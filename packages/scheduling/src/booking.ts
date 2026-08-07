@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { localToInstant, parseHHMM } from '@barbearia/core';
 import { loadDayContext } from './repository.js';
@@ -28,6 +29,12 @@ export type BookingFailure =
   | 'appointment_not_found'
   | 'appointment_not_active'
   | 'hold_expired';
+
+/** Espelha o enum `appointment_source`. Valor fora da lista quebraria o INSERT
+ *  com erro de banco em vez de recusa limpa. */
+export type AppointmentSource =
+  | 'website' | 'app' | 'whatsapp' | 'instagram' | 'google' | 'marketplace'
+  | 'reception' | 'professional' | 'api' | 'recurrence' | 'waitlist';
 
 export class BookingError extends Error {
   constructor(readonly code: BookingFailure, message: string) {
@@ -81,7 +88,7 @@ export interface CreateAppointmentRequest {
   /** Início visível ao cliente, HH:mm local. */
   readonly start: string;
   readonly customerId?: string;
-  readonly source?: string;
+  readonly source?: AppointmentSource;
   readonly notes?: string;
   readonly idempotencyKey?: string;
   readonly holdId?: string;
@@ -173,6 +180,27 @@ async function resolveSlot(
     prices,
     resources: [...resources].map(([resourceType, quantity]) => ({ resourceType, quantity })),
   };
+}
+
+/**
+ * Deriva a chave gravada a partir do tenant, do cliente e da chave bruta.
+ *
+ * A chave bruta vem do cliente e é livre — na prática as aplicações mandam
+ * coisas como "1" ou um timestamp. Buscar só por ela dentro do tenant faria dois
+ * clientes com a mesma string colidirem, e o segundo receberia de volta o
+ * agendamento do primeiro: id, horário, preço. Com o id, cancelaria o horário
+ * alheio.
+ *
+ * Derivar elimina a colisão sem exigir que a chave seja secreta.
+ */
+function scopedIdempotencyKey(
+  tenantId: string,
+  customerId: string | undefined,
+  raw: string,
+): string {
+  return createHash('sha256')
+    .update(`${tenantId}\u0000${customerId ?? ''}\u0000${raw}`)
+    .digest('hex');
 }
 
 async function findByIdempotencyKey(
@@ -273,8 +301,12 @@ export async function createAppointment(
   request: CreateAppointmentRequest,
 ): Promise<AppointmentRef> {
   return withTenant(request.tenantId, async (tx) => {
-    if (request.idempotencyKey) {
-      const existing = await findByIdempotencyKey(tx, request.idempotencyKey);
+    const storedKey = request.idempotencyKey
+      ? scopedIdempotencyKey(request.tenantId, request.customerId, request.idempotencyKey)
+      : undefined;
+
+    if (storedKey) {
+      const existing = await findByIdempotencyKey(tx, storedKey);
       if (existing) return existing;
     }
 
@@ -282,7 +314,11 @@ export async function createAppointment(
 
     let id: string;
     try {
-      id = await insertAppointment(tx, request, slot);
+      id = await insertAppointment(
+        tx,
+        { ...request, ...(storedKey ? { idempotencyKey: storedKey } : {}) },
+        slot,
+      );
     } catch (error) {
       const code = pgCode(error);
       if (code === EXCLUSION_VIOLATION) {
@@ -292,8 +328,8 @@ export async function createAppointment(
           'Este horário já não está mais disponível. Tente em um outro horário.',
         );
       }
-      if (code === UNIQUE_VIOLATION && request.idempotencyKey) {
-        const existing = await findByIdempotencyKey(tx, request.idempotencyKey);
+      if (code === UNIQUE_VIOLATION && storedKey) {
+        const existing = await findByIdempotencyKey(tx, storedKey);
         if (existing) return existing;
       }
       throw error;
@@ -362,6 +398,14 @@ export interface CancelRequest {
   readonly appointmentId: string;
   readonly by: 'customer' | 'business';
   readonly reason?: string;
+  /**
+   * Quando informado, só cancela se o agendamento for deste cliente.
+   *
+   * A RLS separa barbearias, mas não separa clientes **dentro** de uma. Sem
+   * este filtro, qualquer cliente autenticado cancelaria o horário de qualquer
+   * outro bastando o id. Obrigatório sempre que a ação partir do cliente.
+   */
+  readonly customerId?: string;
 }
 
 /**
@@ -382,6 +426,8 @@ export async function cancelAppointment(request: CancelRequest): Promise<void> {
           updated_at = now()
       WHERE id = ${request.appointmentId}::uuid
         AND status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
+        AND (${request.customerId ?? null}::uuid IS NULL
+             OR customer_id = ${request.customerId ?? null}::uuid)
     `;
 
     if (affected === 0) {
@@ -401,6 +447,8 @@ export interface RescheduleRequest {
   readonly date: string;
   readonly start: string;
   readonly professionalId?: string;
+  /** Mesma razão de `CancelRequest.customerId`: a RLS não separa clientes. */
+  readonly customerId?: string;
   readonly now?: Date;
 }
 
@@ -427,7 +475,7 @@ export async function rescheduleAppointment(
         customer_id: string | null;
         professional_id: string;
         status: string;
-        source: string;
+        source: AppointmentSource;
         service_ids: string[];
       }[]
     >`
@@ -436,6 +484,8 @@ export async function rescheduleAppointment(
       FROM appointments a
       JOIN appointment_services s ON s.appointment_id = a.id
       WHERE a.id = ${request.appointmentId}::uuid
+        AND (${request.customerId ?? null}::uuid IS NULL
+             OR a.customer_id = ${request.customerId ?? null}::uuid)
       GROUP BY a.id
     `;
 

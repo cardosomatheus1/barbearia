@@ -32,6 +32,7 @@ const LOCATION = 'aaaaaaaa-0000-0000-0000-000000000001';
 const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
 const GLEIDSON = 'bbbbbbbb-0000-0000-0000-000000000002';
 const CARLOS = 'cccccccc-0000-0000-0000-000000000001';
+const JOAO = 'cccccccc-0000-0000-0000-000000000002';
 const CABELO = 'eeeeeeee-0000-0000-0000-000000000001';
 const BARBA = 'eeeeeeee-0000-0000-0000-000000000002';
 
@@ -74,8 +75,9 @@ describeIfDb('reserva', () => {
         ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional'),
         ('${GLEIDSON}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional');
 
-      INSERT INTO customers (id, tenant_id, name, phone_e164)
-      VALUES ('${CARLOS}', '${TENANT}', 'Carlos', '+5571988887777');
+      INSERT INTO customers (id, tenant_id, name, phone_e164) VALUES
+        ('${CARLOS}', '${TENANT}', 'Carlos', '+5571988887777'),
+        ('${JOAO}', '${TENANT}', 'Joao', '+5571977776666');
 
       INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes) VALUES
         ('${CABELO}', '${TENANT}', 'Cabelo', 4900, 20),
@@ -233,6 +235,77 @@ describeIfDb('reserva', () => {
     await expect(
       createAppointment({ ...base, idempotencyKey: 'req-4' }),
     ).rejects.toMatchObject({ code: 'slot_not_available' });
+  });
+
+  it('clientes diferentes com a mesma chave bruta não colidem', async () => {
+    // A chave vem do cliente e é livre; aplicações reais mandam "1". Sem escopo
+    // por cliente, Joao receberia de volta o agendamento do Carlos — com o id,
+    // que basta para cancelá-lo.
+    const doCarlos = await createAppointment({
+      ...base, customerId: CARLOS, idempotencyKey: '1',
+    });
+    const doJoao = await createAppointment({
+      ...base, customerId: JOAO, start: '09:20', idempotencyKey: '1',
+    });
+
+    expect(doJoao.id).not.toBe(doCarlos.id);
+    expect(doJoao.deduplicated).toBe(false);
+
+    const rows = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM appointments`,
+    );
+    expect(Number(rows[0]?.n)).toBe(2);
+  });
+
+  it('a chave bruta não é o que fica gravado', async () => {
+    await createAppointment({ ...base, customerId: CARLOS, idempotencyKey: 'previsivel' });
+    const rows = await admin.$queryRawUnsafe<{ idempotency_key: string }[]>(
+      `SELECT idempotency_key FROM appointments`,
+    );
+    expect(rows[0]?.idempotency_key).not.toBe('previsivel');
+    expect(rows[0]?.idempotency_key).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // -- titularidade ----------------------------------------------------------
+
+  it('cliente não cancela agendamento de outro cliente', async () => {
+    const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
+
+    await expect(
+      cancelAppointment({
+        tenantId: TENANT, appointmentId: doCarlos.id, by: 'customer', customerId: JOAO,
+      }),
+    ).rejects.toMatchObject({ code: 'appointment_not_found' });
+
+    const rows = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status FROM appointments WHERE id = '${doCarlos.id}'`,
+    );
+    expect(rows[0]?.status).toBe('pending');
+  });
+
+  it('o dono cancela o próprio', async () => {
+    const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
+    await cancelAppointment({
+      tenantId: TENANT, appointmentId: doCarlos.id, by: 'customer', customerId: CARLOS,
+    });
+    expect(await slotsFor(RUAN)).toContain('09:00');
+  });
+
+  it('cliente não reagenda agendamento de outro cliente', async () => {
+    const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
+
+    await expect(
+      rescheduleAppointment({
+        tenantId: TENANT, appointmentId: doCarlos.id, date: TERCA, start: '14:00',
+        customerId: JOAO, now: AGORA,
+      }),
+    ).rejects.toMatchObject({ code: 'appointment_not_found' });
+  });
+
+  it('a barbearia cancela sem informar cliente', async () => {
+    const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: doCarlos.id, by: 'business' });
+    expect(await slotsFor(RUAN)).toContain('09:00');
   });
 
   // -- concorrência ----------------------------------------------------------

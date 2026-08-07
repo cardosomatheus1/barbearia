@@ -82,6 +82,13 @@ externa.** Na prática: quase todos.
 ### Dinheiro e efeitos colaterais
 
 - **`Idempotency-Key` em todo POST** que cria agendamento ou move dinheiro.
+- **Chave de idempotência é escopada por cliente**, nunca só por tenant. Ela vem
+  do cliente e é livre: duas pessoas mandando `"1"` colidiriam, e a segunda
+  receberia de volta o agendamento da primeira — com o id, que basta para
+  cancelá-lo.
+- **RLS separa barbearias, não separa clientes dentro de uma.** Toda operação
+  disparada pelo cliente final (cancelar, reagendar, ver histórico) filtra
+  também por `customer_id`.
 - **Consumidor de evento e webhook é idempotente por id.** Entrega duplicada não
   pode gerar comissão dobrada nem baixa de estoque em duplicidade.
 - Webhook do PSP é a fonte da verdade, com reconciliação por polling como rede

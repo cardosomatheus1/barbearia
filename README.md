@@ -106,6 +106,16 @@ gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida rea
 uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
 ambos são respostas corretas e nenhum deles é overbooking.
 
+### Isolamento tem dois níveis, não um
+
+A RLS separa barbearias. Ela **não** separa clientes dentro da mesma barbearia —
+para isso, toda operação disparada pelo cliente filtra por `customer_id`.
+
+Pela mesma razão, a chave de idempotência é derivada de `tenant + cliente +
+chave bruta`. A chave bruta vem do cliente e é livre: sem derivação, duas pessoas
+mandando `"1"` colidiriam e a segunda receberia de volta o agendamento da
+primeira.
+
 ### Preço e duração nunca vêm da requisição
 
 O cliente informa data, profissional e início. O resto sai do catálogo. Aceitar
