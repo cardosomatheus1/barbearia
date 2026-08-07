@@ -82,15 +82,15 @@ e recebe zero linhas.
 
 | Documento | Conteúdo |
 |---|---|
-| [`SPEC.md`](SPEC.md) | Visão, evidências de campo, roadmap, métricas |
+| [`SPEC.md`](SPEC.md) | Visão, evidências de campo, métricas |
+| [`ROADMAP.md`](ROADMAP.md) | Os 76 blocos de execução e o escopo recomendado |
 | [`docs/spec/`](docs/spec/) | Especificação detalhada em 5 partes |
 | [`docs/01-analise-salonsoft.md`](docs/01-analise-salonsoft.md) | Engenharia reversa do concorrente em produção |
 | [`docs/02-benchmark-apps-barbearia.md`](docs/02-benchmark-apps-barbearia.md) | Matriz competitiva e preços de mercado |
 
 ## Próximos passos
 
-1. Repositórios do domínio Scheduling: resolver jornada + exceções + bloqueios de
-   uma data em `ProfessionalDay` (a entrada do motor).
-2. `GET /availability` e `POST /appointments` com `Idempotency-Key`.
-3. Reagendamento atômico — reserva o novo antes de liberar o antigo.
-4. Página pública com SSR e deep link por serviço.
+Bloco 2 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
+
+Resolver jornada + exceções + bloqueios de uma data no `ProfessionalDay` que o
+motor consome. Hoje o motor está pronto e provado, mas não tem quem o alimente.
