@@ -53,8 +53,9 @@ Detalhes completos em [`docs/01-analise-salonsoft.md`](docs/01-analise-salonsoft
 
 | Prática observada | Por que importa |
 |---|---|
-| **Zero fricção de conta** — nome + celular + OTP, sem senha, sem app, sem e-mail | Cliente de barbearia não instala app nem cria senha. Isto é decisivo. |
-| **OTP por WhatsApp, não SMS** | Entrega melhor e custo menor no Brasil |
+| **Zero fricção de conta** — agendar pede só nome + celular, sem senha, sem app, sem e-mail e **sem código** | Cliente de barbearia não instala app nem cria senha. Isto é decisivo. |
+| **Código só para ver e cancelar** | Criar não exige prova de posse do número; cancelar o agendamento de alguém, sim. A fronteira está no lugar certo. |
+| **OTP por WhatsApp, não SMS** — no fluxo de ver/cancelar | Entrega melhor e custo menor no Brasil |
 | **Recuperação só pelo telefone** | Resolve "troquei de celular / limpei o navegador" sem sessão persistente |
 | **Filtro de habilidade** (`get_profs_hab`) | Só oferece quem sabe fazer o serviço — evita agendamento inválido na origem |
 | **Carrinho multi-serviço** com soma de duração antes de buscar slots | Corte + barba na mesma ida é o caso mais comum |

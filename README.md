@@ -107,15 +107,23 @@ gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida rea
 uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
 ambos são respostas corretas e nenhum deles é overbooking.
 
-### Entrar custa nome + celular, e nada mais
+### Agendar custa nome + celular. Só isso.
 
-Sem senha, sem e-mail, sem baixar app. O cliente escolhe serviço, profissional e
-horário sem se identificar; só ao fechar informa nome e celular e valida um
-código no WhatsApp. É o fluxo do sistema analisado, que acerta nisso — e a
-vantagem não pode ser perdida.
+Sem senha, sem e-mail, sem app e **sem código**. O cliente escolhe serviço,
+profissional e horário sem se identificar, informa nome e celular no fim, e
+confirma. É o fluxo do sistema analisado — cujo componente envia o campo de
+código sempre vazio e conclui sem verificação alguma.
 
-A sessão dura 90 dias, então o cliente que volta agenda de novo sem refazer
-código. O concorrente revalida a cada agendamento.
+O código entra só em **ver, cancelar e remarcar**. A fronteira está aí porque
+criar um agendamento não exige provar posse do número, mas cancelar o
+agendamento de outra pessoa, sim.
+
+Consequência aceita conscientemente: dá para agendar com o telefone de outra
+pessoa. É o que o mercado pratica, e a unidade que sofrer com isso liga
+`require_otp_for_booking`. Informar telefone alheio nunca dá acesso ao histórico
+nem permite cancelar o que já existe.
+
+A sessão dura 90 dias, então quem já validou o número não repete o código.
 
 O código nunca vai para log: `ConsoleMessagingProvider` imprime telefone
 mascarado e mais nada. Log com código de uso único transforma acesso ao log em

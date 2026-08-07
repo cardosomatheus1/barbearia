@@ -89,10 +89,10 @@ Reconstruído a partir do `pt-br.json` e da máquina de estados do componente
 │ GET verifica_celular/{tel}/{slug}            │
 └──────────────────────────────────────────────┘
         v
-┌─ P6. Validação OTP ──────────────────────────────────────┐
-│ "Para finalizar o agendamento é necessário validar seu   │
-│  número. Enviamos uma mensagem de WhatsApp com um código"│
-│ GET envia_sms/... · Reenviar · Editar número             │
+┌─ P6. Validação OTP — NÃO ACONTECE ───────────────────────┐
+│ As chaves de i18n existem ("Para finalizar o agendamento │
+│ é necessário validar seu número..."), mas o fluxo não    │
+│ passa por aqui. Ver a correção abaixo.                   │
 └──────────────────────────────────────────────────────────┘
         v
 ┌─ P7. Sucesso ────────────────────────────────────────────┐
@@ -102,6 +102,33 @@ Reconstruído a partir do `pt-br.json` e da máquina de estados do componente
 │ Ações: Novo agendamento · Ver os meus agendamentos       │
 └──────────────────────────────────────────────────────────┘
 ```
+
+### Correção: agendar não pede código
+
+A primeira leitura desta análise concluiu, a partir das chaves de i18n, que o
+agendamento exigia validação por código. **Está errado.** O componente desmente:
+
+```js
+let a = { id_salon, id_profissional, data, horario,
+          nome: this.register_user.name,
+          codigo: "",                       // sempre vazio
+          phone: ... };
+this.appointmentProvider.doOnlineAppointment(a).subscribe(t => {
+  100 == t.code ? (localStorage.setItem("online_user", ...), this.done = !0)
+                : alert("time-not-available")
+})
+```
+
+O campo `codigo` vai fixo em branco e o sucesso já marca `done`. Não há ramo
+para "código necessário". E `sendScheduleSms` aparece **uma vez** no bundle — é
+a definição; ninguém chama.
+
+O código só existe no outro fluxo, o de **ver/cancelar** (`envia_codigo_login`,
+`confirma_codigo_cancelamento`). Faz sentido: cancelar exige provar que o
+agendamento é seu; criar, não.
+
+Lição de método: chave de i18n prova que uma tela foi escrita, não que ela é
+alcançável.
 
 **Concorrência:** ao confirmar, se o slot foi tomado no meio do caminho, o app
 mostra `"Este horário já não está mais disponível. Tente em um outro horário."` —

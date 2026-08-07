@@ -38,6 +38,7 @@ export interface LocationSettings {
   readonly granularityMinutes: number;
   readonly minLeadMinutes: number;
   readonly maxLeadDays: number;
+  readonly requireOtpForBooking: boolean;
 }
 
 export interface ServiceRow {
@@ -157,10 +158,12 @@ export async function loadRangeContext(
       granularity_minutes: number;
       min_lead_minutes: number;
       max_lead_days: number;
+      require_otp_for_booking: boolean;
     }[]
   >`
     SELECT id, name, timezone, slot_strategy, buffer_policy,
-           granularity_minutes, min_lead_minutes, max_lead_days
+           granularity_minutes, min_lead_minutes, max_lead_days,
+           require_otp_for_booking
     FROM locations WHERE id = ${locationId}::uuid
   `;
   const locationRow = locationRows[0];
@@ -175,6 +178,7 @@ export async function loadRangeContext(
     granularityMinutes: locationRow.granularity_minutes,
     minLeadMinutes: locationRow.min_lead_minutes,
     maxLeadDays: locationRow.max_lead_days,
+    requireOtpForBooking: locationRow.require_otp_for_booking,
   };
 
   const sorted = [...dates].sort();

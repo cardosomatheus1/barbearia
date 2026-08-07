@@ -3,7 +3,10 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
-import { AppointmentsController } from './booking/appointments.controller.js';
+import {
+  AppointmentsController,
+  CreateAppointmentController,
+} from './booking/appointments.controller.js';
 import { AuthController } from './auth/auth.controller.js';
 import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
@@ -13,7 +16,12 @@ import { TenantService } from './tenant/tenant.service.js';
 
 @Module({
   imports: [ThrottlerModule.forRoot(throttlerConfig())],
-  controllers: [BookingController, AuthController, AppointmentsController],
+  controllers: [
+    BookingController,
+    AuthController,
+    CreateAppointmentController,
+    AppointmentsController,
+  ],
   providers: [
     TenantService,
     CustomerGuard,

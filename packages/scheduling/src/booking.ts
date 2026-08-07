@@ -630,3 +630,17 @@ export async function listCustomerAppointments(params: {
     });
   });
 }
+
+/** Política de identificação da unidade, para a API decidir se exige sessão. */
+export async function bookingPolicy(
+  tenantId: string,
+  locationId: string,
+): Promise<{ readonly requireOtpForBooking: boolean } | null> {
+  return withTenant(tenantId, async (tx) => {
+    const rows = await tx.$queryRaw<{ require_otp_for_booking: boolean }[]>`
+      SELECT require_otp_for_booking FROM locations WHERE id = ${locationId}::uuid
+    `;
+    const row = rows[0];
+    return row ? { requireOtpForBooking: row.require_otp_for_booking } : null;
+  });
+}

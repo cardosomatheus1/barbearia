@@ -371,3 +371,50 @@ export async function revokeSession(tenantId: string, sessionId: string): Promis
     `;
   });
 }
+
+export interface GuestIdentity {
+  readonly tenantId: string;
+  readonly name: string;
+  readonly phone: string;
+}
+
+/**
+ * Resolve o cliente a partir de nome e celular, sem código.
+ *
+ * É o fluxo que o mercado pratica: escolher, informar nome e telefone,
+ * confirmar. O sistema analisado agenda exatamente assim — o payload dele leva
+ * o campo de código vazio.
+ *
+ * O que **não** acontece aqui: nenhuma sessão é emitida. Informar o telefone de
+ * outra pessoa cria um agendamento em nome dela, mas não dá acesso ao histórico
+ * dela nem permite cancelar o que já existe — isso continua exigindo o código.
+ * É a mesma fronteira que o concorrente traça.
+ */
+export async function resolveGuestCustomer(input: GuestIdentity): Promise<{
+  readonly customerId: string;
+  readonly phoneE164: string;
+}> {
+  let phone: string;
+  try {
+    phone = normalizePhone(input.phone);
+  } catch (error) {
+    if (error instanceof InvalidPhoneError) {
+      throw new OtpError('invalid_phone', 'Por favor, digite o ddd e telefone');
+    }
+    throw error;
+  }
+
+  const name = input.name.trim().replace(/ {2,}/g, ' ');
+
+  return withTenant(input.tenantId, async (tx) => {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      INSERT INTO customers (tenant_id, name, phone_e164)
+      VALUES (${input.tenantId}::uuid, ${name}, ${phone})
+      ON CONFLICT (tenant_id, phone_e164) DO UPDATE SET updated_at = now()
+      RETURNING id
+    `;
+    const customer = rows[0];
+    if (!customer) throw new OtpError('no_challenge', 'Não foi possível identificar o cliente');
+    return { customerId: customer.id, phoneE164: phone };
+  });
+}

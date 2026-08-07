@@ -7,7 +7,10 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeMessagingProvider } from '@barbearia/identity';
-import { AppointmentsController } from '../src/booking/appointments.controller.js';
+import {
+  AppointmentsController,
+  CreateAppointmentController,
+} from '../src/booking/appointments.controller.js';
 import { AuthController } from '../src/auth/auth.controller.js';
 import { CustomerGuard } from '../src/auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
@@ -67,7 +70,7 @@ describeIfDb('fluxo do cliente', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot(throttlerConfig())],
-      controllers: [AuthController, AppointmentsController],
+      controllers: [AuthController, CreateAppointmentController, AppointmentsController],
       providers: [
         TenantService,
         CustomerGuard,
@@ -128,6 +131,21 @@ describeIfDb('fluxo do cliente', () => {
       .expect(201);
     return response.body.token as string;
   }
+
+  /** Agenda sem sessão: nome + celular, como o mercado faz. */
+  const agendarComoConvidado = (phone: string, start = '09:00', key?: string) => {
+    const req = http().post('/v1/b/domari/appointments');
+    if (key) req.set('Idempotency-Key', key);
+    return req.send({
+      name: 'Carlos Souza',
+      phone,
+      locationId: LOCATION,
+      professionalId: RUAN,
+      serviceIds: [CABELO],
+      date: DIA,
+      start,
+    });
+  };
 
   const agendar = (token: string, start = '09:00', key?: string) => {
     const req = http()
@@ -196,8 +214,59 @@ describeIfDb('fluxo do cliente', () => {
 
   // -- guard -----------------------------------------------------------------
 
-  it('rota autenticada recusa sem token', async () => {
+  it('ver agendamentos exige sessão', async () => {
     await http().get('/v1/b/domari/appointments').expect(401);
+  });
+
+  it('agendar não exige sessão — nome e celular bastam', async () => {
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+    expect(criado.body.priceCents).toBe(4900);
+    expect(criado.body.status).toBe('pending');
+  });
+
+  it('agendar sem sessão e sem nome é recusado', async () => {
+    await http()
+      .post('/v1/b/domari/appointments')
+      .send({
+        locationId: LOCATION, professionalId: RUAN, serviceIds: [CABELO],
+        date: DIA, start: '09:00',
+      })
+      .expect(400);
+  });
+
+  it('convidado não vê nem cancela o que agendou sem validar o número', async () => {
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+
+    // Sem código, não há sessão: ver e cancelar continuam fechados. É a mesma
+    // fronteira do concorrente.
+    await http().get('/v1/b/domari/appointments').expect(401);
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .send({})
+      .expect(401);
+  });
+
+  it('validando o número depois, o convidado reencontra o agendamento', async () => {
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+
+    const token = await login(CARLOS);
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(lista.body.appointments.map((a: { id: string }) => a.id)).toContain(criado.body.id);
+  });
+
+  it('unidade que exige validação recusa agendamento sem sessão', async () => {
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET require_otp_for_booking = true WHERE id = '${LOCATION}'`,
+    );
+    const recusa = await agendarComoConvidado(CARLOS).expect(401);
+    expect(recusa.body.error.code).toBe('otp_required');
+
+    const token = await login(CARLOS);
+    await agendar(token).expect(201);
   });
 
   it('recusa token inventado e cabeçalho malformado', async () => {
