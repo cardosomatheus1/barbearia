@@ -8,3 +8,5 @@ coverage/
 !.env.example
 .turbo/
 packages/db/prisma/generated/
+.next/
+next-env.d.ts

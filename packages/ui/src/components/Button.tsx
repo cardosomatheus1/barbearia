@@ -85,6 +85,9 @@ export const buttonCss = `
   font-weight: var(--font-weight-semibold);
   line-height: 1;
   cursor: pointer;
+  /* O botão também é usado em <a> (links de navegação com aparência de botão);
+     sem isso o sublinhado do link aparece por cima do rótulo. */
+  text-decoration: none;
   transition: background-color var(--motion-fast) var(--motion-ease),
               border-color var(--motion-fast) var(--motion-ease);
 }

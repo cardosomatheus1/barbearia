@@ -1,5 +1,5 @@
 import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
-import { getAvailabilityRange, MAX_RANGE_DAYS } from '@barbearia/scheduling';
+import { getAvailabilityRange, getPublicProfile, MAX_RANGE_DAYS } from '@barbearia/scheduling';
 import { notFound, badRequest } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
@@ -17,6 +17,17 @@ export class BookingController {
   // emitir `design:paramtypes`, o que o esbuild não faz. Declarar o token deixa
   // a injeção independente da ferramenta de build.
   constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
+
+  /** Tudo que a página pública mostra sem autenticação. */
+  @Get()
+  async profile(@Param('slug', new ZodValidationPipe(slugSchema)) slug: string) {
+    const tenantId = await this.tenants.resolve(slug);
+    if (!tenantId) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
+
+    const profile = await getPublicProfile(tenantId, slug);
+    if (!profile) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
+    return profile;
+  }
 
   @Get('availability')
   async availability(

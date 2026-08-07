@@ -18,7 +18,8 @@ integridade do banco.
 | `packages/scheduling` | Repositórios, disponibilidade e reserva | 44 testes ✅ |
 | `packages/identity` | OTP por WhatsApp, sessão do cliente, consentimentos | 26 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 77 testes ✅ |
-| `apps/api` | API pública: disponibilidade, login, agendamento | 35 testes e2e ✅ |
+| `apps/api` | API pública: perfil, disponibilidade, login, agendamento | 51 testes e2e ✅ |
+| `apps/web` | Página pública com SSR (Next.js) | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -107,6 +108,21 @@ Nenhuma das duas basta sozinha. A validação tem uma janela entre calcular e
 gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida real,
 uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
 ambos são respostas corretas e nenhum deles é overbooking.
+
+### O herói da página é a disponibilidade, não uma foto
+
+Toda página de barbearia abre igual: foto grande, botão "AGENDE AGORA", agenda a
+três toques de distância. Aqui a primeira coisa são os horários livres de hoje,
+renderizados no servidor e já tocáveis.
+
+Quem chega pelo link da bio já viu as fotos no Instagram — veio saber quando dá
+para ir. Direção completa em [`docs/03-direcao-visual.md`](docs/03-direcao-visual.md).
+
+### O HTML sai pronto do servidor
+
+Nome, endereço, serviços, preços, horários e JSON-LD `HairSalon` vêm no HTML
+inicial. O sistema analisado entrega uma casca com `<title>Agende online</title>`
+e nada mais — nenhum buscador indexa a barbearia (defeito D6).
 
 ### Mobile-first é regra verificada
 

@@ -1,0 +1,224 @@
+/* ============================================================================
+   Página pública da barbearia.
+   Direção em docs/03-direcao-visual.md. Mobile-first: só min-width.
+   ========================================================================== */
+
+.topo {
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4) 0;
+}
+.topo__linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.topo__nome {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+.topo__onde {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.estado__ponto {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+.estado--aberto { color: var(--color-success); }
+.estado--aberto .estado__ponto { background: var(--color-success); }
+.estado__detalhe { color: var(--color-text-muted); }
+
+/* Rótulo de seção: caixa alta, tracking folgado, pequeno. Estrutura, não título. */
+.rotulo {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
+}
+
+/* -- Herói: a disponibilidade ---------------------------------------------- */
+
+.hoje { padding: var(--space-6) 0 var(--space-5); }
+
+.faixa { margin: 0 calc(var(--space-4) * -1); padding: 0 var(--space-4); }
+.faixa__lista {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 5.25rem;
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              background-color var(--motion-fast) var(--motion-ease);
+}
+.chip:hover { background: var(--color-surface-hover); border-color: var(--color-accent); }
+.chip:active { transform: translateY(1px); }
+
+/* O numeral é o elemento tipográfico da página, não acessório do texto. */
+.chip__hora {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.chip__quem {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.hoje__nota {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.vazio {
+  padding: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.vazio__titulo { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.vazio__saida { margin: var(--space-2) 0 var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* -- Seções ---------------------------------------------------------------- */
+
+.secao { padding: var(--space-6) 0; border-top: 1px solid var(--color-border); }
+.grupo + .grupo { margin-top: var(--space-6); }
+
+/* A régua carrega a categoria, então a linha é informação e não enfeite. */
+.grupo__titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+}
+.grupo__regua { flex: 1; height: 1px; background: var(--color-border); }
+
+.servicos { margin: 0; padding: 0; list-style: none; }
+.servicos > li + li { border-top: 1px solid var(--color-border); }
+
+.servico {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-4);
+  align-items: baseline;
+  min-height: var(--size-touch);
+  padding: var(--space-3) 0;
+  text-decoration: none;
+  color: inherit;
+}
+.servico:hover .servico__nome { color: var(--color-accent); }
+
+.servico__nome { font-weight: var(--font-weight-medium); }
+.servico__sobre {
+  grid-column: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.servico__dados {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+/* Duração antes do preço: é ela que decide o que cabe no dia de quem escolhe. */
+.servico__duracao { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.servico__preco {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+.servico__moeda { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.equipe { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.pessoa a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--size-touch);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.pessoa__nome { font-weight: var(--font-weight-medium); }
+.pessoa__bio { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.onde { display: grid; gap: var(--space-6); }
+.onde__endereco { margin: 0; }
+.onde__cep { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.onde__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+
+.tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.tag {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.horarios { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.horarios th { text-align: left; font-weight: var(--font-weight-normal); padding: var(--space-2) 0; }
+.horarios td { text-align: right; padding: var(--space-2) 0; font-variant-numeric: tabular-nums; }
+.horarios tr + tr th, .horarios tr + tr td { border-top: 1px solid var(--color-border); }
+.horarios--fechado { color: var(--color-text-muted); }
+
+.politica { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: var(--size-readable); }
+
+/* A barra fixa cobriria o fim do conteúdo sem esta folga. */
+main { padding-bottom: var(--space-8); }
+
+.vazio-pagina { padding: var(--space-8) var(--space-4); }
+
+@media (min-width: 768px) {
+  .topo { padding: var(--space-5) 0; }
+  .topo__nome { font-size: var(--font-size-2xl); }
+  .hoje { padding: var(--space-7) 0 var(--space-6); }
+  .chip { min-width: 6rem; }
+  .chip__hora { font-size: var(--font-size-2xl); }
+  .onde { grid-template-columns: 1.4fr 1fr; gap: var(--space-7); }
+}

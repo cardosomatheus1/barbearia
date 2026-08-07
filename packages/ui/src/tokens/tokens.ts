@@ -42,30 +42,37 @@ export interface ColorScheme {
 /**
  * Tema escuro — o padrão da página pública.
  *
- * Barbearia é ambiente de pouca luz e o cliente agenda no celular, muitas vezes
- * na rua. Fundo escuro com destaque âmbar sustenta leitura em tela pequena e
- * combina com a identidade do setor.
+ * A paleta vem de um artefato concreto do ofício: a cadeira de barbeiro
+ * esmaltada em verde-menta, com cromado, contra parede de azulejo. Ardósia
+ * esverdeada de fundo (tem matiz, não é quase-preto), esmalte como acento,
+ * cromado no texto de apoio.
+ *
+ * A versão anterior era âmbar sobre quase-preto — exatamente um dos três
+ * visuais que a skill `frontend-design` aponta como default de design gerado
+ * por IA. Tinha justificativa de fachada (couro, latão), mas paleta escura com
+ * um acento é o lugar mais previsível possível. Ver
+ * `docs/03-direcao-visual.md`.
  */
 export const dark: ColorScheme = {
-  surface: '#0E0E10',
-  surfaceRaised: '#1A1A1E',
-  surfaceHover: '#24242A',
+  surface: '#141F1E',
+  surfaceRaised: '#1D2B29',
+  surfaceHover: '#273634',
 
-  textPrimary: '#F5F3F0',
-  textMuted: '#A8A29B',
-  textOnAccent: '#1A1206',
+  textPrimary: '#F1EEE8',
+  textMuted: '#A3B0AD',
+  textOnAccent: '#08201A',
 
-  accent: '#E0A94E',
-  accentHover: '#EFBD68',
+  accent: '#79D2B8',
+  accentHover: '#5FBFA3',
 
-  border: '#2E2E35',
-  borderStrong: '#6E6A64',
-  focus: '#7FC4FF',
+  border: '#2A3936',
+  borderStrong: '#6F7D7A',
+  focus: '#8FCBFF',
 
-  success: '#5FD08A',
-  warning: '#E8B84B',
-  danger: '#FF7A70',
-  textOnDanger: '#2A0A07',
+  success: '#7FD69B',
+  warning: '#E6C05F',
+  danger: '#FF8D7A',
+  textOnDanger: '#2A0D07',
 };
 
 /**
@@ -75,30 +82,25 @@ export const dark: ColorScheme = {
  * sessão longa e imprime melhor.
  */
 export const light: ColorScheme = {
-  surface: '#FBFAF8',
+  surface: '#F4F2EC',
   surfaceRaised: '#FFFFFF',
-  surfaceHover: '#F1EEE9',
+  surfaceHover: '#E8E5DC',
 
-  textPrimary: '#1A1A1E',
-  // O destaque do tema claro é um âmbar escuro, então o texto sobre ele é
-  // branco. Reaproveitar o quase-preto do tema escuro dava 3.3:1 no estado de
-  // hover — reprovado, e só descoberto porque o par está declarado.
+  textPrimary: '#141F1E',
+  textMuted: '#4E5A57',
+  // O esmalte claro precisa ser escuro o bastante para sustentar texto branco.
   textOnAccent: '#FFFFFF',
-  textMuted: '#5C5751',
 
-  // Escolhido por cálculo, não por gosto: branco sobre ele precisa passar de
-  // 4.5:1 e o tom precisa continuar lendo como âmbar. #A9741B, a primeira
-  // tentativa, dava 4.04 — reprovado.
-  accent: '#9C6C0E',
-  accentHover: '#855C0C',
+  accent: '#0E6E57',
+  accentHover: '#0A5A47',
 
-  border: '#DFDAD2',
-  borderStrong: '#8A847C',
-  focus: '#1F6FD0',
+  border: '#DAD6CC',
+  borderStrong: '#78837F',
+  focus: '#1660C4',
 
-  success: '#1C7A45',
-  warning: '#8A5D00',
-  danger: '#B3261E',
+  success: '#1C6B44',
+  warning: '#7A5500',
+  danger: '#A83224',
   textOnDanger: '#FFFFFF',
 };
 

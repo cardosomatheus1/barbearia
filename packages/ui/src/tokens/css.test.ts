@@ -72,6 +72,10 @@ describe('emitCss', () => {
     expect(css).toContain('--breakpoint-md: 768px');
   });
 
+  it('botão não herda sublinhado quando é um link', () => {
+    expect(css).toMatch(/\.ui-button\s*\{[\s\S]*text-decoration: none/);
+  });
+
   it('declara color-scheme nos dois temas', () => {
     expect(css).toContain('color-scheme: dark');
     expect(css).toContain('color-scheme: light');
