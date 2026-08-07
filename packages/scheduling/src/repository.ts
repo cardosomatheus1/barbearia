@@ -129,6 +129,16 @@ export async function loadRangeContext(
     readonly serviceIds: readonly string[];
     readonly dates: readonly string[];
     readonly professionalId?: string;
+    /**
+     * Agendamento a ignorar na ocupação. Usado pelo reagendamento: o horário
+     * que está sendo liberado não pode bloquear a si mesmo.
+     */
+    readonly ignoreAppointmentId?: string;
+    /**
+     * Reserva temporária a ignorar. Quem segura o hold é justamente quem vai
+     * ocupar o slot — o próprio hold não pode barrá-lo.
+     */
+    readonly ignoreHoldId?: string;
   },
 ): Promise<RangeContext | null> {
   const { locationId, dates } = params;
@@ -376,6 +386,8 @@ export async function loadRangeContext(
       AND starts_at < ${rangeEnd}
       AND ends_at > ${rangeStart}
       AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+      AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
+           OR id <> ${params.ignoreAppointmentId ?? null}::uuid)
   `;
 
   const holdRows = await tx.$queryRaw<OccupiedRow[]>`
@@ -385,6 +397,8 @@ export async function loadRangeContext(
       AND starts_at < ${rangeEnd}
       AND ends_at > ${rangeStart}
       AND expires_at > now()
+      AND (${params.ignoreHoldId ?? null}::uuid IS NULL
+           OR id <> ${params.ignoreHoldId ?? null}::uuid)
   `;
 
   // Contagem por dia local para o limite diário — inclui o que já passou.
@@ -504,6 +518,8 @@ export async function loadDayContext(
     readonly serviceIds: readonly string[];
     readonly date: string;
     readonly professionalId?: string;
+    readonly ignoreAppointmentId?: string;
+    readonly ignoreHoldId?: string;
   },
 ): Promise<DayContext | null> {
   const range = await loadRangeContext(tx, {
@@ -511,6 +527,8 @@ export async function loadDayContext(
     serviceIds: params.serviceIds,
     dates: [params.date],
     ...(params.professionalId ? { professionalId: params.professionalId } : {}),
+    ...(params.ignoreAppointmentId ? { ignoreAppointmentId: params.ignoreAppointmentId } : {}),
+    ...(params.ignoreHoldId ? { ignoreHoldId: params.ignoreHoldId } : {}),
   });
   return range?.days.get(params.date) ?? null;
 }

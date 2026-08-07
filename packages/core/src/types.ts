@@ -100,10 +100,16 @@ export interface AvailabilityQuery {
 }
 
 export interface Slot {
-  /** Início, HH:mm local. */
+  /** Início visível ao cliente — não inclui o buffer de preparo. */
   readonly start: string;
   /** Fim visível ao cliente — não inclui o buffer de limpeza. */
   readonly end: string;
+  /**
+   * Início real da ocupação na agenda, incluindo o buffer de preparo.
+   * Com `bufferBefore` zero é igual a `start`; é o par de `occupiedEnd` e o que
+   * de fato vai para `appointments.starts_at`.
+   */
+  readonly occupiedStart: string;
   /** Fim real da ocupação na agenda, incluindo buffers. */
   readonly occupiedEnd: string;
   readonly professionalId: string;

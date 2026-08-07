@@ -19,6 +19,9 @@ for migration in ../db/migrations/*.sql; do
   psql "$BASE/$DB_NAME" -q -v ON_ERROR_STOP=1 -f "$migration"
 done
 
-export DATABASE_URL="$BASE/$DB_NAME"
-export APP_DATABASE_URL="${BASE/postgres:\/\/postgres/postgres://barbearia_app:$APP_DB_PASSWORD}/$DB_NAME"
+# A aplicação conecta pelo role restrito. Apontar DATABASE_URL para
+# superusuário desligaria a RLS e os testes de isolamento passariam vazios.
+export DATABASE_URL="${BASE/postgres:\/\/postgres/postgres://barbearia_app:$APP_DB_PASSWORD}/$DB_NAME"
+export APP_DATABASE_URL="$DATABASE_URL"
+export SEED_DATABASE_URL="$BASE/$DB_NAME"
 exec vitest run

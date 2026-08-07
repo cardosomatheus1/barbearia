@@ -9,7 +9,7 @@ import { computeFromContext } from './service.js';
  *
  * Rodam contra Postgres real. Precisam de duas conexões:
  *
- *  - `DATABASE_URL`      superusuário, para semear (ignora RLS)
+ *  - `SEED_DATABASE_URL` superusuário, para semear (ignora RLS)
  *  - `APP_DATABASE_URL`  role `barbearia_app`, o mesmo que a API usa
  *
  * A separação é proposital: as consultas do repositório passam pela RLS de
@@ -19,7 +19,7 @@ import { computeFromContext } from './service.js';
  * (docs/01-analise-salonsoft.md).
  */
 
-const ADMIN_URL = process.env['DATABASE_URL'];
+const ADMIN_URL = process.env['SEED_DATABASE_URL'];
 const APP_URL = process.env['APP_DATABASE_URL'];
 
 const TENANT = '11111111-1111-1111-1111-111111111111';
@@ -59,7 +59,7 @@ describeIfDb('Scheduling — integração', () => {
   beforeAll(async () => {
     // Estreitamento explícito: `describeIfDb` já garante as duas, mas o
     // compilador não sabe disso — e a regra proíbe `!` para calar o tipo.
-    if (!ADMIN_URL || !APP_URL) throw new Error('DATABASE_URL e APP_DATABASE_URL são obrigatórias');
+    if (!ADMIN_URL || !APP_URL) throw new Error('SEED_DATABASE_URL e APP_DATABASE_URL são obrigatórias');
     admin = new PrismaClient({ datasources: { db: { url: ADMIN_URL } } });
     app = new PrismaClient({ datasources: { db: { url: APP_URL } } });
   });

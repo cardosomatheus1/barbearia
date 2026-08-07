@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { withTenant } from './client.js';
+import { assertRlsEnforced, withTenant } from './client.js';
 
 /**
  * `withTenant` é o único ponto por onde a aplicação alcança o banco, e é o que
@@ -123,6 +123,14 @@ describeIfDb('withTenant', () => {
     for (const invalid of ['', 'nao-e-uuid', "' OR 1=1 --", '11111111-1111-1111-1111-11111111111']) {
       await expect(withTenant(invalid, async () => 1, { prisma: app })).rejects.toThrow(TypeError);
     }
+  });
+
+  it('aceita a conexão da aplicação, que não ignora RLS', async () => {
+    await expect(assertRlsEnforced(app)).resolves.toBeUndefined();
+  });
+
+  it('recusa conexão de superusuário — RLS seria silenciosamente desligada', async () => {
+    await expect(assertRlsEnforced(admin)).rejects.toThrow(/ignora RLS/);
   });
 
   it('propaga o valor de retorno do callback', async () => {

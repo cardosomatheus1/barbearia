@@ -265,6 +265,7 @@ describe('computeAvailability — buffers', () => {
     expect(result.slots[0]).toMatchObject({
       start: '09:00',
       end: '09:40', // cliente vê 40 min
+      occupiedStart: '09:00',
       occupiedEnd: '09:45', // agenda reserva 45
     });
     expect(result.totalDurationMinutes).toBe(45);
@@ -279,7 +280,13 @@ describe('computeAvailability — buffers', () => {
       professionals: [prof('p1', '09:00-10:00')],
       granularityMinutes: 60,
     });
-    expect(result.slots[0]).toMatchObject({ start: '09:10', end: '09:50', occupiedEnd: '09:50' });
+    // Buffer de 10 min antes: a agenda ocupa desde 09:00, o cliente chega 09:10.
+    expect(result.slots[0]).toMatchObject({
+      start: '09:10',
+      end: '09:50',
+      occupiedStart: '09:00',
+      occupiedEnd: '09:50',
+    });
   });
 
   it('impede slot cujo buffer não cabe no expediente', () => {
@@ -479,9 +486,9 @@ describe('computeAvailability — vários profissionais', () => {
 
 describe('collapseByStart — "qualquer profissional"', () => {
   const slots = [
-    { start: '09:00', end: '09:20', occupiedEnd: '09:20', professionalId: 'ruan' },
-    { start: '09:00', end: '09:20', occupiedEnd: '09:20', professionalId: 'gleidson' },
-    { start: '10:00', end: '10:20', occupiedEnd: '10:20', professionalId: 'gleidson' },
+    { start: '09:00', end: '09:20', occupiedStart: '09:00', occupiedEnd: '09:20', professionalId: 'ruan' },
+    { start: '09:00', end: '09:20', occupiedStart: '09:00', occupiedEnd: '09:20', professionalId: 'gleidson' },
+    { start: '10:00', end: '10:20', occupiedStart: '10:00', occupiedEnd: '10:20', professionalId: 'gleidson' },
   ];
 
   it('devolve um slot por horário', () => {

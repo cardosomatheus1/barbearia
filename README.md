@@ -14,8 +14,8 @@ integridade do banco.
 | Pacote | O que é | Estado |
 |---|---|---|
 | `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 118 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 13 invariantes + 8 testes ✅ |
-| `packages/scheduling` | Repositórios e orquestração: do banco ao motor | 18 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 16 invariantes + 10 testes ✅ |
+| `packages/scheduling` | Repositórios, disponibilidade e reserva | 44 testes ✅ |
 | `apps/api` | API pública de agendamento (NestJS) | 16 testes e2e ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
@@ -94,6 +94,32 @@ EXCLUDE USING gist (
 
 O intervalo é semiaberto de propósito: um agendamento que começa exatamente onde
 o anterior termina é encaixe justo, não conflito.
+
+### Reserva tem duas defesas, não uma
+
+O horário pedido precisa constar da grade que o motor calcula — jornada, buffer,
+recurso, limite diário, antecedência. E a constraint de exclusão rejeita
+sobreposição no banco.
+
+Nenhuma das duas basta sozinha. A validação tem uma janela entre calcular e
+gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida real,
+uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
+ambos são respostas corretas e nenhum deles é overbooking.
+
+### Preço e duração nunca vêm da requisição
+
+O cliente informa data, profissional e início. O resto sai do catálogo. Aceitar
+preço vindo do cliente seria deixá-lo escolher quanto paga.
+
+### A conexão da aplicação não pode ignorar RLS
+
+`assertRlsEnforced()` roda na subida da API e recusa iniciar se o role for
+superusuário ou tiver `BYPASSRLS`. Uma conexão assim desliga o isolamento
+silenciosamente: nada falha, nada avisa, e cada barbearia passa a enxergar a base
+inteira.
+
+Isso não é hipotético — foi exatamente o que aconteceu no arnês de testes deste
+bloco, onde os testes de isolamento passavam sem provar nada.
 
 ### Disponibilidade é carregada por intervalo, não por dia
 

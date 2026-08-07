@@ -58,3 +58,37 @@ export async function withTenant<T>(
     { timeout: options.timeoutMs ?? 10_000 },
   );
 }
+
+/**
+ * Confirma que a conexão da aplicação **não** ignora RLS.
+ *
+ * Todo o isolamento multi-tenant depende disso. Um `DATABASE_URL` apontando
+ * para superusuário desliga a RLS silenciosamente: nada falha, nada avisa, e
+ * cada barbearia passa a enxergar a base inteira.
+ *
+ * Foi exatamente o que aconteceu no arnês de testes do bloco 4 — os testes de
+ * isolamento passavam sem provar nada. Falhar alto na subida é barato; descobrir
+ * em produção, não.
+ *
+ * Chamar no bootstrap, antes de servir a primeira requisição.
+ */
+export async function assertRlsEnforced(prisma: PrismaClient = getPrisma()): Promise<void> {
+  const rows = await prisma.$queryRaw<
+    { is_superuser: string; bypass_rls: boolean; role_name: string }[]
+  >`
+    SELECT current_setting('is_superuser') AS is_superuser,
+           rolbypassrls AS bypass_rls,
+           current_user AS role_name
+    FROM pg_roles WHERE rolname = current_user
+  `;
+
+  const row = rows[0];
+  if (!row) throw new Error('Não foi possível verificar o role da conexão');
+
+  if (row.is_superuser === 'on' || row.bypass_rls) {
+    throw new Error(
+      `Conexão da aplicação usa o role "${row.role_name}", que ignora RLS. ` +
+        'O isolamento entre tenants não teria efeito. Use um role NOSUPERUSER NOBYPASSRLS.',
+    );
+  }
+}

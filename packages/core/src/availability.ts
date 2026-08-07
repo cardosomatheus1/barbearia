@@ -188,6 +188,7 @@ export function computeAvailability(query: AvailabilityQuery): AvailabilityResul
         slots.push({
           start: formatHHMM(serviceStart),
           end: formatHHMM(serviceStart + duration.serviceMinutes),
+          occupiedStart: formatHHMM(occupied.start),
           occupiedEnd: formatHHMM(occupied.end),
           professionalId: professional.professionalId,
           ...(professional.price !== undefined ? { price: professional.price } : {}),
