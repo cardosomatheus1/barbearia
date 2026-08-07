@@ -191,10 +191,35 @@ export const fontWeight = {
  */
 export const MIN_TOUCH_TARGET_PX = 44;
 
+/**
+ * Pontos de quebra.
+ *
+ * Nomeados pelo contexto de uso, não por dispositivo: "tablet" envelhece,
+ * "a partir de 640px" não. Sempre aplicados com `min-width` — ver a regra de
+ * mobile-first no CLAUDE.md.
+ *
+ * O piso de projeto é 360px: Android popular no Brasil, que é o aparelho em que
+ * o cliente da barbearia realmente agenda.
+ */
+export const breakpoint = {
+  /** Piso de projeto. Nada pode quebrar abaixo disso. */
+  base: '360px',
+  /** Celular grande e landscape. */
+  sm: '480px',
+  /** Tablet em pé; a partir daqui cabem duas colunas. */
+  md: '768px',
+  /** Notebook; o admin começa a ficar confortável. */
+  lg: '1024px',
+  /** Monitor; a agenda do admin ganha colunas por profissional. */
+  xl: '1280px',
+} as const;
+
 export const size = {
   touch: `${MIN_TOUCH_TARGET_PX}px`,
   /** Largura máxima de leitura confortável. */
   readable: '65ch',
+  /** Largura máxima do conteúdo da página pública. */
+  container: '72rem',
 } as const;
 
 export const motion = {

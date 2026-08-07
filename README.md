@@ -108,6 +108,16 @@ gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida rea
 uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
 ambos são respostas corretas e nenhum deles é overbooking.
 
+### Mobile-first é regra verificada
+
+Toda media query de layout usa `min-width`, e há teste que rejeita `max-width`.
+O piso de projeto é 360px — o Android popular no Brasil, o aparelho em que o
+cliente da barbearia realmente agenda.
+
+Três defeitos comuns de página de barbearia no celular têm teste próprio:
+rolagem horizontal da página, imagem estourando o recipiente, e botão principal
+sob a barra de gestos do iPhone.
+
 ### Contraste é medido, não declarado
 
 Cada par de cores que a interface usa está declarado em `CONTRAST_PAIRS` e

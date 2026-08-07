@@ -200,6 +200,82 @@ core  ←  scheduling  ←  api  ←  web
 
 ---
 
+## 5. Responsividade e acabamento visual
+
+**Aplicável a todo bloco que produza interface.**
+
+Não existe skill de design neste ambiente — procurei. `canvas-design` é para
+pôster, `web-artifacts-builder` e `theme-factory` são para artifact do
+claude.ai. Nenhum serve para app em produção. Então a qualidade visual vem de
+regra escrita e verificada, não de ferramenta.
+
+### Mobile-first, sem exceção
+
+- **O piso de projeto é 360px.** É o Android popular no Brasil, o aparelho em
+  que o cliente da barbearia realmente agenda — em pé, na rua, com uma mão.
+  Nada pode quebrar abaixo disso.
+- **Toda media query de layout usa `min-width`.** `max-width` significa
+  "desfazer o que fiz para tela grande", o que inverte a ordem de trabalho e
+  deixa o celular como caso excepcional. Há teste que rejeita.
+- **Larguras de conferência:** 360 · 390 · 768 · 1280. Uma tela que só foi
+  olhada no notebook não foi olhada.
+- **Nunca esconder conteúdo no celular — refluir.** `display: none` em tela
+  pequena é decisão de que aquilo não importava; se não importa, tire de todas.
+
+### O que nunca pode acontecer
+
+- **Rolagem horizontal na página.** É o defeito mais comum em página de
+  barbearia no celular. Conteúdo largo — tabela, grade de horários, diagrama —
+  rola dentro do próprio recipiente (`.ui-scroll-x`), nunca leva a página junto.
+  Há teste.
+- **Imagem sem limite de largura.** `max-width: 100%` sempre, e `aspect-ratio`
+  declarado para a foto não empurrar o conteúdo ao carregar.
+- **Ação principal sob a barra de gestos.** Barra fixa no rodapé soma
+  `env(safe-area-inset-bottom)`. Sem isso o botão "Agendar" fica inalcançável no
+  iPhone. Há teste.
+- **Alvo de toque abaixo de 44px.** Vale para botão, campo, horário na grade e
+  qualquer coisa clicável.
+
+### Componente responsivo ao recipiente, não à tela
+
+Cartão de serviço aparece em coluna única no celular, em duas no tablet e dentro
+de uma barra lateral estreita no admin. Quem decide o formato é a largura
+disponível — `@container` —, não a largura da janela.
+
+### Acabamento
+
+O que separa uma página que parece profissional de uma que parece template:
+
+- **Uma ação primária por tela.** Se tudo é destaque, nada é. No fluxo de
+  agendamento, a cada passo existe exatamente um botão em `accent`.
+- **Ritmo vem da escala.** Todo espaçamento sai de `space`. Valor avulso
+  (`13px`, `0.85rem`) é o que faz uma tela parecer montada às pressas.
+- **Hierarquia por tamanho e peso, antes de cor.** Cor é o último recurso, não
+  o primeiro — e é o que menos funciona para quem tem baixa visão.
+- **Foto faz o trabalho pesado.** Em barbearia a escolha é visual: corte,
+  ambiente, barbeiro. Layout que depende só de texto vai parecer pobre por mais
+  bem espaçado que esteja.
+- **Estado vazio, carregando e erro são desenhados**, não improvisados. "Nenhum
+  horário disponível" é uma tela, com o que fazer em seguida — não uma lista
+  vazia.
+- **Conteúdo real desde o primeiro protótipo.** Nada de texto de preenchimento:
+  nome de serviço longo, preço de quatro dígitos e nome composto de barbeiro são
+  o que quebram layout, e só aparecem com conteúdo verdadeiro.
+- **Densidade é diferente por app.** A página pública respira — o cliente entra
+  uma vez por mês. O admin é denso — a recepção passa o dia ali e rolagem custa
+  tempo.
+- **Movimento com propósito e curto.** Transição existe para explicar de onde
+  algo veio. Acima de 200 ms vira espera, e `prefers-reduced-motion` desliga.
+
+### Referência de qualidade
+
+O alvo não é "melhor que o concorrente analisado" — a página dele não tem
+endereço, mapa, foto de serviço nem descrição (defeitos D8 e D9). O alvo é a
+faixa de Booksy e Fresha, documentada em
+[`docs/02-benchmark-apps-barbearia.md`](docs/02-benchmark-apps-barbearia.md) §5.
+
+---
+
 ## Definition of Done
 
 Um bloco só está concluído quando **todos** os itens passam:
@@ -215,6 +291,8 @@ Um bloco só está concluído quando **todos** os itens passam:
 - [ ] Nenhum segredo no repositório
 - [ ] `/security-review` rodado, se o bloco tocou auth, dinheiro, dado pessoal ou permissão
 - [ ] README atualizado se alguma decisão de arquitetura mudou
+- [ ] Interface conferida em 360, 390, 768 e 1280 — sem rolagem horizontal
+- [ ] Estado vazio, carregando e erro desenhados
 - [ ] Lacuna conhecida declarada por escrito, não deixada implícita
 - [ ] `ROADMAP.md` com o bloco marcado e o contador atualizado
 

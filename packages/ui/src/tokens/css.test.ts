@@ -41,6 +41,37 @@ describe('emitCss', () => {
     expect(css).toMatch(/\.ui-field__input\s*\{[\s\S]*min-height: var\(--size-touch\)/);
   });
 
+  it('toda media query de layout é mobile-first', () => {
+    // `max-width` significa "desfazer o que fiz para telas grandes", o que
+    // inverte a ordem de trabalho e deixa o celular — o aparelho em que o
+    // cliente realmente agenda — como caso excepcional.
+    const queries = [...css.matchAll(/@media\s*\(([^)]+)\)/g)].map((m) => m[1] ?? '');
+    const layout = queries.filter((q) => !q.startsWith('prefers-'));
+
+    expect(layout.length).toBeGreaterThan(0);
+    for (const query of layout) {
+      expect(query, `media query não é min-width: "${query}"`).toContain('min-width');
+    }
+  });
+
+  it('impede rolagem horizontal da página', () => {
+    expect(css).toMatch(/html,\s*body\s*\{[\s\S]*overflow-x: hidden/);
+  });
+
+  it('mídia nunca estoura o recipiente', () => {
+    expect(css).toMatch(/img,\s*video,\s*svg\s*\{[\s\S]*max-width: 100%/);
+  });
+
+  it('ação fixa respeita a área segura do aparelho', () => {
+    // Sem isso o botão principal fica sob a barra de gestos do iPhone.
+    expect(css).toContain('env(safe-area-inset-bottom');
+  });
+
+  it('exporta os pontos de quebra como custom property', () => {
+    expect(css).toContain('--breakpoint-base: 360px');
+    expect(css).toContain('--breakpoint-md: 768px');
+  });
+
   it('declara color-scheme nos dois temas', () => {
     expect(css).toContain('color-scheme: dark');
     expect(css).toContain('color-scheme: light');

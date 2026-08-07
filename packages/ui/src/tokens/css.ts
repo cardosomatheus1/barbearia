@@ -2,6 +2,7 @@ import { buttonCss } from '../components/Button.js';
 import { fieldCss } from '../components/Field.js';
 import { primitivesCss } from '../components/primitives.js';
 import {
+  breakpoint,
   dark,
   light,
   fontSize,
@@ -52,6 +53,7 @@ ${block('radius', radius)}
 ${block('font-size', fontSize)}
 ${block('font-weight', fontWeight)}
 ${block('font', font)}
+${block('breakpoint', breakpoint)}
 ${block('size', size)}
 ${block('motion', motion)}
 ${block('shadow', shadow)}
@@ -110,6 +112,57 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/*
+ * Nada estoura a largura da tela.
+ *
+ * Rolagem horizontal no corpo é o defeito mais comum em página de barbearia
+ * aberta no celular: um preço largo, uma imagem sem limite, uma tabela — e a
+ * página inteira passa a arrastar de lado. Conteúdo largo rola dentro do
+ * próprio recipiente.
+ */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img, video, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Recipiente largo rola sozinho, sem levar a página junto. */
+.ui-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Barra de ação fixa no rodapé respeita a área segura do aparelho.
+ *
+ * Sem isso o botão "Agendar" fica debaixo da barra de gestos do iPhone e o
+ * cliente não consegue tocar no elemento mais importante da página.
+ */
+.ui-sticky-action {
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-3) var(--space-4);
+  padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  z-index: var(--z-sticky);
+}
+
+.ui-container {
+  width: 100%;
+  max-width: var(--size-container);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .ui-container { padding-inline: var(--space-6); }
 }
 
 /* Horário e preço em coluna: numerais de largura fixa não dançam. */
