@@ -222,3 +222,233 @@ main { padding-bottom: var(--space-8); }
   .chip__hora { font-size: var(--font-size-2xl); }
   .onde { grid-template-columns: 1.4fr 1fr; gap: var(--space-7); }
 }
+
+/* ============================================================================
+   Fluxo de agendamento — serviço · profissional · horário · nome
+   ========================================================================== */
+
+.fluxo-topo { border-bottom: 1px solid var(--color-border); padding: var(--space-3) 0 0; }
+.fluxo-topo__linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.fluxo-topo__nome { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+.voltar:hover { color: var(--color-accent); }
+
+/* A régua de passos mostra progresso real: são quatro decisões, nem uma a mais. */
+.passos {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 0 var(--space-3);
+  list-style: none;
+}
+.passos__item {
+  flex: 1;
+  padding-top: var(--space-2);
+  border-top: 2px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.passos__item--feito { border-top-color: var(--color-accent); }
+.passos__item--atual {
+  border-top-color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.fluxo { padding: var(--space-6) var(--space-4) var(--space-8); }
+.fluxo__titulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+.fluxo__ajuda { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* -- Escolha de serviço ---------------------------------------------------- */
+
+.escolha {
+  grid-template-columns: 1.5rem 1fr auto;
+  padding-left: 0;
+}
+.escolha__marca {
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-on-accent);
+}
+.escolha--marcada .escolha__marca {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.escolha .servico__nome { grid-column: 2; }
+.escolha .servico__sobre { grid-column: 2; }
+.escolha .servico__dados { grid-column: 3; }
+
+/* -- Opções (profissional) ------------------------------------------------- */
+
+.opcoes { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.opcao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--size-touch);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.opcao:hover { border-color: var(--color-accent); }
+.opcao--destaque { border-color: var(--color-accent); }
+.opcao__nome { font-weight: var(--font-weight-semibold); }
+.opcao__sobre { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Dias e horas ---------------------------------------------------------- */
+
+.dias { margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
+.dias__lista { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+
+.dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 3.25rem;
+  min-height: var(--size-touch);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--color-text-muted);
+}
+.dia--atual {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.dia__semana { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+.dia__numero { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+
+.horas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hora {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: var(--size-touch);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.hora:hover { border-color: var(--color-accent); background: var(--color-surface-hover); }
+.hora__valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: -0.02em; }
+.hora__quem { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* -- Confirmação e formulário ---------------------------------------------- */
+
+.confirmacao { margin-bottom: var(--space-5); }
+/* Rótulo em coluna fixa e valor alinhado à esquerda.
+   Com `space-between` e valor à direita, "sexta-feira, 07 de agosto, 20:40"
+   quebra e deixa o horário pendurado sozinho na segunda linha. */
+.confere { margin: 0; display: grid; gap: var(--space-3); }
+.confere > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.confere dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.confere dd { margin: 0; font-weight: var(--font-weight-medium); }
+.confere__trocar {
+  display: inline-block;
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
+.formulario { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.resumo { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.resumo__servicos { margin: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.resumo__dados { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Confirmado ------------------------------------------------------------ */
+
+.confirmado { padding: var(--space-8) var(--space-4); text-align: center; max-width: 34rem; }
+.confirmado__marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-2xl);
+}
+.confirmado__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
+.confirmado__quando { margin: 0 0 var(--space-2); font-size: var(--font-size-lg); color: var(--color-accent); }
+.confirmado__onde { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* O comprovante herda o alinhamento do bloco de conferência do passo 4: mesma
+   informação, mesma forma — o cliente reconhece o que acabou de confirmar. */
+.comprovante {
+  margin: 0 0 var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  text-align: left;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-lg);
+}
+.comprovante__linha { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.comprovante dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.comprovante dd { margin: 0; font-weight: var(--font-weight-medium); }
+
+/* Cancelado: a marca deixa de ser o acento, senão um × verde parece sucesso. */
+.confirmado--cancelado .confirmado__marca {
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+}
+
+.confirmado__aviso { text-align: left; margin-bottom: var(--space-5); }
+.confirmado__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; }
+.confirmado__politica { margin: var(--space-6) 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+@media (min-width: 768px) {
+  .horas { grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr)); }
+  .fluxo__titulo { font-size: var(--font-size-3xl); }
+}
+
+.fluxo__falha { margin-bottom: var(--space-5); }
+.fluxo__falha a { color: inherit; font-weight: var(--font-weight-semibold); }

@@ -5,7 +5,7 @@ import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
 import {
   AppointmentsController,
-  CreateAppointmentController,
+  GuestAppointmentsController,
 } from './booking/appointments.controller.js';
 import { AuthController } from './auth/auth.controller.js';
 import { CustomerGuard } from './auth/customer.guard.js';
@@ -19,7 +19,7 @@ import { TenantService } from './tenant/tenant.service.js';
   controllers: [
     BookingController,
     AuthController,
-    CreateAppointmentController,
+    GuestAppointmentsController,
     AppointmentsController,
   ],
   providers: [

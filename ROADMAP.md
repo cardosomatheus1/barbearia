@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 7 de 76 blocos.**
+**Status: 8 de 76 blocos.**
 
 ---
 
@@ -53,7 +53,7 @@ atual sem perder nenhuma capacidade que usava.
 | 5 | Auth do cliente (OTP WhatsApp) + endpoints de reserva | ✅ |
 | 6 | Design system: tokens, componentes base, tema, acessibilidade | ✅ |
 | 7 | Página pública SSR: layout, mapa, horário, JSON-LD, deep links | ✅ |
-| 8 | Fluxo de agendamento no front (seleção → OTP → confirmação) | |
+| 8 | Fluxo de agendamento no front: serviço → profissional → horário → dados → comprovante | ✅ |
 | 9 | Meus agendamentos: listar, cancelar, reagendar | |
 | 10 | Onboarding em 6 etapas | |
 | 11 | Admin: CRUD de catálogo, equipe, jornadas, recursos | |

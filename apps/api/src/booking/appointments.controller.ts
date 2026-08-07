@@ -15,6 +15,7 @@ import {
   bookingPolicy,
   cancelAppointment,
   createAppointment,
+  getAppointmentReceipt,
   listCustomerAppointments,
   rescheduleAppointment,
 } from '@barbearia/scheduling';
@@ -33,7 +34,7 @@ import {
   createAppointmentSchema,
   rescheduleSchema,
 } from '../auth/auth.schemas.js';
-import { slugSchema } from './booking.schemas.js';
+import { appointmentIdSchema, slugSchema } from './booking.schemas.js';
 
 const BOOKING_STATUS: Record<string, number> = {
   unknown_location: 404,
@@ -57,13 +58,6 @@ function toHttp(error: unknown): never {
     throw new DomainError(error.code, OTP_STATUS[error.code] ?? 400, error.message);
   }
   throw error;
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function requireUuid(value: string): string {
-  if (!UUID.test(value)) throw badRequest('invalid_request', 'Identificador inválido');
-  return value;
 }
 
 interface CreateBody {
@@ -94,7 +88,7 @@ interface CreateBody {
  * continuam exigindo o código — é o mesmo limite que o concorrente traça.
  */
 @Controller('v1/b/:slug/appointments')
-export class CreateAppointmentController {
+export class GuestAppointmentsController {
   constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
 
   @Post()
@@ -143,6 +137,30 @@ export class CreateAppointmentController {
     } catch (error) {
       return toHttp(error);
     }
+  }
+
+  /**
+   * Comprovante do agendamento — **sem sessão**.
+   *
+   * Quem agendou como visitante não tem sessão, então exigir uma aqui deixaria
+   * a própria tela de confirmação inacessível. O UUID aleatório na URL é a
+   * credencial, como em qualquer link de confirmação enviado por mensagem.
+   *
+   * Ler é tudo que essa rota permite, e o retorno não traz dado nenhum do
+   * cliente: quem receber o link encaminhado vê o horário, não a pessoa.
+   * Cancelar e remarcar continuam no controller com guarda.
+   */
+  @Get(':id')
+  async receipt(
+    @Param('slug', new ZodValidationPipe(slugSchema)) slug: string,
+    @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
+  ) {
+    const tenantId = await this.tenants.resolve(slug);
+    if (!tenantId) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
+
+    const receipt = await getAppointmentReceipt(tenantId, id);
+    if (!receipt) throw notFound('appointment_not_found', 'Agendamento não encontrado');
+    return receipt;
   }
 
   /** Sessão quando houver; senão, nome e celular — se a unidade permitir. */
@@ -217,13 +235,13 @@ export class AppointmentsController {
   async cancel(
     @TenantId() tenantId: string,
     @Customer() customer: AuthenticatedCustomer,
-    @Param('id') id: string,
+    @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
     @Body(new ZodValidationPipe(cancelSchema)) body: { reason?: string },
   ) {
     try {
       await cancelAppointment({
         tenantId,
-        appointmentId: requireUuid(id),
+        appointmentId: id,
         by: 'customer',
         customerId: customer.customerId,
         ...(body.reason ? { reason: body.reason } : {}),
@@ -238,14 +256,14 @@ export class AppointmentsController {
   async reschedule(
     @TenantId() tenantId: string,
     @Customer() customer: AuthenticatedCustomer,
-    @Param('id') id: string,
+    @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
     @Body(new ZodValidationPipe(rescheduleSchema))
     body: { date: string; start: string; professionalId?: string },
   ) {
     try {
       const appointment = await rescheduleAppointment({
         tenantId,
-        appointmentId: requireUuid(id),
+        appointmentId: id,
         customerId: customer.customerId,
         date: body.date,
         start: body.start,

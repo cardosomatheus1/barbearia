@@ -33,3 +33,6 @@ export const slugSchema = z
   // Slug entra em consulta e em URL: restringir o alfabeto elimina uma classe
   // inteira de entrada hostil na origem.
   .regex(/^[a-z0-9][a-z0-9-]*$/i, 'slug inválido');
+
+/** O id do agendamento é a credencial do comprovante; precisa ser UUID de fato. */
+export const appointmentIdSchema = uuid;

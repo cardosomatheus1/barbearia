@@ -631,6 +631,96 @@ export async function listCustomerAppointments(params: {
   });
 }
 
+/**
+ * O que o comprovante precisa dizer, em três estados.
+ *
+ * O enum do banco tem dez valores e vai crescer; a tela não deve conhecê-los.
+ * Traduzir aqui é o que impede a view de decidir regra de negócio — e de errar
+ * ao inventar nome de status (`cancelled` não existe: são `cancelled_customer`
+ * e `cancelled_business`).
+ */
+export type ReceiptState = 'active' | 'done' | 'cancelled';
+
+/**
+ * Conjunto próprio, não `ACTIVE_STATUSES`: aquele responde "ainda dá para
+ * cancelar?" e por isso deixa `in_progress` de fora. Aqui a pergunta é "esse
+ * horário ainda vale?", e um corte em andamento vale.
+ */
+const RECEIPT_ACTIVE = ['pending', 'confirmed', 'checked_in', 'waiting', 'in_progress'];
+
+function receiptState(status: string): ReceiptState {
+  if (RECEIPT_ACTIVE.includes(status)) return 'active';
+  if (status === 'completed') return 'done';
+  return 'cancelled';
+}
+
+export interface AppointmentReceipt {
+  readonly id: string;
+  readonly state: ReceiptState;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly professionalName: string;
+  readonly services: readonly string[];
+  readonly priceCents: number;
+  readonly locationId: string;
+}
+
+/**
+ * Comprovante de um agendamento, legível por quem tem o link.
+ *
+ * O id é UUID aleatório e funciona como a própria credencial — é o padrão de
+ * link mágico de confirmação. Por isso o retorno traz só o que cabe num
+ * comprovante: **nada do cliente**. Nome e celular ficariam expostos a quem
+ * recebesse o link encaminhado, e a tela de confirmação não precisa deles.
+ *
+ * A separação entre barbearias é da RLS; aqui não há filtro por cliente porque
+ * não há cliente autenticado. Cancelar e reagendar continuam exigindo sessão.
+ */
+export async function getAppointmentReceipt(
+  tenantId: string,
+  appointmentId: string,
+): Promise<AppointmentReceipt | null> {
+  return withTenant(tenantId, async (tx) => {
+    const rows = await tx.$queryRaw<
+      {
+        id: string;
+        service_starts_at: Date;
+        service_ends_at: Date;
+        status: string;
+        professional_name: string;
+        services: string[];
+        price_cents: number;
+        location_id: string;
+      }[]
+    >`
+      SELECT a.id, a.service_starts_at, a.service_ends_at, a.status,
+             p.name AS professional_name,
+             array_agg(s.name ORDER BY aps.position) AS services,
+             a.price_cents, a.location_id
+      FROM appointments a
+      JOIN professionals p ON p.id = a.professional_id
+      JOIN appointment_services aps ON aps.appointment_id = a.id
+      JOIN services s ON s.id = aps.service_id
+      WHERE a.id = ${appointmentId}::uuid
+      GROUP BY a.id, p.name
+    `;
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      state: receiptState(row.status),
+      startsAt: row.service_starts_at.toISOString(),
+      endsAt: row.service_ends_at.toISOString(),
+      professionalName: row.professional_name,
+      services: row.services,
+      priceCents: row.price_cents,
+      locationId: row.location_id,
+    };
+  });
+}
+
 /** Política de identificação da unidade, para a API decidir se exige sessão. */
 export async function bookingPolicy(
   tenantId: string,

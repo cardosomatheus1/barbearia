@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeMessagingProvider } from '@barbearia/identity';
 import {
   AppointmentsController,
-  CreateAppointmentController,
+  GuestAppointmentsController,
 } from '../src/booking/appointments.controller.js';
 import { AuthController } from '../src/auth/auth.controller.js';
 import { CustomerGuard } from '../src/auth/customer.guard.js';
@@ -70,7 +70,7 @@ describeIfDb('fluxo do cliente', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot(throttlerConfig())],
-      controllers: [AuthController, CreateAppointmentController, AppointmentsController],
+      controllers: [AuthController, GuestAppointmentsController, AppointmentsController],
       providers: [
         TenantService,
         CustomerGuard,
@@ -244,6 +244,62 @@ describeIfDb('fluxo do cliente', () => {
       .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
       .send({})
       .expect(401);
+  });
+
+  it('o comprovante é legível sem sessão e não expõe o cliente', async () => {
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+
+    const comprovante = await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}`)
+      .expect(200);
+
+    expect(comprovante.body.services).toEqual(['Cabelo']);
+    expect(comprovante.body.professionalName).toBe('Ruan');
+    expect(comprovante.body.priceCents).toBe(4900);
+    expect(comprovante.body.state).toBe('active');
+
+    // O link pode ser encaminhado. Quem o receber vê o horário, não a pessoa.
+    const corpo = JSON.stringify(comprovante.body);
+    expect(corpo).not.toContain('Carlos');
+    expect(corpo).not.toContain('98888');
+  });
+
+  it('o comprovante de uma barbearia não é legível pelo slug de outra', async () => {
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+
+    // Mesmo id, slug do rival: a RLS não enxerga a linha e a rota devolve 404.
+    await http().get(`/v1/b/rival/appointments/${criado.body.id}`).expect(404);
+  });
+
+  it('o comprovante acompanha o cancelamento', async () => {
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+    const token = await login(CARLOS);
+
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(201);
+
+    const depois = await http().get(`/v1/b/domari/appointments/${criado.body.id}`).expect(200);
+    expect(depois.body.state).toBe('cancelled');
+  });
+
+  it('atendimento concluído não vira "cancelado" no comprovante', async () => {
+    // `completed` não passa por rota de cliente; só o status final importa aqui.
+    const criado = await agendarComoConvidado(CARLOS).expect(201);
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments SET status = 'completed' WHERE id = '${criado.body.id}'`,
+    );
+
+    const depois = await http().get(`/v1/b/domari/appointments/${criado.body.id}`).expect(200);
+    expect(depois.body.state).toBe('done');
+  });
+
+  it('comprovante de id inexistente devolve 404, não 500', async () => {
+    await http()
+      .get('/v1/b/domari/appointments/99999999-9999-4999-8999-999999999999')
+      .expect(404);
   });
 
   it('validando o número depois, o convidado reencontra o agendamento', async () => {

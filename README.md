@@ -235,14 +235,38 @@ deliberadamente não repetem `tenant_id` no `WHERE` — quem filtra é a políti
 | [`docs/spec/`](docs/spec/) | Especificação detalhada em 5 partes |
 | [`docs/01-analise-salonsoft.md`](docs/01-analise-salonsoft.md) | Engenharia reversa do concorrente em produção |
 | [`docs/02-benchmark-apps-barbearia.md`](docs/02-benchmark-apps-barbearia.md) | Matriz competitiva e preços de mercado |
+| [`docs/03-direcao-visual.md`](docs/03-direcao-visual.md) | Direção visual da página pública, antes do CSS |
+
+## Agendar sem login
+
+O fluxo público vai de serviço a comprovante em quatro passos — **sem código,
+sem senha, sem conta**. Nome e celular bastam, que é como o concorrente
+analisado opera e como o cliente de barbearia espera.
+
+O código no WhatsApp continua existindo, mas só na fronteira que importa: **ver
+histórico, cancelar e remarcar**. Sem ele, conhecer o telefone de alguém daria
+poder sobre a agenda dessa pessoa.
+
+O passo está marcado na URL (`?e=p|h|d`), não inferido do que já está
+preenchido. Inferir quebrava o carrinho de múltiplos serviços: escolher um só
+pulava direto para o passo seguinte, e escolher o segundo virava impossível.
+
+O comprovante é lido da API pelo id, nunca reconstruído da URL. Repetir o que o
+formulário enviou seria afirmar sem conferir — "Qualquer profissional" nunca
+viraria um nome, e um horário cancelado continuaria dizendo "confirmado".
 
 ## Próximos passos
 
-Bloco 3 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 9 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
 
-API com middleware de tenant e `GET /availability`. O pipeline banco → motor já
-funciona ponta a ponta; falta expô-lo.
+Meus agendamentos: listar, cancelar e remarcar pelo cliente autenticado. A API
+já tem as três rotas com guarda; falta a tela.
 
-**Lacuna conhecida:** bloqueios pontuais (barbeiro fechar uma hora específica)
-ainda não têm tabela. O motor já aceita `blocks`; o repositório passa vazio. Vem
-com o bloco 12, a agenda do admin.
+**Lacunas conhecidas:**
+
+- Bloqueios pontuais (barbeiro fechar uma hora específica) ainda não têm tabela.
+  O motor já aceita `blocks`; o repositório passa vazio. Vem com o bloco 12, a
+  agenda do admin.
+- O carrinho não avisa quando os serviços escolhidos existem como combo mais
+  barato — em Domari, Cabelo (Tesoura) + Barba custa R$ 84,00 avulso e R$ 74,00
+  no combo. `service_combo_components` já modela a composição.

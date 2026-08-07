@@ -66,6 +66,143 @@ async function get<T>(path: string, revalidate: number): Promise<T | null> {
  */
 export const getProfile = (slug: string) => get<PublicProfile>(`/v1/b/${slug}`, 30);
 
+export interface AvailabilityQuery {
+  locationId: string;
+  serviceIds: string[];
+  dateFrom: string;
+  dateTo?: string;
+  professionalId?: string;
+  anyProfessional?: boolean;
+}
+
+/**
+ * Disponibilidade para um intervalo, já filtrada pelo profissional escolhido.
+ *
+ * `revalidate` é parâmetro porque a mesma consulta serve a dois propósitos com
+ * exigências opostas: montar a grade (pode ser de meio minuto atrás) e decidir
+ * em quem gravar (não pode).
+ */
+export async function getAvailability(
+  slug: string,
+  query: AvailabilityQuery,
+  revalidate = 30,
+): Promise<{ days: DayAvailability[] } | null> {
+  const busca = new URLSearchParams({
+    locationId: query.locationId,
+    serviceIds: query.serviceIds.join(','),
+    dateFrom: query.dateFrom,
+  });
+  if (query.dateTo) busca.set('dateTo', query.dateTo);
+  if (query.professionalId) busca.set('professionalId', query.professionalId);
+  if (query.anyProfessional) busca.set('anyProfessional', 'true');
+
+  return get<{ days: DayAvailability[] }>(
+    `/v1/b/${slug}/availability?${busca.toString()}`,
+    revalidate,
+  );
+}
+
+export interface CriarAgendamento {
+  locationId: string;
+  professionalId: string;
+  serviceIds: string[];
+  date: string;
+  start: string;
+  name: string;
+  phone: string;
+}
+
+export type ResultadoAgendamento =
+  | { ok: true; id: string }
+  | { ok: false; code: string };
+
+/**
+ * Cria o agendamento.
+ *
+ * "Qualquer profissional" vira um id concreto aqui: o motor devolve o
+ * profissional junto de cada horário, e é ele que vai no corpo. Mandar "any"
+ * para a API faria o servidor escolher de novo, podendo cair em outra pessoa
+ * entre a tela e a gravação.
+ *
+ * Essa consulta é **sem cache**. Com o cache de 30 s da grade, a resolução
+ * apontaria para quem já foi ocupado nesse intervalo e a gravação seria
+ * recusada — e continuaria sendo pelos 30 s inteiros, sem o cliente ter como
+ * escapar. Aqui a resposta precisa ser do instante.
+ */
+export async function criarAgendamentoNaApi(
+  slug: string,
+  dados: CriarAgendamento,
+): Promise<ResultadoAgendamento> {
+  let professionalId = dados.professionalId;
+
+  if (professionalId === 'any') {
+    const disponibilidade = await getAvailability(
+      slug,
+      {
+        locationId: dados.locationId,
+        serviceIds: dados.serviceIds,
+        dateFrom: dados.date,
+        anyProfessional: true,
+      },
+      0,
+    );
+    const slot = disponibilidade?.days[0]?.slots.find((s) => s.start === dados.start);
+    if (!slot) return { ok: false, code: 'slot_not_available' };
+    professionalId = slot.professionalId;
+  }
+
+  const response = await fetch(`${BASE}/v1/b/${slug}/appointments`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      // Deriva da escolha, não do relógio: reenvio do mesmo formulário — o
+      // duplo toque clássico em rede lenta — devolve o mesmo agendamento.
+      'idempotency-key': `${dados.phone}|${dados.date}|${dados.start}|${dados.serviceIds.join(',')}`,
+    },
+    body: JSON.stringify({
+      locationId: dados.locationId,
+      professionalId,
+      serviceIds: dados.serviceIds,
+      date: dados.date,
+      start: dados.start,
+      name: dados.name,
+      phone: dados.phone,
+    }),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const corpo = (await response.json().catch(() => null)) as
+      | { error?: { code?: string } }
+      | null;
+    return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
+  }
+
+  const criado = (await response.json()) as { id: string };
+  return { ok: true, id: criado.id };
+}
+
+export interface Comprovante {
+  id: string;
+  /** A API já traduz os dez status do banco nos três que a tela distingue. */
+  state: 'active' | 'done' | 'cancelled';
+  startsAt: string;
+  endsAt: string;
+  professionalName: string;
+  services: string[];
+  priceCents: number;
+  locationId: string;
+}
+
+/**
+ * Comprovante do agendamento.
+ *
+ * Sem cache: é o registro de um agendamento específico e muda quando o cliente
+ * cancela. Cache aqui mostraria "confirmado" para um horário já desmarcado.
+ */
+export const getComprovante = (slug: string, id: string) =>
+  get<Comprovante>(`/v1/b/${slug}/appointments/${id}`, 0);
+
 /**
  * Disponibilidade de hoje.
  *
