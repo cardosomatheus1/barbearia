@@ -168,7 +168,12 @@ core  ←  scheduling  ←  api  ←  web
 - **O schema é o SQL em `packages/db/migrations`.** Prisma é introspectado
   (`pnpm db:pull`). Constraint de exclusão, RLS e as checks não têm
   representação em Prisma — um `migrate dev` as apagaria.
-- Migração é aditiva e reversível. Nunca editar migração já aplicada.
+- Migração é aditiva e reversível. **Nunca editar migração já aplicada em
+  ambiente compartilhado ou produção** — antes do primeiro deploy elas ainda são
+  maleáveis, depois disso a correção vem em migração nova.
+- Migração roda em produção: nada de `CREATE ROLE ... PASSWORD` nem qualquer
+  credencial dentro dela. Bootstrap de role fica em `scripts/bootstrap-role.sh`,
+  parametrizado por ambiente.
 
 ### Código
 

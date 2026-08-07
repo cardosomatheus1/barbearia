@@ -248,16 +248,8 @@ COMMIT;
 -- Precisa de role não-superusuário: superusuário ignora RLS por definição.
 -- ----------------------------------------------------------------------------
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'barbearia_app') THEN
-    CREATE ROLE barbearia_app LOGIN PASSWORD 'app';
-  END IF;
-END $$;
-
-GRANT USAGE ON SCHEMA public TO barbearia_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO barbearia_app;
-
+-- O role já foi criado por scripts/bootstrap-role.sh e recebeu os privilégios
+-- na migração 0002. Nenhuma credencial aqui.
 SET ROLE barbearia_app;
 
 -- Sem tenant no contexto: nada é visível.

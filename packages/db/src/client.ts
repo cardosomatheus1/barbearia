@@ -58,18 +58,3 @@ export async function withTenant<T>(
     { timeout: options.timeoutMs ?? 10_000 },
   );
 }
-
-/**
- * Executa `fn` sem tenant — para operações de plataforma (Super Admin,
- * migrações, jobs de manutenção) que legitimamente atravessam tenants.
- *
- * Só funciona com um role que tenha BYPASSRLS ou seja dono das tabelas. O role
- * `barbearia_app` usado pela API é NOBYPASSRLS de propósito: se esta função for
- * chamada por engano na API, ela não enxerga nada em vez de vazar tudo.
- */
-export async function withoutTenant<T>(
-  fn: (client: PrismaClient) => Promise<T>,
-  options: { readonly prisma?: PrismaClient } = {},
-): Promise<T> {
-  return fn(options.prisma ?? getPrisma());
-}

@@ -244,7 +244,13 @@ CREATE TABLE schedule_exceptions (
     CHECK (start_minute IS NULL OR end_minute IS NULL
            OR (start_minute >= 0 AND end_minute <= 1440 AND start_minute < end_minute))
 );
-CREATE INDEX schedule_exceptions_date_idx ON schedule_exceptions (on_date);
+-- A consulta do motor filtra por data **e** por alvo. Um índice só em
+-- `on_date` obrigaria a varrer todas as exceções do dia de todos os
+-- profissionais da base.
+CREATE INDEX schedule_exceptions_professional_date_idx
+  ON schedule_exceptions (professional_id, on_date) WHERE professional_id IS NOT NULL;
+CREATE INDEX schedule_exceptions_location_date_idx
+  ON schedule_exceptions (location_id, on_date) WHERE location_id IS NOT NULL;
 
 -- ----------------------------------------------------------------------------
 -- Agendamentos

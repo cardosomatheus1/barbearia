@@ -3,6 +3,7 @@ import {
   formatHHMM,
   maxConcurrency,
   normalize,
+  parseHHMM,
   saturatedRanges,
   subtract,
   type Minutes,
@@ -158,12 +159,13 @@ export function computeAvailability(query: AvailabilityQuery): AvailabilityResul
       continue;
     }
 
-    if (holes.length > 0 && freeWindows(professional).length > 0
-        && freeWindows(professional, holes).length === 0) {
+    // Calculado uma vez: é a função mais quente do motor.
+    const windows = freeWindows(professional, holes);
+    if (holes.length > 0 && windows.length === 0 && freeWindows(professional).length > 0) {
       diagnostics.blockedByResource = true;
     }
 
-    for (const window of freeWindows(professional, holes)) {
+    for (const window of windows) {
       diagnostics.anyFreeWindow = true;
 
       for (const start of generateStarts(window, duration.occupiedMinutes, granularity, strategy)) {
@@ -241,8 +243,7 @@ function densityScore(
   const busy = busyByProfessional?.get(slot.professionalId);
   if (!busy || busy.length === 0) return 0;
 
-  const [h, m] = slot.start.split(':');
-  const startMinute = Number(h) * 60 + Number(m);
+  const startMinute = parseHHMM(slot.start);
   // Quanto mais perto de um atendimento existente, melhor: evita buraco morto.
   let best = Number.POSITIVE_INFINITY;
   for (const range of busy) {

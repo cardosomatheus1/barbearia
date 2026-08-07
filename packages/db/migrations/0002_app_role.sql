@@ -9,12 +9,14 @@
 -- ler e gravar dados, sempre filtrado pelas políticas de tenant.
 -- ============================================================================
 
+-- A criação do role **não** acontece aqui: migração roda em produção, e
+-- credencial não mora no repositório (CLAUDE.md §2). O role é criado por
+-- `scripts/bootstrap-role.sh`, que exige a senha por variável de ambiente.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'barbearia_app') THEN
-    -- A senha real é definida pela infraestrutura; este default só serve para
-    -- ambiente local e CI.
-    CREATE ROLE barbearia_app LOGIN PASSWORD 'app';
+    RAISE EXCEPTION
+      'role barbearia_app não existe. Rode scripts/bootstrap-role.sh antes das migrações.';
   END IF;
 END $$;
 

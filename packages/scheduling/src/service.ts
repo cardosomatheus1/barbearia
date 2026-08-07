@@ -1,9 +1,10 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { withTenant } from '@barbearia/db';
 import {
   collapseByStart,
   computeAvailability,
   cutoffMinuteFor,
   localToInstant,
+  parseHHMM,
   resolveWorkingDay,
   type AssignmentStrategy,
   type Service,
@@ -211,8 +212,8 @@ export function computeFromContext(
     // resolvido e o front nunca recalcula fuso.
     slots: slots.map((slot) => ({
       ...slot,
-      startsAt: localToInstant(location.timezone, request.date, toMinutes(slot.start)).toISOString(),
-      endsAt: localToInstant(location.timezone, request.date, toMinutes(slot.end)).toISOString(),
+      startsAt: localToInstant(location.timezone, request.date, parseHHMM(slot.start)).toISOString(),
+      endsAt: localToInstant(location.timezone, request.date, parseHHMM(slot.end)).toISOString(),
     })),
     unavailableReason: reason,
     waitlistAvailable: reason !== null && WAITLIST_REASONS.has(reason),
@@ -220,30 +221,18 @@ export function computeFromContext(
   };
 }
 
-function toMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':');
-  return Number(h) * 60 + Number(m);
-}
-
 /** Ponto de entrada: abre a transação com o tenant fixado e calcula. */
 export async function getAvailability(
   request: AvailabilityRequest,
 ): Promise<AvailabilityResponse> {
   return withTenant(request.tenantId, async (tx) => {
-    const context = await loadContextOrNull(tx, request);
+    const context = await loadDayContext(tx, {
+      locationId: request.locationId,
+      serviceIds: request.serviceIds,
+      date: request.date,
+      ...(request.professionalId ? { professionalId: request.professionalId } : {}),
+    });
     if (!context) return emptyResponse(request.date, 'unknown_location');
     return computeFromContext(context, request);
-  });
-}
-
-async function loadContextOrNull(
-  tx: TransactionClient,
-  request: AvailabilityRequest,
-): Promise<DayContext | null> {
-  return loadDayContext(tx, {
-    locationId: request.locationId,
-    serviceIds: request.serviceIds,
-    date: request.date,
-    ...(request.professionalId ? { professionalId: request.professionalId } : {}),
   });
 }

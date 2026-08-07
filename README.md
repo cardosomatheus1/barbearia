@@ -14,7 +14,7 @@ integridade do banco.
 | Pacote | O que é | Estado |
 |---|---|---|
 | `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 118 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 13 invariantes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 13 invariantes + 8 testes ✅ |
 | `packages/scheduling` | Repositórios e orquestração: do banco ao motor | 18 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
@@ -41,6 +41,10 @@ pnpm --filter @barbearia/scheduling test  # pipeline banco -> motor
 
 `pnpm verify` **falha** se os testes de banco forem pulados por falta de
 `ADMIN_DATABASE_URL`. Pular em silêncio seria o padrão perigoso.
+
+O role da aplicação é criado por `scripts/bootstrap-role.sh`, que exige
+`APP_DB_PASSWORD` e não tem default — os scripts de teste geram uma senha
+efêmera por execução, então não há credencial no repositório.
 
 ## Decisões que valem conhecer antes de mexer
 

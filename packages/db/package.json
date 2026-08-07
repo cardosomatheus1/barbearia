@@ -5,15 +5,29 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
     "db:pull": "prisma db pull --schema prisma/schema.prisma",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "migrate": "./scripts/migrate.sh",
-    "test": "./scripts/test.sh"
+    "test": "./scripts/test.sh",
+    "test:unit": "vitest run"
   },
-  "dependencies": { "@prisma/client": "^6.19.1", "pg": "^8.16.3" },
-  "devDependencies": { "@types/pg": "^8.15.6", "prisma": "^6.19.1", "typescript": "^5.7.2" }
+  "dependencies": {
+    "@prisma/client": "^6.19.1",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.6",
+    "prisma": "^6.19.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
+  }
 }

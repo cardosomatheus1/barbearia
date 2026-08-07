@@ -57,6 +57,9 @@ const describeIfDb = ADMIN_URL && APP_URL ? describe : describe.skip;
 
 describeIfDb('Scheduling — integração', () => {
   beforeAll(async () => {
+    // Estreitamento explícito: `describeIfDb` já garante as duas, mas o
+    // compilador não sabe disso — e a regra proíbe `!` para calar o tipo.
+    if (!ADMIN_URL || !APP_URL) throw new Error('DATABASE_URL e APP_DATABASE_URL são obrigatórias');
     admin = new PrismaClient({ datasources: { db: { url: ADMIN_URL } } });
     app = new PrismaClient({ datasources: { db: { url: APP_URL } } });
   });
