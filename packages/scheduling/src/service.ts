@@ -11,7 +11,8 @@ import {
   type Slot,
   type UnavailableReason,
 } from '@barbearia/core';
-import { loadDayContext, type DayContext } from './repository.js';
+import { loadRangeContext, type DayContext } from './repository.js';
+import { datesBetween } from './range.js';
 
 export type AvailabilityReason =
   | UnavailableReason
@@ -221,18 +222,66 @@ export function computeFromContext(
   };
 }
 
-/** Ponto de entrada: abre a transação com o tenant fixado e calcula. */
+/** Máximo de dias por consulta. Sem teto, um pedido varre anos de agenda. */
+export const MAX_RANGE_DAYS = 14;
+
+export interface AvailabilityRangeRequest extends Omit<AvailabilityRequest, 'date'> {
+  readonly dateFrom: string;
+  readonly dateTo?: string;
+}
+
+export interface AvailabilityRangeResponse {
+  readonly timezone: string;
+  readonly strategy: 'anchored' | 'grid';
+  readonly granularityMinutes: number;
+  readonly days: readonly AvailabilityResponse[];
+}
+
+/**
+ * Ponto de entrada: abre a transação com o tenant fixado e calcula o intervalo.
+ *
+ * O contexto é carregado **uma vez** para todo o intervalo e recortado por dia.
+ * Consultar dia a dia seria N+1 entre datas (CLAUDE.md §3).
+ */
+export async function getAvailabilityRange(
+  request: AvailabilityRangeRequest,
+): Promise<AvailabilityRangeResponse> {
+  const dates = datesBetween(request.dateFrom, request.dateTo ?? request.dateFrom, MAX_RANGE_DAYS);
+
+  return withTenant(request.tenantId, async (tx) => {
+    const context = await loadRangeContext(tx, {
+      locationId: request.locationId,
+      serviceIds: request.serviceIds,
+      dates,
+      ...(request.professionalId ? { professionalId: request.professionalId } : {}),
+    });
+
+    if (!context) {
+      return {
+        timezone: 'UTC',
+        strategy: 'anchored' as const,
+        granularityMinutes: 0,
+        days: dates.map((date) => emptyResponse(date, 'unknown_location')),
+      };
+    }
+
+    return {
+      timezone: context.location.timezone,
+      strategy: context.location.slotStrategy,
+      granularityMinutes: context.location.granularityMinutes,
+      days: dates.map((date) => {
+        const day = context.days.get(date);
+        if (!day) return emptyResponse(date, 'unknown_location', context.location.timezone);
+        return computeFromContext(day, { ...request, date });
+      }),
+    };
+  });
+}
+
+/** Conveniência para um único dia. */
 export async function getAvailability(
   request: AvailabilityRequest,
 ): Promise<AvailabilityResponse> {
-  return withTenant(request.tenantId, async (tx) => {
-    const context = await loadDayContext(tx, {
-      locationId: request.locationId,
-      serviceIds: request.serviceIds,
-      date: request.date,
-      ...(request.professionalId ? { professionalId: request.professionalId } : {}),
-    });
-    if (!context) return emptyResponse(request.date, 'unknown_location');
-    return computeFromContext(context, request);
-  });
+  const range = await getAvailabilityRange({ ...request, dateFrom: request.date });
+  return range.days[0] ?? emptyResponse(request.date, 'unknown_location');
 }

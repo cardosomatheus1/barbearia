@@ -9,7 +9,13 @@ import {
 } from '@barbearia/core';
 
 /**
- * Carrega tudo que o motor de disponibilidade precisa para uma data.
+ * Carrega tudo que o motor de disponibilidade precisa, para um intervalo de
+ * datas de uma vez.
+ *
+ * A carga é por **intervalo**, não por dia: consultar dia a dia num laço seria
+ * N+1 entre datas, e a meta de P95 é 7 dias × 5 profissionais em menos de 800 ms
+ * (CLAUDE.md §3). O que não depende de data — catálogo, equipe, combos — é
+ * carregado uma vez só.
  *
  * Todas as consultas rodam dentro da transação com `app.tenant_id` fixado
  * (ver `withTenant`), então a RLS filtra por tenant mesmo nas queries abaixo,
@@ -25,6 +31,7 @@ const TERMINAL_STATUSES = [
 
 export interface LocationSettings {
   readonly id: string;
+  readonly name: string;
   readonly timezone: string;
   readonly slotStrategy: 'anchored' | 'grid';
   readonly bufferPolicy: 'outer' | 'per_service';
@@ -47,12 +54,22 @@ export interface QualifiedProfessional {
   readonly id: string;
   readonly name: string;
   readonly dailyLimit: number | null;
-  /** Sobrescritas do profissional, por serviço. */
-  readonly overrides: ReadonlyMap<string, { priceCents: number | null; durationMinutes: number | null }>;
+  readonly overrides: ReadonlyMap<
+    string,
+    { priceCents: number | null; durationMinutes: number | null }
+  >;
 }
 
+export interface ResourcePoolRow {
+  readonly resourceType: string;
+  readonly capacity: number;
+  readonly busy: TimeRange[];
+}
+
+/** Recorte de um único dia — é o que o motor consome. */
 export interface DayContext {
   readonly location: LocationSettings;
+  readonly date: string;
   readonly weekday: number;
   readonly services: readonly ServiceRow[];
   readonly professionals: readonly QualifiedProfessional[];
@@ -60,8 +77,17 @@ export interface DayContext {
   readonly exceptions: ReadonlyMap<string, ScheduleException[]>;
   readonly busy: ReadonlyMap<string, TimeRange[]>;
   readonly appointmentCount: ReadonlyMap<string, number>;
-  readonly resourcePools: readonly { resourceType: string; capacity: number; busy: TimeRange[] }[];
+  readonly resourcePools: readonly ResourcePoolRow[];
   readonly comboRules: readonly ComboRule[];
+}
+
+export interface RangeContext {
+  readonly location: LocationSettings;
+  readonly dates: readonly string[];
+  readonly services: readonly ServiceRow[];
+  readonly professionals: readonly QualifiedProfessional[];
+  /** Recorte pronto por data. */
+  readonly days: ReadonlyMap<string, DayContext>;
 }
 
 /** Recorta um intervalo UTC para os minutos locais do dia pedido. */
@@ -84,21 +110,37 @@ function toLocalMinutes(
   };
 }
 
-export async function loadDayContext(
+function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const bucket = map.get(key);
+  if (bucket) bucket.push(value);
+  else map.set(key, [value]);
+}
+
+interface OccupiedRow {
+  professional_id: string;
+  starts_at: Date;
+  ends_at: Date;
+}
+
+export async function loadRangeContext(
   tx: TransactionClient,
   params: {
     readonly locationId: string;
     readonly serviceIds: readonly string[];
-    readonly date: string;
+    readonly dates: readonly string[];
     readonly professionalId?: string;
   },
-): Promise<DayContext | null> {
-  const { locationId, serviceIds, date } = params;
-  if (serviceIds.length === 0) throw new RangeError('Nenhum serviço selecionado');
+): Promise<RangeContext | null> {
+  const { locationId, dates } = params;
+  const ids = [...params.serviceIds];
+  if (ids.length === 0) throw new RangeError('Nenhum serviço selecionado');
+  if (dates.length === 0) throw new RangeError('Nenhuma data solicitada');
 
+  // ---- Unidade -------------------------------------------------------------
   const locationRows = await tx.$queryRaw<
     {
       id: string;
+      name: string;
       timezone: string;
       slot_strategy: 'anchored' | 'grid';
       buffer_policy: 'outer' | 'per_service';
@@ -107,7 +149,7 @@ export async function loadDayContext(
       max_lead_days: number;
     }[]
   >`
-    SELECT id, timezone, slot_strategy, buffer_policy,
+    SELECT id, name, timezone, slot_strategy, buffer_policy,
            granularity_minutes, min_lead_minutes, max_lead_days
     FROM locations WHERE id = ${locationId}::uuid
   `;
@@ -116,6 +158,7 @@ export async function loadDayContext(
 
   const location: LocationSettings = {
     id: locationRow.id,
+    name: locationRow.name,
     timezone: locationRow.timezone,
     slotStrategy: locationRow.slot_strategy,
     bufferPolicy: locationRow.buffer_policy,
@@ -124,10 +167,14 @@ export async function loadDayContext(
     maxLeadDays: locationRow.max_lead_days,
   };
 
-  const weekday = weekdayIn(location.timezone, date);
-  const ids = [...serviceIds];
+  const sorted = [...dates].sort();
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  const rangeStart = localToInstant(location.timezone, first, 0);
+  const rangeEnd = localToInstant(location.timezone, last, 24 * 60);
+  const weekdays = [...new Set(sorted.map((date) => weekdayIn(location.timezone, date)))];
 
-  // ---- Serviços e exigências de recurso ------------------------------------
+  // ---- Serviços e exigências de recurso -----------------------------------
   const serviceRows = await tx.$queryRaw<
     {
       id: string;
@@ -156,9 +203,10 @@ export async function loadDayContext(
 
   const requirementsByService = new Map<string, { resourceType: string; quantity: number }[]>();
   for (const row of requirementRows) {
-    const bucket = requirementsByService.get(row.service_id) ?? [];
-    bucket.push({ resourceType: row.resource_type, quantity: row.quantity });
-    requirementsByService.set(row.service_id, bucket);
+    push(requirementsByService, row.service_id, {
+      resourceType: row.resource_type,
+      quantity: row.quantity,
+    });
   }
 
   const services: ServiceRow[] = serviceRows.map((row) => ({
@@ -171,7 +219,7 @@ export async function loadDayContext(
     requiredResources: requirementsByService.get(row.id) ?? [],
   }));
 
-  // ---- Profissionais habilitados em TODOS os serviços ----------------------
+  // ---- Profissionais habilitados em TODOS os serviços ---------------------
   // Herdado do concorrente (`get_profs_hab`): filtrar na origem evita oferecer
   // horário para quem não executa o serviço.
   // `counter` e `resource_only` ficam de fora — são agendas de balcão, não
@@ -194,18 +242,39 @@ export async function loadDayContext(
     ORDER BY p.name
   `;
 
+  const emptyDay = (date: string): DayContext => ({
+    location,
+    date,
+    weekday: weekdayIn(location.timezone, date),
+    services,
+    professionals: [],
+    weeklyPlans: new Map(),
+    exceptions: new Map(),
+    busy: new Map(),
+    appointmentCount: new Map(),
+    resourcePools: [],
+    comboRules: [],
+  });
+
   if (professionalRows.length === 0) {
     return {
-      location, weekday, services, professionals: [],
-      weeklyPlans: new Map(), exceptions: new Map(), busy: new Map(),
-      appointmentCount: new Map(), resourcePools: [], comboRules: [],
+      location,
+      dates: sorted,
+      services,
+      professionals: [],
+      days: new Map(sorted.map((date) => [date, emptyDay(date)])),
     };
   }
 
   const professionalIds = professionalRows.map((row) => row.id);
 
   const overrideRows = await tx.$queryRaw<
-    { professional_id: string; service_id: string; price_cents: number | null; duration_minutes: number | null }[]
+    {
+      professional_id: string;
+      service_id: string;
+      price_cents: number | null;
+      duration_minutes: number | null;
+    }[]
   >`
     SELECT professional_id, service_id, price_cents, duration_minutes
     FROM professional_services
@@ -233,30 +302,41 @@ export async function loadDayContext(
     overrides: overridesByProfessional.get(row.id) ?? new Map(),
   }));
 
-  // ---- Jornadas -----------------------------------------------------------
+  // ---- Jornadas: todos os dias da semana presentes no intervalo -----------
   const scheduleRows = await tx.$queryRaw<
-    { professional_id: string; weekday: number; start_minute: number; end_minute: number; breaks: unknown }[]
+    {
+      professional_id: string;
+      weekday: number;
+      start_minute: number;
+      end_minute: number;
+      breaks: unknown;
+    }[]
   >`
     SELECT professional_id, weekday, start_minute, end_minute, breaks
     FROM work_schedules
-    WHERE professional_id = ANY(${professionalIds}::uuid[]) AND weekday = ${weekday}
+    WHERE professional_id = ANY(${professionalIds}::uuid[])
+      AND weekday = ANY(${weekdays}::smallint[])
   `;
 
-  const weeklyPlans = new Map<string, WeeklyPlan[]>();
+  const plansByProfessional = new Map<string, WeeklyPlan[]>();
   for (const row of scheduleRows) {
     const breaks = Array.isArray(row.breaks)
       ? (row.breaks as TimeRange[]).filter(
           (item) => typeof item?.start === 'number' && typeof item?.end === 'number',
         )
       : [];
-    const bucket = weeklyPlans.get(row.professional_id) ?? [];
-    bucket.push({ weekday: row.weekday, start: row.start_minute, end: row.end_minute, breaks });
-    weeklyPlans.set(row.professional_id, bucket);
+    push(plansByProfessional, row.professional_id, {
+      weekday: row.weekday,
+      start: row.start_minute,
+      end: row.end_minute,
+      breaks,
+    });
   }
 
-  // ---- Exceções da data ---------------------------------------------------
+  // ---- Exceções do intervalo ---------------------------------------------
   const exceptionRows = await tx.$queryRaw<
     {
+      on_date: Date;
       professional_id: string | null;
       location_id: string | null;
       kind: 'custom_hours' | 'day_off' | 'holiday' | 'vacation';
@@ -265,17 +345,18 @@ export async function loadDayContext(
       reason: string | null;
     }[]
   >`
-    SELECT professional_id, location_id, kind, start_minute, end_minute, reason
+    SELECT on_date, professional_id, location_id, kind, start_minute, end_minute, reason
     FROM schedule_exceptions
-    WHERE on_date = ${date}::date
+    WHERE on_date = ANY(${[...sorted]}::date[])
       AND (professional_id = ANY(${professionalIds}::uuid[])
            OR location_id = ${locationId}::uuid)
   `;
 
-  const exceptions = new Map<string, ScheduleException[]>();
-  const locationExceptions: ScheduleException[] = [];
+  const professionalExceptions = new Map<string, ScheduleException[]>();
+  const locationExceptions = new Map<string, ScheduleException[]>();
 
   for (const row of exceptionRows) {
+    const date = row.on_date.toISOString().slice(0, 10);
     const item: ScheduleException = {
       kind: row.kind,
       scope: row.professional_id ? 'professional' : 'location',
@@ -283,67 +364,53 @@ export async function loadDayContext(
       ...(row.end_minute !== null ? { end: row.end_minute } : {}),
       ...(row.reason !== null ? { reason: row.reason } : {}),
     };
-    if (row.professional_id) {
-      const bucket = exceptions.get(row.professional_id) ?? [];
-      bucket.push(item);
-      exceptions.set(row.professional_id, bucket);
-    } else {
-      locationExceptions.push(item);
-    }
-  }
-  // Exceções da unidade valem para todo mundo.
-  for (const professionalId of professionalIds) {
-    exceptions.set(professionalId, [...(exceptions.get(professionalId) ?? []), ...locationExceptions]);
+    if (row.professional_id) push(professionalExceptions, `${date}|${row.professional_id}`, item);
+    else push(locationExceptions, date, item);
   }
 
-  // ---- Ocupação: agendamentos ativos + reservas temporárias ----------------
-  const dayStart = localToInstant(location.timezone, date, 0);
-  const dayEnd = localToInstant(location.timezone, date, 24 * 60);
-
-  const appointmentRows = await tx.$queryRaw<
-    { professional_id: string; starts_at: Date; ends_at: Date }[]
-  >`
+  // ---- Ocupação: agendamentos ativos + reservas temporárias ---------------
+  const appointmentRows = await tx.$queryRaw<OccupiedRow[]>`
     SELECT professional_id, starts_at, ends_at
     FROM appointments
     WHERE professional_id = ANY(${professionalIds}::uuid[])
-      AND starts_at < ${dayEnd}
-      AND ends_at > ${dayStart}
+      AND starts_at < ${rangeEnd}
+      AND ends_at > ${rangeStart}
       AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
   `;
 
-  const holdRows = await tx.$queryRaw<
-    { professional_id: string; starts_at: Date; ends_at: Date }[]
-  >`
+  const holdRows = await tx.$queryRaw<OccupiedRow[]>`
     SELECT professional_id, starts_at, ends_at
     FROM slot_holds
     WHERE professional_id = ANY(${professionalIds}::uuid[])
-      AND starts_at < ${dayEnd}
-      AND ends_at > ${dayStart}
+      AND starts_at < ${rangeEnd}
+      AND ends_at > ${rangeStart}
       AND expires_at > now()
   `;
 
-  const busy = new Map<string, TimeRange[]>();
-  for (const row of [...appointmentRows, ...holdRows]) {
-    const range = toLocalMinutes(location.timezone, date, row.starts_at, row.ends_at);
-    if (!range) continue;
-    const bucket = busy.get(row.professional_id) ?? [];
-    bucket.push(range);
-    busy.set(row.professional_id, bucket);
-  }
-
-  // Contagem do dia inteiro para o limite diário — inclui o que já passou.
-  const countRows = await tx.$queryRaw<{ professional_id: string; total: bigint }[]>`
-    SELECT professional_id, count(*) AS total
+  // Contagem por dia local para o limite diário — inclui o que já passou.
+  const countRows = await tx.$queryRaw<
+    { professional_id: string; local_date: Date; total: bigint }[]
+  >`
+    SELECT professional_id,
+           (starts_at AT TIME ZONE ${location.timezone})::date AS local_date,
+           count(*) AS total
     FROM appointments
     WHERE professional_id = ANY(${professionalIds}::uuid[])
-      AND starts_at >= ${dayStart}
-      AND starts_at < ${dayEnd}
+      AND starts_at >= ${rangeStart}
+      AND starts_at < ${rangeEnd}
       AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
-    GROUP BY professional_id
+    GROUP BY professional_id, local_date
   `;
-  const appointmentCount = new Map(countRows.map((row) => [row.professional_id, Number(row.total)]));
 
-  // ---- Recursos -----------------------------------------------------------
+  const countsByDate = new Map<string, Map<string, number>>();
+  for (const row of countRows) {
+    const date = row.local_date.toISOString().slice(0, 10);
+    const bucket = countsByDate.get(date) ?? new Map<string, number>();
+    bucket.set(row.professional_id, Number(row.total));
+    countsByDate.set(date, bucket);
+  }
+
+  // ---- Recursos ------------------------------------------------------------
   const poolRows = await tx.$queryRaw<{ resource_type: string; capacity: number }[]>`
     SELECT resource_type, capacity FROM resource_pools WHERE location_id = ${locationId}::uuid
   `;
@@ -355,25 +422,10 @@ export async function loadDayContext(
     FROM appointment_resources ar
     JOIN appointments a ON a.id = ar.appointment_id
     WHERE a.location_id = ${locationId}::uuid
-      AND a.starts_at < ${dayEnd}
-      AND a.ends_at > ${dayStart}
+      AND a.starts_at < ${rangeEnd}
+      AND a.ends_at > ${rangeStart}
       AND a.status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
   `;
-
-  const usageByType = new Map<string, TimeRange[]>();
-  for (const row of resourceUsageRows) {
-    const range = toLocalMinutes(location.timezone, date, row.starts_at, row.ends_at);
-    if (!range) continue;
-    const bucket = usageByType.get(row.resource_type) ?? [];
-    bucket.push(range);
-    usageByType.set(row.resource_type, bucket);
-  }
-
-  const resourcePools = poolRows.map((row) => ({
-    resourceType: row.resource_type,
-    capacity: row.capacity,
-    busy: usageByType.get(row.resource_type) ?? [],
-  }));
 
   // ---- Combos que casam exatamente com a seleção --------------------------
   const comboRows = await tx.$queryRaw<
@@ -398,8 +450,67 @@ export async function loadDayContext(
     declaredDurationMinutes: row.declared_duration_minutes,
   }));
 
-  return {
-    location, weekday, services, professionals,
-    weeklyPlans, exceptions, busy, appointmentCount, resourcePools, comboRules,
-  };
+  // ---- Recorte por dia -----------------------------------------------------
+  const days = new Map<string, DayContext>();
+
+  for (const date of sorted) {
+    const busy = new Map<string, TimeRange[]>();
+    for (const row of [...appointmentRows, ...holdRows]) {
+      const range = toLocalMinutes(location.timezone, date, row.starts_at, row.ends_at);
+      if (range) push(busy, row.professional_id, range);
+    }
+
+    const usageByType = new Map<string, TimeRange[]>();
+    for (const row of resourceUsageRows) {
+      const range = toLocalMinutes(location.timezone, date, row.starts_at, row.ends_at);
+      if (range) push(usageByType, row.resource_type, range);
+    }
+
+    const exceptions = new Map<string, ScheduleException[]>();
+    const forLocation = locationExceptions.get(date) ?? [];
+    for (const professionalId of professionalIds) {
+      const own = professionalExceptions.get(`${date}|${professionalId}`) ?? [];
+      // Exceções da unidade valem para todo mundo.
+      exceptions.set(professionalId, [...own, ...forLocation]);
+    }
+
+    days.set(date, {
+      location,
+      date,
+      weekday: weekdayIn(location.timezone, date),
+      services,
+      professionals,
+      weeklyPlans: plansByProfessional,
+      exceptions,
+      busy,
+      appointmentCount: countsByDate.get(date) ?? new Map(),
+      resourcePools: poolRows.map((row) => ({
+        resourceType: row.resource_type,
+        capacity: row.capacity,
+        busy: usageByType.get(row.resource_type) ?? [],
+      })),
+      comboRules,
+    });
+  }
+
+  return { location, dates: sorted, services, professionals, days };
+}
+
+/** Conveniência para um único dia. Delega ao carregador de intervalo. */
+export async function loadDayContext(
+  tx: TransactionClient,
+  params: {
+    readonly locationId: string;
+    readonly serviceIds: readonly string[];
+    readonly date: string;
+    readonly professionalId?: string;
+  },
+): Promise<DayContext | null> {
+  const range = await loadRangeContext(tx, {
+    locationId: params.locationId,
+    serviceIds: params.serviceIds,
+    dates: [params.date],
+    ...(params.professionalId ? { professionalId: params.professionalId } : {}),
+  });
+  return range?.days.get(params.date) ?? null;
 }

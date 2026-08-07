@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 2 de 76 blocos.**
+**Status: 3 de 76 blocos.**
 
 ---
 
@@ -48,7 +48,7 @@ atual sem perder nenhuma capacidade que usava.
 |---|---|---|
 | 1 | Motor de disponibilidade + schema Scheduling | ✅ |
 | 2 | Repositórios: resolver `ProfessionalDay`, catálogo, habilidades | ✅ |
-| 3 | API + middleware de tenant/RLS + `GET /availability` | |
+| 3 | API + middleware de tenant/RLS + `GET /availability` | ✅ |
 | 4 | `POST /appointments`, hold, idempotência, reagendamento atômico | |
 | 5 | Auth do cliente: OTP WhatsApp, rate limit, sessão | |
 | 6 | Design system: tokens, componentes base, tema, acessibilidade | |

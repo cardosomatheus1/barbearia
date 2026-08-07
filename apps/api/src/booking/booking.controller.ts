@@ -1,0 +1,70 @@
+import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { getAvailabilityRange, MAX_RANGE_DAYS } from '@barbearia/scheduling';
+import { notFound, badRequest } from '../common/errors.js';
+import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { TenantService } from '../tenant/tenant.service.js';
+import { availabilityQuerySchema, slugSchema, type AvailabilityQuery } from './booking.schemas.js';
+
+/**
+ * Superfície pública de agendamento. Sem autenticação: o slug é o endereço.
+ *
+ * O controller traduz HTTP para caso de uso e volta. Nenhuma regra de negócio
+ * mora aqui (CLAUDE.md §4).
+ */
+@Controller('v1/b/:slug')
+export class BookingController {
+  // `@Inject` explícito: a DI por metadata de decorator depende do transpilador
+  // emitir `design:paramtypes`, o que o esbuild não faz. Declarar o token deixa
+  // a injeção independente da ferramenta de build.
+  constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
+
+  @Get('availability')
+  async availability(
+    @Param('slug', new ZodValidationPipe(slugSchema)) slug: string,
+    @Query(new ZodValidationPipe(availabilityQuerySchema)) query: AvailabilityQuery,
+  ) {
+    const tenantId = await this.tenants.resolve(slug);
+    if (!tenantId) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
+
+    let range;
+    try {
+      range = await getAvailabilityRange({
+        tenantId,
+        locationId: query.locationId,
+        serviceIds: query.serviceIds,
+        dateFrom: query.dateFrom,
+        ...(query.dateTo ? { dateTo: query.dateTo } : {}),
+        ...(query.professionalId ? { professionalId: query.professionalId } : {}),
+        collapse: query.anyProfessional,
+      });
+    } catch (error) {
+      // `datesBetween` rejeita intervalo invertido ou acima do teto. É erro do
+      // chamador, não falha interna.
+      if (error instanceof RangeError) {
+        throw badRequest('invalid_range', `Intervalo inválido (máximo ${MAX_RANGE_DAYS} dias)`);
+      }
+      throw error;
+    }
+
+    return {
+      timezone: range.timezone,
+      granularityMinutes: range.granularityMinutes,
+      days: range.days.map((day) => ({
+        date: day.date,
+        totalDurationMinutes: day.totalDurationMinutes,
+        serviceDurationMinutes: day.serviceDurationMinutes,
+        unavailableReason: day.unavailableReason,
+        waitlistAvailable: day.waitlistAvailable,
+        slots: day.slots.map((slot) => ({
+          start: slot.start,
+          end: slot.end,
+          startsAt: slot.startsAt,
+          endsAt: slot.endsAt,
+          professionalId: slot.professionalId,
+          priceCents: slot.price ?? null,
+        })),
+      })),
+      professionals: range.days[0]?.professionals ?? [],
+    };
+  }
+}

@@ -25,6 +25,7 @@ step "core — unitários"     pnpm --filter @barbearia/core test
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   step "db — invariantes"   pnpm --filter @barbearia/db test
   step "scheduling — integração" pnpm --filter @barbearia/scheduling test
+  step "api — e2e"          pnpm --filter @barbearia/api test
 else
   printf '\n\033[33m==> testes de banco PULADOS\033[0m\n'
   printf '    defina ADMIN_DATABASE_URL para rodá-los. Um bloco não pode ser\n'

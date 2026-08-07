@@ -299,6 +299,37 @@ EXCEPTION WHEN insufficient_privilege THEN
   RAISE NOTICE 'OK 13 — WITH CHECK impede gravar em nome de outro tenant';
 END $$;
 
+-- Resolução pública de slug (migração 0004): legível sem tenant, nunca gravável.
+DO $$
+DECLARE
+  resolved uuid;
+BEGIN
+  PERFORM set_config('app.tenant_id', '', true);
+  SELECT tenant_id INTO resolved FROM tenant_slugs WHERE slug = 'boxseisbarbearia';
+  IF resolved IS DISTINCT FROM '11111111-1111-1111-1111-111111111111' THEN
+    RAISE EXCEPTION 'FALHOU: slug público não resolveu sem tenant no contexto';
+  END IF;
+  RAISE NOTICE 'OK 14 — slug resolve sem tenant (a API precisa disso antes de ter um)';
+END $$;
+
+DO $$
+BEGIN
+  PERFORM set_config('app.tenant_id', '', true);
+  INSERT INTO tenant_slugs (slug, tenant_id) VALUES ('sequestro', '11111111-1111-1111-1111-111111111111');
+  RAISE EXCEPTION 'FALHOU: gravou slug sem tenant no contexto';
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'OK 15 — leitura de slug é pública, escrita não';
+END $$;
+
+DO $$
+BEGIN
+  PERFORM set_config('app.tenant_id', '22222222-2222-2222-2222-222222222222', true);
+  INSERT INTO tenant_slugs (slug, tenant_id) VALUES ('roubado', '11111111-1111-1111-1111-111111111111');
+  RAISE EXCEPTION 'FALHOU: tenant gravou slug apontando para outro tenant';
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'OK 16 — não se cria slug apontando para outro tenant';
+END $$;
+
 RESET ROLE;
 
 DO $$ BEGIN RAISE NOTICE '--- todos os invariantes passaram ---'; END $$;

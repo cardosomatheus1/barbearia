@@ -16,6 +16,7 @@ integridade do banco.
 | `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 118 testes ✅ |
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 13 invariantes + 8 testes ✅ |
 | `packages/scheduling` | Repositórios e orquestração: do banco ao motor | 18 testes ✅ |
+| `apps/api` | API pública de agendamento (NestJS) | 16 testes e2e ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -37,6 +38,7 @@ pnpm -r typecheck
 # Cada script cria e destrói o próprio banco descartável.
 pnpm --filter @barbearia/db test          # invariantes do schema
 pnpm --filter @barbearia/scheduling test  # pipeline banco -> motor
+pnpm --filter @barbearia/api test         # e2e da API
 ```
 
 `pnpm verify` **falha** se os testes de banco forem pulados por falta de
@@ -92,6 +94,21 @@ EXCLUDE USING gist (
 
 O intervalo é semiaberto de propósito: um agendamento que começa exatamente onde
 o anterior termina é encaixe justo, não conflito.
+
+### Disponibilidade é carregada por intervalo, não por dia
+
+`GET /availability` aceita `dateFrom`/`dateTo`. O contexto do intervalo inteiro é
+carregado numa leva e recortado por dia — consultar dia a dia num laço seria N+1
+entre datas, e a meta é 7 dias × 5 profissionais abaixo de 800 ms.
+
+O intervalo tem teto de 14 dias. Sem ele, um único pedido varre anos de agenda.
+
+### Slug resolve antes de existir tenant
+
+A RLS filtra por `app.tenant_id`, mas para descobrir o tenant a API precisa
+consultar o slug — que é o que ela ainda não resolveu. `tenant_slugs` é a única
+tabela com leitura pública, e **só leitura**: escrita continua restrita ao dono.
+O `tenant_id` resolvido nunca sai da API.
 
 ### Contenção de recurso recorta a janela, não filtra o slot
 
