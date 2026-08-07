@@ -26,6 +26,7 @@ step() {
 step "typecheck"            pnpm -r typecheck
 step "build"                pnpm -r build
 step "core — unitários"     pnpm --filter @barbearia/core test
+step "ui — tokens e componentes" pnpm --filter @barbearia/ui test
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   step "db — invariantes"   pnpm --filter @barbearia/db test

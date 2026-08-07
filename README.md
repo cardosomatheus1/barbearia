@@ -17,6 +17,7 @@ integridade do banco.
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 16 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade e reserva | 44 testes ✅ |
 | `packages/identity` | OTP por WhatsApp, sessão do cliente, consentimentos | 26 testes ✅ |
+| `packages/ui` | Design system: tokens, tema, componentes acessíveis | 77 testes ✅ |
 | `apps/api` | API pública: disponibilidade, login, agendamento | 35 testes e2e ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
@@ -106,6 +107,18 @@ Nenhuma das duas basta sozinha. A validação tem uma janela entre calcular e
 gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida real,
 uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
 ambos são respostas corretas e nenhum deles é overbooking.
+
+### Contraste é medido, não declarado
+
+Cada par de cores que a interface usa está declarado em `CONTRAST_PAIRS` e
+verificado contra a WCAG por teste. "Usamos cores acessíveis" sem medição é
+opinião — e a primeira troca de paleta a quebra sem ninguém notar.
+
+Isso já pagou: o âmbar do tema claro reprovou duas vezes antes de passar. A cor
+final saiu de cálculo, não de gosto.
+
+O CSS é gerado a partir dos tokens tipados, então não existe uma segunda lista
+para ficar desatualizada.
 
 ### Agendar custa nome + celular. Só isso.
 
