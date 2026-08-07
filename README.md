@@ -9,20 +9,24 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 88 testes ✅ |
-| `packages/db` | Schema, migrações e testes de integridade | 13 invariantes ✅ |
+| `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 118 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 13 invariantes ✅ |
+| `packages/scheduling` | Repositórios e orquestração: do banco ao motor | 18 testes ✅ |
 
 ## Rodando
 
 ```bash
 pnpm install
-pnpm --filter @barbearia/core test        # motor
-pnpm --filter @barbearia/core typecheck
+pnpm -r build
 
-# Testes de banco exigem um Postgres 16+ com as extensões
-# pgcrypto, citext e btree_gist disponíveis.
+pnpm --filter @barbearia/core test        # motor, sem banco
+pnpm -r typecheck
+
+# Os testes de banco exigem Postgres 16+ com pgcrypto, citext e btree_gist.
+# Cada script cria e destrói o próprio banco descartável.
 export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
-pnpm --filter @barbearia/db test
+pnpm --filter @barbearia/db test          # invariantes do schema
+pnpm --filter @barbearia/scheduling test  # pipeline banco -> motor
 ```
 
 ## Decisões que valem conhecer antes de mexer
@@ -72,11 +76,23 @@ EXCLUDE USING gist (
 O intervalo é semiaberto de propósito: um agendamento que começa exatamente onde
 o anterior termina é encaixe justo, não conflito.
 
+### Contenção de recurso recorta a janela, não filtra o slot
+
+Quando a única cadeira libera às 09:20, o slot seguinte nasce às 09:20. Filtrar
+candidatos depois de gerá-los produziria o mesmo desperdício da grade fixa por
+outra via: a janela do barbeiro ancoraria em 09:00 e o passo pularia para 09:30.
+
+`saturatedRanges` calcula as faixas em que o recurso não comporta mais a
+exigência, e elas são subtraídas da janela **antes** da geração.
+
 ### Isolamento de tenant no banco, não só no código
 
-RLS com `FORCE` em todas as tabelas de negócio. Um `WHERE tenant_id` esquecido no
-repositório não vaza dados — o teste `OK 12` consulta deliberadamente sem filtro
-e recebe zero linhas.
+RLS com `FORCE` em todas as tabelas de negócio, via `app.tenant_id` fixado dentro
+da transação. Não existe acesso ao banco fora de `withTenant`, porque o pool
+reaproveita conexões e uma sessão herdaria o tenant da requisição anterior.
+
+O role da aplicação é `NOBYPASSRLS` de propósito. As consultas do repositório
+deliberadamente não repetem `tenant_id` no `WHERE` — quem filtra é a política.
 
 ## Documentação
 
@@ -90,7 +106,11 @@ e recebe zero linhas.
 
 ## Próximos passos
 
-Bloco 2 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 3 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Resolver jornada + exceções + bloqueios de uma data no `ProfessionalDay` que o
-motor consome. Hoje o motor está pronto e provado, mas não tem quem o alimente.
+API com middleware de tenant e `GET /availability`. O pipeline banco → motor já
+funciona ponta a ponta; falta expô-lo.
+
+**Lacuna conhecida:** bloqueios pontuais (barbeiro fechar uma hora específica)
+ainda não têm tabela. O motor já aceita `blocks`; o repositório passa vazio. Vem
+com o bloco 12, a agenda do admin.

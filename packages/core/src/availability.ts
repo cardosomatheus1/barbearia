@@ -1,4 +1,13 @@
-import { formatHHMM, maxConcurrency, normalize, subtract, type Minutes, type TimeRange } from './time.js';
+import {
+  MINUTES_IN_DAY,
+  formatHHMM,
+  maxConcurrency,
+  normalize,
+  saturatedRanges,
+  subtract,
+  type Minutes,
+  type TimeRange,
+} from './time.js';
 import { resolveDuration, type ResolvedDuration } from './duration.js';
 import { DEFAULT_GRANULARITY, generateStarts } from './slots.js';
 import type {
@@ -52,13 +61,40 @@ function hasResourceCapacity(
 }
 
 /** Janelas livres do profissional: jornada − intervalos − agendamentos − bloqueios. */
-export function freeWindows(professional: ProfessionalDay): TimeRange[] {
+export function freeWindows(
+  professional: ProfessionalDay,
+  resourceHoles: readonly TimeRange[] = [],
+): TimeRange[] {
   const holes = [
     ...(professional.breaks ?? []),
     ...(professional.busy ?? []),
     ...(professional.blocks ?? []),
+    ...resourceHoles,
   ];
   return subtract(normalize(professional.working), holes);
+}
+
+/**
+ * Faixas do dia em que algum recurso exigido está saturado.
+ *
+ * São subtraídas da janela livre **antes** da geração de slots, para que o
+ * ancoramento também valha para recurso: quando a cadeira libera às 09:20, o
+ * próximo slot nasce às 09:20 e não no próximo ponto da grade.
+ */
+export function resourceHoles(
+  needs: readonly ResourceRequirement[],
+  pools: ReadonlyMap<string, ResourcePool>,
+): TimeRange[] {
+  const holes: TimeRange[] = [];
+
+  for (const need of needs) {
+    const pool = pools.get(need.resourceType);
+    // Recurso exigido que a unidade não cadastrou: o dia inteiro é inviável.
+    if (!pool) return [{ start: 0, end: MINUTES_IN_DAY }];
+    holes.push(...saturatedRanges(pool.busy ?? [], pool.capacity, need.quantity));
+  }
+
+  return normalize(holes);
 }
 
 interface Diagnostics {
@@ -99,6 +135,7 @@ export function computeAvailability(query: AvailabilityQuery): AvailabilityResul
 
   const needs = aggregateResourceNeeds(query.services);
   const pools = new Map((query.resourcePools ?? []).map((pool) => [pool.resourceType, pool]));
+  const holes = resourceHoles(needs, pools);
 
   const diagnostics: Diagnostics = {
     anyWorking: false,
@@ -121,7 +158,12 @@ export function computeAvailability(query: AvailabilityQuery): AvailabilityResul
       continue;
     }
 
-    for (const window of freeWindows(professional)) {
+    if (holes.length > 0 && freeWindows(professional).length > 0
+        && freeWindows(professional, holes).length === 0) {
+      diagnostics.blockedByResource = true;
+    }
+
+    for (const window of freeWindows(professional, holes)) {
       diagnostics.anyFreeWindow = true;
 
       for (const start of generateStarts(window, duration.occupiedMinutes, granularity, strategy)) {
@@ -131,6 +173,8 @@ export function computeAvailability(query: AvailabilityQuery): AvailabilityResul
         }
 
         const occupied: TimeRange = { start, end: start + duration.occupiedMinutes };
+        // As faixas saturadas já foram recortadas da janela; esta checagem é
+        // rede de segurança e não deveria disparar.
         if (!hasResourceCapacity(occupied, needs, pools)) {
           diagnostics.blockedByResource = true;
           continue;

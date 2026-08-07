@@ -372,6 +372,21 @@ describe('computeAvailability — recursos', () => {
     expect(starts(result)).toEqual(['09:20']);
   });
 
+  it('ancora o slot na liberação do recurso, não na grade', () => {
+    // A única cadeira libera 09:20. O barbeiro está livre desde 09:00, então a
+    // janela dele ancoraria em 09:00 e o passo de 20 min pularia direto para
+    // 09:40 — perdendo 09:20. Recortar a faixa saturada antes de gerar os slots
+    // faz o próximo nascer exatamente na liberação.
+    const result = computeAvailability({
+      date: '2026-08-11',
+      services: [corteComCadeira],
+      professionals: [prof('p1', '09:00-11:00')],
+      resourcePools: [{ resourceType: 'cadeira', capacity: 1, busy: [r('09:00-09:20')] }],
+      granularityMinutes: 20,
+    });
+    expect(starts(result)[0]).toBe('09:20');
+  });
+
   it('trata recurso exigido e não cadastrado como indisponível', () => {
     const comMaca: Service = {
       ...CORTE,

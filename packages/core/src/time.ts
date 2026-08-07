@@ -147,6 +147,56 @@ export function intersect(a: readonly TimeRange[], b: readonly TimeRange[]): Tim
 }
 
 /**
+ * Faixas em que um recurso está saturado — isto é, em que ainda ocupar `need`
+ * unidades ultrapassaria a capacidade.
+ *
+ * Existe para que a contenção de recurso **recorte a janela livre** antes da
+ * geração de slots, em vez de filtrar candidatos depois. Filtrar depois perde o
+ * ancoramento: se a única cadeira libera às 09:20 e a janela do barbeiro começa
+ * às 09:00, o passo continuaria caindo em 09:00, 09:15, 09:30 e os 10 minutos a
+ * partir de 09:20 morreriam — o mesmo desperdício da grade fixa, por outra via.
+ */
+export function saturatedRanges(
+  usage: readonly TimeRange[],
+  capacity: number,
+  need: number,
+): TimeRange[] {
+  if (need <= 0) return [];
+  // Sem folga alguma: o recurso nunca comporta esta exigência.
+  if (need > capacity) return [{ start: 0, end: MINUTES_IN_DAY }];
+
+  const threshold = capacity - need; // saturado quando a concorrência passa disso
+  const events: Array<{ at: Minutes; delta: number }> = [];
+
+  for (const range of usage) {
+    if (!isValidRange(range)) continue;
+    events.push({ at: range.start, delta: 1 });
+    events.push({ at: range.end, delta: -1 });
+  }
+  if (events.length === 0) return [];
+
+  events.sort((a, b) => a.at - b.at || a.delta - b.delta);
+
+  const blocked: TimeRange[] = [];
+  let current = 0;
+  let openedAt: Minutes | null = null;
+
+  for (const event of events) {
+    const previous = current;
+    current += event.delta;
+
+    if (previous <= threshold && current > threshold) {
+      openedAt = event.at;
+    } else if (previous > threshold && current <= threshold && openedAt !== null) {
+      blocked.push({ start: openedAt, end: event.at });
+      openedAt = null;
+    }
+  }
+
+  return normalize(blocked);
+}
+
+/**
  * Quantos intervalos de `ranges` cobrem simultaneamente qualquer ponto de `probe`.
  * Usado para capacidade de recurso: N cadeiras => no máximo N usos concorrentes.
  */

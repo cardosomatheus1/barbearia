@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatHHMM,
+  saturatedRanges,
   intersect,
   maxConcurrency,
   normalize,
@@ -152,5 +153,44 @@ describe('maxConcurrency', () => {
   it('limita a contagem à sonda', () => {
     const usage = [r('08:00-09:00'), r('08:30-09:30')];
     expect(maxConcurrency(usage, r('09:00-10:00'))).toBe(1);
+  });
+});
+
+describe('saturatedRanges', () => {
+  it('sem uso, nada está saturado', () => {
+    expect(saturatedRanges([], 2, 1)).toEqual([]);
+  });
+
+  it('capacidade 1: qualquer uso satura', () => {
+    expect(show(saturatedRanges([r('09:00-09:20')], 1, 1))).toEqual(['09:00-09:20']);
+  });
+
+  it('capacidade 2: satura só onde há dois usos simultâneos', () => {
+    const usage = [r('09:00-10:00'), r('09:30-10:30')];
+    expect(show(saturatedRanges(usage, 2, 1))).toEqual(['09:30-10:00']);
+  });
+
+  it('funde faixas saturadas contíguas', () => {
+    const usage = [r('09:00-10:00'), r('10:00-11:00')];
+    expect(show(saturatedRanges(usage, 1, 1))).toEqual(['09:00-11:00']);
+  });
+
+  it('exigência maior que a capacidade satura o dia inteiro', () => {
+    expect(show(saturatedRanges([], 1, 2))).toEqual(['00:00-24:00']);
+  });
+
+  it('exigência de 2 numa capacidade de 3 ainda cabe com um uso', () => {
+    // 1 em uso + 2 exigidos = 3, exatamente a capacidade.
+    expect(saturatedRanges([r('09:00-10:00')], 3, 2)).toEqual([]);
+  });
+
+  it('exigência de 2 numa capacidade de 3 satura com dois usos', () => {
+    const usage = [r('09:00-10:00'), r('09:30-11:00')];
+    // 2 em uso + 2 exigidos = 4 > 3, só onde os dois se sobrepõem.
+    expect(show(saturatedRanges(usage, 3, 2))).toEqual(['09:30-10:00']);
+  });
+
+  it('exigência zero nunca satura', () => {
+    expect(saturatedRanges([r('09:00-10:00')], 1, 0)).toEqual([]);
   });
 });

@@ -1,0 +1,361 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model appointment_services {
+  appointment_id   String       @db.Uuid
+  service_id       String       @db.Uuid
+  tenant_id        String       @db.Uuid
+  position         Int          @default(0) @db.SmallInt
+  price_cents      Int
+  duration_minutes Int          @db.SmallInt
+  appointments     appointments @relation(fields: [appointment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  services         services     @relation(fields: [service_id], references: [id], onUpdate: NoAction)
+  tenants          tenants      @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([appointment_id, service_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model appointments {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id              String                 @db.Uuid
+  location_id            String                 @db.Uuid
+  customer_id            String?                @db.Uuid
+  professional_id        String                 @db.Uuid
+  starts_at              DateTime               @db.Timestamptz(6)
+  ends_at                DateTime               @db.Timestamptz(6)
+  service_starts_at      DateTime               @db.Timestamptz(6)
+  service_ends_at        DateTime               @db.Timestamptz(6)
+  status                 appointment_status     @default(pending)
+  source                 appointment_source     @default(website)
+  recurrence_id          String?                @db.Uuid
+  rescheduled_from       String?                @db.Uuid
+  notes                  String?
+  price_cents            Int                    @default(0)
+  discount_cents         Int                    @default(0)
+  deposit_required_cents Int                    @default(0)
+  deposit_paid_cents     Int                    @default(0)
+  idempotency_key        String?
+  created_at             DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime               @default(now()) @db.Timestamptz(6)
+  appointment_services   appointment_services[]
+  customers              customers?             @relation(fields: [customer_id], references: [id], onUpdate: NoAction)
+  locations              locations              @relation(fields: [location_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  professionals          professionals          @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  appointments           appointments?          @relation("appointmentsToappointments", fields: [rescheduled_from], references: [id], onUpdate: NoAction)
+  other_appointments     appointments[]         @relation("appointmentsToappointments")
+  tenants                tenants                @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([customer_id, starts_at(sort: Desc)], map: "appointments_customer_idx")
+  @@index([location_id, starts_at], map: "appointments_location_window_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customers {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id    String         @db.Uuid
+  name         String
+  phone_e164   String
+  created_at   DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime       @default(now()) @db.Timestamptz(6)
+  appointments appointments[]
+  tenants      tenants        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenant_id, phone_e164], map: "customers_tenant_phone_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model locations {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String                @db.Uuid
+  name                String
+  timezone            String                @default("America/Sao_Paulo")
+  slot_strategy       slot_strategy         @default(anchored)
+  buffer_policy       buffer_policy         @default(outer)
+  granularity_minutes Int                   @default(5) @db.SmallInt
+  min_lead_minutes    Int                   @default(30) @db.SmallInt
+  max_lead_days       Int                   @default(60) @db.SmallInt
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
+  appointments        appointments[]
+  tenants             tenants               @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  professionals       professionals[]
+  resource_pools      resource_pools[]
+  schedule_exceptions schedule_exceptions[]
+
+  @@index([tenant_id], map: "locations_tenant_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model professional_services {
+  professional_id  String        @db.Uuid
+  service_id       String        @db.Uuid
+  tenant_id        String        @db.Uuid
+  price_cents      Int?
+  duration_minutes Int?          @db.SmallInt
+  professionals    professionals @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  services         services      @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants          tenants       @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([professional_id, service_id])
+  @@index([service_id], map: "professional_services_service_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model professionals {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String                  @db.Uuid
+  location_id           String                  @db.Uuid
+  name                  String
+  kind                  professional_kind       @default(professional)
+  bookable_online       Boolean                 @default(true)
+  daily_limit           Int?                    @db.SmallInt
+  active                Boolean                 @default(true)
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime                @default(now()) @db.Timestamptz(6)
+  appointments          appointments[]
+  professional_services professional_services[]
+  locations             locations               @relation(fields: [location_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants               tenants                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  schedule_exceptions   schedule_exceptions[]
+  slot_holds            slot_holds[]
+  work_schedules        work_schedules[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model resource_pools {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String    @db.Uuid
+  location_id   String    @db.Uuid
+  resource_type String
+  capacity      Int       @db.SmallInt
+  locations     locations @relation(fields: [location_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants       tenants   @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([location_id, resource_type], map: "resource_pools_location_type_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model schedule_exceptions {
+  id              String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String                  @db.Uuid
+  professional_id String?                 @db.Uuid
+  location_id     String?                 @db.Uuid
+  on_date         DateTime                @db.Date
+  kind            schedule_exception_type
+  start_minute    Int?                    @db.SmallInt
+  end_minute      Int?                    @db.SmallInt
+  reason          String?
+  locations       locations?              @relation(fields: [location_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  professionals   professionals?          @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants         tenants                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([on_date], map: "schedule_exceptions_date_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_categories {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id String     @db.Uuid
+  name      String
+  position  Int        @default(0) @db.SmallInt
+  tenants   tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  services  services[]
+
+  @@index([tenant_id], map: "service_categories_tenant_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_combo_components {
+  combo_id       String         @db.Uuid
+  service_id     String         @db.Uuid
+  tenant_id      String         @db.Uuid
+  service_combos service_combos @relation(fields: [combo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  services       services       @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants        tenants        @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([combo_id, service_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_combos {
+  id                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                 String                     @db.Uuid
+  name                      String
+  declared_duration_minutes Int                        @db.SmallInt
+  service_combo_components  service_combo_components[]
+  tenants                   tenants                    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model service_resource_requirements {
+  service_id    String   @db.Uuid
+  resource_type String
+  tenant_id     String   @db.Uuid
+  quantity      Int      @default(1) @db.SmallInt
+  services      services @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants       tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([service_id, resource_type])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model services {
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                     String                          @db.Uuid
+  category_id                   String?                         @db.Uuid
+  name                          String
+  description                   String?
+  price_cents                   Int
+  duration_minutes              Int                             @db.SmallInt
+  buffer_before_minutes         Int                             @default(0) @db.SmallInt
+  buffer_after_minutes          Int                             @default(0) @db.SmallInt
+  bookable_online               Boolean                         @default(true)
+  active                        Boolean                         @default(true)
+  created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  appointment_services          appointment_services[]
+  professional_services         professional_services[]
+  service_combo_components      service_combo_components[]
+  service_resource_requirements service_resource_requirements[]
+  service_categories            service_categories?             @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  tenants                       tenants                         @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model slot_holds {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String        @db.Uuid
+  professional_id String        @db.Uuid
+  starts_at       DateTime      @db.Timestamptz(6)
+  ends_at         DateTime      @db.Timestamptz(6)
+  expires_at      DateTime      @db.Timestamptz(6)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  professionals   professionals @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants         tenants       @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([expires_at], map: "slot_holds_expiry_idx")
+  @@index([professional_id, starts_at], map: "slot_holds_professional_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tenant_slugs {
+  slug       String   @id @db.Citext
+  tenant_id  String   @db.Uuid
+  is_primary Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  tenants    tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenant_id], map: "tenant_slugs_tenant_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tenants {
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                          String
+  created_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime                        @default(now()) @db.Timestamptz(6)
+  appointment_services          appointment_services[]
+  appointments                  appointments[]
+  customers                     customers[]
+  locations                     locations[]
+  professional_services         professional_services[]
+  professionals                 professionals[]
+  resource_pools                resource_pools[]
+  schedule_exceptions           schedule_exceptions[]
+  service_categories            service_categories[]
+  service_combo_components      service_combo_components[]
+  service_combos                service_combos[]
+  service_resource_requirements service_resource_requirements[]
+  services                      services[]
+  slot_holds                    slot_holds[]
+  tenant_slugs                  tenant_slugs[]
+  work_schedules                work_schedules[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model work_schedules {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String        @db.Uuid
+  professional_id String        @db.Uuid
+  weekday         Int           @db.SmallInt
+  start_minute    Int           @db.SmallInt
+  end_minute      Int           @db.SmallInt
+  breaks          Json          @default("[]")
+  professionals   professionals @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants         tenants       @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([professional_id, weekday], map: "work_schedules_prof_weekday_key")
+}
+
+enum appointment_source {
+  website
+  app
+  whatsapp
+  instagram
+  google
+  marketplace
+  reception
+  professional
+  api
+  recurrence
+  waitlist
+}
+
+enum appointment_status {
+  pending
+  confirmed
+  checked_in
+  waiting
+  in_progress
+  completed
+  cancelled_customer
+  cancelled_business
+  no_show
+  rescheduled
+}
+
+enum buffer_policy {
+  outer
+  per_service
+}
+
+enum professional_kind {
+  professional
+  counter
+  resource_only
+  external
+}
+
+enum schedule_exception_type {
+  custom_hours
+  day_off
+  holiday
+  vacation
+}
+
+enum slot_strategy {
+  anchored
+  grid
+}
