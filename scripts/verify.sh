@@ -10,12 +10,17 @@ failures=()
 step() {
   local name="$1"; shift
   printf '\n\033[1m==> %s\033[0m\n' "$name"
-  if "$@"; then
+  # A saída da etapa é preservada em arquivo: filtrar `pnpm verify` com grep
+  # escondeu uma falha de build atrás de suítes verdes, e o commit saiu vermelho.
+  local log; log=$(mktemp)
+  if "$@" >"$log" 2>&1; then
     printf '\033[32m    ok\033[0m\n'
   else
     printf '\033[31m    FALHOU\033[0m\n'
+    sed 's/^/    /' "$log" | tail -25
     failures+=("$name")
   fi
+  rm -f "$log"
 }
 
 step "typecheck"            pnpm -r typecheck
