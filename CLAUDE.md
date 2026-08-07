@@ -204,10 +204,28 @@ core  ←  scheduling  ←  api  ←  web
 
 **Aplicável a todo bloco que produza interface.**
 
-Não existe skill de design neste ambiente — procurei. `canvas-design` é para
-pôster, `web-artifacts-builder` e `theme-factory` são para artifact do
-claude.ai. Nenhum serve para app em produção. Então a qualidade visual vem de
-regra escrita e verificada, não de ferramenta.
+### Antes de escrever CSS, invoque `frontend-design`
+
+A skill oficial da Anthropic está instalada em
+`.claude/skills/frontend-design/`. **Todo bloco que produza tela nova começa por
+ela** — é o que impede o resultado de parecer template.
+
+As duas coisas se complementam e nenhuma substitui a outra:
+
+- **Esta seção define o piso** — responsivo a partir de 360px, contraste medido,
+  toque de 44px, foco visível, sem rolagem horizontal. Obrigações, várias com
+  teste.
+- **A skill define o teto** — direção estética, tipografia com personalidade,
+  elemento assinatura.
+
+Em conflito, o piso vence: layout marcante que quebra em 360px ou reprova no
+contraste não entra.
+
+**Alerta que já se aplica aqui:** a skill lista três aparências em que design de
+IA costuma cair, e a segunda é "fundo quase preto com um único acento vivo" —
+descrição superficial do tema escuro do bloco 6. O âmbar tem lastro (couro,
+latão, o setor) e passou por verificação, mas paleta não diferencia. A
+personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
 
 ### Mobile-first, sem exceção
 
