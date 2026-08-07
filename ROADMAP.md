@@ -13,6 +13,10 @@ Uma unidade de trabalho que termina **commitada, com teste verde e uma
 capacidade nova real**. Não é uma sessão nem um dia — é um incremento que se
 sustenta sozinho e pode ser revisado isoladamente.
 
+**Nenhum bloco é dado como concluído sem cumprir o
+[Definition of Done](CLAUDE.md#definition-of-done) do `CLAUDE.md`** — testes,
+segurança, desempenho e arquitetura. `pnpm verify` é o portão.
+
 ---
 
 ## Aviso sobre este número

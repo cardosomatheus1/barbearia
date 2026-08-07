@@ -1,6 +1,10 @@
 # Plataforma Inteligente de Gestão para Barbearias
 
-Monorepo TypeScript. A especificação completa está em [`SPEC.md`](SPEC.md).
+Monorepo TypeScript.
+
+- [`SPEC.md`](SPEC.md) — o que o produto é
+- [`ROADMAP.md`](ROADMAP.md) — em quantos blocos, em que ordem
+- **[`CLAUDE.md`](CLAUDE.md) — as regras de engenharia. Vinculante para todo bloco.**
 
 ## Estado atual
 
@@ -13,21 +17,30 @@ integridade do banco.
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 13 invariantes ✅ |
 | `packages/scheduling` | Repositórios e orquestração: do banco ao motor | 18 testes ✅ |
 
+Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
+dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
+
 ## Rodando
 
 ```bash
 pnpm install
-pnpm -r build
 
+# Portão único do Definition of Done: typecheck + build + todas as suítes.
+export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
+pnpm verify
+
+# Ou por partes:
 pnpm --filter @barbearia/core test        # motor, sem banco
 pnpm -r typecheck
 
-# Os testes de banco exigem Postgres 16+ com pgcrypto, citext e btree_gist.
+# Testes de banco exigem Postgres 16+ com pgcrypto, citext e btree_gist.
 # Cada script cria e destrói o próprio banco descartável.
-export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 pnpm --filter @barbearia/db test          # invariantes do schema
 pnpm --filter @barbearia/scheduling test  # pipeline banco -> motor
 ```
+
+`pnpm verify` **falha** se os testes de banco forem pulados por falta de
+`ADMIN_DATABASE_URL`. Pular em silêncio seria o padrão perigoso.
 
 ## Decisões que valem conhecer antes de mexer
 
