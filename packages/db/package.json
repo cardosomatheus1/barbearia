@@ -1,0 +1,9 @@
+{
+  "name": "@barbearia/db",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "migrate": "./scripts/migrate.sh",
+    "test": "./scripts/test.sh"
+  }
+}
