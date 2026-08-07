@@ -1,0 +1,380 @@
+import 'reflect-metadata';
+import { PrismaClient } from '@prisma/client';
+import { Test } from '@nestjs/testing';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import type { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { FakeMessagingProvider } from '@barbearia/identity';
+import { AppointmentsController } from '../src/booking/appointments.controller.js';
+import { AuthController } from '../src/auth/auth.controller.js';
+import { CustomerGuard } from '../src/auth/customer.guard.js';
+import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
+import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
+import { TenantService } from '../src/tenant/tenant.service.js';
+import { throttlerConfig } from '../src/common/throttler.config.js';
+
+/**
+ * Fluxo completo do cliente: código no WhatsApp, sessão, agendar, listar,
+ * remarcar, cancelar.
+ *
+ * O provedor de mensagem é o `fake`, que guarda o código em memória — é a única
+ * forma de o teste conhecer o código sem que ele apareça em log.
+ */
+
+const SEED_URL = process.env['SEED_DATABASE_URL'];
+const APP_URL = process.env['APP_DATABASE_URL'];
+
+const TENANT = '11111111-1111-1111-1111-111111111111';
+const RIVAL = '22222222-2222-2222-2222-222222222222';
+const LOCATION = 'aaaaaaaa-0000-0000-0000-000000000001';
+const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
+const CABELO = 'eeeeeeee-0000-0000-0000-000000000001';
+
+const CARLOS = '(71) 98888-7777';
+const JOAO = '(71) 97777-6666';
+
+let app: INestApplication;
+let admin: PrismaClient;
+let messaging: FakeMessagingProvider;
+
+async function exec(client: PrismaClient, sql: string): Promise<void> {
+  for (const statement of sql.split(';').map((p) => p.trim()).filter(Boolean)) {
+    await client.$executeRawUnsafe(statement);
+  }
+}
+
+/** Data futura o bastante para escapar da antecedência mínima. */
+function proximaTerca(): string {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  do {
+    date.setUTCDate(date.getUTCDate() + 1);
+  } while (date.getUTCDay() !== 2);
+  return date.toISOString().slice(0, 10);
+}
+
+const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
+
+describeIfDb('fluxo do cliente', () => {
+  const DIA = proximaTerca();
+
+  beforeAll(async () => {
+    if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
+    admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
+    messaging = new FakeMessagingProvider();
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot(throttlerConfig())],
+      controllers: [AuthController, AppointmentsController],
+      providers: [
+        TenantService,
+        CustomerGuard,
+        { provide: MESSAGING_PROVIDER, useValue: messaging },
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+        { provide: APP_FILTER, useClass: HttpExceptionFilter },
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    await admin?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    messaging.clear();
+    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await exec(admin, `
+      INSERT INTO tenants (id, name) VALUES
+        ('${TENANT}', 'Domari Barber Club'), ('${RIVAL}', 'Rival');
+
+      INSERT INTO tenant_slugs (slug, tenant_id, is_primary) VALUES
+        ('domari', '${TENANT}', true), ('rival', '${RIVAL}', true);
+
+      INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes)
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20);
+
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional');
+
+      INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
+      VALUES ('${CABELO}', '${TENANT}', 'Cabelo', 4900, 20);
+
+      INSERT INTO professional_services (professional_id, service_id, tenant_id)
+      VALUES ('${RUAN}', '${CABELO}', '${TENANT}');
+
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
+      SELECT '${TENANT}', '${RUAN}', d.weekday, 540, 1080
+      FROM (VALUES (0), (1), (2), (3), (4), (5), (6)) AS d(weekday);
+    `);
+  });
+
+  const http = () => request(app.getHttpServer());
+
+  /** Percorre o fluxo de login e devolve o token. */
+  async function login(phone: string, slug = 'domari'): Promise<string> {
+    await http().post(`/v1/b/${slug}/auth/otp`).send({ phone, name: 'Carlos Souza' }).expect(201);
+    const sent = messaging.sent.at(-1);
+    if (!sent) throw new Error('nenhum código enviado');
+
+    const response = await http()
+      .post(`/v1/b/${slug}/auth/verify`)
+      .send({ phone, code: sent.code })
+      .expect(201);
+    return response.body.token as string;
+  }
+
+  const agendar = (token: string, start = '09:00', key?: string) => {
+    const req = http()
+      .post('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`);
+    if (key) req.set('Idempotency-Key', key);
+    return req.send({
+      locationId: LOCATION,
+      professionalId: RUAN,
+      serviceIds: [CABELO],
+      date: DIA,
+      start,
+    });
+  };
+
+  // -- login -----------------------------------------------------------------
+
+  it('percorre o fluxo do código até a sessão', async () => {
+    const otp = await http()
+      .post('/v1/b/domari/auth/otp')
+      .send({ phone: CARLOS, name: 'Carlos Souza' })
+      .expect(201);
+
+    expect(otp.body.expiresInSeconds).toBe(300);
+    expect(otp.body.resendAfterSeconds).toBe(30);
+    // O código nunca volta na resposta.
+    expect(JSON.stringify(otp.body)).not.toContain(messaging.sent[0]?.code);
+
+    const verify = await http()
+      .post('/v1/b/domari/auth/verify')
+      .send({ phone: CARLOS, code: messaging.sent[0]?.code })
+      .expect(201);
+
+    expect(verify.body.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(verify.body.customer.name).toBe('Carlos Souza');
+  });
+
+  it('código errado devolve 401 sem distinguir o motivo', async () => {
+    await http().post('/v1/b/domari/auth/otp').send({ phone: CARLOS }).expect(201);
+
+    const errado = await http()
+      .post('/v1/b/domari/auth/verify')
+      .send({ phone: CARLOS, code: '000000' })
+      .expect(401);
+
+    const semDesafio = await http()
+      .post('/v1/b/domari/auth/verify')
+      .send({ phone: JOAO, code: '000000' })
+      .expect(401);
+
+    expect(errado.body.error.message).toBe(semDesafio.body.error.message);
+  });
+
+  it('recusa código malformado sem consultar o banco', async () => {
+    for (const code of ['12345', 'abcdef', '', '1234567']) {
+      await http()
+        .post('/v1/b/domari/auth/verify')
+        .send({ phone: CARLOS, code })
+        .expect(400);
+    }
+  });
+
+  it('estabelecimento inexistente devolve 404', async () => {
+    await http().post('/v1/b/nao-existe/auth/otp').send({ phone: CARLOS }).expect(404);
+  });
+
+  // -- guard -----------------------------------------------------------------
+
+  it('rota autenticada recusa sem token', async () => {
+    await http().get('/v1/b/domari/appointments').expect(401);
+  });
+
+  it('recusa token inventado e cabeçalho malformado', async () => {
+    for (const header of ['Bearer invalido', 'invalido', 'Basic abc', 'Bearer ']) {
+      await http().get('/v1/b/domari/appointments').set('Authorization', header).expect(401);
+    }
+  });
+
+  it('token de uma barbearia não vale em outra', async () => {
+    const token = await login(CARLOS);
+    await http()
+      .get('/v1/b/rival/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
+  });
+
+  // -- agendamento -----------------------------------------------------------
+
+  it('cria agendamento e ele aparece na lista do cliente', async () => {
+    const token = await login(CARLOS);
+
+    const criado = await agendar(token).expect(201);
+    expect(criado.body.priceCents).toBe(4900);
+    expect(criado.body.status).toBe('pending');
+
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(lista.body.appointments).toHaveLength(1);
+    expect(lista.body.appointments[0]).toMatchObject({
+      id: criado.body.id,
+      professionalName: 'Ruan',
+      services: ['Cabelo'],
+      canCancel: true,
+    });
+  });
+
+  it('a mesma Idempotency-Key não cria dois', async () => {
+    const token = await login(CARLOS);
+
+    const primeiro = await agendar(token, '09:00', 'chave-do-cliente').expect(201);
+    const segundo = await agendar(token, '09:00', 'chave-do-cliente').expect(201);
+    expect(segundo.body.id).toBe(primeiro.body.id);
+  });
+
+  it('clientes diferentes com a mesma chave não colidem', async () => {
+    const tokenCarlos = await login(CARLOS);
+    messaging.clear();
+    const tokenJoao = await login(JOAO);
+
+    const doCarlos = await agendar(tokenCarlos, '09:00', '1').expect(201);
+    const doJoao = await agendar(tokenJoao, '09:20', '1').expect(201);
+
+    expect(doJoao.body.id).not.toBe(doCarlos.body.id);
+  });
+
+  it('horário ocupado devolve 409', async () => {
+    const token = await login(CARLOS);
+    await agendar(token, '09:00', 'a').expect(201);
+    const conflito = await agendar(token, '09:00', 'b').expect(409);
+    expect(conflito.body.error.code).toBe('slot_not_available');
+  });
+
+  it('rejeita corpo malformado', async () => {
+    const token = await login(CARLOS);
+    const casos = [
+      { locationId: 'x', professionalId: RUAN, serviceIds: [CABELO], date: DIA, start: '09:00' },
+      { locationId: LOCATION, professionalId: RUAN, serviceIds: [], date: DIA, start: '09:00' },
+      { locationId: LOCATION, professionalId: RUAN, serviceIds: [CABELO], date: '11/08', start: '09:00' },
+      { locationId: LOCATION, professionalId: RUAN, serviceIds: [CABELO], date: DIA, start: '25:00' },
+    ];
+    for (const body of casos) {
+      await http()
+        .post('/v1/b/domari/appointments')
+        .set('Authorization', `Bearer ${token}`)
+        .send(body)
+        .expect(400);
+    }
+  });
+
+  // -- titularidade ----------------------------------------------------------
+
+  it('cliente não vê agendamento de outro cliente', async () => {
+    const tokenCarlos = await login(CARLOS);
+    await agendar(tokenCarlos).expect(201);
+
+    messaging.clear();
+    const tokenJoao = await login(JOAO);
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${tokenJoao}`)
+      .expect(200);
+
+    expect(lista.body.appointments).toEqual([]);
+  });
+
+  it('cliente não cancela agendamento de outro cliente', async () => {
+    const tokenCarlos = await login(CARLOS);
+    const criado = await agendar(tokenCarlos).expect(201);
+
+    messaging.clear();
+    const tokenJoao = await login(JOAO);
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .set('Authorization', `Bearer ${tokenJoao}`)
+      .send({})
+      .expect(404);
+
+    const rows = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status FROM appointments WHERE id = '${criado.body.id}'`,
+    );
+    expect(rows[0]?.status).toBe('pending');
+  });
+
+  it('cliente não remarca agendamento de outro cliente', async () => {
+    const tokenCarlos = await login(CARLOS);
+    const criado = await agendar(tokenCarlos).expect(201);
+
+    messaging.clear();
+    const tokenJoao = await login(JOAO);
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${tokenJoao}`)
+      .send({ date: DIA, start: '14:00' })
+      .expect(404);
+  });
+
+  // -- cancelar e remarcar ---------------------------------------------------
+
+  it('o dono cancela e o horário volta a ficar livre', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(201);
+
+    await agendar(token, '09:00', 'outra').expect(201);
+  });
+
+  it('o dono remarca', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+
+    const novo = await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ date: DIA, start: '14:00' })
+      .expect(201);
+
+    expect(novo.body.id).not.toBe(criado.body.id);
+  });
+
+  it('identificador malformado não chega ao banco', async () => {
+    const token = await login(CARLOS);
+    await http()
+      .post('/v1/b/domari/appointments/nao-e-uuid/cancel')
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(400);
+  });
+
+  it('nunca vaza detalhe interno em erro de rota autenticada', async () => {
+    const token = await login(CARLOS);
+    const response = await http()
+      .post('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ locationId: 'x', professionalId: RUAN, serviceIds: [CABELO], date: DIA, start: '09:00' })
+      .expect(400);
+
+    const body = JSON.stringify(response.body).toLowerCase();
+    for (const leak of ['select', 'insert', 'postgres', 'prisma', 'stack']) {
+      expect(body).not.toContain(leak);
+    }
+  });
+});

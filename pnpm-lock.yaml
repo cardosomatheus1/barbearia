@@ -16,6 +16,9 @@ importers:
       '@barbearia/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@barbearia/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@barbearia/scheduling':
         specifier: workspace:*
         version: link:../../packages/scheduling
@@ -99,6 +102,28 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@26.2.0)
+
+  packages/identity:
+    dependencies:
+      '@barbearia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@barbearia/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@prisma/client':
+        specifier: ^6.19.1
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)
 
   packages/scheduling:
     dependencies:

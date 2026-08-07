@@ -16,7 +16,8 @@ integridade do banco.
 | `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 118 testes ✅ |
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 16 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade e reserva | 44 testes ✅ |
-| `apps/api` | API pública de agendamento (NestJS) | 16 testes e2e ✅ |
+| `packages/identity` | OTP por WhatsApp, sessão do cliente, consentimentos | 26 testes ✅ |
+| `apps/api` | API pública: disponibilidade, login, agendamento | 35 testes e2e ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -105,6 +106,20 @@ Nenhuma das duas basta sozinha. A validação tem uma janela entre calcular e
 gravar; a constraint não sabe nada sobre expediente ou recurso. Sob corrida real,
 uma das duas pega — e o teste aceita qualquer um dos dois códigos de erro, porque
 ambos são respostas corretas e nenhum deles é overbooking.
+
+### Entrar custa nome + celular, e nada mais
+
+Sem senha, sem e-mail, sem baixar app. O cliente escolhe serviço, profissional e
+horário sem se identificar; só ao fechar informa nome e celular e valida um
+código no WhatsApp. É o fluxo do sistema analisado, que acerta nisso — e a
+vantagem não pode ser perdida.
+
+A sessão dura 90 dias, então o cliente que volta agenda de novo sem refazer
+código. O concorrente revalida a cada agendamento.
+
+O código nunca vai para log: `ConsoleMessagingProvider` imprime telefone
+mascarado e mais nada. Log com código de uso único transforma acesso ao log em
+acesso à conta.
 
 ### Isolamento tem dois níveis, não um
 

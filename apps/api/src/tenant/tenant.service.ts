@@ -47,6 +47,14 @@ export class TenantService {
     return tenantId;
   }
 
+  /** Nome do estabelecimento, para compor a mensagem do código. */
+  async nameOf(tenantId: string): Promise<string> {
+    const rows = await getPrisma().$queryRaw<{ name: string }[]>`
+      SELECT name FROM tenants WHERE id = ${tenantId}::uuid
+    `;
+    return rows[0]?.name ?? 'Barbearia';
+  }
+
   private evictExpired(): void {
     const now = this.now();
     for (const [key, entry] of this.cache) {

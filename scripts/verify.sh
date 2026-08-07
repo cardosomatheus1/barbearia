@@ -29,6 +29,7 @@ step "core — unitários"     pnpm --filter @barbearia/core test
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   step "db — invariantes"   pnpm --filter @barbearia/db test
+  step "identity — OTP e sessão" pnpm --filter @barbearia/identity test
   step "scheduling — integração" pnpm --filter @barbearia/scheduling test
   step "api — e2e"          pnpm --filter @barbearia/api test
 else

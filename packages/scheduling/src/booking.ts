@@ -556,3 +556,77 @@ export async function rescheduleAppointment(
     };
   });
 }
+
+export interface CustomerAppointment {
+  readonly id: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly status: string;
+  readonly professionalName: string;
+  readonly services: readonly string[];
+  readonly priceCents: number;
+  readonly canCancel: boolean;
+  readonly canReschedule: boolean;
+}
+
+/**
+ * Agendamentos de um cliente.
+ *
+ * Filtra por `customerId` além do tenant: a RLS separa barbearias, não separa
+ * clientes dentro de uma. Sem esse filtro a listagem devolveria a agenda inteira
+ * da barbearia para qualquer cliente autenticado.
+ */
+export async function listCustomerAppointments(params: {
+  readonly tenantId: string;
+  readonly customerId: string;
+  readonly includePast?: boolean;
+  readonly now?: Date;
+  readonly limit?: number;
+}): Promise<readonly CustomerAppointment[]> {
+  const now = params.now ?? new Date();
+  const limit = Math.min(params.limit ?? 50, 100);
+
+  return withTenant(params.tenantId, async (tx) => {
+    const rows = await tx.$queryRaw<
+      {
+        id: string;
+        service_starts_at: Date;
+        service_ends_at: Date;
+        status: string;
+        professional_name: string;
+        services: string[];
+        price_cents: number;
+      }[]
+    >`
+      SELECT a.id, a.service_starts_at, a.service_ends_at, a.status,
+             p.name AS professional_name,
+             array_agg(s.name ORDER BY aps.position) AS services,
+             a.price_cents
+      FROM appointments a
+      JOIN professionals p ON p.id = a.professional_id
+      JOIN appointment_services aps ON aps.appointment_id = a.id
+      JOIN services s ON s.id = aps.service_id
+      WHERE a.customer_id = ${params.customerId}::uuid
+        AND (${params.includePast ?? false} OR a.service_ends_at >= ${now})
+      GROUP BY a.id, p.name
+      ORDER BY a.service_starts_at DESC
+      LIMIT ${limit}
+    `;
+
+    return rows.map((row) => {
+      const active = (ACTIVE_STATUSES as readonly string[]).includes(row.status);
+      const future = row.service_starts_at.getTime() > now.getTime();
+      return {
+        id: row.id,
+        startsAt: row.service_starts_at.toISOString(),
+        endsAt: row.service_ends_at.toISOString(),
+        status: row.status,
+        professionalName: row.professional_name,
+        services: row.services,
+        priceCents: row.price_cents,
+        canCancel: active && future,
+        canReschedule: active && future,
+      };
+    });
+  });
+}
