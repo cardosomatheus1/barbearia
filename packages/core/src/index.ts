@@ -13,3 +13,4 @@ export * from './attendance.js';
 export * from './imagem.js';
 export * from './vitrine.js';
 export * from './permissoes.js';
+export * from './fila.js';

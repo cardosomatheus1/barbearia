@@ -20,8 +20,22 @@ for migration in migrations/*.sql; do
 done
 
 echo "==> invariantes do schema"
-psql "$BASE/$DB_NAME" -v ON_ERROR_STOP=1 -f test/0001_scheduling.test.sql 2>&1 \
-  | grep -E "NOTICE:  (OK|---|FALHOU)" | sed 's/^NOTICE:  //'
+# A saída completa vai para arquivo e o filtro roda em cima dele. Filtrar o psql
+# direto pelo cano escondia o erro: um arquivo que abortava na primeira linha
+# não imprimia NOTICE nenhuma, o `grep` não casava nada, e a única pista era o
+# código de saída. Foi assim que a prova nova ficou minutos "sem rodar".
+for prova in test/*.test.sql; do
+  saida=$(mktemp)
+  if psql "$BASE/$DB_NAME" -v ON_ERROR_STOP=1 -f "$prova" >"$saida" 2>&1; then
+    grep -E "NOTICE:  (OK|---|FALHOU)" "$saida" | sed 's/^NOTICE:  //'
+  else
+    echo "FALHOU: $prova"
+    tail -20 "$saida" | sed 's/^/    /'
+    rm -f "$saida"
+    exit 1
+  fi
+  rm -f "$saida"
+done
 
 echo "==> cliente com escopo de tenant"
 export DATABASE_URL="$BASE/$DB_NAME"

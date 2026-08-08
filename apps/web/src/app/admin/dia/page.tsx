@@ -312,6 +312,9 @@ export default async function DiaPage({ searchParams }: Props) {
               Equipe
             </a>
           ) : null}
+          <a className="ui-button ui-button--ghost painel__sair" href="/admin/fila">
+            Fila
+          </a>
           {podeNaTela(estado, 'settings.manage') ? (
             <a className="ui-button ui-button--ghost painel__sair" href="/admin/catalogo">
               Cadastro

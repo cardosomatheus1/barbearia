@@ -519,3 +519,122 @@ export const salvarRecursos = (
   token: string,
   pools: { resourceType: string; capacity: number }[],
 ) => chamar<{ saved: boolean }>('PUT', '/v1/admin/catalog/resources', { pools }, token);
+
+// -- Fila presencial -----------------------------------------------------------
+
+export type StatusNaFila = 'waiting' | 'called' | 'in_service' | 'done' | 'gave_up';
+
+export interface PessoaNaFila {
+  id: string;
+  posicao: number;
+  customerId: string;
+  customerName: string;
+  customerPhoneTail: string | null;
+  status: StatusNaFila;
+  services: string[];
+  duracaoMinutos: number;
+  preferidoId: string | null;
+  professionalId: string | null;
+  professionalName: string | null;
+  esperaMinutos: number | null;
+  esperandoHaMinutos: number;
+  /** O encaixe passaria por cima de quem marcou. Não impede — avisa. */
+  atrasaMarcado: boolean;
+  frase: string;
+}
+
+export interface CadeiraNaFila {
+  professionalId: string;
+  professionalName: string;
+  livreEmMinutos: number;
+  proximoMarcado: string | null;
+  proximoMarcadoEmMinutos: number | null;
+}
+
+export interface Fila {
+  entries: PessoaNaFila[];
+  cadeiras: CadeiraNaFila[];
+  timezone: string;
+  totals: {
+    esperando: number;
+    chamados: number;
+    atendendo: number;
+    desistiram: number;
+    esperaMediaMinutos: number | null;
+  };
+}
+
+export const filaDoBalcao = (token: string) =>
+  chamar<Fila>('GET', '/v1/admin/queue', undefined, token);
+
+export interface EncaixeNaCadeira {
+  professionalId: string;
+  professionalName: string;
+  livreEmMinutos: number;
+  cabe: boolean;
+  sobraMinutos: number | null;
+  invadeMinutos: number;
+  proximoMarcado: string | null;
+}
+
+export const custoDoEncaixe = (token: string, serviceIds: string[]) =>
+  chamar<{ cadeiras: EncaixeNaCadeira[] }>(
+    'GET',
+    `/v1/admin/queue/fit?serviceIds=${encodeURIComponent(serviceIds.join(','))}`,
+    undefined,
+    token,
+  );
+
+/**
+ * Põe alguém na fila.
+ *
+ * A chave de idempotência vem de quem chama — nunca gerada aqui dentro, senão
+ * cada reenvio traria uma chave nova e o duplo toque criaria duas entradas.
+ */
+export const entrarNaFila = (
+  token: string,
+  dados: {
+    customerId?: string;
+    name?: string;
+    phone?: string;
+    serviceIds: string[];
+    professionalId?: string;
+    notes?: string;
+  },
+  idempotencyKey: string,
+) =>
+  chamar<{ id: string; token: string; posicao: number }>(
+    'POST',
+    '/v1/admin/queue',
+    dados,
+    token,
+    idempotencyKey,
+  );
+
+export const moverNaFila = (token: string, id: string, para: StatusNaFila) =>
+  chamar<{ status: StatusNaFila }>('POST', `/v1/admin/queue/${id}/move`, { para }, token);
+
+export const sentarDaFila = (token: string, id: string, professionalId: string) =>
+  chamar<{ appointmentId: string; endsAt: string }>(
+    'POST',
+    `/v1/admin/queue/${id}/seat`,
+    { professionalId },
+    token,
+  );
+
+export interface MinhaPosicao {
+  posicao: number;
+  status: StatusNaFila;
+  esperaMinutos: number | null;
+  frase: string;
+  nome: string;
+  services: string[];
+  professionalName: string | null;
+}
+
+/** A posição pelo link do celular. Sem sessão: o token é a credencial. */
+export const minhaPosicaoNaFila = (slug: string, token: string) =>
+  chamar<MinhaPosicao>(
+    'GET',
+    `/v1/b/${encodeURIComponent(slug)}/queue/${encodeURIComponent(token)}`,
+  );

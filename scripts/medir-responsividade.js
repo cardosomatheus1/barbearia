@@ -282,11 +282,54 @@ async function prepararRecursos(token) {
   });
 }
 
+/**
+ * Põe gente na fila, com nome comprido e um pedido de profissional.
+ *
+ * Medir a fila vazia não prova nada sobre a cheia: o que estoura layout é o
+ * cartão com nome composto, serviço longo e três botões de ação.
+ */
+async function prepararFila(token) {
+  const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+  const catalogo = await (await fetch(`${API}/v1/admin/catalog`, { headers: cabecalho })).json();
+  const servico = catalogo.services.reduce((maior, s) => (s.name.length > maior.name.length ? s : maior));
+
+  const gente = [
+    { name: 'Maria Aparecida do Nascimento', phone: '(71) 98111-3311' },
+    { name: 'Zé', phone: '(71) 98111-3322', professionalId: catalogo.professionals[0]?.id },
+  ];
+
+  let link = null;
+  for (const pessoa of gente) {
+    const criada = await (
+      await fetch(`${API}/v1/admin/queue`, {
+        method: 'POST',
+        headers: cabecalho,
+        body: JSON.stringify({ ...pessoa, serviceIds: [servico.id] }),
+      })
+    ).json();
+    if (criada.token) link = link ?? criada.token;
+  }
+
+  // Um chamado: a linha do chamado tem selo e botão diferentes das outras.
+  const fila = await (await fetch(`${API}/v1/admin/queue`, { headers: cabecalho })).json();
+  const primeira = fila.entries?.[0];
+  if (primeira) {
+    await fetch(`${API}/v1/admin/queue/${primeira.id}/move`, {
+      method: 'POST',
+      headers: cabecalho,
+      body: JSON.stringify({ para: 'called' }),
+    });
+  }
+
+  return { link };
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
   const balcao = await prepararBalcao(token);
   await prepararRecursos(token);
+  const filaPreparada = await prepararFila(token);
 
   const telas = [
     { nome: 'pública', url: `/${slug}` },
@@ -304,6 +347,10 @@ async function main() {
     { nome: 'jornada aberta', url: `/admin/profissionais?pessoa=${balcao.profissionalLivre}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recursos', url: '/admin/recursos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trocar senha', url: '/admin/trocar-senha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'fila (balcão)', url: '/admin/fila', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    ...(filaPreparada.link
+      ? [{ nome: 'fila (cliente)', url: `/${slug}/fila/${filaPreparada.link}` }]
+      : []),
     { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — horário', url: `/admin/dia/marcar?s=${balcao.servicoId}&d=${balcao.dataLivre}&e=c`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

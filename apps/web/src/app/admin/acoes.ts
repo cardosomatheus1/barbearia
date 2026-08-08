@@ -20,6 +20,10 @@ import {
   trocarMinhaSenha,
   trocarPapel,
   criarProfissional,
+  entrarNaFila,
+  moverNaFila,
+  sentarDaFila,
+  type StatusNaFila,
   criarServico,
   editarProfissional,
   editarServico,
@@ -38,6 +42,7 @@ import { centavosDoCampo } from '@/lib/dinheiro';
 import {
   apagarSessaoGestor,
   guardarConflitoDeJornada,
+  guardarLinkDaFila,
   guardarSenhaDeUmaVez,
   gravarSessaoGestor,
   lerSessaoGestor,
@@ -606,4 +611,66 @@ export async function acaoSalvarRecursos(form: FormData): Promise<void> {
   const resultado = await salvarRecursos(token, pools);
   if (!resultado.ok) falhar('/admin/recursos', resultado.code);
   redirect('/admin/recursos?salvo=1');
+}
+
+// -- Fila presencial ----------------------------------------------------------
+
+/**
+ * Põe alguém na fila.
+ *
+ * A chave de idempotência vem do formulário, gerada quando a tela foi montada —
+ * como na marcação pelo balcão, e pelo mesmo motivo: gerá-la aqui daria uma
+ * chave nova a cada envio, e o duplo toque criaria duas entradas para a mesma
+ * pessoa, empurrando a fila inteira.
+ */
+export async function acaoEntrarNaFila(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const serviceIds = form.getAll('serviceIds').map((v) => String(v)).filter(Boolean);
+  if (serviceIds.length === 0) falhar('/admin/fila', 'sem_servico');
+
+  const preferido = texto(form, 'professionalId');
+
+  const resultado = await entrarNaFila(
+    token,
+    {
+      name: texto(form, 'name'),
+      phone: texto(form, 'phone'),
+      serviceIds,
+      ...(preferido ? { professionalId: preferido } : {}),
+    },
+    texto(form, 'idempotencyKey'),
+  );
+
+  if (!resultado.ok) falhar('/admin/fila', resultado.code);
+
+  // O link viaja num cookie de vida curta, nunca na URL: ele é credencial ao
+  // portador e a URL fica no histórico do balcão, que é máquina compartilhada.
+  await guardarLinkDaFila(texto(form, 'name'), resultado.dados.token);
+  redirect('/admin/fila');
+}
+
+export async function acaoMoverNaFila(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const para = texto(form, 'para');
+  if (!['waiting', 'called', 'done', 'gave_up'].includes(para)) {
+    falhar('/admin/fila', 'invalid_request');
+  }
+
+  const resultado = await moverNaFila(token, texto(form, 'id'), para as StatusNaFila);
+  if (!resultado.ok) falhar('/admin/fila', resultado.code);
+  redirect('/admin/fila?salvo=1');
+}
+
+/**
+ * A pessoa sentou.
+ *
+ * O 409 daqui não é erro de tela: é a recusa de encaixar por cima de quem
+ * marcou, que vem da constraint do banco. A mensagem precisa chegar inteira.
+ */
+export async function acaoSentarDaFila(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await sentarDaFila(token, texto(form, 'id'), texto(form, 'professionalId'));
+  if (!resultado.ok) falhar('/admin/fila', resultado.code);
+  redirect('/admin/dia');
 }

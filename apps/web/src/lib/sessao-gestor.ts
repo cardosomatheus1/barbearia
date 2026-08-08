@@ -154,3 +154,49 @@ export async function lerConflitoDeJornada(): Promise<JornadaEmConflito | null> 
   }
   return null;
 }
+
+/**
+ * O link de acompanhamento, do servidor para a tela seguinte.
+ *
+ * Mesmo motivo do cookie da senha: o token é credencial ao portador — quem o
+ * tiver vê a posição daquela pessoa — e a URL do painel para no histórico do
+ * balcão, que é máquina compartilhada, e no `Referer` de toda requisição
+ * seguinte.
+ *
+ * Vida curta porque a recepção entrega o link na hora: mostra o QR ou manda por
+ * WhatsApp e pronto. Se perder, não há como reemitir — o banco só guarda o
+ * hash, e gerar outro invalidaria o que a pessoa já está olhando.
+ */
+const LINK_FILA = 'link-fila';
+const CAMINHO_FILA = '/admin/fila';
+const SEGUNDOS_DO_LINK = 180;
+
+export async function guardarLinkDaFila(nome: string, token: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(LINK_FILA, JSON.stringify({ nome, token }), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: CAMINHO_FILA,
+    maxAge: SEGUNDOS_DO_LINK,
+  });
+}
+
+export async function lerLinkDaFila(): Promise<{ nome: string; token: string } | null> {
+  const bruto = (await cookies()).get(LINK_FILA)?.value;
+  if (!bruto) return null;
+
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (
+      typeof lido === 'object' && lido !== null &&
+      'nome' in lido && 'token' in lido &&
+      typeof lido.nome === 'string' && typeof lido.token === 'string'
+    ) {
+      return { nome: lido.nome, token: lido.token };
+    }
+  } catch {
+    // Cookie corrompido não derruba a tela da fila inteira.
+  }
+  return null;
+}

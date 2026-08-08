@@ -5,3 +5,4 @@ export * from './booking.js';
 export * from './profile.js';
 export * from './dayboard.js';
 export * from './counter.js';
+export * from './fila.js';

@@ -65,7 +65,7 @@ const UNIQUE_VIOLATION = '23505';
  * como último recurso na mensagem. Ler só `error.code` devolveria sempre
  * 'P2010' e nenhuma violação seria reconhecida.
  */
-function pgCode(error: unknown): string | null {
+export function pgCode(error: unknown): string | null {
   const meta = (error as { meta?: { code?: unknown } })?.meta;
   if (typeof meta?.code === 'string') return meta.code;
 

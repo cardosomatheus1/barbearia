@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 13 de 78 blocos.**
+**Status: 14 de 78 blocos.**
 
 ---
 
@@ -54,6 +54,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
 | Folga, feriado, horário diferente num dia e bloqueio pontual | `schedule_exceptions` desde o bloco 1: alvo por profissional **ou** por unidade, os cinco `kind` (`day_off`, `holiday`, `vacation`, `custom_hours`, `block`), índice parcial, RLS, e a precedência resolvida e testada no motor — bloqueio vence exceção do profissional, que vence a da unidade, que vence o feriado. A grade recorta e a reserva recusa | **nenhuma escrita: nem domínio, nem rota, nem tela.** Só por SQL | 15 (agenda do admin). É dívida, não sequência — motor com teste verde e barbeiro sem como avisar que falta na sexta é o mesmo padrão de `blocks` e de `resource_pools`. Registrado em [`SPEC.md` §7.1 grupo A](SPEC.md#71-distância-entre-esta-spec-e-o-que-está-construído) |
+| Avisar quem está na fila que chegou a vez | a posição e a estimativa existem, com link próprio por pessoa, e a página do celular mostra as duas | o empurrão: hoje a pessoa precisa recarregar a página, e quem sai para dar uma volta não fica sabendo. A SPEC §2.10 pede a mensagem "Você é o próximo" **entregue**, não só exibida | 20 (fila + worker): é onde nasce o canal transacional e o processo fora de requisição. Até lá o contorno é o real na barbearia — a recepção grita o nome, e o botão "Chamar" registra que gritou |
 | Convite do barbeiro por WhatsApp | o profissional é criado no onboarding | o convite e o login próprio dele | 16 (`app-pro`) — sem a agenda do barbeiro não há para onde o convite levar |
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
 | Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
@@ -97,7 +98,7 @@ atual sem perder nenhuma capacidade que usava.
 | 11 | Balcão: painel do dia, check-in, no-show, busca e marcação pelo balcão | ✅ |
 | 12 | RBAC mínimo: papéis, permissões e contas de equipe | ✅ |
 | 13 | Admin: CRUD de catálogo, equipe, jornadas, recursos | ✅ |
-| 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | |
+| 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | ✅ |
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
 | 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |

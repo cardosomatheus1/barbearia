@@ -1127,7 +1127,16 @@ main { padding-bottom: var(--space-8); }
 
 /* -- Equipe ----------------------------------------------------------------- */
 
-.painel__atalhos { display: flex; align-items: center; gap: var(--space-2); }
+/* Quebra em vez de estourar: o topo do balcão ganhou um quarto atalho no
+   bloco 14 e passou de 360px. Cabeçalho que rola de lado esconde o botão de
+   sair; cabeçalho que cresce uma linha, não. */
+.painel__atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+}
 
 .equipe-lista { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-2); }
 .pessoa-equipe {
@@ -1362,4 +1371,133 @@ main { padding-bottom: var(--space-8); }
      ação desce, que é o que mantém o alvo de toque inteiro no piso de 360px. */
   .item-cadastro__cabeca { grid-template-columns: 1fr auto; align-items: start; }
   .campos-lado { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* ---------------------------------------------------------------------------
+   Fila presencial (bloco 14)
+
+   Densidade de balcão: a recepção olha esta tela de pé, entre um cliente e
+   outro, e o que ela procura é sempre a mesma coisa — quem é o próximo e qual
+   cadeira comporta.
+   --------------------------------------------------------------------------- */
+
+.cadeiras { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.cadeira {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.cadeira--livre { border-left-color: var(--color-success); }
+.cadeira__nome { margin: 0; font-weight: var(--font-weight-semibold); }
+.cadeira__estado { margin: 2px 0 0; font-size: var(--font-size-sm); }
+.cadeira__proximo { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.esperas { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.espera {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.espera--chamada { border-color: var(--color-accent); }
+.espera__posicao {
+  align-self: start;
+  min-width: 2rem;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+.espera__quem { min-width: 0; }
+.espera__nome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.espera__fone { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.espera__selo {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+.espera__servico { margin: 2px 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.espera__tempo { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.espera__frase { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.espera__aviso { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-warning); }
+/* `min-width: 0` em todos: item de grade nasce com `min-width: auto`, e o
+   `<select>` com "Maria Aparecida do Nascimento — livre em 12 min" tem largura
+   intrínseca maior que a tela de 360px. Sem isto ele empurra o cartão inteiro. */
+.espera__acoes { grid-column: 1 / -1; display: grid; gap: var(--space-2); min-width: 0; }
+.espera__sentar { display: flex; gap: var(--space-2); min-width: 0; }
+.espera__sentar .ui-field__input { flex: 1; min-width: 0; }
+.espera__miudas { min-width: 0; }
+.espera__miudas { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.espera__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+.espera__risco { color: var(--color-danger); }
+
+.link-fila__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.link-fila__valor {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--font-weight-medium);
+  /* O token é longo e não tem espaços: sem isto ele estoura o cartão em 360px. */
+  word-break: break-all;
+}
+.link-fila__nota { margin: 0; font-size: var(--font-size-sm); }
+
+/* A tela do cliente: uma coisa só, grande, lida de relance na rua. */
+.fila-cliente {
+  padding: var(--space-7) var(--space-4) var(--space-8);
+  max-width: 30rem;
+  text-align: center;
+}
+.fila-cliente__casa {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.fila-cliente__rotulo { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fila-cliente__numero {
+  margin: 0;
+  font-size: 5rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--color-accent);
+}
+.fila-cliente__frase { margin: var(--space-4) 0 var(--space-6); font-size: var(--font-size-lg); }
+.fila-cliente__frase--grande { font-size: var(--font-size-xl); margin-top: var(--space-4); }
+.fila-cliente__titulo { margin: 0 0 var(--space-3); font-size: var(--font-size-xl); }
+.fila-cliente__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); }
+.fila-cliente__dados {
+  margin: 0 0 var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.fila-cliente__dados > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.fila-cliente__dados dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fila-cliente__dados dd { margin: 0; font-weight: var(--font-weight-medium); }
+.fila-cliente__nota { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+@media (min-width: 768px) {
+  .cadeiras { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .espera { grid-template-columns: auto 1fr auto; align-items: start; }
+  .espera__acoes { grid-column: auto; }
 }

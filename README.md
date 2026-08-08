@@ -13,14 +13,14 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento e permissões — lógica pura, sem banco e sem relógio | 220 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 10 testes ✅ |
-| `packages/scheduling` | Repositórios, disponibilidade, reserva e o dia do balcão | 85 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila e permissões — lógica pura, sem banco e sem relógio | 242 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 27 invariantes + 10 testes ✅ |
+| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão e a fila | 110 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, auditoria | 75 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 84 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, equipe, cadastro | 139 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, equipe e cadastro, com SSR (Next.js) | 36 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, equipe, cadastro | 154 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, equipe e cadastro, com SSR (Next.js) | 36 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -719,11 +719,121 @@ A checagem recusa em vez de descartar em silêncio, e a mensagem não distingue
 "não existe" de "é de outra barbearia" — a diferença é justamente o que o
 oráculo procurava.
 
+## A fila é outro objeto, não um agendamento improvisado
+
+A SPEC (Parte 2 §2.10) diz isso em uma linha e a razão é estrutural.
+
+Um agendamento **ocupa janela**: tem `starts_at`, entra na constraint de
+exclusão que impede overbooking, e é subtraído da grade. Quem chegou na porta
+não tem horário — tem ordem de chegada e uma estimativa que muda a cada corte
+que termina. Modelar walk-in como `appointment` obrigaria a inventar um horário
+falso, e esse horário passaria a bloquear a agenda de quem quer marcar pelo
+site.
+
+O caminho é o inverso: a entrada da fila **vira** agendamento no instante em que
+a pessoa senta, com a hora real e `source: 'walk_in'`. Aí sim ocupa janela,
+entra na comanda e conta na comissão. A fila em si nunca vira dinheiro — ela é a
+sala de espera.
+
+### "Livre" e "cabe" são coisas diferentes
+
+O número que faltava à recepção não é "o Ruan está livre". É **quanto tempo
+existe até o próximo marcado dele**.
+
+Cadeira livre com quinze minutos até o próximo cliente não comporta um corte de
+trinta, e é exatamente assim que a barbearia começa o dia quinze minutos
+atrasada e termina uma hora. `custoDoEncaixe` devolve, por cadeira, se cabe,
+quanto sobra e quanto invadiria — e não decide por ninguém, porque às vezes o
+certo é encaixar mesmo assim e avisar o próximo.
+
+### A regra de convivência é imposta pelo banco
+
+> Walk-in nunca sobrescreve agendamento confirmado.
+
+Quem garante isso é a constraint de exclusão sobre a janela do profissional, não
+um `if` no serviço. Um `if` teria a janela entre a checagem e o `INSERT` — e é
+justamente com o cliente de pé na frente da recepção que duas pessoas tocam o
+botão ao mesmo tempo. A violação vira 409 com o motivo: "este profissional tem
+cliente marcado nesse horário".
+
+### A estimativa vem da duração real, e isso tinha uma armadilha
+
+A SPEC exige a **duração real média, não a cadastrada**. O corte que o catálogo
+diz durar 30 minutos leva 40 na cadeira daquele barbeiro, e é o 40 que faz a
+estimativa bater. `started_at` e `completed_at` existem desde o bloco 11
+justamente para isto.
+
+Duas defesas em `duracaoEsperada`, cada uma por uma falha provável:
+
+- **Amostra mínima.** Um atendimento medido não é média; com dois ou três
+  registros, um dia atípico vira a estimativa de todo mundo.
+- **Teto e piso em torno da cadastrada.** `completed_at` é preenchido quando
+  alguém toca o botão, e o botão é tocado tarde — recepção movimentada "conclui"
+  o atendimento das 14h às 17h. Sem limite, esse registro sozinho jogaria a fila
+  para três horas de espera. O limite não conserta o dado ruim; impede que ele
+  contamine a conta enquanto ninguém percebe.
+
+### Quem aceita qualquer um passa na frente
+
+A fila é ordenada por chegada, mas **não é fila única**: cada pessoa só entra na
+cadeira que pode atendê-la. Quem pediu o Bruno espera o Bruno; quem aceita
+qualquer um pega quem liberar primeiro, inclusive passando na frente.
+
+É o que acontece de fato no salão, e bloquear deixaria uma cadeira parada com
+gente esperando. A estimativa de quem espera o Bruno já contém esse efeito — a
+alternativa produz o número que a barbearia mais odeia ter que explicar.
+
+### O link do celular é credencial, e é tratado como tal
+
+A SPEC pede acompanhar a posição "por link, sem app". Esse link é bearer: quem o
+tiver vê a posição daquela pessoa.
+
+- 32 bytes de `randomBytes`, não `Math.random` nem UUID.
+- O banco guarda **só o SHA-256**. O valor em claro existe uma vez, na resposta
+  de quem acabou de entrar na fila. Não é recuperável — reemitir invalidaria o
+  link que a pessoa já está olhando.
+- `GET /v1/admin/queue` **não devolve token nenhum**. Devolvê-lo transformaria a
+  tela do balcão numa lista de chaves para a posição de cada cliente.
+- Ele viaja para a tela num cookie `httpOnly` de três minutos, nunca na URL: o
+  endereço do painel para no histórico do balcão, que é máquina compartilhada.
+- A página pública é `noindex` e mostra o mínimo: a posição de quem tem o link,
+  o próprio nome e a frase. Nenhum nome de outra pessoa, nenhum telefone,
+  nenhuma lista.
+- Token inválido e token de outra barbearia respondem **igual**. A diferença
+  diria a quem varre links que aquele existe em algum lugar.
+
+### A média era ilimitada, e isso não era um índice faltando
+
+A primeira versão da consulta lia **todo o passado da barbearia** a cada carga da
+tela da fila. O plano era Seq Scan, e o reflexo — criar um índice em
+`appointment_services.service_id` — estava errado: a consulta agregava sem
+filtro nenhum, e para isso varrer é o plano certo. O defeito não era o índice
+ausente, era a consulta não ter recorte.
+
+A média passou a olhar **90 dias**, e isso é correção antes de ser desempenho: o
+barbeiro que ficou mais rápido este ano não deve ser julgado pelo ano passado, e
+uma média de três anos leva um tempo enorme para reagir a qualquer mudança real.
+
+Medido em banco descartável com 34 mil atendimentos: **40,9 ms → 8,8 ms**, com
+Index Scan no lugar do Seq Scan. O número importa menos que a curva — antes, o
+custo crescia para sempre.
+
+### O harness de invariantes escondia falha
+
+O `packages/db` roda provas em SQL e filtrava a saída do `psql` por cano
+(`| grep NOTICE`). Um arquivo que abortasse na primeira linha não imprimia
+NOTICE nenhuma, o `grep` não casava nada, e a única pista era o código de saída.
+
+Foi assim que a prova nova da fila ficou minutos parecendo "não ter rodado". A
+saída passou a ir para arquivo, e a falha imprime as últimas linhas do erro.
+
 ## Próximos passos
 
-Bloco 14 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 15 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Balcão: fila de walk-in, encaixe com custo visível e posição pelo celular.
+Agenda do admin: dia, semana e lista, arrastar, e o bloqueio pontual — que é
+onde entra a escrita de `schedule_exceptions`, hoje a única dívida declarada em
+[`SPEC.md` §7.1 grupo A](SPEC.md#71-distância-entre-esta-spec-e-o-que-está-construído).
 
 ## Responsividade é medida, não olhada
 
@@ -737,7 +847,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as dezenove
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as vinte e uma
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
