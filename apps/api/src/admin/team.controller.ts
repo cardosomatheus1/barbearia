@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import {
   changeOwnPassword,
@@ -10,10 +10,12 @@ import {
   setStaffActive,
   StaffError,
   type AuthenticatedStaff,
+  type MessagingProvider,
 } from '@barbearia/identity';
 import type { Papel } from '@barbearia/core';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { MESSAGING_PROVIDER } from '../auth/messaging.token.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
@@ -66,6 +68,10 @@ const contexto = (request: Request) => ({
 @Controller('v1/admin/team')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class TeamController {
+  constructor(
+    @Inject(MESSAGING_PROVIDER) private readonly messaging: MessagingProvider,
+  ) {}
+
   @Exige('team.manage')
   @Get()
   async list(@Staff() staff: AuthenticatedStaff) {
@@ -79,11 +85,12 @@ export class TeamController {
   }
 
   /**
-   * Cria a conta e devolve a senha de primeiro acesso **uma vez**.
+   * Cria a conta, manda a senha de primeiro acesso e a devolve **uma vez**.
    *
-   * Não há canal de mensagem transacional ainda (bloco 20); a alternativa real
-   * numa barbearia é o dono entregar a senha para quem está do lado dele. A
-   * conta nasce obrigada a trocá-la, então ela não sobrevive ao primeiro uso.
+   * As duas coisas: a mensagem é a entrega normal, e a senha na resposta é o
+   * caminho de quando o provedor está fora do ar ou a pessoa não tem celular
+   * cadastrado. `entrega` diz qual dos dois aconteceu, para a tela não afirmar
+   * que mandou quando não mandou.
    */
   @Exige('team.manage')
   @Post()
@@ -102,6 +109,7 @@ export class TeamController {
         role: body.role,
         ...(body.phone ? { phone: body.phone } : {}),
         ...(body.professionalId ? { professionalId: body.professionalId } : {}),
+        messaging: this.messaging,
         ...contexto(request),
       });
       return criado;
@@ -167,6 +175,7 @@ export class TeamController {
         tenantId: staff.tenantId,
         actor: { id: staff.staffUserId, name: staff.name },
         staffUserId: id,
+        messaging: this.messaging,
         ...contexto(request),
       });
     } catch (error) {

@@ -154,7 +154,7 @@ export default async function CaixaPage({ searchParams }: Props) {
       <main className="ui-container painel__conteudo">
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
-          {FALHA[caixa.code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
+          {FALHA[caixa.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>
     );

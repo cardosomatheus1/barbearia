@@ -1,0 +1,543 @@
+import { withTenant, type TransactionClient } from '@barbearia/db';
+import {
+  chaveDaNotificacao,
+  decidirEnvioDeAgendamento,
+  decidirRetorno,
+  maskPhone,
+  naturezaDe,
+  TIPOS_DE_NOTIFICACAO,
+  type MotivoDeNaoEnviar,
+  type TipoDeNotificacao,
+} from '@barbearia/core';
+import { enfileirar, cancelarTarefas } from './fila.js';
+import { chaveDaFalta } from './faltas.js';
+
+/**
+ * As notificações do agendamento.
+ *
+ * A regra de **quando** está em `packages/core`, pura. Aqui está o **como**:
+ * ler o estado sob RLS, chamar o domínio, mandar pelo provedor e registrar.
+ *
+ * A decisão que atravessa o arquivo: **conferir de novo na hora de enviar**. A
+ * tarefa foi criada ontem; entre lá e agora o cliente pode ter cancelado,
+ * remarcado ou pedido para não receber. Cancelar a tarefa na hora do
+ * cancelamento é a primeira defesa e resolve o caso comum; reconferir aqui é a
+ * segunda, e é ela que cobre o cancelamento que aconteceu enquanto a tarefa já
+ * estava sendo executada.
+ */
+
+export interface MensagemDeAgendamento {
+  readonly phoneE164: string;
+  readonly tipo: TipoDeNotificacao;
+  readonly clienteNome: string;
+  readonly barbearia: string;
+  readonly profissional: string;
+  readonly quandoTexto: string;
+}
+
+export interface MensagemDeFila {
+  readonly phoneE164: string;
+  readonly clienteNome: string;
+  readonly barbearia: string;
+  readonly posicao: number;
+}
+
+/**
+ * O provedor, estendido para além do OTP.
+ *
+ * Continua abstração pelo mesmo motivo do bloco 4: o WhatsApp oficial exige
+ * número verificado e template aprovado — bloqueio de fornecedor, não de
+ * código. O `fake` é o que roda em teste e em desenvolvimento, e é o que
+ * permite provar as regras de silêncio e de teto sem rede.
+ *
+ * A senha de primeiro acesso **não** está aqui, e é decisão, não esquecimento:
+ * ela sai inline por `MessagingProvider` em `packages/identity`, porque a fila é
+ * durável e guardar credencial viva num `payload` é criar segredo em repouso.
+ */
+export interface NotificationProvider {
+  enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void>;
+  enviarDeFila(mensagem: MensagemDeFila): Promise<void>;
+}
+
+export class FakeNotificationProvider implements NotificationProvider {
+  readonly agendamentos: MensagemDeAgendamento[] = [];
+  readonly filas: MensagemDeFila[] = [];
+  /** Para provar o caminho de falha sem depender de rede fora do ar. */
+  falharProxima = false;
+
+  async enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void> {
+    this.derrubarSePedido();
+    this.agendamentos.push(mensagem);
+  }
+
+  async enviarDeFila(mensagem: MensagemDeFila): Promise<void> {
+    this.derrubarSePedido();
+    this.filas.push(mensagem);
+  }
+
+  private derrubarSePedido(): void {
+    if (this.falharProxima) {
+      this.falharProxima = false;
+      throw new Error('provedor indisponível');
+    }
+  }
+
+  clear(): void {
+    this.agendamentos.length = 0;
+    this.filas.length = 0;
+  }
+}
+
+/**
+ * Provedor de desenvolvimento: escreve no log o que teria mandado.
+ *
+ * O telefone sai mascarado, como no `ConsoleMessagingProvider` do OTP. O texto
+ * da mensagem não é segredo, mas o número é dado pessoal, e log costuma ir para
+ * lugares que a política de dado pessoal não cobre.
+ */
+export class ConsoleNotificationProvider implements NotificationProvider {
+  constructor(private readonly log: (message: string) => void = console.log) {}
+
+  async enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void> {
+    this.log(
+      `[aviso] ${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia}${mensagem.quandoTexto ? `, ${mensagem.quandoTexto}` : ''})`,
+    );
+  }
+
+  async enviarDeFila(mensagem: MensagemDeFila): Promise<void> {
+    this.log(
+      `[aviso] sua_vez para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia}, posição ${mensagem.posicao})`,
+    );
+  }
+}
+
+/** Os avisos que nascem de um agendamento novo. */
+const DO_AGENDAMENTO = ['confirmacao', 'lembrete_24h', 'lembrete_2h'] as const;
+
+/**
+ * Só o que a fila de trabalho executa.
+ *
+ * `senha_de_acesso` é tipo de notificação e não é tarefa: ela sai inline, e
+ * mapeá-la aqui daria a entender que existe um handler esperando por ela.
+ */
+const TAREFA_DE: Readonly<Record<(typeof DO_AGENDAMENTO)[number] | 'sua_vez', string>> = {
+  confirmacao: 'notificacao.confirmacao',
+  lembrete_24h: 'notificacao.lembrete_24h',
+  lembrete_2h: 'notificacao.lembrete_2h',
+  sua_vez: 'notificacao.sua_vez',
+};
+
+/**
+ * Enfileira os avisos de um agendamento, **dentro da transação que o cria**.
+ *
+ * Fora dela existiria a janela em que o corte está marcado e nenhum lembrete
+ * foi programado — e o defeito só apareceria no dia seguinte, como uma falta
+ * que o lembrete existia para evitar.
+ *
+ * O `run_after` de cada um sai do domínio, já com a janela de silêncio
+ * aplicada. Quem decide *se* vale a pena enviar é o handler, na hora — aqui só
+ * se decide *quando* olhar de novo.
+ */
+export async function agendarAvisosDoAgendamento(
+  tx: TransactionClient,
+  params: {
+    readonly appointmentId: string;
+    readonly comecaEm: Date;
+    readonly timeZone: string;
+    readonly agora: Date;
+    readonly ligados: Readonly<Record<TipoDeNotificacao, boolean>>;
+  },
+): Promise<number> {
+  let criados = 0;
+
+  for (const tipo of DO_AGENDAMENTO) {
+    if (!params.ligados[tipo]) continue;
+
+    const decisao = decidirEnvioDeAgendamento({
+      tipo,
+      comecaEm: params.comecaEm,
+      timeZone: params.timeZone,
+      agora: params.agora,
+      temTelefone: true,
+      aindaVale: true,
+      jaEnviada: false,
+    });
+    if (!decisao.enviar || !decisao.quando) continue;
+
+    await enfileirar(tx, {
+      kind: TAREFA_DE[tipo],
+      payload: { appointmentId: params.appointmentId },
+      rodarApos: decisao.quando,
+      idempotencyKey: chaveDaNotificacao(tipo, params.appointmentId),
+    });
+    criados += 1;
+  }
+
+  return criados;
+}
+
+/**
+ * Enfileira o "você é o próximo" de uma entrada da fila.
+ *
+ * A chave é da **entrada**, não do momento: quem passa a ser o primeiro, é
+ * chamado e volta a esperar não recebe três mensagens. Uma por visita, e o
+ * índice único é quem garante.
+ *
+ * Sem `rodarApos`: o aviso da fila é o único do bloco que não é agendamento — a
+ * pessoa está a três minutos de distância e um lembrete adiantado não existe.
+ */
+export async function agendarAvisoDeFila(
+  tx: TransactionClient,
+  queueEntryId: string,
+): Promise<void> {
+  await enfileirar(tx, {
+    kind: TAREFA_DE.sua_vez,
+    payload: { queueEntryId },
+    idempotencyKey: chaveDaNotificacao('sua_vez', queueEntryId),
+  });
+}
+
+/**
+ * Cancela tudo o que ainda não saiu para um agendamento.
+ *
+ * Chamado ao cancelar e ao remarcar. No remarcar, os novos são enfileirados em
+ * seguida com as chaves recalculadas — sem apagar antes, o cliente receberia o
+ * lembrete do horário antigo, que é pior do que não receber nenhum.
+ *
+ * A falta entra na mesma lista, e não é detalhe: ela é a única tarefa daqui que
+ * **escreve** no agendamento. Deixá-la pendente depois de um remarcar mandaria o
+ * worker olhar o horário antigo — que agora está `rescheduled` e por isso
+ * sobrevive ao `WHERE` de status, mas por sorte, não por desenho.
+ */
+export async function cancelarTarefasDoAgendamento(
+  tx: TransactionClient,
+  appointmentId: string,
+): Promise<number> {
+  return cancelarTarefas(tx, {
+    chaves: [
+      ...TIPOS_DE_NOTIFICACAO.map((tipo) => chaveDaNotificacao(tipo, appointmentId)),
+      chaveDaFalta(appointmentId),
+    ],
+  });
+}
+
+interface EstadoDoAviso {
+  starts_at: Date;
+  status: string;
+  timezone: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  phone: string | null;
+  accepts_marketing: boolean;
+  professional_name: string;
+  tenant_name: string;
+  ja_enviada: boolean;
+}
+
+/** Status que desligam o lembrete: o corte não vai acontecer como marcado. */
+const TERMINAIS: ReadonlySet<string> = new Set([
+  'cancelled_customer',
+  'cancelled_business',
+  'no_show',
+  'rescheduled',
+]);
+
+/**
+ * Executa um aviso de agendamento.
+ *
+ * Devolve o que aconteceu para que o worker registre — inclusive quando **não**
+ * enviou. "Nada foi enviado" sem motivo transforma toda pergunta do dono numa
+ * investigação; com motivo, ela vira uma linha na tela.
+ */
+export async function executarAvisoDeAgendamento(params: {
+  readonly tenantId: string;
+  readonly appointmentId: string;
+  readonly tipo: TipoDeNotificacao;
+  readonly provider: NotificationProvider;
+  readonly agora: Date;
+}): Promise<{ readonly enviado: boolean; readonly motivo: MotivoDeNaoEnviar | null }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<EstadoDoAviso[]>`
+      SELECT a.starts_at, a.status::text AS status, l.timezone,
+             a.customer_id, c.name AS customer_name, c.phone_e164 AS phone,
+             c.accepts_marketing,
+             p.name AS professional_name, t.name AS tenant_name,
+             EXISTS (
+               SELECT 1 FROM notifications n
+                WHERE n.appointment_id = a.id
+                  AND n.kind = ${params.tipo}::notification_kind
+                  AND n.status = 'sent'
+             ) AS ja_enviada
+        FROM appointments a
+        JOIN locations l ON l.id = a.location_id
+        JOIN professionals p ON p.id = a.professional_id
+        JOIN tenants t ON t.id = a.tenant_id
+        LEFT JOIN customers c ON c.id = a.customer_id
+       WHERE a.id = ${params.appointmentId}::uuid
+    `;
+
+    const estado = linhas[0];
+    // Agendamento apagado entre a criação da tarefa e agora: não é erro, é o
+    // mundo tendo mudado. Falhar aqui poria a tarefa em retry até esgotar.
+    if (!estado) return registrar(tx, params, null, 'cancelado');
+
+    const decisao = decidirEnvioDeAgendamento({
+      tipo: params.tipo,
+      comecaEm: estado.starts_at,
+      timeZone: estado.timezone,
+      agora: params.agora,
+      temTelefone: Boolean(estado.phone),
+      aindaVale: !TERMINAIS.has(estado.status),
+      jaEnviada: estado.ja_enviada,
+      aceitaPromocional: estado.accepts_marketing,
+    });
+
+    if (!decisao.enviar) return registrar(tx, params, estado, decisao.motivo);
+
+    await params.provider.enviarDeAgendamento({
+      phoneE164: estado.phone ?? '',
+      tipo: params.tipo,
+      clienteNome: estado.customer_name ?? 'cliente',
+      barbearia: estado.tenant_name,
+      profissional: estado.professional_name,
+      quandoTexto: horaLocal(estado.starts_at, estado.timezone),
+    });
+
+    return registrar(tx, params, estado, null);
+  });
+}
+
+/**
+ * Grava o que aconteceu — enviado ou não.
+ *
+ * Na mesma transação da leitura, e **depois** do envio: registrar antes faria o
+ * sistema afirmar que avisou quando o provedor recusou. A ordem inversa é pior
+ * do que parece, porque o registro é o que o `jaEnviada` consulta.
+ */
+async function registrar(
+  tx: TransactionClient,
+  params: { readonly appointmentId: string; readonly tipo: TipoDeNotificacao },
+  estado: EstadoDoAviso | null,
+  motivo: MotivoDeNaoEnviar | null,
+): Promise<{ enviado: boolean; motivo: MotivoDeNaoEnviar | null }> {
+  const enviado = motivo === null;
+  // Já enviada não vira segunda linha: ela poluiria o teto mensal e a contagem
+  // de "quantas vezes avisamos este cliente".
+  if (motivo === 'ja_enviada') return { enviado: false, motivo };
+
+  await tx.$executeRaw`
+    INSERT INTO notifications
+      (tenant_id, kind, customer_id, appointment_id, status, reason, phone_masked)
+    VALUES (
+      NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+      ${params.tipo}::notification_kind,
+      ${estado?.customer_id ?? null}::uuid,
+      ${params.appointmentId}::uuid,
+      ${enviado ? 'sent' : 'skipped'}::notification_status,
+      ${motivo},
+      ${estado?.phone ? maskPhone(estado.phone) : null}
+    )
+  `;
+
+  return { enviado, motivo };
+}
+
+/** "quinta, 11 de setembro às 15:00" — o texto que o cliente lê. */
+function horaLocal(instante: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone,
+  }).format(instante);
+}
+
+/**
+ * "Você é o próximo" — a lacuna aberta desde o bloco 14.
+ *
+ * A posição e a estimativa existiam, com link próprio por pessoa. O que faltava
+ * era o empurrão: quem sai para dar uma volta não recarrega a página, e a SPEC
+ * §2.10 pede a mensagem **entregue**, não só exibida.
+ */
+export async function executarAvisoDeFila(params: {
+  readonly tenantId: string;
+  readonly queueEntryId: string;
+  readonly provider: NotificationProvider;
+}): Promise<{ readonly enviado: boolean; readonly motivo: MotivoDeNaoEnviar | null }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        status: string;
+        customer_id: string;
+        customer_name: string;
+        phone: string | null;
+        tenant_name: string;
+        posicao: bigint;
+        ja_enviada: boolean;
+      }[]
+    >`
+      SELECT q.status::text AS status, q.customer_id, c.name AS customer_name,
+             c.phone_e164 AS phone, t.name AS tenant_name,
+             (
+               SELECT count(*) + 1 FROM queue_entries anterior
+                WHERE anterior.location_id = q.location_id
+                  AND anterior.status = 'waiting'
+                  AND anterior.created_at < q.created_at
+             )::bigint AS posicao,
+             EXISTS (
+               SELECT 1 FROM notifications n
+                WHERE n.customer_id = q.customer_id
+                  AND n.kind = 'sua_vez'
+                  AND n.sent_at > q.created_at
+                  AND n.status = 'sent'
+             ) AS ja_enviada
+        FROM queue_entries q
+        JOIN tenants t ON t.id = q.tenant_id
+        JOIN customers c ON c.id = q.customer_id
+       WHERE q.id = ${params.queueEntryId}::uuid
+    `;
+
+    const entrada = linhas[0];
+    if (!entrada) return { enviado: false, motivo: 'cancelado' };
+    if (entrada.ja_enviada) return { enviado: false, motivo: 'ja_enviada' };
+    if (!entrada.phone) return { enviado: false, motivo: 'sem_telefone' };
+    /**
+     * `waiting` e `called`, não só `waiting`.
+     *
+     * A tarefa nasce quando a pessoa vira a primeira da fila e o worker a pega
+     * segundos depois — tempo suficiente para a recepção já ter apertado
+     * "Chamar". Recusar `called` faria justamente quem está sendo chamado
+     * agora perder a mensagem, que é o pior caso possível para este aviso.
+     *
+     * Sentou, terminou ou desistiu: aí o aviso perdeu o sentido, e mandá-lo
+     * faria a pessoa voltar correndo à toa.
+     */
+    if (entrada.status !== 'waiting' && entrada.status !== 'called') {
+      return { enviado: false, motivo: 'cancelado' };
+    }
+
+    await params.provider.enviarDeFila({
+      phoneE164: entrada.phone,
+      clienteNome: entrada.customer_name,
+      barbearia: entrada.tenant_name,
+      posicao: Number(entrada.posicao),
+    });
+
+    await tx.$executeRaw`
+      INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        'sua_vez', ${entrada.customer_id}::uuid, 'sent', ${maskPhone(entrada.phone)}
+      )
+    `;
+
+    return { enviado: true, motivo: null };
+  });
+}
+
+/**
+ * A mensagem de retorno, varrida periodicamente.
+ *
+ * Diferente das outras: não nasce de um evento, e sim de uma **ausência**. Por
+ * isso é uma varredura, e por isso ela é a única que precisa do teto mensal e
+ * do opt-out — é a única promocional do bloco.
+ */
+export async function varrerRetornos(params: {
+  readonly tenantId: string;
+  readonly provider: NotificationProvider;
+  readonly agora: Date;
+  readonly limite?: number;
+}): Promise<{ readonly enviados: number }> {
+  const limite = Math.min(Math.max(1, params.limite ?? 50), 200);
+
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        customer_id: string;
+        customer_name: string;
+        phone: string;
+        accepts_marketing: boolean;
+        tenant_name: string;
+        timezone: string;
+        comeback_after_days: number;
+        ultima_visita: Date | null;
+        promocionais_no_mes: bigint;
+        ja_enviada: boolean;
+      }[]
+    >`
+      SELECT c.id AS customer_id, c.name AS customer_name, c.phone_e164 AS phone,
+             c.accepts_marketing, t.name AS tenant_name,
+             l.timezone, l.comeback_after_days,
+             (SELECT max(a.starts_at) FROM appointments a
+               WHERE a.customer_id = c.id AND a.status = 'completed') AS ultima_visita,
+             (SELECT count(*) FROM notifications n
+               WHERE n.customer_id = c.id AND n.kind = 'retorno'
+                 AND n.status = 'sent'
+                 AND n.sent_at > ${params.agora} - interval '30 days')::bigint
+               AS promocionais_no_mes,
+             EXISTS (
+               SELECT 1 FROM notifications n
+                WHERE n.customer_id = c.id AND n.kind = 'retorno' AND n.status = 'sent'
+                  AND n.sent_at > ${params.agora} - interval '60 days'
+             ) AS ja_enviada
+        FROM customers c
+        JOIN tenants t ON t.id = c.tenant_id
+        -- Uma unidade, não todas. A tabela customers é do tenant, não da
+        -- unidade: com duas unidades, um JOIN comum devolveria o mesmo cliente
+        -- duas vezes, e as duas linhas leriam ja_enviada = false na mesma
+        -- consulta — a mesma pessoa receberia a mensagem em dobro na mesma
+        -- varredura. É a unidade principal, a mesma que a tela mostra.
+        JOIN LATERAL (
+          SELECT timezone, comeback_after_days, notify_comeback
+            FROM locations ORDER BY created_at LIMIT 1
+        ) l ON true
+       WHERE c.phone_e164 IS NOT NULL
+         AND c.accepts_marketing
+         AND l.notify_comeback
+       ORDER BY c.id
+       LIMIT ${limite}
+    `;
+
+    let enviados = 0;
+
+    for (const linha of linhas) {
+      const decisao = decidirRetorno({
+        ultimaVisita: linha.ultima_visita,
+        diasParaRetorno: linha.comeback_after_days,
+        agora: params.agora,
+        timeZone: linha.timezone,
+        temTelefone: Boolean(linha.phone),
+        aceitaPromocional: linha.accepts_marketing,
+        promocionaisNoMes: Number(linha.promocionais_no_mes),
+        jaEnviada: linha.ja_enviada,
+      });
+      if (!decisao.enviar) continue;
+
+      await params.provider.enviarDeAgendamento({
+        phoneE164: linha.phone,
+        tipo: 'retorno',
+        clienteNome: linha.customer_name,
+        barbearia: linha.tenant_name,
+        profissional: '',
+        quandoTexto: '',
+      });
+
+      await tx.$executeRaw`
+        INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
+        VALUES (
+          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+          'retorno', ${linha.customer_id}::uuid, 'sent', ${maskPhone(linha.phone)}
+        )
+      `;
+      enviados += 1;
+    }
+
+    return { enviados };
+  });
+}
+
+export { naturezaDe };

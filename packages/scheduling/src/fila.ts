@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
+import { agendarAvisoDeFila } from '@barbearia/jobs';
 import { pgCode } from './booking.js';
 import {
   custoDoEncaixe,
@@ -117,6 +118,28 @@ export interface Fila {
 
 const minutosEntre = (de: Date, ate: Date): number =>
   Math.max(0, Math.round((ate.getTime() - de.getTime()) / 60_000));
+
+/**
+ * Avisa quem passou a ser o primeiro da fila — a SPEC §2.10, entregue.
+ *
+ * A posição e a estimativa existiam desde o bloco 14, com link próprio por
+ * pessoa. Faltava o empurrão: quem sai para dar uma volta não recarrega a
+ * página, e "Você é o próximo" exibido numa aba fechada não avisa ninguém.
+ *
+ * Chamada depois de **toda** mudança que altera quem está na frente: alguém
+ * entrou, alguém sentou, alguém desistiu. Sempre dentro da transação que mudou
+ * a fila, para que a mensagem não sobreviva a um `ROLLBACK`.
+ */
+async function avisarProximoDaFila(tx: TransactionClient, locationId: string): Promise<void> {
+  const linhas = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM queue_entries
+     WHERE location_id = ${locationId}::uuid AND status = 'waiting'
+     ORDER BY joined_at
+     LIMIT 1
+  `;
+  const proximo = linhas[0];
+  if (proximo) await agendarAvisoDeFila(tx, proximo.id);
+}
 
 /**
  * Quanto cada serviço leva de fato, com o histórico da própria barbearia.
@@ -517,6 +540,9 @@ export async function joinQueue(params: {
       `;
     }
 
+    // Fila vazia: quem entrou já é o próximo, e a mensagem é a mesma.
+    await avisarProximoDaFila(tx, params.locationId);
+
     return { id, token, posicao: await posicaoNaFila(tx, id) };
   });
 }
@@ -582,6 +608,19 @@ export async function moveQueueEntry(params: {
         updated_at = now()
       WHERE id = ${params.queueEntryId}::uuid
     `;
+
+    if (params.para === 'called') {
+      // Gritar o nome no salão não alcança quem foi tomar um café. A chave é da
+      // entrada, então esta e a de "virou o primeiro" nunca viram duas
+      // mensagens para a mesma pessoa.
+      await agendarAvisoDeFila(tx, params.queueEntryId);
+    } else if (params.para === 'gave_up') {
+      const linha = await tx.$queryRaw<{ location_id: string }[]>`
+        SELECT location_id FROM queue_entries WHERE id = ${params.queueEntryId}::uuid
+      `;
+      const locationId = linha[0]?.location_id;
+      if (locationId) await avisarProximoDaFila(tx, locationId);
+    }
 
     return { status: params.para };
   });
@@ -725,6 +764,9 @@ export async function seatQueueEntry(params: {
         appointment_id = ${appointmentId}::uuid, updated_at = now()
       WHERE id = ${params.queueEntryId}::uuid
     `;
+
+    // Uma cadeira ocupou: quem estava atrás subiu, e é a hora de avisar.
+    await avisarProximoDaFila(tx, entrada.location_id);
 
     return { appointmentId, endsAt: fim.toISOString() };
   });

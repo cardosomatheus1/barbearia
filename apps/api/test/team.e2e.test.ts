@@ -8,9 +8,12 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BoardController } from '../src/admin/board.controller.js';
 import { MeController, TeamController } from '../src/admin/team.controller.js';
+import { AvisosController } from '../src/admin/avisos.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
+import { ConsoleMessagingProvider } from '@barbearia/identity';
+import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
 import { throttlerConfig } from '../src/common/throttler.config.js';
@@ -54,9 +57,13 @@ describeIfDb('equipe e permissões pela HTTP', () => {
         BoardController,
         TeamController,
         MeController,
+        AvisosController,
       ],
       providers: [
         TenantService,
+        // O `TeamController` manda a senha de primeiro acesso; sem provedor o
+        // Nest não monta o controller e a suíte inteira cai por injeção.
+        { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },
         StaffGuard,
         PermissaoGuard,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
@@ -399,5 +406,83 @@ describeIfDb('equipe e permissões pela HTTP', () => {
     await com(rival.body.token)(
       http().put(`/v1/admin/team/${maria.id}/active`).send({ active: false }),
     ).expect(404);
+  });
+  // -- avisos ao cliente -------------------------------------------------------
+
+  it('a recepcionista não muda o que a barbearia manda ao cliente', async () => {
+    // Desligar o lembrete de 24h é configuração da casa, do mesmo tipo que a
+    // janela de cancelamento — e é o aviso que mais derruba falta.
+    const dono = await entrarComoDono();
+    const maria = await recepcionista(dono);
+
+    await com(maria.token)(http().get('/v1/admin/notifications')).expect(403);
+    await com(maria.token)(
+      http().put('/v1/admin/notifications').send({
+        confirmacao: false,
+        lembrete24h: false,
+        lembrete2h: false,
+        retorno: false,
+        diasParaRetorno: 45,
+      }),
+    ).expect(403);
+  });
+
+  it('o dono liga e desliga cada aviso, e o prazo de retorno tem piso', async () => {
+    const dono = await entrarComoDono();
+
+    const antes = await com(dono)(http().get('/v1/admin/notifications')).expect(200);
+    expect(antes.body.settings).toMatchObject({ lembrete2h: true, retorno: false });
+    expect(antes.body.log).toEqual([]);
+
+    await com(dono)(
+      http().put('/v1/admin/notifications').send({
+        confirmacao: true,
+        lembrete24h: true,
+        lembrete2h: false,
+        retorno: true,
+        diasParaRetorno: 30,
+      }),
+    ).expect(200);
+
+    const depois = await com(dono)(http().get('/v1/admin/notifications')).expect(200);
+    expect(depois.body.settings).toMatchObject({
+      lembrete2h: false,
+      retorno: true,
+      diasParaRetorno: 30,
+    });
+
+    // Dois dias sem voltar não é lembrete, é perseguição. O piso é o mesmo da
+    // CHECK do banco — a borda recusa antes de chegar lá.
+    const recusado = await com(dono)(
+      http().put('/v1/admin/notifications').send({
+        confirmacao: true,
+        lembrete24h: true,
+        lembrete2h: true,
+        retorno: true,
+        diasParaRetorno: 2,
+      }),
+    ).expect(400);
+    expect(recusado.body.error.code).toBe('invalid_request');
+  });
+
+  it('a senha de primeiro acesso sai por mensagem e não vira registro legível', async () => {
+    const dono = await entrarComoDono();
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({
+        name: 'Maria Recepção',
+        email: 'maria2@domari.com.br',
+        phone: '(71) 97777-6666',
+        role: 'receptionist',
+      }),
+    ).expect(201);
+
+    expect(criada.body.entrega).toBe('enviada');
+
+    const avisos = await com(dono)(http().get('/v1/admin/notifications')).expect(200);
+    const senha = avisos.body.log.find((linha: { tipo: string }) => linha.tipo === 'senha_de_acesso');
+    expect(senha).toMatchObject({ status: 'sent', quem: 'Maria Recepção' });
+    // O telefone sai mascarado e a credencial não aparece em lugar nenhum.
+    expect(senha.telefone).not.toContain('977776666');
+    expect(JSON.stringify(avisos.body)).not.toContain(criada.body.senhaInicial);
   });
 });

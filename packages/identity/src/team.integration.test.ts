@@ -11,6 +11,7 @@ import {
   resetStaffPassword,
   setStaffActive,
 } from './team.js';
+import { FakeMessagingProvider } from './messaging.js';
 import { resolveStaffSession, signUpOwner, staffLogin } from './staff.js';
 import { listAudit } from './audit.js';
 
@@ -38,6 +39,8 @@ const DONO = {
 };
 
 describeIfDb('equipe e permissões', () => {
+  const messaging = new FakeMessagingProvider();
+
   beforeAll(async () => {
     if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
     process.env['STAFF_EMAIL_PEPPER'] = 'pepper-de-teste';
@@ -51,6 +54,7 @@ describeIfDb('equipe e permissões', () => {
   beforeEach(async () => {
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
     await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
+    messaging.clear();
   });
 
   async function abrirBarbearia() {
@@ -111,6 +115,7 @@ describeIfDb('equipe e permissões', () => {
     // não pode receber a chave do faturamento junto.
     const dono = await abrirBarbearia();
     const { senhaInicial } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -132,6 +137,7 @@ describeIfDb('equipe e permissões', () => {
     // resolve o papel a cada requisição, então não fica valendo a foto antiga.
     const dono = await abrirBarbearia();
     const { senhaInicial } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -158,6 +164,7 @@ describeIfDb('equipe e permissões', () => {
   it('a conta nova nasce obrigada a trocar a senha', async () => {
     const dono = await abrirBarbearia();
     const { senhaInicial } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -226,6 +233,7 @@ describeIfDb('equipe e permissões', () => {
 
     await expect(
       createStaffUser({
+      messaging,
         tenantId: dono.tenantId,
         actor: ator(dono),
         name: 'Sócio',
@@ -257,6 +265,7 @@ describeIfDb('equipe e permissões', () => {
     const dono = await abrirBarbearia();
     await expect(
       createStaffUser({
+      messaging,
         tenantId: dono.tenantId,
         actor: ator(dono),
         name: 'Outro',
@@ -274,6 +283,7 @@ describeIfDb('equipe e permissões', () => {
     // deveria mais estar lá.
     const dono = await abrirBarbearia();
     const { member, senhaInicial } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -298,6 +308,7 @@ describeIfDb('equipe e permissões', () => {
   it('reemitir a senha também derruba as sessões abertas', async () => {
     const dono = await abrirBarbearia();
     const { member, senhaInicial } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -307,6 +318,7 @@ describeIfDb('equipe e permissões', () => {
     const dela = await staffLogin({ email: 'maria@domari.com.br', password: senhaInicial });
 
     const nova = await resetStaffPassword({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       staffUserId: member.id,
@@ -318,11 +330,128 @@ describeIfDb('equipe e permissões', () => {
     });
   });
 
+  // -- a senha entregue por mensagem -----------------------------------------
+
+  it('quem tem celular recebe a senha de primeiro acesso por mensagem', async () => {
+    // A lacuna do bloco 13: a senha era gerada, mostrada uma vez e o dono a lia
+    // em voz alta. Agora ela também sai pelo canal.
+    const dono = await abrirBarbearia();
+    const criado = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      phone: '(71) 97777-6666',
+      role: 'receptionist',
+    });
+
+    expect(criado.entrega).toBe('enviada');
+    expect(messaging.senhas).toHaveLength(1);
+    expect(messaging.senhas[0]).toMatchObject({
+      phoneE164: '+5571977776666',
+      password: criado.senhaInicial,
+      establishmentName: DONO.businessName,
+    });
+  });
+
+  it('sem celular cadastrado a senha continua saindo só na resposta', async () => {
+    const dono = await abrirBarbearia();
+    const criado = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+
+    expect(criado.entrega).toBe('sem_telefone');
+    expect(criado.senhaInicial).toHaveLength(14);
+    expect(messaging.senhas).toHaveLength(0);
+  });
+
+  it('provedor fora do ar não impede a contratação', async () => {
+    // A conta é o que importa; a mensagem é conveniência. Falhar aqui deixaria
+    // o dono sem conseguir contratar porque o WhatsApp caiu.
+    const dono = await abrirBarbearia();
+    messaging.falharProxima = true;
+
+    const criado = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      phone: '(71) 97777-6666',
+      role: 'receptionist',
+    });
+
+    expect(criado.entrega).toBe('falhou');
+    // E a conta funciona: a senha da resposta continua sendo a da conta.
+    const dela = await staffLogin({
+      email: 'maria@domari.com.br',
+      password: criado.senhaInicial,
+    });
+    expect(dela.token).toBeTruthy();
+  });
+
+  it('o registro do envio guarda o telefone mascarado, nunca a senha', async () => {
+    const dono = await abrirBarbearia();
+    const criado = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      phone: '(71) 97777-6666',
+      role: 'receptionist',
+    });
+
+    const linhas = await withTenant(dono.tenantId, async (tx) =>
+      tx.$queryRaw<{ kind: string; phone_masked: string; staff_user_id: string }[]>`
+        SELECT kind::text, phone_masked, staff_user_id FROM notifications
+      `,
+    );
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0]?.kind).toBe('senha_de_acesso');
+    expect(linhas[0]?.staff_user_id).toBe(criado.member.id);
+    expect(linhas[0]?.phone_masked).not.toContain('977776666');
+    // O que nunca pode estar lá: a credencial viva.
+    expect(JSON.stringify(linhas)).not.toContain(criado.senhaInicial);
+  });
+
+  it('reemitir a senha manda a nova, não a antiga', async () => {
+    const dono = await abrirBarbearia();
+    const criado = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      phone: '(71) 97777-6666',
+      role: 'receptionist',
+    });
+
+    const nova = await resetStaffPassword({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      staffUserId: criado.member.id,
+    });
+
+    expect(nova.entrega).toBe('enviada');
+    expect(messaging.senhas).toHaveLength(2);
+    expect(messaging.senhas[1]?.password).toBe(nova.senhaInicial);
+    expect(messaging.senhas[1]?.password).not.toBe(criado.senhaInicial);
+  });
+
   // -- trilha ----------------------------------------------------------------
 
   it('registra quem criou a conta e quem mudou o papel, com antes e depois', async () => {
     const dono = await abrirBarbearia();
     const { member } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -351,6 +480,7 @@ describeIfDb('equipe e permissões', () => {
   it('a trilha nunca guarda senha nem hash', async () => {
     const dono = await abrirBarbearia();
     const { senhaInicial } = await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -369,6 +499,7 @@ describeIfDb('equipe e permissões', () => {
     // reescreve não prova nada, e quem chega ao role apagaria o próprio rastro.
     const dono = await abrirBarbearia();
     await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',
@@ -392,6 +523,7 @@ describeIfDb('equipe e permissões', () => {
   it('a equipe de uma barbearia não aparece na outra', async () => {
     const dono = await abrirBarbearia();
     await createStaffUser({
+      messaging,
       tenantId: dono.tenantId,
       actor: ator(dono),
       name: 'Maria Recepção',

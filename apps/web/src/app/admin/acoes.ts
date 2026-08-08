@@ -12,6 +12,7 @@ import {
   sairDoGestor,
   salvarEmpresa,
   salvarFotos,
+  salvarAvisos,
   salvarJanela,
   salvarPagamentos,
   salvarProfissionais,
@@ -1127,4 +1128,29 @@ export async function acaoFecharComissao(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar('/admin/comissao', resultado.code);
   redirect('/admin/comissao?fechado=1');
+}
+
+// -- Avisos ------------------------------------------------------------------
+
+/**
+ * Salva o que a barbearia manda ao cliente.
+ *
+ * Caixa não marcada não chega no `FormData` — daí `form.has`, e não `texto`. A
+ * diferença importa: com `texto(...) === 'on'` desligar um aviso funcionaria,
+ * mas ligar de volta também dependeria de o navegador mandar o valor, e o
+ * padrão do HTML é justamente não mandar.
+ */
+export async function acaoAvisos(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const resultado = await salvarAvisos(token, {
+    confirmacao: form.has('confirmacao'),
+    lembrete24h: form.has('lembrete24h'),
+    lembrete2h: form.has('lembrete2h'),
+    retorno: form.has('retorno'),
+    diasParaRetorno: numero(form, 'diasParaRetorno', 45),
+  });
+
+  if (!resultado.ok) falhar('/admin/avisos', resultado.code);
+  redirect('/admin/avisos?salvo=1');
 }

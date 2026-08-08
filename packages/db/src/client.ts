@@ -60,6 +60,31 @@ export async function withTenant<T>(
 }
 
 /**
+ * Executa `fn` numa transação **sem tenant fixado**.
+ *
+ * Existe para uma coisa só: a fila de trabalho. O worker precisa perguntar
+ * "qual é a próxima tarefa?" antes de saber de quem ela é — e `jobs` é
+ * infraestrutura, sem RLS, justamente por isso.
+ *
+ * O nome é explícito e feio de propósito. Ele aparece na revisão como uma
+ * exceção que precisa ser justificada, o que é bem melhor do que um
+ * `withTenant(ALGUM_UUID_QUALQUER, …)` que pareceria normal.
+ *
+ * **O que ele não dá:** acesso a dado de negócio. `app.tenant_id` fica vazio, e
+ * a política de toda tabela com RLS compara `tenant_id` com ele — resultado
+ * zero linhas, sempre. Há teste de invariante que prova isso desde o bloco 1.
+ * Quem precisa tocar dado da barbearia abre `withTenant` com o tenant da
+ * própria tarefa, e dali para dentro nada muda.
+ */
+export async function semTenant<T>(
+  fn: (tx: TransactionClient) => Promise<T>,
+  options: { readonly prisma?: PrismaClient; readonly timeoutMs?: number } = {},
+): Promise<T> {
+  const prisma = options.prisma ?? getPrisma();
+  return prisma.$transaction(async (tx) => fn(tx), { timeout: options.timeoutMs ?? 10_000 });
+}
+
+/**
  * Confirma que a conexão da aplicação **não** ignora RLS.
  *
  * Todo o isolamento multi-tenant depende disso. Um `DATABASE_URL` apontando

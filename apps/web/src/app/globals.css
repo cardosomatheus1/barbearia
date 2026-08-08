@@ -1941,3 +1941,78 @@ main { padding-bottom: var(--space-8); }
      faixas no papel. */
   .faixas-comissao__linha { grid-template-columns: 2fr 1fr; align-items: start; }
 }
+
+/* ============================================================================
+   Avisos ao cliente.
+
+   Duas seções na mesma página porque quem abre chega por uma de duas perguntas:
+   desligar um aviso, ou descobrir se o cliente foi avisado.
+
+   O histórico é lista, não tabela, e é escolha: as colunas seriam tipo, quem,
+   quando e motivo — quatro, e a última é uma frase. Tabela de quatro colunas com
+   frase na última só cabe em 360px rolando de lado, que é justamente o que não
+   pode acontecer.
+   ============================================================================ */
+
+.avisos__opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.avisos__prazo { display: block; margin-top: var(--space-4); }
+/* Campo de três dígitos não precisa da largura da tela; largura que não
+   corresponde ao conteúdo faz o formulário parecer montado às pressas. */
+.avisos__dias { max-width: 8rem; }
+
+.avisos__titulo {
+  margin: var(--space-8) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.envios { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.envios__item {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.envios__linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.envios__tipo { font-weight: var(--font-weight-medium); }
+.envios__quem {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  /* Nome composto com telefone mascarado estoura 360px; quebrar é melhor que
+     cortar, porque o telefone é o que identifica a linha. */
+  overflow-wrap: anywhere;
+}
+.envios__meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* O estado vem do texto também, nunca só da cor: quem não distingue verde de
+   vermelho lê "Enviado" e "Falhou" do mesmo jeito. */
+.envios__status { font-size: var(--font-size-xs); white-space: nowrap; }
+.envios__status--sent { color: var(--color-success); }
+.envios__status--failed { color: var(--color-danger); }
+.envios__status--skipped { color: var(--color-text-muted); }
+
+.envios__item:has(.envios__status--sent) { border-left-color: var(--color-success); }
+.envios__item:has(.envios__status--failed) { border-left-color: var(--color-danger); }
+
+/* A saída de um estado de erro é ação, não link no meio da frase.
+   Ela existia como `<a>` cru em nove telas — 16px de altura, contra o piso de
+   44. Nenhuma medição pegava, porque o ramo de erro nunca renderiza no caminho
+   feliz; a tela de avisos foi a primeira cujo erro apareceu na régua. */
+.painel__saida { margin-top: var(--space-3); }

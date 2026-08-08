@@ -171,7 +171,7 @@ export default async function EquipePage({ searchParams }: Props) {
         </header>
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[resposta.code] ?? FALHA['request_failed']}{' '}
-          <a href="/admin/dia">Voltar ao dia</a>
+          <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>
     );

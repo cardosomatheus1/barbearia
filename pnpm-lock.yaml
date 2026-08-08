@@ -25,6 +25,9 @@ importers:
       '@barbearia/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@barbearia/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@barbearia/onboarding':
         specifier: workspace:*
         version: link:../../packages/onboarding
@@ -114,6 +117,28 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)
+
+  apps/worker:
+    dependencies:
+      '@barbearia/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@barbearia/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@barbearia/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.11
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   packages/catalog:
     dependencies:
@@ -215,6 +240,28 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)
 
+  packages/jobs:
+    dependencies:
+      '@barbearia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@barbearia/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@prisma/client':
+        specifier: ^6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)
+
   packages/onboarding:
     dependencies:
       '@barbearia/core':
@@ -251,6 +298,9 @@ importers:
       '@barbearia/db':
         specifier: workspace:*
         version: link:../db
+      '@barbearia/jobs':
+        specifier: workspace:*
+        version: link:../jobs
     devDependencies:
       '@prisma/client':
         specifier: ^6.19.3

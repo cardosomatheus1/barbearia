@@ -265,7 +265,7 @@ export default async function DiaPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo">
         <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar o dia. <a href="/admin/dia">Tentar de novo</a>
+          Não deu para carregar o dia. <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Tentar de novo</a>
         </div>
       </main>
     );

@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
+  agendarAvisosDoAgendamento,
+  agendarFalta,
+  cancelarTarefasDoAgendamento,
+} from '@barbearia/jobs';
+import {
   canCancel,
   canReschedule,
   localToInstant,
@@ -259,6 +264,64 @@ async function findByIdempotencyKey(
   };
 }
 
+/**
+ * Programa o que o agendamento recém-criado dispara sozinho: os avisos e a
+ * falta.
+ *
+ * **Na mesma transação.** Se o corte entra, os lembretes entram; se a transação
+ * volta atrás, eles somem junto. Enfileirar depois criaria a janela em que o
+ * horário está marcado e nenhum lembrete foi programado — e o defeito só
+ * apareceria no dia seguinte, como a falta que o lembrete existia para evitar.
+ *
+ * Cada aviso liga e desliga por conta própria na unidade: barbearia que acha o
+ * de 2h intrusivo desliga só ele. A falta segue `no_show_after_minutes`, que
+ * existe desde o bloco 11 — até aqui só o painel a mostrava correndo.
+ */
+async function programarTarefas(
+  tx: TransactionClient,
+  appointmentId: string,
+  locationId: string,
+  comecaEm: Date,
+  agora: Date,
+): Promise<void> {
+  const linhas = await tx.$queryRaw<
+    {
+      timezone: string;
+      notify_confirmation: boolean;
+      notify_reminder_24h: boolean;
+      notify_reminder_2h: boolean;
+      no_show_after_minutes: number;
+    }[]
+  >`
+    SELECT timezone, notify_confirmation, notify_reminder_24h, notify_reminder_2h,
+           no_show_after_minutes
+      FROM locations WHERE id = ${locationId}::uuid
+  `;
+  const unidade = linhas[0];
+  if (!unidade) return;
+
+  await agendarAvisosDoAgendamento(tx, {
+    appointmentId,
+    comecaEm,
+    timeZone: unidade.timezone,
+    agora,
+    ligados: {
+      confirmacao: unidade.notify_confirmation,
+      lembrete_24h: unidade.notify_reminder_24h,
+      lembrete_2h: unidade.notify_reminder_2h,
+      sua_vez: false,
+      senha_de_acesso: false,
+      retorno: false,
+    },
+  });
+
+  await agendarFalta(tx, {
+    appointmentId,
+    comecaEm,
+    toleranciaMinutos: unidade.no_show_after_minutes,
+  });
+}
+
 async function insertAppointment(
   tx: TransactionClient,
   request: CreateAppointmentRequest,
@@ -287,6 +350,8 @@ async function insertAppointment(
 
   const id = rows[0]?.id;
   if (!id) throw new BookingError('slot_taken', 'Não foi possível reservar o horário');
+
+  await programarTarefas(tx, id, request.locationId, slot.serviceStart, request.now ?? new Date());
 
   for (const [index, serviceId] of request.serviceIds.entries()) {
     await tx.$executeRaw`
@@ -523,6 +588,10 @@ function refuse(decision: ChangeDecision, verbo: 'cancelar' | 'remarcar'): void 
 export async function cancelAppointment(request: CancelRequest): Promise<void> {
   await withTenant(request.tenantId, async (tx) => {
     const status = request.by === 'customer' ? 'cancelled_customer' : 'cancelled_business';
+    // Quem desmarcou não pode receber "não esqueça do seu horário". Esta é a
+    // primeira defesa; o handler reconfere o estado na hora de enviar, que é o
+    // que cobre o cancelamento acontecendo com a tarefa já em execução.
+    await cancelarTarefasDoAgendamento(tx, request.appointmentId);
 
     // A janela de antecedência vale para o cliente, não para a barbearia: quem
     // atende precisa poder desmarcar em cima da hora quando o barbeiro adoece.
@@ -665,6 +734,11 @@ export async function rescheduleAppointment(
     const slot = await resolveSlot(tx, target, {
       ignoreAppointmentId: request.appointmentId,
     });
+
+    // Os avisos do horário antigo saem junto. Sem isso o cliente receberia o
+    // lembrete de um horário que deixou de existir — pior que não receber, e o
+    // novo agendamento programa os seus logo abaixo, em `insertAppointment`.
+    await cancelarTarefasDoAgendamento(tx, request.appointmentId);
 
     await tx.$executeRaw`
       UPDATE appointments SET status = 'rescheduled', updated_at = now()

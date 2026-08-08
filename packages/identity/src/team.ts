@@ -3,6 +3,7 @@ import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   ehPermissao,
   InvalidPhoneError,
+  maskPhone,
   normalizePhone,
   PAPEIS,
   permissoesPadrao,
@@ -10,6 +11,7 @@ import {
   type Permissao,
 } from '@barbearia/core';
 import { audit } from './audit.js';
+import type { MessagingProvider } from './messaging.js';
 import { emailKey, hashPassword, verifyPassword } from './password.js';
 import { StaffError } from './staff.js';
 
@@ -55,6 +57,87 @@ const TAMANHO_SENHA = 14;
 
 /** Mesmo piso do cadastro do dono. */
 const MIN_PASSWORD = 10;
+
+/** O que aconteceu com a entrega da senha. A tela precisa saber qual dizer. */
+export type EntregaDaSenha = 'enviada' | 'sem_telefone' | 'falhou';
+
+/**
+ * Entrega a senha de primeiro acesso por mensagem — lacuna aberta no bloco 13.
+ *
+ * Três decisões, todas contra o instinto de reaproveitar o resto do bloco 20:
+ *
+ * 1. **Não entra na fila.** `jobs.payload` é durável e a tabela não tem RLS, de
+ *    propósito — enfileirar a senha em claro a deixaria legível para qualquer
+ *    consulta à fila, por tempo indeterminado. Sai inline, como o OTP.
+ * 2. **Depois do commit, e falhar aqui não desfaz a conta.** O provedor fora do
+ *    ar não pode impedir a contratação; a senha continua voltando na resposta,
+ *    que é o caminho que funcionava antes e segue sendo o de emergência.
+ * 3. **O registro guarda que saiu, nunca o que saiu.** `notifications` fica com
+ *    tipo, destinatário e telefone mascarado. É o que responde "mandaram minha
+ *    senha?" sem se tornar mais um lugar de onde ela vaza.
+ */
+async function entregarSenha(params: {
+  readonly tenantId: string;
+  readonly staffUserId: string;
+  readonly senha: string;
+  readonly messaging: MessagingProvider;
+}): Promise<EntregaDaSenha> {
+  const dados = await withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { name: string; phone_e164: string | null; tenant_name: string }[]
+    >`
+      SELECT s.name, s.phone_e164, t.name AS tenant_name
+        FROM staff_users s
+        JOIN tenants t ON t.id = s.tenant_id
+       WHERE s.id = ${params.staffUserId}::uuid
+    `;
+    return linhas[0] ?? null;
+  });
+
+  if (!dados?.phone_e164) return 'sem_telefone';
+
+  try {
+    await params.messaging.sendStaffPassword({
+      phoneE164: dados.phone_e164,
+      name: dados.name,
+      establishmentName: dados.tenant_name,
+      password: params.senha,
+    });
+  } catch {
+    // O detalhe do erro é do provedor e não acrescenta nada aqui: o que o dono
+    // precisa saber é que a mensagem não saiu e a senha está na tela.
+    await registrarEnvioDaSenha(params.tenantId, params.staffUserId, null, 'falhou');
+    return 'falhou';
+  }
+
+  await registrarEnvioDaSenha(
+    params.tenantId,
+    params.staffUserId,
+    maskPhone(dados.phone_e164),
+    'sent',
+  );
+  return 'enviada';
+}
+
+async function registrarEnvioDaSenha(
+  tenantId: string,
+  staffUserId: string,
+  telefoneMascarado: string | null,
+  status: 'sent' | 'falhou',
+): Promise<void> {
+  await withTenant(tenantId, async (tx) => {
+    await tx.$executeRaw`
+      INSERT INTO notifications (tenant_id, kind, staff_user_id, status, reason, phone_masked)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        'senha_de_acesso', ${staffUserId}::uuid,
+        ${status === 'sent' ? 'sent' : 'failed'}::notification_status,
+        ${status === 'sent' ? null : 'provedor_indisponivel'},
+        ${telefoneMascarado}
+      )
+    `;
+  });
+}
 
 /**
  * Senha de primeiro acesso, gerada e não escolhida.
@@ -125,6 +208,7 @@ export interface CreateStaffRequest {
   readonly role: Papel;
   readonly phone?: string;
   readonly professionalId?: string;
+  readonly messaging: MessagingProvider;
   readonly ip?: string | undefined;
   readonly userAgent?: string | undefined;
 }
@@ -132,10 +216,11 @@ export interface CreateStaffRequest {
 /**
  * Cria a conta de alguém da equipe.
  *
- * Devolve a senha de primeiro acesso **uma vez**. Não há e-mail nem WhatsApp
- * transacional ainda (bloco 20), e a alternativa realista numa barbearia é o
- * dono entregar a senha para quem está ao lado dele. `must_change_password`
- * garante que ela não sobreviva ao primeiro uso.
+ * Devolve a senha de primeiro acesso **uma vez**, e agora também a manda por
+ * mensagem quando a pessoa tem celular cadastrado. As duas coisas, não uma: o
+ * provedor pode estar fora do ar, e o dono precisa poder ler em voz alta para
+ * quem está do lado dele. `must_change_password` garante que ela não sobreviva
+ * ao primeiro uso.
  *
  * O e-mail é conferido no índice entre tenants **antes** de gravar: a mesma
  * pessoa não pode ter conta em duas barbearias com o mesmo endereço, porque o
@@ -146,6 +231,7 @@ export interface CreateStaffRequest {
 export async function createStaffUser(request: CreateStaffRequest): Promise<{
   readonly member: StaffMember;
   readonly senhaInicial: string;
+  readonly entrega: EntregaDaSenha;
 }> {
   if (!PAPEIS.includes(request.role)) {
     throw new StaffError('invalid_role', 'Papel desconhecido');
@@ -172,7 +258,7 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
   const senhaInicial = gerarSenhaInicial();
   const hash = await hashPassword(senhaInicial);
 
-  return withTenant(request.tenantId, async (tx) => {
+  const criacao = await withTenant(request.tenantId, async (tx) => {
     /**
      * A conferência é **desta barbearia**, não da plataforma.
      *
@@ -256,6 +342,17 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
       senhaInicial,
     };
   });
+
+  // Fora da transação: o envio é rede, e rede dentro de transação segura
+  // conexão e cadeado enquanto o provedor pensa.
+  const entrega = await entregarSenha({
+    tenantId: request.tenantId,
+    staffUserId: criacao.member.id,
+    senha: senhaInicial,
+    messaging: request.messaging,
+  });
+
+  return { ...criacao, entrega };
 }
 
 async function carregar(
@@ -367,21 +464,22 @@ export async function setStaffActive(request: {
 /**
  * Gera nova senha de primeiro acesso para quem esqueceu a dele.
  *
- * Sem canal de mensagem ainda, é o dono que reemite e entrega. Revoga as
- * sessões abertas: senha trocada com sessão viva não tira ninguém de lugar
- * nenhum.
+ * Vai pelo mesmo caminho da criação: mensagem quando há celular, e a senha na
+ * resposta de qualquer jeito. Revoga as sessões abertas — senha trocada com
+ * sessão viva não tira ninguém de lugar nenhum.
  */
 export async function resetStaffPassword(request: {
   readonly tenantId: string;
   readonly actor: { readonly id: string; readonly name: string };
   readonly staffUserId: string;
+  readonly messaging: MessagingProvider;
   readonly ip?: string | undefined;
   readonly userAgent?: string | undefined;
-}): Promise<{ readonly senhaInicial: string }> {
+}): Promise<{ readonly senhaInicial: string; readonly entrega: EntregaDaSenha }> {
   const senhaInicial = gerarSenhaInicial();
   const hash = await hashPassword(senhaInicial);
 
-  return withTenant(request.tenantId, async (tx) => {
+  await withTenant(request.tenantId, async (tx) => {
     const atual = await carregar(tx, request.staffUserId);
     if (!atual) throw new StaffError('staff_not_found', 'Conta não encontrada.');
     // Mesma proteção de `changeStaffRole` e `setStaffActive`, que faltava aqui.
@@ -412,9 +510,16 @@ export async function resetStaffPassword(request: {
       ip: request.ip,
       userAgent: request.userAgent,
     });
-
-    return { senhaInicial };
   });
+
+  const entrega = await entregarSenha({
+    tenantId: request.tenantId,
+    staffUserId: request.staffUserId,
+    senha: senhaInicial,
+    messaging: request.messaging,
+  });
+
+  return { senhaInicial, entrega };
 }
 
 // -- Permissões ---------------------------------------------------------------

@@ -59,6 +59,7 @@ describeIfDb('fila presencial', () => {
 
   beforeEach(async () => {
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await admin.$executeRawUnsafe('TRUNCATE jobs');
     await exec(admin, `
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari'), ('${RIVAL}', 'Rival');
 
@@ -537,5 +538,71 @@ describeIfDb('fila presencial', () => {
         now: AGORA,
       }),
     ).rejects.toMatchObject({ code: 'queue_entry_not_found' });
+  });
+  // -- "você é o próximo", entregue -------------------------------------------
+
+  /** As tarefas de aviso de fila que existem agora, na ordem em que nasceram. */
+  const avisosDeFila = async (): Promise<string[]> => {
+    const linhas = await admin.$queryRawUnsafe<{ payload: { queueEntryId?: string } }[]>(
+      `SELECT payload FROM jobs WHERE kind = 'notificacao.sua_vez' ORDER BY created_at, id`,
+    );
+    return linhas.map((linha) => linha.payload.queueEntryId ?? '');
+  };
+
+  it('quem chega numa fila vazia já é o próximo e é avisado', async () => {
+    // A lacuna do bloco 14: a posição e a estimativa existiam, com link próprio
+    // por pessoa. Faltava o empurrão — quem sai para dar uma volta não
+    // recarrega a página.
+    const entrada = await entrar(CARLOS);
+    expect(await avisosDeFila()).toEqual([entrada.id]);
+  });
+
+  it('quem está atrás só é avisado quando a vez chega de fato', async () => {
+    const primeiro = await entrar(CARLOS);
+    const segundo = await entrar(JOAO);
+    // O segundo não recebe nada enquanto o primeiro está na frente: "você é o
+    // próximo" mandado para quem tem gente na frente é mentira.
+    expect(await avisosDeFila()).toEqual([primeiro.id]);
+
+    await seatQueueEntry({
+      tenantId: TENANT,
+      queueEntryId: primeiro.id,
+      professionalId: RUAN,
+      now: AGORA,
+    });
+    expect(await avisosDeFila()).toEqual([primeiro.id, segundo.id]);
+  });
+
+  it('desistência da frente avisa quem subiu', async () => {
+    const primeiro = await entrar(CARLOS);
+    const segundo = await entrar(JOAO);
+
+    await moveQueueEntry({
+      tenantId: TENANT,
+      queueEntryId: primeiro.id,
+      para: 'gave_up',
+      now: AGORA,
+    });
+    expect(await avisosDeFila()).toEqual([primeiro.id, segundo.id]);
+  });
+
+  it('a mesma pessoa nunca recebe dois avisos na mesma visita', async () => {
+    // Entrar primeiro, ser chamada, voltar a esperar e ser chamada de novo é o
+    // caminho comum de quem foi tomar um café. Uma mensagem, não quatro.
+    const entrada = await entrar(CARLOS);
+    for (const para of ['called', 'waiting', 'called'] as const) {
+      await moveQueueEntry({ tenantId: TENANT, queueEntryId: entrada.id, para, now: AGORA });
+    }
+    expect(await avisosDeFila()).toEqual([entrada.id]);
+  });
+
+  it('o aviso da fila é tarefa da própria barbearia', async () => {
+    // A fila de trabalho não tem RLS de propósito; o que separa as barbearias é
+    // o `tenant_id` da tarefa, que o handler usa para abrir `withTenant`.
+    await entrar(CARLOS);
+    const linhas = await admin.$queryRawUnsafe<{ tenant_id: string }[]>(
+      `SELECT tenant_id FROM jobs WHERE kind = 'notificacao.sua_vez'`,
+    );
+    expect(linhas.map((l) => l.tenant_id)).toEqual([TENANT]);
   });
 });

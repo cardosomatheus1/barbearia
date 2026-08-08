@@ -17,6 +17,7 @@
     "@barbearia/db": "workspace:*",
     "@barbearia/finance": "workspace:*",
     "@barbearia/identity": "workspace:*",
+    "@barbearia/jobs": "workspace:*",
     "@barbearia/onboarding": "workspace:*",
     "@barbearia/scheduling": "workspace:*",
     "@nestjs/common": "^11.1.6",

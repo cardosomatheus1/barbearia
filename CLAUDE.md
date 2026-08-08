@@ -392,6 +392,7 @@ pnpm --filter @barbearia/core test          # puro, sem banco
 pnpm --filter @barbearia/db test            # invariantes do schema
 pnpm --filter @barbearia/scheduling test    # pipeline banco -> motor
 pnpm --filter @barbearia/finance test       # comanda, caixa e fiado
+pnpm --filter @barbearia/jobs test          # fila, avisos e falta automática
 ```
 
 Testes de banco exigem Postgres 16+ com `pgcrypto`, `citext` e `btree_gist`.
@@ -422,6 +423,10 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Permissão exibida na tela | sai da mesma função que a API aplica — nunca recalculada na view |
 | Permissão numa rota | declarada com `@Exige(...)`; rota sem declaração é **recusada**, não liberada |
 | Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
+| Trabalho fora de requisição | tarefa em `jobs`, enfileirada **dentro** da transação que cria o fato; nunca depois |
+| Tarefa de fila | sempre com `tenant_id`; o handler abre `withTenant` com ele. `jobs` não tem RLS, e por isso o `payload` guarda id, nunca conteúdo |
+| Credencial entregue por mensagem | inline depois do commit, como o OTP — **nunca** pela fila, que é durável e legível sem tenant |
+| Fuso e janela de silêncio do aviso | da unidade, nunca do aparelho; entre 21h e 8h nada sai |
 | Evento auditado | gravado por `audit()` **dentro da transação** que muda o estado; `audit_log` é append-only por `REVOKE` |
 | Segundo fator | TOTP RFC 6238 do `node:crypto`; segredo cifrado com AES-256-GCM; passo consumido gravado; código de recuperação some ao ser usado |
 | Comissão | lançamento guarda **base + regra copiada**, nunca o valor; o valor é derivado, porque faixa depende do acumulado do período |

@@ -13,15 +13,17 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 344 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 62 invariantes + 10 testes ✅ |
-| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 130 testes ✅ |
-| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP) e auditoria | 109 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 375 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 77 invariantes + 10 testes ✅ |
+| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
+| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP) e auditoria | 119 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro, do banco para a tela | 54 testes ✅ |
+| `packages/jobs` | Fila de trabalho, avisos ao cliente e falta automática — o que acontece sem ninguém esperando | 41 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda e comissão | 204 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda e comissão, com SSR (Next.js) | 37 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão e avisos | 209 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão e avisos, com SSR (Next.js) | 37 testes ✅ |
+| `apps/worker` | O segundo processo: consome a fila, manda os avisos e marca a falta | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -977,7 +979,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as vinte e quatro
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e duas
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
@@ -1265,3 +1267,100 @@ de valer junto.
 **Lacunas conhecidas** estão na tabela
 [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada
 uma com o que já existe, o que falta e em qual bloco entra.
+
+## Bloco 20 — o primeiro processo que roda sem ninguém esperando
+
+Até aqui todo efeito deste produto acontecia enquanto alguém olhava a tela. O
+lembrete de 24 horas não cabe nesse modelo: ninguém está esperando resposta às
+9h da manhã de ontem. Daí uma fila de trabalho e um segundo processo.
+
+### A fila é uma tabela, não um Redis
+
+O trabalho nasce **dentro da mesma transação** que cria o fato que o origina. Se
+o corte entra, o lembrete entra; se a transação volta atrás, o lembrete some
+junto. Com uma fila fora do banco isso vira entrega em dois lugares — problema
+que uma barbearia não tem escala para justificar. Postgres com
+`FOR UPDATE SKIP LOCKED` sustenta ordem de milhares de tarefas por minuto.
+
+O que impede a mensagem dupla é o índice único sobre a chave de idempotência,
+não um `SELECT` antes de inserir — que teria janela de corrida entre a consulta
+e a escrita. E falha não some: tentativa tem teto e espera crescente (1, 2, 4…
+minutos, teto de uma hora); esgotado o teto, a tarefa vira `failed` e fica
+visível. Mensagem que ninguém enviou e ninguém soube é a pior das duas falhas
+possíveis, porque a barbearia acha que avisou.
+
+### A tabela `jobs` não tem RLS, e é de propósito
+
+Ela é infraestrutura: o worker precisa ver a próxima tarefa **antes** de saber
+de quem ela é. Quem protege o dado de negócio continua sendo a RLS das tabelas
+que a tarefa toca — o handler abre `withTenant` com o tenant da própria tarefa,
+e dali para dentro nada muda. O `payload` guarda id, nunca conteúdo: nome e
+telefone são lidos sob RLS na hora de executar.
+
+### A varredura que não podia existir
+
+A primeira versão da falta automática era uma varredura de plataforma, sem
+tenant, atravessando barbearias. Ela não podia funcionar, e o teste pegou:
+`appointments` tem RLS, e sem tenant no contexto a consulta devolve zero linhas
+**sempre**.
+
+A correção foi melhor que o remendo. A falta virou **uma tarefa por
+agendamento**, criada junto com ele, com `run_after` no instante exato em que a
+tolerância vence: mais precisa que varrer de minuto em minuto, sem gastar nada
+quando não há ninguém atrasado, e passando pela RLS como qualquer outra escrita.
+Sobrou a regra, agora no schema: `jobs.tenant_id` é `NOT NULL` — quem não tem
+tenant não tem o que fazer ali.
+
+A mesma impossibilidade decidiu a mensagem de retorno, que é a única tarefa
+periódica do produto: `locations` também tem RLS, então nenhum processo sem
+tenant descobre quem quer a mensagem. A cadeia nasce quando a barbearia **liga**
+o aviso na tela e se mantém sozinha, cada varredura criando a próxima — e para
+quando ela desliga.
+
+### A tolerância conta da hora combinada
+
+`marcarFalta` mede a partir de `service_starts_at`, não de `starts_at`. Os dois
+diferem quando o serviço tem preparo antes: `starts_at` é quando a cadeira fica
+ocupada. Contar dali puniria o cliente por um tempo que não é dele — e faria o
+status virar num instante diferente do que o painel do dia mostra, que conta da
+hora combinada desde o bloco 11.
+
+### A senha de primeiro acesso não entra na fila
+
+Todo o resto do bloco passa pela fila. A senha não, e a razão é a mesma que
+justifica `jobs` não ter RLS: a tabela é durável e legível sem tenant no
+contexto. Enfileirar a senha em claro a transformaria num segredo em repouso.
+Ela sai inline depois do commit, como o OTP desde o bloco 4, e continua voltando
+na resposta — porque o provedor pode estar fora do ar e o dono precisa poder ler
+em voz alta para quem está do lado dele. O registro guarda que saiu, com
+telefone mascarado; nunca o que saiu.
+
+### O que o cliente recebe, e o que ele nunca recebe
+
+A janela de silêncio (21h–8h) e o fuso saem da **unidade**, nunca do aparelho —
+mesmo defeito D2 do sistema analisado. A confirmação sai na hora de marcar, não
+na hora do corte. Consentimento de marketing é separado do necessário para
+executar o serviço: quem recusa promoção continua recebendo o lembrete do
+próprio corte, e o convite de retorno — a única mensagem promocional daqui —
+respeita opt-in, teto mensal e prazo mínimo de sete dias.
+
+Cancelar ou remarcar apaga as tarefas pendentes daquele agendamento, **inclusive
+a falta**. E o handler reconfere o estado na hora de enviar: são duas defesas
+porque cancelamento e envio podem se cruzar no mesmo segundo.
+
+### A tela diz o que não saiu, com o motivo
+
+`/admin/avisos` liga e desliga cada aviso e mostra os últimos envios — os que
+saíram e os que **não** saíram, com o motivo em português. "O cliente foi
+avisado?" é pergunta de discussão sobre falta, e "não, porque não tinha
+telefone" é uma resposta; uma lista só de sucessos não é.
+
+O registro é append-only por `REVOKE`, como `audit_log` e o extrato do cliente:
+resposta que pode ser reescrita não responde nada.
+
+### O que a medição encontrou desta vez
+
+O ramo de erro. Nove telas do painel tinham a saída do estado de erro como um
+`<a>` cru — 16px de altura, contra o piso de 44. Nenhuma medição pegava, porque
+o caminho feliz nunca renderiza aquele ramo; a tela de avisos foi a primeira
+cujo erro apareceu na régua, e a correção valeu para as nove.

@@ -1,0 +1,714 @@
+import { PrismaClient } from '@prisma/client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { withTenant } from '@barbearia/db';
+import {
+  cancelarTarefas,
+  concluirTarefa,
+  enfileirar,
+  enfileirarAvulso,
+  esperaDaTentativa,
+  falharTarefa,
+  soltarOrfas,
+  tomarTarefas,
+} from './fila.js';
+import {
+  agendarAvisosDoAgendamento,
+  cancelarTarefasDoAgendamento,
+  executarAvisoDeAgendamento,
+  FakeNotificationProvider,
+} from './notificacoes.js';
+import { agendarFalta, marcarFalta } from './faltas.js';
+import {
+  agendarVarreduraDeRetorno,
+  lerPreferenciasDeAviso,
+  salvarPreferenciasDeAviso,
+} from './preferencias.js';
+import { varrerRetornos } from './notificacoes.js';
+import { rodada, type Contexto } from './worker.js';
+
+/**
+ * A fila contra Postgres real.
+ *
+ * É a primeira coisa do produto que roda sem ninguém esperando, e por isso a
+ * primeira em que "duas vezes" não é hipótese: reentrega, worker reiniciado,
+ * dois processos disputando a mesma tarefa. Mock não prova nada sobre
+ * `FOR UPDATE SKIP LOCKED`.
+ */
+
+const SEED_URL = process.env['SEED_DATABASE_URL'];
+const APP_URL = process.env['APP_DATABASE_URL'];
+
+const TENANT = '11111111-1111-1111-1111-111111111111';
+const RIVAL = '22222222-2222-2222-2222-222222222222';
+const LOCATION = 'aaaaaaaa-0000-0000-0000-000000000001';
+const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
+const CARLOS = 'cccccccc-0000-0000-0000-000000000001';
+const AGENDAMENTO = 'dddddddd-0000-0000-0000-000000000001';
+
+let admin: PrismaClient;
+const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
+
+/** O corte é amanhã às 15h de Salvador. */
+const COMECA_EM = new Date('2026-09-11T18:00:00Z');
+const AGORA = new Date('2026-09-10T13:00:00Z'); // 10h em Salvador
+
+async function exec(client: PrismaClient, sql: string): Promise<void> {
+  for (const parte of sql.split(';').map((p) => p.trim()).filter(Boolean)) {
+    await client.$executeRawUnsafe(parte);
+  }
+}
+
+describeIfDb('fila de trabalho', () => {
+  let provider: FakeNotificationProvider;
+  let contexto: Contexto;
+
+  beforeAll(async () => {
+    if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
+    admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
+  });
+
+  afterAll(async () => {
+    await admin?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await admin.$executeRawUnsafe('TRUNCATE jobs');
+    await exec(admin, `
+      INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari'), ('${RIVAL}', 'Rival');
+
+      INSERT INTO locations (id, tenant_id, name, timezone, no_show_after_minutes)
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20);
+
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional');
+
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('${CARLOS}', '${TENANT}', 'Carlos Souza', '+5571988887777');
+
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at, price_cents, status)
+      VALUES ('${AGENDAMENTO}', '${TENANT}', '${LOCATION}', '${CARLOS}', '${RUAN}',
+              '${COMECA_EM.toISOString()}', '2026-09-11T18:30:00Z',
+              '${COMECA_EM.toISOString()}', '2026-09-11T18:30:00Z', 5000, 'confirmed');
+    `);
+
+    provider = new FakeNotificationProvider();
+    contexto = { provider, relogio: { agora: () => AGORA } };
+  });
+
+  const enfileirarNoTenant = (tarefa: Parameters<typeof enfileirar>[1]) =>
+    withTenant(TENANT, (tx) => enfileirar(tx, tarefa));
+
+  const quantasNaFila = async (status = 'pending'): Promise<number> => {
+    const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM jobs WHERE status = '${status}'`,
+    );
+    return Number(linhas[0]?.n ?? 0);
+  };
+
+  // -- a fila -----------------------------------------------------------------
+
+  it('a mesma chave não entra duas vezes', async () => {
+    // Reentrega do mesmo evento não pode virar duas mensagens.
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    expect(await quantasNaFila()).toBe(1);
+  });
+
+  it('sem chave, repetir é legítimo', async () => {
+    await enfileirarNoTenant({ kind: 'varredura' });
+    await enfileirarNoTenant({ kind: 'varredura' });
+    expect(await quantasNaFila()).toBe(2);
+  });
+
+  it('tarefa do futuro não é tomada', async () => {
+    // É isto que transforma a fila em agendador: o lembrete de 24h nasce hoje
+    // com `run_after` para amanhã.
+    await enfileirarNoTenant({
+      kind: 'x',
+      rodarApos: new Date(AGORA.getTime() + 60 * 60_000),
+    });
+    expect(await tomarTarefas(10, 'w', AGORA)).toHaveLength(0);
+  });
+
+  it('dois workers não pegam a mesma tarefa', async () => {
+    /**
+     * A garantia que só o banco dá. Sem `SKIP LOCKED`, o segundo worker ficaria
+     * bloqueado atrás do primeiro — dois processos com a vazão de um. Com
+     * `SELECT` comum sem trava, os dois pegariam a mesma tarefa e o cliente
+     * receberia duas mensagens.
+     */
+    for (const i of [1, 2, 3, 4]) {
+      await enfileirarNoTenant({ kind: 'x', idempotencyKey: `k${i}` });
+    }
+
+    const [a, b] = await Promise.all([
+      tomarTarefas(2, 'worker-a', AGORA),
+      tomarTarefas(2, 'worker-b', AGORA),
+    ]);
+
+    const ids = [...a.map((t) => t.id), ...b.map((t) => t.id)];
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+  });
+
+  it('tomar conta a tentativa', async () => {
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    const [tarefa] = await tomarTarefas(1, 'w', AGORA);
+    expect(tarefa?.attempts).toBe(1);
+  });
+
+  it('falha devolve à fila com espera crescente', async () => {
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    const [tarefa] = await tomarTarefas(1, 'w', AGORA);
+    if (!tarefa) throw new Error('nada na fila');
+
+    expect(await falharTarefa(tarefa, 'provedor caiu', AGORA)).toBe('retry');
+    expect(await quantasNaFila()).toBe(1);
+    // E não está pronta agora: a espera é o que impede o laço apertado.
+    expect(await tomarTarefas(1, 'w', AGORA)).toHaveLength(0);
+  });
+
+  it('esgotado o teto, a tarefa fica visível como falha', async () => {
+    // Mensagem que ninguém enviou e ninguém soube é a pior das duas falhas: a
+    // barbearia acha que avisou.
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k', maxAttempts: 1 });
+    const [tarefa] = await tomarTarefas(1, 'w', AGORA);
+    if (!tarefa) throw new Error('nada na fila');
+
+    expect(await falharTarefa(tarefa, 'erro final', AGORA)).toBe('failed');
+    expect(await quantasNaFila('failed')).toBe(1);
+
+    const linhas = await admin.$queryRawUnsafe<{ last_error: string }[]>(
+      `SELECT last_error FROM jobs WHERE status = 'failed'`,
+    );
+    expect(linhas[0]?.last_error).toBe('erro final');
+  });
+
+  it('a espera cresce e tem teto', () => {
+    expect(esperaDaTentativa(1)).toBe(60_000);
+    expect(esperaDaTentativa(2)).toBe(2 * 60_000);
+    expect(esperaDaTentativa(3)).toBe(4 * 60_000);
+    // Indisponibilidade longa não empurra a tarefa para daqui a dois dias.
+    expect(esperaDaTentativa(20)).toBe(60 * 60_000);
+  });
+
+  it('órfã de worker morto volta para a fila', async () => {
+    // Worker morto no meio deixa a tarefa presa para sempre — e "para sempre"
+    // aqui é um cliente que nunca é avisado.
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    const antes = new Date(AGORA.getTime() - 60 * 60_000);
+    await tomarTarefas(1, 'worker-morto', antes);
+
+    expect(await quantasNaFila('running')).toBe(1);
+    expect(await soltarOrfas(15, AGORA)).toBe(1);
+    expect(await quantasNaFila()).toBe(1);
+  });
+
+  it('a órfã não zera o teto de tentativas', async () => {
+    // Handler que derruba o processo toda vez precisa acabar em `failed`, não
+    // reiniciar o worker eternamente.
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    const antes = new Date(AGORA.getTime() - 60 * 60_000);
+    await tomarTarefas(1, 'worker-morto', antes);
+    await soltarOrfas(15, AGORA);
+
+    const [tarefa] = await tomarTarefas(1, 'w', AGORA);
+    expect(tarefa?.attempts).toBe(2);
+  });
+
+  it('concluir tira da fila', async () => {
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
+    const [tarefa] = await tomarTarefas(1, 'w', AGORA);
+    if (!tarefa) throw new Error('nada na fila');
+    await concluirTarefa(tarefa.id);
+    expect(await quantasNaFila('done')).toBe(1);
+  });
+
+  it('cancelar apaga só o que ainda não saiu', async () => {
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k1' });
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k2' });
+    await tomarTarefas(1, 'w', AGORA); // uma vira `running`
+
+    const apagadas = await withTenant(TENANT, (tx) =>
+      cancelarTarefas(tx, { chaves: ['k1', 'k2'] }),
+    );
+    expect(apagadas).toBe(1);
+    expect(await quantasNaFila('running')).toBe(1);
+  });
+
+  // -- os avisos --------------------------------------------------------------
+
+  const LIGADOS = {
+    confirmacao: true,
+    lembrete_24h: true,
+    lembrete_2h: true,
+    sua_vez: false,
+    senha_de_acesso: false,
+    retorno: false,
+  } as const;
+
+  it('um agendamento programa confirmação e os dois lembretes', async () => {
+    await withTenant(TENANT, (tx) =>
+      agendarAvisosDoAgendamento(tx, {
+        appointmentId: AGENDAMENTO,
+        comecaEm: COMECA_EM,
+        timeZone: 'America/Bahia',
+        agora: AGORA,
+        ligados: LIGADOS,
+      }),
+    );
+    expect(await quantasNaFila()).toBe(3);
+  });
+
+  it('aviso desligado na unidade não é programado', async () => {
+    await withTenant(TENANT, (tx) =>
+      agendarAvisosDoAgendamento(tx, {
+        appointmentId: AGENDAMENTO,
+        comecaEm: COMECA_EM,
+        timeZone: 'America/Bahia',
+        agora: AGORA,
+        ligados: { ...LIGADOS, lembrete_2h: false },
+      }),
+    );
+    expect(await quantasNaFila()).toBe(2);
+  });
+
+  it('cancelar o agendamento apaga os avisos pendentes', async () => {
+    // Quem desmarcou não pode receber "não esqueça do seu horário".
+    await withTenant(TENANT, (tx) =>
+      agendarAvisosDoAgendamento(tx, {
+        appointmentId: AGENDAMENTO,
+        comecaEm: COMECA_EM,
+        timeZone: 'America/Bahia',
+        agora: AGORA,
+        ligados: LIGADOS,
+      }),
+    );
+    await withTenant(TENANT, (tx) => cancelarTarefasDoAgendamento(tx, AGENDAMENTO));
+    expect(await quantasNaFila()).toBe(0);
+  });
+
+  it('o aviso sai e fica registrado', async () => {
+    const resultado = await executarAvisoDeAgendamento({
+      tenantId: TENANT,
+      appointmentId: AGENDAMENTO,
+      tipo: 'lembrete_24h',
+      provider,
+      agora: new Date(COMECA_EM.getTime() - 24 * 60 * 60_000),
+    });
+
+    expect(resultado.enviado).toBe(true);
+    expect(provider.agendamentos[0]?.clienteNome).toBe('Carlos Souza');
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string; phone_masked: string }[]>(
+      `SELECT status, phone_masked FROM notifications WHERE tenant_id = '${TENANT}'`,
+    );
+    expect(linhas[0]?.status).toBe('sent');
+    // O número inteiro não é copiado para o registro de envio.
+    expect(linhas[0]?.phone_masked).not.toContain('988887777');
+  });
+
+  it('o handler reconfere o estado: cancelado entre a fila e o envio não sai', async () => {
+    /**
+     * A segunda defesa. Cancelar a tarefa é a primeira e resolve o caso comum;
+     * esta cobre o cancelamento que aconteceu com a tarefa já em execução.
+     */
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments SET status = 'cancelled_customer' WHERE id = '${AGENDAMENTO}'`,
+    );
+
+    const resultado = await executarAvisoDeAgendamento({
+      tenantId: TENANT,
+      appointmentId: AGENDAMENTO,
+      tipo: 'lembrete_24h',
+      provider,
+      agora: new Date(COMECA_EM.getTime() - 24 * 60 * 60_000),
+    });
+
+    expect(resultado.enviado).toBe(false);
+    expect(resultado.motivo).toBe('cancelado');
+    expect(provider.agendamentos).toHaveLength(0);
+  });
+
+  it('o motivo de não enviar fica registrado, não só o silêncio', async () => {
+    // "Nada foi enviado" sem motivo transforma toda pergunta do dono numa
+    // investigação; com motivo, vira uma linha na tela.
+    // `customers.phone_e164` é NOT NULL: cliente sem telefone não existe. O
+    // caso real é o **agendamento sem cliente** — o encaixe que o balcão marcou
+    // sem cadastrar ninguém.
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments SET customer_id = NULL WHERE id = '${AGENDAMENTO}'`,
+    );
+    await executarAvisoDeAgendamento({
+      tenantId: TENANT,
+      appointmentId: AGENDAMENTO,
+      tipo: 'lembrete_24h',
+      provider,
+      agora: new Date(COMECA_EM.getTime() - 24 * 60 * 60_000),
+    });
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string; reason: string }[]>(
+      `SELECT status, reason FROM notifications WHERE tenant_id = '${TENANT}'`,
+    );
+    expect(linhas[0]).toMatchObject({ status: 'skipped', reason: 'sem_telefone' });
+  });
+
+  it('o mesmo aviso não sai duas vezes', async () => {
+    const quando = new Date(COMECA_EM.getTime() - 24 * 60 * 60_000);
+    const uma = { tenantId: TENANT, appointmentId: AGENDAMENTO, tipo: 'lembrete_24h' as const, provider, agora: quando };
+
+    await executarAvisoDeAgendamento(uma);
+    const segunda = await executarAvisoDeAgendamento(uma);
+
+    expect(segunda.motivo).toBe('ja_enviada');
+    expect(provider.agendamentos).toHaveLength(1);
+  });
+
+  // -- o worker ---------------------------------------------------------------
+
+  it('a rodada executa e conclui', async () => {
+    await enfileirarNoTenant({
+      kind: 'notificacao.lembrete_24h',
+      payload: { appointmentId: AGENDAMENTO },
+      idempotencyKey: 'lembrete_24h:ap',
+    });
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
+    });
+
+    expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+    expect(provider.agendamentos).toHaveLength(1);
+  });
+
+  it('provedor fora do ar devolve a tarefa à fila', async () => {
+    await enfileirarNoTenant({
+      kind: 'notificacao.lembrete_24h',
+      payload: { appointmentId: AGENDAMENTO },
+      idempotencyKey: 'lembrete_24h:ap',
+    });
+    provider.falharProxima = true;
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
+    });
+
+    expect(resultado).toMatchObject({ concluidas: 0, reagendadas: 1 });
+    expect(await quantasNaFila()).toBe(1);
+  });
+
+  it('tarefa de tipo desconhecido falha em vez de sumir', async () => {
+    // Marcar como feita esconderia que alguém enfileirou algo que este worker
+    // não sabe fazer.
+    await enfileirarNoTenant({ kind: 'tipo.que.nao.existe', idempotencyKey: 'k', maxAttempts: 1 });
+    const resultado = await rodada(contexto);
+
+    expect(resultado.falhadas).toBe(1);
+    expect(await quantasNaFila('failed')).toBe(1);
+  });
+
+  // -- falta automática -------------------------------------------------------
+
+  /** A tolerância da unidade é de 20 minutos; um minuto depois ela venceu. */
+  const VENCEU = new Date(COMECA_EM.getTime() + 21 * 60_000);
+  const AINDA_DA = new Date(COMECA_EM.getTime() + 19 * 60_000);
+
+  it('quem passou da tolerância vira falta sozinho', async () => {
+    /**
+     * A lacuna aberta no bloco 11: `no_show_after_minutes` existia, o painel
+     * mostrava o relógio correndo, e quem virava o status era uma pessoa. O
+     * horário ficava ocupado por quem não veio.
+     */
+    expect(await marcarFalta(TENANT, AGENDAMENTO, VENCEU)).toBe(true);
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status FROM appointments WHERE id = '${AGENDAMENTO}'`,
+    );
+    expect(linhas[0]?.status).toBe('no_show');
+  });
+
+  it('dentro da tolerância ninguém é marcado', async () => {
+    // A tarefa pode chegar adiantada, ou a unidade pode ter aumentado o prazo
+    // depois de ela ser criada: a conferência é refeita na execução.
+    expect(await marcarFalta(TENANT, AGENDAMENTO, AINDA_DA)).toBe(false);
+  });
+
+  it('tolerância zero desliga a falta automática', async () => {
+    // Barbearia que prefere resolver falta na mão não pode ter o status virado
+    // pelas costas.
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET no_show_after_minutes = 0 WHERE id = '${LOCATION}'`,
+    );
+    expect(await marcarFalta(TENANT, AGENDAMENTO, VENCEU)).toBe(false);
+  });
+
+  it('quem já fez check-in nunca vira falta', async () => {
+    // Marcar falta de quem chegou é pior que não marcar: ele vê a punição do
+    // próprio comparecimento.
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments SET status = 'checked_in' WHERE id = '${AGENDAMENTO}'`,
+    );
+    expect(await marcarFalta(TENANT, AGENDAMENTO, VENCEU)).toBe(false);
+  });
+
+  it('a tolerância conta da hora combinada, não da ocupação da cadeira', async () => {
+    // `starts_at` inclui o preparo antes do serviço. Contar dali puniria o
+    // cliente por um tempo que não é dele — e faria o status virar num instante
+    // diferente do que o painel do dia mostra desde o bloco 11.
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments SET starts_at = service_starts_at - interval '15 minutes'
+        WHERE id = '${AGENDAMENTO}'`,
+    );
+    const entreOsDois = new Date(COMECA_EM.getTime() + 10 * 60_000);
+    expect(await marcarFalta(TENANT, AGENDAMENTO, entreOsDois)).toBe(false);
+  });
+
+  it('a falta é programada junto com o agendamento, para o fim da tolerância', async () => {
+    // Sem isto o motor teria a regra e ninguém a dispararia — que é exatamente
+    // o estado em que `no_show_after_minutes` passou oito blocos.
+    await withTenant(TENANT, (tx) =>
+      agendarFalta(tx, {
+        appointmentId: AGENDAMENTO,
+        comecaEm: COMECA_EM,
+        toleranciaMinutos: 20,
+      }),
+    );
+
+    const linhas = await admin.$queryRawUnsafe<{ run_after: Date; kind: string }[]>(
+      `SELECT run_after, kind FROM jobs WHERE idempotency_key = 'falta:${AGENDAMENTO}'`,
+    );
+    expect(linhas[0]?.kind).toBe('agendamento.marcar_falta');
+    expect(linhas[0]?.run_after.toISOString()).toBe(
+      new Date(COMECA_EM.getTime() + 20 * 60_000).toISOString(),
+    );
+  });
+
+  it('tolerância zero não gasta fila', async () => {
+    const criou = await withTenant(TENANT, (tx) =>
+      agendarFalta(tx, { appointmentId: AGENDAMENTO, comecaEm: COMECA_EM, toleranciaMinutos: 0 }),
+    );
+    expect(criou).toBe(false);
+    expect(await quantasNaFila()).toBe(0);
+  });
+
+  it('cancelar o agendamento tira a falta da fila junto com os avisos', async () => {
+    // A falta é a única tarefa daqui que escreve no agendamento. Deixá-la
+    // pendente depois do cancelamento seria confiar no `WHERE` de status como
+    // única defesa.
+    await withTenant(TENANT, async (tx) => {
+      await agendarFalta(tx, {
+        appointmentId: AGENDAMENTO,
+        comecaEm: COMECA_EM,
+        toleranciaMinutos: 20,
+      });
+      await agendarAvisosDoAgendamento(tx, {
+        appointmentId: AGENDAMENTO,
+        comecaEm: COMECA_EM,
+        timeZone: 'America/Bahia',
+        agora: AGORA,
+        ligados: LIGADOS,
+      });
+    });
+    expect(await quantasNaFila()).toBeGreaterThan(1);
+
+    await withTenant(TENANT, (tx) => cancelarTarefasDoAgendamento(tx, AGENDAMENTO));
+    expect(await quantasNaFila()).toBe(0);
+  });
+
+  // -- a parede entre barbearias ----------------------------------------------
+
+  it('o aviso de uma barbearia não é executado pelo tenant da outra', async () => {
+    // O handler abre `withTenant` com o tenant da tarefa; com o errado, o
+    // agendamento simplesmente não existe — e a RLS é quem diz isso.
+    const resultado = await executarAvisoDeAgendamento({
+      tenantId: RIVAL,
+      appointmentId: AGENDAMENTO,
+      tipo: 'lembrete_24h',
+      provider,
+      agora: new Date(COMECA_EM.getTime() - 24 * 60 * 60_000),
+    });
+
+    expect(resultado.enviado).toBe(false);
+    expect(provider.agendamentos).toHaveLength(0);
+  });
+
+  it('o registro de envio de uma barbearia não aparece na outra', async () => {
+    await executarAvisoDeAgendamento({
+      tenantId: TENANT,
+      appointmentId: AGENDAMENTO,
+      tipo: 'lembrete_24h',
+      provider,
+      agora: new Date(COMECA_EM.getTime() - 24 * 60 * 60_000),
+    });
+
+    const daRival = await withTenant(RIVAL, async (tx) =>
+      tx.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM notifications`,
+    );
+    expect(Number(daRival[0]?.n)).toBe(0);
+  });
+
+  it('a falta entra na fila como tarefa da própria barbearia', async () => {
+    await enfileirarAvulso(TENANT, {
+      kind: 'agendamento.marcar_falta',
+      payload: { appointmentId: AGENDAMENTO },
+      idempotencyKey: `falta:${AGENDAMENTO}`,
+    });
+
+    const resultado = await rodada({ provider, relogio: { agora: () => VENCEU } });
+    expect(resultado.concluidas).toBe(1);
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status FROM appointments WHERE id = '${AGENDAMENTO}'`,
+    );
+    expect(linhas[0]?.status).toBe('no_show');
+  });
+  // -- o convite de retorno ----------------------------------------------------
+
+  /**
+   * A única mensagem promocional do bloco, e a única varredura.
+   *
+   * Tudo o mais nasce de um evento. Esta nasce de uma **ausência**, e por isso é
+   * a única que precisa de opt-in, teto mensal e prazo mínimo.
+   */
+  const SUMIU_HA = (dias: number) => new Date(AGORA.getTime() - dias * 24 * 60 * 60_000);
+
+  const marcarVisita = async (quando: Date): Promise<void> => {
+    await admin.$executeRawUnsafe(`
+      UPDATE appointments SET status = 'completed',
+             starts_at = '${quando.toISOString()}',
+             service_starts_at = '${quando.toISOString()}'
+       WHERE id = '${AGENDAMENTO}'
+    `);
+  };
+
+  const aceitaPromocao = async (): Promise<void> => {
+    await admin.$executeRawUnsafe(
+      `UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`,
+    );
+  };
+
+  const ligarRetorno = async (dias = 45): Promise<void> => {
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET notify_comeback = true, comeback_after_days = ${dias}`,
+    );
+  };
+
+  it('quem sumiu além do prazo e aceitou promoção recebe o convite', async () => {
+    await ligarRetorno(45);
+    await aceitaPromocao();
+    await marcarVisita(SUMIU_HA(60));
+
+    const { enviados } = await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    expect(enviados).toBe(1);
+    expect(provider.agendamentos[0]?.tipo).toBe('retorno');
+  });
+
+  it('quem não aceitou promoção nunca recebe o convite', async () => {
+    // Consentimento de marketing é separado do necessário para o serviço: esta
+    // pessoa continua recebendo o lembrete do próprio corte.
+    await ligarRetorno(45);
+    await marcarVisita(SUMIU_HA(60));
+
+    const { enviados } = await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    expect(enviados).toBe(0);
+  });
+
+  it('quem voltou dentro do prazo não é chamado de volta', async () => {
+    await ligarRetorno(45);
+    await aceitaPromocao();
+    await marcarVisita(SUMIU_HA(10));
+
+    const { enviados } = await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    expect(enviados).toBe(0);
+  });
+
+  it('barbearia com duas unidades não manda o convite em dobro', async () => {
+    /**
+     * `customers` é do tenant, não da unidade. Com um `JOIN` comum sobre
+     * `locations`, a mesma pessoa aparecia duas vezes na varredura — e as duas
+     * linhas liam `ja_enviada = false` na mesma consulta.
+     */
+    await ligarRetorno(45);
+    await aceitaPromocao();
+    await marcarVisita(SUMIU_HA(60));
+    await admin.$executeRawUnsafe(`
+      INSERT INTO locations (tenant_id, name, timezone, notify_comeback)
+      VALUES ('${TENANT}', 'Filial', 'America/Bahia', true)
+    `);
+
+    const { enviados } = await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    expect(enviados).toBe(1);
+    expect(provider.agendamentos).toHaveLength(1);
+  });
+
+  it('o convite não repete enquanto o anterior for recente', async () => {
+    await ligarRetorno(45);
+    await aceitaPromocao();
+    await marcarVisita(SUMIU_HA(60));
+
+    await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    provider.clear();
+    // A varredura roda todo dia; sem a trava, todo dia seria uma mensagem.
+    const segunda = await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    expect(segunda.enviados).toBe(0);
+  });
+
+  it('ligar o convite na tela é o que cria a varredura', async () => {
+    // Não há varredura de plataforma possível: `locations` tem RLS, e sem tenant
+    // no contexto nada revela quem quer a mensagem.
+    expect(await quantasNaFila()).toBe(0);
+
+    await salvarPreferenciasDeAviso(
+      TENANT,
+      {
+        confirmacao: true,
+        lembrete24h: true,
+        lembrete2h: true,
+        retorno: true,
+        diasParaRetorno: 30,
+      },
+      AGORA,
+    );
+
+    const linhas = await admin.$queryRawUnsafe<{ idempotency_key: string }[]>(
+      `SELECT idempotency_key FROM jobs WHERE kind = 'notificacao.retorno'`,
+    );
+    expect(linhas[0]?.idempotency_key).toBe(`retorno:${TENANT}:2026-09-10`);
+    expect(await lerPreferenciasDeAviso(TENANT)).toMatchObject({
+      retorno: true,
+      diasParaRetorno: 30,
+    });
+  });
+
+  it('com o convite desligado a cadeia para de se reprogramar', async () => {
+    // Sem isto, desligar na tela deixaria a varredura rodando para sempre.
+    const criou = await withTenant(TENANT, (tx) =>
+      agendarVarreduraDeRetorno(tx, { tenantId: TENANT, quando: AGORA }),
+    );
+    expect(criou).toBe(false);
+    expect(await quantasNaFila()).toBe(0);
+  });
+
+  it('a chave da varredura inclui a barbearia, não só o dia', async () => {
+    /**
+     * O índice único de `jobs` é global — `jobs` não tem RLS de propósito.
+     * `retorno:2026-09-10` sozinho deixaria a primeira barbearia do dia
+     * bloquear a varredura de todas as outras.
+     */
+    await ligarRetorno(45);
+    await admin.$executeRawUnsafe(`
+      INSERT INTO locations (tenant_id, name, timezone, notify_comeback)
+      VALUES ('${RIVAL}', 'Matriz da rival', 'America/Bahia', true)
+    `);
+
+    for (const tenant of [TENANT, RIVAL]) {
+      await withTenant(tenant, (tx) => agendarVarreduraDeRetorno(tx, { tenantId: tenant, quando: AGORA }));
+    }
+    expect(await quantasNaFila()).toBe(2);
+  });
+});

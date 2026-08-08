@@ -16,16 +16,51 @@ export interface OtpMessage {
   readonly ttlMinutes: number;
 }
 
+export interface StaffPasswordMessage {
+  readonly phoneE164: string;
+  readonly name: string;
+  readonly establishmentName: string;
+  readonly password: string;
+}
+
 export interface MessagingProvider {
   sendOtp(message: OtpMessage): Promise<void>;
+  /**
+   * A senha de primeiro acesso.
+   *
+   * **Não passa pela fila de trabalho**, ao contrário de todo o resto do bloco
+   * 20. A fila é durável e o `payload` fica gravado até a limpeza: enfileirar a
+   * senha em claro a transformaria num segredo em repouso, legível por qualquer
+   * consulta à tabela `jobs` — que nem RLS tem, de propósito.
+   *
+   * Sai inline depois do commit, como o OTP, e pelo mesmo motivo: credencial
+   * viva não se guarda para mandar depois.
+   */
+  sendStaffPassword(message: StaffPasswordMessage): Promise<void>;
 }
 
 /** Registra o que enviaria. Único provedor usado em teste e desenvolvimento. */
 export class FakeMessagingProvider implements MessagingProvider {
   readonly sent: OtpMessage[] = [];
+  readonly senhas: StaffPasswordMessage[] = [];
+  /** Para provar que a conta sobrevive ao provedor fora do ar. */
+  falharProxima = false;
 
   async sendOtp(message: OtpMessage): Promise<void> {
+    this.derrubarSePedido();
     this.sent.push(message);
+  }
+
+  async sendStaffPassword(message: StaffPasswordMessage): Promise<void> {
+    this.derrubarSePedido();
+    this.senhas.push(message);
+  }
+
+  private derrubarSePedido(): void {
+    if (this.falharProxima) {
+      this.falharProxima = false;
+      throw new Error('provedor indisponível');
+    }
   }
 
   lastFor(phoneE164: string): OtpMessage | undefined {
@@ -34,6 +69,7 @@ export class FakeMessagingProvider implements MessagingProvider {
 
   clear(): void {
     this.sent.length = 0;
+    this.senhas.length = 0;
   }
 }
 
@@ -51,6 +87,14 @@ export class ConsoleMessagingProvider implements MessagingProvider {
     this.log(
       `[otp] código enviado para ${maskPhone(message.phoneE164)} ` +
         `(${message.establishmentName}, expira em ${message.ttlMinutes} min)`,
+    );
+  }
+
+  /** A senha também não aparece: log com credencial viva é credencial vazada. */
+  async sendStaffPassword(message: StaffPasswordMessage): Promise<void> {
+    this.log(
+      `[senha] primeiro acesso enviado para ${maskPhone(message.phoneE164)} ` +
+        `(${message.establishmentName})`,
     );
   }
 }

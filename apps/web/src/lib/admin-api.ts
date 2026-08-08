@@ -1045,3 +1045,38 @@ export const salvarConfiguracaoDeComissao = (
   token: string,
   dados: { base: BaseDeComissao; tratamentoDoDesconto: TratamentoDoDesconto },
 ) => chamar<{ ok: true }>('PUT', '/v1/admin/commission/settings', dados, token);
+
+// -- Avisos -------------------------------------------------------------------
+
+export interface PreferenciasDeAviso {
+  confirmacao: boolean;
+  lembrete24h: boolean;
+  lembrete2h: boolean;
+  retorno: boolean;
+  diasParaRetorno: number;
+}
+
+export type TipoDeAviso =
+  | 'confirmacao' | 'lembrete_24h' | 'lembrete_2h'
+  | 'sua_vez' | 'senha_de_acesso' | 'retorno';
+
+export interface EnvioRegistrado {
+  id: string;
+  tipo: TipoDeAviso;
+  enviadoEm: string;
+  status: 'sent' | 'failed' | 'skipped';
+  motivo: string | null;
+  telefone: string | null;
+  quem: string | null;
+}
+
+export const avisos = (token: string) =>
+  chamar<{ settings: PreferenciasDeAviso; log: EnvioRegistrado[] }>(
+    'GET',
+    '/v1/admin/notifications',
+    undefined,
+    token,
+  );
+
+export const salvarAvisos = (token: string, dados: PreferenciasDeAviso) =>
+  chamar<{ saved: boolean }>('PUT', '/v1/admin/notifications', dados, token);

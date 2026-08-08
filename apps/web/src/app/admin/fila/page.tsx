@@ -192,7 +192,7 @@ export default async function FilaPage({ searchParams }: Props) {
           </a>
         </header>
         <div className="ui-alert ui-alert--warning" role="alert">
-          {FALHA[code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
+          {FALHA[code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>
     );

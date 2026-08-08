@@ -11,6 +11,8 @@ import { TeamController, MeController } from '../src/admin/team.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
+import { ConsoleMessagingProvider } from '@barbearia/identity';
+import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
 import { throttlerConfig } from '../src/common/throttler.config.js';
@@ -81,6 +83,9 @@ describeIfDb('cadastro do admin pela HTTP', () => {
       ],
       providers: [
         TenantService,
+        // O `TeamController` manda a senha de primeiro acesso; sem provedor o
+        // Nest não monta o controller e a suíte inteira cai por injeção.
+        { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },
         StaffGuard,
         PermissaoGuard,
         { provide: APP_GUARD, useClass: ThrottlerGuard },

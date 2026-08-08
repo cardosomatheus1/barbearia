@@ -292,7 +292,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
           </a>
         </header>
         <div className="ui-alert ui-alert--warning" role="alert">
-          {FALHA[resposta.code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
+          {FALHA[resposta.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>
     );
