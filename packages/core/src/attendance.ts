@@ -96,11 +96,11 @@ export type Punctuality =
 /**
  * Quanto falta, ou quanto já passou.
  *
- * `noShowInMinutes` é quanto ainda falta da tolerância da unidade. Hoje ele só
- * informa: **quem marca a falta é uma pessoa**, e a tela precisa avisar antes
- * de o prazo acabar para a recepção decidir a tempo. A transição automática
- * depende do worker (bloco 20) — enquanto ele não existir, nenhum texto de tela
- * pode chamar isso de automático.
+ * `noShowInMinutes` é quanto ainda falta da tolerância da unidade — e desde o
+ * bloco 20 ele é uma **contagem regressiva de verdade**: passado o prazo, a
+ * tarefa `agendamento.marcar_falta` vira o status sozinha. O aviso continua
+ * existindo pelo mesmo motivo de antes, invertido: a recepção precisa poder
+ * fazer check-in antes de o sistema decidir por ela.
  *
  * `toleranceMinutes` zero significa que a unidade não tem prazo de tolerância;
  * aí o atrasado permanece atrasado até alguém decidir.

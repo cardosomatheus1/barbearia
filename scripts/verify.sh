@@ -115,6 +115,7 @@ NOMES=(
   "@barbearia/onboarding:onboarding — seis etapas"
   "@barbearia/catalog:catalog — CRUD do admin"
   "@barbearia/finance:finance — comanda, caixa e fiado"
+  "@barbearia/crm:crm — a ficha do cliente"
   "@barbearia/jobs:jobs — fila, avisos e falta automática"
   "@barbearia/api:api — e2e"
 )
