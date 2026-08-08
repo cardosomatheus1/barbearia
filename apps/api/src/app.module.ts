@@ -31,7 +31,7 @@ import { TenantService } from './tenant/tenant.service.js';
     TenantService,
     StaffGuard,
     CustomerGuard,
-    // Provedor real do WhatsApp entra no bloco 52. Até lá, o de console — que
+    // Provedor real do WhatsApp entra no bloco 55. Até lá, o de console — que
     // nunca imprime o código.
     { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },
     { provide: APP_GUARD, useClass: ThrottlerGuard },

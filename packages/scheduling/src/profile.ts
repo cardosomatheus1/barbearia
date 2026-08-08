@@ -173,7 +173,7 @@ export async function getPublicProfile(
     const tenant = tenants[0];
     if (!tenant) return null;
 
-    // A unidade primária é a mais antiga; multiunidade entra no bloco 55.
+    // A unidade primária é a mais antiga; multiunidade entra no bloco 58.
     const locations = await tx.$queryRaw<
       {
         id: string; name: string; timezone: string;

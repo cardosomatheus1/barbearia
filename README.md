@@ -231,7 +231,7 @@ deliberadamente não repetem `tenant_id` no `WHERE` — quem filtra é a políti
 | Documento | Conteúdo |
 |---|---|
 | [`SPEC.md`](SPEC.md) | Visão, evidências de campo, métricas |
-| [`ROADMAP.md`](ROADMAP.md) | Os 76 blocos de execução e o escopo recomendado |
+| [`ROADMAP.md`](ROADMAP.md) | Os 78 blocos de execução e o escopo recomendado |
 | [`docs/spec/`](docs/spec/) | Especificação detalhada em 5 partes |
 | [`docs/01-analise-salonsoft.md`](docs/01-analise-salonsoft.md) | Engenharia reversa do concorrente em produção |
 | [`docs/02-benchmark-apps-barbearia.md`](docs/02-benchmark-apps-barbearia.md) | Matriz competitiva e preços de mercado |
@@ -356,10 +356,16 @@ seguinte é o login, nos dois casos. Custa uma tela a mais e fecha o oráculo.
 
 ## Próximos passos
 
-Bloco 11 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 11 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
 
 Admin: CRUD de catálogo, equipe, jornadas e recursos. O onboarding cria o
 essencial; o dia a dia precisa editar.
+
+Depois dele vem a **terceira superfície**: o balcão. Cliente e gestor tinham
+tela; quem passa o dia com o notebook aberto — marcando presença, atendendo quem
+chegou sem marcar, descobrindo quem faltou — não tinha. A SPEC descreve o papel
+e a fila presencial; o roadmap é que tratava isso como funções espalhadas. Ver
+[o balcão é a terceira superfície](ROADMAP.md#o-balcão-é-a-terceira-superfície).
 
 **Lacunas conhecidas** estão na tabela
 [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada

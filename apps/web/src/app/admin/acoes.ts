@@ -163,7 +163,7 @@ export async function acaoProfissionais(form: FormData): Promise<void> {
 
   // A jornada é a mesma para toda a equipe nesta etapa. Diferenciar por pessoa
   // é trabalho de cadastro, e o objetivo aqui é chegar ao link em dez minutos —
-  // o ajuste fino fica na agenda do admin (bloco 12).
+  // o ajuste por pessoa fica no CRUD da equipe (bloco 11).
   const schedule = dias.map((weekday) => ({ weekday, startMinute: abre, endMinute: fecha }));
 
   const resultado = await salvarProfissionais(

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 10 de 76 blocos.**
+**Status: 10 de 78 blocos.**
 
 ---
 
@@ -34,7 +34,7 @@ Faltavam, por inteiro:
 - design system — três apps precisam de base comum;
 - LGPD operacional — exportação, anonimização e retenção como código, não como texto.
 
-O número corrigido é ~76. Ele é registrado aqui para não se perder, mas leia a
+O número corrigido é ~78. Ele é registrado aqui para não se perder, mas leia a
 seção [Escopo recomendado](#escopo-recomendado) antes de tratá-lo como plano.
 
 ---
@@ -65,7 +65,7 @@ esconder o que ainda falta.
 
 ---
 
-## R1 — MVP (20 blocos)
+## R1 — MVP (23 blocos)
 
 **Critério de aceite:** uma barbearia de duas cadeiras consegue largar o sistema
 atual sem perder nenhuma capacidade que usava.
@@ -83,15 +83,62 @@ atual sem perder nenhuma capacidade que usava.
 | 9 | Meus agendamentos: entrar por código, listar, cancelar, remarcar | ✅ |
 | 10 | Conta de gestor + onboarding em 6 etapas + configuração da unidade | ✅ |
 | 11 | Admin: CRUD de catálogo, equipe, jornadas, recursos | |
-| 12 | Admin: agenda dia/semana/lista, drag-and-drop, bloqueios, encaixe | |
-| 13 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
-| 14 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |
-| 15 | Comanda + checkout + caixa | |
-| 16 | Comissão básica + fechamento | |
-| 17 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | |
-| 18 | Dashboard básico + validador de catálogo | |
-| 19 | Importador de base + deduplicação por telefone | |
-| 20 | CI/CD, staging, observabilidade, e2e, carga em `/availability` | |
+| 12 | RBAC mínimo: papéis, permissões e contas de equipe | |
+| 13 | Balcão: painel do dia, check-in, no-show, busca e cadastro rápido | |
+| 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | |
+| 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | |
+| 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
+| 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |
+| 18 | Comanda + checkout + caixa | |
+| 19 | Comissão básica + fechamento | |
+| 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | |
+| 21 | Dashboard básico + validador de catálogo | |
+| 22 | Importador de base + deduplicação por telefone | |
+| 23 | CI/CD, staging, observabilidade, e2e, carga em `/availability` | |
+
+---
+
+## O balcão é a terceira superfície
+
+Três pessoas usam este produto, e só duas tinham tela no plano original.
+
+| Quem | Aparelho | Frequência | Densidade |
+|---|---|---|---|
+| Cliente | celular, em pé na rua | uma vez por mês | respira |
+| Gestor | celular ou notebook | uma vez por semana | média |
+| **Balcão** | **notebook ligado o dia inteiro** | **o tempo todo** | **densa** |
+
+O balcão é quem digita o telefone de quem chegou sem marcar, marca presença,
+descobre que o cliente das 14h não veio e decide se encaixa o que está esperando
+em pé na frente dele. A SPEC descreve o papel (Parte 1 §1.2), a fila presencial
+(Parte 2 §2.10 — "**é outro objeto e outra tela**") e o check-in (§2.11). O que
+faltava era o roadmap tratar isso como **uma superfície**, e não como funções
+espalhadas.
+
+O erro concreto que estava no plano:
+
+- **Check-in só existia dentro do `app-pro`**, o aplicativo do barbeiro. Mas o
+  primeiro canal de check-in que a SPEC lista é "recepção" — quem marca presença
+  na prática é quem está no balcão, não o barbeiro com a máquina na mão.
+- **A fila de walk-in estava no bloco 37**, depois do MVP inteiro. Numa barbearia
+  de bairro, quem entra sem marcar é uma fatia grande do faturamento; sem a fila,
+  o sistema não cobre o dia real e a recepção volta para o caderno.
+- **Não havia RBAC.** Hoje toda conta de gestor tem poder de dono. Criar a conta
+  da recepcionista antes de existir permissão entregaria faturamento e base de
+  clientes a quem só precisa marcar presença — e `customers.export` é o vetor
+  clássico de roubo de base quando alguém sai.
+
+Daí a ordem: RBAC (12) vem **antes** do balcão (13 e 14), porque sem ele a
+primeira conta de recepcionista já é um incidente.
+
+### O que muda no desenho
+
+É a primeira tela cujo aparelho principal é um **notebook**, aberta o dia
+inteiro, usada por alguém que não lê — olha de relance entre um cliente e outro.
+Tudo até aqui é mobile-first com piso de 360px, e continua sendo; o balcão
+inverte a prioridade sem quebrar a regra: nasce dos 360px para o caso de o
+notebook estar ocupado e a recepção atender pelo celular, mas é **desenhada para
+1280**, com teclado, densidade alta e sem alvo de polegar.
 
 ---
 
@@ -102,34 +149,33 @@ não é vendável.
 
 | # | Bloco |
 |---|---|
-| 21 | Super Admin: tenants, planos, bloqueio de conta |
-| 22 | Super Admin: métricas globais, MRR, churn |
-| 23 | Super Admin: feature flags, impersonação auditada |
-| 24 | Billing: planos, trial, assinatura da barbearia |
-| 25 | Billing: upgrade/downgrade, inadimplência, régua de retentativa |
-| 26 | Billing: integração com PSP, conciliação |
-| 27 | RBAC: telas de gestão de papéis e permissões |
-| 28 | LGPD: consentimentos, exportação de dados |
-| 29 | LGPD: anonimização, retenção, pipeline de exclusão |
-| 30 | Segurança: hardening, rate limit global, auditoria de acesso |
+| 24 | Super Admin: tenants, planos, bloqueio de conta |
+| 25 | Super Admin: métricas globais, MRR, churn |
+| 26 | Super Admin: feature flags, impersonação auditada |
+| 27 | Billing: planos, trial, assinatura da barbearia |
+| 28 | Billing: upgrade/downgrade, inadimplência, régua de retentativa |
+| 29 | Billing: integração com PSP, conciliação |
+| 30 | RBAC: telas de gestão de papéis e permissões editáveis pelo dono |
+| 31 | LGPD: consentimentos, exportação de dados |
+| 32 | LGPD: anonimização, retenção, pipeline de exclusão |
+| 33 | Segurança: hardening, rate limit global, auditoria de acesso |
 
 ---
 
-## R2 — dinheiro e ocupação (11 blocos)
+## R2 — dinheiro e ocupação (10 blocos)
 
 | # | Bloco |
 |---|---|
-| 31 | `PaymentProvider`: abstração, fake, testes |
-| 32 | Pix: QR Code, webhook, conciliação |
-| 33 | Cartão e link de pagamento |
-| 34 | Sinal seletivo + política de reembolso |
-| 35 | Lista de espera: entradas, expiração, gatilho de cancelamento |
-| 36 | Lista de espera: priority queue, janela exclusiva, notificação |
-| 37 | Fila presencial / walk-in + estimativa de espera |
-| 38 | Fidelidade: pontos, visitas ou cashback |
-| 39 | Pacotes: venda, consumo, validade, receita diferida |
-| 40 | Avaliações + fluxo de recuperação de nota baixa |
-| 41 | Produtos, estoque, ficha de consumo, CMV |
+| 34 | `PaymentProvider`: abstração, fake, testes |
+| 35 | Pix: QR Code, webhook, conciliação |
+| 36 | Cartão e link de pagamento |
+| 37 | Sinal seletivo + política de reembolso |
+| 38 | Lista de espera: entradas, expiração, gatilho de cancelamento |
+| 39 | Lista de espera: priority queue, janela exclusiva, notificação |
+| 41 | Fidelidade: pontos, visitas ou cashback |
+| 42 | Pacotes: venda, consumo, validade, receita diferida |
+| 43 | Avaliações + fluxo de recuperação de nota baixa |
+| 44 | Produtos, estoque, ficha de consumo, CMV |
 
 ---
 
@@ -137,21 +183,21 @@ não é vendável.
 
 | # | Bloco |
 |---|---|
-| 42 | Planos de assinatura: modelagem, regras, cooldown |
-| 43 | Assinatura: restrição de horário, dependentes, prioridade na fila |
-| 44 | Cobrança recorrente: régua, suspensão gradual, cancelamento self-service |
-| 45 | Rentabilidade da assinatura (simulação dos três modelos de comissão) |
-| 46 | Split: modelagem derivada da comissão |
-| 47 | Split: KYC do profissional, liquidação, estorno |
-| 48 | Financeiro: contas a pagar/receber, transferências, conciliação |
-| 49 | Financeiro: fiado, vale, DRE gerencial |
-| 50 | `FiscalProvider`: abstração e integração |
-| 51 | Fiscal: NFS-e, cancelamento, Salão-Parceiro |
-| 52 | WhatsApp oficial: templates, webhooks, botões |
-| 53 | Marketing automation: motor de eventos, teto de mensagens, janela de silêncio |
-| 54 | Campanhas: filtros, canais, receita atribuída |
-| 55 | Multiunidade: seleção, consolidação, transferência de estoque |
-| 56 | Multiunidade: cliente e fidelidade compartilhados |
+| 45 | Planos de assinatura: modelagem, regras, cooldown |
+| 46 | Assinatura: restrição de horário, dependentes, prioridade na fila |
+| 47 | Cobrança recorrente: régua, suspensão gradual, cancelamento self-service |
+| 48 | Rentabilidade da assinatura (simulação dos três modelos de comissão) |
+| 49 | Split: modelagem derivada da comissão |
+| 50 | Split: KYC do profissional, liquidação, estorno |
+| 51 | Financeiro: contas a pagar/receber, transferências, conciliação |
+| 52 | Financeiro: fiado, vale, DRE gerencial |
+| 53 | `FiscalProvider`: abstração e integração |
+| 54 | Fiscal: NFS-e, cancelamento, Salão-Parceiro |
+| 55 | WhatsApp oficial: templates, webhooks, botões |
+| 56 | Marketing automation: motor de eventos, teto de mensagens, janela de silêncio |
+| 57 | Campanhas: filtros, canais, receita atribuída |
+| 58 | Multiunidade: seleção, consolidação, transferência de estoque |
+| 59 | Multiunidade: cliente e fidelidade compartilhados |
 
 ---
 
@@ -161,16 +207,16 @@ Depende de histórico acumulado. Não antecipar.
 
 | # | Bloco |
 |---|---|
-| 57 | Reliability score + sinal condicional |
-| 58 | Ciclo individual de retorno + segmentação automática |
-| 59 | Churn score com explicação |
-| 60 | Schema semântico de métricas (base do assistente) |
-| 61 | Assistente do gestor: text-to-query |
-| 62 | Agente de agendamento: intent, slots, confirmação |
-| 63 | Agente: remarcação e recepção digital |
-| 64 | Insights proativos |
-| 65 | Smart pricing com aprovação humana |
-| 66 | Previsão de consumo e sugestão de compra |
+| 60 | Reliability score + sinal condicional |
+| 61 | Ciclo individual de retorno + segmentação automática |
+| 62 | Churn score com explicação |
+| 63 | Schema semântico de métricas (base do assistente) |
+| 64 | Assistente do gestor: text-to-query |
+| 65 | Agente de agendamento: intent, slots, confirmação |
+| 66 | Agente: remarcação e recepção digital |
+| 67 | Insights proativos |
+| 68 | Smart pricing com aprovação humana |
+| 69 | Previsão de consumo e sugestão de compra |
 
 ---
 
@@ -180,22 +226,22 @@ Só faz sentido com centenas de barbearias na base.
 
 | # | Bloco |
 |---|---|
-| 67 | Marketplace: busca geográfica e filtros |
-| 68 | Marketplace: "próximo horário" em lote (exige `/availability` rápido) |
-| 69 | Marketplace: atribuição de cliente novo e comissão |
-| 70 | Perfil público do barbeiro |
-| 71 | Portfólio e consentimento de uso público |
-| 72 | Anúncios e destaque |
-| 73 | Franquias: catálogo padrão, preços sugeridos |
-| 74 | Franquias: indicadores consolidados, metas |
-| 75 | API pública: chaves, escopos, rate limit |
-| 76 | Webhooks assinados para terceiros |
+| 70 | Marketplace: busca geográfica e filtros |
+| 71 | Marketplace: "próximo horário" em lote (exige `/availability` rápido) |
+| 72 | Marketplace: atribuição de cliente novo e comissão |
+| 73 | Perfil público do barbeiro |
+| 74 | Portfólio e consentimento de uso público |
+| 75 | Anúncios e destaque |
+| 76 | Franquias: catálogo padrão, preços sugeridos |
+| 77 | Franquias: indicadores consolidados, metas |
+| 78 | API pública: chaves, escopos, rate limit |
+| 79 | Webhooks assinados para terceiros |
 
 ---
 
 ## Escopo recomendado
 
-76 blocos é produto de time, horizonte de mais de um ano. Duas decisões cortam
+78 blocos é produto de time, horizonte de mais de um ano. Duas decisões cortam
 isso pela metade sem prejudicar o que é vendável:
 
 ### 1. Adiar R4 e R5 por dependência, não por preguiça
@@ -204,7 +250,7 @@ que ainda não existe, marketplace precisa de densidade de barbearias que ainda
 não existe. Construí-los cedo produz funcionalidade morta.
 
 ### 2. Comprar a Plataforma em vez de construir
-Billing e Super Admin (blocos 21–26) são os menos diferenciados do produto
+Billing e Super Admin (blocos 24–29) são os menos diferenciados do produto
 inteiro. Nenhuma barbearia escolhe o sistema pelo painel interno do fornecedor.
 Uma solução de billing pronta cobre a maior parte, e sobra o essencial: feature
 flags, impersonação auditada e LGPD.
@@ -212,12 +258,18 @@ flags, impersonação auditada e LGPD.
 ### Resultado
 
 ```
-R1 MVP              20 blocos
+R1 MVP              23 blocos   (20 + balcão e RBAC)
 Plataforma enxuta    5 blocos   (de 10)
-R2                  11 blocos
+R2                  10 blocos   (a fila de walk-in subiu para o MVP)
 ─────────────────────────────
-                    36 blocos  → produto que uma barbearia paga e usa
+                    38 blocos  → produto que uma barbearia paga e usa
 ```
+
+Os três blocos que entraram no MVP não são escopo novo: dois já estavam na SPEC
+(recepcionista e fila presencial), fora de ordem. O terceiro divide o RBAC em
+dois — **aplicar** permissão vem antes da primeira conta que não é do dono
+(bloco 12); **gerenciar** papéis pela tela continua na Plataforma (bloco 30),
+porque até lá os quatro papéis fixos da SPEC bastam.
 
 O resto vira roadmap de verdade — replanejado com cliente real usando o sistema,
 não estimado no vazio.
