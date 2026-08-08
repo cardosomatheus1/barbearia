@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { codigoDoPasso, passoAgora } from '@barbearia/identity';
 import { CaixaController } from '../src/admin/caixa.controller.js';
 import { MfaController } from '../src/admin/mfa.controller.js';
+import { ComissaoController } from '../src/admin/comissao.controller.js';
 import { BoardController } from '../src/admin/board.controller.js';
 import { MeController, TeamController } from '../src/admin/team.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
@@ -74,6 +75,7 @@ describeIfDb('caixa e comanda pela HTTP', () => {
         BoardController,
         CaixaController,
         MfaController,
+        ComissaoController,
         TeamController,
         MeController,
       ],
@@ -139,7 +141,15 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     await com(token)(
       http()
         .put('/v1/admin/professionals')
-        .send({ professionals: [{ name: 'Ruan Nascimento', schedule: JORNADA }] }),
+        .send({
+          professionals: [
+            { name: 'Ruan Nascimento', schedule: JORNADA },
+            // O segundo existe para o recorte da comissão poder ser provado:
+            // com um só, o barbeiro e o executor da venda seriam a mesma pessoa
+            // e "ele não vê o do colega" não afirmaria nada.
+            { name: 'Gleidson Alves', schedule: JORNADA },
+          ],
+        }),
     ).expect(200);
 
     await com(token)(http().post('/v1/admin/publish')).expect(201);
@@ -526,5 +536,228 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     // E a gaveta recebeu a venda uma vez só.
     const caixa = await com(token)(http().get('/v1/admin/cash')).expect(200);
     expect(caixa.body.aberto.esperadoAgoraCents).toBe(24900);
+  });
+
+  // -- comissão ----------------------------------------------------------------
+
+  /** Cria um barbeiro com conta própria, vinculado à agenda indicada. */
+  async function barbeiroComConta(dono: string, indice = 0) {
+    const catalogo = await com(dono)(http().get('/v1/admin/catalog')).expect(200);
+    const professionalId: string = catalogo.body.professionals[indice].id;
+
+    const email = `barbeiro${indice}@domari.com.br`;
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({
+        name: 'Ruan Nascimento', email, role: 'professional', professionalId,
+      }),
+    ).expect(201);
+
+    const senhaInicial: string = criada.body.senhaInicial;
+    const primeira = await http().post('/v1/admin/login')
+      .send({ email, password: senhaInicial }).expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password')
+        .send({ currentPassword: senhaInicial, newPassword: 'a-senha-dele-agora' }),
+    ).expect(200);
+
+    const entrou = await http().post('/v1/admin/login')
+      .send({ email, password: 'a-senha-dele-agora' }).expect(201);
+    return { token: entrou.body.token as string, professionalId };
+  }
+
+  it('o barbeiro vê a própria comissão sem precisar de segundo fator', async () => {
+    /**
+     * `commission.view_own` fica de fora do grupo de dinheiro de propósito: é o
+     * profissional olhando o próprio holerite. Um código de seis dígitos entre
+     * ele e a primeira tela que abre todo dia é como a barbearia acaba
+     * procurando como desligar a proteção inteira.
+     */
+    const dono = await abrirBarbearia();
+    const { token } = await barbeiroComConta(dono);
+
+    const extrato = await com(token)(http().get('/v1/admin/commission/mine')).expect(200);
+    expect(extrato.body.linhas).toEqual([]);
+  });
+
+  it('o barbeiro não vê a comissão do colega, mesmo pedindo', async () => {
+    // O recorte não é parâmetro: quem só tem `view_own` recebe o próprio id
+    // cravado na consulta. Motivo nº 1 de briga interna em barbearia.
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await abrirCaixa(dono).expect(201);
+
+    const catalogo = await com(dono)(http().get('/v1/admin/catalog')).expect(200);
+    const outroId: string = catalogo.body.professionals[0].id;
+
+    await com(dono)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'percent', valor: 4000 }),
+    ).expect(200);
+
+    // Venda executada pelo profissional do catálogo.
+    const aberta = await com(dono)(http().post('/v1/admin/orders').send({})).expect(201);
+    await com(dono)(
+      http().post(`/v1/admin/orders/${aberta.body.id}/items`).send({
+        tipo: 'service', descricao: 'Corte', quantidade: 1,
+        precoUnitarioCents: 10_000, professionalId: outroId,
+      }),
+    ).expect(201);
+    await com(dono)(
+      http().post(`/v1/admin/orders/${aberta.body.id}/close`).send({
+        pagamentos: [{ forma: 'cash', valorCents: 10_000 }],
+      }),
+    ).expect(201);
+
+    // O dono vê.
+    const doDono = await com(dono)(http().get('/v1/admin/commission')).expect(200);
+    expect(doDono.body.linhas).toHaveLength(1);
+
+    // O **outro** barbeiro não vê nada: a venda não foi dele.
+    const { token: doOutro } = await barbeiroComConta(dono, 1);
+    const dele = await com(doOutro)(http().get('/v1/admin/commission/mine')).expect(200);
+    expect(dele.body.linhas).toEqual([]);
+
+    // E o que executou vê a própria, sem segundo fator nenhum.
+    const { token: doExecutor } = await barbeiroComConta(dono, 0);
+    const dela = await com(doExecutor)(http().get('/v1/admin/commission/mine')).expect(200);
+    expect(dela.body.linhas).toHaveLength(1);
+    expect(dela.body.totalComissaoCents).toBe(4_000);
+  });
+
+  it('o barbeiro não fecha o período nem mexe nas regras', async () => {
+    const dono = await abrirBarbearia();
+    const { token } = await barbeiroComConta(dono);
+
+    await com(token)(http().get('/v1/admin/commission/rules')).expect(403);
+    await com(token)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'percent', valor: 9000 }),
+    ).expect(403);
+    await com(token)(
+      http().post('/v1/admin/commission/closures').send({ de: '2026-09-01', ate: '2026-09-30' }),
+    ).expect(403);
+  });
+
+  it('mexer em regra de comissão exige segundo fator', async () => {
+    // `commission.edit_rules` muda quanto cada um recebe: entrou no grupo de
+    // dinheiro no bloco 19, pelo mesmo motivo que `cashier.withdraw` no 18.
+    const dono = await abrirBarbearia();
+    const recusa = await com(dono)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'percent', valor: 4000 }),
+    ).expect(403);
+    expect(recusa.body.error.code).toBe('mfa_setup_required');
+  });
+
+  it('alíquota fracionária é recusada na borda', async () => {
+    // Pontos-base inteiros: 40% é 4000. Aceitar 0.4 poria ponto flutuante na
+    // única porta que ainda não tinha.
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await com(dono)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'percent', valor: 40.5 }),
+    ).expect(400);
+  });
+
+  it('modo por faixas sem faixa nenhuma não passa da borda', async () => {
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await com(dono)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'tiers', valor: 0, faixas: [] }),
+    ).expect(400);
+  });
+
+  it('fechar o mesmo período duas vezes é 409, não silêncio', async () => {
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await abrirCaixa(dono).expect(201);
+    await com(dono)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'percent', valor: 4000 }),
+    ).expect(200);
+
+    const catalogo = await com(dono)(http().get('/v1/admin/catalog')).expect(200);
+    const aberta = await com(dono)(http().post('/v1/admin/orders').send({})).expect(201);
+    await com(dono)(
+      http().post(`/v1/admin/orders/${aberta.body.id}/items`).send({
+        tipo: 'service', descricao: 'Corte', quantidade: 1, precoUnitarioCents: 10_000,
+        professionalId: catalogo.body.professionals[0].id,
+      }),
+    ).expect(201);
+    const paga = await com(dono)(
+      http().post(`/v1/admin/orders/${aberta.body.id}/close`).send({
+        pagamentos: [{ forma: 'cash', valorCents: 10_000 }],
+      }),
+    ).expect(201);
+    expect(paga.body.status).toBe('paid');
+
+    // O período do mês da venda, resolvido pelo extrato padrão.
+    const extrato = await com(dono)(http().get('/v1/admin/commission')).expect(200);
+    const periodo = { de: extrato.body.de, ate: extrato.body.ate };
+
+    await com(dono)(http().post('/v1/admin/commission/closures').send(periodo)).expect(201);
+    const segunda = await com(dono)(
+      http().post('/v1/admin/commission/closures').send(periodo),
+    ).expect(409);
+    expect(segunda.body.error.code).toBe('periodo_ja_fechado');
+  });
+
+  it('a comissão de uma barbearia não aparece na outra', async () => {
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await com(dono)(
+      http().put('/v1/admin/commission/rules').send({ modo: 'percent', valor: 4000 }),
+    ).expect(200);
+
+    const rival = await abrirBarbearia(RIVAL);
+    await comSegundoFator(rival);
+    const dela = await com(rival)(http().get('/v1/admin/commission/rules')).expect(200);
+    expect(dela.body.regras).toEqual([]);
+  });
+
+  it('ler a folha inteira exige segundo fator; o próprio holerite não', async () => {
+    /**
+     * O defeito que a `/security-review` encontrou neste bloco.
+     *
+     * Havia uma rota só, declarando `commission.view_own` e decidindo por
+     * dentro se devolvia a folha da casa. A `PermissaoGuard` deriva a exigência
+     * de segundo fator da permissão **declarada** — então a rota era liberada
+     * pela permissão barata e servia o dado da cara: o dono lia quanto cada
+     * barbeiro ganhou, sem código nenhum, com a sessão do balcão.
+     */
+    const dono = await abrirBarbearia();
+
+    const folha = await com(dono)(http().get('/v1/admin/commission')).expect(403);
+    expect(folha.body.error.code).toBe('mfa_setup_required');
+
+    const fechamentos = await com(dono)(http().get('/v1/admin/commission/closures')).expect(403);
+    expect(fechamentos.body.error.code).toBe('mfa_setup_required');
+
+    // E o próprio holerite continua a um toque de distância.
+    await com(dono)(http().get('/v1/admin/commission/mine')).expect(200);
+    await com(dono)(http().get('/v1/admin/commission/mine/closures')).expect(200);
+  });
+
+  it('o gerente lê a folha — ele tem view_all e não tem view_own', async () => {
+    /**
+     * O outro lado do mesmo defeito, e ele não era de segurança: com a rota
+     * única exigindo `view_own`, o gerente — que tem `view_all` e **não** tem
+     * `view_own` — levava 403 na própria tela que a permissão dele existe para
+     * abrir. O controle estava invertido nos dois sentidos.
+     */
+    const dono = await abrirBarbearia();
+
+    const email = 'gerente@domari.com.br';
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({ name: 'Gerente', email, role: 'manager' }),
+    ).expect(201);
+    const primeira = await http().post('/v1/admin/login')
+      .send({ email, password: criada.body.senhaInicial }).expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password')
+        .send({ currentPassword: criada.body.senhaInicial, newPassword: 'senha-do-gerente' }),
+    ).expect(200);
+    const entrou = await http().post('/v1/admin/login')
+      .send({ email, password: 'senha-do-gerente' }).expect(201);
+
+    await comSegundoFator(entrou.body.token);
+    const folha = await com(entrou.body.token)(http().get('/v1/admin/commission')).expect(200);
+    expect(folha.body.linhas).toEqual([]);
   });
 });

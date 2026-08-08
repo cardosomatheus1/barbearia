@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { FORMAS_DE_PAGAMENTO, TIPOS_DE_ITEM } from '@barbearia/core';
+import {
+  BASES_DE_COMISSAO,
+  FORMAS_DE_PAGAMENTO,
+  MODOS_DE_COMISSAO,
+  TIPOS_DE_ITEM,
+  TRATAMENTOS_DO_DESCONTO,
+} from '@barbearia/core';
 
 /**
  * A borda do dinheiro.
@@ -93,4 +99,52 @@ export const diaSchema = z.object({
 export const codigoMfaSchema = z.object({
   // Aceita com ou sem hífen: o código de recuperação é lido de um papel.
   codigo: z.string().trim().min(6).max(20),
+});
+
+// -- Comissão -------------------------------------------------------------------
+
+const diaISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const periodoSchema = z.object({
+  de: diaISO.optional(),
+  ate: diaISO.optional(),
+});
+
+export const fecharComissaoSchema = z.object({
+  de: diaISO,
+  ate: diaISO,
+  notas: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Alíquota em pontos-base, sempre inteira.
+ *
+ * 40% é `4000`. Aceitar `0.4` aqui poria ponto flutuante na única porta que
+ * ainda não tinha — e a diferença só apareceria no centavo do acerto do mês.
+ */
+export const regraDeComissaoSchema = z
+  .object({
+    professionalId: uuidSchema.optional(),
+    serviceId: uuidSchema.optional(),
+    categoryId: uuidSchema.optional(),
+    modo: z.enum(MODOS_DE_COMISSAO),
+    valor: z.number().int().min(0).max(10_000_000),
+    faixas: z
+      .array(
+        z.object({
+          ateCents: z.number().int().positive().nullable(),
+          pontosBase: z.number().int().min(0).max(10_000),
+        }),
+      )
+      .max(10)
+      .optional(),
+  })
+  .refine((r) => r.modo !== 'tiers' || (r.faixas?.length ?? 0) > 0, {
+    message: 'Modo por faixas exige pelo menos uma faixa.',
+    path: ['faixas'],
+  });
+
+export const configuracaoDeComissaoSchema = z.object({
+  base: z.enum(BASES_DE_COMISSAO),
+  tratamentoDoDesconto: z.enum(TRATAMENTOS_DO_DESCONTO),
 });

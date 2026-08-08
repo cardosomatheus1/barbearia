@@ -16,3 +16,4 @@ export * from './permissoes.js';
 export * from './fila.js';
 export * from './excecao.js';
 export * from './comanda.js';
+export * from './comissao.js';

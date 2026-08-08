@@ -45,6 +45,9 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
 }
 
 const operador = { staffId: STAFF, staffName: 'Maria Recepção' };
+// A data que o controller passa: o dia da unidade, não o do servidor.
+const HOJE = '2026-09-10';
+const fecha = { ...operador, hojeNaUnidade: HOJE };
 
 describeIfDb('comanda, caixa e fiado', () => {
   beforeAll(async () => {
@@ -297,7 +300,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     await expect(
       fecharComanda({
         tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-        pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...operador,
+        pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...fecha,
       }),
     ).rejects.toMatchObject({ code: 'caixa_fechado' });
   });
@@ -312,7 +315,7 @@ describeIfDb('comanda, caixa e fiado', () => {
         { forma: 'cash', valorCents: 4000 },
         { forma: 'credit', valorCents: 6000 },
       ],
-      ...operador,
+      ...fecha,
     });
 
     expect((await caixaAberto(TENANT, LOCATION))?.esperadoAgoraCents).toBe(24000);
@@ -324,7 +327,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     const fechada = await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'cash', valorCents: 10000 }], ...operador,
+      pagamentos: [{ forma: 'cash', valorCents: 10000 }], ...fecha,
     });
 
     expect(fechada.trocoCents).toBe(3000);
@@ -337,13 +340,13 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem();
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...fecha,
     });
 
     await expect(
       fecharComanda({
         tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-        pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...operador,
+        pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...fecha,
       }),
     ).rejects.toMatchObject({ code: 'comanda_fechada' });
   });
@@ -354,7 +357,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     await expect(
       fecharComanda({
         tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-        pagamentos: [{ forma: 'pix', valorCents: 5000 }], ...operador,
+        pagamentos: [{ forma: 'pix', valorCents: 5000 }], ...fecha,
       }),
     ).rejects.toMatchObject({ code: 'pagamento_invalido' });
   });
@@ -367,7 +370,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...fecha,
     });
 
     const cliente = await admin.$queryRawUnsafe<{ balance_cents: number }[]>(
@@ -392,7 +395,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     await expect(
       fecharComanda({
         tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-        pagamentos: [{ forma: 'fiado', valorCents: 15000 }], ...operador,
+        pagamentos: [{ forma: 'fiado', valorCents: 15000 }], ...fecha,
       }),
     ).rejects.toMatchObject({ code: 'pagamento_invalido' });
 
@@ -410,7 +413,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     await expect(
       fecharComanda({
         tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-        pagamentos: [{ forma: 'fiado', valorCents: 1000 }], ...operador,
+        pagamentos: [{ forma: 'fiado', valorCents: 1000 }], ...fecha,
       }),
     ).rejects.toMatchObject({ code: 'pagamento_invalido' });
   });
@@ -420,7 +423,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem(7000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...fecha,
     });
 
     const { saldoCents } = await receberFiado({
@@ -441,7 +444,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem(7000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...fecha,
     });
 
     await expect(
@@ -457,7 +460,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem(7000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...fecha,
     });
 
     await expect(
@@ -478,13 +481,13 @@ describeIfDb('comanda, caixa e fiado', () => {
     const paga = await comItem(10000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: paga.id,
-      pagamentos: [{ forma: 'cash', valorCents: 10000 }], ...operador,
+      pagamentos: [{ forma: 'cash', valorCents: 10000 }], ...fecha,
     });
 
     const fiada = await comItem(6000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: fiada.id,
-      pagamentos: [{ forma: 'fiado', valorCents: 6000 }], ...operador,
+      pagamentos: [{ forma: 'fiado', valorCents: 6000 }], ...fecha,
     });
 
     const total = await faturamentoDoDia({
@@ -506,7 +509,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem(7000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...fecha,
     });
 
     expect(await caixaAberto(RIVAL, LOCATION)).toBeNull();
@@ -538,7 +541,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem(7000);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'cash', valorCents: 7000 }], ...fecha,
     });
 
     const trilha = await admin.$queryRawUnsafe<{ action: string; actor_name: string }[]>(
@@ -599,7 +602,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     const pagamento = {
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
-      pagamentos: [{ forma: 'cash' as const, valorCents: 7000 }], ...operador,
+      pagamentos: [{ forma: 'cash' as const, valorCents: 7000 }], ...fecha,
     };
     const [a, b] = await Promise.allSettled([
       fecharComanda(pagamento),
@@ -629,7 +632,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const fiar = (orderId: string) =>
       fecharComanda({
         tenantId: TENANT, locationId: LOCATION, orderId,
-        pagamentos: [{ forma: 'fiado' as const, valorCents: 6000 }], ...operador,
+        pagamentos: [{ forma: 'fiado' as const, valorCents: 6000 }], ...fecha,
       });
 
     // Limite do Carlos é 10000: cabe uma de 6000, não cabem duas.
@@ -647,7 +650,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const pagamento = {
       tenantId: TENANT, locationId: LOCATION, orderId: com.id,
       pagamentos: [{ forma: 'cash' as const, valorCents: 7000 }],
-      idempotencyKey: 'balcao-1', ...operador,
+      idempotencyKey: 'balcao-1', ...fecha,
     };
 
     const primeira = await fecharComanda(pagamento);

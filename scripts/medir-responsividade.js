@@ -434,6 +434,50 @@ async function prepararCaixa(token, catalogo) {
     });
   }
 
+  // Comissão com conteúdo: regra geral, uma por profissional, e faixas — mais
+  // uma venda fechada, para o extrato não ser medido vazio. Estado vazio é
+  // justamente o layout que **não** quebra.
+  await fetch(`${API}/v1/admin/commission/rules`, {
+    method: 'POST', headers: cabecalho,
+    body: JSON.stringify({ modo: 'percent', valor: 4000 }),
+  }).catch(() => undefined);
+  await fetch(`${API}/v1/admin/commission/rules`, {
+    method: 'PUT', headers: cabecalho,
+    body: JSON.stringify({ modo: 'percent', valor: 4000 }),
+  });
+  await fetch(`${API}/v1/admin/commission/rules`, {
+    method: 'PUT', headers: cabecalho,
+    body: JSON.stringify({
+      professionalId: catalogo.professionals[0]?.id,
+      serviceId: catalogo.services[0]?.id,
+      modo: 'tiers', valor: 0,
+      faixas: [
+        { ateCents: 500000, pontosBase: 4000 },
+        { ateCents: 800000, pontosBase: 4500 },
+        { ateCents: null, pontosBase: 5000 },
+      ],
+    }),
+  });
+
+  const comissionada = await fetch(`${API}/v1/admin/orders`, {
+    method: 'POST', headers: cabecalho, body: JSON.stringify({}),
+  });
+  if (comissionada.ok) {
+    const { id } = await comissionada.json();
+    await fetch(`${API}/v1/admin/orders/${id}/items`, {
+      method: 'POST', headers: cabecalho,
+      body: JSON.stringify({
+        tipo: 'service', descricao: 'Corte degradê com máquina e tesoura',
+        quantidade: 1, precoUnitarioCents: 129000,
+        professionalId: catalogo.professionals[0]?.id,
+      }),
+    });
+    await fetch(`${API}/v1/admin/orders/${id}/close`, {
+      method: 'POST', headers: cabecalho,
+      body: JSON.stringify({ pagamentos: [{ forma: 'cash', valorCents: 129000 }] }),
+    });
+  }
+
   return { ok: true, orderId };
 }
 
@@ -488,6 +532,8 @@ async function main() {
       ? [{ nome: 'comanda', url: `/admin/comanda/${caixa.orderId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
     { nome: 'fiado', url: '/admin/fiado', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
   ];
 
   const browser = await chromium.launch({

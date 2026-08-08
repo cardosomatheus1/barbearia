@@ -931,3 +931,117 @@ export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
     { codigo },
     token,
   );
+
+// -- Comissão -------------------------------------------------------------------
+
+export type ModoDeComissao = 'percent' | 'fixed' | 'tiers';
+export type BaseDeComissao = 'liquido' | 'bruto';
+export type TratamentoDoDesconto = 'reduz_base' | 'custo_da_casa';
+
+export interface FaixaDeComissao {
+  ateCents: number | null;
+  pontosBase: number;
+}
+
+export interface LinhaDeComissao {
+  professionalId: string;
+  professionalName: string;
+  baseCents: number;
+  comissaoCents: number;
+  lancamentos: number;
+}
+
+export interface ExtratoDeComissao {
+  de: string;
+  ate: string;
+  linhas: LinhaDeComissao[];
+  totalBaseCents: number;
+  totalComissaoCents: number;
+  /** Quem vendeu e nenhuma regra alcançou. Falta de configuração ≠ zero. */
+  semRegra: { professionalName: string; itens: number }[];
+}
+
+/**
+ * Duas rotas, e a tela escolhe pela permissão que ela já conhece.
+ *
+ * `/mine` serve o holerite de quem pergunta e não pede segundo fator; a raiz
+ * serve a folha inteira e pede, porque `commission.view_all` está no grupo de
+ * dinheiro. Uma rota só, decidindo por dentro, liberava a folha pela permissão
+ * barata — foi o que a `/security-review` encontrou.
+ */
+export const comissaoDoPeriodo = (
+  token: string,
+  opcoes: { de?: string; ate?: string; daCasa?: boolean } = {},
+) => {
+  const busca = new URLSearchParams();
+  if (opcoes.de) busca.set('de', opcoes.de);
+  if (opcoes.ate) busca.set('ate', opcoes.ate);
+  const query = busca.toString();
+  const rota = opcoes.daCasa ? '/v1/admin/commission' : '/v1/admin/commission/mine';
+  return chamar<ExtratoDeComissao>('GET', `${rota}${query ? `?${query}` : ''}`, undefined, token);
+};
+
+export interface FechamentoDeComissao {
+  id: string;
+  de: string;
+  ate: string;
+  fechadoEm: string;
+  fechadoPor: string;
+  linhas: { professionalName: string; baseCents: number; comissaoCents: number }[];
+  totalCents: number;
+}
+
+export const fechamentosDeComissao = (token: string, daCasa = false) =>
+  chamar<{ fechamentos: FechamentoDeComissao[] }>(
+    'GET',
+    daCasa ? '/v1/admin/commission/closures' : '/v1/admin/commission/mine/closures',
+    undefined,
+    token,
+  );
+
+export const fecharComissao = (token: string, dados: { de: string; ate: string; notas?: string }) =>
+  chamar<{ id: string; linhas: LinhaDeComissao[] }>(
+    'POST',
+    '/v1/admin/commission/closures',
+    dados,
+    token,
+  );
+
+export interface RegraDeComissao {
+  id: string;
+  professionalId: string | null;
+  serviceId: string | null;
+  categoryId: string | null;
+  modo: ModoDeComissao;
+  valor: number;
+  faixas: FaixaDeComissao[];
+  professionalName: string | null;
+  serviceName: string | null;
+  categoryName: string | null;
+}
+
+export const regrasDeComissao = (token: string) =>
+  chamar<{
+    regras: RegraDeComissao[];
+    configuracao: { base: BaseDeComissao; tratamentoDoDesconto: TratamentoDoDesconto };
+  }>('GET', '/v1/admin/commission/rules', undefined, token);
+
+export const salvarRegraDeComissao = (
+  token: string,
+  dados: {
+    professionalId?: string;
+    serviceId?: string;
+    categoryId?: string;
+    modo: ModoDeComissao;
+    valor: number;
+    faixas?: FaixaDeComissao[];
+  },
+) => chamar<{ id: string }>('PUT', '/v1/admin/commission/rules', dados, token);
+
+export const removerRegraDeComissao = (token: string, id: string) =>
+  chamar<{ ok: true }>('DELETE', `/v1/admin/commission/rules/${id}`, undefined, token);
+
+export const salvarConfiguracaoDeComissao = (
+  token: string,
+  dados: { base: BaseDeComissao; tratamentoDoDesconto: TratamentoDoDesconto },
+) => chamar<{ ok: true }>('PUT', '/v1/admin/commission/settings', dados, token);

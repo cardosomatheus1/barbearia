@@ -13,6 +13,7 @@ import {
   type TipoDeItem,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import { lancarComissaoDaComanda } from './comissao.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -514,6 +515,14 @@ export async function fecharComanda(params: {
   readonly staffId: string;
   readonly staffName: string;
   readonly idempotencyKey?: string;
+  /**
+   * A data de hoje **no fuso da unidade**, para datar a comissão.
+   *
+   * Vem de quem chama e não de `now()` no banco: às 22h de Salvador o servidor
+   * em UTC já virou o dia, e a comissão cairia no mês seguinte — no mês errado
+   * do acerto do barbeiro (defeito D2, o mesmo que erra a grade).
+   */
+  readonly hojeNaUnidade: string;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     /**
@@ -578,6 +587,7 @@ export async function fecharComanda(params: {
         status = 'paid', closed_at = now(),
         session_id = ${sessao.id}::uuid,
         change_cents = ${conferido.trocoCents},
+        business_day = ${params.hojeNaUnidade}::date,
         close_idempotency_key = ${params.idempotencyKey ?? null}
       WHERE id = ${params.orderId}::uuid AND status = 'open'
     `;
@@ -630,6 +640,19 @@ export async function fecharComanda(params: {
         staffName: params.staffName,
       });
     }
+
+    /**
+     * A comissão nasce **na mesma transação** que fecha a venda.
+     *
+     * Fora dela existiria a janela em que a venda aconteceu e a comissão não —
+     * e ela apareceria como dinheiro faltando no acerto do barbeiro, sem nada
+     * dizendo por quê. Item sem profissional ou sem regra simplesmente não
+     * gera lançamento; a tela de comissão lista quem ficou de fora.
+     */
+    await lancarComissaoDaComanda(tx, {
+      orderId: params.orderId,
+      quandoISO: params.hojeNaUnidade,
+    });
 
     await audit(tx, {
       actorId: params.staffId,

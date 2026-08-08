@@ -84,8 +84,27 @@ export function ehPermissao(valor: string): valor is Permissao {
  * inverso do risco.
  */
 export const PERMISSOES_DE_DINHEIRO: readonly Permissao[] = PERMISSOES.filter(
-  (p): p is Permissao => p.startsWith('finance.') || p.startsWith('cashier.'),
+  (p): p is Permissao =>
+    p.startsWith('finance.') ||
+    p.startsWith('cashier.') ||
+    // Ver a comissão de todo mundo é ver a folha; mudar a regra é mudar quanto
+    // cada um recebe. As duas revelam ou movem dinheiro.
+    p === 'commission.view_all' ||
+    p === 'commission.edit_rules',
 );
+
+/**
+ * A exceção, escrita para poder ser discutida.
+ *
+ * `commission.view_own` fica **fora** do grupo de propósito. É o barbeiro
+ * olhando o próprio holerite — o dado é dele, e ele já provou a senha. Exigir
+ * segundo fator para isso poria um código de seis dígitos entre o profissional
+ * e a primeira tela que ele abre todo dia, e o desfecho real de atrito assim é
+ * a barbearia procurando como desligar a proteção inteira.
+ *
+ * A linha é: **segundo fator protege o dinheiro dos outros.**
+ */
+export const PERMISSAO_DE_DINHEIRO_SEM_SEGUNDO_FATOR = 'commission.view_own' as const;
 
 export type Papel = 'owner' | 'manager' | 'receptionist' | 'professional';
 

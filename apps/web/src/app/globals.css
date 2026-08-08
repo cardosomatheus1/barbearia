@@ -1849,3 +1849,95 @@ main { padding-bottom: var(--space-8); }
   .resumo-dia__lista { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
   .codigos-recuperacao { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------------------------------------------------------------------------
+   Comissão.
+
+   O número que o barbeiro procura é "quanto eu tenho a receber", e ele o
+   confere de pé, uma vez por mês. Por isso ele reusa `.gaveta`, que já é o
+   maior número da tela no balcão — dois vocabulários para a mesma função
+   fariam a página parecer montada por pessoas diferentes.
+   --------------------------------------------------------------------------- */
+
+.linhas-comissao, .fechamentos-comissao, .regras-comissao {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2);
+}
+
+.linha-comissao, .regra-comissao {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.linha-comissao__quem, .regra-comissao__quem { display: grid; min-width: 0; }
+.linha-comissao__nome, .regra-comissao__alvo {
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+.linha-comissao__detalhe, .regra-comissao__como {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+.linha-comissao__valor {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.regra-comissao__tirar { padding: 0 var(--space-2); font-size: var(--font-size-sm); }
+
+.fechamento-comissao {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.fechamento-comissao__cabeca {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: baseline;
+  min-width: 0;
+}
+.fechamento-comissao__periodo { font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
+.fechamento-comissao__total { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-semibold); }
+.fechamento-comissao__linhas {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+.fechamento-comissao__linhas li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+.fechamento-comissao__quem {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.faixas-comissao { margin: 0 0 var(--space-3); padding: 0; border: 0; min-width: 0; }
+.faixas-comissao__legenda {
+  padding: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.faixas-comissao__linha { display: grid; gap: var(--space-2); min-width: 0; }
+
+@media (min-width: 480px) {
+  /* Teto e alíquota lado a lado quando há largura: é como se lê uma tabela de
+     faixas no papel. */
+  .faixas-comissao__linha { grid-template-columns: 2fr 1fr; align-items: start; }
+}

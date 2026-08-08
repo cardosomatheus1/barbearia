@@ -15,6 +15,7 @@ import { AgendaController } from './admin/agenda.controller.js';
 import { FilaController } from './admin/fila.controller.js';
 import { CaixaController } from './admin/caixa.controller.js';
 import { MfaController } from './admin/mfa.controller.js';
+import { ComissaoController } from './admin/comissao.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
@@ -39,6 +40,7 @@ import { TenantService } from './tenant/tenant.service.js';
     AgendaController,
     CaixaController,
     MfaController,
+    ComissaoController,
     FilaPublicaController,
     TeamController,
     MeController,

@@ -37,7 +37,10 @@ export type AuditAction =
   // Segundo fator: ligar e desligar mudam quem consegue chegar ao caixa.
   | 'mfa.enabled'
   | 'mfa.disabled'
-  | 'mfa.recovery_used';
+  | 'mfa.recovery_used'
+  // Comissão: fechar um período paga gente, e mudar a regra muda quanto.
+  | 'commission.closed'
+  | 'commission.rule_changed';
 
 export interface AuditEntry {
   readonly actorId: string | null;

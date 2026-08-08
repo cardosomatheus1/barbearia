@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ehPermissao,
+  PERMISSAO_DE_DINHEIRO_SEM_SEGUNDO_FATOR,
   PAPEIS,
   PERMISSOES,
   PERMISSOES_DE_DINHEIRO,
@@ -110,20 +111,34 @@ describe('permissões de dinheiro', () => {
       'cashier.close',
       'cashier.open',
       'cashier.withdraw',
+      'commission.edit_rules',
+      'commission.view_all',
       'finance.export',
       'finance.view',
       'finance.view_profit',
     ]);
   });
 
-  it('nenhuma permissão de dinheiro fica de fora do grupo', () => {
+  it('nenhuma permissão de dinheiro fica de fora do grupo sem estar declarada', () => {
     // A lista acima é literal e por isso envelhece: uma permissão nova de
     // dinheiro passaria despercebida e nasceria sem segundo fator. Esta é a
-    // rede — bate a lista contra o catálogo inteiro.
+    // rede — bate a lista contra o catálogo inteiro, e a **única** ausência
+    // aceita é a que está escrita como exceção.
     const foraDoGrupo = PERMISSOES.filter(
-      (p) => /^(finance|cashier)\./.test(p) && !PERMISSOES_DE_DINHEIRO.includes(p),
+      (p) =>
+        /^(finance|cashier|commission)\./.test(p) &&
+        !PERMISSOES_DE_DINHEIRO.includes(p) &&
+        p !== PERMISSAO_DE_DINHEIRO_SEM_SEGUNDO_FATOR,
     );
     expect(foraDoGrupo, `sem segundo fator: ${foraDoGrupo.join(', ')}`).toEqual([]);
+  });
+
+  it('o barbeiro chega à própria comissão sem segundo fator', () => {
+    // A linha é: segundo fator protege o dinheiro dos outros. Pôr um código de
+    // seis dígitos entre o profissional e a primeira tela que ele abre todo dia
+    // é como a barbearia acaba procurando como desligar a proteção inteira.
+    expect(PERMISSOES_DE_DINHEIRO).not.toContain('commission.view_own');
+    expect(PERMISSOES_DE_DINHEIRO).toContain('commission.view_all');
   });
 });
 

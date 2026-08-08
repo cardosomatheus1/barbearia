@@ -54,6 +54,10 @@ import {
   confirmarSegundoFator,
   verificarSegundoFatorAgora,
   type FormaDePagamento,
+  salvarRegraDeComissao,
+  removerRegraDeComissao,
+  salvarConfiguracaoDeComissao,
+  fecharComissao,
 } from '@/lib/admin-api';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
@@ -1013,4 +1017,114 @@ export async function acaoVerificarSegundoFator(form: FormData): Promise<void> {
     comanda: '/admin/comanda',
   };
   redirect(destinos[texto(form, 'voltarPara')] ?? '/admin/caixa');
+}
+
+// -- Comissão -----------------------------------------------------------------
+
+/**
+ * Alíquota digitada em porcentagem, gravada em pontos-base.
+ *
+ * "40" e "40,5" vêm do mesmo campo. `Number(v) * 100` daria 4049.999… para
+ * 40,5 — o mesmo defeito de ponto flutuante do preço, na única porta que
+ * faltava. Os pontos-base saem dos dígitos, como os centavos.
+ */
+function pontosBaseDoCampo(bruto: string): number | null {
+  const limpo = bruto.trim().replace('%', '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(limpo)) return null;
+  const [inteiro = '0', decimais = ''] = limpo.split('.');
+  const pontos = Number(inteiro) * 100 + Number(decimais.padEnd(2, '0'));
+  return pontos > 10_000 ? null : pontos;
+}
+
+export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const modo = texto(form, 'modo');
+  if (modo !== 'percent' && modo !== 'fixed' && modo !== 'tiers') {
+    falhar('/admin/comissao/regras', 'invalid_request');
+  }
+
+  let valor = 0;
+  const faixas: { ateCents: number | null; pontosBase: number }[] = [];
+
+  if (modo === 'percent') {
+    const pontos = pontosBaseDoCampo(texto(form, 'aliquota'));
+    if (pontos === null) falhar('/admin/comissao/regras', 'aliquota_invalida');
+    valor = pontos;
+  } else if (modo === 'fixed') {
+    valor = centavos(form, 'valorFixo', '/admin/comissao/regras');
+  } else {
+    // Três faixas no formulário: duas com teto e a última aberta, que é o que
+    // impede faturamento acima do último degrau ficar sem alíquota.
+    for (const i of [0, 1, 2]) {
+      const aliquota = texto(form, `faixaPontos${i}`);
+      if (!aliquota) continue;
+      const pontos = pontosBaseDoCampo(aliquota);
+      if (pontos === null) falhar('/admin/comissao/regras', 'aliquota_invalida');
+
+      const ate = texto(form, `faixaAte${i}`);
+      faixas.push({
+        ateCents: ate ? centavos(form, `faixaAte${i}`, '/admin/comissao/regras') : null,
+        pontosBase: pontos,
+      });
+    }
+    if (faixas.length === 0) falhar('/admin/comissao/regras', 'faixas_ausentes');
+    // A última é sempre aberta: o formulário não oferece outra forma.
+    const ultima = faixas[faixas.length - 1];
+    if (ultima) faixas[faixas.length - 1] = { ...ultima, ateCents: null };
+  }
+
+  const professionalId = texto(form, 'professionalId');
+  const serviceId = texto(form, 'serviceId');
+
+  const resultado = await salvarRegraDeComissao(token, {
+    modo,
+    valor,
+    ...(faixas.length ? { faixas } : {}),
+    ...(professionalId ? { professionalId } : {}),
+    ...(serviceId ? { serviceId } : {}),
+  });
+  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  redirect('/admin/comissao/regras?salvo=1');
+}
+
+export async function acaoRemoverRegraDeComissao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await removerRegraDeComissao(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  redirect('/admin/comissao/regras?salvo=1');
+}
+
+export async function acaoConfiguracaoDeComissao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const base = texto(form, 'base');
+  const tratamento = texto(form, 'tratamentoDoDesconto');
+  if (base !== 'liquido' && base !== 'bruto') falhar('/admin/comissao/regras', 'invalid_request');
+  if (tratamento !== 'reduz_base' && tratamento !== 'custo_da_casa') {
+    falhar('/admin/comissao/regras', 'invalid_request');
+  }
+
+  const resultado = await salvarConfiguracaoDeComissao(token, {
+    base,
+    tratamentoDoDesconto: tratamento,
+  });
+  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  redirect('/admin/comissao/regras?salvo=1');
+}
+
+/**
+ * Fecha o período.
+ *
+ * Depois disto o valor é imutável e o ajuste vira lançamento novo — por isso o
+ * formulário confirma antes, e por isso o período vai por campo escondido, do
+ * que a tela mostrou, e não digitado de novo.
+ */
+export async function acaoFecharComissao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await fecharComissao(token, {
+    de: texto(form, 'de'),
+    ate: texto(form, 'ate'),
+    ...(texto(form, 'notas') ? { notas: texto(form, 'notas') } : {}),
+  });
+  if (!resultado.ok) falhar('/admin/comissao', resultado.code);
+  redirect('/admin/comissao?fechado=1');
 }

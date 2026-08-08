@@ -14,6 +14,7 @@ const ABAS = [
   { href: '/admin/fila', nome: 'Fila' },
   { href: '/admin/caixa', nome: 'Caixa' },
   { href: '/admin/fiado', nome: 'Fiado' },
+  { href: '/admin/comissao', nome: 'Comissão' },
 ] as const;
 
 export function BalcaoNav({ atual }: { readonly atual: string }) {

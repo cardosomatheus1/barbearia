@@ -185,6 +185,9 @@ ser gravada **dentro da transação** que move o dinheiro, então ela não pode 
 chamada de fora — e é o mesmo precedente de `onboarding`, que já dependia de
 `identity`. Nenhuma seta volta: `identity` não sabe que existe caixa.
 
+- **Faixa progressiva é marginal**, como imposto de renda. A alternativa — a
+  alíquota da faixa alcançada valendo sobre tudo — é outra regra, com degrau, e
+  entra como modalidade nova e explícita se alguém quiser.
 - **`packages/core` não depende de nada.** Sem banco, sem rede, sem relógio, sem
   framework. É lógica pura e é onde mora a regra de negócio. Há teste que falha
   se alguém adicionar dependência a ele.
@@ -421,6 +424,10 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
 | Evento auditado | gravado por `audit()` **dentro da transação** que muda o estado; `audit_log` é append-only por `REVOKE` |
 | Segundo fator | TOTP RFC 6238 do `node:crypto`; segredo cifrado com AES-256-GCM; passo consumido gravado; código de recuperação some ao ser usado |
+| Comissão | lançamento guarda **base + regra copiada**, nunca o valor; o valor é derivado, porque faixa depende do acumulado do período |
+| Comissão fechada | imutável por trigger e `REVOKE`; estorno é lançamento novo com sinal negativo no período aberto, jamais `DELETE` |
+| Dia de uma venda | `orders.business_day`, o dia **da unidade** — `closed_at` responde "que instante", não "de que dia é este dinheiro" |
+| Alíquota | pontos-base inteiros (4000 = 40%), nunca fração |
 | Prova do segundo fator | por **sessão** (`staff_sessions.mfa_verified_at`), com validade de 30 min — nunca só no login |
 
 ---

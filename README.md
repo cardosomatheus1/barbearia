@@ -13,15 +13,15 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda e permissões — lógica pura, sem banco e sem relógio | 305 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 43 invariantes + 10 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 344 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 62 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 130 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP) e auditoria | 109 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
-| `packages/finance` | Comanda, checkout, caixa e fiado — o dinheiro, do banco para a tela | 27 testes ✅ |
+| `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro, do banco para a tela | 54 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa e comanda | 192 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa e comanda, com SSR (Next.js) | 37 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda e comissão | 204 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda e comissão, com SSR (Next.js) | 37 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -1155,6 +1155,112 @@ recusava e mandava de volta para lá. Sem sair e entrar de novo, não havia como
 destravar. Hoje as duas chamam `segundoFatorValido` — a regra do projeto de que
 a permissão exibida sai da mesma função que a API aplica, custando caro por não
 ter sido seguida.
+
+## Bloco 19 — a comissão
+
+### O lançamento guarda a base, nunca o valor
+
+Faixa progressiva depende do acumulado: a alíquota do corte de terça só é
+conhecida no fim do mês, e um estorno no dia 28 pode derrubar a faixa de tudo o
+que veio antes. Se o valor fosse gravado na venda, ele teria que ser reescrito a
+cada nova venda do período — e reescrever comissão é exatamente o que destrói a
+confiança no sistema.
+
+Então o lançamento guarda **base + regra**, e o valor é derivado. É isso que
+permite o estorno corrigir o passado sem alterar uma linha sequer.
+
+### A regra é copiada para dentro do lançamento
+
+Mudar a alíquota em outubro não pode mudar o que foi feito em setembro. Mesma
+decisão do preço em `order_items`: referenciar o catálogo reescreveria o
+passado, e o relatório impresso na sexta não bateria com o da segunda.
+
+### Faixa progressiva é marginal
+
+Os primeiros R$ 5.000 a 40%, e só o que passa disso a 45%. A alternativa — a
+alíquota da faixa alcançada valendo para tudo — é **outra regra**, e produz um
+degrau em que vender um real a mais aumenta a comissão em centenas. Se a
+barbearia quiser o degrau, isso é uma modalidade nova e explícita.
+
+Um teste afirma a propriedade que define "progressiva": a função é contínua nas
+fronteiras.
+
+### O desconto é rateado entre os itens
+
+A comanda tem um desconto só; a comissão é por item, e itens podem ser de
+barbeiros diferentes. Sem ratear, o desconto cairia inteiro sobre o primeiro da
+lista e quem cortou o cabelo pagaria sozinho a cortesia dada na conta toda.
+
+O rateio é proporcional e a soma das partes é **exatamente** o desconto —
+arredondar cada parte para baixo faria um centavo sumir da conta da casa a cada
+comanda. A sobra vai para o item de maior valor, deterministicamente, para que
+dois relatórios do mesmo mês não divirjam por um centavo.
+
+### Fechar é congelar, e o carimbo é o que segura
+
+O fechamento calcula, grava o valor por profissional e carimba os lançamentos.
+Depois disso eles não entram em conta nenhuma de novo.
+
+O índice único de período só pega o duplicado exato. O que impede pagar duas
+vezes por períodos **sobrepostos** é o filtro de carimbo — e, na corrida, a
+trigger: o segundo `UPDATE` espera a trava do primeiro, relê a linha já
+carimbada e recusa, derrubando a transação inteira.
+
+Vale registrar como o teste dessa regra quase não provou nada. A primeira versão
+punha a venda no dia 10 com os períodos 01–30 e 15–15/10: fora da sobreposição,
+então o filtro de data já bastava e o teste passava mesmo com o carimbo
+ignorado. Movi a venda para o dia 20.
+
+### Duas fontes para "quando esta venda aconteceu"
+
+Um teste de integração falhou dizendo que "quem ficou sem regra" via um mês
+vazio. A causa não era o teste: `commission_entries.earned_on` guardava o dia da
+**unidade**, e a consulta de itens sem regra filtrava por `orders.closed_at`,
+que é o instante em UTC. Dois relógios para o mesmo período — e a divergência só
+apareceria perto da meia-noite, que é o horário em que barbearia fecha.
+
+`orders.business_day` passou a existir para haver uma resposta só.
+
+### Falta de regra ≠ comissão zero
+
+A tela lista **quem vendeu e nenhuma regra alcançou**. Sem isso, as duas
+situações são o mesmo número na tela, e o barbeiro descobre no dia do acerto
+olhando um valor menor do que esperava, sem nada explicando o porquê.
+
+### Segundo fator protege o dinheiro dos outros
+
+`commission.view_all` e `commission.edit_rules` entraram no grupo que exige MFA:
+a primeira é ver a folha inteira, a segunda é mudar quanto cada um recebe.
+
+`commission.view_own` ficou **fora**, e está escrito como exceção com nome
+próprio para poder ser discutido. É o barbeiro olhando o próprio holerite. Pôr
+um código de seis dígitos entre ele e a primeira tela que abre todo dia é como a
+barbearia acaba procurando como desligar a proteção inteira.
+
+### O que a `/security-review` encontrou no bloco da comissão
+
+Um defeito, e ele invertia o controle nos dois sentidos.
+
+`GET /v1/admin/commission` declarava `@Exige('commission.view_own')` e decidia
+**por dentro** se devolvia a folha da casa ou só o holerite de quem perguntou.
+A `PermissaoGuard` deriva a exigência de segundo fator da permissão
+**declarada** — então a rota era liberada pela permissão barata e servia o dado
+da cara. O dono lia quanto cada barbeiro ganhou sem digitar código nenhum, com a
+sessão do balcão que fica aberta o dia inteiro, enquanto a rota ao lado, de
+mudar a regra, exigia o segundo fator.
+
+E o outro lado, que não era de segurança: o **gerente** tem `view_all` e não tem
+`view_own`. A exigência conjuntiva o trancava para fora exatamente da tela que a
+permissão dele existe para abrir.
+
+A correção não foi um `if` a mais: são duas rotas. `/mine` serve o próprio
+holerite sem segundo fator; a raiz serve a folha e declara `view_all`, que está
+no grupo de dinheiro. A invariante que a guarda depende volta a valer — **o que
+o `@Exige` diz é o que a rota faz**.
+
+A lição para o próximo bloco: quando uma rota decide por dentro *quanto* devolve,
+a permissão declarada deixa de descrevê-la — e toda garantia derivada dela para
+de valer junto.
 
 **Lacunas conhecidas** estão na tabela
 [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada

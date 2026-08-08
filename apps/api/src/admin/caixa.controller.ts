@@ -326,6 +326,9 @@ export class CaixaController {
         pagamentos: body.pagamentos,
         staffId: staff.staffUserId,
         staffName: staff.name,
+        // O dia da unidade, não o do servidor: às 22h de Salvador o UTC já
+        // virou, e a comissão cairia no mês seguinte do acerto do barbeiro.
+        hojeNaUnidade: diaNaUnidade(null, local.timezone, new Date()).dia,
         // Escopada por operador: a chave vem do cliente e é livre, e duas
         // recepcionistas mandando "1" devolveriam uma a comanda da outra.
         ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
