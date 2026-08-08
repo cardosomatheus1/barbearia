@@ -136,6 +136,15 @@ img, video, svg {
 .ui-scroll-x {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  /*
+   * O "relative" não é enfeite: sem ele o recipiente não é bloco contentor, e
+   * todo descendente "position: absolute" — incluindo cada .ui-visually-hidden
+   * — é posicionado contra a página, na coordenada que tem dentro do conteúdo
+   * largo. Um rótulo de leitor de tela na quarta coluna de uma tabela de 682px
+   * ia parar em x=420 no documento e levava a página a rolar 424px numa tela de
+   * 360. "overflow" sozinho não segura quem se posiciona fora do fluxo.
+   */
+  position: relative;
 }
 
 /*

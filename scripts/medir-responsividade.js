@@ -260,10 +260,33 @@ async function prepararBalcao(token) {
   };
 }
 
+/**
+ * Cadastra recursos com nome comprido.
+ *
+ * "sala de barba" e "lavatório" são o vocabulário real da barbearia, e são
+ * nomes que estouram célula de tabela em 360px — medir a tela vazia não prova
+ * nada sobre a cheia.
+ */
+async function prepararRecursos(token) {
+  const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+  await fetch(`${API}/v1/admin/catalog/resources`, {
+    method: 'PUT',
+    headers: cabecalho,
+    body: JSON.stringify({
+      pools: [
+        { resourceType: 'cadeira', capacity: 3 },
+        { resourceType: 'lavatório', capacity: 1 },
+        { resourceType: 'sala de barba', capacity: 2 },
+      ],
+    }),
+  });
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
   const balcao = await prepararBalcao(token);
+  await prepararRecursos(token);
 
   const telas = [
     { nome: 'pública', url: `/${slug}` },
@@ -276,6 +299,10 @@ async function main() {
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'equipe', url: '/admin/equipe', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'catálogo', url: '/admin/catalogo', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'profissionais', url: '/admin/profissionais', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'jornada aberta', url: `/admin/profissionais?pessoa=${balcao.profissionalLivre}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'recursos', url: '/admin/recursos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trocar senha', url: '/admin/trocar-senha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
@@ -311,6 +338,14 @@ async function main() {
       }
       const page = await ctx.newPage();
       await page.goto(`${WEB}${tela.url}`, { waitUntil: 'networkidle' });
+
+      // Conteúdo dobrado é conteúdo. As telas de cadastro guardam os
+      // formulários atrás de `<details>` — inclusive a tabela da jornada, que é
+      // a coisa mais larga do painel. Medir só o que está aberto seria aprovar
+      // a tela pelo que ela esconde.
+      await page.evaluate(() => {
+        for (const dobra of document.querySelectorAll('details')) dobra.open = true;
+      });
 
       const medida = await page.evaluate(() => {
         const limite = document.documentElement.clientWidth;

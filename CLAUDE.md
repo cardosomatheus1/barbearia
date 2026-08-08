@@ -157,9 +157,10 @@ rode `/security-review` antes do commit.**
 
 ```
                  ┌── scheduling ──┐
-core  ←──────────┤                ├──  api  ←  web
                  ├── identity ────┤
-                 └── onboarding ──┘
+core  ←──────────┤                ├──  api  ←  web
+                 ├── onboarding ──┤
+                 └── catalog ─────┘
   ↑                      ↓
   └───────────────── db (Prisma/SQL)
 ```
@@ -167,6 +168,13 @@ core  ←──────────┤                ├──  api  ←  w
 `onboarding` depende de `scheduling` e `identity` porque a etapa final precisa
 provar que a barbearia tem grade — e é isso que separa um formulário de um
 produto. A seta nunca volta: `scheduling` não sabe que existe onboarding.
+
+`catalog` depende só de `core` e `db`, e é de propósito: ele **edita** o mesmo
+cadastro que `onboarding` **cria**, e as duas operações são diferentes o
+bastante para não compartilharem código. O onboarding substitui o conjunto
+inteiro, o que é certo para quem está abrindo e errado a partir do dia seguinte
+— `appointment_services` aponta para `services.id`, e recriar o catálogo
+desfaz o vínculo com o que já foi vendido.
 
 - **`packages/core` não depende de nada.** Sem banco, sem rede, sem relógio, sem
   framework. É lógica pura e é onde mora a regra de negócio. Há teste que falha

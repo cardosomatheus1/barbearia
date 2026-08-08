@@ -313,8 +313,8 @@ export default async function DiaPage({ searchParams }: Props) {
             </a>
           ) : null}
           {podeNaTela(estado, 'settings.manage') ? (
-            <a className="ui-button ui-button--ghost painel__sair" href="/admin/fotos">
-              Fotos
+            <a className="ui-button ui-button--ghost painel__sair" href="/admin/catalogo">
+              Cadastro
             </a>
           ) : null}
           <form action={acaoSair}>

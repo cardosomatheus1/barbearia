@@ -1219,3 +1219,147 @@ main { padding-bottom: var(--space-8); }
   .papel { grid-template-columns: auto 1fr auto; }
   .papel__contagem { grid-column: 3; grid-row: 1 / span 2; text-align: right; }
 }
+
+/* ---------------------------------------------------------------------------
+   Cadastro: serviços, equipe e jornadas, recursos (bloco 13)
+
+   Densidade de admin, não de página pública: a recepção passa o dia aqui e
+   rolagem custa tempo. Por isso o item vem fechado, com o essencial na linha —
+   nome, o que muda a decisão, e uma ação — e o formulário atrás de `<details>`.
+   --------------------------------------------------------------------------- */
+
+.cadastro-nav { margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
+.cadastro-nav__lista {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cadastro-nav__aba {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+.cadastro-nav__aba:hover { border-color: var(--color-accent); color: var(--color-text-primary); }
+.cadastro-nav__aba--atual {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.lista-cadastro { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-2); }
+/* Item de grade nasce com `min-width: auto`: a faixa cresce até caber o
+   min-content do conteúdo, e dois campos lado a lado dentro da dobra empurravam
+   o cartão a 375px numa tela de 360. Só a medição no navegador pega isso — o
+   CSS lido em teste não sabe qual é a largura intrínseca de um `<input>`. */
+.lista-cadastro > li { min-width: 0; }
+.item-cadastro {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.item-cadastro--fora { opacity: 0.65; }
+.item-cadastro__cabeca { display: grid; gap: var(--space-3); }
+.item-cadastro__quem { min-width: 0; }
+.item-cadastro__nome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.item-cadastro__selo {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  text-transform: lowercase;
+}
+.item-cadastro__linha { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.item-cadastro__falta { color: var(--color-warning); font-weight: var(--font-weight-medium); }
+.item-cadastro__aviso { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-warning); }
+.item-cadastro__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+.item-cadastro__risco { color: var(--color-danger); }
+.item-cadastro__acao { margin: var(--space-3) 0 0; }
+
+/* `<details>` é o único jeito de esconder e revelar sem JavaScript, e este
+   produto não manda JavaScript de painel para o navegador. */
+.dobra { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.dobra__titulo {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+.dobra[open] .dobra__titulo { margin-bottom: var(--space-3); }
+.dobra__ajuda { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.campos-lado { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.campos-lado > * { min-width: 0; }
+.campos-lado .ui-field__input { width: 100%; min-width: 0; }
+
+.marcas-lista { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.opcao-simples {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+.opcao-simples__nome { display: block; font-weight: var(--font-weight-medium); }
+.opcao-simples__sobre { display: block; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* A semana inteira numa tabela: sete linhas, quatro colunas. Larga por
+   natureza — rola dentro de `.ui-scroll-x`, nunca leva a página junto. */
+.jornada { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.jornada th, .jornada td { padding: var(--space-1) var(--space-2) var(--space-1) 0; text-align: left; }
+.jornada thead th { font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+.jornada tbody tr + tr th, .jornada tbody tr + tr td { border-top: 1px solid var(--color-border); }
+.jornada__dia {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jornada__hora { min-width: 6.5rem; font-variant-numeric: tabular-nums; }
+.jornada__pausa { display: flex; gap: var(--space-2); }
+
+.conflito__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.conflito__lista { margin: 0 0 var(--space-2); padding-left: var(--space-5); font-size: var(--font-size-sm); }
+.conflito__nota { margin: 0; font-size: var(--font-size-sm); }
+.conflito__nota a { color: inherit; font-weight: var(--font-weight-semibold); }
+
+.recursos { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.recursos th, .recursos td { padding: var(--space-1) var(--space-2) var(--space-1) 0; text-align: left; }
+.recursos thead th { font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+.recursos tbody tr + tr th, .recursos tbody tr + tr td { border-top: 1px solid var(--color-border); }
+.recursos__numero { max-width: 6rem; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 768px) {
+  /* Só a partir daqui a linha do item cabe em duas colunas. Abaixo disso a
+     ação desce, que é o que mantém o alvo de toque inteiro no piso de 360px. */
+  .item-cadastro__cabeca { grid-template-columns: 1fr auto; align-items: start; }
+  .campos-lado { grid-template-columns: 1fr 1fr 1fr; }
+}

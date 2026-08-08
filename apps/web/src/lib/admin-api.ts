@@ -350,3 +350,172 @@ export const trocarMinhaSenha = (
     { currentPassword, newPassword },
     token,
   );
+
+// -- Cadastro: catálogo, equipe, jornadas e recursos ---------------------------
+
+export interface ServicoDoCatalogo {
+  id: string;
+  name: string;
+  description: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  priceCents: number;
+  durationMinutes: number;
+  bufferBeforeMinutes: number;
+  bufferAfterMinutes: number;
+  bookableOnline: boolean;
+  active: boolean;
+  photoUrl: string | null;
+  componentIds: string[];
+  /** Quantos clientes já têm hora marcada com ele — o que se perde ao desativar. */
+  futureAppointments: number;
+}
+
+export interface EntradaDeServico {
+  name: string;
+  description?: string | null;
+  categoryName: string;
+  priceCents: number;
+  durationMinutes: number;
+  bufferBeforeMinutes: number;
+  bufferAfterMinutes: number;
+  bookableOnline: boolean;
+  componentIds?: string[];
+}
+
+export const catalogoDeServicos = (token: string) =>
+  chamar<{ services: ServicoDoCatalogo[]; categories: { id: string; name: string }[] }>(
+    'GET',
+    '/v1/admin/catalog/services',
+    undefined,
+    token,
+  );
+
+export const criarServico = (token: string, dados: EntradaDeServico) =>
+  chamar<{ id: string }>('POST', '/v1/admin/catalog/services', dados, token);
+
+export const editarServico = (token: string, id: string, dados: EntradaDeServico) =>
+  chamar<{ updated: boolean }>('PUT', `/v1/admin/catalog/services/${id}`, dados, token);
+
+export const ligarServico = (token: string, id: string, active: boolean) =>
+  chamar<{ active: boolean; futureAppointments: number }>(
+    'PUT',
+    `/v1/admin/catalog/services/${id}/active`,
+    { active },
+    token,
+  );
+
+export const exigenciasDoServico = (
+  token: string,
+  id: string,
+  requirements: { resourceType: string; quantity: number }[],
+) =>
+  chamar<{ saved: boolean }>(
+    'PUT',
+    `/v1/admin/catalog/services/${id}/resources`,
+    { requirements },
+    token,
+  );
+
+export interface ProfissionalDoCadastro {
+  id: string;
+  name: string;
+  kind: 'professional' | 'station' | 'room';
+  bookableOnline: boolean;
+  dailyLimit: number | null;
+  active: boolean;
+  photoUrl: string | null;
+  bio: string | null;
+  serviceIds: string[];
+  weekdays: number[];
+  futureAppointments: number;
+}
+
+export interface EntradaDeProfissional {
+  name: string;
+  bio?: string | null;
+  kind: 'professional' | 'station' | 'room';
+  bookableOnline: boolean;
+  dailyLimit?: number | null;
+  serviceIds?: string[];
+}
+
+export const equipeDoCadastro = (token: string) =>
+  chamar<{ professionals: ProfissionalDoCadastro[] }>(
+    'GET',
+    '/v1/admin/catalog/professionals',
+    undefined,
+    token,
+  );
+
+export const criarProfissional = (token: string, dados: EntradaDeProfissional) =>
+  chamar<{ id: string }>('POST', '/v1/admin/catalog/professionals', dados, token);
+
+export const editarProfissional = (token: string, id: string, dados: EntradaDeProfissional) =>
+  chamar<{ updated: boolean }>('PUT', `/v1/admin/catalog/professionals/${id}`, dados, token);
+
+export interface HorarioForaDaJornada {
+  appointmentId: string;
+  startsAt: string;
+  date: string;
+  time: string;
+  customerName: string | null;
+}
+
+export const ligarProfissional = (token: string, id: string, active: boolean) =>
+  chamar<{ active: boolean; futuros: HorarioForaDaJornada[] }>(
+    'PUT',
+    `/v1/admin/catalog/professionals/${id}/active`,
+    { active },
+    token,
+  );
+
+export interface FaixaDaJornada {
+  weekday: number;
+  startMinute: number;
+  endMinute: number;
+  breaks: { start: number; end: number }[];
+}
+
+export const jornadaDoProfissional = (token: string, id: string) =>
+  chamar<{ faixas: FaixaDaJornada[] }>(
+    'GET',
+    `/v1/admin/catalog/professionals/${id}/schedule`,
+    undefined,
+    token,
+  );
+
+/**
+ * Grava a jornada.
+ *
+ * Sem `confirmarConflitos`, a API devolve `saved: false` com a lista de quem
+ * ficaria fora e **não grava**. É de propósito: encolher a terça é operação
+ * legítima, fazê-la sem ver os três clientes que já estavam marcados às 15h
+ * não é.
+ */
+export const salvarJornada = (
+  token: string,
+  id: string,
+  faixas: FaixaDaJornada[],
+  confirmarConflitos = false,
+) =>
+  chamar<{ saved: boolean; conflitos: HorarioForaDaJornada[] }>(
+    'PUT',
+    `/v1/admin/catalog/professionals/${id}/schedule`,
+    { faixas, confirmarConflitos },
+    token,
+  );
+
+export interface RecursoDaUnidade {
+  resourceType: string;
+  capacity: number;
+  usedBy: { serviceId: string; quantity: number }[];
+}
+
+export const recursosDaUnidade = (token: string) =>
+  chamar<{ resources: RecursoDaUnidade[] }>('GET', '/v1/admin/catalog/resources', undefined, token);
+
+export const salvarRecursos = (
+  token: string,
+  pools: { resourceType: string; capacity: number }[],
+) => chamar<{ saved: boolean }>('PUT', '/v1/admin/catalog/resources', { pools }, token);

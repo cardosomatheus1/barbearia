@@ -10,6 +10,7 @@ import {
 import { AuthController, SessionController } from './auth/auth.controller.js';
 import { OnboardingController, StaffAuthController } from './admin/admin.controller.js';
 import { BoardController } from './admin/board.controller.js';
+import { CatalogoController } from './admin/catalogo.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
@@ -28,6 +29,7 @@ import { TenantService } from './tenant/tenant.service.js';
     StaffAuthController,
     OnboardingController,
     BoardController,
+    CatalogoController,
     TeamController,
     MeController,
     GuestAppointmentsController,

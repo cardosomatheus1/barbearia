@@ -58,6 +58,16 @@ describe('emitCss', () => {
     expect(css).toMatch(/html,\s*body\s*\{[\s\S]*overflow-x: hidden/);
   });
 
+  it('o recipiente que rola é bloco contentor, senão o conteúdo escapa dele', () => {
+    // `overflow` não segura descendente `position: absolute` cujo bloco
+    // contentor está fora — e todo `.ui-visually-hidden` é um. Um rótulo de
+    // leitor de tela dentro de uma tabela larga era posicionado contra a
+    // página, na coordenada que ele tem dentro da tabela, e fazia a página
+    // rolar de lado. Sem `position` aqui, `.ui-scroll-x` não resolve o
+    // problema que existe para resolver.
+    expect(css).toMatch(/\.ui-scroll-x\s*\{[\s\S]*?position: relative[\s\S]*?\}/);
+  });
+
   it('mídia nunca estoura o recipiente', () => {
     expect(css).toMatch(/img,\s*video,\s*svg\s*\{[\s\S]*max-width: 100%/);
   });

@@ -91,3 +91,66 @@ export async function lerSenhaDeUmaVez(): Promise<{ nome: string; senha: string 
   }
   return null;
 }
+
+/**
+ * A jornada recusada e quem ficaria de fora, do servidor para a tela seguinte.
+ *
+ * Mesmo motivo do cookie de senha, por outro caminho: a proposta é a semana
+ * inteira que a pessoa acabou de digitar e a lista de conflitos traz **nome de
+ * cliente**. Nenhuma das duas coisas pode ir na URL — a primeira estoura o
+ * limite prático de uma query string, e a segunda acabaria no histórico do
+ * balcão, que é máquina compartilhada.
+ *
+ * Vida curta e caminho restrito. Se a pessoa não confirmar em cinco minutos, o
+ * cookie some e a tela volta a mostrar a jornada gravada — que é o estado real.
+ */
+const CONFLITO_JORNADA = 'jornada-conflito';
+const CAMINHO_PROFISSIONAIS = '/admin/profissionais';
+const SEGUNDOS_PARA_CONFIRMAR = 300;
+
+export interface JornadaEmConflito {
+  readonly professionalId: string;
+  readonly faixas: readonly {
+    weekday: number;
+    startMinute: number;
+    endMinute: number;
+    breaks: { start: number; end: number }[];
+  }[];
+  readonly conflitos: readonly {
+    appointmentId: string;
+    date: string;
+    time: string;
+    customerName: string | null;
+  }[];
+}
+
+export async function guardarConflitoDeJornada(dados: JornadaEmConflito): Promise<void> {
+  const jar = await cookies();
+  jar.set(CONFLITO_JORNADA, JSON.stringify(dados), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: CAMINHO_PROFISSIONAIS,
+    maxAge: SEGUNDOS_PARA_CONFIRMAR,
+  });
+}
+
+export async function lerConflitoDeJornada(): Promise<JornadaEmConflito | null> {
+  const bruto = (await cookies()).get(CONFLITO_JORNADA)?.value;
+  if (!bruto) return null;
+
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (
+      typeof lido === 'object' && lido !== null &&
+      'professionalId' in lido && typeof lido.professionalId === 'string' &&
+      'faixas' in lido && Array.isArray(lido.faixas) &&
+      'conflitos' in lido && Array.isArray(lido.conflitos)
+    ) {
+      return lido as unknown as JornadaEmConflito;
+    }
+  } catch {
+    // Cookie corrompido não derruba a tela de equipe inteira.
+  }
+  return null;
+}

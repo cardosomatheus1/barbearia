@@ -37,6 +37,7 @@ if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   step "identity — OTP e sessão" pnpm --filter @barbearia/identity test
   step "scheduling — integração" pnpm --filter @barbearia/scheduling test
   step "onboarding — seis etapas" pnpm --filter @barbearia/onboarding test
+  step "catalog — CRUD do admin" pnpm --filter @barbearia/catalog test
   step "api — e2e"          pnpm --filter @barbearia/api test
 else
   printf '\n\033[33m==> testes de banco PULADOS\033[0m\n'

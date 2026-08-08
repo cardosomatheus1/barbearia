@@ -17,9 +17,10 @@ integridade do banco.
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva e o dia do balcão | 85 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, auditoria | 75 testes ✅ |
+| `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 84 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, equipe | 125 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão e equipe, com SSR (Next.js) | 19 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, equipe, cadastro | 139 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, equipe e cadastro, com SSR (Next.js) | 36 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -605,13 +606,124 @@ Grava dentro da transação que muda o estado, com o par antes/depois — saber 
 alguém mudou uma permissão sem saber de quê para quê não fecha investigação — e
 nunca guarda senha nem hash.
 
+## O onboarding cria; o cadastro edita
+
+São operações diferentes e o código passou doze blocos com só a primeira.
+
+As seis etapas do onboarding **substituem** o conjunto: `PUT /v1/admin/services`
+apaga tudo e recria. Isso é certo para quem está abrindo — a pessoa está
+corrigindo o que acabou de digitar. É errado a partir do dia seguinte, porque
+`appointment_services` guarda o preço e a duração praticados no momento da
+reserva e aponta para `services.id`. Recriar o catálogo troca todos os ids e
+desfaz esse vínculo: o histórico de vendas perde a que serviço cada linha se
+refere.
+
+`packages/catalog` edita **no lugar**. Há teste que grava um agendamento, muda o
+preço do serviço e confere que a linha vendida continua com o valor antigo e o
+mesmo id.
+
+### Desativar não é apagar, e a tela diz o que se perde
+
+Serviço e profissional saem de circulação com `active = false`. Nunca `DELETE` —
+apagar arrastaria o histórico junto.
+
+O que muda a decisão é o número que vem com a resposta: quantos clientes **já
+têm hora marcada** com aquele serviço ou com aquela pessoa. Desativar não
+cancela nada, e sem esse número a recepção descobriria pelo cliente que chegou.
+
+### A coerência do combo é verificada contra o catálogo inteiro, não contra a edição
+
+`validateCombos` já existia em `packages/core` desde o bloco 3 e recusava um
+"corte + barba" de 40 minutos quando as partes somam 55. A armadilha estava no
+outro lado: **alongar uma parte** também quebra o combo, e quem edita "corte" não
+está pensando em combo nenhum.
+
+Por isso `exigirCombosCoerentes` monta o catálogo inteiro a partir do banco, com
+a alteração pendente aplicada por cima, e valida esse conjunto. Aumentar o corte
+de 30 para 45 minutos é recusado se existe um combo que não comporta mais a
+soma. Há teste; ele fica vermelho se a validação passar a olhar só o que mudou.
+
+### Encolher a jornada é legítimo. Fazê-lo às cegas, não.
+
+`work_schedules` é por profissional desde o bloco 1, e o onboarding gravava a
+mesma grade para a equipe inteira. O barbeiro que passou a folgar na segunda
+continuava aparecendo na segunda, e a barbearia descobria pelo cliente que
+chegou e não encontrou ninguém.
+
+Gravar a jornada tem dois tempos quando há conflito: a primeira chamada devolve
+a lista de quem ficaria fora do horário e **não grava**; a segunda, com
+`confirmarConflitos`, grava. A comparação roda no fuso da unidade e confere as
+duas pontas do atendimento — um corte que começa às 11:50 e termina 12:20 não
+cabe numa jornada que fecha ao meio-dia — além dos intervalos.
+
+### Recursos: o motor sabia e não tinha por onde ser avisado
+
+`resource_pools` e `service_resource_requirements` existem desde o bloco 1, com
+índice, RLS e a lógica de recorte de janela testada. **Nada nunca escreveu nas
+duas tabelas.**
+
+Em concreto: barbearia com dois barbeiros e um lavatório oferecia dois horários
+simultâneos de lavagem, e o segundo cliente esperava de cabelo molhado. Campo que
+o motor aceita e ninguém preenche é mentira do sistema — a mesma coisa que
+`blocks` foi por oito blocos.
+
+O tipo é texto livre de propósito: "cadeira", "lavatório" e "sala de barba" são
+vocabulário da barbearia, não enum do sistema. O que a tela garante é que o nome
+usado no serviço seja um dos cadastrados — exigir recurso inexistente sumiria com
+o serviço da grade sem explicação.
+
+### O recipiente que rola precisava ser bloco contentor
+
+A medição acusou rolagem horizontal na tela de jornada em 360 e 390px, e o
+suspeito óbvio — a tabela de sete dias — estava certo dentro de `.ui-scroll-x`.
+
+O culpado era cada `<label class="ui-visually-hidden">` da tabela. `overflow` não
+segura descendente `position: absolute` cujo bloco contentor está fora dele: os
+rótulos de leitor de tela eram posicionados contra a página, na coordenada que
+têm dentro da tabela de 682px. Um deles ia parar em x=420 e levava o documento a
+424px de largura numa tela de 360.
+
+`.ui-scroll-x` ganhou `position: relative` no design system, com teste. Vale para
+toda tela que use o recipiente — a correção não é desta página.
+
+### O que a `/security-review` encontrou desta vez
+
+**A chave estrangeira do Postgres não passa pela RLS.** A documentação é
+explícita: a checagem de integridade referencial sempre ignora row security.
+
+`professional_services` e `service_combo_components` recebiam `service_id` vindo
+direto do corpo da requisição. O `tenant_id` da linha saía de
+`current_setting('app.tenant_id')`, então a política de `WITH CHECK` aprovava; a
+única coisa que poderia reprovar era a FK, e ela não olha. Confirmado num banco
+descartável com o role real `NOBYPASSRLS`: `INSERT 0 1` com o serviço de outra
+barbearia.
+
+O estrago não é leitura — a RLS ainda filtra o `JOIN`, então nenhum atributo do
+serviço alheio volta. É oráculo de existência (id inexistente estoura, id de
+outra barbearia responde 201) e referência atravessada que a outra barbearia
+apaga em cascata sem saber que existia.
+
+Duas coisas valem registrar sobre por que passou:
+
+- **É exatamente o que `identificar()` faz no balcão**, com o comentário
+  explicando o motivo. O padrão estava escrito no repositório e o pacote novo
+  foi o primeiro caminho de escrita a não segui-lo. Dentro do mesmo pacote,
+  `setServiceResources` e `saveSchedule` reconferem; `gravarHabilidades` e
+  `gravarCombo` não reconferiam.
+- **O teste de isolamento existia e passava.** Ele mandava o id alheio na
+  **URL**, que é resolvida por `SELECT` sob RLS. Nenhum caso mandava no
+  **corpo**, que é o único caminho que não passa por `SELECT` nenhum. Os dois
+  testes novos mandam no corpo e ficam vermelhos contra o código anterior.
+
+A checagem recusa em vez de descartar em silêncio, e a mensagem não distingue
+"não existe" de "é de outra barbearia" — a diferença é justamente o que o
+oráculo procurava.
+
 ## Próximos passos
 
-Bloco 13 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 14 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Admin: CRUD de catálogo, equipe, jornadas e recursos. O onboarding cria o
-essencial em dez minutos; o dia a dia precisa editar — mudar preço, ajustar a
-jornada de um barbeiro, desativar um serviço — e hoje isso é SQL.
+Balcão: fila de walk-in, encaixe com custo visível e posição pelo celular.
 
 ## Responsividade é medida, não olhada
 
@@ -625,7 +737,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as quinze
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as dezenove
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar

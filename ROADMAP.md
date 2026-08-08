@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 12 de 78 blocos.**
+**Status: 13 de 78 blocos.**
 
 ---
 
@@ -53,12 +53,12 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| Folga, feriado e horário diferente num dia específico | `schedule_exceptions` no schema desde o bloco 1, com alvo (profissional **ou** unidade), os três tipos (`day_off`, `holiday`, `custom_hours`) e a regra de precedência resolvida e testada no motor: a exceção do profissional vence o feriado da unidade | tela para criar — **nada no produto inteiro escreve nessa tabela**. É o mesmo padrão de `blocks`: motor com teste verde e barbeiro sem como avisar que vai faltar na sexta | 15 (agenda do admin), junto com o bloqueio pontual: os dois são "nesta data, aqui, não" e pedem um calendário para escolher o dia. A jornada semanal, que é o cadastro recorrente, fechou no 13 |
 | Bloqueio pontual do dia (dentista às 14h) | tipo `block` no schema, motor, repositório e API: recorta a grade e recusa o agendamento | tela para a recepção criar — hoje só por SQL | 15 (agenda do admin) |
 | Convite do barbeiro por WhatsApp | o profissional é criado no onboarding | o convite e o login próprio dele | 16 (`app-pro`) — sem a agenda do barbeiro não há para onde o convite levar |
-| Painel como aplicação separada | rota `/admin` própria; o pacote da página pública não cresceu (102 kB antes e depois do painel) | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | 13 (CRUD do admin) |
-| Jornada diferente por barbeiro | jornada por profissional no schema e no motor | o onboarding aplica a mesma para a equipe — o ajuste por pessoa é cadastro, não caminho de dez minutos | 13 (CRUD do admin) |
-| Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | 13 (CRUD do admin): a dependência real é **armazenamento de objeto**, que o projeto ainda não tem. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
-| Entregar a senha de primeiro acesso por mensagem | a senha é gerada, mostrada uma vez e morre no primeiro uso — a conta nasce obrigada a trocá-la | entrega por WhatsApp em vez de o dono ler em voz alta; hoje ela passa por parâmetro de URL do painel | 20 (fila + worker): é onde nasce o canal transacional. Até lá a alternativa real na barbearia é entregar de viva-voz para quem está do lado |
+| Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
+| Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
+| Entregar a senha de primeiro acesso por mensagem | a senha é gerada, mostrada uma vez e morre no primeiro uso — a conta nasce obrigada a trocá-la | entrega por WhatsApp em vez de o dono ler em voz alta | 20 (fila + worker): é onde nasce o canal transacional. Até lá a alternativa real na barbearia é entregar de viva-voz para quem está do lado |
 | Segundo fator para quem mexe em dinheiro | as permissões `finance.*` existem no catálogo e em nenhum papel além do dono | o MFA que o `CLAUDE.md` exige para elas | 18 (comanda e caixa): é a primeira tela que precisa de `finance.*`. Há teste que reprova qualquer rota que exija uma dessas antes do MFA existir, então a regra não some por esquecimento |
 | Editar as permissões de cada papel pela tela | `role_permissions` é por barbearia e editável — tirar `appointments.cancel` da recepção é um `DELETE` e vale na requisição seguinte | a tela que faz isso sem SQL | 30 (RBAC: telas de gestão): o mecanismo está pronto de propósito para o bloco 30 precisar só de tela, não de migração |
 | Ler a trilha de auditoria pela tela | tabela `audit_log` append-only no banco, escrita na mesma transação da mudança, com antes e depois, e leitura paginada por cursor | a tela que mostra | 21 (dashboard): a trilha já registra; falta onde olhar sem `psql` |
@@ -92,7 +92,7 @@ atual sem perder nenhuma capacidade que usava.
 | 10 | Conta de gestor + onboarding em 6 etapas + configuração da unidade | ✅ |
 | 11 | Balcão: painel do dia, check-in, no-show, busca e marcação pelo balcão | ✅ |
 | 12 | RBAC mínimo: papéis, permissões e contas de equipe | ✅ |
-| 13 | Admin: CRUD de catálogo, equipe, jornadas, recursos | |
+| 13 | Admin: CRUD de catálogo, equipe, jornadas, recursos | ✅ |
 | 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | |
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |

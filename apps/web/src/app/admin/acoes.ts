@@ -19,11 +19,25 @@ import {
   salvarServicos,
   trocarMinhaSenha,
   trocarPapel,
+  criarProfissional,
+  criarServico,
+  editarProfissional,
+  editarServico,
+  exigenciasDoServico,
+  ligarProfissional,
+  ligarServico,
+  salvarJornada,
+  salvarRecursos,
   type AcaoAtendimento,
+  type EntradaDeProfissional,
+  type EntradaDeServico,
   type Papel,
 } from '@/lib/admin-api';
+import { DIAS, lerJornada } from '@/lib/jornada';
+import { centavosDoCampo } from '@/lib/dinheiro';
 import {
   apagarSessaoGestor,
+  guardarConflitoDeJornada,
   guardarSenhaDeUmaVez,
   gravarSessaoGestor,
   lerSessaoGestor,
@@ -431,4 +445,165 @@ export async function acaoTrocarMinhaSenha(form: FormData): Promise<void> {
   if (!resultado.ok) falhar('/admin/trocar-senha', resultado.code);
 
   redirect('/admin/dia');
+}
+
+// -- Cadastro: catálogo, equipe, jornadas e recursos --------------------------
+
+function entradaDeServico(form: FormData): EntradaDeServico | null {
+  const priceCents = centavosDoCampo(String(form.get('preco') ?? ''));
+  if (priceCents === null) return null;
+
+  const componentIds = form
+    .getAll('componentIds')
+    .map((valor) => String(valor))
+    .filter(Boolean);
+
+  return {
+    name: texto(form, 'name'),
+    description: texto(form, 'description'),
+    categoryName: texto(form, 'categoryName') || 'Serviços',
+    priceCents,
+    durationMinutes: numero(form, 'durationMinutes', 30),
+    bufferBeforeMinutes: numero(form, 'bufferBeforeMinutes', 0),
+    bufferAfterMinutes: numero(form, 'bufferAfterMinutes', 0),
+    bookableOnline: form.get('bookableOnline') === 'on',
+    ...(componentIds.length >= 2 ? { componentIds } : {}),
+  };
+}
+
+export async function acaoSalvarServico(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const entrada = entradaDeServico(form);
+  if (!entrada) falhar('/admin/catalogo', 'preco_invalido');
+
+  const id = texto(form, 'id');
+  const resultado = id
+    ? await editarServico(token, id, entrada)
+    : await criarServico(token, entrada);
+
+  if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
+  redirect('/admin/catalogo?salvo=1');
+}
+
+export async function acaoLigarServico(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await ligarServico(token, texto(form, 'id'), texto(form, 'active') === '1');
+  if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
+  redirect('/admin/catalogo?salvo=1');
+}
+
+export async function acaoExigenciasDoServico(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  // Um par de campos por recurso cadastrado; quantidade zero significa "não usa".
+  const requirements = form
+    .getAll('resourceType')
+    .map((tipo, indice) => ({
+      resourceType: String(tipo),
+      quantity: Number(form.getAll('quantity')[indice] ?? 0),
+    }))
+    .filter((exigencia) => Number.isFinite(exigencia.quantity) && exigencia.quantity > 0);
+
+  const resultado = await exigenciasDoServico(token, texto(form, 'id'), requirements);
+  if (!resultado.ok) falhar('/admin/recursos', resultado.code);
+  redirect('/admin/recursos?salvo=1');
+}
+
+function entradaDeProfissional(form: FormData): EntradaDeProfissional {
+  const serviceIds = form.getAll('serviceIds').map((valor) => String(valor)).filter(Boolean);
+  const limite = Number(form.get('dailyLimit'));
+
+  return {
+    name: texto(form, 'name'),
+    bio: texto(form, 'bio'),
+    kind: (texto(form, 'kind') || 'professional') as EntradaDeProfissional['kind'],
+    bookableOnline: form.get('bookableOnline') === 'on',
+    dailyLimit: Number.isFinite(limite) && limite > 0 ? limite : null,
+    // Vazio é "faz tudo", e a API grava como tudo. Ver `gravarHabilidades`.
+    ...(serviceIds.length > 0 ? { serviceIds } : {}),
+  };
+}
+
+export async function acaoSalvarProfissional(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+  const entrada = entradaDeProfissional(form);
+
+  const resultado = id
+    ? await editarProfissional(token, id, entrada)
+    : await criarProfissional(token, entrada);
+
+  if (!resultado.ok) falhar('/admin/profissionais', resultado.code);
+  redirect('/admin/profissionais?salvo=1');
+}
+
+export async function acaoLigarProfissional(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await ligarProfissional(token, texto(form, 'id'), texto(form, 'active') === '1');
+  if (!resultado.ok) falhar('/admin/profissionais', resultado.code);
+
+  // Desativar não cancela nada. Quem fica sem dono vai para a tela, e alguém
+  // decide o que fazer — silenciar isso é como o cliente descobre no dia.
+  const orfaos = resultado.dados.futuros.length;
+  redirect(`/admin/profissionais?salvo=1${orfaos > 0 ? `&orfaos=${orfaos}` : ''}`);
+}
+
+/**
+ * Grava a jornada, em dois tempos quando há conflito.
+ *
+ * A primeira gravação volta com a lista de quem ficaria fora e **não escreve**;
+ * a tela mostra os nomes e oferece o botão que confirma. Encolher a terça é
+ * legítimo — fazê-lo sem ver os clientes já marcados às 15h não é.
+ */
+export async function acaoSalvarJornada(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+  const destino = `/admin/profissionais?pessoa=${encodeURIComponent(id)}`;
+
+  const lida = lerJornada(
+    DIAS.map(({ weekday }) => ({
+      weekday,
+      trabalha: form.get(`dia_${weekday}`) === 'on',
+      inicio: texto(form, `inicio_${weekday}`),
+      fim: texto(form, `fim_${weekday}`),
+      pausaInicio: texto(form, `pausa_inicio_${weekday}`),
+      pausaFim: texto(form, `pausa_fim_${weekday}`),
+    })),
+  );
+
+  if (!lida.ok) falhar(destino, `${lida.code}_${lida.weekday}`);
+
+  const confirmar = form.get('confirmarConflitos') === '1';
+  const resultado = await salvarJornada(token, id, lida.faixas, confirmar);
+  if (!resultado.ok) falhar(destino, resultado.code);
+
+  if (!resultado.dados.saved) {
+    // A proposta e os conflitos vão num cookie de vida curta, nunca na URL: um
+    // traz a semana inteira digitada, o outro traz nome de cliente — e a URL
+    // fica no histórico do balcão, que é máquina compartilhada.
+    await guardarConflitoDeJornada({
+      professionalId: id,
+      faixas: lida.faixas,
+      conflitos: resultado.dados.conflitos,
+    });
+    redirect(destino);
+  }
+
+  redirect(`${destino}&salvo=1`);
+}
+
+export async function acaoSalvarRecursos(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const pools = form
+    .getAll('resourceType')
+    .map((tipo, indice) => ({
+      resourceType: String(tipo).trim(),
+      capacity: Number(form.getAll('capacity')[indice] ?? 0),
+    }))
+    .filter((pool) => pool.resourceType.length >= 2 && pool.capacity >= 1);
+
+  const resultado = await salvarRecursos(token, pools);
+  if (!resultado.ok) falhar('/admin/recursos', resultado.code);
+  redirect('/admin/recursos?salvo=1');
 }
