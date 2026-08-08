@@ -557,6 +557,34 @@ async function prepararBarbeiro(token, profissionalId) {
   return dele.token;
 }
 
+/**
+ * Envia um arquivo de base e deixa a importação **em preview**.
+ *
+ * O estado mais largo da tela de importação é o do passo 2, com a lista de
+ * linhas recusadas. Conteúdo real de propósito: nome composto de quatro
+ * palavras, telefone em três formatos e uma linha estragada — que é o que
+ * quebra layout, não texto de preenchimento.
+ */
+async function prepararImportacao(token) {
+  const linhas = [
+    'Nome;Celular;Data de Nascimento;Observações',
+    'José Antônio da Silva Nascimento;(71) 98888-1111;07/09/1985;Corta na tesoura, sem máquina',
+    'Ana Paula Rodrigues;71 97777-2222;1990-03-12;',
+    'Bruno Carvalho;(71) 8888-3333;;Sempre atrasa uns quinze minutos',
+    'Cliente Sem Telefone Cadastrado No Sistema Antigo;;;',
+    ';71966664444;;linha sem nome',
+    'Outro Nome Para O Mesmo Celular;(71) 98888-1111;;',
+  ].join('\n');
+
+  const resposta = await fetch(`${API}/v1/admin/imports`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ fileName: 'clientes-agenda-antiga-exportacao-final.csv', conteudo: linhas }),
+  });
+  if (!resposta.ok) return null;
+  return (await resposta.json()).id;
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
@@ -573,6 +601,8 @@ async function main() {
     : null;
   if (!tokenBarbeiro) console.warn('  aviso: barbeiro não convidado; "meu dia" fora da medição');
   if (!caixa.ok) console.warn(`  aviso: caixa não preparado (${caixa.motivo})`);
+  const importacao = await prepararImportacao(token);
+  if (!importacao) console.warn('  aviso: importação não preparada; passo 2 fora da medição');
 
   const telas = [
     { nome: 'pública', url: `/${slug}` },
@@ -624,6 +654,13 @@ async function main() {
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.
     { nome: 'trilha — dinheiro', url: '/admin/trilha?aba=dinheiro', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    // A importação é medida **com um preview aberto**: é o estado mais largo da
+    // tela, com a lista de linhas recusadas e o nome de arquivo comprido. Medir
+    // o formulário vazio mediria a versão fácil.
+    { nome: 'importar base', url: '/admin/importar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    ...(importacao
+      ? [{ nome: 'importar — conferindo', url: `/admin/importar?i=${importacao}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
+      : []),
     // A tela do barbeiro e a ficha do cliente. O `token` aqui é o do dono, que
     // vê tudo — o recorte por profissional é do servidor e tem teste próprio;
     // o que se mede aqui é o layout.

@@ -980,8 +980,8 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e
-  nove telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as quarenta
+  e uma telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
   correto e a grade estourar assim que entra conteúdo real — só a medição pega.
@@ -1609,3 +1609,119 @@ O diagnóstico do catálogo chama seus itens de `defeito` no CSS, apesar de o ti
 se chamar `Achado`. `.achado` já é a linha de resultado da busca de cliente no
 balcão — flex, uma linha, alinhada ao centro. Reaproveitar o nome herdaria aquele
 layout em silêncio, e a tela quebraria sem ninguém tocar num arquivo dela.
+
+---
+
+## Bloco 22 — trazer a base do sistema antigo
+
+> "Barbearia estabelecida não começa do zero: ela tem base de clientes,
+> histórico e agenda futura. **Sem importador, a venda morre na objeção 'vou
+> perder meus clientes'.**" — SPEC §5.8
+
+### Um parser de CSV escrito à mão, e o motivo
+
+O formato cabe em duzentas linhas, e o que ele exige não é conformidade com a
+RFC 4180 — é **tolerância a exportador mal-educado**, que nenhuma das fontes da
+SPEC respeita. Uma biblioteca traria a RFC e não traria o que falta: separador
+`;` (padrão do Excel em português, porque a vírgula é o separador decimal), BOM
+do Windows, CR sozinho de exportador antigo de Mac, e linha com o número errado
+de colunas. E `packages/core` não depende de nada por regra.
+
+Duas decisões que só aparecem com arquivo de verdade:
+
+- **A detecção do separador conta fora de aspas.** `"Nome, Sobrenome";Telefone`
+  tem duas vírgulas dentro de um campo e um `;` de verdade; contar cru escolhe a
+  vírgula e devolve lixo.
+- **Linha curta vira campo vazio, não erro.** Numa base de mil clientes existe
+  sempre a linha estragada, e derrubar o arquivo inteiro por causa dela é o
+  comportamento que faz a barbearia desistir da migração.
+
+### O telefone é a identidade, e chega em três formatos
+
+`(71) 98888-7777`, `71988887777` e `+55 71 98888-7777` são a mesma pessoa — é
+assim que a base sai de um sistema usado por seis anos por gente diferente. A
+deduplicação é por E.164, que já era a chave desde o bloco 1.
+
+Mesmo telefone com **nome diferente** não é duplicata: é marido e mulher no
+mesmo celular, e escolher sozinho apagaria um dos dois. Vira conflito, com as
+duas grafias na tela, e fica de fora.
+
+### Aniversário só pode entrar no formato que não é ambíguo
+
+`dd/mm/aaaa` e `aaaa-mm-dd` entram; `mm/dd/aaaa` não. Não há como distinguir
+`03/04/1990` de `04/03/1990` sem perguntar, e adivinhar erra em silêncio numa
+data que ninguém confere — o cliente descobre quando recebe "feliz aniversário"
+no mês errado.
+
+### O importador nunca liga o consentimento de marketing
+
+É o que impede o erro que a SPEC nomeia: "importar 1.200 clientes e mandar 1.200
+mensagens de 'sentimos sua falta' no primeiro dia é o erro que queima o número de
+WhatsApp e a conta da barbearia".
+
+Não é uma exceção na varredura — é a consequência de uma regra que já existia:
+consentimento precisa de data, IP e versão do texto, e nada disso atravessa uma
+exportação. Nenhuma coluna do arquivo o liga.
+
+**O teste disso nasceu errado e passou assim mesmo.** A primeira versão dava aos
+clientes importados nenhum histórico, e a varredura os pulava por "nunca veio" —
+não por consentimento. Ele ficava verde com a regra de consentimento arrancada
+dos dois lugares onde ela mora. Agora cada importado tem uma visita antiga
+concluída, e a única coisa que o segura é o `accepts_marketing` falso.
+
+### Reversível quer dizer saber o que foi criado
+
+`customers.import_id` marca **só quem a importação criou**. Cliente que já
+existia e teve o aniversário preenchido não recebe a marca: desfazer não pode
+apagar gente que estava aqui antes.
+
+E a reversão **recusa inteira** quando algum importado já marcou horário, abriu
+comanda ou entrou na fila. "Desfeita inteira" é a palavra da SPEC; um desfazer
+parcial deixaria a base num meio-termo que ninguém pediu, e apagar o cliente
+levaria junto o agendamento de amanhã.
+
+### A cópia dos dados pessoais tem prazo, e é o banco que cobra
+
+Entre conferir e aplicar, o preview guarda os quatro campos que viram cliente —
+nunca o CSV inteiro, que costuma trazer CPF, endereço e nome da mãe. Ao aplicar,
+a cópia some, e há `CHECK` que recusa marcar `applied` sem limpá-la: a regra de
+retenção está onde não dá para esquecer.
+
+### O endereço antigo continua funcionando
+
+`tenant_slugs` é a única tabela do produto com `SELECT` público — a API resolve
+`/{slug}` antes de existir tenant no contexto. Consequência direta: quem separa
+as barbearias na listagem é o `WHERE`, não a política, e é a única consulta do
+código que repete `tenant_id` de propósito. Está escrito na função.
+
+### O que a `/security-review` encontrou
+
+Nada de segurança — e ela verificou o que este bloco tinha de mais arriscado: o
+`DELETE` em massa da reversão, o `unnest` do `INSERT` em lote, o endereço público
+e o arquivo enviado.
+
+Apontou uma coisa que não é vulnerabilidade e é violação de regra deste
+repositório: **`observacao` era detectada, aparada e jogada fora**. Campo que o
+motor aceita e ninguém preenche é mentira (CLAUDE.md §4). Agora a observação do
+sistema antigo vira a anotação da ficha — sem sobrescrever a que o barbeiro
+escreveu com o cliente na cadeira, que vale mais que a herdada.
+
+Apontou também que um preview **abandonado** guardava a cópia dos dados pessoais
+para sempre: `payload` some ao aplicar, e faltava o caso de quem confere e
+desiste. A faxina pega carona na importação seguinte, e não virou tarefa na fila
+porque `imports` tem RLS — varredura de plataforma não enxergaria linha nenhuma
+sem tenant no contexto.
+
+### O que a medição e o boot pegaram
+
+- **`input[type=file]` dimensiona pelo nome do arquivo escolhido.** Um nome real
+  (`clientes-agenda-antiga-exportacao-final.csv`) estourava os 360px e levava a
+  página junto. Só apareceu porque a medição prepara o arquivo com nome de
+  verdade.
+- **A API não subia.** `import { json } from 'express'` compila e passa em todo
+  o e2e — que monta a aplicação sem passar por `main.ts` — e quebra no
+  `node dist/main.js`, porque `express` chega por dentro do
+  `@nestjs/platform-express` e não é dependência declarada. O limite de corpo
+  agora vem do `useBodyParser` do Nest.
+- **A crase dentro de SQL, pela quarta vez.** Desta vez o guarda do bloco 17
+  apontou arquivo e linha antes do build.

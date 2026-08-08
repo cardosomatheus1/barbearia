@@ -415,6 +415,9 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Intervalo | semiaberto `[início, fim)` — encostar não é sobrepor |
 | Id público | UUID/ULID, nunca sequencial |
 | Telefone | E.164 normalizado, chave de deduplicação |
+| Importação de base | idempotente pelo **sha256 do conteúdo**, nunca pelo nome do arquivo; reversível por `import_id`, que marca só quem ela criou |
+| Consentimento de marketing | nunca importável — precisa de data, IP e versão do texto, e nada disso atravessa uma exportação |
+| Cópia de dado pessoal fora de `customers` | com prazo escrito no schema: `imports.payload` é apagado ao aplicar, e há `CHECK` que recusa o contrário |
 | Slug | permanente; renomear adiciona em `tenant_slugs`, nunca substitui |
 | Status de cancelamento | `cancelled_customer` ≠ `cancelled_business` — só o primeiro pune o cliente |
 | Sessão do cliente no navegador | cookie `httpOnly`, um por barbearia no nome **e** no caminho |

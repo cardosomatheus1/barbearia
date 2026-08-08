@@ -13,6 +13,7 @@ const ABAS = [
   { href: '/admin/recursos', nome: 'Recursos' },
   { href: '/admin/fotos', nome: 'Fotos' },
   { href: '/admin/catalogo/diagnostico', nome: 'Diagnóstico' },
+  { href: '/admin/importar', nome: 'Trazer minha base' },
 ] as const;
 
 export function CadastroNav({ atual }: { readonly atual: string }) {

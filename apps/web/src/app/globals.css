@@ -2484,3 +2484,44 @@ main { padding-bottom: var(--space-8); }
   .evento__quando { grid-row: 1 / span 2; }
   .evento__frase { margin-top: 0; }
 }
+
+/* ============================================================================
+   Trazer a base do sistema antigo (bloco 22)
+   ============================================================================ */
+
+/* A tela é uma sequência — enviar, conferir, aplicar —, e o espaço entre os
+   blocos é o que faz a sequência ser lida como sequência em vez de como um
+   formulário longo. */
+.importar__bloco {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+}
+.importar__bloco:first-of-type { border-top: none; padding-top: 0; }
+
+.importar__form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  max-width: 32rem;
+}
+
+/* O seletor de arquivo do navegador tem altura própria e ignora `min-height`
+   no input. O toque é o botão que ele desenha, então a folga vem do padding —
+   sem isso o alvo fica em 32px no Android.
+
+   A largura é o outro problema, e foi a medição que pegou: `input[type=file]`
+   dimensiona pelo **nome do arquivo escolhido**, e um nome real
+   ("clientes-agenda-antiga-exportacao-final.csv") estoura os 360px levando a
+   página junto. `width` fixo em 100% e `min-width: 0` no item da grade — sem o
+   segundo, o item de grid recusa encolher abaixo do conteúdo e o primeiro não
+   adianta. */
+.importar__form .ui-field { min-width: 0; }
+.importar__form input[type='file'] {
+  padding: var(--space-3);
+  line-height: 1.6;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}

@@ -618,6 +618,60 @@ describeIfDb('fila de trabalho', () => {
     expect(enviados).toBe(0);
   });
 
+  it('base recém-importada não dispara mil convites no primeiro dia', async () => {
+    /**
+     * O erro que a SPEC §5.8 nomeia: "importar 1.200 clientes e mandar 1.200
+     * mensagens de 'sentimos sua falta' no primeiro dia é o erro que queima o
+     * número de WhatsApp e a conta da barbearia".
+     *
+     * O que impede não é uma exceção na varredura — é o consentimento. Ele
+     * precisa de data, IP e versão do texto, e nada disso atravessa uma
+     * exportação, então o importador nunca o liga. A varredura filtra
+     * `accepts_marketing` e a base inteira fica de fora sozinha.
+     *
+     * O teste importa gente de verdade pelo mesmo caminho da tela, com visita
+     * antiga, e conta quantas mensagens saem.
+     */
+    await ligarRetorno(45);
+    await marcarVisita(SUMIU_HA(60));
+
+    await admin.$executeRawUnsafe(`
+      INSERT INTO imports (id, tenant_id, file_name, file_sha256, separator, status, applied_at)
+      VALUES ('99999999-0000-0000-0000-000000000001', '${TENANT}', 'base.csv',
+              repeat('f', 64), ';', 'applied', now())
+    `);
+
+    /**
+     * Cada importado ganha uma visita antiga e concluída — e isso é o teste, não
+     * cenário. A primeira versão deixava os importados **sem histórico nenhum**,
+     * e aí a varredura os pulava por `sem visita anterior`, não por
+     * consentimento: o teste ficava verde mesmo com a regra de consentimento
+     * arrancada dos dois lugares onde ela mora. Com visita antiga, a única coisa
+     * que os segura é o `accepts_marketing` falso que o importador escreve.
+     */
+    for (let i = 0; i < 5; i += 1) {
+      const cliente = `99999999-1111-0000-0000-00000000000${i}`;
+      await admin.$executeRawUnsafe(`
+        INSERT INTO customers (id, tenant_id, name, phone_e164, import_id)
+        VALUES ('${cliente}', '${TENANT}', 'Importado ${i}', '+55719000000${i}0',
+                '99999999-0000-0000-0000-000000000001')
+      `);
+      const inicio = SUMIU_HA(200 + i).toISOString();
+      const fim = new Date(SUMIU_HA(200 + i).getTime() + 30 * 60_000).toISOString();
+      await admin.$executeRawUnsafe(`
+        INSERT INTO appointments
+          (tenant_id, location_id, customer_id, professional_id,
+           starts_at, ends_at, service_starts_at, service_ends_at, status)
+        VALUES ('${TENANT}', '${LOCATION}', '${cliente}', '${RUAN}',
+                '${inicio}', '${fim}', '${inicio}', '${fim}', 'completed')
+      `);
+    }
+
+    const { enviados } = await varrerRetornos({ tenantId: TENANT, provider, agora: AGORA });
+    expect(enviados).toBe(0);
+    expect(provider.agendamentos).toHaveLength(0);
+  });
+
   it('quem voltou dentro do prazo não é chamado de volta', async () => {
     await ligarRetorno(45);
     await aceitaPromocao();

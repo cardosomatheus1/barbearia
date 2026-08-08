@@ -34,6 +34,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
 
   'commission.closed': 'fechou a comissão do período',
   'commission.rule_changed': 'mudou a regra de comissão de',
+
+  'import.applied': 'trouxe a base do sistema antigo',
+  'import.reverted': 'desfez a importação da base',
+  'slug.added': 'cadastrou um endereço antigo da barbearia',
 };
 
 /**

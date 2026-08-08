@@ -1291,3 +1291,80 @@ export const trilhaDoDinheiro = (token: string, antesDe?: string) =>
     undefined,
     token,
   );
+
+// -- Importação de base ------------------------------------------------------
+
+export type VereditoDaLinha =
+  | 'telefone_invalido'
+  | 'sem_nome'
+  | 'conflito'
+  | 'repetido_no_arquivo'
+  | 'ja_existe'
+  | 'novo';
+
+export interface LinhaComProblema {
+  linha: number;
+  veredito: VereditoDaLinha;
+  nome: string;
+  telefone: string;
+  motivo?: string;
+  conflitaCom?: string;
+}
+
+export interface ResumoDaImportacao {
+  id: string;
+  fileName: string;
+  separator: string;
+  status: 'previewed' | 'applied' | 'reverted';
+  resumo: Record<VereditoDaLinha, number>;
+  total: number;
+  createdAt: string;
+  appliedAt: string | null;
+  revertedAt: string | null;
+}
+
+export interface PreviewDaImportacao extends ResumoDaImportacao {
+  cabecalho: string[];
+  colunas: Record<'nome' | 'telefone' | 'nascimento' | 'observacao', number | null>;
+  problemas: LinhaComProblema[];
+  repetida: boolean;
+}
+
+export const listarImportacoes = (token: string) =>
+  chamar<{ imports: ResumoDaImportacao[] }>('GET', '/v1/admin/imports', undefined, token);
+
+export const analisarImportacao = (
+  token: string,
+  corpo: { fileName: string; conteudo: string; separador?: string },
+) => chamar<PreviewDaImportacao>('POST', '/v1/admin/imports', corpo, token);
+
+export const aplicarImportacao = (token: string, id: string) =>
+  chamar<{ criados: number; atualizados: number }>(
+    'POST',
+    `/v1/admin/imports/${id}/apply`,
+    {},
+    token,
+  );
+
+export const reverterImportacao = (token: string, id: string) =>
+  chamar<{ apagados: number }>('POST', `/v1/admin/imports/${id}/revert`, {}, token);
+
+export interface SlugDaCasa {
+  slug: string;
+  principal: boolean;
+  criadoEm: string;
+}
+
+export const listarSlugs = (token: string) =>
+  chamar<{ slugs: SlugDaCasa[] }>('GET', '/v1/admin/slugs', undefined, token);
+
+export const adicionarSlug = (token: string, slug: string) =>
+  chamar<{ slug: string }>('POST', '/v1/admin/slugs', { slug }, token);
+
+export const lerImportacao = (token: string, id: string) =>
+  chamar<ResumoDaImportacao & { problemas: LinhaComProblema[] }>(
+    'GET',
+    `/v1/admin/imports/${id}`,
+    undefined,
+    token,
+  );

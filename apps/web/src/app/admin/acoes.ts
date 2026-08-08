@@ -2,6 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import {
+  adicionarSlug,
+  analisarImportacao,
+  aplicarImportacao,
   criarConta,
   criarMembro,
   entrarComoGestor,
@@ -20,6 +23,7 @@ import {
   salvarPagamentos,
   salvarProfissionais,
   reemitirSenha,
+  reverterImportacao,
   salvarServicos,
   trocarMinhaSenha,
   trocarPapel,
@@ -98,6 +102,16 @@ function falhar(rota: string, code: string): never {
   const separador = rota.includes('?') ? '&' : '?';
   redirect(`${rota}${separador}erro=${encodeURIComponent(code)}`);
 }
+
+/**
+ * Teto do arquivo de importação, em bytes — o mesmo que a API recusa.
+ *
+ * Conferido aqui também para que o arquivo grande demais nem seja lido na
+ * memória do servidor de tela antes de a API dizer não. Repetido em vez de
+ * importado do pacote da API porque `apps/web` não depende dela: os dois falam
+ * HTTP, e um número é barato de duplicar com o motivo escrito.
+ */
+const TETO_DO_ARQUIVO = 8 * 1024 * 1024;
 
 /**
  * Lista fechada das ações que o balcão pode enviar.
@@ -1254,4 +1268,69 @@ export async function acaoMeta(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar(rota, resultado.code);
   redirect(`${rota}&salvo=1`);
+}
+
+// -- Importação de base ------------------------------------------------------
+
+/**
+ * Lê o arquivo e mostra o preview — SPEC §5.8.
+ *
+ * O arquivo é lido **aqui**, na ação de servidor, e vai para a API como texto.
+ * A alternativa seria `multipart` até o final, e ela custaria um segundo
+ * formato de corpo numa API que hoje só fala JSON — por um arquivo que é texto
+ * por definição.
+ *
+ * Nada é gravado neste passo. O que ele cria é a importação em preview, que a
+ * tela seguinte aplica ou descarta.
+ */
+export async function acaoAnalisarImportacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const arquivo = form.get('arquivo');
+  if (!(arquivo instanceof File) || arquivo.size === 0) falhar('/admin/importar', 'sem_arquivo');
+
+  const enviado = arquivo as File;
+  if (enviado.size > TETO_DO_ARQUIVO) falhar('/admin/importar', 'arquivo_grande');
+
+  const conteudo = await enviado.text();
+  const separador = texto(form, 'separador');
+
+  const resultado = await analisarImportacao(token, {
+    fileName: enviado.name,
+    conteudo,
+    ...(separador ? { separador } : {}),
+  });
+
+  if (!resultado.ok) falhar('/admin/importar', resultado.code);
+  redirect(`/admin/importar?i=${resultado.dados.id}`);
+}
+
+export async function acaoAplicarImportacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+
+  const resultado = await aplicarImportacao(token, id);
+  if (!resultado.ok) falhar(`/admin/importar?i=${id}`, resultado.code);
+
+  redirect(`/admin/importar?feito=${resultado.dados.criados}&atualizados=${resultado.dados.atualizados}`);
+}
+
+export async function acaoReverterImportacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+
+  const resultado = await reverterImportacao(token, id);
+  if (!resultado.ok) falhar('/admin/importar', resultado.code);
+
+  redirect(`/admin/importar?desfeito=${resultado.dados.apagados}`);
+}
+
+/** O endereço do sistema antigo, para o link da bio não quebrar. */
+export async function acaoAdicionarSlug(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const resultado = await adicionarSlug(token, texto(form, 'slug'));
+  if (!resultado.ok) falhar('/admin/importar', resultado.code);
+
+  redirect('/admin/importar?slug=1');
 }

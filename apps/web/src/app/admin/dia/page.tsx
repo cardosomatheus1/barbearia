@@ -330,6 +330,11 @@ export default async function DiaPage({ searchParams }: Props) {
               Cadastro
             </a>
           ) : null}
+          {podeNaTela(estado, 'customers.edit') ? (
+            <a className="ui-button ui-button--ghost painel__sair" href="/admin/importar">
+              Trazer base
+            </a>
+          ) : null}
           <form action={acaoSair}>
             <button className="ui-button ui-button--ghost painel__sair" type="submit">
               Sair

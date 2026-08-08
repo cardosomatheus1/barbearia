@@ -40,7 +40,16 @@ export type AuditAction =
   | 'mfa.recovery_used'
   // Comissão: fechar um período paga gente, e mudar a regra muda quanto.
   | 'commission.closed'
-  | 'commission.rule_changed';
+  | 'commission.rule_changed'
+  // Importação de base: aplicar cria cliente em massa e desfazer apaga. As duas
+  // mudam a base inteira de uma vez, que é o tipo de ação cuja pergunta do dia
+  // seguinte é "quem fez isso?".
+  | 'import.applied'
+  | 'import.reverted'
+  // Endereço público novo apontando para a barbearia. Quem adiciona um slug
+  // muda por onde o cliente chega — e é a única ação deste produto que altera
+  // algo visível fora dele.
+  | 'slug.added';
 
 /**
  * O vocabulário partido em dois, porque a leitura não é uma permissão só.
@@ -86,6 +95,9 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'mfa.enabled',
   'mfa.disabled',
   'mfa.recovery_used',
+  'import.applied',
+  'import.reverted',
+  'slug.added',
 ];
 
 export interface AuditEntry {
