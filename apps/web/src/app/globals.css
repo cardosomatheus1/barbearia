@@ -1025,13 +1025,11 @@ main { padding-bottom: var(--space-8); }
   margin: var(--space-2) 0 0;
   font-size: var(--font-size-xs);
 }
-.atendimento__selo {
-  padding: 2px var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
+/* A pílula do estado virou `.selo`, compartilhada com o resto do produto. Esta
+   regra só acrescenta o que é do balcão: caixa alta e o espaçamento da faixa. */
+.atendimento__estado .selo {
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--color-text-muted);
 }
 .atendimento__frase { color: var(--color-text-muted); }
 
@@ -3885,3 +3883,231 @@ main { padding-bottom: var(--space-8); }
   .casco .painel__conteudo { max-width: 68rem; }
   .casco .painel__entrada { max-width: 30rem; }
 }
+
+/* ============================================================================
+   Painéis, selos de estado e gráficos — a linguagem interna do Barber Dock
+   ============================================================================
+
+   O mock não desenha "caixas com texto": desenha **painéis**, com cabeçalho,
+   corpo e uma ação à direita. É o que separa uma tela de sistema de uma folha
+   de formulário, e vale para as trinta telas de uma vez porque mora nas classes
+   que todas já usam.
+   ============================================================================ */
+
+/* -- o painel ---------------------------------------------------------------- */
+
+.quadro {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  overflow: hidden;
+  min-width: 0;
+  transition: border-color var(--motion-base) var(--motion-ease);
+}
+.quadro:hover { border-color: color-mix(in srgb, var(--color-accent) 20%, transparent); }
+.quadro__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+.quadro__titulo {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.quadro__sub {
+  margin: 2px 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.quadro__acao {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+}
+.quadro__corpo { padding: var(--space-4); }
+
+/* -- o cartão de número ------------------------------------------------------
+   `.numero` é usado no painel do dono, no diagnóstico e nos números do
+   barbeiro. Ganha o tratamento do mock: degradê, o clarão do poste no canto e
+   o número na condensada. */
+
+.numero {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-4);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+  transition: border-color var(--motion-base) var(--motion-ease);
+}
+.numero:hover { border-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.numero::after {
+  content: '';
+  position: absolute;
+  right: -30%;
+  bottom: -60%;
+  width: 80%;
+  height: 90%;
+  transform: rotate(-12deg);
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--color-danger) 10%, transparent),
+    transparent 62%
+  );
+  filter: blur(10px);
+  pointer-events: none;
+}
+.numero > * { position: relative; }
+.numero__valor { font-size: var(--font-size-2xl); }
+
+/* -- selo de estado ----------------------------------------------------------
+   Pílula com borda e fundo da própria cor, como no mock. Cor **e** texto: um em
+   doze homens não distingue verde de vermelho, e barbearia é público de homem. */
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.selo--feito {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+}
+.selo--agora {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.selo--espera {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 26%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+.selo--fora {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* -- linha de atendimento ----------------------------------------------------
+   A linha do balcão ganha o degradê e a elevação do mock, mantendo a tarja de
+   estado que já existia — ela é o que se lê de relance. */
+
+.atendimento {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border-radius: var(--radius-lg);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+.atendimento:hover { border-color: color-mix(in srgb, var(--color-accent) 20%, transparent); }
+
+/* -- totais do dia ----------------------------------------------------------- */
+
+.totalzinho {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border-radius: var(--radius-lg);
+}
+.totalzinho__valor { font-family: var(--font-display); font-size: var(--font-size-xl); }
+
+/* -- estado vazio ------------------------------------------------------------ */
+
+.vazio {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-5);
+}
+.vazio__titulo { font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
+
+/* -- os blocos de lista que já existiam -------------------------------------- */
+
+.evento,
+.defeito,
+.cardapio__item {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+}
+
+/* -- o anel de percentual ----------------------------------------------------
+   O gráfico do mock, em `conic-gradient`: um arco preenchido até a fração e o
+   miolo recortado. Zero SVG, zero JavaScript.
+
+   O número fica **escrito no meio**, não só desenhado: quem usa leitor de tela e
+   quem não distingue o arco do fundo leem o mesmo valor. O anel é a leitura
+   rápida, não a informação. */
+
+.anel {
+  --anel-parte: 0%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: var(--radius-full);
+  background: conic-gradient(
+    var(--color-accent) 0 var(--anel-parte),
+    var(--color-border) var(--anel-parte) 100%
+  );
+  flex: none;
+}
+.anel::before {
+  content: '';
+  position: absolute;
+  inset: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+}
+.anel__valor {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  line-height: 1;
+  color: var(--color-accent);
+}
+.anel__rotulo {
+  position: relative;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+/* Acima do esperado o arco muda de cor — e a legenda ao lado diz o mesmo. */
+.anel--atras { background: conic-gradient(var(--color-warning) 0 var(--anel-parte), var(--color-border) var(--anel-parte) 100%); }
+.anel--atras .anel__valor { color: var(--color-warning); }
+
+.anel-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.anel-linha__texto { min-width: 0; }
+
+/* O alerta que traz uma saída — "Confirmar agora", "Voltar ao dia" — precisa
+   empilhar. Como `.ui-alert` é um bloco e o botão é `inline-flex`, os dois
+   dividiam a mesma linha e o botão montava em cima do texto. */
+.ui-alert:has(.painel__saida) {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+.ui-alert .painel__saida { margin-top: 0; }

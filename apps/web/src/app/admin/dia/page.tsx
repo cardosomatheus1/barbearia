@@ -130,6 +130,26 @@ function situacao(linha: LinhaDoDia, toleranciaMinutos: number): string | null {
     : `Atrasado ${p.minutesLate} min`;
 }
 
+/**
+ * A cor do selo de estado, no vocabulário do mock.
+ *
+ * Cor **e** texto, nunca cor sozinha: um em doze homens não distingue verde de
+ * vermelho, e barbearia é público de homem. O rótulo continua escrito dentro da
+ * pílula — o que a cor faz é acelerar a leitura de relance, não substituí-la.
+ */
+const TOM_DO_SELO: Record<LinhaDoDia['status'], string> = {
+  pending: '',
+  confirmed: '',
+  checked_in: 'selo--espera',
+  waiting: 'selo--espera',
+  in_progress: 'selo--agora',
+  completed: 'selo--feito',
+  cancelled_customer: 'selo--fora',
+  cancelled_business: 'selo--fora',
+  no_show: 'selo--fora',
+  rescheduled: '',
+};
+
 /** Classe de ênfase da linha. Cor é o último recurso — sempre acompanha texto. */
 function tom(linha: LinhaDoDia): string {
   if (linha.status === 'in_progress') return 'atendimento--agora';
@@ -210,7 +230,7 @@ function Atendimento({
           {linha.services.join(' + ')} · {linha.professionalName}
         </p>
         <p className="atendimento__estado">
-          <span className="atendimento__selo">{RÓTULO[linha.status]}</span>
+          <span className={`selo ${TOM_DO_SELO[linha.status]}`}>{RÓTULO[linha.status]}</span>
           {frase ? <span className="atendimento__frase">{frase}</span> : null}
         </p>
       </div>

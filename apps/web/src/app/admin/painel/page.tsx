@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import {
   diagnosticoDoCatalogo,
@@ -154,10 +155,42 @@ export default async function PainelPage() {
       ) : null}
 
       <h2 className="avisos__titulo">Hoje</h2>
+
+      {/* A ocupação sai da grade e vira anel: é a única métrica desta tela que é
+          uma fração de um todo conhecido — minutos vendidos sobre minutos de
+          jornada —, e fração é o que anel sabe mostrar. As outras são contagem,
+          e contagem em anel seria desenho sem denominador. */}
+      <div className="quadro">
+        <div className="quadro__topo">
+          <div>
+            <p className="quadro__titulo">Ocupação</p>
+            <p className="quadro__sub">minutos vendidos sobre a jornada da equipe</p>
+          </div>
+        </div>
+        <div className="quadro__corpo anel-linha">
+          <div
+            className="anel"
+            style={{ '--anel-parte': `${Math.min(100, operacao.dados.ocupacao.valor)}%` } as CSSProperties}
+          >
+            <span className="anel__valor tabular">{operacao.dados.ocupacao.valor}%</span>
+          </div>
+          <div className="anel-linha__texto">
+            <p className="painel__sub">
+              {operacao.dados.ocupacao.variacao === null
+                ? 'Primeiro dia com este número — ainda não há com o que comparar.'
+                : `${operacao.dados.ocupacao.variacao > 0 ? '+' : ''}${operacao.dados.ocupacao.variacao}% que no mesmo dia da semana passada.`}
+            </p>
+            <p className="painel__nota">
+              Buraco na agenda é dinheiro que não volta: a hora que passou vazia não
+              é vendida amanhã.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <dl className="numeros">
         <Metrica dado={operacao.dados.agendamentos} rotulo="Agendamentos" />
         <Metrica dado={operacao.dados.atendidos} rotulo="Atendidos" />
-        <Metrica dado={operacao.dados.ocupacao} rotulo="Ocupação" unidade="%" />
         <Metrica dado={operacao.dados.noShow} melhorQuandoCai rotulo="Faltas" unidade="%" />
         <Metrica dado={operacao.dados.novosClientes} rotulo="Clientes novos" />
       </dl>

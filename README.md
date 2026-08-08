@@ -1816,6 +1816,28 @@ Duas armadilhas no caminho, as duas de CSS gerado por script:
   apontou `Unexpected }` trinta linhas adiante. A saída foi reescrever o bloco do
   casco inteiro a partir de uma marca conhecida, sem regex.
 
+### Painéis, selos e o anel
+
+Depois do casco, o que faltava era o miolo. Três primitivas, e como moram nas
+classes que as trinta telas já usam, entraram de uma vez:
+
+- **`.quadro`** — o painel do mock: cabeçalho com título, subtítulo e ação à
+  direita, corpo separado por linha. É o que separa uma tela de sistema de uma
+  folha de formulário.
+- **`.selo`** — a pílula de estado, com borda e fundo da própria cor. Cor **e**
+  texto, nunca cor sozinha: um em doze homens não distingue verde de vermelho, e
+  barbearia é público de homem.
+- **`.anel`** — o gráfico de fração em `conic-gradient`, com o número escrito no
+  meio. Zero SVG, zero JavaScript, e legível para quem não enxerga o arco.
+
+O anel só aparece na **ocupação**, e é uma decisão: é a única métrica do painel
+que é fração de um todo conhecido — minutos vendidos sobre minutos de jornada.
+As outras são contagem, e contagem em anel é desenho sem denominador.
+
+**Gráfico de série ficou de fora, declarado como lacuna.** A API devolve dois
+pontos: hoje e o mesmo dia da semana passada. Desenhar uma linha com dois pontos
+é inventar tendência onde existe uma comparação.
+
 ### O "R$ NaN" que estava lá desde o bloco 11
 
 Abrir o balcão num navegador com conta de verdade mostrou **R$ NaN** no total do
