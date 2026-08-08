@@ -137,7 +137,7 @@ export default async function TrilhaPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="trilha">
         {topo}
         <h1 className="painel__titulo">Trilha</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -166,7 +166,7 @@ export default async function TrilhaPage({ searchParams }: Props) {
   const { entries, proximoCursor } = resposta.dados;
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="trilha">
       {topo}
       {abas}
 

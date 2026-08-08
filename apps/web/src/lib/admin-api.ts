@@ -161,6 +161,19 @@ export interface PainelDoDia {
   noShowAfterMinutes: number;
   professionals: { id: string; name: string }[];
   entries: LinhaDoDia[];
+  /**
+   * Contagem, nunca dinheiro.
+   *
+   * `realizadoCents` esteve declarado aqui e **a API nunca o mandou** — de
+   * propósito: `/day` é rota de `appointments.view`, e faturamento é
+   * `finance.view`, que exige segundo fator. Há teste na API que reprova se o
+   * campo aparecer.
+   *
+   * O tipo mentia, e o TypeScript garantia que a tela lia um campo que nunca
+   * chegava: o balcão exibiu "R$ NaN" no lugar do total do dia desde o bloco 11,
+   * e só apareceu quando a tela foi aberta num navegador com conta de verdade.
+   * O faturamento do dia mora em `/admin/painel`.
+   */
   totals: {
     esperados: number;
     chegaram: number;
@@ -168,7 +181,6 @@ export interface PainelDoDia {
     concluidos: number;
     faltaram: number;
     cancelados: number;
-    realizadoCents: number;
   };
 }
 

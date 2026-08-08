@@ -285,7 +285,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="cadastro">
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -302,7 +302,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
   const ativos = servicos.filter((servico) => servico.active);
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="cadastro">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}

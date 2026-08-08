@@ -94,7 +94,7 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
   const aCobrar = dia.ok ? dia.dados.entries.filter((linha) => COBRAVEL.has(linha.status)) : [];
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="comanda">
       {topo}
       <BalcaoNav atual="/admin/comanda" />
 

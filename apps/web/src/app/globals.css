@@ -3445,3 +3445,230 @@ main { padding-bottom: var(--space-8); }
   background-size: 4.5rem 4.5rem;
   mask-image: linear-gradient(to bottom, black, transparent 60%);
 }
+
+/* ============================================================================
+   O casco do painel — a moldura de três colunas do mock interno
+   ============================================================================
+
+   Trilho de ícones, navegação de contexto e área de trabalho. No celular as
+   duas colunas laterais deitam: o trilho vira uma faixa de ícones que rola no
+   topo e o contexto vira uma faixa de links abaixo dela. Nada some — em 360px
+   não existe coluna lateral, existe conteúdo e o resto.
+   ============================================================================ */
+
+.casco {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  min-height: 100dvh;
+  min-width: 0;
+}
+
+/* -- o trilho ---------------------------------------------------------------- */
+
+.trilho {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.trilho__selo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--size-touch);
+  height: var(--size-touch);
+  margin-right: var(--space-2);
+}
+.trilho__selo img {
+  width: 2.25rem;
+  height: 2.25rem;
+  aspect-ratio: 1;
+  max-width: 100%;
+  object-fit: contain;
+}
+.trilho__grupo { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+/* O rótulo do grupo só cabe quando o trilho está de pé. Na faixa deitada ele
+   vira um separador — o texto continua no DOM, e é ele que separa os blocos. */
+.trilho__rotulo {
+  margin: 0 var(--space-2) 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  opacity: 0.6;
+}
+.trilho__botao {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+.trilho__botao,
+.trilho__botao:hover { text-decoration: none; }
+.trilho__botao:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.trilho__botao svg { flex: none; color: var(--color-accent); opacity: 0.7; }
+.trilho__botao:hover svg { opacity: 1; }
+
+/* -- a navegação de contexto ------------------------------------------------- */
+
+/* A coluna de contexto não repete a navegação: ela diz de que casa é a tela e
+   quem está logado. No celular vira uma linha só, acima do trabalho. */
+.contexto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.contexto__topo { min-width: 0; }
+.contexto__casa {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+.contexto__sub {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+}
+.contexto__pe { min-width: 0; }
+.contexto__quem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  min-width: 0;
+}
+.contexto__iniciais {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-xs);
+}
+.contexto__identidade {
+  font-size: var(--font-size-sm);
+  line-height: 1.25;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contexto__identidade small {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* -- a área de trabalho ------------------------------------------------------ */
+
+.trabalho {
+  position: relative;
+  min-width: 0;
+  overflow-x: clip;
+}
+/* A malha fina do estaleiro, como no mock. Vive aqui e não mais em
+   `.painel__conteudo`, que é só um dos recipientes de tela. */
+.trabalho::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-accent) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 3%, transparent) 1px, transparent 1px);
+  background-size: 4.5rem 4.5rem;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
+}
+.trabalho > * { position: relative; z-index: 1; }
+
+/* O item ativo vem do `data-secao` que cada tela declara no próprio `<main>`.
+   `:has()` no lugar de um componente de cliente só para ler a rota. */
+.casco:has([data-secao='dia']) [data-para='dia'],
+.casco:has([data-secao='agenda']) [data-para='agenda'],
+.casco:has([data-secao='fila']) [data-para='fila'],
+.casco:has([data-secao='caixa']) [data-para='caixa'],
+.casco:has([data-secao='comanda']) [data-para='comanda'],
+.casco:has([data-secao='fiado']) [data-para='fiado'],
+.casco:has([data-secao='comissao']) [data-para='comissao'],
+.casco:has([data-secao='painel']) [data-para='painel'],
+.casco:has([data-secao='cadastro']) [data-para='cadastro'],
+.casco:has([data-secao='equipe']) [data-para='equipe'],
+.casco:has([data-secao='importar']) [data-para='importar'],
+.casco:has([data-secao='trilha']) [data-para='trilha'] {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+/* A partir do tablet o casco fica de pé: duas colunas fixas e o trabalho rola
+   sozinho, que é o comportamento do mock — a moldura não sai da tela. */
+@media (min-width: 1024px) {
+  .casco {
+    grid-template-rows: none;
+    grid-template-columns: 11.5rem 13rem 1fr;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .trilho {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-2);
+    border-bottom: 0;
+    border-right: 1px solid var(--color-border);
+    overflow: visible;
+  }
+  .trilho__selo { width: auto; margin: 0 auto var(--space-3); }
+  .trilho__grupo { flex-direction: column; align-items: stretch; gap: 2px; }
+  .trilho__rotulo { margin: var(--space-4) var(--space-2) var(--space-1); }
+  .trilho__botao { padding: 0 var(--space-2); }
+  .trilho__legenda { font-size: var(--font-size-xs); }
+  .contexto {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    padding: var(--space-4) var(--space-3);
+    border-bottom: 0;
+    border-right: 1px solid var(--color-border);
+    overflow: hidden;
+  }
+  .trabalho { overflow: auto; }
+  /* Dentro do casco a tela já tem duas colunas de moldura à esquerda; manter o
+     conteúdo em 46rem deixaria um terço do notebook vazio. O teto sobe, mas não
+     some: texto corrido continua limitado por `--size-readable` nas telas que o
+     usam. */
+  .casco .painel__conteudo { max-width: 68rem; }
+  .casco .painel__entrada { max-width: 30rem; }
+}

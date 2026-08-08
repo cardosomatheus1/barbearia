@@ -43,9 +43,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const dinheiro = (centavos: number): string =>
-  (centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-
 /** O que cada estado significa para quem está no balcão. */
 const RÓTULO: Record<LinhaDoDia['status'], string> = {
   pending: 'Marcado',
@@ -146,6 +143,18 @@ function tom(linha: LinhaDoDia): string {
   return '';
 }
 
+/**
+ * O resumo do dia — contagem, nunca dinheiro.
+ *
+ * Havia aqui um sexto número, "realizado", que mostrava **R$ NaN** desde o
+ * bloco 11: o tipo do cliente declarava `realizadoCents` e a API nunca mandou o
+ * campo, de propósito — `/day` é rota de `appointments.view`, e faturamento é
+ * `finance.view`, com segundo fator. Há teste na API que reprova se o número
+ * aparecer ali.
+ *
+ * A tela pedia certo pelo TypeScript e errado pela permissão. O faturamento do
+ * dia está em `/admin/painel`, para quem pode vê-lo.
+ */
 function Totais({ totals }: { readonly totals: PainelDoDia['totals'] }) {
   const numeros: readonly [string, number | string][] = [
     ['esperados', totals.esperados],
@@ -153,7 +162,6 @@ function Totais({ totals }: { readonly totals: PainelDoDia['totals'] }) {
     ['atendendo', totals.atendendo],
     ['concluídos', totals.concluidos],
     ['faltaram', totals.faltaram],
-    ['realizado', `R$ ${dinheiro(totals.realizadoCents)}`],
   ];
 
   return (
@@ -265,7 +273,7 @@ export default async function DiaPage({ searchParams }: Props) {
 
   if (!painel.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="dia">
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar o dia. <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Tentar de novo</a>
         </div>
@@ -300,41 +308,15 @@ export default async function DiaPage({ searchParams }: Props) {
     : -1;
 
   return (
-    <main className="ui-container balcao">
+    <main className="ui-container balcao" data-secao="dia">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/onboarding">
           ← {estado.businessName}
         </a>
         <nav className="painel__atalhos">
-          {/* A tela esconde o que a guarda recusaria. Não é a segurança — essa
-              está no servidor — é que botão que só serve para dar erro é pior
-              que botão ausente para quem opera. */}
-          {podeNaTela(estado, 'reports.operational') ? (
-            <a className="ui-button ui-button--ghost painel__sair" href="/admin/painel">
-              Painel
-            </a>
-          ) : null}
-          {podeNaTela(estado, 'team.manage') ? (
-            <a className="ui-button ui-button--ghost painel__sair" href="/admin/equipe">
-              Equipe
-            </a>
-          ) : null}
-          <a className="ui-button ui-button--ghost painel__sair" href="/admin/agenda">
-            Agenda
-          </a>
-          <a className="ui-button ui-button--ghost painel__sair" href="/admin/fila">
-            Fila
-          </a>
-          {podeNaTela(estado, 'settings.manage') ? (
-            <a className="ui-button ui-button--ghost painel__sair" href="/admin/catalogo">
-              Cadastro
-            </a>
-          ) : null}
-          {podeNaTela(estado, 'customers.edit') ? (
-            <a className="ui-button ui-button--ghost painel__sair" href="/admin/importar">
-              Trazer base
-            </a>
-          ) : null}
+          {/* Só sair. Painel, equipe, agenda, fila e cadastro moram no trilho
+              do casco desde que ele existe — repetir aqui é o mesmo link duas
+              vezes na mesma tela. */}
           <form action={acaoSair}>
             <button className="ui-button ui-button--ghost painel__sair" type="submit">
               Sair

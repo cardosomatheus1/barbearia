@@ -300,7 +300,7 @@ export default async function AgendaPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container balcao">
+      <main className="ui-container balcao" data-secao="agenda">
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -333,7 +333,7 @@ export default async function AgendaPage({ searchParams }: Props) {
     );
 
   return (
-    <main className="ui-container balcao">
+    <main className="ui-container balcao" data-secao="agenda">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}

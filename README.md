@@ -1777,6 +1777,37 @@ como escala de página de venda — nenhuma tela de operação usa os seis.
 - **Nenhum preço.** Não há decisão comercial tomada, e inventar tabela seria a
   mesma fabricação.
 
+### O casco: as internas ganharam a moldura do mock
+
+A primeira passada mudou cor e letra e parou aí — as telas continuaram sendo
+uma coluna solta no meio da página. Agora existe `casco.tsx`: trilho de
+navegação agrupado, coluna de contexto com a casa e quem está logado, e a área
+de trabalho com a malha fina do estaleiro. Vive em `admin/layout.tsx`, então
+entrou nas trinta e poucas telas de uma vez.
+
+Sem um byte de JavaScript. O item ativo sai do CSS: cada tela declara
+`data-secao` no próprio `<main>` e o casco acende com `:has()`, em vez de virar
+componente de cliente só para ler a rota.
+
+**O tema do admin virou escuro, e isso reverte uma decisão anterior.** O
+argumento do claro continua de pé (o balcão fica horas com a tela ligada), mas a
+marca chegou e o desenho que veio com ela é escuro. Direção do cliente ganha de
+escolha do projeto. É um atributo, e os dois temas passam pela mesma verificação
+de contraste — voltar é uma linha.
+
+### O "R$ NaN" que estava lá desde o bloco 11
+
+Abrir o balcão num navegador com conta de verdade mostrou **R$ NaN** no total do
+dia. A causa não era a conta: `apps/web/src/lib/admin-api.ts` declarava
+`totals.realizadoCents`, e a API **nunca mandou o campo** — de propósito. `/day`
+é rota de `appointments.view`; faturamento é `finance.view`, com segundo fator.
+Há teste na API, escrito no bloco 12, que reprova se o número aparecer ali.
+
+O tipo mentia, e o TypeScript garantia que a tela lia um campo que nunca
+chegava. A primeira correção foi a errada — adicionei o campo à API, e o teste
+do bloco 12 reprovou na hora, com o motivo escrito. O certo era tirar o número
+da tela: ele mora em `/admin/painel`, para quem pode vê-lo.
+
 ### Três coisas que a régua pegou
 
 - **`.marca` já existia.** O selo nas portas do sistema herdou, calado, a pílula

@@ -114,7 +114,7 @@ export default async function PainelPage() {
 
   if (!operacao.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="painel">
         {topo}
         <h1 className="painel__titulo">Painel</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -132,7 +132,7 @@ export default async function PainelPage() {
   const urgentes = achados?.achados.filter((a) => a.severidade !== 'aviso') ?? [];
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="painel">
       {topo}
 
       <h1 className="painel__titulo">Painel</h1>

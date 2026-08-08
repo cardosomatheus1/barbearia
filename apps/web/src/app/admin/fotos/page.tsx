@@ -84,7 +84,7 @@ export default async function FotosPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="cadastro">
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar as fotos. <a href="/admin/fotos">Tentar de novo</a>
         </div>
@@ -99,7 +99,7 @@ export default async function FotosPage({ searchParams }: Props) {
     fotos.services.filter((s) => s.photoUrl).length;
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="cadastro">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         <form action={acaoSair}>

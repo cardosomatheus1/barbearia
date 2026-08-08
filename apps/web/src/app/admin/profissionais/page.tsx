@@ -521,7 +521,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
   if (!equipe.ok || !catalogo.ok) {
     const code = equipe.ok ? (catalogo.ok ? 'request_failed' : catalogo.code) : equipe.code;
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="cadastro">
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -546,7 +546,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
     : linhasDaJornada(jornada?.ok ? jornada.dados.faixas : []);
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="cadastro">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}

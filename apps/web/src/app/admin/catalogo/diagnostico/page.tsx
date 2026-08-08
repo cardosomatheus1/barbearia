@@ -74,7 +74,7 @@ export default async function DiagnosticoPage() {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="cadastro">
         {topo}
         <h1 className="painel__titulo">Diagnóstico do catálogo</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -93,7 +93,7 @@ export default async function DiagnosticoPage() {
   const ordenados = [...achados].sort((a, b) => ORDEM[a.severidade] - ORDEM[b.severidade]);
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="cadastro">
       {topo}
       <CadastroNav atual="/admin/catalogo/diagnostico" />
 

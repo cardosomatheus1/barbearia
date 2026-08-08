@@ -115,7 +115,7 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
       redirect('/admin/seguranca?de=caixa');
     }
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="comissao">
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[dados.code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
@@ -129,7 +129,7 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
   const servicos = catalogo.ok ? catalogo.dados.services.filter((s) => s.active) : [];
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="comissao">
       {topo}
 
       <h1 className="painel__titulo">Regras de comissão</h1>
