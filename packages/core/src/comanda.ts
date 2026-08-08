@@ -139,12 +139,31 @@ export const FORMAS_DE_PAGAMENTO = [
   'credit',
   'link',
   'transfer',
+  /**
+   * Fiado: o cliente leva agora e paga depois.
+   *
+   * A SPEC §3.10 o marca como **obrigatório para migrar** — o incumbente tem
+   * (`get_controle_fiados`) e a barbearia de bairro usa. Ele é a única forma
+   * que **não é dinheiro entrando**: vira saldo devedor do cliente, e o dinheiro
+   * só aparece quando ele volta para pagar.
+   */
+  'fiado',
 ] as const;
 
 export type FormaDePagamento = (typeof FORMAS_DE_PAGAMENTO)[number];
 
 /** Só dinheiro entra na gaveta. O resto some no extrato do adquirente. */
 export const ENTRA_NA_GAVETA: readonly FormaDePagamento[] = ['cash'];
+
+/**
+ * Formas que não trazem dinheiro agora.
+ *
+ * Separado de `ENTRA_NA_GAVETA` de propósito: cartão não entra na gaveta mas é
+ * receita realizada; fiado não entra na gaveta **e não é receita ainda**. Somar
+ * os dois no faturamento do dia é como a barbearia acha que faturou o que
+ * ninguém pagou.
+ */
+export const NAO_E_RECEITA_AGORA: readonly FormaDePagamento[] = ['fiado'];
 
 export interface Pagamento {
   readonly forma: FormaDePagamento;
@@ -155,7 +174,9 @@ export type FalhaDoPagamento =
   | 'forma_invalida'
   | 'valor_invalido'
   | 'falta_pagar'
-  | 'pagou_demais';
+  | 'pagou_demais'
+  | 'fiado_sem_cliente'
+  | 'fiado_acima_do_limite';
 
 /**
  * O pagamento fecha a comanda?
@@ -170,6 +191,12 @@ export type FalhaDoPagamento =
 export function conferirPagamento(params: {
   readonly totalCents: number;
   readonly pagamentos: readonly Pagamento[];
+  /**
+   * A conta do cliente. Obrigatória se alguma parcela for fiado — sem cliente
+   * identificado a dívida não teria dono, e a barbearia descobriria no fim do
+   * mês que fiou para "ninguém".
+   */
+  readonly conta?: ContaDoCliente | null;
 }): { readonly falha: FalhaDoPagamento | null; readonly trocoCents: number } {
   for (const pagamento of params.pagamentos) {
     if (!FORMAS_DE_PAGAMENTO.includes(pagamento.forma)) {
@@ -180,11 +207,26 @@ export function conferirPagamento(params: {
     }
   }
 
+  const fiadoCents = params.pagamentos
+    .filter((p) => p.forma === 'fiado')
+    .reduce((soma, p) => soma + p.valorCents, 0);
+
+  if (fiadoCents > 0) {
+    if (!params.conta) return { falha: 'fiado_sem_cliente', trocoCents: 0 };
+    if (!podeFiar({ conta: params.conta, valorCents: fiadoCents })) {
+      return { falha: 'fiado_acima_do_limite', trocoCents: 0 };
+    }
+  }
+
   const pago = params.pagamentos.reduce((soma, p) => soma + p.valorCents, 0);
   if (pago < params.totalCents) return { falha: 'falta_pagar', trocoCents: 0 };
 
   const sobra = pago - params.totalCents;
   if (sobra === 0) return { falha: null, trocoCents: 0 };
+
+  // Ninguém fia e leva troco. Se sobrou com fiado na conta, o operador digitou
+  // errado — e o desfecho seria a barbearia dar dinheiro a quem ficou devendo.
+  if (fiadoCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
 
   const emDinheiro = params.pagamentos
     .filter((p) => ENTRA_NA_GAVETA.includes(p.forma))
@@ -258,5 +300,91 @@ export function fecharCaixa(params: {
     esperadoCents,
     contadoCents: params.contadoCents,
     divergenciaCents: params.contadoCents - esperadoCents,
+  };
+}
+
+// -- Fiado --------------------------------------------------------------------
+
+/**
+ * A conta do cliente.
+ *
+ * `saldoCents` negativo é dívida; positivo é crédito (troco que ficou, pacote
+ * pago adiantado). Um número só, com sinal, em vez de duas colunas: duas
+ * colunas permitiriam a mesma pessoa dever e ter crédito ao mesmo tempo, e a
+ * conversa no balcão é sempre "quanto o senhor deve".
+ */
+export interface ContaDoCliente {
+  readonly saldoCents: number;
+  /**
+   * Quanto esta pessoa pode dever. Zero significa **não fia**.
+   *
+   * Por cliente, não por barbearia: fiar é decisão de confiança, e o valor que
+   * a barbearia aceita do vizinho de vinte anos não é o que aceita de quem
+   * entrou hoje.
+   */
+  readonly limiteCents: number;
+}
+
+/**
+ * Esta pessoa pode fiar este valor?
+ *
+ * A conta é sobre a **dívida depois**, não sobre o valor pedido: quem já deve
+ * R$ 80 com limite de R$ 100 fia R$ 20, não R$ 100.
+ */
+export function podeFiar(params: {
+  readonly conta: ContaDoCliente;
+  readonly valorCents: number;
+}): boolean {
+  if (params.valorCents <= 0) return false;
+  const dividaDepois = params.valorCents - params.conta.saldoCents;
+  return dividaDepois <= params.conta.limiteCents;
+}
+
+/** Quanto ainda cabe de fiado nesta conta. Nunca negativo. */
+export function fiadoDisponivel(conta: ContaDoCliente): number {
+  return Math.max(0, conta.limiteCents + conta.saldoCents);
+}
+
+/**
+ * O que a comanda produz de verdade, por forma de pagamento.
+ *
+ * Três números que a barbearia confunde e não deveria:
+ *
+ * - **na gaveta** — o que o operador vai contar no fechamento;
+ * - **receita agora** — o que de fato entrou, em qualquer forma;
+ * - **a receber** — o fiado, que ainda não é dinheiro nenhum.
+ *
+ * Somar fiado ao faturamento do dia é como a barbearia comemora um mês que não
+ * aconteceu; e não registrá-lo em lugar nenhum é como ela esquece de cobrar.
+ */
+export interface ResultadoDoPagamento {
+  readonly naGavetaCents: number;
+  readonly receitaAgoraCents: number;
+  readonly aReceberCents: number;
+  readonly trocoCents: number;
+}
+
+export function resultadoDoPagamento(params: {
+  readonly pagamentos: readonly Pagamento[];
+  readonly trocoCents: number;
+}): ResultadoDoPagamento {
+  let naGaveta = 0;
+  let receita = 0;
+  let aReceber = 0;
+
+  for (const pagamento of params.pagamentos) {
+    if (NAO_E_RECEITA_AGORA.includes(pagamento.forma)) {
+      aReceber += pagamento.valorCents;
+      continue;
+    }
+    receita += pagamento.valorCents;
+    if (ENTRA_NA_GAVETA.includes(pagamento.forma)) naGaveta += pagamento.valorCents;
+  }
+
+  return {
+    naGavetaCents: Math.max(0, naGaveta - params.trocoCents),
+    receitaAgoraCents: Math.max(0, receita - params.trocoCents),
+    aReceberCents: aReceber,
+    trocoCents: params.trocoCents,
   };
 }

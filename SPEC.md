@@ -331,6 +331,7 @@ hoje.
 
 | Lacuna | Por que espera |
 |---|---|
+| ~~Fiado fora do MVP~~ | **Resolvido.** O roadmap o punha no bloco 52 e esta spec (§3.10) o marca como obrigatório para migrar. A contradição foi decidida a favor da spec: fiado subiu para o bloco 18, junto com o caixa, porque pagar fiado é forma de pagamento e receber fiado é movimento de caixa |
 | Segundo fator para `finance.*` | nenhuma tela exige `finance.*` ainda. Há teste que reprova qualquer rota que passe a exigir antes de o MFA existir, então a regra não some por esquecimento |
 | Faturamento do dia no balcão | é `finance.view`, e depende do item acima |
 

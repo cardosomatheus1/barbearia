@@ -102,7 +102,7 @@ atual sem perder nenhuma capacidade que usava.
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | ✅ |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
 | 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |
-| 18 | Comanda + checkout + caixa | |
+| 18 | Comanda + checkout + caixa + **fiado** | |
 | 19 | Comissão básica + fechamento | |
 | 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | |
 | 21 | Dashboard básico + validador de catálogo | |
@@ -213,7 +213,7 @@ não é vendável.
 | 49 | Split: modelagem derivada da comissão |
 | 50 | Split: KYC do profissional, liquidação, estorno |
 | 51 | Financeiro: contas a pagar/receber, transferências, conciliação |
-| 52 | Financeiro: fiado, vale, DRE gerencial |
+| 52 | Financeiro: vale, DRE gerencial |
 | 53 | `FiscalProvider`: abstração e integração |
 | 54 | Fiscal: NFS-e, cancelamento, Salão-Parceiro |
 | 55 | WhatsApp oficial: templates, webhooks, botões |
@@ -259,6 +259,30 @@ Só faz sentido com centenas de barbearias na base.
 | 77 | Franquias: indicadores consolidados, metas |
 | 78 | API pública: chaves, escopos, rate limit |
 | 79 | Webhooks assinados para terceiros |
+
+---
+
+## Correção de escopo: fiado subiu para o MVP
+
+O roadmap punha fiado no bloco 52 e a SPEC §3.10 diz, com todas as letras:
+
+> **Obrigatório no MVP** — sua ausência é motivo de não-migração.
+
+Os dois não podiam estar certos, e quem decide é o critério de aceite do próprio
+MVP: *uma barbearia de duas cadeiras substitui o incumbente sem perder nenhuma
+capacidade que usava*. A engenharia reversa do concorrente encontrou
+`get_controle_fiados` e `registra_pagamento_divida` — é recurso em uso, não
+enfeite de catálogo. Barbearia de bairro fia, e sistema que não fia é sistema
+que não entra.
+
+Fiado passou para o **bloco 18**, junto com o caixa, porque é onde ele de fato
+vive: pagar fiado é forma de pagamento no fechamento da comanda, e receber o
+fiado é movimento de caixa. Separar em outro bloco criaria uma forma de
+pagamento que a tela de pagamento não conhece.
+
+**`vale` e DRE gerencial ficaram no 52.** A SPEC os descreve como presentes no
+incumbente, mas não os marca como obrigatórios para migrar — vale é
+adiantamento descontado da comissão, e comissão é o bloco 19.
 
 ---
 
