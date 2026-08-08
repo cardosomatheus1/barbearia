@@ -280,6 +280,69 @@ porque sozinho entrega 40–70% da redução de falta a uma fração do custo.
 
 ---
 
+# 7.1 Distância entre esta spec e o que está construído
+
+Esta seção existe porque uma spec que descreve o produto inteiro no presente
+vira ficção assim que o código começa. O detalhe de cada item — o que já
+funciona, o que falta e em que bloco entra — está na tabela
+[Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada) do
+`ROADMAP.md`, que é atualizada a cada bloco. Aqui fica só a leitura de alto
+nível, agrupada pelo **motivo** de ainda não existir, porque é o motivo que
+decide se algo é dívida ou sequência.
+
+## A. Especificado, motor pronto, **sem caminho de escrita** — dívida
+
+O único grupo que não é escolha de ordem. Aqui a spec descreve um comportamento,
+o motor o implementa e é testado, e **nada no produto consegue produzir o dado
+que o alimenta**. Campo que o motor aceita e ninguém preenche é mentira do
+sistema, e é a terceira vez que o padrão aparece (`blocks`, `resource_pools` e
+agora este).
+
+| Comportamento | Onde está especificado | O que existe | O que não existe |
+|---|---|---|---|
+| Folga, feriado, horário diferente num dia e bloqueio pontual | Parte 2, §"Exceções por data" e a precedência de §3.1 | `schedule_exceptions` com os cinco tipos, a precedência resolvida e testada (`bloqueio > exceção do profissional > exceção da unidade > feriado > jornada`), índice parcial e RLS | **nenhuma escrita**: nem domínio, nem rota, nem tela. Hoje só por SQL. Bloco 15 |
+
+Nota de correção: `bloqueio pontual` e `folga/feriado` foram registrados por um
+tempo como duas lacunas diferentes. São o mesmo `schedule_exceptions`, separados
+só pelo `kind` — e a linha do bloqueio afirmava ter "API", o que vendia demais:
+a API **respeita** o bloqueio e recusa agendamento em cima dele; criar um nunca
+foi possível.
+
+## B. Bloqueadas em infraestrutura que o projeto não tem — sequência, não dívida
+
+Resolver qualquer uma destas significa construir a infraestrutura primeiro, o
+que é outro bloco. Todas têm um contorno que funciona na barbearia de verdade
+hoje.
+
+| Lacuna | Depende de | Contorno atual |
+|---|---|---|
+| Convite do barbeiro | `app-pro` — sem a agenda dele o convite não leva a lugar nenhum | o profissional é criado pelo cadastro |
+| Entregar a senha de primeiro acesso | canal transacional (provedor de WhatsApp + fila) | o dono entrega de viva-voz; a senha morre no primeiro uso |
+| Marcar falta automaticamente | processo rodando fora de uma requisição | a recepção toca o botão; a tela mostra o relógio da tolerância |
+| Painel que se atualiza sozinho | empurrão do servidor | recarga a cada ação; qualquer outra coisa seria pesquisa em laço |
+| Enviar a foto em vez de colar o endereço | armazenamento de objeto | colar `https`; a barbearia já publicou as fotos em algum lugar |
+
+## C. Ordem deliberada — construir antes seria construir sem consumidor
+
+| Lacuna | Por que espera |
+|---|---|
+| Segundo fator para `finance.*` | nenhuma tela exige `finance.*` ainda. Há teste que reprova qualquer rota que passe a exigir antes de o MFA existir, então a regra não some por esquecimento |
+| Faturamento do dia no balcão | é `finance.view`, e depende do item acima |
+
+## D. Mecanismo pronto, falta a tela — legítimo adiar
+
+A regra do projeto separa as duas coisas: mecanismo fecha no bloco em que a
+necessidade aparece; **tela de administração para cadastrar o dado** espera o
+bloco do admin correspondente. O que não é legítimo é o contrário — adiar o
+mecanismo porque a tela ainda não existe, que é como se produz o grupo A.
+
+| Lacuna | Mecanismo pronto | Bloco da tela |
+|---|---|---|
+| Editar as permissões de cada papel | `role_permissions` por barbearia, editável, valendo na requisição seguinte | 30 |
+| Ler a trilha de auditoria | `audit_log` append-only, escrita na transação que muda o estado, leitura paginada por cursor | 21 |
+
+---
+
 # 8. Métricas
 
 **North Star:** `Completed Appointments per Active Business`

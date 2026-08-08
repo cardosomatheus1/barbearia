@@ -40,6 +40,14 @@ bloqueio pontual > exceção do profissional > exceção da unidade
 > feriado > jornada semanal
 ```
 
+> **Estado da implementação.** A precedência acima está resolvida e testada no
+> motor, e `schedule_exceptions` tem os cinco tipos, índice e RLS desde o
+> primeiro bloco. **Nada no produto escreve nessa tabela** — nem folga, nem
+> feriado, nem bloqueio pontual. Só por SQL. A escrita e a tela entram no bloco
+> 15 (agenda do admin), e o registro está em
+> [`SPEC.md` §7.1 grupo A](../../SPEC.md#71-distância-entre-esta-spec-e-o-que-está-construído),
+> classificado como dívida e não como sequência.
+
 ### Modelo
 ```
 work_schedules       (professional_id, weekday, start, end, breaks[])
