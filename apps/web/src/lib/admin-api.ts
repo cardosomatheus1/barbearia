@@ -18,12 +18,14 @@ async function chamar<T>(
   path: string,
   body?: unknown,
   token?: string,
+  idempotencyKey?: string,
 ): Promise<Resposta<T>> {
   const resposta = await fetch(`${BASE}${path}`, {
     method: metodo,
     headers: {
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     cache: 'no-store',
@@ -115,3 +117,147 @@ export const salvarJanela = (
     cancellationPolicy?: string;
   },
 ) => chamar<{ saved: boolean }>('PUT', '/v1/admin/change-window', dados, token);
+
+// -- Balcão -------------------------------------------------------------------
+
+export type StatusAtendimento =
+  | 'pending' | 'confirmed' | 'checked_in' | 'waiting' | 'in_progress'
+  | 'completed' | 'cancelled_customer' | 'cancelled_business' | 'no_show' | 'rescheduled';
+
+export type AcaoAtendimento =
+  | 'confirm' | 'check_in' | 'wait' | 'start' | 'complete'
+  | 'no_show' | 'undo_no_show' | 'cancel';
+
+export type Pontualidade =
+  | { kind: 'upcoming'; minutesUntil: number }
+  | { kind: 'due' }
+  | { kind: 'late'; minutesLate: number; noShowInMinutes: number }
+  | { kind: 'no_show_due'; minutesLate: number };
+
+export interface LinhaDoDia {
+  id: string;
+  status: StatusAtendimento;
+  start: string;
+  end: string;
+  startsAt: string;
+  professionalId: string;
+  professionalName: string;
+  customerName: string | null;
+  customerPhoneTail: string | null;
+  services: string[];
+  priceCents: number;
+  realDurationMinutes: number | null;
+  waitingMinutes: number | null;
+  punctuality: Pontualidade | null;
+  actions: AcaoAtendimento[];
+}
+
+export interface PainelDoDia {
+  date: string;
+  today: string;
+  timezone: string;
+  noShowAfterMinutes: number;
+  professionals: { id: string; name: string }[];
+  entries: LinhaDoDia[];
+  totals: {
+    esperados: number;
+    chegaram: number;
+    atendendo: number;
+    concluidos: number;
+    faltaram: number;
+    cancelados: number;
+    realizadoCents: number;
+  };
+}
+
+export const painelDoDia = (token: string, filtros: { date?: string; professionalId?: string } = {}) => {
+  const busca = new URLSearchParams();
+  if (filtros.date) busca.set('date', filtros.date);
+  if (filtros.professionalId) busca.set('professionalId', filtros.professionalId);
+  const query = busca.toString();
+  return chamar<PainelDoDia>('GET', `/v1/admin/day${query ? `?${query}` : ''}`, undefined, token);
+};
+
+export const moverAtendimento = (token: string, id: string, action: AcaoAtendimento) =>
+  chamar<{ status: StatusAtendimento }>(
+    'POST',
+    `/v1/admin/appointments/${id}/attendance`,
+    { action },
+    token,
+  );
+
+export interface ClienteEncontrado {
+  id: string;
+  name: string;
+  phoneMasked: string;
+  lastVisitAt: string | null;
+  noShows: number;
+}
+
+export const buscarClientes = (token: string, q: string) =>
+  chamar<{ customers: ClienteEncontrado[] }>(
+    'GET',
+    `/v1/admin/customers?q=${encodeURIComponent(q)}`,
+    undefined,
+    token,
+  );
+
+export interface CatalogoDoBalcao {
+  services: { id: string; name: string; durationMinutes: number; priceCents: number }[];
+  professionals: { id: string; name: string }[];
+  timezone: string;
+}
+
+export const catalogoDoBalcao = (token: string) =>
+  chamar<CatalogoDoBalcao>('GET', '/v1/admin/catalog', undefined, token);
+
+export interface DiaDaGrade {
+  date: string;
+  unavailableReason: string | null;
+  slots: { start: string; end: string; professionalId: string }[];
+}
+
+export const gradeDoBalcao = (
+  token: string,
+  filtros: { serviceIds: string[]; professionalId?: string; dateFrom: string; dateTo?: string },
+) => {
+  const busca = new URLSearchParams({
+    serviceIds: filtros.serviceIds.join(','),
+    dateFrom: filtros.dateFrom,
+  });
+  if (filtros.professionalId) busca.set('professionalId', filtros.professionalId);
+  if (filtros.dateTo) busca.set('dateTo', filtros.dateTo);
+  return chamar<{ timezone: string; days: DiaDaGrade[] }>(
+    'GET',
+    `/v1/admin/availability?${busca.toString()}`,
+    undefined,
+    token,
+  );
+};
+
+/**
+ * Marca pelo balcão.
+ *
+ * A chave de idempotência vem de quem chama — nunca gerada aqui dentro, senão
+ * cada reenvio traria uma chave nova e o duplo toque criaria dois horários.
+ */
+export const marcarNoBalcao = (
+  token: string,
+  dados: {
+    customerId?: string;
+    name?: string;
+    phone?: string;
+    professionalId: string;
+    serviceIds: string[];
+    date: string;
+    start: string;
+    notes?: string;
+  },
+  idempotencyKey: string,
+) => chamar<{ id: string; startsAt: string }>(
+  'POST',
+  '/v1/admin/appointments',
+  dados,
+  token,
+  idempotencyKey,
+);

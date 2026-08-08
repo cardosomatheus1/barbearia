@@ -104,6 +104,14 @@ export interface CreateAppointmentRequest {
   readonly idempotencyKey?: string;
   readonly holdId?: string;
   readonly now?: Date;
+  /**
+   * Marcação pelo balcão: sem antecedência mínima e sem janela máxima.
+   *
+   * Só quem já está autenticado como equipe pode passar isto — nunca vem do
+   * corpo de uma requisição do cliente, senão a guarda de autoatendimento seria
+   * desligada por quem ela existe para conter.
+   */
+  readonly atCounter?: boolean;
 }
 
 interface ResolvedSlot {
@@ -146,6 +154,7 @@ async function resolveSlot(
   const availability = computeFromContext(context, {
     date: request.date,
     ...(request.now ? { now: request.now } : {}),
+    ...(request.atCounter ? { atCounter: true } : {}),
   });
 
   const slot = availability.slots.find(

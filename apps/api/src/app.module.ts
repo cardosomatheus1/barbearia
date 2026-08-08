@@ -9,6 +9,7 @@ import {
 } from './booking/appointments.controller.js';
 import { AuthController, SessionController } from './auth/auth.controller.js';
 import { OnboardingController, StaffAuthController } from './admin/admin.controller.js';
+import { BoardController } from './admin/board.controller.js';
 import { StaffGuard } from './admin/staff.guard.js';
 import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
@@ -24,6 +25,7 @@ import { TenantService } from './tenant/tenant.service.js';
     SessionController,
     StaffAuthController,
     OnboardingController,
+    BoardController,
     GuestAppointmentsController,
     AppointmentsController,
   ],

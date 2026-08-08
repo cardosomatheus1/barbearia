@@ -3,3 +3,5 @@ export * from './service.js';
 export * from './range.js';
 export * from './booking.js';
 export * from './profile.js';
+export * from './dayboard.js';
+export * from './counter.js';

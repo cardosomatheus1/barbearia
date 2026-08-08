@@ -13,13 +13,13 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade — lógica pura, sem banco e sem relógio | 118 testes ✅ |
+| `packages/core` | Motor de disponibilidade e vida do atendimento — lógica pura, sem banco e sem relógio | 185 testes ✅ |
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 16 invariantes + 10 testes ✅ |
-| `packages/scheduling` | Repositórios, disponibilidade e reserva | 44 testes ✅ |
+| `packages/scheduling` | Repositórios, disponibilidade, reserva e o dia do balcão | 83 testes ✅ |
 | `packages/identity` | OTP por WhatsApp, sessão do cliente, consentimentos | 26 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 77 testes ✅ |
-| `apps/api` | API pública: perfil, disponibilidade, login, agendamento | 51 testes e2e ✅ |
-| `apps/web` | Página pública com SSR (Next.js) | — |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão | 101 testes e2e ✅ |
+| `apps/web` | Página pública, fluxo do cliente e balcão, com SSR (Next.js) | 17 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -354,18 +354,97 @@ existe para proteger, entregue por HTTP sem precisar de dump. Agora as duas
 respostas são idênticas (202, mesmo corpo) e nenhuma traz sessão; o passo
 seguinte é o login, nos dois casos. Custa uma tela a mais e fecha o oráculo.
 
+## O balcão é a terceira superfície
+
+Cliente e gestor tinham tela. Quem passa o dia com o notebook aberto — marcando
+presença, atendendo quem chegou sem marcar, descobrindo quem faltou — não tinha.
+Até o bloco 10 a barbearia publicava a página, recebia agendamento no banco e
+**não tinha nenhuma tela que mostrasse o dia**: na prática o dono abria a página
+do cliente para adivinhar o que estava marcado.
+
+`/admin/dia` responde à pergunta que a recepção faz à tela o dia inteiro — quem
+está aí agora e o que faço com essa pessoa.
+
+### A máquina de estados existia desde o bloco 1 e ninguém a percorria
+
+`appointment_status` tem dez valores desde a primeira migração. Todo agendamento
+nascia `pending` e morria `pending`: `checked_in`, `in_progress`, `completed` e
+`no_show` eram enum sem caminho. Agora as transições vivem em
+`packages/core/src/attendance.ts` — lógica pura, testável, com o "agora" entrando
+por parâmetro — e a decisão é tomada **dentro da transação que escreve**. Duas
+pessoas no balcão tocando o mesmo cartão: a segunda recebe 409, não uma
+sobrescrita silenciosa.
+
+Duas escolhas da tabela de transições merecem nota:
+
+- **`pending` aceita `check_in` direto.** Quem chega sem ter confirmado é o caso
+  comum, não a exceção.
+- **`checked_in` ainda aceita `no_show`.** Parece contraditório — a pessoa
+  chegou —, mas é quem cansou de esperar e foi embora. Sem isso a recepção teria
+  que cancelar em nome da casa, e o registro diria que a culpa foi dela.
+
+Desfazer uma falta pode falhar, e é bom que falhe: enquanto o horário estava
+`no_show` a constraint de exclusão o ignorava, então a vaga pode ter sido dada a
+outro cliente. O banco recusa com `23P01` e a tela diz para marcar um novo.
+
+### A antecedência mínima é regra do site, não do balcão
+
+Ela existe para o cliente não marcar às 14:05 um horário de 14:10 que ninguém vai
+preparar. Com a pessoa de pé na frente da recepcionista, vira obstáculo. O flag
+`atCounter` desliga a antecedência mínima e a janela máxima de agendamento — e
+vale para a **grade e para a gravação juntas**. Aplicar em uma só é como o
+operador clicaria num horário oferecido e levaria 409 de volta.
+
+O que `atCounter` **não** desliga é o corte do "agora": oferecer 09:00 às 23:00
+não é flexibilidade, é lixo na tela.
+
+### A busca de cliente não pode virar exportação da base
+
+`GET /v1/admin/customers?q=` acha pelo trecho do nome ou pelos últimos dígitos do
+celular — que é como a recepção pergunta. Três guardas:
+
+- **Piso de três caracteres.** Uma letra devolveria quase a base a cada tecla.
+- **Curinga do LIKE neutralizado.** Sem escapar, `%` sozinho devolve todo mundo.
+- **Telefone nunca sai inteiro.** Nem na busca, nem no painel do dia — a tela do
+  balcão fica virada para o salão. O painel mostra os quatro últimos dígitos; a
+  busca, o número mascarado.
+
+É por isso que marcar para um cliente já cadastrado manda o **id**, não o
+telefone: o balcão nunca teve o número completo para digitar de volta. E o id
+passa por conferência antes do `INSERT` — a chave estrangeira de
+`appointments.customer_id` não conhece tenant, e a checagem de integridade do
+Postgres não passa pela RLS. Sem essa consulta, o id de um cliente de outra
+barbearia seria gravado sem erro. Há teste que prova os dois lados.
+
+### Duas dependências novas no banco, com motivo
+
+`pg_trgm` e `unaccent`, na migração 0015. Sem trigrama, buscar por trecho de nome
+é varredura sequencial; sem `unaccent`, "joao" não acha "João" — e metade dos
+nomes brasileiros tem acento que ninguém digita no balcão. `unaccent()` é STABLE
+e não entra em índice, então a migração cria `sem_acento()` com o dicionário
+fixado, que é a receita da própria documentação do Postgres.
+
+O índice de telefone é sobre `reverse(phone_e164)`, porque sufixo vira prefixo e
+é isso que um B-tree sabe fazer. Ele **não** leva `tenant_id` na frente: a
+consulta não filtra por tenant (a RLS faz isso), e coluna líder sem predicado
+inutiliza o índice. Medido em 40 mil clientes: com `(tenant_id, ...)` o plano era
+Seq Scan em 11,3 ms; sem ela, Index Scan em 0,12 ms.
+
+### O painel é claro, e isso estava escrito havia cinco blocos
+
+Os tokens declaravam o tema claro como "o padrão do admin" desde o design
+system — e ninguém o aplicava. O balcão é o que torna isso concreto: a tela fica
+horas ligada e fundo escuro cansa em sessão longa. Os dois temas passam pela
+mesma verificação de contraste, então a troca não abre buraco de acessibilidade.
+
 ## Próximos passos
 
-Bloco 11 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 12 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Admin: CRUD de catálogo, equipe, jornadas e recursos. O onboarding cria o
-essencial; o dia a dia precisa editar.
-
-Depois dele vem a **terceira superfície**: o balcão. Cliente e gestor tinham
-tela; quem passa o dia com o notebook aberto — marcando presença, atendendo quem
-chegou sem marcar, descobrindo quem faltou — não tinha. A SPEC descreve o papel
-e a fila presencial; o roadmap é que tratava isso como funções espalhadas. Ver
-[o balcão é a terceira superfície](ROADMAP.md#o-balcão-é-a-terceira-superfície).
+RBAC mínimo: papéis, permissões e contas de equipe. Hoje quem opera o balcão usa
+a conta do dono, e essa conta abre faturamento. Dar a chave do dinheiro a quem só
+marca presença é o incidente que o bloco 12 existe para impedir — e por isso ele
+vem antes de qualquer conta que não seja a do dono.
 
 ## Responsividade é medida, não olhada
 
@@ -379,7 +458,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as oito
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as doze
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento. O CSS pode estar
   correto e a grade estourar assim que entra conteúdo real — só a medição pega.
 

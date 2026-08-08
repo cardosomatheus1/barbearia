@@ -32,6 +32,23 @@ export interface AvailabilityRequest {
   readonly preferredProfessionalId?: string;
   /** Injetável para teste; default é o relógio real. */
   readonly now?: Date;
+  /**
+   * Grade do balcão: desliga a antecedência mínima e a janela máxima.
+   *
+   * As duas são guardas do **autoatendimento** — existem para o cliente não
+   * marcar às 14:05 um horário de 14:10 que ninguém vai conseguir preparar, e
+   * para não encher a agenda de seis meses à frente. Nenhuma das duas faz
+   * sentido com a pessoa de pé na frente da recepcionista: quem está no balcão
+   * marca para agora, e o cliente fiel marca o Natal em julho.
+   *
+   * O que **não** cai é o corte do "agora": o balcão marca para daqui a pouco,
+   * não para as nove da manhã de ontem.
+   *
+   * Precisa existir **também** na grade, não só na gravação: com a estratégia
+   * `anchored`, oferecer uma grade e gravar por outra regra é como toda escolha
+   * do operador acabaria recusada uma por uma.
+   */
+  readonly atCounter?: boolean;
 }
 
 export interface AvailabilityResponse {
@@ -109,7 +126,12 @@ export function computeFromContext(
   context: DayContext,
   request: Pick<
     AvailabilityRequest,
-    'date' | 'collapse' | 'assignmentStrategy' | 'preferredProfessionalId' | 'now'
+    | 'date'
+    | 'collapse'
+    | 'assignmentStrategy'
+    | 'preferredProfessionalId'
+    | 'now'
+    | 'atCounter'
   >,
 ): AvailabilityResponse {
   const { location } = context;
@@ -118,11 +140,18 @@ export function computeFromContext(
   const maxDate = new Date(now.getTime() + location.maxLeadDays * 86_400_000)
     .toISOString()
     .slice(0, 10);
-  if (request.date > maxDate) {
+  if (!request.atCounter && request.date > maxDate) {
     return emptyResponse(request.date, 'beyond_booking_window', location.timezone);
   }
 
-  const cutoff = cutoffMinuteFor(location.timezone, request.date, now, location.minLeadMinutes);
+  // No balcão a antecedência mínima cai, mas o corte do "agora" fica: oferecer
+  // 09:00 às 23:00 não é flexibilidade, é lixo na tela.
+  const cutoff = cutoffMinuteFor(
+    location.timezone,
+    request.date,
+    now,
+    request.atCounter ? 0 : location.minLeadMinutes,
+  );
 
   const bufferPolicy = location.bufferPolicy === 'per_service' ? 'perService' : 'outer';
   const allSlots: Slot[] = [];

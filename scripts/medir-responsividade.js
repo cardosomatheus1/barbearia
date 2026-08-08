@@ -117,9 +117,87 @@ async function prepararCliente(slug) {
   return sessao.token;
 }
 
+/**
+ * Enche o dia de hoje pelo balcão, com conteúdo real.
+ *
+ * Nome composto, serviço longo e dois profissionais: é o que quebra layout, e
+ * só aparece com conteúdo verdadeiro (CLAUDE.md §5).
+ */
+async function prepararBalcao(token) {
+  const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+  const catalogo = await (await fetch(`${API}/v1/admin/catalog`, { headers: cabecalho })).json();
+  const hoje = await (await fetch(`${API}/v1/admin/day`, { headers: cabecalho })).json();
+
+  const servico = catalogo.services.reduce((maior, s) => (s.name.length > maior.name.length ? s : maior));
+  const pessoas = [
+    { name: 'Maria Aparecida do Nascimento', phone: '(71) 98111-2233' },
+    { name: 'Zé', phone: '(71) 98111-2244' },
+  ];
+
+  // O dia medido é **amanhã**, não hoje: rodar a medição às onze da noite
+  // deixaria o painel vazio, e medir a tela vazia não prova nada sobre a cheia.
+  const amanha = new Date(`${hoje.today}T12:00:00Z`);
+  amanha.setUTCDate(amanha.getUTCDate() + 1);
+  const dataLivre = amanha.toISOString().slice(0, 10);
+
+  for (const [i, pessoa] of pessoas.entries()) {
+    const profissional = catalogo.professionals[i % catalogo.professionals.length];
+    const grade = await (
+      await fetch(
+        `${API}/v1/admin/availability?serviceIds=${servico.id}&professionalId=${profissional.id}&dateFrom=${dataLivre}&dateTo=${dataLivre}`,
+        { headers: cabecalho },
+      )
+    ).json();
+    const slot = grade.days[0]?.slots?.[i];
+    if (!slot) throw new Error(`sem horário livre em ${dataLivre} para preparar o balcão`);
+
+    const criado = await (
+      await fetch(`${API}/v1/admin/appointments`, {
+        method: 'POST',
+        headers: cabecalho,
+        body: JSON.stringify({
+          ...pessoa,
+          professionalId: profissional.id,
+          serviceIds: [servico.id],
+          date: dataLivre,
+          start: slot.start,
+        }),
+      })
+    ).json();
+
+    // Um deles já chegou: a linha com "esperando há X min" e a com o relógio da
+    // falta têm alturas diferentes, e é a mistura que estoura layout.
+    if (i === 0 && criado.id) {
+      await fetch(`${API}/v1/admin/appointments/${criado.id}/attendance`, {
+        method: 'POST',
+        headers: cabecalho,
+        body: JSON.stringify({ action: 'check_in' }),
+      });
+    }
+  }
+
+  // O que a medição precisa para abrir os passos seguintes da marcação sem
+  // depender de clique.
+  const grade = await (
+    await fetch(
+      `${API}/v1/admin/availability?serviceIds=${servico.id}&dateFrom=${dataLivre}&dateTo=${dataLivre}`,
+      { headers: cabecalho },
+    )
+  ).json();
+
+  return {
+    dia: dataLivre,
+    servicoId: servico.id,
+    dataLivre,
+    horaLivre: grade.days[0]?.slots?.[0]?.start,
+    profissionalLivre: grade.days[0]?.slots?.[0]?.professionalId,
+  };
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
+  const balcao = await prepararBalcao(token);
 
   const telas = [
     { nome: 'pública', url: `/${slug}` },
@@ -130,6 +208,14 @@ async function main() {
     { nome: 'entrar (gestor)', url: '/admin/entrar' },
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'balcão — horário', url: `/admin/dia/marcar?s=${balcao.servicoId}&d=${balcao.dataLivre}&e=c`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    {
+      nome: 'balcão — para quem',
+      url: `/admin/dia/marcar?s=${balcao.servicoId}&p=${balcao.profissionalLivre}&d=${balcao.dataLivre}&h=${balcao.horaLivre}&e=d&q=nascimento`,
+      cookie: { nome: 'gestor', valor: token, caminho: '/admin' },
+    },
   ];
 
   const browser = await chromium.launch({

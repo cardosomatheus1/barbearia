@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 10 de 78 blocos.**
+**Status: 11 de 78 blocos.**
 
 ---
 
@@ -53,10 +53,13 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
-| Bloqueio pontual do dia (dentista às 14h) | tipo `block` no schema, motor, repositório e API: recorta a grade e recusa o agendamento | tela para a recepção criar — hoje só por SQL | 12 (agenda do admin) |
-| Convite do barbeiro por WhatsApp | o profissional é criado no onboarding | o convite e o login próprio dele | 13 (`app-pro`) — sem a agenda do barbeiro não há para onde o convite levar |
-| Painel como aplicação separada | rota `/admin` própria; o pacote da página pública não cresceu (102 kB antes e depois do painel) | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | 11 (CRUD do admin) |
-| Jornada diferente por barbeiro | jornada por profissional no schema e no motor | o onboarding aplica a mesma para a equipe — o ajuste por pessoa é cadastro, não caminho de dez minutos | 11 (CRUD do admin) |
+| Bloqueio pontual do dia (dentista às 14h) | tipo `block` no schema, motor, repositório e API: recorta a grade e recusa o agendamento | tela para a recepção criar — hoje só por SQL | 15 (agenda do admin) |
+| Convite do barbeiro por WhatsApp | o profissional é criado no onboarding | o convite e o login próprio dele | 16 (`app-pro`) — sem a agenda do barbeiro não há para onde o convite levar |
+| Painel como aplicação separada | rota `/admin` própria; o pacote da página pública não cresceu (102 kB antes e depois do painel) | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | 13 (CRUD do admin) |
+| Jornada diferente por barbeiro | jornada por profissional no schema e no motor | o onboarding aplica a mesma para a equipe — o ajuste por pessoa é cadastro, não caminho de dez minutos | 13 (CRUD do admin) |
+| Falta automática ao fim da tolerância | `no_show_after_minutes` na unidade, o relógio calculado no domínio e mostrado no painel antes de o prazo acabar | quem vira o status é uma pessoa — nada faz isso sozinho | 20 (fila + worker): é a primeira vez que existe processo rodando fora de uma requisição. Até lá a tela diz "tolerância acaba em", nunca "automática" |
+| Painel do dia que se atualiza sozinho | recarga manual e recarga a cada ação; a tela sempre reflete o banco no instante em que foi montada | atualização sem toque, para o balcão que fica aberto | 20 (fila + worker) para o empurrão do servidor; antes disso qualquer solução seria pesquisa em laço, que é o que o produto cobra dos outros |
+| Recepcionista com conta própria | sessão de equipe, papel gravado em `staff_users` e guarda de rota | criar contas além da do dono, com permissão separada — hoje quem opera o balcão usa a conta do dono | 12 (RBAC): dar a chave do faturamento a quem só marca presença é o incidente que o bloco 12 existe para impedir |
 | Encerrar sessão nos outros aparelhos | revogação e "Sair" deste aparelho, para cliente e para gestor | listagem de sessões ativas | sem bloco: o cliente de barbearia usa um celular só. Entra se aparecer demanda real, não por simetria |
 
 **Lacuna fechada sai da tabela.** O histórico de por que foi adiada fica no
@@ -82,9 +85,9 @@ atual sem perder nenhuma capacidade que usava.
 | 8 | Fluxo de agendamento no front: serviço → profissional → horário → dados → comprovante | ✅ |
 | 9 | Meus agendamentos: entrar por código, listar, cancelar, remarcar | ✅ |
 | 10 | Conta de gestor + onboarding em 6 etapas + configuração da unidade | ✅ |
-| 11 | Admin: CRUD de catálogo, equipe, jornadas, recursos | |
+| 11 | Balcão: painel do dia, check-in, no-show, busca e marcação pelo balcão | ✅ |
 | 12 | RBAC mínimo: papéis, permissões e contas de equipe | |
-| 13 | Balcão: painel do dia, check-in, no-show, busca e cadastro rápido | |
+| 13 | Admin: CRUD de catálogo, equipe, jornadas, recursos | |
 | 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | |
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
@@ -128,8 +131,12 @@ O erro concreto que estava no plano:
   clientes a quem só precisa marcar presença — e `customers.export` é o vetor
   clássico de roubo de base quando alguém sai.
 
-Daí a ordem: RBAC (12) vem **antes** do balcão (13 e 14), porque sem ele a
-primeira conta de recepcionista já é um incidente.
+Daí a ordem: o painel do dia (11) vem primeiro porque é o buraco mais agudo —
+hoje o dono abre a página do cliente para adivinhar o que está marcado. O RBAC
+(12) vem logo atrás e **antes de qualquer conta que não seja do dono**: enquanto
+só existe dono não há permissão a separar, mas a primeira recepcionista criada
+sem ele já é um incidente. O CRUD (13) espera porque mudar preço é dor semanal;
+não enxergar a agenda é dor de todo minuto do expediente.
 
 ### O que muda no desenho
 

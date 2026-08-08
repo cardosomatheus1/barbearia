@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import {
   criarConta,
   entrarComoGestor,
+  marcarNoBalcao,
+  moverAtendimento,
   publicarBarbearia,
   sairDoGestor,
   salvarEmpresa,
@@ -11,6 +13,7 @@ import {
   salvarPagamentos,
   salvarProfissionais,
   salvarServicos,
+  type AcaoAtendimento,
 } from '@/lib/admin-api';
 import { apagarSessaoGestor, gravarSessaoGestor, lerSessaoGestor } from '@/lib/sessao-gestor';
 
@@ -30,7 +33,31 @@ const numero = (form: FormData, campo: string, padrao: number): number => {
 };
 
 function falhar(rota: string, code: string): never {
-  redirect(`${rota}?erro=${encodeURIComponent(code)}`);
+  const separador = rota.includes('?') ? '&' : '?';
+  redirect(`${rota}${separador}erro=${encodeURIComponent(code)}`);
+}
+
+/**
+ * Lista fechada das ações que o balcão pode enviar.
+ *
+ * O `action` chega de um campo escondido do formulário, que é entrada externa
+ * como qualquer outra. A API valida de novo — esta guarda existe para a tela
+ * não gastar uma ida ao servidor com lixo, e para o erro ser o da tela.
+ */
+const ACOES_DE_ATENDIMENTO: ReadonlySet<string> = new Set([
+  'confirm', 'check_in', 'wait', 'start', 'complete', 'no_show', 'undo_no_show', 'cancel',
+]);
+
+/**
+ * Para onde voltar depois de mover um atendimento.
+ *
+ * Mesmo motivo de `destinoSeguro` no fluxo do cliente: valor de formulário
+ * virando `redirect` é redirecionador aberto. Aqui o alvo é ainda mais
+ * sensível — o cookie do painel altera catálogo, equipe e preço.
+ */
+function destinoDoBalcao(bruto: string): string {
+  if (bruto.startsWith('//')) return '/admin/dia';
+  return bruto === '/admin/dia' || bruto.startsWith('/admin/dia?') ? bruto : '/admin/dia';
 }
 
 async function exigirSessao(): Promise<string> {
@@ -163,7 +190,7 @@ export async function acaoProfissionais(form: FormData): Promise<void> {
 
   // A jornada é a mesma para toda a equipe nesta etapa. Diferenciar por pessoa
   // é trabalho de cadastro, e o objetivo aqui é chegar ao link em dez minutos —
-  // o ajuste por pessoa fica no CRUD da equipe (bloco 11).
+  // o ajuste por pessoa fica no CRUD da equipe (bloco 13).
   const schedule = dias.map((weekday) => ({ weekday, startMinute: abre, endMinute: fecha }));
 
   const resultado = await salvarProfissionais(
@@ -209,4 +236,78 @@ export async function acaoJanela(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
   redirect('/admin/configuracoes?salvo=1');
+}
+
+// -- Balcão ------------------------------------------------------------------
+
+/**
+ * Move um atendimento pelo balcão.
+ *
+ * Volta para o mesmo dia e o mesmo filtro de onde saiu — a recepção não pode
+ * perder o lugar na lista a cada toque. O destino vem do formulário e é
+ * conferido antes de virar redirecionamento: campo de formulário é entrada
+ * externa, e um `redirect` cru com ele seria redirecionamento aberto.
+ */
+export async function acaoAtendimento(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const id = texto(form, 'id');
+  const acao = texto(form, 'action');
+  const voltar = destinoDoBalcao(texto(form, 'voltar'));
+
+  if (!ACOES_DE_ATENDIMENTO.has(acao)) falhar(voltar, 'request_failed');
+
+  const resultado = await moverAtendimento(token, id, acao as AcaoAtendimento);
+  if (!resultado.ok) falhar(voltar, resultado.code);
+
+  redirect(voltar);
+}
+
+/**
+ * Marca alguém pelo balcão.
+ *
+ * A chave de idempotência vem do formulário, gerada uma vez quando a tela foi
+ * montada. Gerá-la aqui daria uma chave nova a cada envio, e o duplo toque —
+ * que é o problema que ela existe para resolver — criaria dois horários.
+ */
+export async function acaoMarcarNoBalcao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const serviceIds = texto(form, 'serviceIds').split(',').filter(Boolean);
+  const date = texto(form, 'date');
+  const start = texto(form, 'start');
+  const professionalId = texto(form, 'professionalId');
+
+  const volta = new URLSearchParams({
+    s: serviceIds.join(','),
+    p: professionalId,
+    d: date,
+    h: start,
+    e: 'd',
+  });
+
+  const resultado = await marcarNoBalcao(
+    token,
+    {
+      // Cliente já cadastrado entra pelo id; quem não tem cadastro entra por
+      // nome e celular, e o cadastro nasce agora. O telefone do cadastrado não
+      // volta para a tela em momento nenhum — a busca só devolve mascarado.
+      ...(texto(form, 'customerId')
+        ? { customerId: texto(form, 'customerId') }
+        : { name: texto(form, 'name'), phone: texto(form, 'phone') }),
+      professionalId,
+      serviceIds,
+      date,
+      start,
+      ...(texto(form, 'notes') ? { notes: texto(form, 'notes') } : {}),
+    },
+    texto(form, 'chave'),
+  );
+
+  if (!resultado.ok) {
+    volta.set('erro', resultado.code);
+    redirect(`/admin/dia/marcar?${volta.toString()}`);
+  }
+
+  redirect(`/admin/dia?d=${date}&marcado=1`);
 }
