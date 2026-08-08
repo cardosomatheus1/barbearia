@@ -248,9 +248,19 @@ personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
   Nada pode quebrar abaixo disso.
 - **Toda media query de layout usa `min-width`.** `max-width` significa
   "desfazer o que fiz para tela grande", o que inverte a ordem de trabalho e
-  deixa o celular como caso excepcional. Há teste que rejeita.
+  deixa o celular como caso excepcional. Há teste que rejeita — no design system
+  **e** em `apps/web/src/app/globals.css`, que é onde o CSS das telas realmente
+  mora. Por um tempo só o primeiro era verificado, e o arquivo que mais cresce
+  era o que ninguém olhava.
 - **Larguras de conferência:** 360 · 390 · 768 · 1280. Uma tela que só foi
-  olhada no notebook não foi olhada.
+  olhada no notebook não foi olhada — e o inverso também vale.
+- **Toda tela serve aos dois aparelhos.** Não existe "tela de celular" e "tela
+  de PC" neste produto: existe a mesma tela, que começa no piso e ganha densidade
+  quando há espaço. Vale inclusive para o balcão, cujo aparelho principal é o
+  notebook — quando ele está ocupado, a recepção atende pelo celular.
+- **Medição, não olhômetro.** `node scripts/medir-responsividade.js` abre cada
+  tela nas quatro larguras e mede elemento a elemento: rolagem horizontal,
+  transbordo e alvo de toque. Rodar antes de fechar bloco que produza interface.
 - **Nunca esconder conteúdo no celular — refluir.** `display: none` em tela
   pequena é decisão de que aquilo não importava; se não importa, tire de todas.
 
@@ -259,14 +269,23 @@ personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
 - **Rolagem horizontal na página.** É o defeito mais comum em página de
   barbearia no celular. Conteúdo largo — tabela, grade de horários, diagrama —
   rola dentro do próprio recipiente (`.ui-scroll-x`), nunca leva a página junto.
-  Há teste.
+  Há teste **e** medição no navegador: o teste lê o CSS, a medição vê o layout
+  montado, e só a segunda pega grade que estoura com conteúdo real.
 - **Imagem sem limite de largura.** `max-width: 100%` sempre, e `aspect-ratio`
   declarado para a foto não empurrar o conteúdo ao carregar.
 - **Ação principal sob a barra de gestos.** Barra fixa no rodapé soma
   `env(safe-area-inset-bottom)`. Sem isso o botão "Agendar" fica inalcançável no
   iPhone. Há teste.
-- **Alvo de toque abaixo de 44px.** Vale para botão, campo, horário na grade e
-  qualquer coisa clicável.
+- **Alvo de toque abaixo de 44px.** Vale para botão, campo, horário na grade,
+  link de navegação e qualquer alvo autônomo — **em qualquer largura**, não só
+  no celular: mouse impreciso e limitação motora não são exclusividade do
+  aparelho pequeno.
+
+  A única exceção é **link dentro de frase** ("é só *escolher o horário*"), que
+  a própria WCAG 2.5.8 isenta: esticar um link no meio de um parágrafo abre
+  buraco no texto e piora a leitura. Link de navegação sozinho no topo da tela
+  **não** é isso — foi assim que `← Voltar` ficou com 21px em quatro telas até
+  a medição pegar.
 
 ### Componente responsivo ao recipiente, não à tela
 

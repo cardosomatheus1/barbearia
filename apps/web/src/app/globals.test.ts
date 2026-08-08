@@ -1,0 +1,141 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+/**
+ * Responsividade das telas (CLAUDE.md §5).
+ *
+ * O design system já tinha esta guarda, mas ela só olhava o CSS de
+ * `packages/ui`. **Todo o CSS das telas mora aqui** — página pública, fluxo de
+ * agendamento, meus agendamentos e painel do balcão —, e nada verificava.
+ *
+ * A regra dizia "há teste que rejeita" e era verdade pela metade: o arquivo que
+ * mais cresce era justamente o que ninguém checava.
+ */
+
+const css = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'globals.css'),
+  'utf8',
+);
+
+/**
+ * O mesmo CSS sem as condições de `@media`.
+ *
+ * Ponto de quebra é `min-width: 768px` e não tem nada a ver com exigir 768px de
+ * largura. Procurar largura fixa sem separar os dois acusa o próprio
+ * mobile-first de quebrar o mobile-first.
+ */
+const semCondicoes = css.replace(/@media[^{]+\{/g, '{');
+
+/**
+ * Separa o CSS base do que está dentro de `@media`, contando chaves.
+ *
+ * A primeira versão partia o arquivo no primeiro `@media` e tratava o resto como
+ * condicional — mas as media queries são intercaladas, então tudo que vem depois
+ * da primeira ficava fora da análise. O teste passava por não estar olhando.
+ */
+function separar(fonte: string): { base: string; dentroDeMedia: string } {
+  let base = '';
+  let dentroDeMedia = '';
+  let i = 0;
+
+  while (i < fonte.length) {
+    const inicio = fonte.indexOf('@media', i);
+    if (inicio === -1) {
+      base += fonte.slice(i);
+      break;
+    }
+
+    base += fonte.slice(i, inicio);
+
+    const abre = fonte.indexOf('{', inicio);
+    if (abre === -1) break;
+
+    let profundidade = 1;
+    let j = abre + 1;
+    while (j < fonte.length && profundidade > 0) {
+      if (fonte[j] === '{') profundidade += 1;
+      else if (fonte[j] === '}') profundidade -= 1;
+      j += 1;
+    }
+
+    dentroDeMedia += fonte.slice(abre + 1, j - 1);
+    i = j;
+  }
+
+  return { base, dentroDeMedia };
+}
+
+const { base: cssBase, dentroDeMedia } = separar(css);
+
+/** Piso de projeto: o Android popular no Brasil. */
+const PISO = 360;
+
+describe('CSS das telas', () => {
+  it('toda media query de layout é mobile-first', () => {
+    // `max-width` significa "desfazer o que fiz para tela grande", o que inverte
+    // a ordem de trabalho e transforma o celular em caso excepcional. Vale para
+    // o painel também: notebook é o aparelho principal do balcão, não o único.
+    const queries = [...css.matchAll(/@media\s*([^{]+)\{/g)].map((m) => (m[1] ?? '').trim());
+    const layout = queries.filter((q) => !q.includes('prefers-'));
+
+    expect(layout.length).toBeGreaterThan(0);
+    for (const query of layout) {
+      expect(query, `media query não é min-width: "${query}"`).toContain('min-width');
+    }
+  });
+
+  it('nenhuma largura fixa passa do piso de 360px', () => {
+    // Largura em pixel maior que a tela é a causa nº 1 de rolagem horizontal —
+    // o defeito mais comum em página de barbearia no celular.
+    const larguras = [...semCondicoes.matchAll(/(?:^|[^-])\bwidth:\s*(\d+)px/g)]
+      .map((m) => Number(m[1]))
+      .filter((valor) => valor > PISO);
+
+    expect(larguras, `largura fixa acima de ${PISO}px: ${larguras.join(', ')}`).toEqual([]);
+  });
+
+  it('nenhum `min-width` em pixel obriga a tela a ser maior que o piso', () => {
+    const minimos = [...semCondicoes.matchAll(/min-width:\s*(\d+)px/g)]
+      .map((m) => Number(m[1]))
+      .filter((valor) => valor > PISO);
+
+    expect(minimos, `min-width acima do piso: ${minimos.join(', ')}`).toEqual([]);
+  });
+
+  it('conteúdo largo rola dentro do próprio recipiente', () => {
+    // Tabela, grade de horários e régua de etapas são largas por natureza. A
+    // regra não é evitá-las — é que a rolagem fique dentro delas e nunca leve a
+    // página junto.
+    const rolagens = [...css.matchAll(/overflow-x:\s*auto/g)];
+    expect(rolagens.length).toBeGreaterThan(0);
+  });
+
+  it('não esconde conteúdo no celular para mostrá-lo no desktop', () => {
+    // `display: none` no piso com `display: algo` num `min-width` é a decisão de
+    // que aquilo não importava no celular. Se não importa, tire de todas.
+    const escondidos = [...cssBase.matchAll(/\.([\w-]+)[^{}]*\{[^}]*display:\s*none/g)].map(
+      (m) => m[1] ?? '',
+    );
+
+    const revividos = escondidos.filter((classe) =>
+      new RegExp(`\\.${classe}[^{}]*\\{[^}]*display:\\s*(?!none)`).test(dentroDeMedia),
+    );
+
+    expect(revividos, `escondido no celular e revivido no desktop: ${revividos.join(', ')}`)
+      .toEqual([]);
+  });
+
+  it('toda tela do painel começa no piso, sem exigir notebook', () => {
+    // O balcão é usado num notebook o dia inteiro, mas não pode ser exclusivo
+    // dele: quando o notebook está ocupado, a recepção atende pelo celular.
+    const painel = semCondicoes.slice(semCondicoes.indexOf('.painel__entrada'));
+    expect(painel.length).toBeGreaterThan(0);
+
+    const larguras = [...painel.matchAll(/width:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    for (const largura of larguras) {
+      expect(largura, `painel exige ${largura}px`).toBeLessThanOrEqual(PISO);
+    }
+  });
+});

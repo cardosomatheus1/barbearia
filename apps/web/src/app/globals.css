@@ -456,9 +456,14 @@ main { padding-bottom: var(--space-8); }
 /* -- Entrar ---------------------------------------------------------------- */
 
 .entrar { padding: var(--space-6) var(--space-4) var(--space-8); max-width: 26rem; }
+/* Link de navegação é alvo autônomo, não texto corrido: precisa dos 44px como
+   qualquer botão. A isenção da WCAG vale para link dentro de frase, e "voltar"
+   sozinho no topo da tela não é isso. */
 .entrar__voltar {
-  display: inline-block;
-  margin-bottom: var(--space-6);
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin-bottom: var(--space-4);
   color: var(--color-text-muted);
   text-decoration: none;
   font-size: var(--font-size-sm);
@@ -503,6 +508,9 @@ main { padding-bottom: var(--space-8); }
   margin-bottom: var(--space-5);
 }
 .meus__voltar {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
   color: var(--color-text-muted);
   text-decoration: none;
   font-size: var(--font-size-sm);
@@ -648,7 +656,13 @@ main { padding-bottom: var(--space-8); }
   gap: var(--space-4);
   margin-bottom: var(--space-5);
 }
+/* Serve de título e, no painel de configuração, de link para voltar. Como pode
+   ser clicável, respeita o alvo mínimo sempre — não dá para o mesmo elemento
+   valer 44px numa tela e 24px na outra. */
 .painel__marca {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
   margin: 0;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);

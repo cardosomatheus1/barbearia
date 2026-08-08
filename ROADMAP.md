@@ -135,10 +135,16 @@ primeira conta de recepcionista já é um incidente.
 
 É a primeira tela cujo aparelho principal é um **notebook**, aberta o dia
 inteiro, usada por alguém que não lê — olha de relance entre um cliente e outro.
-Tudo até aqui é mobile-first com piso de 360px, e continua sendo; o balcão
-inverte a prioridade sem quebrar a regra: nasce dos 360px para o caso de o
-notebook estar ocupado e a recepção atender pelo celular, mas é **desenhada para
-1280**, com teclado, densidade alta e sem alvo de polegar.
+
+Isso muda a **densidade**, não a regra. O balcão é a mesma tela nos dois
+aparelhos: nasce no piso de 360px, ganha colunas e atalhos de teclado quando há
+espaço. Nada de "versão de celular" reduzida — a recepção atende pelo telefone
+sempre que o notebook está ocupado com outra coisa, e é justamente aí, com
+cliente esperando em pé na frente dela, que a tela não pode faltar.
+
+Vale para todo o produto e está no CLAUDE.md §5: alvo de toque de 44px em
+qualquer largura, `min-width` sempre, e conferência medida em 360 · 390 · 768 ·
+1280 por `scripts/medir-responsividade.js` — não no olho.
 
 ---
 

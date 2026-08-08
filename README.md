@@ -367,6 +367,27 @@ chegou sem marcar, descobrindo quem faltou — não tinha. A SPEC descreve o pap
 e a fila presencial; o roadmap é que tratava isso como funções espalhadas. Ver
 [o balcão é a terceira superfície](ROADMAP.md#o-balcão-é-a-terceira-superfície).
 
+## Responsividade é medida, não olhada
+
+Toda tela serve aos dois aparelhos. Não existe "tela de celular" e "tela de PC"
+neste produto — existe a mesma tela, que começa no piso de 360px e ganha
+densidade quando há espaço.
+
+Duas guardas, porque uma só não bastava:
+
+- **Teste sobre o CSS** (`globals.test.ts`): `min-width` sempre, nenhuma largura
+  fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
+  Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
+  que ninguém verificava.
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as oito
+  telas em 360 · 390 · 768 · 1280 e mede elemento a elemento. O CSS pode estar
+  correto e a grade estourar assim que entra conteúdo real — só a medição pega.
+
+Foi ela que encontrou `← Voltar` com 21px de altura em quatro telas, contra o
+piso de 44. Link **dentro de frase** é exceção, e por um motivo, não por
+conveniência: a WCAG 2.5.8 isenta, porque esticar um link no meio de um parágrafo
+abre buraco no texto. Link de navegação sozinho não é isso.
+
 **Lacunas conhecidas** estão na tabela
 [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada
 uma com o que já existe, o que falta e em qual bloco entra.
