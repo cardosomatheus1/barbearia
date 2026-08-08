@@ -18,5 +18,6 @@ export * from './excecao.js';
 export * from './comanda.js';
 export * from './comissao.js';
 export * from './desempenho.js';
+export * from './validador.js';
 export * from './meu-dia.js';
 export * from './notificacao.js';

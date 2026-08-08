@@ -51,6 +51,8 @@ export interface Servico {
   readonly photoUrl: string | null;
   /** Componentes, quando este serviço é vendido como combo. */
   readonly componentIds: readonly string[];
+  /** Ganho declarado por fazer os componentes na sequência, em minutos. */
+  readonly comboToleranceMinutes: number;
   /** Quantos agendamentos futuros ainda apontam para ele. */
   readonly futureAppointments: number;
 }
@@ -75,6 +77,7 @@ interface ServicoRow {
   active: boolean;
   photo_url: string | null;
   component_ids: string[] | null;
+  combo_tolerance_minutes: number | null;
   future_appointments: bigint;
 }
 
@@ -93,6 +96,7 @@ function toServico(row: ServicoRow): Servico {
     active: row.active,
     photoUrl: row.photo_url,
     componentIds: row.component_ids ?? [],
+    comboToleranceMinutes: row.combo_tolerance_minutes ?? 0,
     futureAppointments: Number(row.future_appointments),
   };
 }
@@ -122,6 +126,8 @@ export async function listServices(
                 FROM service_combos sc
                 JOIN service_combo_components scc ON scc.combo_id = sc.id
                WHERE sc.name = s.name) AS component_ids,
+             (SELECT sc.tolerance_minutes FROM service_combos sc
+               WHERE sc.name = s.name) AS combo_tolerance_minutes,
              (SELECT count(*) FROM appointment_services aps
                 JOIN appointments a ON a.id = aps.appointment_id
                WHERE aps.service_id = s.id
@@ -155,6 +161,15 @@ export interface ServiceInput {
   readonly bookableOnline: boolean;
   /** Ids de serviços que este combina. Vazio significa serviço simples. */
   readonly componentIds?: readonly string[];
+  /**
+   * Quanto a casa ganha fazendo os serviços na sequência, em minutos.
+   *
+   * Entra por aqui porque a regra V1 do validador a exige (SPEC §5.7), e sem
+   * origem de dado ela seria mais um campo que o motor aceita e ninguém
+   * preenche. O padrão é zero: combo cadastrado sem ninguém pensar no assunto
+   * **tem** que aparecer no validador — é o defeito D4.
+   */
+  readonly comboToleranceMinutes?: number;
 }
 
 /** Acha ou cria a categoria. Categoria é rótulo, não cadastro à parte. */
@@ -276,6 +291,7 @@ async function gravarCombo(
   nome: string,
   duracao: number,
   componentIds: readonly string[] | undefined,
+  toleranciaMinutos = 0,
 ): Promise<void> {
   await tx.$executeRaw`
     DELETE FROM service_combos WHERE name = ${nome}
@@ -284,8 +300,12 @@ async function gravarCombo(
   await exigirServicosDoTenant(tx, componentIds);
 
   const criado = await tx.$queryRaw<{ id: string }[]>`
-    INSERT INTO service_combos (tenant_id, name, declared_duration_minutes)
-    VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid, ${nome}, ${duracao})
+    INSERT INTO service_combos
+      (tenant_id, name, declared_duration_minutes, tolerance_minutes)
+    VALUES (
+      NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+      ${nome}, ${duracao}, ${toleranciaMinutos}
+    )
     RETURNING id
   `;
   const comboId = criado[0]?.id;
@@ -330,7 +350,13 @@ export async function createService(
     const id = linhas[0]?.id;
     if (!id) throw new CatalogError('service_not_found', 'Não foi possível criar o serviço');
 
-    await gravarCombo(tx, input.name, input.durationMinutes, input.componentIds);
+    await gravarCombo(
+      tx,
+      input.name,
+      input.durationMinutes,
+      input.componentIds,
+      input.comboToleranceMinutes ?? 0,
+    );
 
     // Serviço novo nasce habilitado para quem já faz tudo. Sem isto ele some da
     // grade e o dono descobre pela reclamação de que "o site não deixa marcar".
@@ -388,7 +414,13 @@ export async function updateService(
     if (anterior.name !== input.name) {
       await tx.$executeRaw`DELETE FROM service_combos WHERE name = ${anterior.name}`;
     }
-    await gravarCombo(tx, input.name, input.durationMinutes, input.componentIds);
+    await gravarCombo(
+      tx,
+      input.name,
+      input.durationMinutes,
+      input.componentIds,
+      input.comboToleranceMinutes ?? 0,
+    );
   });
 }
 
