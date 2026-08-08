@@ -117,8 +117,17 @@ export default async function BarbershopPage({ params }: Params) {
       </header>
 
       <main>
+        {/* A abertura é uma composição só: o que dá para marcar hoje à esquerda,
+            a foto do salão à direita. A tese não mudou — o herói continua sendo
+            a disponibilidade, e no celular ela continua vindo primeiro, porque
+            é a ordem do DOM. O que mudou é que num notebook metade da dobra era
+            fundo vazio enquanto a única foto da página esperava embaixo, fora
+            do campo de visão. Em barbearia a escolha é visual: a foto trabalha
+            ao lado do horário, não depois dele. */}
+        <div className="abertura">
+        <div className="ui-container abertura__grade">
         <section className="hoje" aria-labelledby="hoje-titulo">
-          <div className="ui-container">
+          <div>
             <h2 className="rotulo" id="hoje-titulo">
               Hoje
             </h2>
@@ -169,9 +178,8 @@ export default async function BarbershopPage({ params }: Params) {
         </section>
 
         {capa ? (
-          /* A foto vem **depois** da agenda, não antes: o herói continua sendo a
-             disponibilidade (docs/03-direcao-visual.md). Mas a direção sempre
-             disse "a foto continua presente logo abaixo", e não havia nenhuma.
+          /* No celular ela continua vindo **depois** da agenda, porque é a ordem
+             do DOM e o herói é a disponibilidade (docs/03-direcao-visual.md).
              `width`/`height` reservam o espaço para ela não empurrar o
              conteúdo ao carregar — o toque errado no horário errado. */
           <figure className="capa">
@@ -186,6 +194,8 @@ export default async function BarbershopPage({ params }: Params) {
             />
           </figure>
         ) : null}
+        </div>
+        </div>
 
         <div className="corpo ui-container">
         <section className="secao secao--menu" id="servicos" aria-labelledby="servicos-titulo">

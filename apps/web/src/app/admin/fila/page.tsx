@@ -210,9 +210,8 @@ export default async function FilaPage({ searchParams }: Props) {
           ← {estado.businessName}
         </a>
         <nav className="painel__atalhos">
-          <a className="ui-button ui-button--ghost painel__sair" href="/admin/dia">
-            O dia
-          </a>
+          {/* O dia mora no contexto do casco. Ver o link aqui também é o mesmo
+              destino duas vezes na mesma tela. */}
           <form action={acaoSair}>
             <button className="ui-button ui-button--ghost painel__sair" type="submit">
               Sair

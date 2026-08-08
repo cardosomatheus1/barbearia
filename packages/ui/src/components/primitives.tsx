@@ -89,8 +89,15 @@ export const primitivesCss = `
 }
 .ui-skip-link:focus { top: var(--space-3); }
 
+/* O degradê é de cima para baixo e curto de propósito: dá a impressão de luz
+   vindo de cima, que é o que separa um painel de um retângulo pintado. Sem ele
+   trinta telas de cartão chapado parecem um formulário, e foi essa a
+   reclamação. Não é decoração solta: .quadro, .numero e .evento usam o mesmo
+   par de tokens, então cartão e painel pertencem à mesma superfície.
+   (Sem crase aqui — este CSS mora dentro de um template literal, e a crase o
+   fecharia. É o mesmo tropeço que a guarda de SQL já pega em consulta.) */
 .ui-card {
-  background: var(--color-surface-raised);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);

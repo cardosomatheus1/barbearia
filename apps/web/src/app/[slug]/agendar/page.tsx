@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getProfile, getAvailability, type PublicProfile, type PublicService } from '@/lib/api';
 import { localDate, addDays, weekdayShort, dayNumber } from '@/lib/date';
-import { applyBundle, suggestBundle } from '@barbearia/core';
+import { applyBundle, suggestBundle, imagemPublica, PROPORCAO } from '@barbearia/core';
 import { criarAgendamento } from './acoes';
 
 /**
@@ -288,6 +288,10 @@ function PassoServico({
               const novos = marcado
                 ? escolhidos.filter((id) => id !== servico.id)
                 : [...escolhidos, servico.id];
+              // A foto já aparecia no cardápio da página pública e sumia
+              // justamente aqui, que é onde a escolha acontece. Numa barbearia
+              // ela é o argumento (CLAUDE.md §5), e o dado já estava carregado.
+              const foto = imagemPublica(servico.photoUrl);
 
               return (
                 <li key={servico.id}>
@@ -301,6 +305,17 @@ function PassoServico({
                     <span className="escolha__marca" aria-hidden="true">
                       {marcado ? '✓' : ''}
                     </span>
+                    {foto ? (
+                      /* eslint-disable-next-line @next/next/no-img-element -- mesmo
+                         motivo do cardápio: domínio externo arbitrário. */
+                      <img
+                        alt=""
+                        className="escolha__foto"
+                        height={PROPORCAO.servico.height}
+                        src={foto}
+                        width={PROPORCAO.servico.width}
+                      />
+                    ) : null}
                     <span className="servico__nome">
                       {servico.name}
                       <span className="ui-visually-hidden">

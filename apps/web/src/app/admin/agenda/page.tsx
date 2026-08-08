@@ -339,12 +339,10 @@ export default async function AgendaPage({ searchParams }: Props) {
           ← {estado.businessName}
         </a>
         <nav className="painel__atalhos">
-          <a className="ui-button ui-button--ghost painel__sair" href="/admin/dia">
-            O dia
-          </a>
-          <a className="ui-button ui-button--ghost painel__sair" href="/admin/fila">
-            Fila
-          </a>
+          {/* O dia e a fila estão no contexto do casco, a um palmo à esquerda.
+              Repetir aqui é o mesmo destino duas vezes no DOM — quem usa leitor
+              de tela ouve dobrado, e é a mesma regra que já tirou a lista
+              duplicada do trilho. */}
           <form action={acaoSair}>
             <button className="ui-button ui-button--ghost painel__sair" type="submit">
               Sair
