@@ -14,7 +14,7 @@ import {
 } from './team.js';
 import { FakeMessagingProvider } from './messaging.js';
 import { resolveStaffSession, signUpOwner, staffLogin } from './staff.js';
-import { listAudit } from './audit.js';
+import { ACOES_DE_GESTAO, listAudit } from './audit.js';
 
 /**
  * Contas de equipe e permissões, contra Postgres real.
@@ -468,7 +468,7 @@ describeIfDb('equipe e permissões', () => {
       role: 'manager',
     });
 
-    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx));
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx, { acoes: ACOES_DE_GESTAO }));
     expect(eventos.map((e) => e.action)).toEqual(['staff.role_changed', 'staff.created']);
 
     const mudanca = eventos[0];
@@ -489,7 +489,7 @@ describeIfDb('equipe e permissões', () => {
       role: 'receptionist',
     });
 
-    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx));
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx, { acoes: ACOES_DE_GESTAO }));
     const texto = JSON.stringify(eventos);
     expect(texto).not.toContain(senhaInicial);
     expect(texto).not.toContain('scrypt$');
@@ -701,7 +701,7 @@ describeIfDb('equipe e permissões', () => {
       email: 'ruan@domari.com.br',
     });
 
-    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx));
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx, { acoes: ACOES_DE_GESTAO }));
     const criacao = eventos.find(
       (linha) => linha.action === 'staff.created' && linha.entityId === convidado.member.id,
     );

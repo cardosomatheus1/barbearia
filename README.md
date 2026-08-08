@@ -980,11 +980,18 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e cinco
-  telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e
+  nove telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
   correto e a grade estourar assim que entra conteúdo real — só a medição pega.
+
+  Antes de medir, ela confere que a tela **carregou**: que o caminho final é o
+  pedido e que não é a caixa de "não deu para carregar". Uma tela que não abriu
+  passa em qualquer largura — não rola, não estoura, não tem alvo pequeno —, e no
+  bloco 21 foi exatamente isso que aconteceu: o banco da demonstração estava duas
+  migrações atrás e trinta e cinco telas devolveram "ok" sem ninguém ter visto
+  nenhuma.
 
 Foi ela que encontrou `← Voltar` com 21px de altura em quatro telas, contra o
 piso de 44. Link **dentro de frase** é exceção, e por um motivo, não por
@@ -1498,3 +1505,107 @@ redirecionamentos a cada botão. Agora mora em `lib/destino.ts`, ao lado de
 Nada de segurança. Apontou um defeito de robustez que virou teste: `2026-99-01`
 passava pelo formato, atravessava a borda inteira e só morria no Postgres —
 virando 500 sobre entrada que a borda tinha obrigação de recusar com 400.
+
+---
+
+## Bloco 21 — o número que vira decisão, e o cadastro que atrapalha a agenda
+
+Três coisas entram juntas porque respondem à mesma pergunta do dono: **o que
+está acontecendo, e o que eu conserto hoje.**
+
+### Número sem comparação não gera decisão
+
+É a frase da SPEC §5.9, e ela decide o formato de tudo no painel: "R$ 5.820" não
+diz nada; "R$ 5.820, 12% acima do sábado passado" diz.
+
+A comparação é com **o mesmo dia da semana**, não com ontem. Barbearia tem
+semana com forma — sábado é o dobro de terça, segunda muitas vezes é fechada —,
+então sábado contra sexta produziria alta toda semana e queda toda segunda.
+Ruído que ninguém consegue usar.
+
+Ocupação é **tempo**, não contagem: um corte de 30 e uma coloração de 120 não
+ocupam a casa do mesmo jeito. O denominador são os minutos de jornada daquele
+dia da semana — e num dia sem jornada nenhuma a ocupação é zero, não infinito.
+
+Cliente novo é quem apareceu **hoje pela primeira vez**, medido pelo primeiro
+atendimento concluído. Contar cadastro criado hoje contaria também quem a
+recepção digitou de novo por engano.
+
+### Duas rotas para o painel, porque são duas permissões
+
+`reports.operational` é da recepção e da gerência; `finance.view` está no grupo
+de dinheiro e exige segundo fator. Uma rota só, decidindo por dentro o que
+devolve conforme quem pergunta, faria a permissão declarada deixar de descrever
+a rota — o defeito que a `/security-review` encontrou no bloco 19.
+
+A tela pede as duas e desenha o que conseguiu. Não esconde bloco atrás de
+cadeado: a SPEC §5.9 proíbe explicitamente ("não ficam cinza com cadeado").
+
+### O validador: dez regras, uma delas exigindo uma coluna nova
+
+`packages/core/src/validador.ts` é lógica pura, com teste que roda sem banco. A
+regra V1 — "combo com duração menor que a soma das partes **menos a tolerância
+declarada**" — não podia existir, porque a tolerância não existia. Sem ela, a
+regra acusaria todo combo legítimo: cortar e fazer a barba na sequência é
+genuinamente mais rápido que os dois atendimentos separados.
+
+O padrão é **zero**, de propósito. Combo cadastrado sem ninguém pensar no assunto
+tem que aparecer no validador — é o defeito D4, o mais caro encontrado em campo.
+E há teto de uma hora: acima disso a "tolerância" deixou de descrever o ganho da
+sequência e virou um jeito de calar o validador.
+
+A leitura do banco é **três consultas**, não uma por serviço. Uma consulta por
+serviço para descobrir quem o executa e quanto ele leva de fato seria N+1 numa
+tela que o dono abre justamente quando o cardápio está grande. A duração real é
+`percentile_cont(0.5)` — a mediana, não a média: um atendimento que parou pelo
+telefone puxa a média e não move a mediana. E só entram atendimentos com **um
+serviço só**, senão a mediana do corte viraria a do corte com barba.
+
+### A trilha guarda *quanto*, e foi isso que a primeira versão não conferiu
+
+A tela da trilha fecha uma lacuna aberta desde o bloco 12. A primeira versão
+serviu a trilha inteira sob `settings.manage`, com uma justificativa escrita no
+próprio arquivo: "a trilha guarda *quem fez o quê*, nunca a senha nem o hash de
+ninguém".
+
+A frase é verdadeira e a categoria conferida era a errada. `cash.closed` guarda o
+esperado, o contado e a divergência da gaveta. `order.discount` guarda o valor
+perdoado. `debt.received` guarda o saldo do cliente. `commission.closed` guarda o
+total da folha do período. A trilha não guarda segredo — guarda **quanto**.
+
+Como a exigência de segundo fator é **derivada** do `@Exige`, e `settings.manage`
+não está no grupo do dinheiro, a rota entregava o caixa e a folha sem MFA para a
+mesma conta que `/dashboard/revenue` tinha barrado um minuto antes. Foi a
+`/security-review` que pegou.
+
+O conserto é a partição do vocabulário em `packages/identity/src/audit.ts`: uma
+lista de gestão (conta, papel, permissão, segundo fator) e uma de dinheiro
+(caixa, comanda, fiado, comissão), duas rotas, duas permissões — e a tela com
+duas abas, porque a fronteira de permissão é real e vale mostrá-la. `listAudit`
+passou a **exigir** a lista de ações: o parâmetro opcional com padrão "todas" é o
+que faria a próxima rota nascer entregando o caixa por esquecimento.
+
+O que segura isso daqui para frente é `audit.test.ts`, que lê o tipo
+`AuditAction` do arquivo de origem e reprova quando uma ação nova não está em
+exatamente um dos dois lados. Ação auditada num bloco futuro fica vermelha até
+alguém decidir de que lado ela fica.
+
+### Duas telas que passaram sem existir
+
+A medição de responsividade devolveu "ok" para trinta e cinco telas contra um
+banco de demonstração duas migrações atrás — todas mostrando caixa de erro, que
+não rola, não estoura e não tem alvo pequeno. A medição agora confere primeiro se
+a tela **carregou**: caminho final igual ao pedido, e sem o texto de falha. E
+largura que nem chegou a ser medida deixou de contar como aprovada.
+
+Na mesma linha, uma tela medida contra um servidor com build velho não foi
+medida. Aconteceu aqui: o `next-server` de uma hora antes continuou de pé depois
+de um `pkill` que só matou o processo pai, e a aba nova da trilha "passou" sem
+existir no bundle servido.
+
+### `.achado` já era de outra coisa
+
+O diagnóstico do catálogo chama seus itens de `defeito` no CSS, apesar de o tipo
+se chamar `Achado`. `.achado` já é a linha de resultado da busca de cliente no
+balcão — flex, uma linha, alinhada ao centro. Reaproveitar o nome herdaria aquele
+layout em silêncio, e a tela quebraria sem ninguém tocar num arquivo dela.

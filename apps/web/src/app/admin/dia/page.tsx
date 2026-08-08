@@ -309,6 +309,11 @@ export default async function DiaPage({ searchParams }: Props) {
           {/* A tela esconde o que a guarda recusaria. Não é a segurança — essa
               está no servidor — é que botão que só serve para dar erro é pior
               que botão ausente para quem opera. */}
+          {podeNaTela(estado, 'reports.operational') ? (
+            <a className="ui-button ui-button--ghost painel__sair" href="/admin/painel">
+              Painel
+            </a>
+          ) : null}
           {podeNaTela(estado, 'team.manage') ? (
             <a className="ui-button ui-button--ghost painel__sair" href="/admin/equipe">
               Equipe

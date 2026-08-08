@@ -42,6 +42,52 @@ export type AuditAction =
   | 'commission.closed'
   | 'commission.rule_changed';
 
+/**
+ * O vocabulário partido em dois, porque a leitura não é uma permissão só.
+ *
+ * A trilha não guarda só *quem fez o quê*: `cash.closed` guarda o esperado, o
+ * contado e a divergência; `order.discount`, o valor perdoado; `debt.received`,
+ * o saldo do cliente; `commission.closed`, o total da folha do período. Ler isso
+ * é ler dinheiro — e no `CLAUDE.md` a exigência de segundo fator é **derivada**
+ * da permissão que a rota declara. Uma trilha inteira sob `settings.manage`
+ * entregaria o caixa e a folha sem segundo fator a quem foi barrado em
+ * `/dashboard/revenue` um minuto antes.
+ *
+ * Daí duas listas e duas rotas. O que decide de que lado uma ação fica é uma
+ * pergunta só: **o `before`/`after` dela contém valor em dinheiro?**
+ */
+export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
+  'cash.opened',
+  'cash.closed',
+  'cash.withdrawal',
+  'cash.supply',
+  'order.closed',
+  'order.discount',
+  'debt.received',
+  'commission.closed',
+  'commission.rule_changed',
+];
+
+/**
+ * O resto: conta, papel, permissão e segundo fator.
+ *
+ * Nenhuma delas carrega centavo — `staff.role_changed` guarda o papel de antes e
+ * o de depois, `mfa.disabled` guarda quem desligou. É a trilha que responde
+ * "quem deu acesso ao caixa para o Bruno?", e essa pergunta é de quem administra
+ * a casa, não de quem tem `finance.view`.
+ */
+export const ACOES_DE_GESTAO: readonly AuditAction[] = [
+  'staff.created',
+  'staff.role_changed',
+  'staff.deactivated',
+  'staff.reactivated',
+  'staff.password_reset',
+  'permissions.changed',
+  'mfa.enabled',
+  'mfa.disabled',
+  'mfa.recovery_used',
+];
+
 export interface AuditEntry {
   readonly actorId: string | null;
   readonly actorName: string;
@@ -95,9 +141,19 @@ export interface AuditRecord {
  */
 export async function listAudit(
   tx: TransactionClient,
-  params: { readonly limite?: number; readonly antesDe?: string } = {},
+  params: {
+    readonly limite?: number;
+    readonly antesDe?: string;
+    /**
+     * Quais ações devolver. **Obrigatório**, e não opcional com padrão "todas":
+     * o padrão permissivo é o que faria uma rota nova nascer entregando o caixa
+     * por esquecimento, que é exatamente o defeito que a separação corrige.
+     */
+    readonly acoes: readonly AuditAction[];
+  },
 ): Promise<readonly AuditRecord[]> {
   const limite = Math.min(params.limite ?? 50, 200);
+  if (params.acoes.length === 0) return [];
 
   const linhas = await tx.$queryRaw<
     {
@@ -114,6 +170,7 @@ export async function listAudit(
     SELECT id, actor_name, action, entity, entity_id, before, after, created_at
     FROM audit_log
     WHERE (${params.antesDe ?? null}::bigint IS NULL OR id < ${params.antesDe ?? null}::bigint)
+      AND action = ANY(${params.acoes as string[]}::text[])
     ORDER BY id DESC
     LIMIT ${limite}
   `;

@@ -615,6 +615,15 @@ async function main() {
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
+    // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir
+    // a versão sem faturamento mediria a tela mais fácil.
+    { nome: 'painel', url: '/admin/painel', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'diagnóstico do catálogo', url: '/admin/catalogo/diagnostico', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
+    // no corpo do evento — que é o que estoura a linha em 360px.
+    { nome: 'trilha — dinheiro', url: '/admin/trilha?aba=dinheiro', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A tela do barbeiro e a ficha do cliente. O `token` aqui é o do dono, que
     // vê tudo — o recorte por profissional é do servidor e tem teste próprio;
     // o que se mede aqui é o layout.
@@ -652,7 +661,40 @@ async function main() {
         ]);
       }
       const page = await ctx.newPage();
-      await page.goto(`${WEB}${tela.url}`, { waitUntil: 'networkidle' });
+      try {
+        await page.goto(`${WEB}${tela.url}`, { waitUntil: 'networkidle' });
+      } catch (erro) {
+        // Uma tela que nem abre é uma linha do relatório, não o fim dele: parar
+        // aqui esconderia o estado das outras trinta e sete.
+        console.log(`FALHA ${tela.nome.padEnd(20)} ${largura}px não abriu: ${erro.message.split('\n')[0]}`);
+        problemas += 1;
+        await ctx.close();
+        continue;
+      }
+
+      /**
+       * Uma tela que não carregou passa em qualquer largura.
+       *
+       * O estado de erro é uma caixa curta e centrada — nunca rola, nunca
+       * estoura, nunca tem alvo pequeno. Sem esta conferência, esquecer de
+       * migrar o banco da demonstração devolvia "ok" para trinta e cinco telas
+       * que ninguém tinha visto. E o desvio para o login é o mesmo caso: mede-se
+       * a tela de entrar quatro vezes achando que se mediu o painel.
+       */
+      const caminhoFinal = new URL(page.url()).pathname;
+      const esperado = new URL(tela.url, WEB).pathname;
+      const carregou = await page.evaluate(
+        () => !document.body.textContent?.includes('Não deu para carregar'),
+      );
+      if (caminhoFinal !== esperado || !carregou) {
+        console.log(
+          `FALHA ${tela.nome.padEnd(20)} ${largura}px `
+          + (caminhoFinal !== esperado ? `desviou para ${caminhoFinal}` : 'não carregou'),
+        );
+        problemas += 1;
+        await ctx.close();
+        continue;
+      }
 
       // Conteúdo dobrado é conteúdo. As telas de cadastro guardam os
       // formulários atrás de `<details>` — inclusive a tabela da jornada, que é
@@ -730,8 +772,11 @@ async function main() {
     const ruins = resultados.filter((r) => r.rola || r.estouram.length > 0 || r.pequenos.length > 0);
     problemas += ruins.length;
 
-    const marca = ruins.length === 0 ? 'ok ' : 'FALHA';
-    console.log(`${marca} ${tela.nome.padEnd(20)} ${LARGURAS.join(' · ')}`);
+    // Largura que nem chegou a ser medida não conta como aprovada: sem isto,
+    // uma tela que falhou nas quatro ainda terminava com um "ok" embaixo.
+    const marca = ruins.length === 0 && resultados.length === LARGURAS.length ? 'ok ' : 'FALHA';
+    const medidas = resultados.map((r) => r.largura);
+    console.log(`${marca} ${tela.nome.padEnd(20)} ${(medidas.length ? medidas : ['nenhuma largura medida']).join(' · ')}`);
     for (const r of ruins) {
       if (r.rola) console.log(`      ${r.largura}px rolagem horizontal na página`);
       if (r.estouram.length) console.log(`      ${r.largura}px estoura: ${r.estouram.join(', ')}`);

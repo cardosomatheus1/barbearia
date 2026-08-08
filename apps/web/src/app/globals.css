@@ -2349,3 +2349,138 @@ main { padding-bottom: var(--space-8); }
 @media (min-width: 768px) {
   .numeros { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ============================================================================
+   Painel, diagnóstico do catálogo e trilha (bloco 21)
+   ============================================================================ */
+
+/* A seta da comparação. Verde e vermelho são reforço, nunca a informação: a
+   frase ao lado ("+12% que na semana passada") diz o mesmo em texto, porque
+   um em doze homens não distingue as duas cores — e barbearia é público de
+   homem. */
+.numero__nota--bom { color: var(--color-success); }
+.numero__nota--ruim { color: var(--color-danger); }
+
+/* O alerta do cardápio vem antes dos números e é um link inteiro, não um texto
+   com "clique aqui": o alvo é a faixa toda, que é o que se acerta com o polegar
+   em pé na rua. */
+.alerta-catalogo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.alerta-catalogo--grave { border-left-color: var(--color-danger); }
+.alerta-catalogo__contagem {
+  flex: none;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+.alerta-catalogo__texto { min-width: 0; font-size: var(--font-size-sm); }
+.alerta-catalogo__seta { margin-left: auto; flex: none; color: var(--color-text-muted); }
+
+.defeitos {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.defeito {
+  /* Declarado com padrão porque o modificador é que troca a cor: sem isto, uma
+     severidade nova sem regra própria apagaria a borda inteira em vez de cair
+     numa cor neutra. */
+  --severidade: var(--color-border-strong);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--severidade);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.defeito--bloqueia { --severidade: var(--color-danger); }
+.defeito--publicacao { --severidade: var(--color-warning); }
+.defeito--aviso { --severidade: var(--color-border-strong); }
+
+.defeito__selo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.defeito__titulo {
+  margin: var(--space-2) 0 0;
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+.defeito__conserto {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+.defeito__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin-top: var(--space-1);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+/* A trilha é leitura, não tabela: em 360px uma grade de quatro colunas viraria
+   rolagem lateral, e o que a pessoa procura é uma frase — "Ana mudou o papel de
+   Bruno" — não uma linha de planilha. */
+.eventos {
+  list-style: none;
+  margin: var(--space-4) 0 var(--space-5);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.evento {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.evento__quando {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.evento__frase {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+.evento__mudou {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.evento__mudou li { overflow-wrap: anywhere; }
+
+@media (min-width: 768px) {
+  /* Com espaço, a hora sai da frente da frase e vira coluna — a leitura
+     cronológica fica em uma varredura só. */
+  .evento {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    column-gap: var(--space-4);
+  }
+  .evento__quando { grid-row: 1 / span 2; }
+  .evento__frase { margin-top: 0; }
+}

@@ -1195,3 +1195,99 @@ export const salvarMetaDoProfissional = (
   token: string,
   dados: { professionalId: string; mes: string; metaCents: number | null },
 ) => chamar<{ saved: boolean }>('PUT', '/v1/admin/pro/goals', dados, token);
+
+// -- O painel do proprietário -------------------------------------------------
+
+export interface Comparado {
+  valor: number;
+  anterior: number;
+  variacao: number | null;
+}
+
+export interface PainelOperacional {
+  dia: string;
+  comparadoCom: string;
+  agendamentos: Comparado;
+  atendidos: Comparado;
+  ocupacao: Comparado;
+  noShow: Comparado;
+  novosClientes: Comparado;
+}
+
+export interface PainelDeDinheiro {
+  dia: string;
+  comparadoCom: string;
+  faturamentoCents: Comparado;
+  ticketMedioCents: Comparado;
+}
+
+export const painelOperacional = (token: string, dia?: string) =>
+  chamar<PainelOperacional>(
+    'GET',
+    `/v1/admin/dashboard${dia ? `?dia=${dia}` : ''}`,
+    undefined,
+    token,
+  );
+
+export const painelDeDinheiro = (token: string, dia?: string) =>
+  chamar<PainelDeDinheiro>(
+    'GET',
+    `/v1/admin/dashboard/revenue${dia ? `?dia=${dia}` : ''}`,
+    undefined,
+    token,
+  );
+
+// -- O validador de catálogo --------------------------------------------------
+
+export interface AchadoDoCatalogo {
+  regra: string;
+  severidade: 'bloqueia' | 'publicacao' | 'aviso';
+  titulo: string;
+  conserto: string;
+  alvoId: string | null;
+  alvoNome: string;
+}
+
+export const diagnosticoDoCatalogo = (token: string) =>
+  chamar<{
+    achados: AchadoDoCatalogo[];
+    resumo: { bloqueia: number; publicacao: number; aviso: number };
+    examinados: number;
+  }>('GET', '/v1/admin/catalog/diagnosis', undefined, token);
+
+// -- A trilha de auditoria ----------------------------------------------------
+
+export interface EventoDaTrilha {
+  id: string;
+  actorName: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  before: unknown;
+  after: unknown;
+  createdAt: string;
+}
+
+/**
+ * A trilha vem em duas, e não é detalhe de implementação.
+ *
+ * `settings.manage` lê conta, papel e segundo fator; `finance.view` — que exige
+ * o segundo fator — lê caixa, comanda, fiado e comissão. Uma função só, com um
+ * parâmetro escolhendo a rota, esconderia que são duas permissões diferentes de
+ * quem lê este arquivo.
+ */
+export const trilhaDeAuditoria = (token: string, antesDe?: string) =>
+  chamar<{ entries: EventoDaTrilha[]; proximoCursor: string | null }>(
+    'GET',
+    `/v1/admin/audit${antesDe ? `?antesDe=${antesDe}` : ''}`,
+    undefined,
+    token,
+  );
+
+export const trilhaDoDinheiro = (token: string, antesDe?: string) =>
+  chamar<{ entries: EventoDaTrilha[]; proximoCursor: string | null }>(
+    'GET',
+    `/v1/admin/audit/finance${antesDe ? `?antesDe=${antesDe}` : ''}`,
+    undefined,
+    token,
+  );

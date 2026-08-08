@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 20 de 78 blocos.**
+**Status: 21 de 78 blocos.**
 
 ---
 
@@ -62,9 +62,11 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Permissão própria para escrever a anotação do cliente | ler e escrever a ficha exigem `customers.view_notes`, negada à recepção por padrão; o vocabulário de "conversa" é fechado e o teto de cada campo é conferido na borda e no banco | uma permissão que diga *escrever* em vez de tomar emprestada a de *ler* | 30 (RBAC: telas de gestão): hoje nenhum papel lê a anotação sem também precisar escrevê-la — quem lê "não usar navalha" é o barbeiro com o cliente na cadeira, que é quem escreveu. Inventá-la agora criaria permissão que nenhum papel distingue, que é o mesmo erro que o bloco 18 declarou em vez de cometer. Ela entra junto com a tela que permite conceder |
 | Permissão própria para dar desconto | desconto exige `finance.view` (dono e gerente), separado de `cashier.open` (recepção) — então quem opera o balcão **não** zera uma conta; é auditado com antes e depois, e o valor fica congelado em centavos | uma permissão que diga *desconto* em vez de tomar emprestada a de *ver dinheiro*; e um teto, porque hoje 100% é permitido a quem tem `finance.view` | 30 (RBAC: telas de gestão): inventá-la agora criaria uma permissão que nenhum papel concede, e que portanto recusaria todo mundo. Ela entra junto com a tela que permite conceder |
 | Editar as permissões de cada papel pela tela | `role_permissions` é por barbearia e editável — tirar `appointments.cancel` da recepção é um `DELETE` e vale na requisição seguinte | a tela que faz isso sem SQL | 30 (RBAC: telas de gestão): o mecanismo está pronto de propósito para o bloco 30 precisar só de tela, não de migração |
-| Ler a trilha de auditoria pela tela | tabela `audit_log` append-only no banco, escrita na mesma transação da mudança, com antes e depois, e leitura paginada por cursor | a tela que mostra | 21 (dashboard): a trilha já registra; falta onde olhar sem `psql` |
 | Painel do dia que se atualiza sozinho | recarga manual e recarga a cada ação; a tela sempre reflete o banco no instante em que foi montada | atualização sem toque, para o balcão que fica aberto | sem bloco (movida do 20): o 20 entregou processo fora de requisição — que é trabalho de fundo, não canal do servidor para o navegador. Empurrar mudança para uma aba aberta exige SSE ou WebSocket, e portanto o **primeiro componente de cliente do produto**, hoje 100% renderizado no servidor. É a mesma decisão que segura o arraste na agenda, e as duas devem entrar juntas, com medição de pacote. A alternativa sem JavaScript é `meta refresh`, que é pesquisa em laço com o custo da página inteira e apaga o que a recepção estiver digitando — pior que recarregar quando ela quiser |
 | Encerrar sessão nos outros aparelhos | revogação e "Sair" deste aparelho, para cliente e para gestor | listagem de sessões ativas | sem bloco: o cliente de barbearia usa um celular só. Entra se aparecer demanda real, não por simetria |
+| Heatmap de ocupação | ocupação do dia em minutos vendidos sobre minutos de jornada, comparada com o mesmo dia da semana anterior | a grade horário × dia da SPEC §5.9 | 57 (campanhas): a própria SPEC diz que o heatmap **não é relatório, é ponto de partida de ação** — a célula fria vira campanha direcionada. Entregar a grade antes de existir campanha faria dela mais um quadro bonito de onde não sai nada, que é exatamente o que a SPEC recusa |
+| Dashboard de crescimento (retenção, churn, LTV, receita por cadeira e por hora) | o painel do dia com as seis métricas da SPEC §5.9 que se respondem com o movimento de hoje, todas comparadas | as métricas que só existem sobre série longa | 62 (churn score com explicação): o cabeçalho do R4 é explícito — "depende de histórico acumulado, não antecipar". Retenção calculada sobre duas semanas de uso é número que engana quem decide contratação. "Assinaturas ativas", que aparece no mesmo quadro da SPEC, espera o bloco 45 pelo motivo mais simples: não existe assinatura no produto |
+| Varredura diária do validador de catálogo | a conferência roda sob demanda, a cada carga do painel e da tela de diagnóstico, sempre sobre o cadastro do instante | a varredura em segundo plano que a SPEC §5.7 também pede | sem bloco: sob demanda é **mais fresco** que diário, então a varredura não melhora o que a tela mostra. O que ela acrescentaria é alertar quem não abriu o painel — e isso é canal de aviso **para o dono**, que o produto não tem (o bloco 20 entregou aviso para o cliente). Entra junto com o primeiro aviso dirigido ao gestor, não antes |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
 deliberada e o que é só tela — está em
@@ -104,7 +106,7 @@ atual sem perder nenhuma capacidade que usava.
 | 18 | Comanda + checkout + caixa + **fiado** | ✅ |
 | 19 | Comissão básica + fechamento | ✅ |
 | 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | ✅ |
-| 21 | Dashboard básico + validador de catálogo | |
+| 21 | Dashboard básico + validador de catálogo | ✅ |
 | 22 | Importador de base + deduplicação por telefone | |
 | 23 | CI/CD, staging, observabilidade, e2e, carga em `/availability` | |
 

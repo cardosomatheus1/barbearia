@@ -1,0 +1,22 @@
+-- ============================================================================
+-- 0024 — A trilha lida por ação
+--
+-- A leitura da trilha deixou de ser uma consulta só. Ela é duas, porque a
+-- permissão é duas: `settings.manage` lê conta, papel e segundo fator;
+-- `finance.view` — que exige o segundo fator — lê caixa, comanda, fiado e
+-- comissão. O que separa é `action`, e o índice de antes não a conhecia.
+--
+-- `audit_log_tenant_idx` é `(tenant_id, created_at DESC)`, feito para "os
+-- últimos eventos da casa". A consulta nova filtra por `action` e pagina por
+-- `id`, então aquele índice deixaria o Postgres varrer a trilha inteira da
+-- barbearia para montar cinquenta linhas — e esta é a única tabela do produto
+-- que **nunca** encolhe: `UPDATE` e `DELETE` estão revogados, todo evento
+-- auditado do histórico está aqui.
+--
+-- `id` no lugar de `created_at` porque é ele que a paginação usa. Dois eventos
+-- da mesma transação compartilham o `created_at` (é `now()`, que não anda dentro
+-- da transação); um cursor sobre ele pularia ou repetiria linha na virada de
+-- página. `id` é `bigserial` e desempata sozinho.
+-- ============================================================================
+
+CREATE INDEX audit_log_acao_idx ON audit_log (tenant_id, action, id DESC);
