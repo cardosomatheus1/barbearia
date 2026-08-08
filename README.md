@@ -858,6 +858,31 @@ piso de 44. Link **dentro de frase** é exceção, e por um motivo, não por
 conveniência: a WCAG 2.5.8 isenta, porque esticar um link no meio de um parágrafo
 abre buraco no texto. Link de navegação sozinho não é isso.
 
+## Lacuna esquecida agora é suíte vermelha
+
+A tabela de lacunas era documento, e documento apodrece. Nada no repositório lia
+o `ROADMAP.md`: dava para fechar o bloco 20 com **quatro** lacunas apontando
+para ele, e nada acusava. Era o mesmo defeito que este projeto já encontrou seis
+vezes — janela de cancelamento, `blocks`, tamanho de imagem, MFA para dinheiro,
+permissão que não decidia nada, `schedule_exceptions`: regra escrita e não
+verificada.
+
+`scripts/verificar-lacunas.mjs` roda como **primeiro passo** do `pnpm verify` e
+reprova em seis casos. O que importa é o quarto:
+
+> **Bloco marcado ✅ não pode ter lacuna apontando para ele.**
+
+Com isso, esquecer deixa de ser possível e vira portão vermelho. Para fechar o
+bloco 15 é preciso ou entregar a folga e o bloqueio pontual, ou reapontar a
+lacuna para outro bloco — com o motivo escrito. Os outros cinco: o contador
+bate com o número de ✅; as quatro colunas de cada lacuna dizem alguma coisa;
+"sem bloco" exige justificativa; o bloco apontado existe; e a §7.1 da SPEC
+continua lá, apontando para a tabela.
+
+A primeira versão desta guarda tinha exatamente o defeito que ela existe para
+pegar: lia só a primeira das três tabelas de blocos do ROADMAP e concluiu que o
+bloco 30 "não existe".
+
 **Lacunas conhecidas** estão na tabela
 [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada
 uma com o que já existe, o que falta e em qual bloco entra.

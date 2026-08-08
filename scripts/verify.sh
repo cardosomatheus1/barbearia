@@ -23,6 +23,11 @@ step() {
   rm -f "$log"
 }
 
+# Primeiro passo de propósito: é o mais barato e é o que responde "o que
+# ficou para trás". Depois de typecheck e build ele viraria a última linha de
+# uma saída longa, que é onde aviso deixa de ser lido.
+step "lacunas declaradas"   node scripts/verificar-lacunas.mjs
+
 step "typecheck"            pnpm -r typecheck
 step "build"                pnpm -r build
 step "core — unitários"     pnpm --filter @barbearia/core test

@@ -362,6 +362,9 @@ Um bloco só está concluído quando **todos** os itens passam:
 - [ ] Estado vazio, carregando e erro desenhados
 - [ ] Lacuna conhecida declarada por escrito, **com dependência e bloco**, na tabela
       [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada)
+- [ ] **Nenhuma lacuna aponta para o bloco que está fechando.** Se aponta, ou ela
+      é entregue agora, ou muda de bloco com o motivo escrito — nunca some em
+      silêncio. `scripts/verificar-lacunas.mjs` reprova, e roda no `pnpm verify`
 - [ ] `ROADMAP.md` com o bloco marcado e o contador atualizado
 
 ---
