@@ -28,6 +28,16 @@ export function dayNumber(date: string): string {
   return date.slice(8, 10);
 }
 
+/** Hora local da unidade, HH:mm. Mesmo fuso da grade, para poder comparar. */
+export function localTime(timeZone: string, iso: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 /**
  * Instante ISO em texto legível no fuso da unidade.
  *

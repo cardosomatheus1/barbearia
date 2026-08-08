@@ -349,6 +349,8 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Telefone | E.164 normalizado, chave de deduplicação |
 | Slug | permanente; renomear adiciona em `tenant_slugs`, nunca substitui |
 | Status de cancelamento | `cancelled_customer` ≠ `cancelled_business` — só o primeiro pune o cliente |
+| Sessão do cliente no navegador | cookie `httpOnly`, um por barbearia no nome **e** no caminho |
+| Permissão exibida na tela | sai da mesma função que a API aplica — nunca recalculada na view |
 
 ---
 

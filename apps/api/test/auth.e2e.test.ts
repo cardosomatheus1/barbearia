@@ -11,7 +11,7 @@ import {
   AppointmentsController,
   GuestAppointmentsController,
 } from '../src/booking/appointments.controller.js';
-import { AuthController } from '../src/auth/auth.controller.js';
+import { AuthController, SessionController } from '../src/auth/auth.controller.js';
 import { CustomerGuard } from '../src/auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
@@ -70,7 +70,7 @@ describeIfDb('fluxo do cliente', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot(throttlerConfig())],
-      controllers: [AuthController, GuestAppointmentsController, AppointmentsController],
+      controllers: [AuthController, SessionController, GuestAppointmentsController, AppointmentsController],
       providers: [
         TenantService,
         CustomerGuard,
@@ -487,6 +487,247 @@ describeIfDb('fluxo do cliente', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({})
       .expect(400);
+  });
+
+  // -- janela de cancelamento e remarcação -----------------------------------
+
+  /**
+   * Aproxima o agendamento do agora, para exercitar a janela sem esperar.
+   *
+   * Desloca as quatro colunas pelo mesmo intervalo. Mexer só em
+   * `service_starts_at` viola `appointments_service_within_occupied` — o banco
+   * recusou, e com razão: o serviço tem que caber na janela ocupada.
+   */
+  async function aproximar(id: string, minutos: number): Promise<void> {
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments
+         SET starts_at = starts_at + deslocamento,
+             ends_at = ends_at + deslocamento,
+             service_starts_at = service_starts_at + deslocamento,
+             service_ends_at = service_ends_at + deslocamento
+       FROM (
+         SELECT (now() + interval '${minutos} minutes') - service_starts_at AS deslocamento
+         FROM appointments WHERE id = '${id}'
+       ) AS shift
+       WHERE id = '${id}'`,
+    );
+  }
+
+  it('cliente não cancela dentro da janela de antecedência', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+    await aproximar(criado.body.id, 90); // padrão da unidade: 2 horas
+
+    const recusa = await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(409);
+
+    expect(recusa.body.error.code).toBe('too_late');
+    // O texto carrega o número, senão o cliente não sabe qual é a regra.
+    expect(recusa.body.error.message).toContain('2 horas');
+  });
+
+  it('cancelar continua valendo fora da janela', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+    await aproximar(criado.body.id, 121);
+
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(201);
+  });
+
+  it('janela zero na unidade libera o cancelamento em cima da hora', async () => {
+    // Prova que a regra é dado, não constante: mudar a coluna muda o resultado.
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET cancel_min_hours = 0 WHERE id = '${LOCATION}'`,
+    );
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+    await aproximar(criado.body.id, 10);
+
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({})
+      .expect(201);
+  });
+
+  it('a lista avisa por que o botão sumiu', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+    await aproximar(criado.body.id, 30);
+
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const item = lista.body.appointments.find(
+      (a: { id: string }) => a.id === criado.body.id,
+    );
+    expect(item.canCancel).toBe(false);
+    expect(item.canReschedule).toBe(false);
+    expect(item.blockedReason).toBe('too_late');
+    expect(item.minHoursToChange).toBe(2);
+  });
+
+  it('a lista libera os botões quando há folga', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const item = lista.body.appointments.find(
+      (a: { id: string }) => a.id === criado.body.id,
+    );
+    expect(item.canCancel).toBe(true);
+    expect(item.blockedReason).toBe(null);
+  });
+
+  it('remarcar esgota no teto da unidade', async () => {
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET max_reschedules = 1 WHERE id = '${LOCATION}'`,
+    );
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+
+    const primeira = await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ date: DIA, start: '10:00' })
+      .expect(201);
+
+    const segunda = await http()
+      .post(`/v1/b/domari/appointments/${primeira.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ date: DIA, start: '11:00' })
+      .expect(409);
+
+    expect(segunda.body.error.code).toBe('too_many_reschedules');
+  });
+
+  it('a contagem de remarcações segue a corrente, não o registro isolado', async () => {
+    // Cada remarcação cria um agendamento novo. Contar só o registro atual
+    // daria zero sempre e o teto nunca chegaria.
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+
+    const primeira = await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ date: DIA, start: '10:00' })
+      .expect(201);
+
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const item = lista.body.appointments.find(
+      (a: { id: string }) => a.id === primeira.body.id,
+    );
+    // Teto padrão 2, já usou 1: ainda pode.
+    expect(item.canReschedule).toBe(true);
+  });
+
+  // -- grade de remarcação ---------------------------------------------------
+
+  it('todo horário oferecido para remarcar é aceito pela remarcação', async () => {
+    // O defeito que este teste tranca: a grade pública conta o horário atual do
+    // cliente como ocupado, e com a estratégia `anchored` ele ancora os slots.
+    // Na gravação o horário é ignorado, a grade recomeça da jornada e nenhum
+    // dos horários exibidos existe mais — toda escolha voltava recusada.
+    // Duração de 25 min numa grade de 20 é o caso que expõe a divergência: com
+    // o horário atual ancorando, a grade sai 09:25, 09:45…; ignorando-o, sai
+    // 09:00, 09:20, 09:40… — conjuntos sem interseção no começo do dia. Com
+    // duração múltipla da granularidade o defeito fica escondido.
+    const BARBA = 'eeeeeeee-0000-0000-0000-000000000009';
+    await exec(admin, `
+      INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
+      VALUES ('${BARBA}', '${TENANT}', 'Barba longa', 5500, 25);
+
+      INSERT INTO professional_services (professional_id, service_id, tenant_id)
+      VALUES ('${RUAN}', '${BARBA}', '${TENANT}');
+    `);
+
+    const token = await login(CARLOS);
+    const criado = await http()
+      .post('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        locationId: LOCATION, professionalId: RUAN, serviceIds: [BARBA],
+        date: DIA, start: '09:00',
+      })
+      .expect(201);
+
+    const grade = await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const primeiro = grade.body.days[0].slots[0];
+    expect(primeiro).toBeDefined();
+
+    await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ date: DIA, start: primeiro.start })
+      .expect(201);
+  });
+
+  it('a grade de remarcação devolve o próprio horário como livre', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token, '09:00').expect(201);
+
+    const grade = await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const inicios = grade.body.days[0].slots.map((s: { start: string }) => s.start);
+    expect(inicios).toContain('09:00');
+  });
+
+  it('a grade de remarcação exige sessão e é do dono', async () => {
+    const token = await login(CARLOS);
+    const criado = await agendar(token, '09:00').expect(201);
+
+    await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}`)
+      .expect(401);
+
+    const outro = await login(JOAO);
+    await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}`)
+      .set('Authorization', `Bearer ${outro}`)
+      .expect(404);
+  });
+
+  it('sair revoga a sessão no servidor, não só no navegador', async () => {
+    const token = await login(CARLOS);
+    await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    await http()
+      .post('/v1/b/domari/auth/logout')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+
+    // O mesmo token, que o navegador poderia ter guardado, deixa de valer.
+    await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
   });
 
   it('nunca vaza detalhe interno em erro de rota autenticada', async () => {

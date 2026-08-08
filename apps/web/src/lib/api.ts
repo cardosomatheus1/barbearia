@@ -30,6 +30,8 @@ export interface PublicProfile {
     phone: string | null; whatsapp: string | null;
     coverUrl: string | null; about: string | null;
     amenities: string[]; cancellationPolicy: string | null;
+    /** Horas de antecedência que a API realmente aplica ao cancelamento. */
+    cancelMinHours: number;
   };
   categories: { id: string | null; name: string; services: PublicService[] }[];
   professionals: { id: string; name: string; bio: string | null; photoUrl: string | null }[];
@@ -182,10 +184,138 @@ export async function criarAgendamentoNaApi(
   return { ok: true, id: criado.id };
 }
 
+/** Resposta de POST/GET autenticado: sucesso tipado ou código de falha. */
+export type Resultado<T> = { ok: true; dados: T } | { ok: false; code: string };
+
+async function post<T>(
+  path: string,
+  body: unknown,
+  token?: string,
+): Promise<Resultado<T>> {
+  const response = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const corpo = (await response.json().catch(() => null)) as
+      | { error?: { code?: string } }
+      | null;
+    return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
+  }
+  return { ok: true, dados: (await response.json()) as T };
+}
+
+/**
+ * Pede o código.
+ *
+ * A resposta é a mesma para telefone cadastrado e não cadastrado — é a API que
+ * garante isso, e a tela não pode desfazer a garantia dizendo "não encontramos
+ * esse número".
+ */
+export const pedirCodigo = (slug: string, phone: string) =>
+  post<{ expiresInSeconds: number; resendAfterSeconds: number }>(
+    `/v1/b/${slug}/auth/otp`,
+    { phone },
+  );
+
+export interface SessaoCriada {
+  token: string;
+  expiresAt: string;
+  customer: { id: string; name: string };
+}
+
+export const conferirCodigo = (slug: string, phone: string, code: string) =>
+  post<SessaoCriada>(`/v1/b/${slug}/auth/verify`, { phone, code });
+
+/** Revoga a sessão no servidor. Apagar só o cookie deixaria o token válido. */
+export const encerrarSessao = (slug: string, token: string) =>
+  post<{ revoked: boolean }>(`/v1/b/${slug}/auth/logout`, {}, token);
+
+export interface AgendamentoDoCliente {
+  id: string;
+  state: 'active' | 'done' | 'cancelled' | 'rescheduled';
+  startsAt: string;
+  endsAt: string;
+  status: string;
+  professionalName: string;
+  services: string[];
+  serviceIds: string[];
+  professionalId: string;
+  priceCents: number;
+  canCancel: boolean;
+  canReschedule: boolean;
+  blockedReason: 'too_late' | 'too_many_reschedules' | 'already_started' | null;
+  minHoursToChange: number;
+}
+
+/**
+ * Agendamentos do cliente da sessão.
+ *
+ * Devolve `null` quando a sessão não vale mais — expirada ou revogada — para a
+ * página mandar entrar de novo em vez de mostrar lista vazia, que o cliente
+ * leria como "meus agendamentos sumiram".
+ */
+export async function listarAgendamentos(
+  slug: string,
+  token: string,
+): Promise<AgendamentoDoCliente[] | null> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/appointments`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!response.ok) return null;
+  const corpo = (await response.json()) as { appointments: AgendamentoDoCliente[] };
+  return corpo.appointments;
+}
+
+export const cancelarAgendamento = (slug: string, token: string, id: string, reason?: string) =>
+  post<{ cancelled: boolean }>(
+    `/v1/b/${slug}/appointments/${id}/cancel`,
+    reason ? { reason } : {},
+    token,
+  );
+
+/**
+ * Grade para remarcar um agendamento específico.
+ *
+ * Não é o `/availability` público: esta ignora o próprio horário do cliente na
+ * ocupação, que é o que a gravação também faz. Com a estratégia `anchored` as
+ * duas grades divergem, e a pública ofereceria horários recusados um a um.
+ */
+export async function opcoesDeRemarcacao(
+  slug: string,
+  token: string,
+  id: string,
+  dateFrom: string,
+): Promise<{ date: string; unavailableReason: string | null; slots: { start: string }[] } | null> {
+  const response = await fetch(
+    `${BASE}/v1/b/${slug}/appointments/${id}/availability?dateFrom=${dateFrom}`,
+    { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
+  );
+  if (!response.ok) return null;
+  const corpo = (await response.json()) as {
+    days: { date: string; unavailableReason: string | null; slots: { start: string }[] }[];
+  };
+  return corpo.days[0] ?? null;
+}
+
+export const remarcarAgendamento = (
+  slug: string,
+  token: string,
+  id: string,
+  quando: { date: string; start: string; professionalId?: string },
+) => post<{ id: string }>(`/v1/b/${slug}/appointments/${id}/reschedule`, quando, token);
+
 export interface Comprovante {
   id: string;
-  /** A API já traduz os dez status do banco nos três que a tela distingue. */
-  state: 'active' | 'done' | 'cancelled';
+  /** A API já traduz os dez status do banco nos quatro que a tela distingue. */
+  state: 'active' | 'done' | 'cancelled' | 'rescheduled';
   startsAt: string;
   endsAt: string;
   professionalName: string;

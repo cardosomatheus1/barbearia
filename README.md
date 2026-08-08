@@ -255,12 +255,38 @@ O comprovante é lido da API pelo id, nunca reconstruído da URL. Repetir o que 
 formulário enviou seria afirmar sem conferir — "Qualquer profissional" nunca
 viraria um nome, e um horário cancelado continuaria dizendo "confirmado".
 
+## Cancelar e remarcar
+
+Ver histórico, cancelar e remarcar **exigem o código** no WhatsApp. É a fronteira
+do produto: sem ela, conhecer o telefone de alguém daria poder sobre a agenda
+dessa pessoa.
+
+A sessão vai em cookie `httpOnly`, um por barbearia — no nome **e** no caminho.
+`localStorage` guardaria a credencial de cancelamento ao alcance de qualquer
+script; e um cookie de nome único faria quem tem sessão em duas barbearias ler o
+token errado.
+
+**As três regras da Parte 2 §2.7 da SPEC agora existem como coluna**, não como
+texto: `cancel_min_hours`, `reschedule_min_hours` e `max_reschedules`. Antes a
+página de confirmação prometia "cancele com 2 horas de antecedência" e nada
+cumpria — dava para desmarcar um minuto antes. A decisão mora em
+`packages/core/src/changes.ts`, sem relógio: recebe quantos minutos faltam.
+
+A tela e a API decidem pela **mesma** função. Calcular a permissão de um jeito
+na lista e de outro no servidor é como um botão aparece e o servidor o recusa.
+
+A grade de remarcação tem rota própria (`GET .../appointments/:id/availability`,
+com sessão) porque precisa ignorar o horário atual do cliente na ocupação —
+exatamente o que a gravação faz. Com a estratégia `anchored` isso não é detalhe:
+o horário atual ancorava a grade pública, a gravação recomeçava do início da
+jornada, e **todo** horário oferecido era recusado.
+
 ## Próximos passos
 
-Bloco 9 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 10 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Meus agendamentos: listar, cancelar e remarcar pelo cliente autenticado. A API
-já tem as três rotas com guarda; falta a tela.
+Onboarding da barbearia em seis etapas: é o que transforma o produto em SaaS
+utilizável sem alguém do time cadastrar dados à mão.
 
 **Lacunas conhecidas:**
 
@@ -270,3 +296,8 @@ já tem as três rotas com guarda; falta a tela.
 - O carrinho não avisa quando os serviços escolhidos existem como combo mais
   barato — em Domari, Cabelo (Tesoura) + Barba custa R$ 84,00 avulso e R$ 74,00
   no combo. `service_combo_components` já modela a composição.
+- Remarcar mantém o profissional do agendamento. Trocar de barbeiro exige
+  cancelar e agendar de novo.
+- `cancel_min_hours` e `reschedule_min_hours` ainda não têm tela de configuração;
+  hoje só mudam por SQL. Entram no bloco 10.
+- Não há tela de sessões ativas: "Sair" revoga a deste aparelho, não as outras.

@@ -154,6 +154,13 @@ img, video, svg {
   z-index: var(--z-sticky);
 }
 
+/* A barra já tem recuo próprio. Um container dentro dela somaria o dele, e a
+   ação principal ficaria mais estreita que o conteúdo logo acima — desalinho
+   visível justamente no elemento mais importante da tela. */
+.ui-sticky-action > .ui-container {
+  padding-inline: 0;
+}
+
 .ui-container {
   width: 100%;
   max-width: var(--size-container);

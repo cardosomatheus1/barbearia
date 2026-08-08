@@ -36,3 +36,9 @@ export const slugSchema = z
 
 /** O id do agendamento é a credencial do comprovante; precisa ser UUID de fato. */
 export const appointmentIdSchema = uuid;
+
+/** Intervalo pedido pela grade de remarcação. Mesmo formato do `/availability`. */
+export const rescheduleRangeSchema = z.object({
+  dateFrom: isoDate,
+  dateTo: isoDate.optional(),
+});

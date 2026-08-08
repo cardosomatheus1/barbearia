@@ -61,6 +61,14 @@ export interface PublicProfile {
     readonly about: string | null;
     readonly amenities: readonly string[];
     readonly cancellationPolicy: string | null;
+    /**
+     * As horas que a página deve escrever, vindas da coluna que a API aplica.
+     *
+     * Antes o prazo só existia no texto livre de `cancellationPolicy`, e nada
+     * o cumpria. Expor o número é o que impede a página de prometer duas horas
+     * enquanto o servidor aceita cancelamento a qualquer momento.
+     */
+    readonly cancelMinHours: number;
   };
   readonly categories: readonly PublicCategory[];
   readonly professionals: readonly PublicProfessional[];
@@ -162,11 +170,12 @@ export async function getPublicProfile(
         phone_e164: string | null; whatsapp_e164: string | null;
         cover_url: string | null; about: string | null;
         amenities: string[]; cancellation_policy: string | null;
+        cancel_min_hours: number;
       }[]
     >`
       SELECT id, name, timezone, street, district, city, state, postal_code,
              latitude, longitude, phone_e164, whatsapp_e164, cover_url, about,
-             amenities, cancellation_policy
+             amenities, cancellation_policy, cancel_min_hours
       FROM locations ORDER BY created_at LIMIT 1
     `;
     const location = locations[0];
@@ -265,6 +274,7 @@ export async function getPublicProfile(
         about: location.about,
         amenities: location.amenities,
         cancellationPolicy: location.cancellation_policy,
+        cancelMinHours: location.cancel_min_hours,
       },
       categories: [...categories.values()],
       professionals: professionalRows.map((row) => ({

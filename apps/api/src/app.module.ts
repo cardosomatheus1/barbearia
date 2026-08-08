@@ -7,7 +7,7 @@ import {
   AppointmentsController,
   GuestAppointmentsController,
 } from './booking/appointments.controller.js';
-import { AuthController } from './auth/auth.controller.js';
+import { AuthController, SessionController } from './auth/auth.controller.js';
 import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
 import { ConsoleMessagingProvider } from '@barbearia/identity';
@@ -19,6 +19,7 @@ import { TenantService } from './tenant/tenant.service.js';
   controllers: [
     BookingController,
     AuthController,
+    SessionController,
     GuestAppointmentsController,
     AppointmentsController,
   ],

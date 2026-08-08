@@ -452,3 +452,140 @@ main { padding-bottom: var(--space-8); }
 
 .fluxo__falha { margin-bottom: var(--space-5); }
 .fluxo__falha a { color: inherit; font-weight: var(--font-weight-semibold); }
+
+/* -- Entrar ---------------------------------------------------------------- */
+
+.entrar { padding: var(--space-6) var(--space-4) var(--space-8); max-width: 26rem; }
+.entrar__voltar {
+  display: inline-block;
+  margin-bottom: var(--space-6);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+.entrar__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
+.entrar__sub { margin: 0 0 var(--space-6); color: var(--color-text-muted); }
+.entrar__falha { margin-bottom: var(--space-5); }
+
+/* O código é o dado da tela: seis dígitos grandes, espaçados, tabulares.
+   Campo pequeno faz errar a digitação com o polegar em pé na rua. */
+.codigo {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-2xl);
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
+.entrar__trocar {
+  display: inline-block;
+  margin-top: var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+.entrar__nota {
+  margin: var(--space-7) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.entrar__nota a { color: var(--color-accent); }
+
+/* -- Meus agendamentos ----------------------------------------------------- */
+
+/* Espaço para a barra fixa; sem isso o último cartão fica sob ela. */
+/* Coluna de leitura, não a largura toda: no notebook o cartão esticaria a
+   1200px para carregar três linhas de texto. */
+.meus { padding: var(--space-5) var(--space-4) var(--space-8); max-width: 44rem; }
+.meus__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.meus__voltar {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+.meus__sair { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+.meus__titulo { margin: 0 0 var(--space-5); font-size: var(--font-size-2xl); }
+.meus__aviso { margin-bottom: var(--space-5); }
+
+.cartoes { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-3); }
+
+.cartao {
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+/* O que já passou não compete com o próximo horário. */
+.cartao--cancelled, .cartao--done, .cartao--rescheduled { opacity: 0.72; }
+
+.cartao__quando {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+}
+.cartao__servico { margin: 0 0 var(--space-1); font-weight: var(--font-weight-medium); }
+.cartao__dados { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.cartao__estado {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.cartao__bloqueio {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.cartao__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+/* Cancelar não é a ação que a tela quer incentivar: fica em `ghost`, ao lado
+   de remarcar, que é o desfecho melhor para as duas partes. */
+.cartao__cancelar { color: var(--color-danger); }
+.cartao__repetir {
+  display: inline-block;
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
+/* -- Remarcar -------------------------------------------------------------- */
+
+.remarcar__atual { margin-bottom: var(--space-5); }
+.remarcar__rotulo {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.remarcar__quando { margin: 0 0 var(--space-1); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.remarcar__servico { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.remarcar__nota {
+  margin: var(--space-6) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O horário vira botão ao remarcar (a escolha já grava). Herda a aparência de
+   `.hora` e desfaz só o que o agente de formulário traz de fábrica. */
+.hora--botao {
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* O horário que o cliente já tem: presente na grade, mas não é escolha.
+   Borda de acento e rótulo, sem virar alvo de toque. */
+.hora--atual {
+  margin: 0;
+  border-color: var(--color-accent);
+  cursor: default;
+}
+.hora--atual .hora__quem { color: var(--color-accent); }

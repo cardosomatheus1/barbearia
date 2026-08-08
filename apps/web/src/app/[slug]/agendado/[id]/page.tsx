@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getComprovante, getProfile } from '@/lib/api';
 import { humanInstant } from '@/lib/date';
+import { regraDeCancelamento } from '@/lib/politica';
 
 /**
  * Confirmação. A tela existe para dizer o que foi feito e o que vem depois.
@@ -28,9 +29,14 @@ const TITULO: Record<string, string> = {
   active: 'Agendamento confirmado',
   done: 'Atendimento concluído',
   cancelled: 'Agendamento cancelado',
+  // Quem abrir o link antigo depois de remarcar precisa entender que o horário
+  // mudou, não que foi cancelado.
+  rescheduled: 'Este horário foi remarcado',
 };
 
-const MARCA: Record<string, string> = { active: '✓', done: '✓', cancelled: '×' };
+const MARCA: Record<string, string> = {
+  active: '✓', done: '✓', cancelled: '×', rescheduled: '→',
+};
 
 export default async function ConfirmadoPage({ params }: Props) {
   const { slug, id } = await params;
@@ -47,7 +53,7 @@ export default async function ConfirmadoPage({ params }: Props) {
     .join(' · ');
 
   return (
-    <main className={`ui-container confirmado ${comprovante.state === 'cancelled' ? 'confirmado--cancelado' : ''}`}>
+    <main className={`ui-container confirmado ${comprovante.state === 'active' || comprovante.state === 'done' ? '' : 'confirmado--cancelado'}`}>
       <p className="confirmado__marca" aria-hidden="true">
         {MARCA[comprovante.state] ?? '✓'}
       </p>
@@ -103,8 +109,16 @@ export default async function ConfirmadoPage({ params }: Props) {
         </a>
       </div>
 
-      {ativo && profile.location.cancellationPolicy ? (
-        <p className="confirmado__politica">{profile.location.cancellationPolicy}</p>
+      {ativo ? (
+        <p className="confirmado__politica">
+          {/* O prazo sai da coluna que a API aplica, não do texto livre. Eles
+              divergem assim que a barbearia muda um e esquece o outro — e quem
+              lê a página é quem sai perdendo. */}
+          {regraDeCancelamento(profile.location.cancelMinHours)}
+          {profile.location.cancellationPolicy ? (
+            <> {profile.location.cancellationPolicy}</>
+          ) : null}
+        </p>
       ) : null}
     </main>
   );

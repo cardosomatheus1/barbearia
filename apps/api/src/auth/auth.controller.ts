@@ -1,10 +1,18 @@
-import { Body, Controller, Inject, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { OtpError, requestOtp, verifyOtp, type MessagingProvider } from '@barbearia/identity';
+import {
+  OtpError,
+  requestOtp,
+  revokeSession,
+  verifyOtp,
+  type AuthenticatedCustomer,
+  type MessagingProvider,
+} from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { slugSchema } from '../booking/booking.schemas.js';
+import { Customer, CustomerGuard, TenantId } from './customer.guard.js';
 import { requestOtpSchema, verifyOtpSchema } from './auth.schemas.js';
 import { MESSAGING_PROVIDER } from './messaging.token.js';
 
@@ -84,5 +92,24 @@ export class AuthController {
     } catch (error) {
       return toHttp(error);
     }
+  }
+}
+
+/**
+ * Sair.
+ *
+ * Apagar o cookie no navegador não basta: o token continuaria aceito por quem
+ * o tivesse capturado, e "Sair" num aparelho compartilhado — a situação comum
+ * numa barbearia — precisa realmente encerrar a sessão.
+ *
+ * Rota separada porque exige a guarda: revogar sessão pede saber qual é.
+ */
+@Controller('v1/b/:slug/auth')
+@UseGuards(CustomerGuard)
+export class SessionController {
+  @Post('logout')
+  async logout(@TenantId() tenantId: string, @Customer() customer: AuthenticatedCustomer) {
+    await revokeSession(tenantId, customer.sessionId);
+    return { revoked: true };
   }
 }

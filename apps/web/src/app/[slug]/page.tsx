@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getProfile, getToday, type PublicProfile } from '@/lib/api';
 import { localDate } from '@/lib/date';
 import { jsonLd } from '@/lib/json-ld';
+import { regraDeCancelamento } from '@/lib/politica';
 
 /**
  * Página pública da barbearia, renderizada no servidor.
@@ -255,14 +256,19 @@ export default async function BarbershopPage({ params }: Params) {
           </div>
         </section>
 
-        {profile.location.cancellationPolicy ? (
-          <section className="secao">
-            <div className="ui-container">
-              <h2 className="rotulo">Cancelamento</h2>
-              <p className="politica">{profile.location.cancellationPolicy}</p>
-            </div>
-          </section>
-        ) : null}
+        <section className="secao">
+          <div className="ui-container">
+            <h2 className="rotulo">Cancelamento</h2>
+            {/* O prazo vem da coluna que a API aplica; o texto livre da
+                barbearia complementa, não substitui. */}
+            <p className="politica">
+              {regraDeCancelamento(profile.location.cancelMinHours)}
+              {profile.location.cancellationPolicy ? (
+                <> {profile.location.cancellationPolicy}</>
+              ) : null}
+            </p>
+          </div>
+        </section>
       </main>
 
       <div className="ui-sticky-action">

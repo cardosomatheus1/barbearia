@@ -67,6 +67,12 @@ describe('emitCss', () => {
     expect(css).toContain('env(safe-area-inset-bottom');
   });
 
+  it('a ação fixa não soma o recuo do container que carrega dentro', () => {
+    // Com os dois recuos, a ação principal fica mais estreita que o conteúdo
+    // acima dela — desalinho no elemento mais importante da tela.
+    expect(css).toMatch(/\.ui-sticky-action > \.ui-container\s*\{[\s\S]*?padding-inline: 0/);
+  });
+
   it('exporta os pontos de quebra como custom property', () => {
     expect(css).toContain('--breakpoint-base: 360px');
     expect(css).toContain('--breakpoint-md: 768px');

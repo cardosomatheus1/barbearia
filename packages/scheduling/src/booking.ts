@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
-import { localToInstant, parseHHMM } from '@barbearia/core';
+import {
+  canCancel,
+  canReschedule,
+  localToInstant,
+  minutesBetween,
+  parseHHMM,
+  type ChangeDecision,
+  type ChangeRefusal,
+} from '@barbearia/core';
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
 
@@ -28,7 +36,10 @@ export type BookingFailure =
   | 'slot_taken'
   | 'appointment_not_found'
   | 'appointment_not_active'
-  | 'hold_expired';
+  | 'hold_expired'
+  | 'too_late'
+  | 'too_many_reschedules'
+  | 'already_started';
 
 /** Espelha o enum `appointment_source`. Valor fora da lista quebraria o INSERT
  *  com erro de banco em vez de recusa limpa. */
@@ -406,6 +417,8 @@ export interface CancelRequest {
    * outro bastando o id. Obrigatório sempre que a ação partir do cliente.
    */
   readonly customerId?: string;
+  /** Relógio por parâmetro: a janela de antecedência precisa ser testável. */
+  readonly now?: Date;
 }
 
 /**
@@ -415,9 +428,103 @@ export interface CancelRequest {
  * primeiro afeta o reliability score. Punir cliente por cancelamento da
  * barbearia seria bug de produto (SPEC Parte 2 §2.11).
  */
+interface ChangeContext {
+  readonly serviceStartsAt: Date;
+  readonly timesRescheduled: number;
+  readonly cancelMinHours: number;
+  readonly rescheduleMinHours: number;
+  readonly maxReschedules: number;
+}
+
+/**
+ * Reúne o que decide se o cliente ainda pode mexer no agendamento.
+ *
+ * Uma consulta só, dentro da mesma transação da alteração: ler a janela em
+ * outra ida ao banco abriria espaço para a barbearia mudar a política entre a
+ * leitura e a escrita.
+ *
+ * A corrente de remarcações é percorrida para trás por `rescheduled_from`. Cada
+ * salto é busca por chave primária, e a profundidade é o próprio teto que se
+ * quer aplicar — não há varredura.
+ */
+async function loadChangeContext(
+  tx: TransactionClient,
+  appointmentId: string,
+  customerId: string | undefined,
+): Promise<ChangeContext | null> {
+  const rows = await tx.$queryRaw<
+    {
+      service_starts_at: Date;
+      times_rescheduled: bigint;
+      cancel_min_hours: number;
+      reschedule_min_hours: number;
+      max_reschedules: number;
+    }[]
+  >`
+    WITH RECURSIVE corrente AS (
+      SELECT id, rescheduled_from
+      FROM appointments
+      WHERE id = ${appointmentId}::uuid
+        AND (${customerId ?? null}::uuid IS NULL OR customer_id = ${customerId ?? null}::uuid)
+      UNION ALL
+      SELECT anterior.id, anterior.rescheduled_from
+      FROM appointments anterior
+      JOIN corrente ON anterior.id = corrente.rescheduled_from
+    )
+    SELECT a.service_starts_at,
+           (SELECT count(*) - 1 FROM corrente) AS times_rescheduled,
+           l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules
+    FROM appointments a
+    JOIN locations l ON l.id = a.location_id
+    WHERE a.id = ${appointmentId}::uuid
+      AND (${customerId ?? null}::uuid IS NULL OR a.customer_id = ${customerId ?? null}::uuid)
+  `;
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    serviceStartsAt: row.service_starts_at,
+    // `count(*)` volta como bigint do Postgres; sem a conversão a comparação
+    // com o teto seria entre BigInt e number e lançaria em runtime.
+    timesRescheduled: Number(row.times_rescheduled),
+    cancelMinHours: row.cancel_min_hours,
+    rescheduleMinHours: row.reschedule_min_hours,
+    maxReschedules: row.max_reschedules,
+  };
+}
+
+/** Traduz a recusa do núcleo em erro de negócio, com o número na mensagem. */
+function refuse(decision: ChangeDecision, verbo: 'cancelar' | 'remarcar'): void {
+  if (decision.allowed) return;
+
+  if (decision.refusal === 'already_started') {
+    throw new BookingError('already_started', `Este horário já começou e não dá para ${verbo}.`);
+  }
+  if (decision.refusal === 'too_many_reschedules') {
+    throw new BookingError(
+      'too_many_reschedules',
+      'Este horário já foi remarcado o máximo de vezes. Fale com a barbearia.',
+    );
+  }
+  const horas = decision.minHours === 1 ? '1 hora' : `${decision.minHours} horas`;
+  throw new BookingError('too_late', `É preciso ${verbo} com pelo menos ${horas} de antecedência.`);
+}
+
 export async function cancelAppointment(request: CancelRequest): Promise<void> {
   await withTenant(request.tenantId, async (tx) => {
     const status = request.by === 'customer' ? 'cancelled_customer' : 'cancelled_business';
+
+    // A janela de antecedência vale para o cliente, não para a barbearia: quem
+    // atende precisa poder desmarcar em cima da hora quando o barbeiro adoece.
+    // `by === 'business'` é chamada interna, já autorizada por papel.
+    if (request.by === 'customer') {
+      const context = await loadChangeContext(tx, request.appointmentId, request.customerId);
+      if (context) {
+        const now = request.now ?? new Date();
+        refuse(canCancel(minutesBetween(now, context.serviceStartsAt), context), 'cancelar');
+      }
+    }
 
     const affected = await tx.$executeRaw`
       UPDATE appointments
@@ -500,6 +607,23 @@ export async function rescheduleAppointment(
       );
     }
 
+    // Só quando parte do cliente: a recepção remarca em cima da hora, é o
+    // trabalho dela. `customerId` é o que distingue os dois chamadores.
+    if (request.customerId) {
+      const context = await loadChangeContext(tx, request.appointmentId, request.customerId);
+      if (context) {
+        const now = request.now ?? new Date();
+        refuse(
+          canReschedule(
+            minutesBetween(now, context.serviceStartsAt),
+            context.timesRescheduled,
+            context,
+          ),
+          'remarcar',
+        );
+      }
+    }
+
     const professionalId = request.professionalId ?? appointment.professional_id;
 
     const target: CreateAppointmentRequest = {
@@ -559,14 +683,27 @@ export async function rescheduleAppointment(
 
 export interface CustomerAppointment {
   readonly id: string;
+  readonly state: ReceiptState;
   readonly startsAt: string;
   readonly endsAt: string;
   readonly status: string;
   readonly professionalName: string;
   readonly services: readonly string[];
+  /** Ids do catálogo: é com eles que a tela de remarcação consulta a grade. */
+  readonly serviceIds: readonly string[];
+  readonly professionalId: string;
   readonly priceCents: number;
   readonly canCancel: boolean;
   readonly canReschedule: boolean;
+  /**
+   * Por que o botão não está lá.
+   *
+   * Botão ausente sem explicação faz o cliente achar que o site quebrou e
+   * ligar para a barbearia — que é exatamente o trabalho que este produto
+   * existe para eliminar.
+   */
+  readonly blockedReason: ChangeRefusal | null;
+  readonly minHoursToChange: number;
 }
 
 /**
@@ -595,37 +732,86 @@ export async function listCustomerAppointments(params: {
         status: string;
         professional_name: string;
         services: string[];
+        service_ids: string[];
+        professional_id: string;
         price_cents: number;
+        times_rescheduled: bigint;
+        cancel_min_hours: number;
+        reschedule_min_hours: number;
+        max_reschedules: number;
       }[]
     >`
+      -- Uma consulta só, incluindo quantas vezes cada horário já foi remarcado.
+      -- A recursão percorre todas as correntes do cliente de uma vez; contar
+      -- por agendamento seria N+1 numa tela que lista dezenas (CLAUDE.md §3).
+      WITH RECURSIVE cadeia AS (
+        SELECT id AS raiz, rescheduled_from, 0 AS saltos
+        FROM appointments
+        WHERE customer_id = ${params.customerId}::uuid
+        UNION ALL
+        SELECT c.raiz, anterior.rescheduled_from, c.saltos + 1
+        FROM appointments anterior
+        JOIN cadeia c ON anterior.id = c.rescheduled_from
+      ),
+      remarcacoes AS (
+        SELECT raiz, max(saltos) AS vezes FROM cadeia GROUP BY raiz
+      )
       SELECT a.id, a.service_starts_at, a.service_ends_at, a.status,
              p.name AS professional_name,
              array_agg(s.name ORDER BY aps.position) AS services,
-             a.price_cents
+             array_agg(aps.service_id::text ORDER BY aps.position) AS service_ids,
+             a.professional_id,
+             a.price_cents,
+             COALESCE(r.vezes, 0) AS times_rescheduled,
+             l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules
       FROM appointments a
       JOIN professionals p ON p.id = a.professional_id
+      JOIN locations l ON l.id = a.location_id
       JOIN appointment_services aps ON aps.appointment_id = a.id
       JOIN services s ON s.id = aps.service_id
+      LEFT JOIN remarcacoes r ON r.raiz = a.id
       WHERE a.customer_id = ${params.customerId}::uuid
         AND (${params.includePast ?? false} OR a.service_ends_at >= ${now})
-      GROUP BY a.id, p.name
+      GROUP BY a.id, p.name, r.vezes, l.cancel_min_hours, l.reschedule_min_hours,
+               l.max_reschedules, a.professional_id
       ORDER BY a.service_starts_at DESC
       LIMIT ${limit}
     `;
 
     return rows.map((row) => {
       const active = (ACTIVE_STATUSES as readonly string[]).includes(row.status);
-      const future = row.service_starts_at.getTime() > now.getTime();
+      const minutes = minutesBetween(now, row.service_starts_at);
+      const window = {
+        cancelMinHours: row.cancel_min_hours,
+        rescheduleMinHours: row.reschedule_min_hours,
+        maxReschedules: row.max_reschedules,
+      };
+
+      // A mesma decisão que a API vai aplicar na hora de cancelar. Calcular a
+      // permissão de um jeito aqui e de outro lá é como a tela acaba oferecendo
+      // um botão que o servidor recusa.
+      const cancel = active ? canCancel(minutes, window) : null;
+      const reschedule = active
+        ? canReschedule(minutes, Number(row.times_rescheduled), window)
+        : null;
+
+      const refused = [cancel, reschedule].find((d) => d && !d.allowed);
+
       return {
         id: row.id,
+        state: receiptState(row.status),
         startsAt: row.service_starts_at.toISOString(),
         endsAt: row.service_ends_at.toISOString(),
         status: row.status,
         professionalName: row.professional_name,
         services: row.services,
+        serviceIds: row.service_ids,
+        professionalId: row.professional_id,
         priceCents: row.price_cents,
-        canCancel: active && future,
-        canReschedule: active && future,
+        canCancel: cancel?.allowed ?? false,
+        canReschedule: reschedule?.allowed ?? false,
+        blockedReason: refused && !refused.allowed ? refused.refusal : null,
+        minHoursToChange: row.cancel_min_hours,
       };
     });
   });
@@ -639,7 +825,7 @@ export async function listCustomerAppointments(params: {
  * ao inventar nome de status (`cancelled` não existe: são `cancelled_customer`
  * e `cancelled_business`).
  */
-export type ReceiptState = 'active' | 'done' | 'cancelled';
+export type ReceiptState = 'active' | 'done' | 'cancelled' | 'rescheduled';
 
 /**
  * Conjunto próprio, não `ACTIVE_STATUSES`: aquele responde "ainda dá para
@@ -651,6 +837,9 @@ const RECEIPT_ACTIVE = ['pending', 'confirmed', 'checked_in', 'waiting', 'in_pro
 function receiptState(status: string): ReceiptState {
   if (RECEIPT_ACTIVE.includes(status)) return 'active';
   if (status === 'completed') return 'done';
+  // Separado de cancelado: o horário não sumiu, virou outro. Dizer "cancelado"
+  // para quem acabou de remarcar faz o cliente achar que perdeu a vaga.
+  if (status === 'rescheduled') return 'rescheduled';
   return 'cancelled';
 }
 
@@ -717,6 +906,45 @@ export async function getAppointmentReceipt(
       services: row.services,
       priceCents: row.price_cents,
       locationId: row.location_id,
+    };
+  });
+}
+
+/**
+ * O agendamento de um cliente, para montar a grade de remarcação.
+ *
+ * Devolve `null` quando o agendamento não é deste cliente — sem distinguir de
+ * "não existe", pela mesma razão de `cancelAppointment`.
+ */
+export async function getReschedulableAppointment(params: {
+  readonly tenantId: string;
+  readonly customerId: string;
+  readonly appointmentId: string;
+}): Promise<{
+  readonly locationId: string;
+  readonly professionalId: string;
+  readonly serviceIds: readonly string[];
+} | null> {
+  return withTenant(params.tenantId, async (tx) => {
+    const rows = await tx.$queryRaw<
+      { location_id: string; professional_id: string; service_ids: string[] }[]
+    >`
+      SELECT a.location_id, a.professional_id,
+             array_agg(aps.service_id::text ORDER BY aps.position) AS service_ids
+      FROM appointments a
+      JOIN appointment_services aps ON aps.appointment_id = a.id
+      WHERE a.id = ${params.appointmentId}::uuid
+        AND a.customer_id = ${params.customerId}::uuid
+        AND a.status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
+      GROUP BY a.id
+    `;
+
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      locationId: row.location_id,
+      professionalId: row.professional_id,
+      serviceIds: row.service_ids,
     };
   });
 }

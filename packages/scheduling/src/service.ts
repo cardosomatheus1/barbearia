@@ -228,6 +228,16 @@ export const MAX_RANGE_DAYS = 14;
 export interface AvailabilityRangeRequest extends Omit<AvailabilityRequest, 'date'> {
   readonly dateFrom: string;
   readonly dateTo?: string;
+  /**
+   * Agendamento a desconsiderar na ocupação.
+   *
+   * Existe para a grade de **remarcação**, que precisa ser a mesma que a
+   * gravação vai validar. Sem isso as duas divergem: com a estratégia
+   * `anchored`, o horário atual do cliente ancora a grade exibida, e ao gravar
+   * — quando ele é ignorado — a grade recomeça do início da jornada e nenhum
+   * dos horários oferecidos existe mais. Toda escolha era recusada.
+   */
+  readonly ignoreAppointmentId?: string;
 }
 
 export interface AvailabilityRangeResponse {
@@ -254,6 +264,9 @@ export async function getAvailabilityRange(
       serviceIds: request.serviceIds,
       dates,
       ...(request.professionalId ? { professionalId: request.professionalId } : {}),
+      ...(request.ignoreAppointmentId
+        ? { ignoreAppointmentId: request.ignoreAppointmentId }
+        : {}),
     });
 
     if (!context) {

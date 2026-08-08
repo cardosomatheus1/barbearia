@@ -6,6 +6,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,7 +17,10 @@ import {
   cancelAppointment,
   createAppointment,
   getAppointmentReceipt,
+  getAvailabilityRange,
+  getReschedulableAppointment,
   listCustomerAppointments,
+  MAX_RANGE_DAYS,
   rescheduleAppointment,
 } from '@barbearia/scheduling';
 import {
@@ -34,7 +38,7 @@ import {
   createAppointmentSchema,
   rescheduleSchema,
 } from '../auth/auth.schemas.js';
-import { appointmentIdSchema, slugSchema } from './booking.schemas.js';
+import { appointmentIdSchema, rescheduleRangeSchema, slugSchema } from './booking.schemas.js';
 
 const BOOKING_STATUS: Record<string, number> = {
   unknown_location: 404,
@@ -43,6 +47,11 @@ const BOOKING_STATUS: Record<string, number> = {
   appointment_not_found: 404,
   appointment_not_active: 409,
   hold_expired: 409,
+  // 409, não 403: a regra é sobre o estado do agendamento no tempo, não sobre
+  // quem está pedindo. O mesmo cliente podia ontem e não pode agora.
+  too_late: 409,
+  too_many_reschedules: 409,
+  already_started: 409,
 };
 
 const OTP_STATUS: Record<string, number> = {
@@ -249,6 +258,62 @@ export class AppointmentsController {
       return { cancelled: true };
     } catch (error) {
       return toHttp(error);
+    }
+  }
+
+  /**
+   * Grade para remarcar **este** agendamento.
+   *
+   * Existe separada de `/availability` porque precisa ignorar o próprio
+   * horário do cliente na ocupação. Com a estratégia `anchored` a diferença
+   * não é cosmética: o horário atual ancora a grade, e a rota pública ofereceria
+   * horários que a gravação — que o ignora — recusaria um por um.
+   *
+   * Sob a guarda, e o agendamento é buscado pelo `customerId` da sessão: o id
+   * na URL não autoriza nada sozinho.
+   */
+  @Get(':id/availability')
+  async rescheduleOptions(
+    @TenantId() tenantId: string,
+    @Customer() customer: AuthenticatedCustomer,
+    @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
+    @Query(new ZodValidationPipe(rescheduleRangeSchema)) query: { dateFrom: string; dateTo?: string },
+  ) {
+    const atual = await getReschedulableAppointment({
+      tenantId,
+      customerId: customer.customerId,
+      appointmentId: id,
+    });
+    if (!atual) throw notFound('appointment_not_found', 'Agendamento não encontrado');
+
+    try {
+      const range = await getAvailabilityRange({
+        tenantId,
+        locationId: atual.locationId,
+        serviceIds: atual.serviceIds,
+        professionalId: atual.professionalId,
+        ignoreAppointmentId: id,
+        dateFrom: query.dateFrom,
+        ...(query.dateTo ? { dateTo: query.dateTo } : {}),
+      });
+
+      return {
+        timezone: range.timezone,
+        days: range.days.map((day) => ({
+          date: day.date,
+          unavailableReason: day.unavailableReason,
+          slots: day.slots.map((slot) => ({
+            start: slot.start,
+            end: slot.end,
+            professionalId: slot.professionalId,
+          })),
+        })),
+      };
+    } catch (error) {
+      if (error instanceof RangeError) {
+        throw badRequest('invalid_range', `Intervalo inválido (máximo ${MAX_RANGE_DAYS} dias)`);
+      }
+      throw error;
     }
   }
 

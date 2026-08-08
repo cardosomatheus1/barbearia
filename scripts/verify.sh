@@ -27,6 +27,10 @@ step "typecheck"            pnpm -r typecheck
 step "build"                pnpm -r build
 step "core — unitários"     pnpm --filter @barbearia/core test
 step "ui — tokens e componentes" pnpm --filter @barbearia/ui test
+# A suíte do web ficou de fora do portão até o bloco 9. Teste que o portão não
+# roda não é garantia nenhuma — o de `destinoSeguro` guarda contra
+# redirecionamento aberto no login e precisa correr aqui.
+step "web — lógica de tela" pnpm --filter @barbearia/web test
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   step "db — invariantes"   pnpm --filter @barbearia/db test

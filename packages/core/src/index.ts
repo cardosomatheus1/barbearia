@@ -6,3 +6,4 @@ export * from './availability.js';
 export * from './zone.js';
 export * from './schedule.js';
 export * from './phone.js';
+export * from './changes.js';
