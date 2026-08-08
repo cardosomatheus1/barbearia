@@ -25,6 +25,7 @@ import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
+import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
   businessSchema,
   changeWindowSchema,
@@ -142,29 +143,39 @@ export class StaffAuthController {
  * RLS só protege quem lembra de passar o tenant certo.
  */
 @Controller('v1/admin')
-@UseGuards(StaffGuard)
+@UseGuards(StaffGuard, PermissaoGuard)
 export class OnboardingController {
   constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
 
+  @Exige()
   @Post('logout')
   async logout(@Staff() staff: AuthenticatedStaff) {
     await revokeStaffSession(staff.tenantId, staff.sessionId);
     return { revoked: true };
   }
 
+  @Exige('appointments.view')
   @Get('state')
   async state(@Staff() staff: AuthenticatedStaff) {
     const estado = await getOnboardingState(staff.tenantId);
     if (!estado) throw notFound('unknown_tenant', 'Barbearia não encontrada');
-    return { ...estado, staff: { name: staff.name, role: staff.role } };
+    // As permissões saem daqui, resolvidas do papel na mesma consulta da
+    // sessão: a tela mostra o que a API aplica, nunca uma cópia da lista
+    // (CLAUDE.md). E é uma ida ao banco a menos que uma rota `/me` por página.
+    return {
+      ...estado,
+      staff: { name: staff.name, role: staff.role, permissions: staff.permissions },
+    };
   }
 
   /** Catálogo sugerido, com duração e buffer coerentes — D4 na origem. */
+  @Exige('settings.manage')
   @Get('templates')
   templates() {
     return { templates: templatesForOnboarding() };
   }
 
+  @Exige('settings.manage')
   @Put('business')
   async business(
     @Staff() staff: AuthenticatedStaff,
@@ -179,6 +190,7 @@ export class OnboardingController {
     }
   }
 
+  @Exige('settings.manage')
   @Put('services')
   async services(
     @Staff() staff: AuthenticatedStaff,
@@ -191,6 +203,7 @@ export class OnboardingController {
     }
   }
 
+  @Exige('settings.manage')
   @Put('professionals')
   async professionals(
     @Staff() staff: AuthenticatedStaff,
@@ -207,6 +220,7 @@ export class OnboardingController {
     }
   }
 
+  @Exige('settings.manage')
   @Put('payments')
   async payments(
     @Staff() staff: AuthenticatedStaff,
@@ -216,6 +230,7 @@ export class OnboardingController {
     return { saved: true };
   }
 
+  @Exige('settings.manage')
   @Post('publish')
   async publicar(@Staff() staff: AuthenticatedStaff) {
     try {
@@ -233,6 +248,7 @@ export class OnboardingController {
    * A tela precisa da lista para montar um campo por profissional e por
    * serviço — sem ela o dono teria que descobrir os ids sozinho.
    */
+  @Exige('settings.manage')
   @Get('photos')
   async photos(@Staff() staff: AuthenticatedStaff) {
     const alvos = await getPhotoTargets(staff.tenantId);
@@ -252,6 +268,7 @@ export class OnboardingController {
    * vazio apaga. Sem essa distinção, salvar a foto de um barbeiro apagaria a
    * dos outros.
    */
+  @Exige('settings.manage')
   @Put('photos')
   async savePhotos(
     @Staff() staff: AuthenticatedStaff,
@@ -289,6 +306,7 @@ export class OnboardingController {
     return { ...resultado, photos: await getPhotoTargets(staff.tenantId) };
   }
 
+  @Exige('settings.manage')
   @Put('change-window')
   async changeWindow(
     @Staff() staff: AuthenticatedStaff,

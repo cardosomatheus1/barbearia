@@ -10,6 +10,8 @@ import {
 import { AuthController, SessionController } from './auth/auth.controller.js';
 import { OnboardingController, StaffAuthController } from './admin/admin.controller.js';
 import { BoardController } from './admin/board.controller.js';
+import { MeController, TeamController } from './admin/team.controller.js';
+import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
 import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
@@ -26,12 +28,15 @@ import { TenantService } from './tenant/tenant.service.js';
     StaffAuthController,
     OnboardingController,
     BoardController,
+    TeamController,
+    MeController,
     GuestAppointmentsController,
     AppointmentsController,
   ],
   providers: [
     TenantService,
     StaffGuard,
+    PermissaoGuard,
     CustomerGuard,
     // Provedor real do WhatsApp entra no bloco 55. Até lá, o de console — que
     // nunca imprime o código.

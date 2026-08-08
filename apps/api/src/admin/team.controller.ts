@@ -1,0 +1,218 @@
+import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import {
+  changeOwnPassword,
+  changeStaffRole,
+  createStaffUser,
+  listStaff,
+  permissionsByRole,
+  resetStaffPassword,
+  setStaffActive,
+  StaffError,
+  type AuthenticatedStaff,
+} from '@barbearia/identity';
+import type { Papel } from '@barbearia/core';
+import { DomainError } from '../common/errors.js';
+import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { Staff, StaffGuard } from './staff.guard.js';
+import { Exige, PermissaoGuard } from './permissao.guard.js';
+import {
+  activeSchema,
+  changePasswordSchema,
+  createStaffSchema,
+  roleSchema,
+  staffIdSchema,
+} from './team.schemas.js';
+
+const STATUS: Record<string, number> = {
+  email_taken: 409,
+  invalid_role: 400,
+  invalid_phone: 400,
+  staff_not_found: 404,
+  // 409, não 403: quem pede tem `team.manage`. O que recusa é a regra de que o
+  // dono não se tranca para fora da própria barbearia.
+  owner_protected: 409,
+  weak_password: 400,
+  invalid_credentials: 401,
+};
+
+function toHttp(error: unknown): never {
+  if (error instanceof StaffError) {
+    throw new DomainError(error.code, STATUS[error.code] ?? 400, error.message);
+  }
+  throw error;
+}
+
+const contexto = (request: Request) => ({
+  ...(request.ip ? { ip: request.ip } : {}),
+  ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
+});
+
+/**
+ * Equipe — exige `team.manage`.
+ *
+ * Até o bloco 11 só existia a conta do dono, e quem operava o balcão usava ela.
+ * Estas rotas são por onde a recepcionista passa a ter conta própria — com o
+ * acesso que ela precisa e nada além.
+ *
+ * Tudo aqui é auditado dentro da transação que muda o estado. Alteração de
+ * permissão é evento de registro obrigatório (SPEC Parte 1 §1.7), e a trilha é
+ * append-only no banco: `UPDATE` e `DELETE` foram revogados do role da
+ * aplicação, então nem esta API consegue reescrever o que gravou.
+ */
+@Controller('v1/admin/team')
+@UseGuards(StaffGuard, PermissaoGuard)
+export class TeamController {
+  @Exige('team.manage')
+  @Get()
+  async list(@Staff() staff: AuthenticatedStaff) {
+    return {
+      members: await listStaff(staff.tenantId),
+      // A tela mostra o que cada papel pode a partir **desta** resposta, nunca
+      // de uma cópia da lista no front: permissão exibida sai da mesma fonte
+      // que a API aplica (CLAUDE.md).
+      permissionsByRole: await permissionsByRole(staff.tenantId),
+    };
+  }
+
+  /**
+   * Cria a conta e devolve a senha de primeiro acesso **uma vez**.
+   *
+   * Não há canal de mensagem transacional ainda (bloco 20); a alternativa real
+   * numa barbearia é o dono entregar a senha para quem está do lado dele. A
+   * conta nasce obrigada a trocá-la, então ela não sobrevive ao primeiro uso.
+   */
+  @Exige('team.manage')
+  @Post()
+  async create(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(createStaffSchema))
+    body: { name: string; email: string; role: Papel; phone?: string; professionalId?: string },
+    @Req() request: Request,
+  ) {
+    try {
+      const criado = await createStaffUser({
+        tenantId: staff.tenantId,
+        actor: { id: staff.staffUserId, name: staff.name },
+        name: body.name,
+        email: body.email,
+        role: body.role,
+        ...(body.phone ? { phone: body.phone } : {}),
+        ...(body.professionalId ? { professionalId: body.professionalId } : {}),
+        ...contexto(request),
+      });
+      return criado;
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  @Exige('team.manage')
+  @Put(':id/role')
+  async role(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(staffIdSchema)) id: string,
+    @Body(new ZodValidationPipe(roleSchema)) body: { role: Papel },
+    @Req() request: Request,
+  ) {
+    try {
+      await changeStaffRole({
+        tenantId: staff.tenantId,
+        actor: { id: staff.staffUserId, name: staff.name },
+        staffUserId: id,
+        role: body.role,
+        ...contexto(request),
+      });
+      return { changed: true };
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  /** Desligar revoga as sessões abertas na mesma transação. */
+  @Exige('team.manage')
+  @Put(':id/active')
+  async active(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(staffIdSchema)) id: string,
+    @Body(new ZodValidationPipe(activeSchema)) body: { active: boolean },
+    @Req() request: Request,
+  ) {
+    try {
+      await setStaffActive({
+        tenantId: staff.tenantId,
+        actor: { id: staff.staffUserId, name: staff.name },
+        staffUserId: id,
+        active: body.active,
+        ...contexto(request),
+      });
+      return { active: body.active };
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  @Exige('team.manage')
+  @Post(':id/reset-password')
+  async reset(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(staffIdSchema)) id: string,
+    @Req() request: Request,
+  ) {
+    try {
+      return await resetStaffPassword({
+        tenantId: staff.tenantId,
+        actor: { id: staff.staffUserId, name: staff.name },
+        staffUserId: id,
+        ...contexto(request),
+      });
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+}
+
+/**
+ * A própria senha — **sem exigir permissão nenhuma**.
+ *
+ * `@Exige()` vazio é a única fuga da guarda, e é deliberada: a conta recém-
+ * criada está bloqueada em todo o resto até trocar a senha de primeiro acesso,
+ * então a rota que a destranca não pode depender de permissão. Ela ainda exige
+ * a senha atual, que é o que impede alguém no navegador aberto de outra pessoa
+ * de ficar com a conta.
+ */
+@Controller('v1/admin/me')
+@UseGuards(StaffGuard, PermissaoGuard)
+export class MeController {
+  @Exige()
+  @Get()
+  me(@Staff() staff: AuthenticatedStaff) {
+    return {
+      name: staff.name,
+      role: staff.role,
+      permissions: staff.permissions,
+      mustChangePassword: staff.mustChangePassword,
+    };
+  }
+
+  @Exige()
+  @Put('password')
+  async password(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(changePasswordSchema))
+    body: { currentPassword: string; newPassword: string },
+  ) {
+    try {
+      await changeOwnPassword({
+        tenantId: staff.tenantId,
+        staffUserId: staff.staffUserId,
+        sessionId: staff.sessionId,
+        currentPassword: body.currentPassword,
+        newPassword: body.newPassword,
+      });
+      return { changed: true };
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+}

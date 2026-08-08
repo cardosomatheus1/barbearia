@@ -3,7 +3,9 @@
 import { redirect } from 'next/navigation';
 import {
   criarConta,
+  criarMembro,
   entrarComoGestor,
+  ligarMembro,
   marcarNoBalcao,
   moverAtendimento,
   publicarBarbearia,
@@ -13,8 +15,12 @@ import {
   salvarJanela,
   salvarPagamentos,
   salvarProfissionais,
+  reemitirSenha,
   salvarServicos,
+  trocarMinhaSenha,
+  trocarPapel,
   type AcaoAtendimento,
+  type Papel,
 } from '@/lib/admin-api';
 import { apagarSessaoGestor, gravarSessaoGestor, lerSessaoGestor } from '@/lib/sessao-gestor';
 
@@ -88,7 +94,11 @@ export async function acaoEntrar(form: FormData): Promise<void> {
   if (!resultado.ok) falhar('/admin/entrar', resultado.code);
 
   await gravarSessaoGestor(resultado.dados.token, resultado.dados.expiresAt);
-  redirect('/admin/onboarding');
+
+  // Quem entrou com a senha de primeiro acesso não opera nada até escolher a
+  // sua: mandar para o painel faria a pessoa bater em 403 na primeira porta e
+  // achar que o sistema quebrou.
+  redirect(resultado.dados.mustChangePassword ? '/admin/trocar-senha' : '/admin/dia');
 }
 
 export async function acaoSair(): Promise<void> {
@@ -342,4 +352,84 @@ export async function acaoFotos(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/fotos', resultado.code);
   redirect('/admin/fotos?salvo=1');
+}
+
+// -- Equipe ------------------------------------------------------------------
+
+/**
+ * Cria a conta e leva a senha de primeiro acesso para a tela **uma vez**.
+ *
+ * Ela viaja na URL porque não há canal de mensagem ainda e o dono precisa lê-la
+ * com a pessoa do lado. É aceitável porque a senha morre no primeiro uso — a
+ * conta nasce obrigada a trocá-la — e porque o painel não é indexado
+ * (`robots: noindex` no layout). Quando existir WhatsApp transacional
+ * (bloco 20), a entrega passa por lá e este parâmetro sai.
+ */
+export async function acaoCriarMembro(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const resultado = await criarMembro(token, {
+    name: texto(form, 'name'),
+    email: texto(form, 'email'),
+    role: texto(form, 'role') as Papel,
+    ...(texto(form, 'phone') ? { phone: texto(form, 'phone') } : {}),
+  });
+
+  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+
+  const busca = new URLSearchParams({
+    criada: resultado.dados.member.name,
+    senha: resultado.dados.senhaInicial,
+  });
+  redirect(`/admin/equipe?${busca.toString()}`);
+}
+
+export async function acaoTrocarPapel(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await trocarPapel(token, texto(form, 'id'), texto(form, 'role') as Papel);
+  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+  redirect('/admin/equipe?salvo=1');
+}
+
+export async function acaoLigarMembro(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await ligarMembro(token, texto(form, 'id'), texto(form, 'active') === '1');
+  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+  redirect('/admin/equipe?salvo=1');
+}
+
+export async function acaoReemitirSenha(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await reemitirSenha(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+
+  const busca = new URLSearchParams({
+    criada: texto(form, 'nome'),
+    senha: resultado.dados.senhaInicial,
+  });
+  redirect(`/admin/equipe?${busca.toString()}`);
+}
+
+/**
+ * Troca a própria senha.
+ *
+ * É a rota que destranca a conta de primeiro acesso, e a única que a guarda de
+ * permissão deixa passar enquanto `mustChangePassword` for verdadeiro.
+ */
+export async function acaoTrocarMinhaSenha(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const nova = String(form.get('newPassword') ?? '');
+  if (nova !== String(form.get('confirmPassword') ?? '')) {
+    falhar('/admin/trocar-senha', 'nao_confere');
+  }
+
+  const resultado = await trocarMinhaSenha(
+    token,
+    String(form.get('currentPassword') ?? ''),
+    nova,
+  );
+  if (!resultado.ok) falhar('/admin/trocar-senha', resultado.code);
+
+  redirect('/admin/dia');
 }

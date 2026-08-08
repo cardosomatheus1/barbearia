@@ -128,6 +128,14 @@ async function preparar() {
     t,
   );
 
+  // Uma conta além da do dono: a lista de equipe com uma linha só não mostra o
+  // que acontece quando cabem selo, papel e botões na mesma altura.
+  await post(
+    '/v1/admin/team',
+    { name: 'Maria Aparecida do Nascimento', email: `recep${Date.now()}@teste.com`, role: 'receptionist' },
+    t,
+  );
+
   return { token: t, slug: sessao.slug };
 }
 
@@ -267,6 +275,8 @@ async function main() {
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'equipe', url: '/admin/equipe', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'trocar senha', url: '/admin/trocar-senha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — horário', url: `/admin/dia/marcar?s=${balcao.servicoId}&d=${balcao.dataLivre}&e=c`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
@@ -338,6 +348,17 @@ async function main() {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
           if (r.height < 44) {
+            // Caixa e rádio dentro de um `<label>`: o alvo é o rótulo inteiro,
+            // porque clicar em qualquer parte dele aciona o controle — que é
+            // exatamente o que a WCAG 2.5.8 mede. Medir a caixinha de 13px
+            // reprovava um padrão correto, e o padrão já existia no onboarding
+            // desde o bloco 10 sem nunca ter sido medido: a régua de etapas
+            // abre no passo publicado, e as caixas ficam nos passos 2 e 4.
+            const tipo = el.getAttribute('type');
+            if (el.tagName === 'INPUT' && (tipo === 'checkbox' || tipo === 'radio')) {
+              const rotulo = el.closest('label');
+              if (rotulo && rotulo.getBoundingClientRect().height >= 44) continue;
+            }
             const dentroDeTexto = el.tagName === 'A' && el.parentElement
               && ['P', 'SPAN', 'LI', 'TD'].includes(el.parentElement.tagName)
               && (el.parentElement.textContent ?? '').trim() !== (el.textContent ?? '').trim();

@@ -1,13 +1,13 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
-  estadoDoPainel,
   painelDoDia,
   type AcaoAtendimento,
   type LinhaDoDia,
   type PainelDoDia,
 } from '@/lib/admin-api';
 import { addDays, localTime, weekdayShort } from '@/lib/date';
+import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAtendimento, acaoSair } from '../acoes';
 
@@ -249,8 +249,7 @@ export default async function DiaPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
-  const estado = await estadoDoPainel(token);
-  if (!estado.ok) redirect('/admin/entrar');
+  const estado = await painelOuDesvio(token);
 
   const query = await searchParams;
   const dataPedida = first(query['d']);
@@ -302,13 +301,28 @@ export default async function DiaPage({ searchParams }: Props) {
     <main className="ui-container balcao">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/onboarding">
-          ← {estado.dados.businessName}
+          ← {estado.businessName}
         </a>
-        <form action={acaoSair}>
-          <button className="ui-button ui-button--ghost painel__sair" type="submit">
-            Sair
-          </button>
-        </form>
+        <nav className="painel__atalhos">
+          {/* A tela esconde o que a guarda recusaria. Não é a segurança — essa
+              está no servidor — é que botão que só serve para dar erro é pior
+              que botão ausente para quem opera. */}
+          {podeNaTela(estado, 'team.manage') ? (
+            <a className="ui-button ui-button--ghost painel__sair" href="/admin/equipe">
+              Equipe
+            </a>
+          ) : null}
+          {podeNaTela(estado, 'settings.manage') ? (
+            <a className="ui-button ui-button--ghost painel__sair" href="/admin/fotos">
+              Fotos
+            </a>
+          ) : null}
+          <form action={acaoSair}>
+            <button className="ui-button ui-button--ghost painel__sair" type="submit">
+              Sair
+            </button>
+          </form>
+        </nav>
       </header>
 
       <div className="balcao__cabeca">

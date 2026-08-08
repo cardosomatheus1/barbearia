@@ -8,6 +8,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BoardController } from '../src/admin/board.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
+import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
@@ -66,6 +67,7 @@ describeIfDb('balcão', () => {
       providers: [
         TenantService,
         StaffGuard,
+        PermissaoGuard,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
       ],

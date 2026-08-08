@@ -13,13 +13,13 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade e vida do atendimento — lógica pura, sem banco e sem relógio | 185 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 16 invariantes + 10 testes ✅ |
-| `packages/scheduling` | Repositórios, disponibilidade, reserva e o dia do balcão | 83 testes ✅ |
-| `packages/identity` | OTP por WhatsApp, sessão do cliente, consentimentos | 26 testes ✅ |
-| `packages/ui` | Design system: tokens, tema, componentes acessíveis | 77 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão | 101 testes e2e ✅ |
-| `apps/web` | Página pública, fluxo do cliente e balcão, com SSR (Next.js) | 17 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento e permissões — lógica pura, sem banco e sem relógio | 220 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 10 testes ✅ |
+| `packages/scheduling` | Repositórios, disponibilidade, reserva e o dia do balcão | 85 testes ✅ |
+| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, auditoria | 75 testes ✅ |
+| `packages/ui` | Design system: tokens, tema, componentes acessíveis | 84 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, equipe | 125 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão e equipe, com SSR (Next.js) | 19 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -507,14 +507,79 @@ cancelamento viram coluna de referência à direita. Isso conserta a hierarquia 
 quebra: as cinco seções tinham exatamente o mesmo peso, e a política de
 cancelamento gritava tanto quanto o preço do corte.
 
+## Papel decidindo alguma coisa
+
+`staff_users.role` existia desde o bloco 10 e **nunca foi lido para decidir
+nada**. Toda conta de gestor tinha poder de dono, então abrir o balcão para a
+recepcionista entregava junto o faturamento, o catálogo e a base de clientes —
+e a saída prática era ela usar a conta do dono, que é o pior dos dois mundos.
+
+### Permissão é dado, não constante
+
+A SPEC (Parte 1 §1.3) pede permissões granulares e papéis editáveis pelo
+proprietário. Guardar o mapa no código faria "o gerente passa a ver faturamento"
+virar deploy; `role_permissions` é por barbearia, então é uma linha. O bloco 30
+precisa só de tela.
+
+O catálogo aparece em dois lugares de propósito: em `packages/core` e numa
+`CHECK` do banco. A duplicação é o que impede uma permissão inventada de ser
+concedida numa correção manual de madrugada — e há teste que lê a `CHECK` do
+`pg_constraint` e falha se as duas listas divergirem. Ele já pegou uma.
+
+Uma permissão saiu do nosso lado: `appointments.attend`. A SPEC descreve a
+recepcionista e o barbeiro fazendo check-in no §1.2 e não tem permissão para
+isso no §1.3 — operar o balcão só caberia sob `appointments.view`, que é um
+write guardado por permissão de leitura.
+
+### A guarda recusa por padrão
+
+Rota que não declara `@Exige(...)` não é rota liberada: é rota que esqueceu de
+declarar. A guarda nega, e um teste varre os controllers e reprova qualquer
+método sem declaração — por classe, não por arquivo, porque `signup` e `login`
+moram no mesmo arquivo das rotas do painel e não ficam atrás de guarda nenhuma.
+
+Outro teste mantém uma regra do `CLAUDE.md` que era só texto: **MFA obrigatório
+para quem tem `finance.*`**. Não há segundo fator ainda, então nenhuma rota pode
+exigir uma dessas. Quando a primeira tela de caixa chegar, o teste fica vermelho
+e obriga a decisão junto — não seis blocos depois.
+
+### A senha de primeiro acesso morre no primeiro uso
+
+Quem cria a conta é o dono, com a pessoa do lado; não há canal transacional até
+o bloco 20. A senha é **gerada** (`randomInt` do `node:crypto`, alfabeto sem
+`0`/`O`/`1`/`l`), aparece uma vez, e a conta nasce com `must_change_password`.
+Enquanto isso for verdade, a guarda recusa tudo menos a rota que a destranca —
+e essa rota ainda exige a senha atual, que é o que impede alguém no navegador
+aberto de outra pessoa de ficar com a conta.
+
+### Desligar tira do sistema agora
+
+Desativar alguém revoga as sessões abertas **na mesma transação**. Sem isso quem
+acabou de ser demitido segue com o balcão aberto no navegador até o token
+expirar — exatamente quando não deveria mais estar lá. Reemitir a senha faz o
+mesmo.
+
+O dono é protegido nos três caminhos: não dá para criar um segundo, promover
+alguém a dono, nem desligar o que existe. Seria a única conta com `team.manage`
+se trancando para fora do próprio negócio, sem volta pela aplicação.
+
+### A trilha é append-only por permissão, não por convenção
+
+`audit_log` nasce com `REVOKE UPDATE, DELETE ... FROM barbearia_app`. Trilha que
+a aplicação reescreve não prova nada, e quem chegasse ao role apagaria o próprio
+rastro. Há teste que tenta apagar e espera falhar.
+
+Grava dentro da transação que muda o estado, com o par antes/depois — saber que
+alguém mudou uma permissão sem saber de quê para quê não fecha investigação — e
+nunca guarda senha nem hash.
+
 ## Próximos passos
 
-Bloco 12 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 13 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
 
-RBAC mínimo: papéis, permissões e contas de equipe. Hoje quem opera o balcão usa
-a conta do dono, e essa conta abre faturamento. Dar a chave do dinheiro a quem só
-marca presença é o incidente que o bloco 12 existe para impedir — e por isso ele
-vem antes de qualquer conta que não seja a do dono.
+Admin: CRUD de catálogo, equipe, jornadas e recursos. O onboarding cria o
+essencial em dez minutos; o dia a dia precisa editar — mudar preço, ajustar a
+jornada de um barbeiro, desativar um serviço — e hoje isso é SQL.
 
 ## Responsividade é medida, não olhada
 
@@ -528,7 +593,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as treze
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as quinze
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar

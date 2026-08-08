@@ -1,0 +1,424 @@
+import { PrismaClient } from '@prisma/client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PAPEIS, PERMISSOES, permissoesPadrao } from '@barbearia/core';
+import { withTenant } from '@barbearia/db';
+import {
+  changeOwnPassword,
+  changeStaffRole,
+  createStaffUser,
+  listStaff,
+  permissionsByRole,
+  resetStaffPassword,
+  setStaffActive,
+} from './team.js';
+import { resolveStaffSession, signUpOwner, staffLogin } from './staff.js';
+import { listAudit } from './audit.js';
+
+/**
+ * Contas de equipe e permissões, contra Postgres real.
+ *
+ * O que se prova aqui: que o papel decide de fato, que a trilha registra quem
+ * mudou o quê, e que desligar alguém tira essa pessoa de dentro do sistema no
+ * mesmo instante — não quando o token expirar.
+ */
+
+const SEED_URL = process.env['SEED_DATABASE_URL'];
+const APP_URL = process.env['APP_DATABASE_URL'];
+
+let admin: PrismaClient;
+
+const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
+
+const DONO = {
+  name: 'Matheus Cardoso',
+  email: 'dono@domari.com.br',
+  password: 'senha-bem-comprida',
+  phone: '(71) 98888-7777',
+  businessName: 'Domari Barber Club',
+};
+
+describeIfDb('equipe e permissões', () => {
+  beforeAll(async () => {
+    if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
+    process.env['STAFF_EMAIL_PEPPER'] = 'pepper-de-teste';
+    admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
+  });
+
+  afterAll(async () => {
+    await admin?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
+  });
+
+  async function abrirBarbearia() {
+    const criado = await signUpOwner(DONO);
+    if (!criado.created) throw new Error('a barbearia deveria ter sido criada');
+    return criado.session;
+  }
+
+  const ator = (sessao: { staffUserId: string; name: string }) => ({
+    id: sessao.staffUserId,
+    name: sessao.name,
+  });
+
+  // -- catálogo --------------------------------------------------------------
+
+  it('o catálogo do banco é o mesmo do código', async () => {
+    // A CHECK de `role_permissions` repete a lista de propósito — é ela que
+    // impede permissão inventada numa correção manual. Duas listas separadas
+    // que ninguém compara é como uma envelhece em silêncio.
+    const linhas = await admin.$queryRawUnsafe<{ def: string }[]>(`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conname = 'role_permissions_conhecida'
+    `);
+    const definicao = linhas[0]?.def ?? '';
+    expect(definicao, 'a CHECK não foi encontrada').not.toBe('');
+
+    for (const permissao of PERMISSOES) {
+      expect(definicao, `${permissao} não está na CHECK do banco`).toContain(`'${permissao}'`);
+    }
+    // E o contrário: nada na CHECK que o código não conheça.
+    const noBanco = [...definicao.matchAll(/'([a-z_]+\.[a-z_]+)'/g)].map((m) => m[1]);
+    for (const permissao of noBanco) {
+      expect(PERMISSOES as readonly string[], `${permissao} está no banco e não no código`)
+        .toContain(permissao);
+    }
+  });
+
+  it('a barbearia nasce com o padrão de fábrica', async () => {
+    // Sem a semente no cadastro, nem o dono consegue abrir o próprio painel.
+    const sessao = await abrirBarbearia();
+    const mapa = await permissionsByRole(sessao.tenantId);
+
+    for (const papel of PAPEIS) {
+      expect([...(mapa[papel] ?? [])].sort(), papel).toEqual([...permissoesPadrao(papel)].sort());
+    }
+  });
+
+  // -- a sessão carrega o que pode ------------------------------------------
+
+  it('a sessão do dono carrega todas as permissões', async () => {
+    const sessao = await abrirBarbearia();
+    const resolvida = await resolveStaffSession(sessao.token);
+    expect([...resolvida.permissions].sort()).toEqual([...PERMISSOES].sort());
+  });
+
+  it('a recepcionista não recebe team.manage nem finance', async () => {
+    // É o incidente que este bloco existe para impedir: quem só marca presença
+    // não pode receber a chave do faturamento junto.
+    const dono = await abrirBarbearia();
+    const { senhaInicial } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+
+    const dela = await staffLogin({ email: 'maria@domari.com.br', password: senhaInicial });
+    const resolvida = await resolveStaffSession(dela.token);
+
+    expect(resolvida.permissions).toContain('appointments.attend');
+    expect(resolvida.permissions).not.toContain('team.manage');
+    expect(resolvida.permissions).not.toContain('finance.view');
+    expect(resolvida.permissions).not.toContain('customers.export');
+  });
+
+  it('tirar a permissão do papel tira de quem já está logado', async () => {
+    // O sentido de guardar permissão no banco: mudar não é deploy. E a sessão
+    // resolve o papel a cada requisição, então não fica valendo a foto antiga.
+    const dono = await abrirBarbearia();
+    const { senhaInicial } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+    const dela = await staffLogin({ email: 'maria@domari.com.br', password: senhaInicial });
+
+    expect((await resolveStaffSession(dela.token)).permissions).toContain('appointments.cancel');
+
+    await withTenant(dono.tenantId, async (tx) => {
+      await tx.$executeRawUnsafe(
+        `DELETE FROM role_permissions WHERE role = 'receptionist' AND permission = 'appointments.cancel'`,
+      );
+    });
+
+    expect((await resolveStaffSession(dela.token)).permissions).not.toContain(
+      'appointments.cancel',
+    );
+  });
+
+  // -- primeiro acesso -------------------------------------------------------
+
+  it('a conta nova nasce obrigada a trocar a senha', async () => {
+    const dono = await abrirBarbearia();
+    const { senhaInicial } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+
+    // Gerada, não escolhida por terceiro, e longa o bastante para não ser
+    // adivinhada enquanto está no papel em cima do balcão.
+    expect(senhaInicial.length).toBeGreaterThanOrEqual(12);
+
+    const dela = await staffLogin({ email: 'maria@domari.com.br', password: senhaInicial });
+    expect((await resolveStaffSession(dela.token)).mustChangePassword).toBe(true);
+
+    await changeOwnPassword({
+      tenantId: dela.tenantId,
+      staffUserId: dela.staffUserId,
+      sessionId: (await resolveStaffSession(dela.token)).sessionId,
+      currentPassword: senhaInicial,
+      newPassword: 'a-senha-que-ela-escolheu',
+    });
+
+    expect((await resolveStaffSession(dela.token)).mustChangePassword).toBe(false);
+  });
+
+  it('trocar a senha exige a atual', async () => {
+    // Quem chega ao navegador aberto de outra pessoa não pode ficar com a conta.
+    const dono = await abrirBarbearia();
+    const resolvida = await resolveStaffSession(dono.token);
+
+    await expect(
+      changeOwnPassword({
+        tenantId: dono.tenantId,
+        staffUserId: dono.staffUserId,
+        sessionId: resolvida.sessionId,
+        currentPassword: 'chute-errado-mesmo',
+        newPassword: 'outra-senha-comprida',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+  });
+
+  it('a senha nova não pode ser a antiga nem curta demais', async () => {
+    const dono = await abrirBarbearia();
+    const resolvida = await resolveStaffSession(dono.token);
+
+    for (const nova of [DONO.password, 'curta']) {
+      await expect(
+        changeOwnPassword({
+          tenantId: dono.tenantId,
+          staffUserId: dono.staffUserId,
+          sessionId: resolvida.sessionId,
+          currentPassword: DONO.password,
+          newPassword: nova,
+        }),
+        nova,
+      ).rejects.toMatchObject({ code: 'weak_password' });
+    }
+  });
+
+  // -- o dono é protegido ----------------------------------------------------
+
+  it('não dá para criar um segundo dono, promover a dono nem desligar o dono', async () => {
+    // Seriam três caminhos para a mesma coisa: a única conta com team.manage se
+    // trancando para fora da própria barbearia, sem volta pela aplicação.
+    const dono = await abrirBarbearia();
+
+    await expect(
+      createStaffUser({
+        tenantId: dono.tenantId,
+        actor: ator(dono),
+        name: 'Sócio',
+        email: 'socio@domari.com.br',
+        role: 'owner',
+      }),
+    ).rejects.toMatchObject({ code: 'owner_protected' });
+
+    await expect(
+      setStaffActive({
+        tenantId: dono.tenantId,
+        actor: ator(dono),
+        staffUserId: dono.staffUserId,
+        active: false,
+      }),
+    ).rejects.toMatchObject({ code: 'owner_protected' });
+
+    await expect(
+      changeStaffRole({
+        tenantId: dono.tenantId,
+        actor: ator(dono),
+        staffUserId: dono.staffUserId,
+        role: 'receptionist',
+      }),
+    ).rejects.toMatchObject({ code: 'owner_protected' });
+  });
+
+  it('recusa e-mail que já tem conta na plataforma', async () => {
+    const dono = await abrirBarbearia();
+    await expect(
+      createStaffUser({
+        tenantId: dono.tenantId,
+        actor: ator(dono),
+        name: 'Outro',
+        email: DONO.email,
+        role: 'receptionist',
+      }),
+    ).rejects.toMatchObject({ code: 'email_taken' });
+  });
+
+  // -- desligar --------------------------------------------------------------
+
+  it('desligar alguém derruba a sessão dela no mesmo instante', async () => {
+    // Sem isto, quem acabou de ser demitido continua com o balcão aberto no
+    // navegador até o token expirar — que é exatamente a hora em que ele não
+    // deveria mais estar lá.
+    const dono = await abrirBarbearia();
+    const { member, senhaInicial } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+    const dela = await staffLogin({ email: 'maria@domari.com.br', password: senhaInicial });
+    await expect(resolveStaffSession(dela.token)).resolves.toBeDefined();
+
+    await setStaffActive({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      staffUserId: member.id,
+      active: false,
+    });
+
+    await expect(resolveStaffSession(dela.token)).rejects.toMatchObject({
+      code: 'invalid_session',
+    });
+  });
+
+  it('reemitir a senha também derruba as sessões abertas', async () => {
+    const dono = await abrirBarbearia();
+    const { member, senhaInicial } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+    const dela = await staffLogin({ email: 'maria@domari.com.br', password: senhaInicial });
+
+    const nova = await resetStaffPassword({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      staffUserId: member.id,
+    });
+    expect(nova.senhaInicial).not.toBe(senhaInicial);
+
+    await expect(resolveStaffSession(dela.token)).rejects.toMatchObject({
+      code: 'invalid_session',
+    });
+  });
+
+  // -- trilha ----------------------------------------------------------------
+
+  it('registra quem criou a conta e quem mudou o papel, com antes e depois', async () => {
+    const dono = await abrirBarbearia();
+    const { member } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+      ip: '189.1.2.3',
+    });
+
+    await changeStaffRole({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      staffUserId: member.id,
+      role: 'manager',
+    });
+
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx));
+    expect(eventos.map((e) => e.action)).toEqual(['staff.role_changed', 'staff.created']);
+
+    const mudanca = eventos[0];
+    expect(mudanca?.actorName).toBe(DONO.name);
+    // Saber que mudou sem saber de quê para quê não fecha investigação nenhuma.
+    expect(mudanca?.before).toEqual({ role: 'receptionist' });
+    expect(mudanca?.after).toEqual({ role: 'manager' });
+  });
+
+  it('a trilha nunca guarda senha nem hash', async () => {
+    const dono = await abrirBarbearia();
+    const { senhaInicial } = await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx));
+    const texto = JSON.stringify(eventos);
+    expect(texto).not.toContain(senhaInicial);
+    expect(texto).not.toContain('scrypt$');
+  });
+
+  it('a aplicação não consegue apagar nem reescrever a trilha', async () => {
+    // Append-only é permissão do banco, não convenção: trilha que a aplicação
+    // reescreve não prova nada, e quem chega ao role apagaria o próprio rastro.
+    const dono = await abrirBarbearia();
+    await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+
+    await expect(
+      withTenant(dono.tenantId, (tx) => tx.$executeRawUnsafe('DELETE FROM audit_log')),
+    ).rejects.toThrow();
+
+    await expect(
+      withTenant(dono.tenantId, (tx) =>
+        tx.$executeRawUnsafe(`UPDATE audit_log SET action = 'mentira'`),
+      ),
+    ).rejects.toThrow();
+  });
+
+  // -- isolamento ------------------------------------------------------------
+
+  it('a equipe de uma barbearia não aparece na outra', async () => {
+    const dono = await abrirBarbearia();
+    await createStaffUser({
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: 'maria@domari.com.br',
+      role: 'receptionist',
+    });
+
+    const rival = await signUpOwner({
+      ...DONO,
+      email: 'rival@rival.com.br',
+      businessName: 'Rival Barbearia',
+    });
+    if (!rival.created) throw new Error('a rival deveria ter sido criada');
+
+    const equipe = await listStaff(rival.session.tenantId);
+    expect(equipe.map((m) => m.email)).toEqual(['rival@rival.com.br']);
+
+    // Nem com o id em mãos: a RLS não enxerga a linha.
+    const daOutra = (await listStaff(dono.tenantId)).find((m) => m.role === 'receptionist');
+    expect(daOutra).toBeDefined();
+    await expect(
+      setStaffActive({
+        tenantId: rival.session.tenantId,
+        actor: ator(rival.session),
+        staffUserId: daOutra?.id ?? '',
+        active: false,
+      }),
+    ).rejects.toMatchObject({ code: 'staff_not_found' });
+  });
+});

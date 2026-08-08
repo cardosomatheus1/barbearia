@@ -1124,3 +1124,98 @@ main { padding-bottom: var(--space-8); }
    de "confirmar", que é o botão vizinho e o que a recepção aperta o dia todo. */
 .atendimento__risco { color: var(--color-danger); }
 .marcar__dica { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Equipe ----------------------------------------------------------------- */
+
+.painel__atalhos { display: flex; align-items: center; gap: var(--space-2); }
+
+.equipe-lista { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-2); }
+.pessoa-equipe {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+/* Conta desligada continua visível: sumir esconderia quem teve acesso ontem. */
+.pessoa-equipe--fora { opacity: 0.65; }
+.pessoa-equipe__nome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+.pessoa-equipe__selo {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.pessoa-equipe__email { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.pessoa-equipe__pode { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.pessoa-equipe__contagem { white-space: nowrap; }
+.pessoa-equipe__dono { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.pessoa-equipe__acoes { display: grid; gap: var(--space-2); }
+.pessoa-equipe__papel { display: flex; gap: var(--space-2); }
+.pessoa-equipe__papel .ui-field__input { flex: 1; min-width: 0; }
+.pessoa-equipe__miudas { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pessoa-equipe__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+/* Desligar tira alguém de dentro do sistema agora. Não pode ter o mesmo peso
+   de "nova senha", que é o botão ao lado. */
+.pessoa-equipe__risco { color: var(--color-danger); }
+
+.papeis { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.papel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.papel:has(input:checked) { border-color: var(--color-accent); }
+.papel input { grid-row: 1 / span 3; }
+.papel__nome { font-weight: var(--font-weight-medium); }
+.papel__sobre { grid-column: 2; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.papel__contagem { grid-column: 2; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* A senha aparece uma vez. Grande e espaçada porque vai ser copiada à mão. */
+.senha-nova__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.senha-nova__valor {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  word-break: break-all;
+}
+.senha-nova__nota { margin: 0; font-size: var(--font-size-sm); }
+
+/* A tela de fotos ficou sem CSS no bloco anterior: as classes existiam no
+   markup e nenhuma regra as alcançava. */
+.foto-campo__linha { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.foto-campo__linha .ui-field__input { flex: 1; min-width: 0; }
+.foto-campo__mini {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+.foto-campo__mini--vazia { background: var(--color-surface-hover); border: 1px dashed var(--color-border); }
+
+@media (min-width: 768px) {
+  .pessoa-equipe { grid-template-columns: 1fr auto; align-items: center; }
+  .papel { grid-template-columns: auto 1fr auto; }
+  .papel__contagem { grid-column: 3; grid-row: 1 / span 2; text-align: right; }
+}

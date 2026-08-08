@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { estadoDoPainel } from '@/lib/admin-api';
+import { painelOuDesvio } from '@/lib/painel';
 import { getProfile } from '@/lib/api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoJanela, acaoSair } from '../acoes';
@@ -20,17 +20,16 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
-  const estado = await estadoDoPainel(token);
-  if (!estado.ok) redirect('/admin/entrar');
+  const estado = await painelOuDesvio(token);
 
-  const perfil = await getProfile(estado.dados.slug);
+  const perfil = await getProfile(estado.slug);
   const query = await searchParams;
   const salvo = (Array.isArray(query['salvo']) ? query['salvo'][0] : query['salvo']) === '1';
 
   return (
     <main className="ui-container painel__conteudo">
       <header className="painel__topo">
-        <a className="painel__marca" href="/admin/onboarding">← {estado.dados.businessName}</a>
+        <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
         <form action={acaoSair}>
           <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
         </form>

@@ -7,6 +7,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
+import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
 import { BookingController } from '../src/booking/booking.controller.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
@@ -56,6 +57,7 @@ describeIfDb('painel do gestor', () => {
       providers: [
         TenantService,
         StaffGuard,
+        PermissaoGuard,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
       ],

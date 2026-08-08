@@ -53,6 +53,7 @@ export interface SessaoGestor {
   slug: string;
   name: string;
   role: string;
+  mustChangePassword?: boolean;
 }
 
 /**
@@ -84,7 +85,7 @@ export interface EstadoOnboarding {
   publishedAt: string | null;
   locationId: string;
   counts: { services: number; professionals: number; schedules: number };
-  staff: { name: string; role: string };
+  staff: { name: string; role: string; permissions: string[] };
 }
 
 export const estadoDoPainel = (token: string) =>
@@ -283,3 +284,69 @@ export const salvarFotos = (
     services?: { id: string; photoUrl: string }[];
   },
 ) => chamar<{ saved: number; photos: AlvosDeFoto }>('PUT', '/v1/admin/photos', dados, token);
+
+// -- Equipe -------------------------------------------------------------------
+
+export type Papel = 'owner' | 'manager' | 'receptionist' | 'professional';
+
+export interface MembroDaEquipe {
+  id: string;
+  name: string;
+  email: string;
+  role: Papel;
+  active: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  professionalId: string | null;
+}
+
+export interface Equipe {
+  members: MembroDaEquipe[];
+  /** O que cada papel pode, vindo da API — nunca de uma cópia da lista aqui. */
+  permissionsByRole: Record<string, string[]>;
+}
+
+export const equipeDaBarbearia = (token: string) =>
+  chamar<Equipe>('GET', '/v1/admin/team', undefined, token);
+
+export const criarMembro = (
+  token: string,
+  dados: { name: string; email: string; role: Papel; phone?: string },
+) =>
+  chamar<{ member: MembroDaEquipe; senhaInicial: string }>(
+    'POST',
+    '/v1/admin/team',
+    dados,
+    token,
+  );
+
+export const trocarPapel = (token: string, id: string, role: Papel) =>
+  chamar<{ changed: boolean }>('PUT', `/v1/admin/team/${id}/role`, { role }, token);
+
+export const ligarMembro = (token: string, id: string, active: boolean) =>
+  chamar<{ active: boolean }>('PUT', `/v1/admin/team/${id}/active`, { active }, token);
+
+export const reemitirSenha = (token: string, id: string) =>
+  chamar<{ senhaInicial: string }>('POST', `/v1/admin/team/${id}/reset-password`, {}, token);
+
+export interface QuemSouEu {
+  name: string;
+  role: Papel;
+  permissions: string[];
+  mustChangePassword: boolean;
+}
+
+export const quemSouEu = (token: string) =>
+  chamar<QuemSouEu>('GET', '/v1/admin/me', undefined, token);
+
+export const trocarMinhaSenha = (
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+) =>
+  chamar<{ changed: boolean }>(
+    'PUT',
+    '/v1/admin/me/password',
+    { currentPassword, newPassword },
+    token,
+  );

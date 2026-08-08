@@ -175,34 +175,39 @@ describe('imagens nas telas', () => {
     expect(semMedida, `<img> sem medida:\n${semMedida.join('\n')}`).toEqual([]);
   });
 
-  it('toda imagem no CSS tem limite de largura e proporção declarada', () => {
-    // `max-width: 100%` (ou largura fixa) para a foto não estourar o
-    // recipiente, e `aspect-ratio` ou altura para o espaço estar reservado
-    // antes de ela chegar.
+  it('toda classe usada num <img> tem limite de largura e proporção', () => {
+    // As classes vêm do markup, não do nome.
     //
-    // A conta é por **classe**, somando todas as regras que a mencionam: uma
-    // imagem legitimamente declara a largura na base e ajusta a proporção
-    // dentro de um `@media`. A primeira versão media regra a regra e acusava
-    // `.capa__img { aspect-ratio: 21/9 }` do notebook de não ter largura — que
-    // está na regra de cima.
-    const porClasse = new Map<string, string>();
-    for (const [, seletor = '', corpo = ''] of semCondicoes.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-      // Toda classe de imagem do seletor recebe o corpo, não só a primeira:
-      // `.pessoa__foto, .pessoa__inicial { … }` declara para as duas, e olhar
-      // só a primeira acusaria a segunda de não ter tamanho nenhum.
-      for (const [, classe = ''] of seletor.matchAll(/\.([\w-]*(?:foto|img|inicial)[\w-]*)/g)) {
-        porClasse.set(classe, (porClasse.get(classe) ?? '') + corpo);
+    // A primeira versão procurava classes com "foto" ou "img" no nome e acusava
+    // `.foto-campo__linha` — um contêiner flex — e `.foto-campo__mini--vazia`,
+    // um modificador cujo tamanho está na regra base. Heurística de nome erra
+    // nos dois sentidos: pega o que não é imagem e perde a imagem mal batizada.
+    const classes = new Set<string>();
+    for (const arquivo of telas(SRC)) {
+      const fonte = readFileSync(arquivo, 'utf8');
+      for (const tag of fonte.match(/<img[\s\S]*?\/>/g) ?? []) {
+        for (const [, lista = ''] of tag.matchAll(/className="([^"]+)"/g)) {
+          for (const classe of lista.split(/\s+/).filter(Boolean)) classes.add(classe);
+        }
       }
     }
-    expect(porClasse.size, 'nenhuma regra de imagem encontrada').toBeGreaterThan(0);
+    expect(classes.size, 'nenhum <img> com classe encontrado').toBeGreaterThan(0);
 
-    const frouxas = [...porClasse]
-      .filter(([, corpo]) => {
-        const temProporcao = /aspect-ratio|height:\s*(?!auto)/.test(corpo);
-        const temLimite = /max-width|width:\s*(100%|\d)/.test(corpo);
-        return !(temProporcao && temLimite);
-      })
-      .map(([classe]) => classe);
+    // Todas as declarações de cada classe, somadas: uma imagem legitimamente
+    // declara a largura na base e ajusta a proporção dentro de um `@media`.
+    const porClasse = new Map<string, string>();
+    for (const [, seletor = '', corpo = ''] of semCondicoes.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      for (const [, classe = ''] of seletor.matchAll(/\.([\w-]+)/g)) {
+        if (classes.has(classe)) porClasse.set(classe, (porClasse.get(classe) ?? '') + corpo);
+      }
+    }
+
+    const frouxas = [...classes].filter((classe) => {
+      const corpo = porClasse.get(classe) ?? '';
+      const temProporcao = /aspect-ratio|height:\s*(?!auto)/.test(corpo);
+      const temLimite = /max-width|width:\s*(100%|\d)/.test(corpo);
+      return !(temProporcao && temLimite);
+    });
 
     expect(frouxas, `imagem sem limite ou sem proporção: ${frouxas.join(', ')}`).toEqual([]);
   });

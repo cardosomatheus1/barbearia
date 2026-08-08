@@ -12,3 +12,4 @@ export * from './templates.js';
 export * from './attendance.js';
 export * from './imagem.js';
 export * from './vitrine.js';
+export * from './permissoes.js';

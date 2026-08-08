@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { normalizePhone, InvalidPhoneError } from '@barbearia/core';
 import { emailKey, hashPassword, verifyPassword } from './password.js';
+import { seedRolePermissions } from './team.js';
 
 /**
  * Identidade de quem administra a barbearia.
@@ -21,7 +22,14 @@ export type StaffFailure =
   | 'invalid_session'
   | 'slug_taken'
   | 'invalid_phone'
-  | 'weak_password';
+  | 'weak_password'
+  // Gestão de equipe: quem chama já está autenticado, então aqui a recusa pode
+  // (e deve) ser específica — não há oráculo de existência a proteger, e o dono
+  // precisa saber por que não funcionou.
+  | 'email_taken'
+  | 'invalid_role'
+  | 'staff_not_found'
+  | 'owner_protected';
 
 export class StaffError extends Error {
   constructor(readonly code: StaffFailure, message: string) {
@@ -119,6 +127,8 @@ export interface StaffSession {
   readonly staffUserId: string;
   readonly name: string;
   readonly role: string;
+  /** Verdadeiro logo depois do primeiro acesso, até a pessoa escolher a dela. */
+  readonly mustChangePassword?: boolean;
 }
 
 /**
@@ -206,6 +216,10 @@ export async function signUpOwner(request: SignUpRequest): Promise<SignUpResult>
       INSERT INTO staff_directory (email_key, tenant_id, staff_user_id)
       VALUES (${chave}, ${tenantId}::uuid, ${staffUserId}::uuid)
     `;
+
+    // Sem isto a barbearia nasce sem permissão nenhuma — inclusive o dono, que
+    // não conseguiria nem abrir o próprio painel. O padrão nasce com o tenant.
+    await seedRolePermissions(tx, tenantId);
     await tx.$executeRaw`
       INSERT INTO staff_sessions (tenant_id, staff_user_id, token_hash, user_agent, ip, expires_at)
       VALUES (${tenantId}::uuid, ${staffUserId}::uuid, ${hash},
@@ -265,9 +279,16 @@ export async function staffLogin(request: LoginRequest): Promise<StaffSession> {
 
   return withTenant(destino.tenant_id, async (tx) => {
     const linhas = await tx.$queryRaw<
-      { id: string; name: string; role: string; password_hash: string; active: boolean }[]
+      {
+        id: string;
+        name: string;
+        role: string;
+        password_hash: string;
+        active: boolean;
+        must_change_password: boolean;
+      }[]
     >`
-      SELECT id, name, role, password_hash, active
+      SELECT id, name, role, password_hash, active, must_change_password
       FROM staff_users WHERE id = ${destino.staff_user_id}::uuid
     `;
     const usuario = linhas[0];
@@ -315,6 +336,10 @@ export async function staffLogin(request: LoginRequest): Promise<StaffSession> {
       staffUserId: usuario.id,
       name: usuario.name,
       role: usuario.role,
+      // A tela precisa saber já no login para onde mandar a pessoa: sem isto,
+      // quem entra com a senha de primeiro acesso bate em 403 na primeira porta
+      // e parece que o sistema quebrou.
+      mustChangePassword: usuario.must_change_password,
     };
   });
 }
@@ -325,6 +350,17 @@ export interface AuthenticatedStaff {
   readonly sessionId: string;
   readonly name: string;
   readonly role: string;
+  /**
+   * O que esta sessão pode fazer, resolvido do papel na mesma consulta.
+   *
+   * Vem daqui e não de um mapa no código porque `role_permissions` é editável
+   * pelo dono (SPEC Parte 1 §1.3): permissão é dado. E vem junto da sessão, e
+   * não numa segunda ida ao banco, porque toda requisição autenticada precisa
+   * dela — seria N+1 na guarda.
+   */
+  readonly permissions: readonly string[];
+  /** Enquanto verdadeiro, a sessão só serve para trocar a própria senha. */
+  readonly mustChangePassword: boolean;
 }
 
 export async function resolveStaffSession(token: string): Promise<AuthenticatedStaff> {
@@ -332,16 +368,33 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
   if (!partes) throw new StaffError('invalid_session', 'Sessão inválida');
 
   return withTenant(partes.tenantId, async (tx) => {
+    // Uma consulta só, com as permissões agregadas: buscá-las depois seria uma
+    // segunda ida ao banco em **toda** requisição autenticada do painel.
     const linhas = await tx.$queryRaw<
-      { id: string; staff_user_id: string; token_hash: string; name: string; role: string }[]
+      {
+        id: string;
+        staff_user_id: string;
+        token_hash: string;
+        name: string;
+        role: string;
+        must_change_password: boolean;
+        permissions: string[];
+      }[]
     >`
-      SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role
+      SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role,
+             u.must_change_password,
+             COALESCE(
+               array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
+               '{}'
+             ) AS permissions
       FROM staff_sessions s
       JOIN staff_users u ON u.id = s.staff_user_id
+      LEFT JOIN role_permissions rp ON rp.role = u.role
       WHERE s.token_hash = ${partes.hash}
         AND s.revoked_at IS NULL
         AND s.expires_at > now()
         AND u.active
+      GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role, u.must_change_password
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -360,6 +413,8 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       sessionId: sessao.id,
       name: sessao.name,
       role: sessao.role,
+      permissions: sessao.permissions,
+      mustChangePassword: sessao.must_change_password,
     };
   });
 }

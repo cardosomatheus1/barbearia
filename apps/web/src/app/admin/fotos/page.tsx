@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { estadoDoPainel, fotosDaBarbearia, type AlvosDeFoto } from '@/lib/admin-api';
+import { fotosDaBarbearia, type AlvosDeFoto } from '@/lib/admin-api';
+import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoFotos, acaoSair } from '../acoes';
 
@@ -75,8 +76,7 @@ export default async function FotosPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
-  const estado = await estadoDoPainel(token);
-  if (!estado.ok) redirect('/admin/entrar');
+  const estado = await painelOuDesvio(token);
 
   const resposta = await fotosDaBarbearia(token);
   const query = await searchParams;
@@ -101,7 +101,7 @@ export default async function FotosPage({ searchParams }: Props) {
   return (
     <main className="ui-container painel__conteudo">
       <header className="painel__topo">
-        <a className="painel__marca" href="/admin/dia">← {estado.dados.businessName}</a>
+        <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         <form action={acaoSair}>
           <button className="ui-button ui-button--ghost painel__sair" type="submit">
             Sair
@@ -118,7 +118,7 @@ export default async function FotosPage({ searchParams }: Props) {
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Fotos salvas. {preenchidas === 0 ? 'Nenhuma foi aceita — confira se o endereço começa com https://.' : null}{' '}
-          <a href={`/${estado.dados.slug}`} rel="noopener noreferrer" target="_blank">
+          <a href={`/${estado.slug}`} rel="noopener noreferrer" target="_blank">
             Ver a página
           </a>
         </div>

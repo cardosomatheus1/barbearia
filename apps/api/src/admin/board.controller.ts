@@ -26,6 +26,7 @@ import { OtpError, resolveGuestCustomer, type AuthenticatedStaff } from '@barbea
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
+import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { appointmentIdSchema } from '../booking/booking.schemas.js';
 import {
   attendanceSchema,
@@ -75,14 +76,18 @@ function toHttp(error: unknown): never {
  *   da requisição transformaria um id vazado em chave para operar o dia de
  *   outra barbearia — a RLS barraria a leitura, mas o desenho não deve depender
  *   disso.
+ * - **Toda rota declara a permissão que exige.** A guarda recusa por padrão o
+ *   que não declara nada: rota sem `@Exige` não é rota liberada, é rota que
+ *   esqueceu — e esquecimento tem que virar erro no primeiro teste, não brecha.
  * - **Nenhuma rota devolve o telefone completo.** A tela fica virada para o
  *   salão; quem passa na frente do notebook não precisa levar a base de
  *   contatos junto.
  */
 @Controller('v1/admin')
-@UseGuards(StaffGuard)
+@UseGuards(StaffGuard, PermissaoGuard)
 export class BoardController {
   /** O dia da barbearia. Uma consulta, aberta o dia inteiro e recarregada. */
+  @Exige('appointments.view')
   @Get('day')
   async day(
     @Staff() staff: AuthenticatedStaff,
@@ -115,6 +120,7 @@ export class BoardController {
    * mais — porque outra pessoa no balcão já tocou o cartão —, a resposta é 409
    * e não uma sobrescrita silenciosa.
    */
+  @Exige('appointments.attend')
   @Post('appointments/:id/attendance')
   async attendance(
     @Staff() staff: AuthenticatedStaff,
@@ -133,6 +139,7 @@ export class BoardController {
   }
 
   /** Serviços e equipe, para montar a marcação pelo balcão. */
+  @Exige('appointments.create')
   @Get('catalog')
   async catalog(@Staff() staff: AuthenticatedStaff) {
     const unidade = await primaryLocation(staff.tenantId);
@@ -148,6 +155,7 @@ export class BoardController {
    * teto de resultados estão no domínio: a rota não pode virar exportação da
    * base uma página por vez.
    */
+  @Exige('customers.view')
   @Get('customers')
   async customers(
     @Staff() staff: AuthenticatedStaff,
@@ -157,6 +165,7 @@ export class BoardController {
   }
 
   /** Grade para marcar alguém pelo balcão. */
+  @Exige('appointments.create')
   @Get('availability')
   async availability(
     @Staff() staff: AuthenticatedStaff,
@@ -199,6 +208,7 @@ export class BoardController {
    * está sob a guarda de equipe, e o cliente está de pé na frente da
    * recepcionista.
    */
+  @Exige('appointments.create')
   @Post('appointments')
   async book(
     @Staff() staff: AuthenticatedStaff,

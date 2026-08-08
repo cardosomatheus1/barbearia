@@ -396,6 +396,9 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Senha | scrypt do `node:crypto`, parâmetros dentro do hash; nunca uma dependência nova para isso |
 | E-mail em tabela sem RLS | HMAC com segredo de ambiente, nunca em claro |
 | Permissão exibida na tela | sai da mesma função que a API aplica — nunca recalculada na view |
+| Permissão numa rota | declarada com `@Exige(...)`; rota sem declaração é **recusada**, não liberada |
+| Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
+| Evento auditado | gravado por `audit()` **dentro da transação** que muda o estado; `audit_log` é append-only por `REVOKE` |
 
 ---
 
