@@ -15,3 +15,4 @@ export * from './vitrine.js';
 export * from './permissoes.js';
 export * from './fila.js';
 export * from './excecao.js';
+export * from './comanda.js';
