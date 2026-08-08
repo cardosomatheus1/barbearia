@@ -445,3 +445,24 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 4. Escreva o teste da regra antes ou junto do código.
 5. Ao terminar, percorra o Definition of Done item por item.
 6. Commit descrevendo **a decisão**, não o arquivo alterado.
+
+## Economia de tempo dentro do bloco
+
+O bloco é entregue inteiro. O que dá para acelerar é o **jeito de trabalhar**,
+e nada aqui abre mão de teste, de segurança ou de medição.
+
+- **Provar teste vermelho em lote.** Quebre cinco regras de uma vez e rode a
+  suíte uma vez, conferindo que os cinco testes certos falharam. Cinco ciclos
+  de quebrar-rodar-restaurar custam cinco execuções e provam o mesmo.
+  Cuidado com um detalhe: confira que a quebra **de fato** aconteceu. Um `sed`
+  que não casou deixa o teste passando e parecendo que ele não presta.
+- **Durante o trabalho, rode só o pacote afetado.** O `pnpm verify` inteiro é
+  do fechamento, não do meio.
+- **`pnpm -r build` antes de qualquer e2e da API.** Ela importa `dist`, não
+  `src`: um `dist` velho produz falha de um defeito que já foi corrigido, e o
+  tempo vai embora investigando o que não existe. Dentro do `verify` isso já
+  está garantido, porque o build vem antes.
+- **A medição de responsividade roda uma vez, no fim**, com todas as telas.
+- **Nada de `sleep` para esperar relógio.** Se o teste precisa do passo
+  seguinte de uma janela de tempo, peça o passo seguinte — não durma até ele
+  chegar. Foi assim que a medição perdia 31 segundos por execução.
