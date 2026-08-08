@@ -879,6 +879,19 @@ bate com o número de ✅; as quatro colunas de cada lacuna dizem alguma coisa;
 "sem bloco" exige justificativa; o bloco apontado existe; e a §7.1 da SPEC
 continua lá, apontando para a tabela.
 
+A guarda sozinha só reprova no fim, e descobrir uma lacuna no fechamento é
+retrabalho. Por isso o mesmo script responde à pergunta de abertura:
+
+```bash
+node scripts/verificar-lacunas.mjs 20
+```
+
+> Bloco 20 — Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker)
+> **4 lacunas apontam para este bloco.**
+
+O que sai dali entra no escopo, e é o primeiro passo de `## Ao começar um bloco`
+no `CLAUDE.md`.
+
 A primeira versão desta guarda tinha exatamente o defeito que ela existe para
 pegar: lia só a primeira das três tabelas de blocos do ROADMAP e concluiu que o
 bloco 30 "não existe".

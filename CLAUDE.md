@@ -416,7 +416,20 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 ## Ao começar um bloco
 
 1. Leia a seção correspondente em `docs/spec/` — a SPEC é o contrato.
-2. Confirme quais defeitos de `SPEC.md §2.2` o bloco resolve.
-3. Escreva o teste da regra antes ou junto do código.
-4. Ao terminar, percorra o Definition of Done item por item.
-5. Commit descrevendo **a decisão**, não o arquivo alterado.
+2. **Pergunte o que já aponta para este bloco**:
+
+   ```bash
+   node scripts/verificar-lacunas.mjs 15
+   ```
+
+   O que sair dali entra no escopo do bloco. A guarda do `pnpm verify` recusa
+   marcar o bloco como concluído enquanto uma lacuna apontar para ele, então
+   descobrir isso no fechamento é retrabalho ou decisão tomada com pressa.
+
+   Três saídas são legítimas — entregar junto, mover a lacuna para outro bloco
+   com o motivo escrito, ou concluir que ela não é mais necessária e removê-la,
+   o que fica visível no commit. Sumir em silêncio não é uma delas.
+3. Confirme quais defeitos de `SPEC.md §2.2` o bloco resolve.
+4. Escreva o teste da regra antes ou junto do código.
+5. Ao terminar, percorra o Definition of Done item por item.
+6. Commit descrevendo **a decisão**, não o arquivo alterado.

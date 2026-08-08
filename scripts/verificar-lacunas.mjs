@@ -18,6 +18,14 @@
  * bloqueio pontual, ou reapontar a lacuna com motivo escrito.
  *
  * Sem banco, sem rede. Roda no portão do `pnpm verify`.
+ *
+ * Também responde à pergunta que se faz **ao começar** um bloco:
+ *
+ *     node scripts/verificar-lacunas.mjs 15
+ *
+ * lista o que aponta para o bloco 15 antes de escrever a primeira linha. A
+ * guarda sozinha só reprova no fim; sem esta consulta, descobrir a lacuna no
+ * fechamento significa retrabalho ou uma decisão tomada com pressa.
  */
 
 import { readFileSync } from 'node:fs';
@@ -162,6 +170,38 @@ if (!/ROADMAP\.md#lacunas-com-dependência-declarada/.test(spec)) {
 }
 
 // ---------------------------------------------------------------------------
+// Consulta: o que aponta para um bloco
+// ---------------------------------------------------------------------------
+
+const alvo = process.argv[2];
+if (alvo) {
+  if (!/^\d+$/.test(alvo)) {
+    console.error(`uso: node scripts/verificar-lacunas.mjs [numero-do-bloco]`);
+    process.exit(2);
+  }
+
+  const doBloco = (lacunas ?? []).filter(([, , , destino]) =>
+    new RegExp(`^${alvo}\\b`).test(destino ?? ''),
+  );
+
+  const nome = (blocos ?? []).find(([numero]) => numero === alvo)?.[1] ?? '(bloco desconhecido)';
+  console.log(`\nBloco ${alvo} — ${nome}`);
+
+  if (doBloco.length === 0) {
+    console.log('  nenhuma lacuna aponta para este bloco.\n');
+  } else {
+    console.log(`  ${doBloco.length} lacuna(s) apontam para este bloco:\n`);
+    for (const [lacuna, pronto, falta] of doBloco) {
+      console.log(`  • ${lacuna}`);
+      console.log(`      já existe: ${pronto}`);
+      console.log(`      falta:     ${falta}\n`);
+    }
+    console.log(
+      '  Entregar junto, ou mover com o motivo escrito. O bloco não fecha ✅\n'
+        + '  com lacuna apontando para ele.\n',
+    );
+  }
+}
 
 if (problemas.length === 0) {
   const total = (lacunas ?? []).length;
