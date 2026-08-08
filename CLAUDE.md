@@ -491,6 +491,11 @@ do `ALTER ROLE` acusando `onboarding`, que ninguém tinha tocado.
   tempo vai embora investigando o que não existe. Dentro do `verify` isso já
   está garantido, porque o build vem antes.
 - **A medição de responsividade roda uma vez, no fim**, com todas as telas.
+- **Teste que depende de "agora" cabendo numa janela é teste instável.** Sob
+  carga, os segundos entre uma consulta e o POST seguinte viram vários, e um
+  horário encostado na antecedência mínima deixa de ser marcável no caminho. O
+  e2e do balcão marcava no primeiro horário de **hoje** e reprovava uma vez em
+  seis depois que as suítes passaram a rodar juntas. Marque amanhã.
 - **Nada de `sleep` para esperar relógio.** Se o teste precisa do passo
   seguinte de uma janela de tempo, peça o passo seguinte — não durma até ele
   chegar. Foi assim que a medição perdia 31 segundos por execução.

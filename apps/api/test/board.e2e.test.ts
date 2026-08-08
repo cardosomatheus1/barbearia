@@ -178,7 +178,22 @@ describeIfDb('balcão', () => {
       }),
     ).expect(200);
 
-    const livre = grade.body.days.find((d: { slots: unknown[] }) => d.slots.length > 0);
+    /**
+     * O primeiro dia **depois de hoje** com horário livre — não o primeiro dia.
+     *
+     * Pegar o de hoje deixava o teste dependente do relógio: entre consultar a
+     * grade e mandar o POST passam alguns segundos, e sob carga passam vários.
+     * Se o primeiro horário de hoje estivesse encostado na antecedência mínima,
+     * ele deixava de ser marcável no meio do caminho e o teste reprovava com
+     * 409 — cerca de uma vez em seis quando as suítes passaram a rodar em
+     * paralelo. Falha de relógio, não de regra.
+     *
+     * Amanhã não tem esse problema: a antecedência mínima é de minutos, e
+     * nenhum teste daqui precisa que a marcação caia hoje.
+     */
+    const livre = grade.body.days.find(
+      (d: { date: string; slots: unknown[] }) => d.date > hoje && d.slots.length > 0,
+    );
     return { serviceId, professionalId, hoje, livre };
   }
 
