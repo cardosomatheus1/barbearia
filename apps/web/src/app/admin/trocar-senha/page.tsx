@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { quemSouEu } from '@/lib/admin-api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoTrocarMinhaSenha } from '../acoes';
+import { Marca } from '../marca';
 
 /**
  * Trocar a própria senha.
@@ -49,6 +50,7 @@ export default async function TrocarSenhaPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container painel__entrada">
+      <Marca />
       <h1 className="painel__titulo">
         {primeiroAcesso ? 'Escolha a sua senha' : 'Trocar senha'}
       </h1>

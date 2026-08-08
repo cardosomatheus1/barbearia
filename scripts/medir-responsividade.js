@@ -605,6 +605,9 @@ async function main() {
   if (!importacao) console.warn('  aviso: importação não preparada; passo 2 fora da medição');
 
   const telas = [
+    // A porta do produto. Não pertence a barbearia nenhuma e não precisa de
+    // sessão — é a única tela medida sem nada preparado antes.
+    { nome: 'landing', url: '/' },
     { nome: 'pública', url: `/${slug}` },
     { nome: 'agendar', url: `/${slug}/agendar` },
     { nome: 'entrar (cliente)', url: `/${slug}/entrar` },
@@ -750,15 +753,26 @@ async function main() {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
 
-          // Conteúdo largo pode passar, desde que role dentro do próprio
-          // recipiente e não leve a página junto.
+          // Conteúdo largo pode passar, desde que fique **contido** por um
+          // ancestral e não leve a página junto.
+          //
+          // `auto` é o caso do `.ui-scroll-x`, em que a pessoa rola a tabela com
+          // o dedo. `hidden` e `clip` são o caso do enfeite: a faixa que corre é
+          // `max-content` por definição, e a janela do produto sangra de
+          // propósito para fora do container. Os três impedem a página de rolar,
+          // que é o que a regra proíbe — e a rolagem da página continua sendo
+          // conferida em separado, logo acima.
           let pai = el.parentElement;
-          let emRecipienteQueRola = false;
+          let contido = false;
           while (pai) {
-            if (getComputedStyle(pai).overflowX === 'auto') { emRecipienteQueRola = true; break; }
+            const overflow = getComputedStyle(pai).overflowX;
+            if (overflow === 'auto' || overflow === 'hidden' || overflow === 'clip') {
+              contido = true;
+              break;
+            }
             pai = pai.parentElement;
           }
-          if (emRecipienteQueRola) continue;
+          if (contido) continue;
 
           if (r.right > limite + 1 || r.left < -1) {
             estouram.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`);

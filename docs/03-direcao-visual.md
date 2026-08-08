@@ -1,4 +1,4 @@
-# Direção visual — página pública
+# Direção visual — Barber Dock
 
 Plano feito com a skill `frontend-design` antes de escrever CSS, como manda o
 `CLAUDE.md` §5.
@@ -40,28 +40,62 @@ página é ferramenta, não portfólio, e a foto continua presente logo abaixo.
 
 ## Cor
 
-A paleta anterior (âmbar sobre quase-preto) era exatamente um dos três visuais
-que a skill aponta como default de design gerado por IA. Tinha justificativa de
-fachada — couro, latão —, mas paleta escura com um acento é o lugar mais
-previsível possível.
+> **Atualizado quando a marca chegou.** As duas versões anteriores foram
+> escolhas do projeto na falta de uma identidade: âmbar sobre quase-preto
+> primeiro, depois o verde-menta da cadeira esmaltada. As duas caíram quando
+> chegou o **Barber Dock** — logo, selo e dois mocks. Marca do cliente ganha de
+> direção inventada, sempre.
 
-A direção nova vem de um artefato concreto do ofício: **a cadeira de barbeiro
-esmaltada em verde-menta**, com cromado, contra parede de azulejo.
+A paleta é o selo: círculo azul-noite, campo de pergaminho, âncora, cordame e o
+poste de barbeiro listrado.
 
 | Papel | Valor | De onde vem |
 |---|---|---|
-| `ink` | `#141F1E` | ardósia esverdeada do azulejo — tem matiz, não é quase-preto |
-| `inkRaised` | `#1D2B29` | a mesma parede, um degrau acima |
-| `paper` | `#F1EEE8` | toalha, papel de barbear |
-| `chrome` | `#A3B0AD` | cromado do apoio de braço |
-| `enamel` | `#79D2B8` | o esmalte da cadeira — o acento |
-| `brick` | `#FF8D7A` | tijolo à vista; erro e cancelamento |
+| `surface` | `#071018` | o azul-noite do selo — tem matiz, não é preto |
+| `surfaceRaised` | `#0C1822` | o mesmo casco, um degrau acima |
+| `textPrimary` | `#F7F4EE` | a tinta branca do letreiro |
+| `accent` | `#E1C39D` | o campo de pergaminho |
+| `danger` | `#F0665A` | a listra do poste |
 
-Frio em vez de quente, e o acento é o mesmo verde que existe fisicamente numa
-barbearia antiga. Contraste medido: nenhum par abaixo do mínimo, e a maioria com
-folga de 6:1 ou mais.
+### O pergaminho é o acento, não o vermelho
 
----
+No selo o vermelho é um detalhe pequeno e o creme é o campo inteiro: quem olha
+de longe vê creme sobre azul. E há uma razão de produto mais dura — **vermelho já
+significa "cancelar", "faltou" e "erro"** em trinta telas. Um "Agendar" vermelho
+ao lado de um "Cancelar" vermelho é toque errado no balcão, com cliente na
+frente.
+
+O vermelho faz aqui o que faz no selo: aparece pouco. Tarja de seção, traço sob
+a palavra do título, e o que remove dinheiro.
+
+### O tema claro do admin é o mesmo pergaminho
+
+Fundo `#F2ECE1` em vez de branco, e o acento inverte para o azul-noite do casco
+— creme sobre branco não seria botão nenhum. É o que costura o admin à página
+pública sem escurecer quem passa o dia na tela.
+
+## Letra
+
+Oswald condensada em caixa alta para o letreiro, DM Sans para o corpo. É o que o
+selo faz — "BARBER DOCK" curvado em condensada pesada —, e sem isso a identidade
+some, porque cor sozinha não diferencia.
+
+As duas são servidas **do nosso domínio**, pelo `next/font`. O `@import` do
+Google Fonts, que é como o mock chega, faria o navegador de cada cliente pedir a
+fonte a um terceiro e entregar o IP dele junto: dado pessoal saindo da barbearia
+a cada visita, por causa de uma fonte.
+
+Oswald é do letreiro e das telas do cliente. O admin fica de fora de propósito:
+ali a tela é densa e o título compete com quinze outras coisas, então ele segue
+na sans com o tracking fechado. Densidade é diferente por app.
+
+## Escala
+
+A escala de espaçamento ganhou três degraus (`space-9`, `10`, `11`) e a
+tipográfica outros três (`4xl`, `5xl`, `6xl`) quando a landing entrou. Não foi
+capricho: a primeira versão dela usou a escala de produto e ficou apertada — o
+que faz uma página parecer cara é ar, e ar não sai de uma escala desenhada para
+caber comanda em 360px. Nenhuma tela de operação usa os seis.
 
 ## Tipografia
 

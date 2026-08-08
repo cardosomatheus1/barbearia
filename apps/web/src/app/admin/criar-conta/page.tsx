@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoCriarConta } from '../acoes';
+import { Marca } from '../marca';
 
 /**
  * Etapa 1 — conta.
@@ -32,6 +33,7 @@ export default async function CriarContaPage({ searchParams }: Props) {
   return (
     <main className="ui-container painel__entrada">
       <p className="painel__etapa">Etapa 1 de 6</p>
+      <Marca />
       <h1 className="painel__titulo">Sua barbearia no ar</h1>
       <p className="painel__sub">Em seis passos você tem um link para colocar na bio.</p>
 

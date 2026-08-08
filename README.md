@@ -981,7 +981,7 @@ Duas guardas, porque uma só não bastava:
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
 - **Medição no navegador** (`scripts/medir-responsividade.js`): abre as quarenta
-  e uma telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
+  e duas telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
   correto e a grade estourar assim que entra conteúdo real — só a medição pega.
@@ -1725,3 +1725,69 @@ sem tenant no contexto.
   agora vem do `useBodyParser` do Nest.
 - **A crase dentro de SQL, pela quarta vez.** Desta vez o guarda do bloco 17
   apontou arquivo e linha antes do build.
+
+---
+
+## Barber Dock — a marca chegou, e o CSS inteiro mudou com ela
+
+Até aqui a direção visual era escolha do projeto na falta de identidade: âmbar
+sobre quase-preto primeiro, depois o verde-menta da cadeira esmaltada. As duas
+caíram quando chegou o **Barber Dock** — logo, selo e dois mocks. Marca do
+cliente ganha de direção inventada.
+
+### Trocar a marca foi trocar um arquivo
+
+`packages/ui/src/tokens/tokens.ts` — e as trinta e poucas telas mudaram juntas,
+sem nenhuma saber que a cor mudou. Era exatamente para isso que os tokens eram
+semânticos desde o bloco 6, e é a primeira vez que a promessa foi cobrada.
+
+Os quarenta e dois pares de contraste declarados continuaram passando, com folga:
+o mais apertado é 3,39 contra o mínimo de 3.
+
+### O pergaminho é o acento, e o vermelho quase não aparece
+
+No selo o vermelho é um detalhe e o creme é o campo inteiro. Além disso —
+**vermelho já significa "cancelar", "faltou" e "erro"** em trinta telas: um
+"Agendar" vermelho ao lado de um "Cancelar" vermelho é toque errado no balcão,
+com cliente na frente. O vermelho ficou onde o selo o põe: tarja de seção, o
+traço sob a palavra do título, e o que remove dinheiro.
+
+### As fontes vêm do nosso domínio, não do Google
+
+Oswald e DM Sans entram pelo `next/font`, que baixa no build e serve junto com a
+aplicação. O `@import` do Google Fonts — que é como o mock chega — faria o
+navegador de cada cliente pedir a fonte a um terceiro e entregar o IP dele
+junto: dado pessoal saindo da barbearia a cada visita, por causa de uma fonte.
+
+### A escala de produto não servia para vender
+
+A primeira versão da landing usou a escala existente e ficou apertada. O que faz
+uma página parecer cara é ar, e ar não sai de uma escala desenhada para caber
+comanda em 360px. Entraram `space-9/10/11` e `font-size-4xl/5xl/6xl`, marcados
+como escala de página de venda — nenhuma tela de operação usa os seis.
+
+### O que a landing não tem, e por quê
+
+- **Zero JavaScript de cliente.** As abas do mock viraram faixa que rola, o
+  "revelar ao rolar" saiu e a paleta de comandos não entrou. O que ficou de
+  movimento é ambiente e some inteiro em `prefers-reduced-motion`.
+- **Nenhum depoimento.** Inventar nome de barbearia satisfeita é fabricar prova.
+  No lugar deles está o que é verificável: os defeitos medidos em campo
+  (`SPEC.md` §2.2), com o efeito de cada um no dia e o que fazemos diferente.
+- **Nenhum preço.** Não há decisão comercial tomada, e inventar tabela seria a
+  mesma fabricação.
+
+### Três coisas que a régua pegou
+
+- **`.marca` já existia.** O selo nas portas do sistema herdou, calado, a pílula
+  de caixa de seleção que oito telas usam para marcar dia da semana — e apareceu
+  dentro de uma cápsula branca. Virou `.selo-produto`. Mesma armadilha do
+  `.achado` no bloco 21, segunda vez no mesmo mês.
+- **Esconder no celular, duas vezes.** As âncoras de seção e depois a boia
+  decorativa entraram com `display: none` no piso. A guarda reprovou as duas; as
+  âncoras viraram faixa que rola, e a boia acabou removida — enfeite que não
+  significa nada não merece nem refluir.
+- **A medição não conhecia `overflow: hidden`.** Ela aceitava só `auto` como
+  recipiente que contém transbordo, e acusava a faixa que corre e a janela que
+  sangra de propósito. Os três valores impedem a página de rolar, que é o que a
+  regra proíbe — e a rolagem da página continua conferida em separado.

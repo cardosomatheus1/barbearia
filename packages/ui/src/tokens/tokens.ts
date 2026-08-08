@@ -40,39 +40,52 @@ export interface ColorScheme {
 }
 
 /**
- * Tema escuro — o padrão da página pública.
+ * Tema escuro — Barber Dock.
  *
- * A paleta vem de um artefato concreto do ofício: a cadeira de barbeiro
- * esmaltada em verde-menta, com cromado, contra parede de azulejo. Ardósia
- * esverdeada de fundo (tem matiz, não é quase-preto), esmalte como acento,
- * cromado no texto de apoio.
+ * A paleta é da marca, e a marca é um selo náutico: círculo azul-noite, campo
+ * de pergaminho, âncora, corda e o poste de barbeiro listrado. Três cores, não
+ * "escuro com um acento":
  *
- * A versão anterior era âmbar sobre quase-preto — exatamente um dos três
- * visuais que a skill `frontend-design` aponta como default de design gerado
- * por IA. Tinha justificativa de fachada (couro, latão), mas paleta escura com
- * um acento é o lugar mais previsível possível. Ver
- * `docs/03-direcao-visual.md`.
+ * | Papel | Valor | De onde vem |
+ * |---|---|---|
+ * | `surface` | `#071018` | o azul-noite do selo — tem matiz, não é preto |
+ * | `surfaceRaised` | `#0C1822` | o mesmo casco, um degrau acima |
+ * | `textPrimary` | `#F7F4EE` | a tinta branca do letreiro |
+ * | `accent` | `#E1C39D` | **o campo de pergaminho do selo** |
+ * | `danger` | `#E05246` | a listra do poste |
+ *
+ * ## Por que o pergaminho é o acento, e não o vermelho
+ *
+ * No selo o vermelho é um detalhe pequeno e o creme é o campo inteiro — quem
+ * olha de longe vê creme sobre azul. E há uma razão de produto mais dura:
+ * **vermelho já significa "cancelar", "faltou" e "erro"** em trinta telas deste
+ * sistema. Um botão "Agendar" vermelho ao lado de um "Cancelar" vermelho é a
+ * receita de toque errado no balcão, com cliente na frente.
+ *
+ * O que o vermelho faz é o que faz no selo: aparece pouco e chama atenção —
+ * na tarja de seção, no traço sob a palavra do título, no que remove dinheiro.
  */
 export const dark: ColorScheme = {
-  surface: '#141F1E',
-  surfaceRaised: '#1D2B29',
-  surfaceHover: '#273634',
+  surface: '#071018',
+  surfaceRaised: '#0C1822',
+  surfaceHover: '#142633',
 
-  textPrimary: '#F1EEE8',
-  textMuted: '#A3B0AD',
-  textOnAccent: '#08201A',
+  textPrimary: '#F7F4EE',
+  textMuted: '#A6B0B6',
+  // Tinta do casco sobre o pergaminho: é o miolo do selo, invertido.
+  textOnAccent: '#0A1620',
 
-  accent: '#79D2B8',
-  accentHover: '#5FBFA3',
+  accent: '#E1C39D',
+  accentHover: '#F2E1C8',
 
-  border: '#2A3936',
-  borderStrong: '#6F7D7A',
-  focus: '#8FCBFF',
+  border: '#1E2E3A',
+  borderStrong: '#6E7C86',
+  focus: '#8FC6FF',
 
-  success: '#7FD69B',
-  warning: '#E6C05F',
-  danger: '#FF8D7A',
-  textOnDanger: '#2A0D07',
+  success: '#5FD79B',
+  warning: '#E8B15E',
+  danger: '#F0665A',
+  textOnDanger: '#2A0705',
 };
 
 /**
@@ -80,27 +93,31 @@ export const dark: ColorScheme = {
  *
  * O dono e a recepção passam o dia inteiro na tela; fundo claro cansa menos em
  * sessão longa e imprime melhor.
+ *
+ * O fundo é o **pergaminho do selo**, não branco: é o que costura o admin à
+ * página pública sem escurecê-lo. E o acento inverte — no claro quem sustenta
+ * texto branco é o azul-noite do casco, porque creme sobre branco não seria
+ * botão nenhum.
  */
 export const light: ColorScheme = {
-  surface: '#F4F2EC',
+  surface: '#F2ECE1',
   surfaceRaised: '#FFFFFF',
-  surfaceHover: '#E8E5DC',
+  surfaceHover: '#E6DCCB',
 
-  textPrimary: '#141F1E',
-  textMuted: '#4E5A57',
-  // O esmalte claro precisa ser escuro o bastante para sustentar texto branco.
+  textPrimary: '#0A1620',
+  textMuted: '#4C5A64',
   textOnAccent: '#FFFFFF',
 
-  accent: '#0E6E57',
-  accentHover: '#0A5A47',
+  accent: '#123349',
+  accentHover: '#0A2436',
 
-  border: '#DAD6CC',
-  borderStrong: '#78837F',
+  border: '#DCD1BE',
+  borderStrong: '#75818A',
   focus: '#1660C4',
 
-  success: '#1C6B44',
+  success: '#186B45',
   warning: '#7A5500',
-  danger: '#A83224',
+  danger: '#A8241C',
   textOnDanger: '#FFFFFF',
 };
 
@@ -142,7 +159,18 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   { foreground: 'accent', background: 'surface', kind: 'component', why: 'ícone de destaque' },
 ];
 
-/** Escala de espaçamento. Base 4px — múltiplos batem com a grade de tipografia. */
+/**
+ * Escala de espaçamento. Base 4px — múltiplos batem com a grade de tipografia.
+ *
+ * De 0 a 8 é a escala de **produto**: densidade de admin e de formulário, onde
+ * rolagem custa tempo de quem passa o dia na tela.
+ *
+ * De 9 a 11 é a escala de **página de venda**, e ela existe porque a de produto
+ * não servia: a landing feita com `space-8` no lugar de respiro de seção ficou
+ * apertada e sem hierarquia — o que faz uma página parecer cara é ar, e ar não
+ * sai de uma escala desenhada para caber comanda em 360px. Nenhuma tela de
+ * operação usa estes três.
+ */
 export const space = {
   '0': '0',
   '1': '0.25rem',
@@ -153,23 +181,57 @@ export const space = {
   '6': '2rem',
   '7': '3rem',
   '8': '4rem',
+  '9': '5.5rem',
+  '10': '7rem',
+  '11': '9.5rem',
 } as const;
 
 export const radius = {
   sm: '0.375rem',
   md: '0.625rem',
   lg: '1rem',
+  /** Painel grande de página de venda: cartão de 600px com raio de 16px parece caixa. */
+  xl: '1.5rem',
   full: '9999px',
 } as const;
 
+/**
+ * As duas letras da marca.
+ *
+ * `--font-oswald` e `--font-dm-sans` são publicados pelo `next/font` em
+ * `apps/web/src/app/layout.tsx`, que **baixa e serve os arquivos do nosso
+ * domínio**. Não é detalhe de performance: `@import` do Google Fonts, que é como
+ * o mock chega, faz o navegador de cada cliente pedir a fonte a um terceiro e
+ * entregar o IP dele junto — dado pessoal saindo da barbearia para fora do
+ * produto, a cada visita.
+ *
+ * A pilha continua com alternativas do sistema depois da fonte da marca: se o
+ * arquivo não chegar, o título ainda sai condensado em vez de virar outra
+ * página.
+ */
 export const font = {
-  /** Pilha de sistema: zero requisição de rede e zero deslocamento de layout. */
-  sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  /**
+   * Título: condensada, em caixa alta.
+   *
+   * É o que o letreiro do selo faz — "BARBER DOCK" curvado em condensada
+   * pesada. Sem ela a identidade some, porque cor sozinha não diferencia.
+   */
+  display:
+    "var(--font-oswald), 'Oswald', 'Arial Narrow', 'Helvetica Neue Condensed', system-ui, sans-serif",
+  /** Corpo: geométrica de leitura, o contraponto neutro da condensada. */
+  sans: "var(--font-dm-sans), 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   /** Numerais tabulares para horário e preço: coluna que não dança ao trocar de valor. */
   numeric:
-    "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    "var(--font-dm-sans), 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
 } as const;
 
+/**
+ * Escala tipográfica.
+ *
+ * Até `3xl` é o produto. De `4xl` para cima é o letreiro: título de seção e
+ * herói de página de venda, onde a condensada da marca precisa de tamanho para
+ * virar letreiro em vez de subtítulo grande.
+ */
 export const fontSize = {
   xs: '0.75rem',
   sm: '0.875rem',
@@ -178,6 +240,9 @@ export const fontSize = {
   xl: '1.375rem',
   '2xl': '1.75rem',
   '3xl': '2.25rem',
+  '4xl': '3rem',
+  '5xl': '4rem',
+  '6xl': '5.5rem',
 } as const;
 
 export const fontWeight = {
@@ -237,6 +302,8 @@ export const shadow = {
   sm: '0 1px 2px rgb(0 0 0 / 0.16)',
   md: '0 4px 12px rgb(0 0 0 / 0.20)',
   lg: '0 12px 32px rgb(0 0 0 / 0.28)',
+  /** Painel flutuando sobre a página: a sombra é o que dá a altura. */
+  xl: '0 45px 130px rgb(0 0 0 / 0.55)',
 } as const;
 
 export const zIndex = {

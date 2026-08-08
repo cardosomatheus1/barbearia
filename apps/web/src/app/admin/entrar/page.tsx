@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoEntrar } from '../acoes';
+import { Marca } from '../marca';
 
 interface Props {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -23,6 +24,7 @@ export default async function EntrarGestorPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container painel__entrada">
+      <Marca />
       <h1 className="painel__titulo">Entrar no painel</h1>
       <p className="painel__sub">A conta é da barbearia, não do cliente.</p>
 
