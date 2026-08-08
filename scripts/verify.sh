@@ -20,8 +20,21 @@
 # A única ordem que precisa ser respeitada: o e2e da API importa `@barbearia/core`
 # e `@barbearia/identity` de `dist`, não de `src`. Os pacotes são construídos
 # antes de tudo; o resto não depende de nada e vai junto.
+#
+# ## Modo rápido
+#
+#   scripts/verify.sh --rapido
+#
+# Confere só os pacotes afetados pelo que mudou, mais quem depende deles. É para
+# o **laço interno** — no bloco 18 foram cerca de trinta execuções, quase todas
+# conferindo pacote que ninguém tinha tocado. Ele **não** fecha bloco: o
+# Definition of Done continua exigindo o portão inteiro, e o modo rápido avisa
+# isso na saída.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+RAPIDO=""
+[ "${1:-}" = "--rapido" ] && RAPIDO=1
 
 failures=()
 
@@ -94,27 +107,59 @@ fi
 # ---------------------------------------------------------------------------
 printf '\n\033[1m==> typecheck, builds e suítes (em paralelo)\033[0m\n'
 
-lancar "typecheck"                 pnpm -r typecheck
-lancar "build do web"              pnpm --filter @barbearia/web build
-lancar "build da api"              pnpm --filter @barbearia/api build
-lancar "core — unitários"          pnpm --filter @barbearia/core test
-lancar "ui — tokens e componentes" pnpm --filter @barbearia/ui test
+# A lista de suítes de banco é a mesma nos dois modos; o que muda é o filtro.
+NOMES=(
+  "@barbearia/db:db — invariantes"
+  "@barbearia/identity:identity — OTP, sessão e 2º fator"
+  "@barbearia/scheduling:scheduling — integração"
+  "@barbearia/onboarding:onboarding — seis etapas"
+  "@barbearia/catalog:catalog — CRUD do admin"
+  "@barbearia/finance:finance — comanda, caixa e fiado"
+  "@barbearia/api:api — e2e"
+)
+
+if [ -n "$RAPIDO" ]; then
+  AFETADOS=$(node scripts/afetados.mjs 2>/dev/null)
+  precisa() { grep -qx -- "$1" <<<"$AFETADOS"; }
+else
+  precisa() { return 0; }
+fi
+
+if [ -n "$RAPIDO" ] && [ -n "$AFETADOS" ]; then
+  # `--filter` por pacote, em vez de `-r`: no modo rápido conferir os dez tipos
+  # quando um mudou é a mesma gordura que rodar as dez suítes.
+  FILTROS=()
+  while read -r pacote; do [ -n "$pacote" ] && FILTROS+=(--filter "$pacote"); done <<<"$AFETADOS"
+  lancar "typecheck" pnpm "${FILTROS[@]}" typecheck
+else
+  lancar "typecheck" pnpm -r typecheck
+fi
+precisa "@barbearia/web" && lancar "build do web" pnpm --filter @barbearia/web build
+precisa "@barbearia/api" && lancar "build da api" pnpm --filter @barbearia/api build
+precisa "@barbearia/core" && lancar "core — unitários" pnpm --filter @barbearia/core test
+precisa "@barbearia/ui" && lancar "ui — tokens e componentes" pnpm --filter @barbearia/ui test
 # A suíte do web ficou de fora do portão até o bloco 9. Teste que o portão não
 # roda não é garantia nenhuma — o de `destinoSeguro` guarda contra
 # redirecionamento aberto no login e precisa correr aqui.
-lancar "web — lógica de tela"      pnpm --filter @barbearia/web test
+precisa "@barbearia/web" && lancar "web — lógica de tela" pnpm --filter @barbearia/web test
+# O resolvedor tem teste próprio: ele decide o que vai ser conferido, e errar
+# para menos ali devolveria verde sobre código que ninguém rodou.
+lancar "resolvedor de afetados" npx vitest run scripts/afetados.test.mjs
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
 
-  lancar "db — invariantes"                    pnpm --filter @barbearia/db test
-  lancar "identity — OTP, sessão e 2º fator"   pnpm --filter @barbearia/identity test
-  lancar "scheduling — integração"             pnpm --filter @barbearia/scheduling test
-  lancar "onboarding — seis etapas"            pnpm --filter @barbearia/onboarding test
-  lancar "catalog — CRUD do admin"             pnpm --filter @barbearia/catalog test
-  lancar "finance — comanda, caixa e fiado"    pnpm --filter @barbearia/finance test
-  # A fase 1 já construiu os pacotes; a suíte não precisa refazer.
-  lancar "api — e2e"  env PULAR_BUILD_DAS_DEPENDENCIAS=1 pnpm --filter @barbearia/api test
+  for entrada in "${NOMES[@]}"; do
+    pacote="${entrada%%:*}"
+    nome="${entrada#*:}"
+    precisa "$pacote" || continue
+    if [ "$pacote" = "@barbearia/api" ]; then
+      # A fase 1 já construiu os pacotes; a suíte não precisa refazer.
+      lancar "$nome" env PULAR_BUILD_DAS_DEPENDENCIAS=1 pnpm --filter "$pacote" test
+    else
+      lancar "$nome" pnpm --filter "$pacote" test
+    fi
+  done
 fi
 
 colher
@@ -128,7 +173,12 @@ fi
 
 printf '\n'
 if [ ${#failures[@]} -eq 0 ]; then
-  printf '\033[32mverify: tudo verde\033[0m\n'
+  if [ -n "$RAPIDO" ]; then
+    printf '\033[32mverify --rapido: verde\033[0m\n'
+    printf '\033[33mPARCIAL: só os pacotes afetados. Não fecha bloco — rode `pnpm verify`.\033[0m\n'
+  else
+    printf '\033[32mverify: tudo verde\033[0m\n'
+  fi
   exit 0
 fi
 
