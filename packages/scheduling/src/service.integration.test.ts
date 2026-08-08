@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
+import { createAppointment } from './booking.js';
 
 /**
  * Testes de integração do domínio Scheduling.
@@ -303,6 +304,76 @@ describeIfDb('Scheduling — integração', () => {
     const ids = new Set(result?.slots.map((s) => s.professionalId));
     expect(ids).toEqual(new Set([RUAN]));
     expect(result?.slots[0]?.start).toBe('10:00');
+  });
+
+  it('bloqueio pontual abre um buraco no meio do dia sem derrubar o resto', async () => {
+    // O caso corriqueiro: o barbeiro atende o dia inteiro menos das 14h às 15h.
+    // `custom_hours` não resolveria — ela substitui a jornada por uma faixa
+    // contínua e não abre buraco no meio.
+    await exec(admin, `
+      INSERT INTO schedule_exceptions (tenant_id, professional_id, on_date, kind, start_minute, end_minute, reason)
+      VALUES ('${TENANT}', '${RUAN}', '${TERCA}', 'block', 840, 900, 'Dentista');
+    `);
+
+    const result = await availability({ serviceIds: [CABELO], date: TERCA, professionalId: RUAN });
+    const inicios = result?.slots.map((s) => s.start) ?? [];
+
+    expect(inicios).toContain('13:00');
+    expect(inicios).toContain('15:00');
+    // Nenhum horário começa dentro da faixa bloqueada.
+    expect(inicios.filter((h) => h >= '14:00' && h < '15:00')).toEqual([]);
+  });
+
+  it('bloqueio não deixa o serviço atravessar o começo da faixa', async () => {
+    // 13:50 + 20 min invadiria 14:00. Barrar só o início bloqueado deixaria o
+    // cliente marcado por cima do compromisso do barbeiro.
+    await exec(admin, `
+      INSERT INTO schedule_exceptions (tenant_id, professional_id, on_date, kind, start_minute, end_minute)
+      VALUES ('${TENANT}', '${RUAN}', '${TERCA}', 'block', 840, 900);
+    `);
+
+    const result = await availability({ serviceIds: [CABELO], date: TERCA, professionalId: RUAN });
+    for (const slot of result?.slots ?? []) {
+      expect(slot.end <= '14:00' || slot.start >= '15:00').toBe(true);
+    }
+  });
+
+  it('bloqueio da unidade vale para todos os barbeiros', async () => {
+    // "Fechado das 12h às 13h para manutenção" fecha para a equipe inteira, não
+    // só para quem foi nomeado.
+    await exec(admin, `
+      INSERT INTO schedule_exceptions (tenant_id, location_id, on_date, kind, start_minute, end_minute, reason)
+      VALUES ('${TENANT}', '${LOCATION}', '${TERCA}', 'block', 720, 780, 'Manutenção');
+    `);
+
+    const result = await availability({ serviceIds: [CABELO], date: TERCA });
+    const dentro = result?.slots.filter((s) => s.start >= '12:00' && s.start < '13:00') ?? [];
+    expect(dentro).toEqual([]);
+    // E o dia continua de pé fora da faixa.
+    expect(result?.slots.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('bloqueio impede o agendamento, não só a exibição', async () => {
+    // A grade some, mas quem tiver o horário antigo aberto ainda tenta gravar.
+    const antes = await availability({ serviceIds: [CABELO], date: TERCA, professionalId: RUAN });
+    const alvo = antes?.slots.find((s) => s.start === '14:00');
+    expect(alvo).toBeDefined();
+
+    await exec(admin, `
+      INSERT INTO schedule_exceptions (tenant_id, professional_id, on_date, kind, start_minute, end_minute)
+      VALUES ('${TENANT}', '${RUAN}', '${TERCA}', 'block', 840, 900);
+    `);
+
+    await expect(
+      createAppointment({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        professionalId: RUAN,
+        serviceIds: [CABELO],
+        date: TERCA,
+        start: '14:00',
+      }),
+    ).rejects.toMatchObject({ code: 'slot_not_available' });
   });
 
   it('capacidade de recurso limita horários simultâneos', async () => {

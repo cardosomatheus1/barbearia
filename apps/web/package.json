@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@barbearia/core": "workspace:*",
     "@barbearia/ui": "workspace:*",
     "next": "^15.1.3",
     "react": "^19.0.0",

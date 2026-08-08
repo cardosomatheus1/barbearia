@@ -74,6 +74,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@barbearia/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@barbearia/ui':
         specifier: workspace:*
         version: link:../../packages/ui

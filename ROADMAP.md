@@ -39,6 +39,28 @@ seção [Escopo recomendado](#escopo-recomendado) antes de tratá-lo como plano.
 
 ---
 
+## Lacunas com dependência declarada
+
+Quando um bloco fecha deixando algo de fora, o motivo entra aqui — com **o que
+já existe**, **o que falta** e **em qual bloco entra**. Sem isso, "lacuna
+conhecida" vira lugar onde trabalho adiado desaparece.
+
+A regra que separa as duas colunas: mecanismo (schema, motor, API, tela do
+cliente) fecha no bloco em que a necessidade aparece; **tela de administração
+para cadastrar o dado** espera o bloco do admin. O contrário — mecanismo adiado
+porque a tela ainda não existe — é o que produz motor que finge aceitar
+`blocks` e nunca recebe nenhum.
+
+| Lacuna | Pronto | Falta | Bloco |
+|---|---|---|---|
+| Bloqueio pontual do dia (dentista às 14h) | tipo `block` no schema, motor, repositório e API; recorta a grade e recusa o agendamento | tela para a recepção criar — hoje só por SQL | 12 (agenda do admin) |
+| Combo mais barato que a soma avulsa | `sold_as_service_id`, detecção em `core`, aviso e troca no carrinho | tela para definir quais serviços formam o combo | 10 (onboarding do catálogo) |
+| Janela de cancelamento e remarcação | colunas, aplicação na API, explicação na tela do cliente | tela para a barbearia ajustar as horas — hoje só por SQL | 10 (configuração da unidade) |
+| Trocar de profissional ao remarcar | grade por profissional e "qualquer um", gravação atômica | — | fechado |
+| Encerrar sessão nos outros aparelhos | `revoke_session` e "Sair" deste aparelho | listagem de sessões ativas | sem bloco: o cliente de barbearia usa um celular só. Entra se aparecer demanda real, não por simetria |
+
+---
+
 ## R1 — MVP (20 blocos)
 
 **Critério de aceite:** uma barbearia de duas cadeiras consegue largar o sistema

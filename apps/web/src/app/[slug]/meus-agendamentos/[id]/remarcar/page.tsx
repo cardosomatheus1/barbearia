@@ -8,9 +8,9 @@ import { remarcar } from '../../acoes';
 /**
  * Remarcar.
  *
- * Mesma grade do agendamento, com uma diferença que importa: o serviço e o
- * profissional já estão decididos. Remarcar é escolher **quando**, e só isso —
- * quem quer trocar de serviço cancela e agenda de novo.
+ * Mesma grade do agendamento, com uma diferença que importa: o **serviço** já
+ * está decidido. Remarcar é escolher quando e, se quiser, com quem — trocar de
+ * serviço é que exige cancelar e agendar de novo.
  *
  * A grade é consultada com os ids que vieram do agendamento, não da URL: senão
  * bastaria trocar o parâmetro para remarcar para um serviço mais caro pelo
@@ -92,7 +92,24 @@ export default async function RemarcarPage({ params, searchParams }: Props) {
 
   // Rota própria da remarcação, não o `/availability` público: só ela ignora o
   // horário atual do cliente na ocupação — a mesma conta que a gravação faz.
-  const doDia = await opcoesDeRemarcacao(slug, token, id, dia);
+  /**
+   * Com quem. O padrão é quem já atende — trocar de horário é o pedido comum.
+   *
+   * Trocar de barbeiro exigia cancelar e agendar de novo, o que jogava fora o
+   * horário atual antes de saber se havia outro. Aqui o horário só sai quando o
+   * novo entra.
+   */
+  const quem = first(query['p']) ?? atual.professionalId;
+  const doDia = await opcoesDeRemarcacao(slug, token, id, dia, quem);
+
+  const equipe = profile.professionals.filter((pessoa) =>
+    atual.serviceIds.every((servico) =>
+      profile.categories.some((c) =>
+        c.services.some((s) => s.id === servico && s.professionalIds.includes(pessoa.id)),
+      ),
+    ),
+  );
+  const nomePorId = new Map(profile.professionals.map((p) => [p.id, p.name]));
 
   /**
    * O horário que o cliente já tem aparece na grade — a rota o ignora na
@@ -102,8 +119,10 @@ export default async function RemarcarPage({ params, searchParams }: Props) {
    */
   const horaAtual = localTime(profile.location.timezone, atual.startsAt);
 
-  const href = (data: string): string =>
-    `/${slug}/meus-agendamentos/${id}/remarcar?d=${data}`;
+  const href = (mudanca: { d?: string; p?: string }): string => {
+    const busca = new URLSearchParams({ d: mudanca.d ?? dia, p: mudanca.p ?? quem });
+    return `/${slug}/meus-agendamentos/${id}/remarcar?${busca.toString()}`;
+  };
 
   return (
     <main className="ui-container fluxo">
@@ -129,13 +148,40 @@ export default async function RemarcarPage({ params, searchParams }: Props) {
         </div>
       ) : null}
 
+      {equipe.length > 1 ? (
+        <div className="quem ui-scroll-x" role="group" aria-label="Com quem">
+          <ul className="quem__lista">
+            <li>
+              <a
+                className={`quem__opcao ${quem === 'any' ? 'quem__opcao--atual' : ''}`}
+                href={href({ p: 'any' })}
+                aria-current={quem === 'any' ? 'true' : undefined}
+              >
+                Qualquer profissional
+              </a>
+            </li>
+            {equipe.map((pessoa) => (
+              <li key={pessoa.id}>
+                <a
+                  className={`quem__opcao ${quem === pessoa.id ? 'quem__opcao--atual' : ''}`}
+                  href={href({ p: pessoa.id })}
+                  aria-current={quem === pessoa.id ? 'true' : undefined}
+                >
+                  {pessoa.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="dias ui-scroll-x">
         <ul className="dias__lista">
           {dias.map((data) => (
             <li key={data}>
               <a
                 className={`dia ${data === dia ? 'dia--atual' : ''}`}
-                href={href(data)}
+                href={href({ d: data })}
                 aria-current={data === dia ? 'date' : undefined}
               >
                 <span className="dia__semana">
@@ -151,7 +197,10 @@ export default async function RemarcarPage({ params, searchParams }: Props) {
       {doDia && doDia.slots.length > 0 ? (
         <ul className="horas">
           {doDia.slots.map((slot) => {
-            const eAtual = dia === diaAtual && slot.start === horaAtual;
+            const eAtual =
+              dia === diaAtual &&
+              slot.start === horaAtual &&
+              slot.professionalId === atual.professionalId;
             return (
               <li key={slot.start}>
                 {eAtual ? (
@@ -166,9 +215,18 @@ export default async function RemarcarPage({ params, searchParams }: Props) {
                     <input type="hidden" name="id" value={id} />
                     <input type="hidden" name="date" value={dia} />
                     <input type="hidden" name="start" value={slot.start} />
-                    <input type="hidden" name="professionalId" value={atual.professionalId} />
+                    {/* O id vem do slot, não do filtro: com "qualquer
+                        profissional" a grade já resolveu quem atende, e mandar
+                        `any` faria o servidor escolher de novo — podendo cair
+                        em outra pessoa entre a tela e a gravação. */}
+                    <input type="hidden" name="professionalId" value={slot.professionalId} />
                     <button className="hora hora--botao" type="submit">
                       <span className="hora__valor tabular">{slot.start}</span>
+                      {quem === 'any' ? (
+                        <span className="hora__quem">
+                          {nomePorId.get(slot.professionalId) ?? ''}
+                        </span>
+                      ) : null}
                     </button>
                   </form>
                 )}
@@ -182,7 +240,7 @@ export default async function RemarcarPage({ params, searchParams }: Props) {
           <p className="vazio__saida">
             {MOTIVO[doDia?.unavailableReason ?? ''] ?? 'Tente outro dia.'}
           </p>
-          <a className="ui-button ui-button--secondary" href={href(addDays(dia, 1))}>
+          <a className="ui-button ui-button--secondary" href={href({ d: addDays(dia, 1) })}>
             Ver o dia seguinte
           </a>
         </div>

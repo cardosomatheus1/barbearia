@@ -277,7 +277,8 @@ export class AppointmentsController {
     @TenantId() tenantId: string,
     @Customer() customer: AuthenticatedCustomer,
     @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
-    @Query(new ZodValidationPipe(rescheduleRangeSchema)) query: { dateFrom: string; dateTo?: string },
+    @Query(new ZodValidationPipe(rescheduleRangeSchema))
+    query: { dateFrom: string; dateTo?: string; professionalId?: string },
   ) {
     const atual = await getReschedulableAppointment({
       tenantId,
@@ -287,11 +288,20 @@ export class AppointmentsController {
     if (!atual) throw notFound('appointment_not_found', 'Agendamento não encontrado');
 
     try {
+      // `any` abre a agenda da equipe e colapsa em um horário por linha; um id
+      // concreto filtra. Sem parâmetro, mantém quem já atende — o caso de quem
+      // só quer trocar de horário.
+      const equipe = query.professionalId === 'any';
+      const escolhido = equipe ? undefined : (query.professionalId ?? atual.professionalId);
+
       const range = await getAvailabilityRange({
         tenantId,
         locationId: atual.locationId,
+        // Os serviços vêm do agendamento, nunca da URL: aceitar da requisição
+        // deixaria remarcar para um serviço mais caro pelo preço do antigo.
         serviceIds: atual.serviceIds,
-        professionalId: atual.professionalId,
+        ...(escolhido ? { professionalId: escolhido } : {}),
+        collapse: equipe,
         ignoreAppointmentId: id,
         dateFrom: query.dateFrom,
         ...(query.dateTo ? { dateTo: query.dateTo } : {}),
@@ -299,6 +309,7 @@ export class AppointmentsController {
 
       return {
         timezone: range.timezone,
+        currentProfessionalId: atual.professionalId,
         days: range.days.map((day) => ({
           date: day.date,
           unavailableReason: day.unavailableReason,

@@ -76,6 +76,14 @@ export interface DayContext {
   readonly professionals: readonly QualifiedProfessional[];
   readonly weeklyPlans: ReadonlyMap<string, WeeklyPlan[]>;
   readonly exceptions: ReadonlyMap<string, ScheduleException[]>;
+  /**
+   * Bloqueios pontuais por profissional, já em minutos locais.
+   *
+   * Separado de `exceptions` porque o motor os trata como faixa a subtrair, não
+   * como regra de jornada: têm a maior precedência e recortam qualquer horário
+   * já resolvido (`resolveWorkingDay`).
+   */
+  readonly blocks: ReadonlyMap<string, TimeRange[]>;
   readonly busy: ReadonlyMap<string, TimeRange[]>;
   readonly appointmentCount: ReadonlyMap<string, number>;
   readonly resourcePools: readonly ResourcePoolRow[];
@@ -264,6 +272,7 @@ export async function loadRangeContext(
     professionals: [],
     weeklyPlans: new Map(),
     exceptions: new Map(),
+    blocks: new Map(),
     busy: new Map(),
     appointmentCount: new Map(),
     resourcePools: [],
@@ -353,7 +362,7 @@ export async function loadRangeContext(
       on_date: Date;
       professional_id: string | null;
       location_id: string | null;
-      kind: 'custom_hours' | 'day_off' | 'holiday' | 'vacation';
+      kind: 'custom_hours' | 'day_off' | 'holiday' | 'vacation' | 'block';
       start_minute: number | null;
       end_minute: number | null;
       reason: string | null;
@@ -368,9 +377,23 @@ export async function loadRangeContext(
 
   const professionalExceptions = new Map<string, ScheduleException[]>();
   const locationExceptions = new Map<string, ScheduleException[]>();
+  const professionalBlocks = new Map<string, TimeRange[]>();
+  const locationBlocks = new Map<string, TimeRange[]>();
 
   for (const row of exceptionRows) {
     const date = row.on_date.toISOString().slice(0, 10);
+
+    // `block` não é regra de jornada, é faixa a subtrair. A CHECK do banco
+    // garante início e fim; a guarda aqui protege de linha antiga, de antes da
+    // migração 0010.
+    if (row.kind === 'block') {
+      if (row.start_minute === null || row.end_minute === null) continue;
+      const range = { start: row.start_minute, end: row.end_minute };
+      if (row.professional_id) push(professionalBlocks, `${date}|${row.professional_id}`, range);
+      else push(locationBlocks, date, range);
+      continue;
+    }
+
     const item: ScheduleException = {
       kind: row.kind,
       scope: row.professional_id ? 'professional' : 'location',
@@ -485,11 +508,19 @@ export async function loadRangeContext(
     }
 
     const exceptions = new Map<string, ScheduleException[]>();
+    const blocks = new Map<string, TimeRange[]>();
     const forLocation = locationExceptions.get(date) ?? [];
+    const blocksForLocation = locationBlocks.get(date) ?? [];
     for (const professionalId of professionalIds) {
       const own = professionalExceptions.get(`${date}|${professionalId}`) ?? [];
       // Exceções da unidade valem para todo mundo.
       exceptions.set(professionalId, [...own, ...forLocation]);
+      // Bloqueio da unidade também: "fechado das 12h às 13h para manutenção"
+      // fecha para todos os barbeiros, não só para quem foi nomeado.
+      blocks.set(professionalId, [
+        ...(professionalBlocks.get(`${date}|${professionalId}`) ?? []),
+        ...blocksForLocation,
+      ]);
     }
 
     days.set(date, {
@@ -500,6 +531,7 @@ export async function loadRangeContext(
       professionals,
       weeklyPlans: plansByProfessional,
       exceptions,
+      blocks,
       busy,
       appointmentCount: countsByDate.get(date) ?? new Map(),
       resourcePools: poolRows.map((row) => ({

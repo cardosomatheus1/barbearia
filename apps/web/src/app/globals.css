@@ -589,3 +589,45 @@ main { padding-bottom: var(--space-8); }
   cursor: default;
 }
 .hora--atual .hora__quem { color: var(--color-accent); }
+
+/* Trocar de profissional ao remarcar. Régua horizontal como a de dias: no
+   celular a equipe não cabe empilhada sem empurrar a grade para fora da tela. */
+.quem { margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: 0 var(--space-4); }
+.quem__lista { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.quem__opcao {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+.quem__opcao--atual {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Aviso de combo mais barato. Discreto de propósito: informa uma economia real,
+   não vende — banner de oferta no meio da escolha faz o cliente desconfiar do
+   preço lá na frente. */
+.oferta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+.oferta__texto { margin: 0; font-size: var(--font-size-sm); }
+.oferta__trocar { flex-shrink: 0; }

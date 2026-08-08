@@ -34,6 +34,7 @@ export interface PublicProfile {
     cancelMinHours: number;
   };
   categories: { id: string | null; name: string; services: PublicService[] }[];
+  bundles: { serviceId: string; name: string; priceCents: number; componentIds: string[] }[];
   professionals: { id: string; name: string; bio: string | null; photoUrl: string | null }[];
   hours: { weekday: number; opensAt: string | null; closesAt: string | null }[];
   open: { isOpen: boolean; detail: string };
@@ -288,20 +289,28 @@ export const cancelarAgendamento = (slug: string, token: string, id: string, rea
  * ocupação, que é o que a gravação também faz. Com a estratégia `anchored` as
  * duas grades divergem, e a pública ofereceria horários recusados um a um.
  */
+export interface DiaDeRemarcacao {
+  date: string;
+  unavailableReason: string | null;
+  slots: { start: string; professionalId: string }[];
+}
+
 export async function opcoesDeRemarcacao(
   slug: string,
   token: string,
   id: string,
   dateFrom: string,
-): Promise<{ date: string; unavailableReason: string | null; slots: { start: string }[] } | null> {
+  professionalId?: string,
+): Promise<DiaDeRemarcacao | null> {
+  const busca = new URLSearchParams({ dateFrom });
+  if (professionalId) busca.set('professionalId', professionalId);
+
   const response = await fetch(
-    `${BASE}/v1/b/${slug}/appointments/${id}/availability?dateFrom=${dateFrom}`,
+    `${BASE}/v1/b/${slug}/appointments/${id}/availability?${busca.toString()}`,
     { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
   );
   if (!response.ok) return null;
-  const corpo = (await response.json()) as {
-    days: { date: string; unavailableReason: string | null; slots: { start: string }[] }[];
-  };
+  const corpo = (await response.json()) as { days: DiaDeRemarcacao[] };
   return corpo.days[0] ?? null;
 }
 

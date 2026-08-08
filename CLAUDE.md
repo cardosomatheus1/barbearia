@@ -196,6 +196,11 @@ core  ←  scheduling  ←  api  ←  web
 - Erro é explícito no tipo de retorno ou lançado — nunca `null` silencioso para
   significar falha.
 - Não abstrair antes do terceiro caso.
+- **Campo que o motor aceita e ninguém preenche é mentira.** Se o domínio expõe
+  uma entrada, o bloco que a introduz entrega a origem do dado junto. `blocks`
+  ficou oito blocos como parâmetro aceito e sempre vazio: o motor tinha teste
+  verde e o barbeiro não conseguia fechar uma hora do dia. Adiar a **tela de
+  cadastro** para o bloco do admin é legítimo; adiar o mecanismo não é.
 - Configuração de negócio é dado (coluna, feature flag), não constante no código.
 
 ---
@@ -311,7 +316,8 @@ Um bloco só está concluído quando **todos** os itens passam:
 - [ ] README atualizado se alguma decisão de arquitetura mudou
 - [ ] Interface conferida em 360, 390, 768 e 1280 — sem rolagem horizontal
 - [ ] Estado vazio, carregando e erro desenhados
-- [ ] Lacuna conhecida declarada por escrito, não deixada implícita
+- [ ] Lacuna conhecida declarada por escrito, **com dependência e bloco**, na tabela
+      [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada)
 - [ ] `ROADMAP.md` com o bloco marcado e o contador atualizado
 
 ---

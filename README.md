@@ -255,6 +255,25 @@ O comprovante é lido da API pelo id, nunca reconstruído da URL. Repetir o que 
 formulário enviou seria afirmar sem conferir — "Qualquer profissional" nunca
 viraria um nome, e um horário cancelado continuaria dizendo "confirmado".
 
+## Bloqueio pontual, combo e janela
+
+Três coisas que o sistema sabia e não usava, fechadas depois do bloco 9:
+
+**O barbeiro pode fechar uma hora do dia.** `schedule_exceptions` só sabia
+"não trabalha" e "trabalha em outro horário" — faltava o caso mais comum, o
+dentista às 14h. O motor aceitava `blocks` desde o bloco 1 e o repositório
+passava lista vazia: teste verde, capacidade inexistente. Agora existe o tipo
+`block`, e ele recorta a grade **e** recusa a gravação.
+
+**O carrinho avisa quando o combo sai mais barato.** Na Domari, Cabelo
+(Tesoura) + Barba avulsos somam R$ 84,00; o mesmo atendimento está no cardápio
+por R$ 74,00. Quem montava à mão pagava R$ 10,00 a mais sem saber. A detecção
+está em `packages/core/src/bundles.ts` e sugere uma troca só — a de maior
+economia —, com link, não troca automática.
+
+**Remarcar pode trocar de profissional.** Antes exigia cancelar e agendar de
+novo, o que jogava fora o horário atual antes de saber se havia outro.
+
 ## Cancelar e remarcar
 
 Ver histórico, cancelar e remarcar **exigem o código** no WhatsApp. É a fronteira
@@ -288,16 +307,11 @@ Bloco 10 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
 Onboarding da barbearia em seis etapas: é o que transforma o produto em SaaS
 utilizável sem alguém do time cadastrar dados à mão.
 
-**Lacunas conhecidas:**
+**Lacunas conhecidas** — todas com dependência e bloco na tabela
+[Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada). O que
+falta em cada uma é **tela de cadastro no admin**, não mecanismo:
 
-- Bloqueios pontuais (barbeiro fechar uma hora específica) ainda não têm tabela.
-  O motor já aceita `blocks`; o repositório passa vazio. Vem com o bloco 12, a
-  agenda do admin.
-- O carrinho não avisa quando os serviços escolhidos existem como combo mais
-  barato — em Domari, Cabelo (Tesoura) + Barba custa R$ 84,00 avulso e R$ 74,00
-  no combo. `service_combo_components` já modela a composição.
-- Remarcar mantém o profissional do agendamento. Trocar de barbeiro exige
-  cancelar e agendar de novo.
-- `cancel_min_hours` e `reschedule_min_hours` ainda não têm tela de configuração;
-  hoje só mudam por SQL. Entram no bloco 10.
-- Não há tela de sessões ativas: "Sair" revoga a deste aparelho, não as outras.
+- Bloqueio pontual, combo e janela de alteração funcionam ponta a ponta, mas o
+  dado hoje só entra por SQL. As telas vêm nos blocos 10 e 12.
+- "Sair" encerra a sessão deste aparelho. Não há listagem de sessões ativas — e
+  não há bloco para ela: o cliente de barbearia usa um celular só.

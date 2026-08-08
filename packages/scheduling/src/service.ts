@@ -135,6 +135,9 @@ export function computeFromContext(
       weekday: context.weekday,
       weeklyPlans: context.weeklyPlans.get(professional.id) ?? [],
       exceptions: context.exceptions.get(professional.id) ?? [],
+      // O motor aceitava `blocks` desde o bloco 1, mas o repositório passava
+      // vazio: o barbeiro não tinha como fechar uma hora do dia.
+      blocks: context.blocks.get(professional.id) ?? [],
     });
 
     // Duração e preço deste profissional para os serviços escolhidos.

@@ -1,5 +1,10 @@
 import { withTenant } from '@barbearia/db';
-import { instantToLocal, weekdayIn, type WeeklyPlan } from '@barbearia/core';
+import {
+  instantToLocal,
+  weekdayIn,
+  type SellableBundle,
+  type WeeklyPlan,
+} from '@barbearia/core';
 
 /**
  * Perfil público da barbearia — tudo que a página mostra sem autenticação.
@@ -71,6 +76,14 @@ export interface PublicProfile {
     readonly cancelMinHours: number;
   };
   readonly categories: readonly PublicCategory[];
+  /**
+   * Combos vendáveis: o item do cardápio e os serviços que ele substitui.
+   *
+   * Vai no perfil porque quem compara é a tela de escolha, e ela já carrega o
+   * cardápio inteiro — buscar à parte seria uma segunda ida ao servidor a cada
+   * serviço marcado.
+   */
+  readonly bundles: readonly SellableBundle[];
   readonly professionals: readonly PublicProfessional[];
   readonly hours: readonly OpeningDay[];
   readonly open: {
@@ -222,6 +235,29 @@ export async function getPublicProfile(
         AND p.active AND p.bookable_online AND p.kind IN ('professional', 'external')
     `;
 
+    // Combos vendáveis da unidade. Uma consulta só, com os componentes
+    // agregados: buscar os componentes por combo seria N+1 no cardápio.
+    const bundleRows = await tx.$queryRaw<
+      { service_id: string; name: string; price_cents: number; component_ids: string[] }[]
+    >`
+      SELECT c.sold_as_service_id::text AS service_id,
+             s.name, s.price_cents,
+             array_agg(cc.service_id::text) AS component_ids
+      FROM service_combos c
+      JOIN services s ON s.id = c.sold_as_service_id
+      JOIN service_combo_components cc ON cc.combo_id = c.id
+      WHERE c.sold_as_service_id IS NOT NULL
+        AND s.active AND s.bookable_online
+      GROUP BY c.id, s.name, s.price_cents
+    `;
+
+    const bundles: SellableBundle[] = bundleRows.map((row) => ({
+      serviceId: row.service_id,
+      name: row.name,
+      priceCents: row.price_cents,
+      componentIds: row.component_ids,
+    }));
+
     const categories = new Map<string, PublicCategory & { services: PublicService[] }>();
     for (const row of serviceRows) {
       const key = row.category_id ?? 'outros';
@@ -277,6 +313,7 @@ export async function getPublicProfile(
         cancelMinHours: location.cancel_min_hours,
       },
       categories: [...categories.values()],
+      bundles,
       professionals: professionalRows.map((row) => ({
         id: row.id,
         name: row.name,

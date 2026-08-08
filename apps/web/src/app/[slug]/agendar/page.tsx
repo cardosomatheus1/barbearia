@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getProfile, getAvailability, type PublicProfile, type PublicService } from '@/lib/api';
 import { localDate, addDays, weekdayShort, dayNumber } from '@/lib/date';
+import { applyBundle, suggestBundle } from '@barbearia/core';
 import { criarAgendamento } from './acoes';
 
 /**
@@ -152,7 +153,12 @@ export default async function AgendarPage({ params, searchParams }: Props) {
 
       <main className="ui-container fluxo">
         {passo === 1 ? (
-          <PassoServico profile={profile} escolhidos={escolhidos} href={href} />
+          <PassoServico
+            profile={profile}
+            escolhidos={escolhidos}
+            catalogo={catalogo}
+            href={href}
+          />
         ) : null}
 
         {passo === 2 ? (
@@ -219,18 +225,55 @@ function voltarDe(passo: number): Record<string, string | null> {
 function PassoServico({
   profile,
   escolhidos,
+  catalogo,
   href,
 }: {
   profile: PublicProfile;
   escolhidos: string[];
+  catalogo: Map<string, PublicService>;
   href: (m: Record<string, string | null>) => string;
 }) {
+  /**
+   * O mesmo atendimento existe duas vezes no cardápio: solto e em combo. Sem
+   * este aviso, quem monta a escolha à mão paga a mais — na Domari, R$ 84,00
+   * contra R$ 74,00 — sem descobrir que a própria barbearia oferece melhor.
+   */
+  const sugestao = suggestBundle(
+    escolhidos,
+    (id) => catalogo.get(id)?.priceCents,
+    profile.bundles.map((b) => ({
+      serviceId: b.serviceId,
+      name: b.name,
+      priceCents: b.priceCents,
+      componentIds: b.componentIds,
+    })),
+  );
+
   return (
     <section aria-labelledby="titulo">
       <h1 className="fluxo__titulo" id="titulo">
         O que você vai fazer?
       </h1>
       <p className="fluxo__ajuda">Pode escolher mais de um.</p>
+
+      {sugestao ? (
+        <div className="oferta" role="status">
+          <p className="oferta__texto">
+            <strong>{sugestao.name}</strong> sai por{' '}
+            <span className="tabular">R$ {money(sugestao.priceCents)}</span> — economiza{' '}
+            <span className="tabular">R$ {money(sugestao.savesCents)}</span>.
+          </p>
+          {/* Link, não troca automática: quem escolheu solto pode ter motivo, e
+              mexer no carrinho por conta própria é o que faz o cliente
+              desconfiar do preço no fim. */}
+          <a
+            className="ui-button ui-button--secondary oferta__trocar"
+            href={href({ s: applyBundle(escolhidos, sugestao).join(',') })}
+          >
+            Trocar pelo combo
+          </a>
+        </div>
+      ) : null}
 
       {profile.categories.map((categoria) => (
         <div className="grupo" key={categoria.id ?? categoria.name}>

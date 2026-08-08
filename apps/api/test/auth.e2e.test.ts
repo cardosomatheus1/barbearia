@@ -696,6 +696,89 @@ describeIfDb('fluxo do cliente', () => {
     expect(inicios).toContain('09:00');
   });
 
+  it('remarcar pode trocar de profissional', async () => {
+    // Antes só dava para trocar de horário. Mudar de barbeiro exigia cancelar e
+    // agendar de novo — jogando fora o horário atual antes de saber se havia
+    // outro. Aqui o antigo só sai quando o novo entra.
+    const GLEIDSON = 'bbbbbbbb-0000-0000-0000-000000000002';
+    await exec(admin, `
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${GLEIDSON}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional');
+
+      INSERT INTO professional_services (professional_id, service_id, tenant_id)
+      VALUES ('${GLEIDSON}', '${CABELO}', '${TENANT}');
+
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
+      SELECT '${TENANT}', '${GLEIDSON}', d.weekday, 540, 1080
+      FROM (VALUES (0), (1), (2), (3), (4), (5), (6)) AS d(weekday);
+    `);
+
+    const token = await login(CARLOS);
+    const criado = await agendar(token, '09:00').expect(201);
+
+    const grade = await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}&professionalId=${GLEIDSON}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(grade.body.currentProfessionalId).toBe(RUAN);
+    const slots = grade.body.days[0].slots;
+    expect(slots.length).toBeGreaterThan(0);
+    expect(new Set(slots.map((s: { professionalId: string }) => s.professionalId))).toEqual(
+      new Set([GLEIDSON]),
+    );
+
+    const remarcado = await http()
+      .post(`/v1/b/domari/appointments/${criado.body.id}/reschedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ date: DIA, start: slots[0].start, professionalId: GLEIDSON })
+      .expect(201);
+
+    expect(remarcado.body.professionalId).toBe(GLEIDSON);
+  });
+
+  it('a grade de "qualquer profissional" traz um horário por linha', async () => {
+    const GLEIDSON = 'bbbbbbbb-0000-0000-0000-000000000002';
+    await exec(admin, `
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${GLEIDSON}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional');
+
+      INSERT INTO professional_services (professional_id, service_id, tenant_id)
+      VALUES ('${GLEIDSON}', '${CABELO}', '${TENANT}');
+
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
+      SELECT '${TENANT}', '${GLEIDSON}', d.weekday, 540, 1080
+      FROM (VALUES (0), (1), (2), (3), (4), (5), (6)) AS d(weekday);
+    `);
+
+    const token = await login(CARLOS);
+    const criado = await agendar(token, '09:00').expect(201);
+
+    const grade = await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}&professionalId=any`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    // Sem colapso a lista mostraria "09:20 Ruan" e "09:20 Gleidson" lado a lado,
+    // gastando a tela para repetir a mesma informação.
+    const inicios = grade.body.days[0].slots.map((s: { start: string }) => s.start);
+    expect(new Set(inicios).size).toBe(inicios.length);
+  });
+
+  it('remarcar não aceita trocar o serviço pela URL', async () => {
+    // Os serviços vêm do agendamento. Aceitá-los da requisição deixaria remarcar
+    // para um serviço mais caro pelo preço do antigo.
+    const token = await login(CARLOS);
+    const criado = await agendar(token, '09:00').expect(201);
+
+    const grade = await http()
+      .get(`/v1/b/domari/appointments/${criado.body.id}/availability?dateFrom=${DIA}&serviceIds=${CABELO}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(grade.body.days[0].slots.length).toBeGreaterThan(0);
+  });
+
   it('a grade de remarcação exige sessão e é do dono', async () => {
     const token = await login(CARLOS);
     const criado = await agendar(token, '09:00').expect(201);

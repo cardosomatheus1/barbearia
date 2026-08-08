@@ -41,4 +41,11 @@ export const appointmentIdSchema = uuid;
 export const rescheduleRangeSchema = z.object({
   dateFrom: isoDate,
   dateTo: isoDate.optional(),
+  /**
+   * Com quem: o id de um profissional, ou `any` para ver a agenda da equipe.
+   *
+   * Ausente mantém quem já atende o agendamento — que é o caso comum de quem
+   * só quer trocar de horário.
+   */
+  professionalId: z.union([uuid, z.literal('any')]).optional(),
 });
