@@ -3,50 +3,43 @@ import type { ReactNode } from 'react';
 /**
  * O casco: a moldura fixa do painel.
  *
- * Três colunas, como no mock interno do Barber Dock — trilho de ícones,
+ * Três colunas, como no mock interno do Barber Dock — trilho de módulos,
  * navegação de contexto e a área de trabalho. Antes disso cada tela do admin era
  * uma coluna solta no meio da página: funcionava, e parecia um formulário, não
  * um sistema.
  *
+ * ## Trilho e contexto não são a mesma lista
+ *
+ * A primeira versão repetia os onze destinos nas duas colunas e escondia a
+ * segunda no celular. A guarda reprovou, e estava certa por mérito: era o mesmo
+ * link duas vezes no DOM, e quem usa leitor de tela ouviria a lista em dobro.
+ *
+ * A estrutura certa é a do mock: **o trilho são os módulos** — três ícones —, e
+ * **o contexto são as telas de dentro do módulo aberto**. Um link, um lugar.
+ *
  * ## Sem um byte de JavaScript
  *
  * O mock abre e fecha o trilho, tem paleta de comandos, gaveta e brinde de
- * notificação — tudo JavaScript. Aqui o trilho é um `<nav>` de links, e a
- * navegação de contexto é uma lista. No celular as duas colunas viram uma faixa
- * que rola acima do conteúdo, porque em 360px não existe coluna lateral: existe
- * conteúdo e o resto.
- *
- * ## Uma navegação só, não duas
- *
- * A primeira versão repetia os onze destinos nas duas colunas e escondia a
- * segunda no celular. A guarda reprovou, e estava certa por mérito: não era
- * conteúdo refluindo, era o mesmo link duas vezes no DOM — quem usa leitor de
- * tela ouviria a lista inteira em dobro.
- *
- * Agora o trilho é a navegação, e só ela. A coluna de contexto carrega o que o
- * mock de fato põe lá além dos links: de que casa é esta tela e quem está
- * logado. A navegação de dentro de cada seção continua onde já estava — nas
- * barras que as próprias telas de cadastro e de balcão desenham.
- *
- * ## O item ativo sai do CSS, não do servidor
- *
- * `layout.tsx` não conhece a rota no App Router. Em vez de transformar o casco
- * num componente de cliente só para isso, cada tela declara `data-secao` no
- * próprio `<main>` e o CSS acende o item com `:has()`. Tela que ainda não
- * declarou simplesmente não acende nada — degrada para uma navegação comum, não
- * para uma quebrada.
+ * notificação — tudo JavaScript. Aqui tudo é link, e o que decide o que aparece
+ * é CSS: cada tela declara `data-secao` no próprio `<main>`, e o casco usa
+ * `:has()` para acender o módulo e revelar o bloco de contexto dele. Trocar isso
+ * por um componente de cliente custaria o primeiro JavaScript do produto — só
+ * para saber em que página estamos.
  */
+
+export type Modulo = 'operacao' | 'dinheiro' | 'casa';
 
 interface Destino {
   readonly href: string;
   readonly nome: string;
   readonly secao: string;
-  readonly icone: ReactNode;
+  /** Uma frase do que a tela faz. É o que o mock põe embaixo de cada item. */
+  readonly nota: string;
 }
 
-/** Traço fino, 1.6px, sem preenchimento: é o desenho do mock, não um emoji. */
-const traco = (d: string) => (
-  <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+/** Traço fino, sem preenchimento: é o desenho do mock, não um emoji. */
+const traco = (d: string, tamanho = 20) => (
+  <svg aria-hidden="true" fill="none" height={tamanho} viewBox="0 0 24 24" width={tamanho}>
     <path
       d={d}
       stroke="currentColor"
@@ -57,101 +50,49 @@ const traco = (d: string) => (
   </svg>
 );
 
-const OPERACAO: readonly Destino[] = [
+const MODULOS: readonly {
+  readonly id: Modulo;
+  readonly nome: string;
+  readonly icone: ReactNode;
+  readonly telas: readonly Destino[];
+}[] = [
   {
-    href: '/admin/dia',
-    nome: 'O dia',
-    secao: 'dia',
+    id: 'operacao',
+    nome: 'Operação',
     icone: traco('M4 7h16M4 12h16M4 17h10'),
+    telas: [
+      { href: '/admin/dia', nome: 'O dia', secao: 'dia', nota: 'quem chegou e quem falta' },
+      { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', nota: 'dia, semana e lista' },
+      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'quem veio sem marcar' },
+      { href: '/admin/avisos', nome: 'Avisos', secao: 'avisos', nota: 'lembretes e retorno' },
+    ],
   },
   {
-    href: '/admin/agenda',
-    nome: 'Agenda',
-    secao: 'agenda',
-    icone: traco('M4 6h16v14H4zM8 3v4M16 3v4M4 10h16'),
-  },
-  {
-    href: '/admin/fila',
-    nome: 'Fila',
-    secao: 'fila',
-    icone: traco('M6 5v14M12 8v11M18 3v16'),
-  },
-];
-
-const DINHEIRO: readonly Destino[] = [
-  {
-    href: '/admin/caixa',
-    nome: 'Caixa',
-    secao: 'caixa',
+    id: 'dinheiro',
+    nome: 'Dinheiro',
     icone: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
+    telas: [
+      { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', nota: 'abertura e fechamento' },
+      { href: '/admin/comanda', nome: 'Comanda', secao: 'comanda', nota: 'cobrar o atendimento' },
+      { href: '/admin/fiado', nome: 'Fiado', secao: 'fiado', nota: 'quem ficou devendo' },
+      { href: '/admin/comissao', nome: 'Comissão', secao: 'comissao', nota: 'período e fechamento' },
+    ],
   },
   {
-    href: '/admin/comanda',
-    nome: 'Comanda',
-    secao: 'comanda',
-    icone: traco('M7 3h10v18l-5-3-5 3zM10 8h4'),
-  },
-  {
-    href: '/admin/fiado',
-    nome: 'Fiado',
-    secao: 'fiado',
-    icone: traco('M4 6h16v12H4zM4 10h16M8 14h4'),
-  },
-  {
-    href: '/admin/comissao',
-    nome: 'Comissão',
-    secao: 'comissao',
-    icone: traco('M6 18L18 6M8 8h.01M16 16h.01'),
+    id: 'casa',
+    nome: 'A casa',
+    icone: traco('M4 11l8-6 8 6v9H4zM10 20v-5h4v5'),
+    telas: [
+      { href: '/admin/painel', nome: 'Painel', secao: 'painel', nota: 'os números do dia' },
+      { href: '/admin/catalogo', nome: 'Cadastro', secao: 'cadastro', nota: 'serviços e equipe' },
+      { href: '/admin/equipe', nome: 'Equipe', secao: 'equipe', nota: 'contas e permissões' },
+      { href: '/admin/importar', nome: 'Trazer base', secao: 'importar', nota: 'migrar de outro sistema' },
+      { href: '/admin/trilha', nome: 'Trilha', secao: 'trilha', nota: 'quem mexeu em quê' },
+      { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'segundo fator' },
+      { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'janela e políticas' },
+    ],
   },
 ];
-
-const CASA: readonly Destino[] = [
-  {
-    href: '/admin/painel',
-    nome: 'Painel',
-    secao: 'painel',
-    icone: traco('M4 20V10M10 20V4M16 20v-7M22 20H2'),
-  },
-  {
-    href: '/admin/catalogo',
-    nome: 'Cadastro',
-    secao: 'cadastro',
-    icone: traco('M4 5h16v6H4zM4 15h10v4H4z'),
-  },
-  {
-    href: '/admin/equipe',
-    nome: 'Equipe',
-    secao: 'equipe',
-    icone: traco('M8 11a3 3 0 100-6 3 3 0 000 6zM2 20c0-3 3-5 6-5s6 2 6 5M17 11a3 3 0 100-6M16 15c3 0 6 2 6 5'),
-  },
-  {
-    href: '/admin/importar',
-    nome: 'Trazer base',
-    secao: 'importar',
-    icone: traco('M12 4v10M8 10l4 4 4-4M4 18h16'),
-  },
-  {
-    href: '/admin/trilha',
-    nome: 'Trilha',
-    secao: 'trilha',
-    icone: traco('M12 3v18M6 8l6-5 6 5M6 16l6 5 6-5'),
-  },
-];
-
-const GRUPOS: readonly (readonly [string, readonly Destino[]])[] = [
-  ['Operação', OPERACAO],
-  ['Dinheiro', DINHEIRO],
-  ['A casa', CASA],
-];
-
-function Item({ destino }: { readonly destino: Destino }) {
-  return (
-    <a className="trilho__botao" data-para={destino.secao} href={destino.href}>
-      {destino.icone}
-      <span className="trilho__legenda">{destino.nome}</span>
-    </a>
-  );
-}
 
 export function Casco({
   children,
@@ -173,27 +114,51 @@ export function Casco({
 
   return (
     <div className="casco">
-      {/* O trilho: a navegação do painel, agrupada. No celular ele deita e vira
-          uma faixa que rola; a partir do notebook ele fica de pé na lateral. */}
-      <nav aria-label="Seções do painel" className="trilho ui-scroll-x">
+      <nav aria-label="Módulos" className="trilho">
         <a className="trilho__selo" href="/admin/dia" title="Barber Dock">
           <img alt="Barber Dock" height={384} src="/barber-dock.png" width={384} />
         </a>
-        {GRUPOS.map(([grupo, destinos]) => (
-          <div className="trilho__grupo" key={grupo}>
-            <p className="trilho__rotulo">{grupo}</p>
-            {destinos.map((destino) => (
-              <Item destino={destino} key={destino.href} />
-            ))}
-          </div>
+
+        {MODULOS.map((modulo) => (
+          <a
+            className="trilho__botao"
+            data-modulo={modulo.id}
+            href={modulo.telas[0]?.href ?? '/admin/dia'}
+            key={modulo.id}
+            title={modulo.nome}
+          >
+            {modulo.icone}
+            <span className="trilho__legenda">{modulo.nome}</span>
+          </a>
         ))}
       </nav>
 
-      {/* A navegação de contexto, com o nome da casa e os grupos. */}
       <aside className="contexto">
         <div className="contexto__topo">
           <p className="contexto__casa">{barbearia}</p>
           <p className="contexto__sub">Painel de gestão</p>
+        </div>
+
+        {/* Todos os blocos são renderizados; o CSS revela o do módulo aberto.
+            Não é "esconder no celular" — é condicional por seção, e vale igual
+            em qualquer largura. */}
+        <div className="contexto__lista">
+          {MODULOS.map((modulo) => (
+            <div className="contexto__bloco" data-modulo={modulo.id} key={modulo.id}>
+              <p className="contexto__grupo">{modulo.nome}</p>
+              {modulo.telas.map((tela) => (
+                <a
+                  className="contexto__link"
+                  data-para={tela.secao}
+                  href={tela.href}
+                  key={tela.href}
+                >
+                  <span className="contexto__link-nome">{tela.nome}</span>
+                  <span className="contexto__link-nota">{tela.nota}</span>
+                </a>
+              ))}
+            </div>
+          ))}
         </div>
 
         <div className="contexto__pe">
@@ -213,3 +178,10 @@ export function Casco({
     </div>
   );
 }
+
+/** As seções de cada módulo — o CSS precisa delas para acender o par certo. */
+export const SECOES_POR_MODULO: Readonly<Record<Modulo, readonly string[]>> = {
+  operacao: MODULOS[0]!.telas.map((t) => t.secao),
+  dinheiro: MODULOS[1]!.telas.map((t) => t.secao),
+  casa: MODULOS[2]!.telas.map((t) => t.secao),
+};

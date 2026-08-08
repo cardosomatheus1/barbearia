@@ -1795,6 +1795,27 @@ marca chegou e o desenho que veio com ela é escuro. Direção do cliente ganha 
 escolha do projeto. É um atributo, e os dois temas passam pela mesma verificação
 de contraste — voltar é uma linha.
 
+### O menu virou o do mock: módulos no trilho, telas no contexto
+
+A primeira versão do casco listava os onze destinos e pronto — parecia um índice,
+não um sistema. A estrutura certa é a do mock e é uma decisão de informação, não
+de enfeite: **o trilho são os três módulos** (Operação, Dinheiro, A casa) e **o
+contexto são as telas de dentro do módulo aberto**, cada uma com uma frase do que
+faz. Um link mora num lugar só.
+
+O módulo aberto acende com fundo em degradê e um filete creme→vermelho — a única
+peça da moldura que usa as duas cores da marca juntas. Quem escolhe é `:has()`
+sobre o `data-secao` que cada tela declara.
+
+Duas armadilhas no caminho, as duas de CSS gerado por script:
+
+- **`A, B, C::after` aplica o pseudo só em `C`.** O filete do item ativo só
+  aparecia na última das quinze seções. Cada seletor precisa do seu `::after`.
+- **Substituir por regex num arquivo de 3.600 linhas comeu um bloco inteiro** —
+  a regra de fundo do estado ativo, com a chave de fechamento junto. O build
+  apontou `Unexpected }` trinta linhas adiante. A saída foi reescrever o bloco do
+  casco inteiro a partir de uma marca conhecida, sem regex.
+
 ### O "R$ NaN" que estava lá desde o bloco 11
 
 Abrir o balcão num navegador com conta de verdade mostrou **R$ NaN** no total do

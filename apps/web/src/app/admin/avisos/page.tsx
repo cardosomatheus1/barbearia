@@ -104,7 +104,7 @@ export default async function AvisosPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="avisos">
         {topo}
         <h1 className="painel__titulo">Avisos</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -118,7 +118,7 @@ export default async function AvisosPage({ searchParams }: Props) {
   const { settings, log } = resposta.dados;
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="avisos">
       {topo}
 
       <h1 className="painel__titulo">Avisos ao cliente</h1>

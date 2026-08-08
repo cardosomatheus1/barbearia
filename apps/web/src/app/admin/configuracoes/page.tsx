@@ -27,7 +27,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
   const salvo = (Array.isArray(query['salvo']) ? query['salvo'][0] : query['salvo']) === '1';
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="configuracoes">
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
         <form action={acaoSair}>

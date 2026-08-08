@@ -98,7 +98,7 @@ export default async function SegurancaPage({ searchParams }: Props) {
 
   if (!mfa.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" data-secao="seguranca">
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[mfa.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
@@ -110,7 +110,7 @@ export default async function SegurancaPage({ searchParams }: Props) {
   const { ativo, pendente, obrigatorio, verificadoNestaSessao } = mfa.dados;
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" data-secao="seguranca">
       {topo}
 
       <h1 className="painel__titulo">Segundo fator</h1>

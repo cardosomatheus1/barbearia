@@ -3446,14 +3446,20 @@ main { padding-bottom: var(--space-8); }
   mask-image: linear-gradient(to bottom, black, transparent 60%);
 }
 
+
+
 /* ============================================================================
    O casco do painel — a moldura de três colunas do mock interno
    ============================================================================
 
-   Trilho de ícones, navegação de contexto e área de trabalho. No celular as
-   duas colunas laterais deitam: o trilho vira uma faixa de ícones que rola no
-   topo e o contexto vira uma faixa de links abaixo dela. Nada some — em 360px
-   não existe coluna lateral, existe conteúdo e o resto.
+   Trilho de **módulos** (três ícones), coluna de contexto com as telas de dentro
+   do módulo aberto, e a área de trabalho. Um link mora num lugar só: o trilho
+   não repete o que o contexto lista.
+
+   O que decide o que aparece é CSS, não JavaScript: cada tela declara
+   `data-secao` no próprio `<main>`, e `:has()` acende o módulo e revela o bloco
+   de contexto dele. Trocar isso por um componente de cliente custaria o primeiro
+   JavaScript do produto só para saber em que página estamos.
    ============================================================================ */
 
 .casco {
@@ -3463,24 +3469,24 @@ main { padding-bottom: var(--space-8); }
   min-width: 0;
 }
 
-/* -- o trilho ---------------------------------------------------------------- */
+/* -- o trilho de módulos ----------------------------------------------------- */
 
 .trilho {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  background: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface));
   min-width: 0;
 }
 .trilho__selo {
-  flex: none;
   display: grid;
   place-items: center;
   width: var(--size-touch);
   height: var(--size-touch);
-  margin-right: var(--space-2);
+  border-radius: var(--radius-md);
 }
 .trilho__selo img {
   width: 2.25rem;
@@ -3489,52 +3495,109 @@ main { padding-bottom: var(--space-8); }
   max-width: 100%;
   object-fit: contain;
 }
-.trilho__grupo { display: flex; align-items: center; gap: var(--space-1); flex: none; }
-/* O rótulo do grupo só cabe quando o trilho está de pé. Na faixa deitada ele
-   vira um separador — o texto continua no DOM, e é ele que separa os blocos. */
-.trilho__rotulo {
-  margin: 0 var(--space-2) 0 var(--space-3);
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  opacity: 0.6;
-}
 .trilho__botao {
-  flex: none;
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   min-height: var(--size-touch);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
+  text-decoration: none;
   white-space: nowrap;
-  transition: background var(--motion-fast) var(--motion-ease);
+  min-width: 0;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
 }
-.trilho__botao,
-.trilho__botao:hover { text-decoration: none; }
 .trilho__botao:hover {
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
-.trilho__botao svg { flex: none; color: var(--color-accent); opacity: 0.7; }
-.trilho__botao:hover svg { opacity: 1; }
+.trilho__botao svg { flex: none; opacity: 0.8; }
+.trilho__legenda {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: var(--font-weight-bold);
+}
 
-/* -- a navegação de contexto ------------------------------------------------- */
+/* O módulo aberto: fundo em degradê e o filete creme→vermelho. É o estado ativo
+   do mock, e a única peça da moldura que usa as duas cores da marca juntas. */
+.casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao'],
+.casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao'],
+.casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao'],
+.casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao'],
+.casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro'],
+.casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro'],
+.casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro'],
+.casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro'],
+.casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa'],
+.casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa'],
+.casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa'],
+.casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa'],
+.casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa'],
+.casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa'],
+.casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa'] {
+  color: var(--color-accent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 10%, transparent),
+    color-mix(in srgb, var(--color-danger) 6%, transparent)
+  );
+  border-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao'] svg,
+.casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao'] svg,
+.casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao'] svg,
+.casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao'] svg,
+.casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro'] svg,
+.casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro'] svg,
+.casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro'] svg,
+.casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro'] svg,
+.casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa'] svg,
+.casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa'] svg,
+.casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa'] svg,
+.casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa'] svg,
+.casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa'] svg,
+.casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa'] svg,
+.casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa'] svg { opacity: 1; }
+.casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao']::after,
+.casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao']::after,
+.casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao']::after,
+.casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao']::after,
+.casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro']::after,
+.casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro']::after,
+.casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro']::after,
+.casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro']::after,
+.casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa']::after,
+.casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa']::after,
+.casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa']::after,
+.casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa']::after,
+.casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa']::after,
+.casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa']::after,
+.casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa']::after {
+  content: '';
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--color-accent), var(--color-danger));
+}
 
-/* A coluna de contexto não repete a navegação: ela diz de que casa é a tela e
-   quem está logado. No celular vira uma linha só, acima do trabalho. */
+/* -- a coluna de contexto ---------------------------------------------------- */
+
 .contexto {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: var(--space-3);
-  flex-wrap: wrap;
   padding: var(--space-3);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-raised);
@@ -3551,12 +3614,97 @@ main { padding-bottom: var(--space-8); }
   overflow-wrap: anywhere;
 }
 .contexto__sub {
-  margin: var(--space-1) 0 0;
+  margin: 2px 0 0;
   font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   color: var(--color-text-muted);
 }
+
+.contexto__lista { grid-column: 1 / -1; min-width: 0; }
+
+/* Só o bloco do módulo aberto aparece. Condicional por seção, não por largura:
+   a mesma regra vale em 360px e em 1440px. */
+.contexto__bloco { display: none; }
+.casco:has([data-secao='dia']) .contexto__bloco[data-modulo='operacao'],
+.casco:has([data-secao='agenda']) .contexto__bloco[data-modulo='operacao'],
+.casco:has([data-secao='fila']) .contexto__bloco[data-modulo='operacao'],
+.casco:has([data-secao='avisos']) .contexto__bloco[data-modulo='operacao'],
+.casco:has([data-secao='caixa']) .contexto__bloco[data-modulo='dinheiro'],
+.casco:has([data-secao='comanda']) .contexto__bloco[data-modulo='dinheiro'],
+.casco:has([data-secao='fiado']) .contexto__bloco[data-modulo='dinheiro'],
+.casco:has([data-secao='comissao']) .contexto__bloco[data-modulo='dinheiro'],
+.casco:has([data-secao='painel']) .contexto__bloco[data-modulo='casa'],
+.casco:has([data-secao='cadastro']) .contexto__bloco[data-modulo='casa'],
+.casco:has([data-secao='equipe']) .contexto__bloco[data-modulo='casa'],
+.casco:has([data-secao='importar']) .contexto__bloco[data-modulo='casa'],
+.casco:has([data-secao='trilha']) .contexto__bloco[data-modulo='casa'],
+.casco:has([data-secao='seguranca']) .contexto__bloco[data-modulo='casa'],
+.casco:has([data-secao='configuracoes']) .contexto__bloco[data-modulo='casa'],
+.casco:not(:has([data-secao])) .contexto__bloco[data-modulo='operacao'] {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  min-width: 0;
+}
+
+/* O rótulo do módulo e a nota de cada tela existem em toda largura. Sumir no
+   celular seria decidir que não importavam. */
+.contexto__grupo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+.contexto__link {
+  flex: none;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-height: var(--size-touch);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+.contexto__link:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+.contexto__link-nome { font-size: var(--font-size-sm); white-space: nowrap; }
+.contexto__link-nota {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.casco:has([data-secao='dia']) .contexto__link[data-para='dia'],
+.casco:has([data-secao='agenda']) .contexto__link[data-para='agenda'],
+.casco:has([data-secao='fila']) .contexto__link[data-para='fila'],
+.casco:has([data-secao='avisos']) .contexto__link[data-para='avisos'],
+.casco:has([data-secao='caixa']) .contexto__link[data-para='caixa'],
+.casco:has([data-secao='comanda']) .contexto__link[data-para='comanda'],
+.casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
+.casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
+.casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
+.casco:has([data-secao='cadastro']) .contexto__link[data-para='cadastro'],
+.casco:has([data-secao='equipe']) .contexto__link[data-para='equipe'],
+.casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
+.casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
+.casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca'],
+.casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes'] {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
 .contexto__pe { min-width: 0; }
 .contexto__quem {
   display: flex;
@@ -3596,8 +3744,6 @@ main { padding-bottom: var(--space-8); }
   min-width: 0;
   overflow-x: clip;
 }
-/* A malha fina do estaleiro, como no mock. Vive aqui e não mais em
-   `.painel__conteudo`, que é só um dos recipientes de tela. */
 .trabalho::before {
   content: '';
   position: absolute;
@@ -3612,63 +3758,130 @@ main { padding-bottom: var(--space-8); }
 }
 .trabalho > * { position: relative; z-index: 1; }
 
-/* O item ativo vem do `data-secao` que cada tela declara no próprio `<main>`.
-   `:has()` no lugar de um componente de cliente só para ler a rota. */
-.casco:has([data-secao='dia']) [data-para='dia'],
-.casco:has([data-secao='agenda']) [data-para='agenda'],
-.casco:has([data-secao='fila']) [data-para='fila'],
-.casco:has([data-secao='caixa']) [data-para='caixa'],
-.casco:has([data-secao='comanda']) [data-para='comanda'],
-.casco:has([data-secao='fiado']) [data-para='fiado'],
-.casco:has([data-secao='comissao']) [data-para='comissao'],
-.casco:has([data-secao='painel']) [data-para='painel'],
-.casco:has([data-secao='cadastro']) [data-para='cadastro'],
-.casco:has([data-secao='equipe']) [data-para='equipe'],
-.casco:has([data-secao='importar']) [data-para='importar'],
-.casco:has([data-secao='trilha']) [data-para='trilha'] {
-  color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
-  border-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+/* A barra de cada tela vira a barra do mock: gruda no topo, fundo translúcido e
+   a linha embaixo. Antes era um cabeçalho solto no meio do conteúdo. */
+.casco .painel__topo {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(18px);
 }
 
-/* A partir do tablet o casco fica de pé: duas colunas fixas e o trabalho rola
-   sozinho, que é o comportamento do mock — a moldura não sai da tela. */
+/* A partir do notebook o casco fica de pé: trilho estreito de ícones, contexto
+   em coluna com as telas listadas, e o trabalho rolando sozinho. */
 @media (min-width: 1024px) {
   .casco {
     grid-template-rows: none;
-    grid-template-columns: 11.5rem 13rem 1fr;
+    grid-template-columns: 5.25rem 15rem 1fr;
     height: 100dvh;
     overflow: hidden;
   }
+
   .trilho {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-1);
+    grid-template-columns: none;
+    grid-auto-rows: max-content;
+    justify-items: center;
+    align-content: start;
+    gap: var(--space-2);
     padding: var(--space-3) var(--space-2);
     border-bottom: 0;
     border-right: 1px solid var(--color-border);
-    overflow: visible;
   }
-  .trilho__selo { width: auto; margin: 0 auto var(--space-3); }
-  .trilho__grupo { flex-direction: column; align-items: stretch; gap: 2px; }
-  .trilho__rotulo { margin: var(--space-4) var(--space-2) var(--space-1); }
-  .trilho__botao { padding: 0 var(--space-2); }
-  .trilho__legenda { font-size: var(--font-size-xs); }
+  .trilho__selo { width: 3rem; height: 3rem; margin-bottom: var(--space-3); }
+  .trilho__selo img { width: 2.75rem; height: 2.75rem; }
+  .trilho__botao {
+    width: 3rem;
+    height: 3rem;
+    min-height: 3rem;
+    padding: 0;
+    border-radius: var(--radius-lg);
+  }
+  .trilho__legenda {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao']::after,
+  .casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao']::after,
+  .casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao']::after,
+  .casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao']::after,
+  .casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro']::after,
+  .casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro']::after,
+  .casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro']::after,
+  .casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro']::after,
+  .casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa']::after,
+  .casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa']::after,
+  .casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa']::after,
+  .casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa']::after,
+  .casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa']::after,
+  .casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa']::after,
+  .casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa']::after {
+    left: calc(var(--space-3) * -1);
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    width: 3px;
+    height: 1.375rem;
+    transform: translateY(-50%);
+    background: linear-gradient(180deg, var(--color-accent), var(--color-danger));
+  }
+
   .contexto {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: space-between;
-    flex-wrap: nowrap;
-    padding: var(--space-4) var(--space-3);
+    grid-template-columns: none;
+    grid-template-rows: auto 1fr auto;
+    gap: 0;
+    padding: 0;
     border-bottom: 0;
     border-right: 1px solid var(--color-border);
     overflow: hidden;
   }
+  .contexto__topo {
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .contexto__lista { padding: var(--space-2); overflow-y: auto; }
+  .casco:has([data-secao='dia']) .contexto__bloco[data-modulo='operacao'],
+  .casco:has([data-secao='agenda']) .contexto__bloco[data-modulo='operacao'],
+  .casco:has([data-secao='fila']) .contexto__bloco[data-modulo='operacao'],
+  .casco:has([data-secao='avisos']) .contexto__bloco[data-modulo='operacao'],
+  .casco:has([data-secao='caixa']) .contexto__bloco[data-modulo='dinheiro'],
+  .casco:has([data-secao='comanda']) .contexto__bloco[data-modulo='dinheiro'],
+  .casco:has([data-secao='fiado']) .contexto__bloco[data-modulo='dinheiro'],
+  .casco:has([data-secao='comissao']) .contexto__bloco[data-modulo='dinheiro'],
+  .casco:has([data-secao='painel']) .contexto__bloco[data-modulo='casa'],
+  .casco:has([data-secao='cadastro']) .contexto__bloco[data-modulo='casa'],
+  .casco:has([data-secao='equipe']) .contexto__bloco[data-modulo='casa'],
+  .casco:has([data-secao='importar']) .contexto__bloco[data-modulo='casa'],
+  .casco:has([data-secao='trilha']) .contexto__bloco[data-modulo='casa'],
+  .casco:has([data-secao='seguranca']) .contexto__bloco[data-modulo='casa'],
+  .casco:has([data-secao='configuracoes']) .contexto__bloco[data-modulo='casa'],
+  .casco:not(:has([data-secao])) .contexto__bloco[data-modulo='operacao'] {
+    flex-direction: column;
+    gap: 2px;
+    overflow: visible;
+  }
+  .contexto__grupo { margin: var(--space-3) var(--space-2) var(--space-2); }
+  .contexto__link {
+    border-color: transparent;
+    background: transparent;
+    padding: var(--space-2) var(--space-3);
+  }
+  .contexto__link:hover { background: var(--color-surface-hover); border-color: transparent; }
+  .contexto__link-nome { white-space: normal; }
+  .contexto__link-nota { white-space: normal; }
+
+  .contexto__pe {
+    padding: var(--space-3);
+    border-top: 1px solid var(--color-border);
+  }
+
   .trabalho { overflow: auto; }
-  /* Dentro do casco a tela já tem duas colunas de moldura à esquerda; manter o
-     conteúdo em 46rem deixaria um terço do notebook vazio. O teto sobe, mas não
-     some: texto corrido continua limitado por `--size-readable` nas telas que o
-     usam. */
   .casco .painel__conteudo { max-width: 68rem; }
   .casco .painel__entrada { max-width: 30rem; }
 }
