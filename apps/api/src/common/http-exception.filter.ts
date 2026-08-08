@@ -9,7 +9,11 @@ import type { Response } from 'express';
 import { DomainError } from './errors.js';
 
 interface ErrorBody {
-  readonly error: { readonly code: string; readonly message: string };
+  readonly error: {
+    readonly code: string;
+    readonly message: string;
+    readonly detail?: unknown;
+  };
 }
 
 /**
@@ -28,7 +32,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof DomainError) {
       response.status(exception.status).json({
-        error: { code: exception.code, message: exception.message },
+        error: {
+          code: exception.code,
+          message: exception.message,
+          ...(exception.detail !== undefined ? { detail: exception.detail } : {}),
+        },
       } satisfies ErrorBody);
       return;
     }

@@ -106,7 +106,9 @@ externa.** Na prática: quase todos.
 
 ### Sempre
 
-- Segredo nunca no repositório. Configuração por variável de ambiente.
+- Segredo nunca no repositório. Configuração por variável de ambiente. Variável
+  que protege dado (`STAFF_EMAIL_PEPPER`) falha alto quando ausente — nunca cai
+  num padrão fraco em silêncio.
 - Sem SQL concatenado com entrada de usuário — parâmetro sempre.
 - Id público é UUID/ULID. Id sequencial em URL permite enumerar a base.
 - Erro para o cliente é genérico; o detalhe vai para o log.
@@ -154,10 +156,17 @@ rode `/security-review` antes do commit.**
 ### Direção de dependência
 
 ```
-core  ←  scheduling  ←  api  ←  web
-  ↑          ↓
-  └────── db (Prisma/SQL)
+                 ┌── scheduling ──┐
+core  ←──────────┤                ├──  api  ←  web
+                 ├── identity ────┤
+                 └── onboarding ──┘
+  ↑                      ↓
+  └───────────────── db (Prisma/SQL)
 ```
+
+`onboarding` depende de `scheduling` e `identity` porque a etapa final precisa
+provar que a barbearia tem grade — e é isso que separa um formulário de um
+produto. A seta nunca volta: `scheduling` não sabe que existe onboarding.
 
 - **`packages/core` não depende de nada.** Sem banco, sem rede, sem relógio, sem
   framework. É lógica pura e é onde mora a regra de negócio. Há teste que falha
@@ -356,6 +365,9 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Slug | permanente; renomear adiciona em `tenant_slugs`, nunca substitui |
 | Status de cancelamento | `cancelled_customer` ≠ `cancelled_business` — só o primeiro pune o cliente |
 | Sessão do cliente no navegador | cookie `httpOnly`, um por barbearia no nome **e** no caminho |
+| Sessão do gestor | cookie `httpOnly` `sameSite=strict` em `/admin`; token `<tenantId>.<segredo>` |
+| Senha | scrypt do `node:crypto`, parâmetros dentro do hash; nunca uma dependência nova para isso |
+| E-mail em tabela sem RLS | HMAC com segredo de ambiente, nunca em claro |
 | Permissão exibida na tela | sai da mesma função que a API aplica — nunca recalculada na view |
 
 ---

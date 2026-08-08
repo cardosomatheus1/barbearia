@@ -9,6 +9,15 @@ export class DomainError extends Error {
     readonly code: string,
     readonly status: number,
     message: string,
+    /**
+     * Detalhe estruturado do que o **próprio cliente** enviou de errado.
+     *
+     * Só para isso. "Este combo declara 40 min e as partes somam 55" é a
+     * informação sem a qual a tela só consegue dizer "dados inválidos" e o
+     * usuário não sabe o que corrigir. Nada de origem interna entra aqui — a
+     * regra de não vazar schema continua valendo.
+     */
+    readonly detail?: unknown,
   ) {
     super(message);
     this.name = 'DomainError';

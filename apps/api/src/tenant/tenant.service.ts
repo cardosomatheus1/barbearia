@@ -47,6 +47,21 @@ export class TenantService {
     return tenantId;
   }
 
+  /**
+   * Esquece um slug.
+   *
+   * O cache guarda também a ausência — sem isso, varrer slugs aleatórios geraria
+   * uma consulta por tentativa. O efeito colateral: um slug consultado **antes**
+   * de existir fica sessenta segundos respondendo "não existe", inclusive logo
+   * depois de a barbearia publicar. Quem acabou de pôr o link no ar e o abre
+   * veria a própria página em 404.
+   *
+   * Chamado quando um slug nasce (cadastro) e quando vai ao ar (publicação).
+   */
+  forget(slug: string): void {
+    this.cache.delete(slug.toLowerCase());
+  }
+
   /** Nome do estabelecimento, para compor a mensagem do código. */
   async nameOf(tenantId: string): Promise<string> {
     const rows = await getPrisma().$queryRaw<{ name: string }[]>`

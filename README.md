@@ -300,18 +300,67 @@ exatamente o que a gravação faz. Com a estratégia `anchored` isso não é det
 o horário atual ancorava a grade pública, a gravação recomeçava do início da
 jornada, e **todo** horário oferecido era recusado.
 
+## Conta de gestor e onboarding
+
+Até o bloco 9 só o cliente final tinha identidade. Catálogo, equipe e jornada
+entravam por SQL — o que faz um produto instalado à mão, não um SaaS.
+
+**A conta cria a própria barbearia sem caminho privilegiado.** A política de
+`tenants` compara o `id` com `app.tenant_id`, então `withTenant(novoId)` deixa o
+role restrito inserir o próprio tenant. Não existe `BYPASSRLS` em lugar nenhum
+do fluxo, e há teste que consulta sem filtro e espera uma linha só.
+
+**Senha em scrypt do próprio Node**, com os parâmetros dentro do hash
+(`scrypt$N$r$p$salt$derivada`) — subir o custo depois não invalida senha
+cadastrada. Argon2id seria a escolha de manual, mas entra como dependência
+nativa compilada; scrypt entrega a mesma classe de proteção sem ampliar a
+superfície de build.
+
+**Login por e-mail acontece antes de existir tenant no contexto**, e a RLS não
+devolve linha sem ele. Daí `staff_directory`, um índice entre tenants — que
+guarda HMAC do e-mail, não o endereço. Em claro, ele seria a lista de donos de
+barbearia da plataforma, pronta para spam e engenharia social.
+
+**As seis etapas gravam uma a uma.** Quem cadastra faz isso no celular entre um
+cliente e outro; abandonar no passo 4 não pode custar os passos 1 a 3. O
+contador só sobe, então voltar para corrigir o endereço não reabre o cadastro.
+
+**O catálogo sugerido resolve o defeito D4 na origem.** Duração e buffer já vêm
+coerentes, e o combo declara a soma real das partes. Se o dono encurtar um combo
+abaixo do que as partes levam, a API recusa e diz **qual** — foi exatamente
+assim que a agenda do sistema analisado nasceu devendo 15 minutos por cliente.
+
+**Não publica pela metade:** sem serviço, sem equipe ou sem jornada, o link não
+vai ao ar. Um link que abre "nenhum horário disponível" é pior que link nenhum —
+o cliente conclui que a barbearia fechou e não volta.
+
+### Duas coisas que o cadastro aberto tornou perigosas
+
+O `/security-review` apontou as duas, e as duas nasceram do mesmo fato: campos
+que antes só entravam por SQL passaram a entrar por HTTP, de qualquer um.
+
+**O JSON-LD virava injeção de script.** `JSON.stringify` escapa aspas, mas não
+escapa `<` — e o bloco é escrito com `dangerouslySetInnerHTML` dentro de
+`<script>`. Um nome de barbearia com `</script><script>…` fechava o bloco e
+executava na origem verdadeira da plataforma. Enquanto o catálogo só entrava por
+SQL era teórico; com o cadastro aberto virou uma requisição. Agora passa por
+`jsonLdScript`, que escapa `<`, `>`, `&` e os separadores de linha, com teste que
+alimenta `</script>` e confere que o JSON continua idêntico ao ler de volta.
+
+**O cadastro dizia quem já é cliente da plataforma.** E-mail livre respondia 201,
+e-mail já cadastrado respondia 409 — oráculo para montar lista de donos de
+barbearia e mandar phishing. É a mesma lista que o HMAC em `staff_directory`
+existe para proteger, entregue por HTTP sem precisar de dump. Agora as duas
+respostas são idênticas (202, mesmo corpo) e nenhuma traz sessão; o passo
+seguinte é o login, nos dois casos. Custa uma tela a mais e fecha o oráculo.
+
 ## Próximos passos
 
-Bloco 10 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 11 de 76 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Onboarding da barbearia em seis etapas: é o que transforma o produto em SaaS
-utilizável sem alguém do time cadastrar dados à mão.
+Admin: CRUD de catálogo, equipe, jornadas e recursos. O onboarding cria o
+essencial; o dia a dia precisa editar.
 
-**Lacunas conhecidas** — todas com dependência e bloco na tabela
-[Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada). O que
-falta em cada uma é **tela de cadastro no admin**, não mecanismo:
-
-- Bloqueio pontual, combo e janela de alteração funcionam ponta a ponta, mas o
-  dado hoje só entra por SQL. As telas vêm nos blocos 10 e 12.
-- "Sair" encerra a sessão deste aparelho. Não há listagem de sessões ativas — e
-  não há bloco para ela: o cliente de barbearia usa um celular só.
+**Lacunas conhecidas** estão na tabela
+[Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada
+uma com o que já existe, o que falta e em qual bloco entra.

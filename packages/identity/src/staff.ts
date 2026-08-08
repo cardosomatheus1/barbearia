@@ -1,0 +1,374 @@
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { withTenant, type TransactionClient } from '@barbearia/db';
+import { normalizePhone, InvalidPhoneError } from '@barbearia/core';
+import { emailKey, hashPassword, verifyPassword } from './password.js';
+
+/**
+ * Identidade de quem administra a barbearia.
+ *
+ * Diferente do cliente final em tudo que importa: e-mail e senha em vez de
+ * código no WhatsApp, sessão longa em vez de curta, e um vínculo com o tenant
+ * que precisa existir **antes** de qualquer consulta — a RLS não devolve linha
+ * sem `app.tenant_id` fixado.
+ *
+ * Daí as duas peças incomuns deste arquivo: o índice `staff_directory`, que
+ * resolve e-mail para tenant sem expor endereço, e o token de sessão que carrega
+ * o tenant em claro no prefixo.
+ */
+
+export type StaffFailure =
+  | 'invalid_credentials'
+  | 'invalid_session'
+  | 'slug_taken'
+  | 'invalid_phone'
+  | 'weak_password';
+
+export class StaffError extends Error {
+  constructor(readonly code: StaffFailure, message: string) {
+    super(message);
+    this.name = 'StaffError';
+  }
+}
+
+/** Sessão de gestor dura o expediente, não o mês: é acesso a dinheiro e a base. */
+const SESSION_DAYS = 14;
+const MIN_PASSWORD = 10;
+
+function pepper(): string {
+  const value = process.env['STAFF_EMAIL_PEPPER'];
+  if (!value) {
+    throw new Error('STAFF_EMAIL_PEPPER é obrigatória — sem ela o índice de login fica em claro');
+  }
+  return value;
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * Token de sessão: `<tenantId>.<segredo>`.
+ *
+ * O tenant vai em claro de propósito. Resolver a sessão exige consultar
+ * `staff_sessions`, que tem RLS — e fixar o tenant exige saber qual é antes de
+ * ler qualquer linha. A alternativa seria um segundo índice entre tenants, mais
+ * superfície para o mesmo resultado.
+ *
+ * Não enfraquece nada: o tenant já aparece na URL do admin, e quem autentica é
+ * o segredo, que tem 256 bits e é guardado só como hash.
+ */
+function mintToken(tenantId: string): { token: string; hash: string } {
+  const secret = randomBytes(32).toString('base64url');
+  return { token: `${tenantId}.${secret}`, hash: sha256(secret) };
+}
+
+function splitToken(token: string): { tenantId: string; hash: string } | null {
+  const separador = token.indexOf('.');
+  if (separador <= 0) return null;
+  const tenantId = token.slice(0, separador);
+  const secret = token.slice(separador + 1);
+  if (!/^[0-9a-f-]{36}$/i.test(tenantId) || secret.length < 32) return null;
+  return { tenantId, hash: sha256(secret) };
+}
+
+/**
+ * Slug a partir do nome da barbearia.
+ *
+ * Permanente depois de publicado — o link na bio do Instagram não pode quebrar
+ * (SPEC Parte 1 §1.5). Renomear adiciona em `tenant_slugs`, nunca substitui.
+ */
+export function slugify(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+async function freeSlug(tx: TransactionClient, base: string): Promise<string> {
+  const raiz = base || 'barbearia';
+  // Poucas tentativas com sufixo legível; depois disso, sufixo aleatório. Um
+  // laço aberto sobre nomes muito comuns viraria varredura.
+  for (let i = 0; i < 20; i += 1) {
+    const candidato = i === 0 ? raiz : `${raiz}-${i + 1}`;
+    const existe = await tx.$queryRaw<{ slug: string }[]>`
+      SELECT slug FROM tenant_slugs WHERE slug = ${candidato}
+    `;
+    if (existe.length === 0) return candidato;
+  }
+  return `${raiz}-${randomBytes(3).toString('hex')}`;
+}
+
+export interface SignUpRequest {
+  readonly name: string;
+  readonly email: string;
+  readonly password: string;
+  readonly phone: string;
+  readonly businessName: string;
+  readonly userAgent?: string;
+  readonly ip?: string;
+}
+
+export interface StaffSession {
+  readonly token: string;
+  readonly expiresAt: string;
+  readonly tenantId: string;
+  readonly slug: string;
+  readonly staffUserId: string;
+  readonly name: string;
+  readonly role: string;
+}
+
+/**
+ * Resultado do cadastro.
+ *
+ * `created: false` quando o e-mail já tem conta. **Não é erro** e o chamador não
+ * deve tratá-lo como tal: responder diferente nos dois casos transformaria o
+ * cadastro em oráculo de "este e-mail é dono de barbearia na plataforma" —
+ * exatamente a lista que o HMAC em `staff_directory` existe para proteger.
+ *
+ * Quem já tem conta simplesmente entra com a senha que já tinha.
+ */
+export type SignUpResult =
+  | { readonly created: true; readonly session: StaffSession }
+  | { readonly created: false };
+
+/**
+ * Cria a conta e a barbearia, numa transação só.
+ *
+ * O tenant é gerado aqui e fixado em `app.tenant_id` antes do primeiro INSERT:
+ * a política de `tenants` compara `id` com a configuração, então o próprio role
+ * da aplicação cria o próprio tenant sem nenhum caminho privilegiado. Não existe
+ * `BYPASSRLS` em lugar nenhum deste fluxo.
+ *
+ * A unidade nasce junto. Barbearia sem unidade não tem agenda, e deixar isso
+ * para uma etapa seguinte criaria um estado em que o produto não funciona.
+ */
+export async function signUpOwner(request: SignUpRequest): Promise<SignUpResult> {
+  if (request.password.length < MIN_PASSWORD) {
+    throw new StaffError(
+      'weak_password',
+      `A senha precisa de pelo menos ${MIN_PASSWORD} caracteres.`,
+    );
+  }
+
+  let phone: string;
+  try {
+    phone = normalizePhone(request.phone);
+  } catch (error) {
+    if (error instanceof InvalidPhoneError) {
+      throw new StaffError('invalid_phone', 'Confira o celular: precisa ter DDD e nove dígitos.');
+    }
+    throw error;
+  }
+
+  const chave = emailKey(request.email, pepper());
+  const tenantId = randomUUID();
+  const { token, hash } = mintToken(tenantId);
+  const senha = await hashPassword(request.password);
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
+
+  return withTenant(tenantId, async (tx) => {
+    // O índice é consultado antes de gravar qualquer coisa: e-mail já usado não
+    // pode deixar meia barbearia criada para trás.
+    const jaExiste = await tx.$queryRaw<{ tenant_id: string }[]>`
+      SELECT tenant_id FROM staff_directory WHERE email_key = ${chave}
+    `;
+    // O scrypt (~100 ms) já foi pago acima, **antes** deste desvio, e domina o
+    // tempo dos dois caminhos. Derivar de novo aqui inverteria o oráculo em vez
+    // de fechá-lo: o e-mail já cadastrado passaria a responder mais devagar.
+    if (jaExiste.length > 0) return { created: false };
+
+    const slug = await freeSlug(tx, slugify(request.businessName));
+
+    await tx.$executeRaw`
+      INSERT INTO tenants (id, name) VALUES (${tenantId}::uuid, ${request.businessName})
+    `;
+    await tx.$executeRaw`
+      INSERT INTO tenant_slugs (slug, tenant_id, is_primary)
+      VALUES (${slug}, ${tenantId}::uuid, true)
+    `;
+    await tx.$executeRaw`
+      INSERT INTO locations (tenant_id, name) VALUES (${tenantId}::uuid, ${request.businessName})
+    `;
+
+    const criado = await tx.$queryRaw<{ id: string }[]>`
+      INSERT INTO staff_users (tenant_id, name, email, phone_e164, password_hash, role)
+      VALUES (${tenantId}::uuid, ${request.name}, ${request.email}, ${phone}, ${senha}, 'owner')
+      RETURNING id
+    `;
+    const staffUserId = criado[0]?.id;
+    if (!staffUserId) throw new Error('INSERT de staff_users não devolveu id');
+
+    await tx.$executeRaw`
+      INSERT INTO staff_directory (email_key, tenant_id, staff_user_id)
+      VALUES (${chave}, ${tenantId}::uuid, ${staffUserId}::uuid)
+    `;
+    await tx.$executeRaw`
+      INSERT INTO staff_sessions (tenant_id, staff_user_id, token_hash, user_agent, ip, expires_at)
+      VALUES (${tenantId}::uuid, ${staffUserId}::uuid, ${hash},
+              ${request.userAgent ?? null}, ${request.ip ?? null}::inet, ${expiresAt})
+    `;
+
+    return {
+      created: true,
+      session: {
+        token,
+        expiresAt: expiresAt.toISOString(),
+        tenantId,
+        slug,
+        staffUserId,
+        name: request.name,
+        role: 'owner',
+      },
+    };
+  });
+}
+
+export interface LoginRequest {
+  readonly email: string;
+  readonly password: string;
+  readonly userAgent?: string;
+  readonly ip?: string;
+}
+
+/**
+ * Entra com e-mail e senha.
+ *
+ * Recusa sempre com o mesmo código e a mesma mensagem, exista ou não a conta:
+ * distinguir transformaria o login em oráculo de "este e-mail é cliente da
+ * plataforma" — a mesma regra que vale para o OTP do cliente.
+ */
+export async function staffLogin(request: LoginRequest): Promise<StaffSession> {
+  const chave = emailKey(request.email, pepper());
+
+  const destino = await withTenant(
+    // Consulta ao índice, que não tem escopo de tenant. O UUID nulo deixa a
+    // política das outras tabelas negando tudo enquanto isto roda.
+    '00000000-0000-0000-0000-000000000000',
+    async (tx) => {
+      const linhas = await tx.$queryRaw<{ tenant_id: string; staff_user_id: string }[]>`
+        SELECT tenant_id, staff_user_id FROM staff_directory WHERE email_key = ${chave}
+      `;
+      return linhas[0] ?? null;
+    },
+  );
+
+  if (!destino) {
+    // Deriva mesmo assim para não responder mais rápido quando a conta não
+    // existe: a diferença de tempo denunciaria quais e-mails têm cadastro.
+    await hashPassword(request.password);
+    throw new StaffError('invalid_credentials', 'E-mail ou senha incorretos.');
+  }
+
+  return withTenant(destino.tenant_id, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { id: string; name: string; role: string; password_hash: string; active: boolean }[]
+    >`
+      SELECT id, name, role, password_hash, active
+      FROM staff_users WHERE id = ${destino.staff_user_id}::uuid
+    `;
+    const usuario = linhas[0];
+    if (!usuario) throw new StaffError('invalid_credentials', 'E-mail ou senha incorretos.');
+
+    const conferido = await verifyPassword(request.password, usuario.password_hash);
+    if (!conferido.valid || !usuario.active) {
+      throw new StaffError('invalid_credentials', 'E-mail ou senha incorretos.');
+    }
+
+    // Custo do hash subiu desde o cadastro: regrava agora, que é a única hora em
+    // que a senha em claro está disponível.
+    if (conferido.needsRehash) {
+      const novo = await hashPassword(request.password);
+      await tx.$executeRaw`
+        UPDATE staff_users SET password_hash = ${novo}, updated_at = now()
+        WHERE id = ${usuario.id}::uuid
+      `;
+    }
+
+    const slugs = await tx.$queryRaw<{ slug: string }[]>`
+      SELECT slug FROM tenant_slugs
+      WHERE tenant_id = ${destino.tenant_id}::uuid
+      ORDER BY is_primary DESC, created_at
+      LIMIT 1
+    `;
+
+    const { token, hash } = mintToken(destino.tenant_id);
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
+
+    await tx.$executeRaw`
+      INSERT INTO staff_sessions (tenant_id, staff_user_id, token_hash, user_agent, ip, expires_at)
+      VALUES (${destino.tenant_id}::uuid, ${usuario.id}::uuid, ${hash},
+              ${request.userAgent ?? null}, ${request.ip ?? null}::inet, ${expiresAt})
+    `;
+    await tx.$executeRaw`
+      UPDATE staff_users SET last_login_at = now() WHERE id = ${usuario.id}::uuid
+    `;
+
+    return {
+      token,
+      expiresAt: expiresAt.toISOString(),
+      tenantId: destino.tenant_id,
+      slug: slugs[0]?.slug ?? '',
+      staffUserId: usuario.id,
+      name: usuario.name,
+      role: usuario.role,
+    };
+  });
+}
+
+export interface AuthenticatedStaff {
+  readonly tenantId: string;
+  readonly staffUserId: string;
+  readonly sessionId: string;
+  readonly name: string;
+  readonly role: string;
+}
+
+export async function resolveStaffSession(token: string): Promise<AuthenticatedStaff> {
+  const partes = splitToken(token);
+  if (!partes) throw new StaffError('invalid_session', 'Sessão inválida');
+
+  return withTenant(partes.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { id: string; staff_user_id: string; token_hash: string; name: string; role: string }[]
+    >`
+      SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role
+      FROM staff_sessions s
+      JOIN staff_users u ON u.id = s.staff_user_id
+      WHERE s.token_hash = ${partes.hash}
+        AND s.revoked_at IS NULL
+        AND s.expires_at > now()
+        AND u.active
+    `;
+    const sessao = linhas[0];
+    if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
+
+    // A busca já foi por igualdade de hash; a comparação constante existe para
+    // que o caminho não dependa de otimização do banco.
+    const esperado = Buffer.from(sessao.token_hash, 'hex');
+    const recebido = Buffer.from(partes.hash, 'hex');
+    if (esperado.length !== recebido.length || !timingSafeEqual(esperado, recebido)) {
+      throw new StaffError('invalid_session', 'Sessão inválida');
+    }
+
+    return {
+      tenantId: partes.tenantId,
+      staffUserId: sessao.staff_user_id,
+      sessionId: sessao.id,
+      name: sessao.name,
+      role: sessao.role,
+    };
+  });
+}
+
+export async function revokeStaffSession(tenantId: string, sessionId: string): Promise<void> {
+  await withTenant(tenantId, async (tx) => {
+    await tx.$executeRaw`
+      UPDATE staff_sessions SET revoked_at = now()
+      WHERE id = ${sessionId}::uuid AND revoked_at IS NULL
+    `;
+  });
+}

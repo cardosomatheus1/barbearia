@@ -5,6 +5,7 @@ coverage/
 *.tsbuildinfo
 .env
 .env.*
+# A lista de variáveis precisa ser versionada; os valores é que não.
 !.env.example
 .turbo/
 packages/db/prisma/generated/

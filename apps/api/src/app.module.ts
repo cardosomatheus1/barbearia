@@ -8,6 +8,8 @@ import {
   GuestAppointmentsController,
 } from './booking/appointments.controller.js';
 import { AuthController, SessionController } from './auth/auth.controller.js';
+import { OnboardingController, StaffAuthController } from './admin/admin.controller.js';
+import { StaffGuard } from './admin/staff.guard.js';
 import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
 import { ConsoleMessagingProvider } from '@barbearia/identity';
@@ -20,11 +22,14 @@ import { TenantService } from './tenant/tenant.service.js';
     BookingController,
     AuthController,
     SessionController,
+    StaffAuthController,
+    OnboardingController,
     GuestAppointmentsController,
     AppointmentsController,
   ],
   providers: [
     TenantService,
+    StaffGuard,
     CustomerGuard,
     // Provedor real do WhatsApp entra no bloco 52. Até lá, o de console — que
     // nunca imprime o código.

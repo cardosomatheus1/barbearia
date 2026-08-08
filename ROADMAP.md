@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 9 de 76 blocos.**
+**Status: 10 de 76 blocos.**
 
 ---
 
@@ -53,11 +53,15 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
-| Bloqueio pontual do dia (dentista às 14h) | tipo `block` no schema, motor, repositório e API; recorta a grade e recusa o agendamento | tela para a recepção criar — hoje só por SQL | 12 (agenda do admin) |
-| Combo mais barato que a soma avulsa | `sold_as_service_id`, detecção em `core`, aviso e troca no carrinho | tela para definir quais serviços formam o combo | 10 (onboarding do catálogo) |
-| Janela de cancelamento e remarcação | colunas, aplicação na API, explicação na tela do cliente | tela para a barbearia ajustar as horas — hoje só por SQL | 10 (configuração da unidade) |
-| Trocar de profissional ao remarcar | grade por profissional e "qualquer um", gravação atômica | — | fechado |
-| Encerrar sessão nos outros aparelhos | `revoke_session` e "Sair" deste aparelho | listagem de sessões ativas | sem bloco: o cliente de barbearia usa um celular só. Entra se aparecer demanda real, não por simetria |
+| Bloqueio pontual do dia (dentista às 14h) | tipo `block` no schema, motor, repositório e API: recorta a grade e recusa o agendamento | tela para a recepção criar — hoje só por SQL | 12 (agenda do admin) |
+| Convite do barbeiro por WhatsApp | o profissional é criado no onboarding | o convite e o login próprio dele | 13 (`app-pro`) — sem a agenda do barbeiro não há para onde o convite levar |
+| Painel como aplicação separada | rota `/admin` própria; o pacote da página pública não cresceu (102 kB antes e depois do painel) | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | 11 (CRUD do admin) |
+| Jornada diferente por barbeiro | jornada por profissional no schema e no motor | o onboarding aplica a mesma para a equipe — o ajuste por pessoa é cadastro, não caminho de dez minutos | 11 (CRUD do admin) |
+| Encerrar sessão nos outros aparelhos | revogação e "Sair" deste aparelho, para cliente e para gestor | listagem de sessões ativas | sem bloco: o cliente de barbearia usa um celular só. Entra se aparecer demanda real, não por simetria |
+
+**Lacuna fechada sai da tabela.** O histórico de por que foi adiada fica no
+commit que a fechou; manter linha morta aqui faria a lista virar ruído e
+esconder o que ainda falta.
 
 ---
 
@@ -77,7 +81,7 @@ atual sem perder nenhuma capacidade que usava.
 | 7 | Página pública SSR: layout, mapa, horário, JSON-LD, deep links | ✅ |
 | 8 | Fluxo de agendamento no front: serviço → profissional → horário → dados → comprovante | ✅ |
 | 9 | Meus agendamentos: entrar por código, listar, cancelar, remarcar | ✅ |
-| 10 | Onboarding em 6 etapas | |
+| 10 | Conta de gestor + onboarding em 6 etapas + configuração da unidade | ✅ |
 | 11 | Admin: CRUD de catálogo, equipe, jornadas, recursos | |
 | 12 | Admin: agenda dia/semana/lista, drag-and-drop, bloqueios, encaixe | |
 | 13 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |

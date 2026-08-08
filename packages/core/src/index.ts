@@ -8,3 +8,4 @@ export * from './schedule.js';
 export * from './phone.js';
 export * from './changes.js';
 export * from './bundles.js';
+export * from './templates.js';

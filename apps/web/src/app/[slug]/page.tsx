@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getProfile, getToday, type PublicProfile } from '@/lib/api';
 import { localDate } from '@/lib/date';
-import { jsonLd } from '@/lib/json-ld';
+import { jsonLd, jsonLdScript } from '@/lib/json-ld';
 import { regraDeCancelamento } from '@/lib/politica';
 
 /**
@@ -66,7 +66,10 @@ export default async function BarbershopPage({ params }: Params) {
         type="application/ld+json"
         // JSON-LD é o que faz o Google mostrar nota, preço e "Aberto agora" no
         // resultado da busca. Sem ele a barbearia é só um link azul.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(profile)) }}
+        //
+        // `jsonLdScript`, não `JSON.stringify`: este é o único ponto do sistema
+        // que injeta HTML sem escape do React, e `JSON.stringify` não escapa `<`.
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd(profile)) }}
       />
 
       <a className="ui-skip-link" href="#servicos">

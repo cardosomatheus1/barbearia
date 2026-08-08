@@ -631,3 +631,141 @@ main { padding-bottom: var(--space-8); }
 }
 .oferta__texto { margin: 0; font-size: var(--font-size-sm); }
 .oferta__trocar { flex-shrink: 0; }
+
+/* ============================================================================
+   Painel do gestor.
+   Densidade diferente da página do cliente: a recepção passa o dia aqui, e
+   rolagem custa tempo. Continua começando em 360px — o dono cadastra do celular.
+   ========================================================================== */
+
+.painel__entrada { padding: var(--space-6) var(--space-4) var(--space-8); max-width: 26rem; }
+.painel__conteudo { padding: var(--space-4) var(--space-4) var(--space-8); max-width: 46rem; }
+
+.painel__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.painel__marca {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+.painel__sair { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+
+.painel__etapa {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+}
+.painel__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
+.painel__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.painel__aviso { margin-bottom: var(--space-5); }
+.painel__nota { margin: var(--space-6) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.painel__nota a, .painel__sub a { color: var(--color-accent); }
+
+/* Régua de etapas: rola na horizontal dentro de si, nunca leva a página junto. */
+.passos {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0 calc(var(--space-4) * -1) var(--space-5);
+  padding: 0 var(--space-4);
+  list-style: none;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.passo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.passo__numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  font-size: var(--font-size-xs);
+}
+.passo--feito { color: var(--color-text-primary); }
+.passo--feito .passo__numero { background: var(--color-success); color: var(--color-surface); }
+.passo--atual { border-color: var(--color-accent); color: var(--color-text-primary); }
+.passo--atual .passo__numero { background: var(--color-accent); color: var(--color-text-on-accent); }
+
+.painel__dupla { display: grid; gap: var(--space-4); }
+.painel__grupo { border: 0; margin: 0; padding: 0; }
+.painel__marcas { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+
+/* Alvo de toque inteiro, não só a caixinha: marcar dia da semana com o polegar
+   numa caixa de 16px é o que faz o dono errar e desistir. */
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.marca:has(input:checked) {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.cardapio { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.cardapio__item {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.cardapio__item--erro { border-color: var(--color-danger); }
+.cardapio__escolha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  cursor: pointer;
+}
+.cardapio__nome { font-weight: var(--font-weight-medium); }
+.cardapio__campos { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-2); }
+.cardapio__campo { display: grid; gap: var(--space-1); font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.publicar { margin-bottom: var(--space-5); padding: var(--space-4); }
+.publicar__rotulo {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.publicar__link {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  word-break: break-all;
+}
+.publicar__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.painel__resumo { margin-bottom: var(--space-5); }
+.painel__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@media (min-width: 768px) {
+  .painel__dupla { grid-template-columns: 1fr 1fr; }
+}
