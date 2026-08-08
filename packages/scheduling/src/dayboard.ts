@@ -19,6 +19,12 @@ import {
  * página do cliente para adivinhar o que estava marcado. Este é o dado que essa
  * tela consome.
  *
+ * O faturamento do dia **não** está aqui, e a ausência é deliberada: ele é
+ * `finance.view`, que a recepção e o barbeiro não têm. Entregá-lo sob
+ * `appointments.view` daria o número a todo mundo com acesso ao balcão. Ele
+ * volta no bloco 18, junto com o caixa e com o segundo fator que o `CLAUDE.md`
+ * exige de quem enxerga dinheiro.
+ *
  * Tudo em **uma consulta**. O painel fica aberto o dia inteiro e recarrega a
  * cada poucos minutos; um laço com ida ao banco por agendamento (para pegar
  * serviços, cliente ou profissional) seria N+1 na tela mais usada do produto.
@@ -72,8 +78,6 @@ export interface DayBoard {
     readonly concluidos: number;
     readonly faltaram: number;
     readonly cancelados: number;
-    /** Soma do que já foi atendido — o número que a recepção olha ao fechar. */
-    readonly realizadoCents: number;
   };
 }
 
@@ -95,6 +99,16 @@ export async function getDayBoard(params: {
   readonly locationId: string;
   /** Data local da unidade, YYYY-MM-DD. */
   readonly date: string;
+  /**
+   * Recorta o dia para uma agenda só.
+   *
+   * Quem **não** tem `appointments.view_all_professionals` enxerga apenas a
+   * própria. O recorte é na consulta e vem da sessão, nunca de parâmetro da
+   * requisição: filtrar depois de ler já teria trazido o dia inteiro para a
+   * memória do processo, e aceitar da requisição seria pedir ao barbeiro que
+   * escolhesse o que ele pode ver.
+   */
+  readonly onlyProfessionalId?: string | null;
   readonly now?: Date;
 }): Promise<DayBoard> {
   const now = params.now ?? new Date();
@@ -116,7 +130,7 @@ export async function getDayBoard(params: {
         entries: [],
         totals: {
           esperados: 0, chegaram: 0, atendendo: 0, concluidos: 0,
-          faltaram: 0, cancelados: 0, realizadoCents: 0,
+          faltaram: 0, cancelados: 0,
         },
       };
     }
@@ -124,6 +138,8 @@ export async function getDayBoard(params: {
     const equipe = await tx.$queryRaw<{ id: string; name: string }[]>`
       SELECT id, name FROM professionals
       WHERE location_id = ${params.locationId}::uuid AND active
+        AND (${params.onlyProfessionalId ?? null}::uuid IS NULL
+             OR id = ${params.onlyProfessionalId ?? null}::uuid)
       ORDER BY name
     `;
 
@@ -159,6 +175,8 @@ export async function getDayBoard(params: {
       JOIN appointment_services aps ON aps.appointment_id = a.id
       JOIN services s ON s.id = aps.service_id
       WHERE a.location_id = ${params.locationId}::uuid
+        AND (${params.onlyProfessionalId ?? null}::uuid IS NULL
+             OR a.professional_id = ${params.onlyProfessionalId ?? null}::uuid)
         AND a.service_starts_at >= (${params.date}::date::timestamp AT TIME ZONE ${unidade.timezone})
         AND a.service_starts_at < ((${params.date}::date + 1)::timestamp AT TIME ZONE ${unidade.timezone})
       GROUP BY a.id, p.name, c.name, c.phone_e164
@@ -218,9 +236,6 @@ export async function getDayBoard(params: {
         cancelados: conta(
           (e) => e.status === 'cancelled_customer' || e.status === 'cancelled_business',
         ),
-        realizadoCents: entries
-          .filter((e) => e.status === 'completed')
-          .reduce((soma, e) => soma + e.priceCents, 0),
       },
     };
   });
@@ -256,13 +271,24 @@ export async function applyAttendance(params: {
   readonly tenantId: string;
   readonly appointmentId: string;
   readonly action: AttendanceAction;
+  /**
+   * Restringe a uma agenda só, pela mesma razão de `getDayBoard`.
+   *
+   * Sem isto, quem enxerga apenas a própria agenda ainda conseguia marcar falta
+   * no cliente do colega — bastava ter o id, e a lista de ontem já o dava.
+   */
+  readonly onlyProfessionalId?: string | null;
   readonly now?: Date;
 }): Promise<{ readonly status: AppointmentStatus }> {
   const now = params.now ?? new Date();
 
   return withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ status: AppointmentStatus }[]>`
-      SELECT status FROM appointments WHERE id = ${params.appointmentId}::uuid FOR UPDATE
+      SELECT status FROM appointments
+      WHERE id = ${params.appointmentId}::uuid
+        AND (${params.onlyProfessionalId ?? null}::uuid IS NULL
+             OR professional_id = ${params.onlyProfessionalId ?? null}::uuid)
+      FOR UPDATE
     `;
     const atual = linhas[0];
     if (!atual) {

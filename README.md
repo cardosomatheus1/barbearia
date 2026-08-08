@@ -548,6 +548,9 @@ e obriga a decisão junto — não seis blocos depois.
 Quem cria a conta é o dono, com a pessoa do lado; não há canal transacional até
 o bloco 20. A senha é **gerada** (`randomInt` do `node:crypto`, alfabeto sem
 `0`/`O`/`1`/`l`), aparece uma vez, e a conta nasce com `must_change_password`.
+Chega à tela por cookie `httpOnly` de dois minutos, não por parâmetro de URL:
+parâmetro acaba no `Location`, no `Referer` de toda requisição da página, no log
+do proxy e no histórico do navegador do balcão — que é máquina compartilhada.
 Enquanto isso for verdade, a guarda recusa tudo menos a rota que a destranca —
 e essa rota ainda exige a senha atual, que é o que impede alguém no navegador
 aberto de outra pessoa de ficar com a conta.
@@ -562,6 +565,35 @@ mesmo.
 O dono é protegido nos três caminhos: não dá para criar um segundo, promover
 alguém a dono, nem desligar o que existe. Seria a única conta com `team.manage`
 se trancando para fora do próprio negócio, sem volta pela aplicação.
+
+### O que a `/security-review` encontrou
+
+Quatro achados, todos corrigidos antes de fechar o bloco. Dois merecem registro
+porque são a mesma classe de defeito que este projeto já tinha visto:
+
+**`appointments.view_all_professionals` não decidia nada.** Estava no catálogo,
+era negada ao barbeiro no padrão de fábrica, e o painel devolvia a agenda da
+casa inteira sob `appointments.view` — que todo papel tem. A tela de equipe
+ainda descrevia o papel como "a própria agenda e a própria comissão". Permissão
+que não decide é promessa que a tela quebra, e é o mesmo padrão do `blocks` e
+das colunas de foto: o mecanismo existe, ninguém o liga.
+
+O recorte agora sai de `staff.professionalId` e vai **na consulta**, nunca em
+parâmetro de requisição — aceitar da URL seria pedir ao barbeiro que escolhesse
+o que ele pode ver. Vale também para mover atendimento: sem isso, marcar falta
+no cliente do colega era uma requisição, e a lista de ontem já dava o id.
+
+**O faturamento do dia saiu do painel.** Ele é `finance.view`, que a recepção e
+o barbeiro não têm, e vinha sob `appointments.view`. Dava para escondê-lo com um
+`if` no handler, mas isso seria decidir sobre dinheiro sem o segundo fator que o
+`CLAUDE.md` exige — contornando pelo lado a regra que o teste de MFA protege. O
+número volta no bloco 18, com o caixa.
+
+Os outros dois: `resetStaffPassword` era a única operação de equipe sem a guarda
+do dono (inalcançável hoje, tomada de conta no dia em que um gerente receber
+`team.manage`), e `POST /v1/admin/team` respondia "e-mail já existe" para conta
+de **qualquer** barbearia — reconstruindo por HTTP a lista que o cadastro
+público paga caro para esconder.
 
 ### A trilha é append-only por permissão, não por convenção
 

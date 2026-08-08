@@ -22,7 +22,12 @@ import {
   type AcaoAtendimento,
   type Papel,
 } from '@/lib/admin-api';
-import { apagarSessaoGestor, gravarSessaoGestor, lerSessaoGestor } from '@/lib/sessao-gestor';
+import {
+  apagarSessaoGestor,
+  guardarSenhaDeUmaVez,
+  gravarSessaoGestor,
+  lerSessaoGestor,
+} from '@/lib/sessao-gestor';
 
 
 /**
@@ -359,11 +364,11 @@ export async function acaoFotos(form: FormData): Promise<void> {
 /**
  * Cria a conta e leva a senha de primeiro acesso para a tela **uma vez**.
  *
- * Ela viaja na URL porque não há canal de mensagem ainda e o dono precisa lê-la
- * com a pessoa do lado. É aceitável porque a senha morre no primeiro uso — a
- * conta nasce obrigada a trocá-la — e porque o painel não é indexado
- * (`robots: noindex` no layout). Quando existir WhatsApp transacional
- * (bloco 20), a entrega passa por lá e este parâmetro sai.
+ * Ela viaja num cookie `httpOnly` de vida curta, não na URL: parâmetro de
+ * consulta acaba no `Location`, no `Referer`, no log do servidor e no histórico
+ * do navegador do balcão — que é máquina compartilhada. Ver
+ * `guardarSenhaDeUmaVez`. Quando existir WhatsApp transacional (bloco 20), a
+ * entrega passa por lá e isto sai.
  */
 export async function acaoCriarMembro(form: FormData): Promise<void> {
   const token = await exigirSessao();
@@ -377,11 +382,8 @@ export async function acaoCriarMembro(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/equipe', resultado.code);
 
-  const busca = new URLSearchParams({
-    criada: resultado.dados.member.name,
-    senha: resultado.dados.senhaInicial,
-  });
-  redirect(`/admin/equipe?${busca.toString()}`);
+  await guardarSenhaDeUmaVez(resultado.dados.member.name, resultado.dados.senhaInicial);
+  redirect('/admin/equipe');
 }
 
 export async function acaoTrocarPapel(form: FormData): Promise<void> {
@@ -403,11 +405,8 @@ export async function acaoReemitirSenha(form: FormData): Promise<void> {
   const resultado = await reemitirSenha(token, texto(form, 'id'));
   if (!resultado.ok) falhar('/admin/equipe', resultado.code);
 
-  const busca = new URLSearchParams({
-    criada: texto(form, 'nome'),
-    senha: resultado.dados.senhaInicial,
-  });
-  redirect(`/admin/equipe?${busca.toString()}`);
+  await guardarSenhaDeUmaVez(texto(form, 'nome'), resultado.dados.senhaInicial);
+  redirect('/admin/equipe');
 }
 
 /**

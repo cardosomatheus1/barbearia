@@ -27,6 +27,7 @@ export type StaffFailure =
   // (e deve) ser específica — não há oráculo de existência a proteger, e o dono
   // precisa saber por que não funcionou.
   | 'email_taken'
+  | 'email_unavailable'
   | 'invalid_role'
   | 'staff_not_found'
   | 'owner_protected';
@@ -361,6 +362,15 @@ export interface AuthenticatedStaff {
   readonly permissions: readonly string[];
   /** Enquanto verdadeiro, a sessão só serve para trocar a própria senha. */
   readonly mustChangePassword: boolean;
+  /**
+   * A agenda desta pessoa, quando ela também atende.
+   *
+   * É o que permite recortar o dia para quem **não** tem
+   * `appointments.view_all_professionals`: sem isto a permissão existiria no
+   * catálogo, seria negada ao barbeiro e não decidiria nada — e a tela de
+   * equipe promete "a própria agenda" para esse papel.
+   */
+  readonly professionalId: string | null;
 }
 
 export async function resolveStaffSession(token: string): Promise<AuthenticatedStaff> {
@@ -378,11 +388,12 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         name: string;
         role: string;
         must_change_password: boolean;
+        professional_id: string | null;
         permissions: string[];
       }[]
     >`
       SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role,
-             u.must_change_password,
+             u.must_change_password, u.professional_id,
              COALESCE(
                array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
                '{}'
@@ -394,7 +405,8 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         AND s.revoked_at IS NULL
         AND s.expires_at > now()
         AND u.active
-      GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role, u.must_change_password
+      GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role,
+               u.must_change_password, u.professional_id
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -415,6 +427,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       role: sessao.role,
       permissions: sessao.permissions,
       mustChangePassword: sessao.must_change_password,
+      professionalId: sessao.professional_id,
     };
   });
 }

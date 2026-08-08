@@ -26,6 +26,16 @@ import { StaffError } from './staff.js';
  * registrar depois cria a janela em que a mudança existe e o registro não.
  */
 
+const UNIQUE_VIOLATION = '23505';
+
+/** SQLSTATE do Postgres por trás do erro do Prisma (mesmo padrão de `booking.ts`). */
+function pgUniqueViolation(error: unknown): boolean {
+  const meta = (error as { meta?: { code?: unknown } })?.meta;
+  if (typeof meta?.code === 'string') return meta.code === UNIQUE_VIOLATION;
+  const message = error instanceof Error ? error.message : '';
+  return /Code: `23505`/.test(message);
+}
+
 function pepper(): string {
   const value = process.env['STAFF_EMAIL_PEPPER'];
   if (!value) {
@@ -163,11 +173,27 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
   const hash = await hashPassword(senhaInicial);
 
   return withTenant(request.tenantId, async (tx) => {
+    /**
+     * A conferência é **desta barbearia**, não da plataforma.
+     *
+     * `staff_directory` tem política `USING (true)` de propósito — o login
+     * resolve e-mail para tenant antes de existir tenant no contexto. Consultar
+     * sem filtro aqui devolvia "já existe" para conta de qualquer barbearia, e
+     * isso é o oráculo que o cadastro público paga caro para fechar: ele
+     * responde 202 igual para e-mail livre e ocupado, e o login ainda queima um
+     * scrypt no caminho da conta inexistente só para não vazar pelo tempo.
+     *
+     * Bastava criar uma barbearia grátis e mandar uma lista de endereços aqui
+     * para reconstruir quem é cliente da plataforma — a lista que o HMAC em
+     * `staff_directory` existe para proteger.
+     */
     const jaExiste = await tx.$queryRaw<{ tenant_id: string }[]>`
-      SELECT tenant_id FROM staff_directory WHERE email_key = ${chave}
+      SELECT tenant_id FROM staff_directory
+      WHERE email_key = ${chave}
+        AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     `;
     if (jaExiste.length > 0) {
-      throw new StaffError('email_taken', 'Este e-mail já tem conta na plataforma.');
+      throw new StaffError('email_taken', 'Este e-mail já tem conta nesta barbearia.');
     }
 
     const criado = await tx.$queryRaw<{ id: string }[]>`
@@ -184,10 +210,24 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
     const id = criado[0]?.id;
     if (!id) throw new Error('INSERT de staff_users não devolveu id');
 
-    await tx.$executeRaw`
-      INSERT INTO staff_directory (email_key, tenant_id, staff_user_id)
-      VALUES (${chave}, ${request.tenantId}::uuid, ${id}::uuid)
-    `;
+    try {
+      await tx.$executeRaw`
+        INSERT INTO staff_directory (email_key, tenant_id, staff_user_id)
+        VALUES (${chave}, ${request.tenantId}::uuid, ${id}::uuid)
+      `;
+    } catch (error) {
+      // Colisão com outra barbearia: `email_key` é chave primária do índice
+      // entre tenants. A recusa é genérica de propósito — dizer "já existe"
+      // confirmaria que o endereço é de alguém na plataforma, que é justamente
+      // o que a consulta acima deixou de perguntar.
+      if (pgUniqueViolation(error)) {
+        throw new StaffError(
+          'email_unavailable',
+          'Não foi possível criar a conta com este e-mail. Use outro.',
+        );
+      }
+      throw error;
+    }
 
     await audit(tx, {
       actorId: request.actor.id,
@@ -344,6 +384,14 @@ export async function resetStaffPassword(request: {
   return withTenant(request.tenantId, async (tx) => {
     const atual = await carregar(tx, request.staffUserId);
     if (!atual) throw new StaffError('staff_not_found', 'Conta não encontrada.');
+    // Mesma proteção de `changeStaffRole` e `setStaffActive`, que faltava aqui.
+    // Hoje só o dono tem `team.manage` e isto é inalcançável — mas a premissa
+    // do bloco é que `role_permissions` é editável, e no dia em que um gerente
+    // receber `team.manage` esta rota vira tomada de conta numa requisição:
+    // ela devolve a senha nova em claro e derruba as sessões do dono junto.
+    if (atual.role === 'owner') {
+      throw new StaffError('owner_protected', 'A senha do dono não se reemite por aqui.');
+    }
 
     await tx.$executeRaw`
       UPDATE staff_users

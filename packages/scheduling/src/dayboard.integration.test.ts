@@ -131,7 +131,6 @@ describeIfDb('painel do dia', () => {
     // que a fila presencial vai usar para estimar espera (bloco 14).
     expect(item?.realDurationMinutes).toBe(28);
     expect(board.totals.concluidos).toBe(1);
-    expect(board.totals.realizadoCents).toBe(4900);
   });
 
   it('recusa começar quem não chegou', async () => {
@@ -256,5 +255,126 @@ describeIfDb('painel do dia', () => {
     await expect(
       applyAttendance({ tenantId: rival, appointmentId: criado.id, action: 'check_in' }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
+  });
+});
+
+/**
+ * Recorte por agenda.
+ *
+ * `appointments.view_all_professionals` existia no catálogo, era negada ao
+ * barbeiro e não decidia nada: o painel devolvia a casa inteira sob
+ * `appointments.view`, que todo papel tem — e a tela de equipe prometia "a
+ * própria agenda" para esse papel.
+ */
+describeIfDb('painel do dia — só a minha agenda', () => {
+  const GLEIDSON = 'bbbbbbbb-0000-0000-0000-000000000002';
+
+  beforeAll(async () => {
+    if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
+    admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
+  });
+
+  afterAll(async () => {
+    await admin?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await exec(admin, `
+      INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
+
+      INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes)
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20);
+
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind) VALUES
+        ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional'),
+        ('${GLEIDSON}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional');
+
+      INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
+      VALUES ('${CABELO}', '${TENANT}', 'Cabelo', 4900, 20);
+
+      INSERT INTO professional_services (professional_id, service_id, tenant_id) VALUES
+        ('${RUAN}', '${CABELO}', '${TENANT}'),
+        ('${GLEIDSON}', '${CABELO}', '${TENANT}');
+
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
+      SELECT '${TENANT}', p.id, d.weekday, 480, 1200
+      FROM (VALUES ('${RUAN}'::uuid), ('${GLEIDSON}'::uuid)) AS p(id)
+      CROSS JOIN (VALUES (0), (1), (2), (3), (4), (5), (6)) AS d(weekday);
+    `);
+  });
+
+  const marcarCom = (professionalId: string, start: string) =>
+    createAppointment({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      professionalId,
+      serviceIds: [CABELO],
+      date: TERCA,
+      start,
+      now: AGORA,
+    });
+
+  it('o barbeiro vê a agenda dele e não a do colega', async () => {
+    await marcarCom(RUAN, '09:00');
+    await marcarCom(GLEIDSON, '10:00');
+
+    const dele = await getDayBoard({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      date: TERCA,
+      onlyProfessionalId: RUAN,
+      now: AGORA,
+    });
+
+    expect(dele.entries.map((e) => e.professionalName)).toEqual(['Ruan']);
+    expect(dele.totals.esperados).toBe(1);
+    // Nem o nome do colega na lista de filtro: seria dizer quem mais atende e
+    // quantos horários ele tem.
+    expect(dele.professionals.map((p) => p.name)).toEqual(['Ruan']);
+  });
+
+  const casaInteira = () =>
+    getDayBoard({ tenantId: TENANT, locationId: LOCATION, date: TERCA, now: AGORA });
+
+  it('sem recorte, a casa inteira aparece', async () => {
+    await marcarCom(RUAN, '09:00');
+    await marcarCom(GLEIDSON, '10:00');
+
+    const tudo = await casaInteira();
+    expect(tudo.entries).toHaveLength(2);
+  });
+
+  it('o barbeiro não move o atendimento do colega, mesmo com o id em mãos', async () => {
+    // A lista de ontem já daria o id. Sem o recorte na gravação, marcar falta no
+    // cliente do colega era uma requisição.
+    const doColega = await marcarCom(GLEIDSON, '10:00');
+
+    await expect(
+      applyAttendance({
+        tenantId: TENANT,
+        appointmentId: doColega.id,
+        action: 'check_in',
+        onlyProfessionalId: RUAN,
+      }),
+    ).rejects.toMatchObject({ code: 'appointment_not_found' });
+
+    // E o dono, sem recorte, move normalmente.
+    await expect(
+      applyAttendance({ tenantId: TENANT, appointmentId: doColega.id, action: 'check_in' }),
+    ).resolves.toMatchObject({ status: 'checked_in' });
+  });
+
+  it('o painel não devolve faturamento para ninguém', async () => {
+    // `finance.view` é do dono e do gerente. Entregar o número sob
+    // `appointments.view` daria a receita do dia a todo mundo com acesso ao
+    // balcão. Ele volta no bloco 18, com o caixa e com MFA.
+    const criado = await marcarCom(RUAN, '09:00');
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete' });
+
+    const board = await casaInteira();
+    expect(JSON.stringify(board.totals)).not.toContain('realizado');
   });
 });

@@ -263,6 +263,120 @@ describeIfDb('equipe e permissões pela HTTP', () => {
     await com(maria.token)(http().get('/v1/admin/team')).expect(403);
   });
 
+  // -- o que cada um enxerga -------------------------------------------------
+
+  it('o barbeiro vê a própria agenda, não a da casa', async () => {
+    // `appointments.view_all_professionals` é negada ao barbeiro no padrão de
+    // fábrica e não decidia nada: o painel devolvia a casa inteira sob
+    // `appointments.view`, que todo papel tem — e a tela de equipe promete "a
+    // própria agenda" para esse papel.
+    const dono = await entrarComoDono();
+    const equipe = await com(dono)(
+      http().put('/v1/admin/professionals').send({
+        professionals: [
+          { name: 'Ruan', schedule: [{ weekday: 2, startMinute: 540, endMinute: 1080 }] },
+          { name: 'Gleidson', schedule: [{ weekday: 2, startMinute: 540, endMinute: 1080 }] },
+        ],
+      }),
+    ).expect(200);
+    expect(equipe.body.created).toBe(2);
+
+    const catalogo = await com(dono)(http().get('/v1/admin/catalog')).expect(200);
+    // Por nome, não por posição: o catálogo vem ordenado alfabeticamente e
+    // "Gleidson" vem antes de "Ruan".
+    const ruan = catalogo.body.professionals.find((p: { name: string }) => p.name === 'Ruan');
+    expect(ruan, 'Ruan não apareceu no catálogo').toBeDefined();
+
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({
+        name: 'Ruan',
+        email: 'ruan@domari.com.br',
+        role: 'professional',
+        professionalId: ruan.id,
+      }),
+    ).expect(201);
+
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'ruan@domari.com.br', password: criada.body.senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password').send({
+        currentPassword: criada.body.senhaInicial,
+        newPassword: 'a-senha-do-ruan',
+      }),
+    ).expect(200);
+    const dele = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'ruan@domari.com.br', password: 'a-senha-do-ruan' })
+      .expect(201);
+
+    const dia = await com(dele.body.token)(http().get('/v1/admin/day')).expect(200);
+    // Nem o nome do colega na lista de filtro: seria dizer quem mais atende.
+    expect(dia.body.professionals.map((p: { name: string }) => p.name)).toEqual(['Ruan']);
+
+    // E o dono continua vendo os dois.
+    const daCasa = await com(dono)(http().get('/v1/admin/day')).expect(200);
+    expect(daCasa.body.professionals).toHaveLength(2);
+  });
+
+  it('o painel não devolve faturamento para ninguém', async () => {
+    // `finance.view` é do dono e do gerente. Entregar o número sob
+    // `appointments.view` daria a receita do dia a quem abre o balcão. Ele volta
+    // no bloco 18, com o caixa e com o segundo fator.
+    const dono = await entrarComoDono();
+    const dia = await com(dono)(http().get('/v1/admin/day')).expect(200);
+    expect(JSON.stringify(dia.body.totals)).not.toContain('realizado');
+  });
+
+  // -- o dono continua protegido ---------------------------------------------
+
+  it('nem quem administra a equipe reemite a senha do dono', async () => {
+    // Hoje só o dono tem `team.manage`, mas `role_permissions` é editável de
+    // propósito. No dia em que um gerente receber a permissão, esta rota seria
+    // tomada de conta numa requisição: devolve a senha nova em claro e derruba
+    // as sessões do dono junto.
+    const dono = await entrarComoDono();
+    const equipe = await com(dono)(http().get('/v1/admin/team')).expect(200);
+    const oDono = equipe.body.members.find((m: { role: string }) => m.role === 'owner');
+
+    const resposta = await com(dono)(
+      http().post(`/v1/admin/team/${oDono.id}/reset-password`),
+    ).expect(409);
+    expect(resposta.body.error.code).toBe('owner_protected');
+  });
+
+  // -- o e-mail não vira oráculo ---------------------------------------------
+
+  it('e-mail de outra barbearia não é confirmado nem negado especificamente', async () => {
+    // `staff_directory` não tem escopo de tenant de propósito — o login resolve
+    // e-mail para tenant antes de existir tenant. Consultar sem filtro fazia
+    // esta rota devolver "já existe" para conta de qualquer barbearia, que é o
+    // oráculo que o cadastro público paga caro para fechar.
+    await http()
+      .post('/v1/admin/signup')
+      .send({ ...DONO, email: 'rival@rival.com.br', businessName: 'Rival Barbearia' })
+      .expect(202);
+
+    const dono = await entrarComoDono();
+    const resposta = await com(dono)(
+      http()
+        .post('/v1/admin/team')
+        .send({ name: 'Alguém', email: 'rival@rival.com.br', role: 'receptionist' }),
+    ).expect(409);
+
+    // Genérico: não confirma que o endereço pertence a alguém na plataforma.
+    expect(resposta.body.error.code).toBe('email_unavailable');
+    expect(resposta.body.error.message).not.toMatch(/plataforma|já tem conta/i);
+
+    // Já o e-mail da própria barbearia pode ser dito com todas as letras: quem
+    // pergunta já enxerga essa lista pela tela de equipe.
+    const daCasa = await com(dono)(
+      http().post('/v1/admin/team').send({ name: 'Outro', email: DONO.email, role: 'receptionist' }),
+    ).expect(409);
+    expect(daCasa.body.error.code).toBe('email_taken');
+  });
+
   // -- isolamento ------------------------------------------------------------
 
   it('o dono de uma barbearia não mexe na equipe da outra', async () => {

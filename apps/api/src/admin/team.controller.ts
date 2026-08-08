@@ -26,6 +26,9 @@ import {
 
 const STATUS: Record<string, number> = {
   email_taken: 409,
+  // Colisão com outra barbearia. Mesmo código HTTP, mensagem genérica: dizer
+  // "já existe na plataforma" confirmaria que o endereço é de alguém.
+  email_unavailable: 409,
   invalid_role: 400,
   invalid_phone: 400,
   staff_not_found: 404,

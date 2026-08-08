@@ -7,7 +7,7 @@ import {
   type Papel,
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
-import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { lerSenhaDeUmaVez, lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
   acaoCriarMembro,
   acaoLigarMembro,
@@ -157,8 +157,9 @@ export default async function EquipePage({ searchParams }: Props) {
   const resposta = await equipeDaBarbearia(token);
   const query = await searchParams;
   const erro = first(query['erro']);
-  const criada = first(query['criada']);
-  const senha = first(query['senha']);
+  // Do cookie de vida curta, nunca da URL: senha em parâmetro de consulta fica
+  // no histórico do balcão e no `Referer` de toda requisição da página.
+  const recemCriada = await lerSenhaDeUmaVez();
   const salvo = first(query['salvo']) === '1';
 
   if (!resposta.ok) {
@@ -207,15 +208,17 @@ export default async function EquipePage({ searchParams }: Props) {
         </div>
       ) : null}
 
-      {criada && senha ? (
-        // Aparece uma vez. Recarregar a página sem o parâmetro faz sumir — e a
-        // conta nasce obrigada a trocar, então a senha morre no primeiro uso.
+      {recemCriada ? (
+        // Some sozinha em dois minutos, com o cookie. Não fica no histórico nem
+        // no endereço, e a conta nasce obrigada a trocar.
         <div className="ui-alert ui-alert--info painel__aviso senha-nova" role="status">
-          <p className="senha-nova__titulo">Senha de primeiro acesso de {criada}</p>
-          <p className="senha-nova__valor tabular">{senha}</p>
+          <p className="senha-nova__titulo">
+            Senha de primeiro acesso de {recemCriada.nome}
+          </p>
+          <p className="senha-nova__valor tabular">{recemCriada.senha}</p>
           <p className="senha-nova__nota">
-            Anote e entregue agora — ela não aparece de novo. No primeiro acesso o sistema pede
-            para trocar.
+            Anote e entregue agora — ela some desta tela em dois minutos e não aparece de novo.
+            No primeiro acesso o sistema pede para trocar.
           </p>
         </div>
       ) : null}

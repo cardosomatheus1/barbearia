@@ -279,7 +279,6 @@ describeIfDb('balcão', () => {
 
     const dia = await comAuth(token)(http().get('/v1/admin/day').query({ date })).expect(200);
     expect(dia.body.totals.concluidos).toBe(1);
-    expect(dia.body.totals.realizadoCents).toBe(4900);
   });
 
   it('a segunda pessoa a tocar o mesmo cartão recebe 409, não silêncio', async () => {

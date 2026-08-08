@@ -21,7 +21,7 @@ import {
   primaryLocation,
   searchCustomers,
 } from '@barbearia/scheduling';
-import type { AttendanceAction } from '@barbearia/core';
+import { pode, type AttendanceAction } from '@barbearia/core';
 import { OtpError, resolveGuestCustomer, type AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -79,6 +79,10 @@ function toHttp(error: unknown): never {
  * - **Toda rota declara a permissão que exige.** A guarda recusa por padrão o
  *   que não declara nada: rota sem `@Exige` não é rota liberada, é rota que
  *   esqueceu — e esquecimento tem que virar erro no primeiro teste, não brecha.
+ * - **Quem não tem `appointments.view_all_professionals` só enxerga a própria
+ *   agenda.** O recorte sai de `staff.professionalId`, nunca do parâmetro da
+ *   requisição — aceitar da URL seria pedir ao barbeiro que escolhesse o que
+ *   ele pode ver.
  * - **Nenhuma rota devolve o telefone completo.** A tela fica virada para o
  *   salão; quem passa na frente do notebook não precisa levar a base de
  *   contatos junto.
@@ -86,6 +90,20 @@ function toHttp(error: unknown): never {
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class BoardController {
+  /**
+   * A qual agenda esta sessão está limitada, ou `null` para o dia inteiro.
+   *
+   * `appointments.view_all_professionals` estava no catálogo, era negada ao
+   * barbeiro e não decidia nada: o painel devolvia a agenda da casa inteira sob
+   * `appointments.view`, que todo papel tem. A tela de equipe ainda prometia "a
+   * própria agenda" para esse papel — permissão que não decide é promessa que a
+   * tela quebra.
+   */
+  private recorte(staff: AuthenticatedStaff): string | null {
+    return pode(staff.permissions, 'appointments.view_all_professionals')
+      ? null
+      : staff.professionalId;
+  }
   /** O dia da barbearia. Uma consulta, aberta o dia inteiro e recarregada. */
   @Exige('appointments.view')
   @Get('day')
@@ -100,11 +118,13 @@ export class BoardController {
       tenantId: staff.tenantId,
       locationId: unidade.id,
       date: query.date ?? unidade.today,
+      onlyProfessionalId: this.recorte(staff),
     });
 
-    // O filtro por profissional é aplicado aqui, não na consulta: o dia inteiro
-    // já veio numa ida ao banco, e os totais que a recepção olha ao fechar são
-    // os da casa, não os do barbeiro selecionado.
+    // O filtro da tela é aplicado aqui, não na consulta: o dia já veio numa ida
+    // ao banco, e os totais que a recepção olha ao fechar são os do que ela
+    // enxerga, não os do barbeiro selecionado no filtro. O **recorte de
+    // permissão** é outra coisa e vai na consulta, acima.
     const entries = query.professionalId
       ? board.entries.filter((e) => e.professionalId === query.professionalId)
       : board.entries;
@@ -132,6 +152,9 @@ export class BoardController {
         tenantId: staff.tenantId,
         appointmentId: id,
         action: body.action,
+        // Sem isto, quem enxerga só a própria agenda ainda marcava falta no
+        // cliente do colega: bastava ter o id, e a lista de ontem já o dava.
+        onlyProfessionalId: this.recorte(staff),
       });
     } catch (error) {
       return toHttp(error);
