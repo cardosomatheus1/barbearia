@@ -171,21 +171,18 @@
 }
 .servico__moeda { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
-.equipe { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.pessoa a {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-height: var(--size-touch);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  color: inherit;
-}
+/* Uma regra só para o cartão de pessoa.
+   Havia duas — `.pessoa a` e `.pessoa__link` — casando no mesmo elemento, e a
+   primeira empilhava em coluna o que a segunda queria em linha. Foto em cima do
+   nome, centralizada, num cartão largo: ninguém escreveu isso, saiu da briga
+   entre os dois seletores. */
+.equipe { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .pessoa__nome { font-weight: var(--font-weight-medium); }
-.pessoa__bio { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.pessoa__bio {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
 
 .onde { display: grid; gap: var(--space-6); }
 .onde__endereco { margin: 0; }
@@ -214,6 +211,108 @@ main { padding-bottom: var(--space-8); }
 
 .vazio-pagina { padding: var(--space-8) var(--space-4); }
 
+
+/* ----------------------------------------------------------------------------
+   Foto.
+
+   A direção visual (docs/03-direcao-visual.md) sempre disse que o herói é a
+   disponibilidade e que "a foto continua presente logo abaixo". A primeira
+   metade foi construída; a segunda ficou só no documento, e a página passou dez
+   blocos sem uma única imagem — num negócio em que o cliente escolhe pelo olho.
+
+   Toda imagem aqui vem com `width` e `height` no HTML: sem eles o navegador não
+   reserva o espaço e a foto empurra a grade de horários ao carregar, bem na
+   hora em que o polegar já está descendo para tocar num horário.
+   -------------------------------------------------------------------------- */
+
+.capa { margin: 0; }
+.capa__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Panorâmica de propósito: uma capa alta empurraria o cardápio para fora da
+     tela e desfaria a tese da página. */
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+/* ----------------------------------------------------------------------------
+   Corpo em duas colunas a partir do tablet.
+
+   Antes existia uma coluna só, esticada até 1280: a linha ia de "Pezinho" na
+   margem esquerda a "R$ 15,00" na direita, com mil pixels de nada no meio, e o
+   olho tinha que atravessar a tela para ligar o serviço ao preço.
+
+   Não é "versão de PC": é a mesma tela ganhando densidade quando há espaço, que
+   é a regra do CLAUDE.md §5. No celular continua uma coluna, na ordem em que se
+   lê.
+   -------------------------------------------------------------------------- */
+
+.corpo { display: grid; gap: 0; }
+/* O cardápio é o evento principal; endereço, equipe e horário são referência.
+   Antes as cinco seções tinham exatamente o mesmo peso, e a política de
+   cancelamento gritava tanto quanto o preço do corte. */
+.secao--menu { border-top: 0; }
+.lado { display: grid; }
+.secao--miudo .politica { font-size: var(--font-size-sm); }
+
+/* ----------------------------------------------------------------------------
+   Quem atende — com rosto.
+   -------------------------------------------------------------------------- */
+
+.pessoa__link {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0 var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.pessoa__foto, .pessoa__inicial { grid-row: 1 / span 2; }
+/* Sem bio a foto continua centrada: a linha vazia não existe para ocupar. */
+.pessoa__link:not(:has(.pessoa__bio)) .pessoa__foto,
+.pessoa__link:not(:has(.pessoa__bio)) .pessoa__inicial { grid-row: 1; }
+.pessoa__link:hover { background: var(--color-surface-hover); }
+.pessoa__foto,
+.pessoa__inicial {
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+}
+/* Sem foto o lugar continua reservado, com a inicial: some a foto, não some a
+   pessoa — e a lista não muda de altura quando a barbearia preenche uma só. */
+.pessoa__inicial {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ----------------------------------------------------------------------------
+   Foto no item do cardápio.
+   -------------------------------------------------------------------------- */
+
+.servico__foto {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  align-self: center;
+}
+.servico--ilustrado { grid-template-columns: 1fr auto 3.5rem; }
+
 @media (min-width: 768px) {
   .topo { padding: var(--space-5) 0; }
   .topo__nome { font-size: var(--font-size-2xl); }
@@ -221,6 +320,18 @@ main { padding-bottom: var(--space-8); }
   .chip { min-width: 6rem; }
   .chip__hora { font-size: var(--font-size-2xl); }
   .onde { grid-template-columns: 1.4fr 1fr; gap: var(--space-7); }
+
+  /* Cardápio à esquerda, referência à direita. O que mata a linha de mil
+     pixels não é limitar a largura da página — é dar trabalho à segunda coluna. */
+  .corpo { grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr); gap: var(--space-7); }
+  .lado { align-content: start; }
+  .lado .secao { padding-top: var(--space-5); }
+  .onde { grid-template-columns: 1fr; gap: var(--space-5); }
+  /* Teto de altura além da proporção: em 1280 uma faixa 21:9 tem 535px e
+     empurra o cardápio inteiro para baixo da dobra — a foto passaria a ser o
+     herói, que é justamente o que a direção recusa. */
+  .capa__img { aspect-ratio: 21 / 9; max-height: 20rem; }
+  .equipe { display: grid; gap: var(--space-1); }
 }
 
 /* ============================================================================

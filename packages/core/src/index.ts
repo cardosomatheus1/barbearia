@@ -10,3 +10,5 @@ export * from './changes.js';
 export * from './bundles.js';
 export * from './templates.js';
 export * from './attendance.js';
+export * from './imagem.js';
+export * from './vitrine.js';

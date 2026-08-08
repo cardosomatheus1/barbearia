@@ -22,6 +22,43 @@ const DB = process.env.DEMO_DATABASE_URL ?? 'postgres://postgres@127.0.0.1:5433/
 
 const LARGURAS = [360, 390, 768, 1280];
 
+/**
+ * Fotos usadas na medição.
+ *
+ * O Chromium do ambiente não sai para a internet, mas o Node sai. As imagens
+ * são baixadas aqui e servidas por interceptação: a página continua pedindo a
+ * URL https real, e o layout é medido com o peso e a proporção verdadeiros.
+ * Se o download falhar, a rota é abortada e a medição vira a da página sem
+ * foto — que continua sendo um estado que precisa passar.
+ */
+const FOTOS = {
+  capa: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=1600&q=70',
+  rostos: [
+    'https://images.unsplash.com/photo-1503443207922-dff7d543fd0e?w=800&q=70',
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=70',
+  ],
+  cortes: [
+    'https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=600&q=70',
+    'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=600&q=70',
+    'https://images.unsplash.com/photo-1621607512214-68297480165e?w=600&q=70',
+  ],
+};
+
+/** Baixa uma vez e guarda em memória, para não repetir a cada largura. */
+const cacheDeFoto = new Map();
+async function baixarFoto(url) {
+  if (cacheDeFoto.has(url)) return cacheDeFoto.get(url);
+  try {
+    const resposta = await fetch(url);
+    const bytes = resposta.ok ? Buffer.from(await resposta.arrayBuffer()) : null;
+    cacheDeFoto.set(url, bytes);
+    return bytes;
+  } catch {
+    cacheDeFoto.set(url, null);
+    return null;
+  }
+}
+
 const psql = (sql) => execFileSync('psql', [DB, '-tAc', sql], { encoding: 'utf8' }).trim();
 
 /** Prepara uma barbearia publicada e uma sessão de gestor. */
@@ -69,6 +106,27 @@ async function preparar() {
   );
   await put('/v1/admin/payments', { methods: ['pix', 'cash'] }, t);
   await post('/v1/admin/publish', {}, t);
+
+  // Fotos de verdade, não caixas vazias: imagem é o que mais estoura layout, e
+  // medir a página sem elas mediria a versão que não existe mais.
+  const alvos = await json(await fetch(`${API}/v1/admin/photos`, { headers: { authorization: `Bearer ${t}` } }));
+  await put(
+    '/v1/admin/photos',
+    {
+      coverUrl: FOTOS.capa,
+      professionals: alvos.professionals.map((p, i) => ({
+        id: p.id,
+        photoUrl: FOTOS.rostos[i % FOTOS.rostos.length],
+      })),
+      services: alvos.services.map((sv, i) => ({
+        // Metade sem foto de propósito: é a mistura que desalinha a coluna de
+        // preço, não a lista toda ilustrada.
+        id: sv.id,
+        photoUrl: i % 2 === 0 ? FOTOS.cortes[i % FOTOS.cortes.length] : '',
+      })),
+    },
+    t,
+  );
 
   return { token: t, slug: sessao.slug };
 }
@@ -208,6 +266,7 @@ async function main() {
     { nome: 'entrar (gestor)', url: '/admin/entrar' },
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — horário', url: `/admin/dia/marcar?s=${balcao.servicoId}&d=${balcao.dataLivre}&e=c`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
@@ -230,6 +289,11 @@ async function main() {
 
     for (const largura of LARGURAS) {
       const ctx = await browser.newContext({ viewport: { width: largura, height: 900 } });
+      await ctx.route('https://images.unsplash.com/**', async (route) => {
+        const bytes = await baixarFoto(route.request().url());
+        if (!bytes) return route.abort();
+        await route.fulfill({ contentType: 'image/jpeg', body: bytes });
+      });
       if (tela.cookie) {
         await ctx.addCookies([
           { name: tela.cookie.nome, value: tela.cookie.valor, domain: '127.0.0.1', path: tela.cookie.caminho },

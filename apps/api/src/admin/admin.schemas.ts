@@ -99,3 +99,25 @@ export const changeWindowSchema = z.object({
   maxReschedules: z.number().int().min(0).max(50),
   cancellationPolicy: z.string().trim().max(300).optional(),
 });
+
+/**
+ * Endereços de foto.
+ *
+ * A URL em si é validada pelo domínio (`imagemPublica`), que exige `https` e
+ * recusa `javascript:` e `data:`. Aqui vale o formato e o teto — a string vazia
+ * é aceita de propósito: é como a tela diz "tire esta foto".
+ */
+const enderecoDeFoto = z.string().trim().max(500);
+
+export const photosSchema = z.object({
+  coverUrl: enderecoDeFoto.optional(),
+  logoUrl: enderecoDeFoto.optional(),
+  professionals: z
+    .array(z.object({ id: z.string().uuid(), photoUrl: enderecoDeFoto }))
+    .max(50)
+    .optional(),
+  services: z
+    .array(z.object({ id: z.string().uuid(), photoUrl: enderecoDeFoto }))
+    .max(80)
+    .optional(),
+});

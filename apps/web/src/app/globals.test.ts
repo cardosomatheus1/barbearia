@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -137,5 +137,73 @@ describe('CSS das telas', () => {
     for (const largura of larguras) {
       expect(largura, `painel exige ${largura}px`).toBeLessThanOrEqual(PISO);
     }
+  });
+});
+
+/** Todo `.tsx` das telas, para conferir as imagens no markup. */
+function telas(raiz: string): string[] {
+  return readdirSync(raiz).flatMap((nome) => {
+    const caminho = join(raiz, nome);
+    if (statSync(caminho).isDirectory()) return telas(caminho);
+    return caminho.endsWith('.tsx') ? [caminho] : [];
+  });
+}
+
+const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+describe('imagens nas telas', () => {
+  /**
+   * Foto sem tamanho declarado empurra o conteúdo ao carregar.
+   *
+   * Numa página em que a próxima coisa depois da foto é a grade de horários,
+   * isso é o toque errado no horário errado — com o cliente em pé, na rua, com
+   * uma mão. A regra está no CLAUDE.md §5 desde o bloco 6 e não tinha teste,
+   * porque até agora não havia uma única imagem no produto.
+   */
+  it('todo <img> declara width e height', () => {
+    const semMedida: string[] = [];
+
+    for (const arquivo of telas(SRC)) {
+      const fonte = readFileSync(arquivo, 'utf8');
+      for (const tag of fonte.match(/<img[\s\S]*?\/>/g) ?? []) {
+        if (!/\bwidth=/.test(tag) || !/\bheight=/.test(tag)) {
+          semMedida.push(`${arquivo.split('/src/')[1]}: ${tag.slice(0, 60).replace(/\s+/g, ' ')}`);
+        }
+      }
+    }
+
+    expect(semMedida, `<img> sem medida:\n${semMedida.join('\n')}`).toEqual([]);
+  });
+
+  it('toda imagem no CSS tem limite de largura e proporção declarada', () => {
+    // `max-width: 100%` (ou largura fixa) para a foto não estourar o
+    // recipiente, e `aspect-ratio` ou altura para o espaço estar reservado
+    // antes de ela chegar.
+    //
+    // A conta é por **classe**, somando todas as regras que a mencionam: uma
+    // imagem legitimamente declara a largura na base e ajusta a proporção
+    // dentro de um `@media`. A primeira versão media regra a regra e acusava
+    // `.capa__img { aspect-ratio: 21/9 }` do notebook de não ter largura — que
+    // está na regra de cima.
+    const porClasse = new Map<string, string>();
+    for (const [, seletor = '', corpo = ''] of semCondicoes.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      // Toda classe de imagem do seletor recebe o corpo, não só a primeira:
+      // `.pessoa__foto, .pessoa__inicial { … }` declara para as duas, e olhar
+      // só a primeira acusaria a segunda de não ter tamanho nenhum.
+      for (const [, classe = ''] of seletor.matchAll(/\.([\w-]*(?:foto|img|inicial)[\w-]*)/g)) {
+        porClasse.set(classe, (porClasse.get(classe) ?? '') + corpo);
+      }
+    }
+    expect(porClasse.size, 'nenhuma regra de imagem encontrada').toBeGreaterThan(0);
+
+    const frouxas = [...porClasse]
+      .filter(([, corpo]) => {
+        const temProporcao = /aspect-ratio|height:\s*(?!auto)/.test(corpo);
+        const temLimite = /max-width|width:\s*(100%|\d)/.test(corpo);
+        return !(temProporcao && temLimite);
+      })
+      .map(([classe]) => classe);
+
+    expect(frouxas, `imagem sem limite ou sem proporção: ${frouxas.join(', ')}`).toEqual([]);
   });
 });

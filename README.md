@@ -437,6 +437,76 @@ system — e ninguém o aplicava. O balcão é o que torna isso concreto: a tela
 horas ligada e fundo escuro cansa em sessão longa. Os dois temas passam pela
 mesma verificação de contraste, então a troca não abre buraco de acessibilidade.
 
+## A página tinha uma promessa em aberto: a foto
+
+`docs/03-direcao-visual.md` sempre disse que o herói é a disponibilidade e que
+"a foto continua presente logo abaixo". A primeira metade foi construída no
+bloco 7. A segunda ficou no documento: a página passou dez blocos **sem uma
+única imagem**, num negócio em que a escolha do cliente é visual antes de ser
+qualquer outra coisa.
+
+A causa não era desenho. As colunas `cover_url`, `photo_url` e `logo_url`
+existiam desde a primeira migração e o perfil público já as devolvia — faltava
+**por onde preenchê-las**. É o mesmo defeito que `blocks` teve por oito blocos,
+com o agravante de estar à vista de qualquer visitante.
+
+`/admin/fotos` fecha a origem do dado. Enquanto não há armazenamento próprio, o
+endereço é colado: a barbearia já publicou essas fotos em algum lugar, e esperar
+por infraestrutura de upload deixaria a página como cardápio de texto por mais
+oito blocos. A lacuna está declarada com a dependência real, que é armazenamento
+de objeto.
+
+### `https` e mais nada
+
+`imagemPublica` (em `packages/core`) decide o que entra. Só `https`, por três
+motivos em ordem: `javascript:` não executa num `src` de `<img>`, mas a mesma
+coluna alimenta `og:image` e uma lista fechada custa menos que rastrear
+consumidor; `data:` transformaria a coluna em depósito de arquivo; e `http:`
+simples é bloqueado como conteúdo misto, então aceitar seria prometer uma imagem
+que nunca aparece.
+
+Escrito com expressão regular, não com `new URL()` — `URL` vem do DOM ou do
+`@types/node`, e `packages/core` não depende de nenhum dos dois. Há teste que
+falha se alguém der dependência a este pacote.
+
+URL recusada vira `null`, não erro: a foto é opcional, e um endereço ruim num
+campo não pode impedir de salvar os outros oito.
+
+### Toda imagem declara o próprio tamanho
+
+`width` e `height` no HTML, junto com `aspect-ratio` no CSS. Sem eles o navegador
+não reserva o espaço e a foto empurra a grade de horários ao carregar — o toque
+errado no horário errado, com o cliente em pé na rua.
+
+## A régua de horários estava se sabotando
+
+A grade sai ordenada por horário, então os primeiros catorze de um dia com 126
+vagas eram `12:30 12:35 12:40 12:45` — a mesma hora repetida, com o mesmo
+barbeiro, seguida de "e mais 122 horários". A tese da página é "escolha quando",
+e a régua mostrava uma fila.
+
+`horariosEmDestaque` mostra seis horários espalhados pelo dia, com as duas
+pontas presas: o primeiro livre responde "dá para ir agora?" e o último desenha
+o fim do expediente. E `horariosRestantes` conta **horários distintos**, não
+vagas — "e mais 122" quando existem 40 horários com três barbeiros cada é número
+inflado, e número inflado numa página de venda custa a confiança no resto dela.
+
+O nome do barbeiro saiu do cartão pelo mesmo motivo: repetia seis vezes o mesmo,
+porque a grade vem colapsada e o primeiro da fila ganha todos. Sugeria que só
+ele estava livre.
+
+## O notebook não tinha layout, tinha a mesma coluna esticada
+
+Em 1280 a linha ia de "Pezinho" na margem esquerda a "R$ 15,00" na direita, com
+mil pixels de nada no meio, e o olho atravessava a tela para ligar o serviço ao
+preço. O wireframe da direção visual era só de celular, e "ganha densidade
+quando há espaço" (CLAUDE.md §5) nunca tinha sido construído para esta página.
+
+A partir de 768 o cardápio fica à esquerda e equipe, endereço, horários e
+cancelamento viram coluna de referência à direita. Isso conserta a hierarquia de
+quebra: as cinco seções tinham exatamente o mesmo peso, e a política de
+cancelamento gritava tanto quanto o preço do corte.
+
 ## Próximos passos
 
 Bloco 12 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
@@ -458,8 +528,10 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as doze
-  telas em 360 · 390 · 768 · 1280 e mede elemento a elemento. O CSS pode estar
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as treze
+  telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
+  verdade carregadas, porque imagem é o que mais estoura layout e medir a página
+  sem elas mediria uma versão que não existe. O CSS pode estar
   correto e a grade estourar assim que entra conteúdo real — só a medição pega.
 
 Foi ela que encontrou `← Voltar` com 21px de altura em quatro telas, contra o

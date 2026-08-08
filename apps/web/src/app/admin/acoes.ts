@@ -9,6 +9,7 @@ import {
   publicarBarbearia,
   sairDoGestor,
   salvarEmpresa,
+  salvarFotos,
   salvarJanela,
   salvarPagamentos,
   salvarProfissionais,
@@ -310,4 +311,35 @@ export async function acaoMarcarNoBalcao(form: FormData): Promise<void> {
   }
 
   redirect(`/admin/dia?d=${date}&marcado=1`);
+}
+
+// -- Fotos -------------------------------------------------------------------
+
+/**
+ * Grava os endereços de foto.
+ *
+ * Manda o formulário inteiro, sempre: campo em branco é "tire esta foto", e
+ * omitir os vazios faria a única forma de remover uma foto ser mexer no banco.
+ * A API distingue ausente de vazio justamente para isto.
+ */
+export async function acaoFotos(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const porPrefixo = (prefixo: string) =>
+    [...form.entries()]
+      .filter(([chave]) => chave.startsWith(prefixo))
+      .map(([chave, valor]) => ({
+        id: chave.slice(prefixo.length),
+        photoUrl: String(valor).trim(),
+      }));
+
+  const resultado = await salvarFotos(token, {
+    coverUrl: texto(form, 'coverUrl'),
+    logoUrl: texto(form, 'logoUrl'),
+    professionals: porPrefixo('pro_'),
+    services: porPrefixo('srv_'),
+  });
+
+  if (!resultado.ok) falhar('/admin/fotos', resultado.code);
+  redirect('/admin/fotos?salvo=1');
 }

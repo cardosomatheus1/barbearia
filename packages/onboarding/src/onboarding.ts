@@ -459,3 +459,111 @@ export async function saveChangeWindow(
     `;
   });
 }
+
+// -- Fotos --------------------------------------------------------------------
+
+export interface PhotoInput {
+  readonly coverUrl?: string | null;
+  readonly logoUrl?: string | null;
+  readonly professionals?: readonly { readonly id: string; readonly photoUrl?: string | null }[];
+  readonly services?: readonly { readonly id: string; readonly photoUrl?: string | null }[];
+}
+
+export interface PhotoTargets {
+  readonly coverUrl: string | null;
+  readonly logoUrl: string | null;
+  readonly professionals: readonly { readonly id: string; readonly name: string; readonly photoUrl: string | null }[];
+  readonly services: readonly { readonly id: string; readonly name: string; readonly photoUrl: string | null }[];
+}
+
+/** O que a tela de fotos precisa listar, com o que já está preenchido. */
+export async function getPhotoTargets(tenantId: string): Promise<PhotoTargets | null> {
+  return withTenant(tenantId, async (tx) => {
+    const unidades = await tx.$queryRaw<{ cover_url: string | null }[]>`
+      SELECT cover_url FROM locations ORDER BY created_at LIMIT 1
+    `;
+    const unidade = unidades[0];
+    if (!unidade) return null;
+
+    const marcas = await tx.$queryRaw<{ logo_url: string | null }[]>`
+      SELECT logo_url FROM tenants WHERE id = ${tenantId}::uuid
+    `;
+
+    const equipe = await tx.$queryRaw<{ id: string; name: string; photo_url: string | null }[]>`
+      SELECT id, name, photo_url FROM professionals
+      WHERE active AND kind = 'professional' ORDER BY name
+    `;
+
+    const servicos = await tx.$queryRaw<{ id: string; name: string; photo_url: string | null }[]>`
+      SELECT id, name, photo_url FROM services WHERE active ORDER BY name
+    `;
+
+    return {
+      coverUrl: unidade.cover_url,
+      logoUrl: marcas[0]?.logo_url ?? null,
+      professionals: equipe.map((p) => ({ id: p.id, name: p.name, photoUrl: p.photo_url })),
+      services: servicos.map((s) => ({ id: s.id, name: s.name, photoUrl: s.photo_url })),
+    };
+  });
+}
+
+/**
+ * Grava os endereços das fotos.
+ *
+ * As colunas existiam desde o bloco 1 e o perfil público já as devolvia — nunca
+ * houve por onde preenchê-las, e a página de barbearia ficava sem uma única
+ * imagem num negócio em que a escolha do cliente é visual. É a mesma falha que
+ * `blocks` teve por oito blocos, com a diferença de que aqui ela estava à vista
+ * de qualquer visitante.
+ *
+ * Fica separada das outras etapas de propósito: a meta de dez minutos do
+ * onboarding não sobrevive a nove campos de URL, e foto é o tipo de coisa que a
+ * barbearia volta para ajustar depois.
+ *
+ * Cada `UPDATE` de profissional e serviço é por id, sob a RLS. Um id de outra
+ * barbearia não encontra linha — a política filtra antes do `WHERE`.
+ */
+export async function savePhotos(
+  tenantId: string,
+  input: PhotoInput,
+): Promise<{ readonly saved: number }> {
+  return withTenant(tenantId, async (tx) => {
+    let gravadas = 0;
+
+    if (input.coverUrl !== undefined) {
+      await tx.$executeRaw`
+        UPDATE locations SET cover_url = ${input.coverUrl}, updated_at = now()
+        WHERE id = (SELECT id FROM locations ORDER BY created_at LIMIT 1)
+      `;
+      if (input.coverUrl) gravadas += 1;
+    }
+
+    if (input.logoUrl !== undefined) {
+      await tx.$executeRaw`
+        UPDATE tenants SET logo_url = ${input.logoUrl}, updated_at = now()
+        WHERE id = ${tenantId}::uuid
+      `;
+      if (input.logoUrl) gravadas += 1;
+    }
+
+    for (const pessoa of input.professionals ?? []) {
+      if (pessoa.photoUrl === undefined) continue;
+      await tx.$executeRaw`
+        UPDATE professionals SET photo_url = ${pessoa.photoUrl}, updated_at = now()
+        WHERE id = ${pessoa.id}::uuid
+      `;
+      if (pessoa.photoUrl) gravadas += 1;
+    }
+
+    for (const servico of input.services ?? []) {
+      if (servico.photoUrl === undefined) continue;
+      await tx.$executeRaw`
+        UPDATE services SET photo_url = ${servico.photoUrl}, updated_at = now()
+        WHERE id = ${servico.id}::uuid
+      `;
+      if (servico.photoUrl) gravadas += 1;
+    }
+
+    return { saved: gravadas };
+  });
+}

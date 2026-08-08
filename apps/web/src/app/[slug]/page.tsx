@@ -1,5 +1,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import {
+  horariosEmDestaque,
+  horariosRestantes,
+  imagemPublica,
+  PROPORCAO,
+} from '@barbearia/core';
 import { getProfile, getToday, type PublicProfile } from '@/lib/api';
 import { localDate } from '@/lib/date';
 import { jsonLd, jsonLdScript } from '@/lib/json-ld';
@@ -27,6 +33,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const profile = await getProfile(slug);
   if (!profile) return { title: 'Estabelecimento não encontrado' };
 
+  const capa = imagemPublica(profile.location.coverUrl);
   const where = [profile.location.district, profile.location.city].filter(Boolean).join(', ');
   const from = profile.priceFromCents ? ` · a partir de R$ ${money(profile.priceFromCents)}` : '';
   const description = profile.location.about ?? `Agende seu horário${from}.`;
@@ -38,7 +45,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       title: profile.name,
       description,
       type: 'website',
-      ...(profile.location.coverUrl ? { images: [profile.location.coverUrl] } : {}),
+      ...(capa ? { images: [capa] } : {}),
     },
     alternates: { canonical: `/${profile.slug}` },
   };
@@ -55,7 +62,26 @@ export default async function BarbershopPage({ params }: Params) {
     ? await getToday(slug, profile.location.id, firstService.id, today)
     : null;
 
-  const byId = new Map(profile.professionals.map((p) => [p.id, p.name]));
+  /**
+   * Seis cartões espalhados pelo dia, não os seis primeiros da fila.
+   *
+   * A grade sai ordenada por horário, então "os primeiros" eram
+   * `12:30 12:35 12:40 12:45` — a mesma hora quatro vezes, seguida de "e mais
+   * 122 horários". Isso não é escolha, é o começo de uma lista.
+   */
+  /**
+   * Revalidado na leitura, não só na gravação.
+   *
+   * Hoje `savePhotos` é o único caminho que escreve estas colunas, e ele já
+   * valida. Mas o dado fica no banco por anos e a próxima importação em massa
+   * ou migração não vai lembrar — e o endereço termina num atributo HTML e no
+   * `og:image`. Validar dos dois lados custa uma expressão regular.
+   */
+  const capa = imagemPublica(profile.location.coverUrl);
+
+  const destaque = availability ? horariosEmDestaque(availability.slots, 6) : [];
+  const restantes = availability ? horariosRestantes(availability.slots, destaque.length) : 0;
+
   const address = [profile.location.street, profile.location.district, profile.location.city]
     .filter(Boolean)
     .join(' · ');
@@ -101,24 +127,28 @@ export default async function BarbershopPage({ params }: Params) {
               <>
                 <div className="faixa ui-scroll-x">
                   <ul className="faixa__lista">
-                    {availability.slots.slice(0, 14).map((slot) => (
+                    {destaque.map((slot) => (
                       <li key={`${slot.start}-${slot.professionalId}`}>
                         <a
                           className="chip"
                           href={`/${slug}/s/${firstService?.id ?? ''}?d=${today}&h=${slot.start}`}
                         >
                           <span className="chip__hora tabular">{slot.start}</span>
-                          <span className="chip__quem">{byId.get(slot.professionalId) ?? ''}</span>
-
                         </a>
                       </li>
                     ))}
                   </ul>
                 </div>
+                {/* O cartão carrega só o horário, que é o que se escolhe.
+                    O nome do barbeiro saía dentro de cada um e repetia seis
+                    vezes o mesmo — a grade vem colapsada por horário, então o
+                    primeiro da fila ganhava todos. Pior que ruído: sugeria que
+                    só ele estava livre. Quem atende é escolha do passo seguinte,
+                    e a seção "Quem atende" mostra a equipe com rosto. */}
                 <p className="hoje__nota">
-                  {availability.slots.length > 14
-                    ? `e mais ${availability.slots.length - 14} horários`
-                    : `${availability.slots.length} horários livres`}
+                  {restantes > 0
+                    ? `e mais ${restantes} ${restantes === 1 ? 'horário' : 'horários'} hoje`
+                    : `${destaque.length} ${destaque.length === 1 ? 'horário livre' : 'horários livres'} hoje`}
                 </p>
               </>
             ) : (
@@ -138,8 +168,28 @@ export default async function BarbershopPage({ params }: Params) {
           </div>
         </section>
 
-        <section className="secao" id="servicos" aria-labelledby="servicos-titulo">
-          <div className="ui-container">
+        {capa ? (
+          /* A foto vem **depois** da agenda, não antes: o herói continua sendo a
+             disponibilidade (docs/03-direcao-visual.md). Mas a direção sempre
+             disse "a foto continua presente logo abaixo", e não havia nenhuma.
+             `width`/`height` reservam o espaço para ela não empurrar o
+             conteúdo ao carregar — o toque errado no horário errado. */
+          <figure className="capa">
+            {/* eslint-disable-next-line @next/next/no-img-element -- domínio
+                externo arbitrário; `next/image` exigiria cadastrá-lo antes. */}
+            <img
+              alt={`Ambiente da ${profile.name}`}
+              className="capa__img"
+              height={PROPORCAO.capa.height}
+              src={capa}
+              width={PROPORCAO.capa.width}
+            />
+          </figure>
+        ) : null}
+
+        <div className="corpo ui-container">
+        <section className="secao secao--menu" id="servicos" aria-labelledby="servicos-titulo">
+          <div>
             <h2 className="rotulo" id="servicos-titulo">
               Serviços
             </h2>
@@ -153,9 +203,24 @@ export default async function BarbershopPage({ params }: Params) {
                 </h3>
 
                 <ul className="servicos">
-                  {categoria.services.map((servico) => (
+                  {categoria.services.map((servico) => {
+                    const foto = imagemPublica(servico.photoUrl);
+                    return (
                     <li key={servico.id}>
-                      <a className="servico" href={`/${slug}/s/${servico.id}`}>
+                      <a
+                        className={`servico ${foto ? 'servico--ilustrado' : ''}`}
+                        href={`/${slug}/s/${servico.id}`}
+                      >
+                        {foto ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            alt=""
+                            className="servico__foto"
+                            height={PROPORCAO.servico.height}
+                            src={foto}
+                            width={PROPORCAO.servico.width}
+                          />
+                        ) : null}
                         <span className="servico__nome">{servico.name}</span>
                         {servico.description ? (
                           <span className="servico__sobre">{servico.description}</span>
@@ -170,35 +235,59 @@ export default async function BarbershopPage({ params }: Params) {
                         </span>
                       </a>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </div>
             ))}
           </div>
         </section>
 
+        <aside className="lado">
         {profile.professionals.length > 0 ? (
           <section className="secao" aria-labelledby="equipe-titulo">
-            <div className="ui-container">
+            <div>
               <h2 className="rotulo" id="equipe-titulo">
                 Quem atende
               </h2>
+              {/* O cliente escolhe barbeiro por rosto. Sem foto, esta seção era
+                  duas etiquetas cinzas com nomes dentro — o item mais fraco da
+                  página inteira, num lugar em que a decisão é visual. */}
               <ul className="equipe">
-                {profile.professionals.map((pessoa) => (
+                {profile.professionals.map((pessoa) => {
+                  const rosto = imagemPublica(pessoa.photoUrl);
+                  return (
                   <li className="pessoa" key={pessoa.id}>
-                    <a href={`/${slug}/p/${pessoa.id}`}>
+                    <a className="pessoa__link" href={`/${slug}/p/${pessoa.id}`}>
+                      {rosto ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          alt=""
+                          className="pessoa__foto"
+                          height={PROPORCAO.pessoa.height}
+                          src={rosto}
+                          width={PROPORCAO.pessoa.width}
+                        />
+                      ) : (
+                        /* Sem foto o lugar continua reservado, com a inicial.
+                           Some a foto, não some a pessoa. */
+                        <span className="pessoa__inicial" aria-hidden="true">
+                          {pessoa.name.trim().charAt(0)}
+                        </span>
+                      )}
                       <span className="pessoa__nome">{pessoa.name}</span>
                       {pessoa.bio ? <span className="pessoa__bio">{pessoa.bio}</span> : null}
                     </a>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           </section>
         ) : null}
 
         <section className="secao" aria-labelledby="onde-titulo">
-          <div className="ui-container onde">
+          <div className="onde">
             <div>
               <h2 className="rotulo" id="onde-titulo">
                 Onde fica
@@ -259,8 +348,8 @@ export default async function BarbershopPage({ params }: Params) {
           </div>
         </section>
 
-        <section className="secao">
-          <div className="ui-container">
+        <section className="secao secao--miudo">
+          <div>
             <h2 className="rotulo">Cancelamento</h2>
             {/* O prazo vem da coluna que a API aplica; o texto livre da
                 barbearia complementa, não substitui. */}
@@ -272,6 +361,8 @@ export default async function BarbershopPage({ params }: Params) {
             </p>
           </div>
         </section>
+        </aside>
+        </div>
       </main>
 
       <div className="ui-sticky-action">

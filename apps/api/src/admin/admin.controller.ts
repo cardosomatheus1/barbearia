@@ -7,14 +7,17 @@ import {
   staffLogin,
   type AuthenticatedStaff,
 } from '@barbearia/identity';
+import { imagemPublica } from '@barbearia/core';
 import {
   getOnboardingState,
+  getPhotoTargets,
   OnboardingError,
   publish,
   saveBusiness,
   saveChangeWindow,
   savePayments,
   saveProfessionals,
+  savePhotos,
   saveServices,
   templatesForOnboarding,
 } from '@barbearia/onboarding';
@@ -27,6 +30,7 @@ import {
   changeWindowSchema,
   loginSchema,
   paymentsSchema,
+  photosSchema,
   professionalsSchema,
   servicesSchema,
   signUpSchema,
@@ -221,6 +225,68 @@ export class OnboardingController {
     } catch (error) {
       return toHttp(error);
     }
+  }
+
+  /**
+   * O que a barbearia pode ilustrar, com o que já está preenchido.
+   *
+   * A tela precisa da lista para montar um campo por profissional e por
+   * serviço — sem ela o dono teria que descobrir os ids sozinho.
+   */
+  @Get('photos')
+  async photos(@Staff() staff: AuthenticatedStaff) {
+    const alvos = await getPhotoTargets(staff.tenantId);
+    if (!alvos) throw notFound('unknown_tenant', 'Barbearia não encontrada');
+    return alvos;
+  }
+
+  /**
+   * Grava os endereços de foto.
+   *
+   * `imagemPublica` decide o que entra: só `https`, e nunca `javascript:` ou
+   * `data:`. O que não passa vira `null` em vez de erro — a foto é opcional, e
+   * uma URL ruim num campo não pode impedir de salvar os outros oito. A tela
+   * mostra o campo vazio de volta, que é a resposta honesta.
+   *
+   * Campo **ausente** é diferente de campo **vazio**: ausente não é tocado,
+   * vazio apaga. Sem essa distinção, salvar a foto de um barbeiro apagaria a
+   * dos outros.
+   */
+  @Put('photos')
+  async savePhotos(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(photosSchema))
+    body: {
+      coverUrl?: string;
+      logoUrl?: string;
+      professionals?: { id: string; photoUrl: string }[];
+      services?: { id: string; photoUrl: string }[];
+    },
+  ) {
+    const resultado = await savePhotos(staff.tenantId, {
+      ...(body.coverUrl !== undefined ? { coverUrl: imagemPublica(body.coverUrl) } : {}),
+      ...(body.logoUrl !== undefined ? { logoUrl: imagemPublica(body.logoUrl) } : {}),
+      ...(body.professionals
+        ? {
+            professionals: body.professionals.map((p) => ({
+              id: p.id,
+              photoUrl: imagemPublica(p.photoUrl),
+            })),
+          }
+        : {}),
+      ...(body.services
+        ? {
+            services: body.services.map((s) => ({
+              id: s.id,
+              photoUrl: imagemPublica(s.photoUrl),
+            })),
+          }
+        : {}),
+    });
+
+    // A barbearia precisa saber que a URL foi recusada. Devolver o estado real
+    // deixa a tela comparar com o que foi enviado sem inventar mensagem.
+    return { ...resultado, photos: await getPhotoTargets(staff.tenantId) };
   }
 
   @Put('change-window')

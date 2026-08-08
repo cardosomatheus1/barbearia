@@ -129,9 +129,48 @@ Só duas coisas se mexem, e ambas informam:
 
 ## O acessório que foi removido
 
-O plano tinha uma galeria de fotos de cortes. Cortada: não há foto real, e caixa
-vazia esperando conteúdo é pior que ausência. A capa única fica, e degrada para
-um fundo sólido quando não existir.
+O plano tinha uma galeria de fotos de cortes. Cortada: caixa vazia esperando
+conteúdo é pior que ausência. A capa única fica, e degrada para um fundo sólido
+quando não existir.
+
+---
+
+## Revisão do bloco 11: o que o documento prometia e a tela não entregava
+
+Escrito depois de olhar a página pronta, lado a lado com este texto.
+
+**"A foto continua presente logo abaixo" era falso.** A página passou dez blocos
+sem uma única imagem. A justificativa original — "não há foto real" — descrevia
+o estado do banco, não uma decisão de desenho: as colunas `cover_url`,
+`photo_url` e `logo_url` existiam desde o bloco 1 e o perfil público já as
+devolvia. Faltava a **origem do dado**, que é o mesmo defeito que `blocks` teve
+por oito blocos, com o agravante de estar à vista de qualquer visitante.
+
+Corrigido no bloco 11: `/admin/fotos` dá à barbearia por onde preencher, e a
+página exibe capa, rosto do barbeiro e foto do serviço. Enquanto não há
+armazenamento próprio o endereço é colado, com validação de `https`.
+
+**A régua de horários se sabotava.** Ela sai ordenada por horário, então os
+primeiros catorze de um dia com 126 vagas eram `12:30 12:35 12:40 12:45` — a
+mesma hora repetida, seguida de "e mais 122 horários". A tese da página é
+"escolha quando", e a régua mostrava uma fila. Agora são seis horários
+espalhados pelo dia, com as pontas presas: o primeiro livre e o último do
+expediente.
+
+**O nome do barbeiro saiu do cartão.** Ele repetia seis vezes o mesmo nome,
+porque a grade vem colapsada por horário e o primeiro da fila ganha todos. Pior
+que ruído: sugeria que só aquela pessoa estava livre. O cartão carrega o
+horário, que é o que se escolhe; quem atende é o passo seguinte, e a seção
+"Quem atende" agora mostra a equipe com rosto.
+
+**Não havia layout de notebook.** Uma coluna só, esticada até 1280: a linha ia
+de "Pezinho" na margem esquerda a "R$ 15,00" na direita, com mil pixels de nada
+no meio. O wireframe deste documento era só de celular, e "ganha densidade
+quando há espaço" (CLAUDE.md §5) nunca foi construído. A partir de 768 o
+cardápio fica à esquerda e equipe, endereço e horários viram coluna de
+referência à direita — que também conserta a hierarquia: as cinco seções tinham
+exatamente o mesmo peso, e a política de cancelamento gritava tanto quanto o
+preço do corte.
 
 ---
 

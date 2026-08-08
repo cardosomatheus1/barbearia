@@ -271,8 +271,16 @@ personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
   rola dentro do próprio recipiente (`.ui-scroll-x`), nunca leva a página junto.
   Há teste **e** medição no navegador: o teste lê o CSS, a medição vê o layout
   montado, e só a segunda pega grade que estoura com conteúdo real.
-- **Imagem sem limite de largura.** `max-width: 100%` sempre, e `aspect-ratio`
-  declarado para a foto não empurrar o conteúdo ao carregar.
+- **Imagem sem limite de largura.** `max-width: 100%` sempre, `aspect-ratio`
+  declarado no CSS **e** `width`/`height` no `<img>` — sem os dois últimos o
+  navegador não reserva o espaço e a foto empurra o conteúdo ao carregar. Há
+  teste para os dois em `apps/web/src/app/globals.test.ts`; ele nasceu só no
+  bloco 11, quando entrou a primeira imagem do produto.
+- **Página sem foto é página fraca, e a culpa costuma ser da origem do dado.**
+  A página pública passou dez blocos sem uma única imagem com as colunas de foto
+  prontas desde o bloco 1 — faltava por onde preenchê-las. Antes de mexer no CSS
+  de uma tela que parece pobre, confira se o dado que a enriqueceria tem
+  cadastro.
 - **Ação principal sob a barra de gestos.** Barra fixa no rodapé soma
   `env(safe-area-inset-bottom)`. Sem isso o botão "Agendar" fica inalcançável no
   iPhone. Há teste.

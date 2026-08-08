@@ -339,6 +339,113 @@ describeIfDb('painel do gestor', () => {
     expect(publico.body.name).toBe('Domari Barber Club');
   });
 
+  // -- fotos -----------------------------------------------------------------
+
+  it('grava a foto e ela chega na página pública', async () => {
+    // As colunas existiam desde o bloco 1 e o perfil já as devolvia; faltava por
+    // onde preencher, e a página de barbearia ficava sem uma única imagem.
+    const um = await criarConta();
+    const slug = await percorrer(um.token);
+
+    const alvos = await http()
+      .get('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .expect(200);
+    expect(alvos.body.professionals.length).toBeGreaterThan(0);
+
+    await http()
+      .put('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .send({
+        coverUrl: 'https://cdn.exemplo.com/fachada.jpg',
+        professionals: [
+          { id: alvos.body.professionals[0].id, photoUrl: 'https://cdn.exemplo.com/ruan.jpg' },
+        ],
+      })
+      .expect(200);
+
+    const publico = await http().get(`/v1/b/${slug}`).expect(200);
+    expect(publico.body.location.coverUrl).toBe('https://cdn.exemplo.com/fachada.jpg');
+    expect(publico.body.professionals[0].photoUrl).toBe('https://cdn.exemplo.com/ruan.jpg');
+  });
+
+  it('recusa endereço que não é https, sem derrubar o resto', async () => {
+    // A foto é opcional: uma URL ruim num campo não pode impedir de salvar os
+    // outros. O que não passa volta em branco, e a tela mostra isso.
+    const um = await criarConta();
+    await percorrer(um.token);
+
+    const alvos = await http()
+      .get('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .expect(200);
+
+    const salvo = await http()
+      .put('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .send({
+        coverUrl: 'javascript:alert(1)',
+        professionals: [
+          { id: alvos.body.professionals[0].id, photoUrl: 'https://cdn.exemplo.com/ok.jpg' },
+        ],
+      })
+      .expect(200);
+
+    expect(salvo.body.photos.coverUrl).toBeNull();
+    expect(salvo.body.photos.professionals[0].photoUrl).toBe('https://cdn.exemplo.com/ok.jpg');
+  });
+
+  it('campo ausente não apaga a foto que já estava lá', async () => {
+    // Ausente é diferente de vazio: sem essa distinção, salvar a foto de um
+    // barbeiro apagaria a dos outros.
+    const um = await criarConta();
+    await percorrer(um.token);
+
+    await http()
+      .put('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .send({ coverUrl: 'https://cdn.exemplo.com/fachada.jpg' })
+      .expect(200);
+
+    const depois = await http()
+      .put('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .send({ logoUrl: 'https://cdn.exemplo.com/logo.png' })
+      .expect(200);
+
+    expect(depois.body.photos.coverUrl).toBe('https://cdn.exemplo.com/fachada.jpg');
+
+    // E vazio apaga de propósito: é como a tela diz "tire esta foto".
+    const limpo = await http()
+      .put('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .send({ coverUrl: '' })
+      .expect(200);
+    expect(limpo.body.photos.coverUrl).toBeNull();
+  });
+
+  it('não põe foto no profissional de outra barbearia', async () => {
+    const um = await criarConta();
+    const slug = await percorrer(um.token);
+    const alvos = await http()
+      .get('/v1/admin/photos')
+      .set('Authorization', `Bearer ${um.token}`)
+      .expect(200);
+    const alheio = alvos.body.professionals[0].id;
+
+    const dois = await criarConta({ ...CONTA, email: 'rival@rival.com', businessName: 'Rival' });
+
+    // O id existe, mas a RLS não enxerga a linha: o UPDATE não encontra nada.
+    await http()
+      .put('/v1/admin/photos')
+      .set('Authorization', `Bearer ${dois.token}`)
+      .send({ professionals: [{ id: alheio, photoUrl: 'https://cdn.rival.com/pichacao.jpg' }] })
+      .expect(200);
+
+    const publico = await http().get(`/v1/b/${slug}`).expect(200);
+    expect(publico.body.professionals[0].photoUrl).toBeNull();
+  });
+
   it('gestor não enxerga o estado da outra barbearia', async () => {
     const um = await criarConta();
     await percorrer(um.token);

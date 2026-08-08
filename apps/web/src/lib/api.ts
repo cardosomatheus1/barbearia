@@ -12,6 +12,8 @@ export interface PublicService {
   id: string;
   name: string;
   description: string | null;
+  /** A API já devolvia; a tela é que ignorava. */
+  photoUrl: string | null;
   priceCents: number;
   durationMinutes: number;
   professionalIds: string[];

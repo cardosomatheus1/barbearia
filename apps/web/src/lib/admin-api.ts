@@ -261,3 +261,25 @@ export const marcarNoBalcao = (
   token,
   idempotencyKey,
 );
+
+// -- Fotos --------------------------------------------------------------------
+
+export interface AlvosDeFoto {
+  coverUrl: string | null;
+  logoUrl: string | null;
+  professionals: { id: string; name: string; photoUrl: string | null }[];
+  services: { id: string; name: string; photoUrl: string | null }[];
+}
+
+export const fotosDaBarbearia = (token: string) =>
+  chamar<AlvosDeFoto>('GET', '/v1/admin/photos', undefined, token);
+
+export const salvarFotos = (
+  token: string,
+  dados: {
+    coverUrl?: string;
+    logoUrl?: string;
+    professionals?: { id: string; photoUrl: string }[];
+    services?: { id: string; photoUrl: string }[];
+  },
+) => chamar<{ saved: number; photos: AlvosDeFoto }>('PUT', '/v1/admin/photos', dados, token);
