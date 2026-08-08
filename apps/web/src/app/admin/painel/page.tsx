@@ -11,6 +11,7 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * O painel do proprietário — SPEC §5.9.
@@ -115,7 +116,7 @@ export default async function PainelPage() {
 
   if (!operacao.ok) {
     return (
-      <main className="ui-container painel__conteudo" data-secao="painel">
+      <main className="ui-container painel__conteudo" {...secao('painel')}>
         {topo}
         <h1 className="painel__titulo">Painel</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -133,7 +134,7 @@ export default async function PainelPage() {
   const urgentes = achados?.achados.filter((a) => a.severidade !== 'aviso') ?? [];
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="painel">
+    <main className="ui-container painel__conteudo" {...secao('painel')}>
       {topo}
 
       <h1 className="painel__titulo">Painel</h1>

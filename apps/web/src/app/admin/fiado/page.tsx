@@ -6,6 +6,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoReceberFiado, acaoSair } from '../acoes';
 import { BalcaoNav } from '../balcao-nav';
+import { secao } from '../secoes';
 
 /**
  * Quem está devendo.
@@ -131,7 +132,7 @@ export default async function FiadoPage({ searchParams }: Props) {
       redirect('/admin/seguranca?de=fiado');
     }
     return (
-      <main className="ui-container painel__conteudo" data-secao="fiado">
+      <main className="ui-container painel__conteudo" {...secao('fiado')}>
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[devedores.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
@@ -144,7 +145,7 @@ export default async function FiadoPage({ searchParams }: Props) {
   const total = lista.reduce((soma, devedor) => soma - devedor.saldoCents, 0);
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="fiado">
+    <main className="ui-container painel__conteudo" {...secao('fiado')}>
       {topo}
       <BalcaoNav atual="/admin/fiado" />
 

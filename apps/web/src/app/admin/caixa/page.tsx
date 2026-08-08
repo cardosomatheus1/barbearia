@@ -6,6 +6,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirCaixa, acaoFecharCaixa, acaoMovimentarCaixa, acaoSair } from '../acoes';
 import { BalcaoNav } from '../balcao-nav';
+import { secao } from '../secoes';
 
 /**
  * O caixa: a gaveta com dono.
@@ -151,7 +152,7 @@ export default async function CaixaPage({ searchParams }: Props) {
       redirect('/admin/seguranca?de=caixa');
     }
     return (
-      <main className="ui-container painel__conteudo" data-secao="caixa">
+      <main className="ui-container painel__conteudo" {...secao('caixa')}>
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[caixa.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
@@ -163,7 +164,7 @@ export default async function CaixaPage({ searchParams }: Props) {
   const { aberto, historico, timezone } = caixa.dados;
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="caixa">
+    <main className="ui-container painel__conteudo" {...secao('caixa')}>
       {topo}
       <BalcaoNav atual="/admin/caixa" />
 

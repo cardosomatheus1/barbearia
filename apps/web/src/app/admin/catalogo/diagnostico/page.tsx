@@ -5,6 +5,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSair } from '../../acoes';
 import { CadastroNav } from '../../cadastro-nav';
+import { secao } from '../../secoes';
 
 /**
  * Diagnóstico do catálogo — SPEC §5.7, que resolve D4 e D5.
@@ -74,7 +75,7 @@ export default async function DiagnosticoPage() {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo" data-secao="cadastro">
+      <main className="ui-container painel__conteudo" {...secao('cadastro')}>
         {topo}
         <h1 className="painel__titulo">Diagnóstico do catálogo</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -93,7 +94,7 @@ export default async function DiagnosticoPage() {
   const ordenados = [...achados].sort((a, b) => ORDEM[a.severidade] - ORDEM[b.severidade]);
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="cadastro">
+    <main className="ui-container painel__conteudo" {...secao('cadastro')}>
       {topo}
       <CadastroNav atual="/admin/catalogo/diagnostico" />
 

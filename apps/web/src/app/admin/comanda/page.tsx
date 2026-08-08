@@ -7,6 +7,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirComanda, acaoSair } from '../acoes';
 import { BalcaoNav } from '../balcao-nav';
+import { secao } from '../secoes';
 
 /**
  * Por onde uma comanda começa.
@@ -94,7 +95,7 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
   const aCobrar = dia.ok ? dia.dados.entries.filter((linha) => COBRAVEL.has(linha.status)) : [];
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="comanda">
+    <main className="ui-container painel__conteudo" {...secao('comanda')}>
       {topo}
       <BalcaoNav atual="/admin/comanda" />
 

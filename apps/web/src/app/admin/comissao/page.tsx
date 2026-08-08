@@ -11,6 +11,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoFecharComissao, acaoSair } from '../acoes';
 import { BalcaoNav } from '../balcao-nav';
+import { secao } from '../secoes';
 
 /**
  * Comissão.
@@ -134,7 +135,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
       redirect('/admin/seguranca?de=caixa');
     }
     return (
-      <main className="ui-container painel__conteudo" data-secao="comissao">
+      <main className="ui-container painel__conteudo" {...secao('comissao')}>
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[extrato.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
@@ -146,7 +147,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
   const conta = extrato.dados;
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="comissao">
+    <main className="ui-container painel__conteudo" {...secao('comissao')}>
       {topo}
       <BalcaoNav atual="/admin/comissao" />
 

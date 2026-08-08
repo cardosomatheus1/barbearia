@@ -5,6 +5,7 @@ import { fichaDoCliente, type VisitaNaFicha } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoPreferencias, acaoSair } from '../../acoes';
+import { secao } from '../../secoes';
 
 /**
  * A ficha do cliente — SPEC §4.1 e §4.3.
@@ -108,7 +109,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
 
   if (!ficha.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" {...secao('cliente')}>
         {topo}
         <h1 className="painel__titulo">Ficha</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -127,7 +128,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const vazia = fichaEstaVazia(preferencias);
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" {...secao('cliente')}>
       {topo}
 
       <h1 className="painel__titulo">{ficha.dados.nome}</h1>

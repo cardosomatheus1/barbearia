@@ -10,6 +10,7 @@ import { addDays, localTime, weekdayShort } from '@/lib/date';
 import { painelDoBalcaoOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAtendimento, acaoSair } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * O balcão: o dia da barbearia.
@@ -293,7 +294,7 @@ export default async function DiaPage({ searchParams }: Props) {
 
   if (!painel.ok) {
     return (
-      <main className="ui-container painel__conteudo" data-secao="dia">
+      <main className="ui-container painel__conteudo" {...secao('dia')}>
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar o dia. <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Tentar de novo</a>
         </div>
@@ -328,7 +329,7 @@ export default async function DiaPage({ searchParams }: Props) {
     : -1;
 
   return (
-    <main className="ui-container balcao" data-secao="dia">
+    <main className="ui-container balcao" {...secao('dia')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/onboarding">
           ← {estado.businessName}

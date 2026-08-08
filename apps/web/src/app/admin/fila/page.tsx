@@ -10,6 +10,7 @@ import {
 import { painelOuDesvio } from '@/lib/painel';
 import { lerLinkDaFila, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoEntrarNaFila, acaoMoverNaFila, acaoSair, acaoSentarDaFila } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * A fila da porta.
@@ -185,7 +186,7 @@ export default async function FilaPage({ searchParams }: Props) {
   if (!fila.ok || !catalogo.ok) {
     const code = fila.ok ? (catalogo.ok ? 'request_failed' : catalogo.code) : fila.code;
     return (
-      <main className="ui-container balcao" data-secao="fila">
+      <main className="ui-container balcao" {...secao('fila')}>
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -204,7 +205,7 @@ export default async function FilaPage({ searchParams }: Props) {
   const chave = randomUUID();
 
   return (
-    <main className="ui-container balcao" data-secao="fila">
+    <main className="ui-container balcao" {...secao('fila')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}

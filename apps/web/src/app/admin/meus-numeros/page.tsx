@@ -7,6 +7,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { ProNav } from '../pro-nav';
+import { secao } from '../secoes';
 
 /**
  * Os números do barbeiro — SPEC §4.21.
@@ -90,7 +91,7 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
 
   if (!numeros.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" {...secao('meus-numeros')}>
         {topo}
         <ProNav atual="/admin/meus-numeros" />
         <h1 className="painel__titulo">Meus números</h1>
@@ -110,7 +111,7 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
   const meuTotal = minha?.linhas.find((l) => l.professionalId === numeros.dados.professionalId);
 
   return (
-    <main className="ui-container meu-dia">
+    <main className="ui-container meu-dia" {...secao('meus-numeros')}>
       {topo}
       <ProNav atual="/admin/meus-numeros" />
 

@@ -11,6 +11,7 @@ import {
 import { addDays, weekdayShort, dayNumber } from '@/lib/date';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoMarcarNoBalcao } from '../../acoes';
+import { secao } from '../../secoes';
 
 /**
  * Marcar alguém pelo balcão.
@@ -88,7 +89,7 @@ export default async function MarcarPage({ searchParams }: Props) {
   const painel = await painelDoDia(token);
   if (!catalogo.ok || !painel.ok) {
     return (
-      <main className="ui-container painel__conteudo" data-secao="dia">
+      <main className="ui-container painel__conteudo" {...secao('dia')}>
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar o catálogo. <a href="/admin/dia">Voltar ao dia</a>
         </div>
@@ -151,7 +152,7 @@ export default async function MarcarPage({ searchParams }: Props) {
   const doDia = grade?.ok ? grade.dados.days[0] : undefined;
 
   return (
-    <main className="ui-container balcao balcao--marcar" data-secao="dia">
+    <main className="ui-container balcao balcao--marcar" {...secao('dia')}>
       <header className="painel__topo">
         <a className="painel__marca" href={`/admin/dia?d=${data}`}>← O dia</a>
       </header>

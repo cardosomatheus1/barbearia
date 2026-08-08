@@ -17,6 +17,7 @@ import {
   acaoRemoverExcecao,
   acaoSair,
 } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * A agenda do admin.
@@ -300,7 +301,7 @@ export default async function AgendaPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container balcao" data-secao="agenda">
+      <main className="ui-container balcao" {...secao('agenda')}>
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -333,7 +334,7 @@ export default async function AgendaPage({ searchParams }: Props) {
     );
 
   return (
-    <main className="ui-container balcao" data-secao="agenda">
+    <main className="ui-container balcao" {...secao('agenda')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}

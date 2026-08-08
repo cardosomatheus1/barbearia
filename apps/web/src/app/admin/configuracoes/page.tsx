@@ -3,6 +3,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { getProfile } from '@/lib/api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoJanela, acaoSair } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * Janela de cancelamento e remarcação.
@@ -27,7 +28,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
   const salvo = (Array.isArray(query['salvo']) ? query['salvo'][0] : query['salvo']) === '1';
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="configuracoes">
+    <main className="ui-container painel__conteudo" {...secao('configuracoes')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
         <form action={acaoSair}>

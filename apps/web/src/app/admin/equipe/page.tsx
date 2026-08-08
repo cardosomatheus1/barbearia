@@ -15,6 +15,7 @@ import {
   acaoSair,
   acaoTrocarPapel,
 } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * Equipe.
@@ -165,7 +166,7 @@ export default async function EquipePage({ searchParams }: Props) {
   if (!resposta.ok) {
     // 403 aqui não é defeito: é uma conta sem `team.manage` tentando entrar.
     return (
-      <main className="ui-container painel__conteudo" data-secao="equipe">
+      <main className="ui-container painel__conteudo" {...secao('equipe')}>
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         </header>
@@ -180,7 +181,7 @@ export default async function EquipePage({ searchParams }: Props) {
   const equipe: Equipe = resposta.dados;
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="equipe">
+    <main className="ui-container painel__conteudo" {...secao('equipe')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         <form action={acaoSair}>

@@ -2030,11 +2030,18 @@ main { padding-bottom: var(--space-8); }
 
 .meu-dia { padding: var(--space-4) var(--space-4) var(--space-8); max-width: 34rem; }
 
+/* A frase do intervalo é o que esta tela existe para dizer — "faltam 20 min
+   para o próximo" —, e por isso ela sempre foi maior que o título. Quando o
+   título do painel subiu para a condensada em 3xl, os dois empataram e a tela
+   passou a ter dois títulos. Ela volta a ser a maior, e ganha a condensada:
+   é número, e número grande aqui é da mesma família do placar. */
 .meu-dia__intervalo {
   margin: 0 0 var(--space-6);
-  font-size: var(--font-size-2xl);
+  font-family: var(--font-display);
+  font-size: var(--font-size-3xl);
   font-weight: var(--font-weight-semibold);
-  line-height: 1.15;
+  letter-spacing: -0.005em;
+  line-height: 1.1;
   text-wrap: balance;
 }
 
@@ -2136,7 +2143,7 @@ main { padding-bottom: var(--space-8); }
      outra página: o barbeiro que fica na estação com o laptop vê o próximo e a
      fila da tarde de uma vez. */
   .meu-dia { max-width: 60rem; }
-  .meu-dia__intervalo { font-size: var(--font-size-3xl); }
+  .meu-dia__intervalo { font-size: var(--font-size-4xl); }
 }
 
 /* ============================================================================
@@ -3544,21 +3551,9 @@ main { padding-bottom: var(--space-8); }
 
 /* O módulo aberto: fundo em degradê e o filete creme→vermelho. É o estado ativo
    do mock, e a única peça da moldura que usa as duas cores da marca juntas. */
-.casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao'],
-.casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao'],
-.casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao'],
-.casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao'],
-.casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro'],
-.casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro'],
-.casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro'],
-.casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro'],
-.casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa'],
-.casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa'],
-.casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa'],
-.casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa'],
-.casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa'],
-.casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa'],
-.casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa'] {
+.casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao'],
+.casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro'],
+.casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa'] {
   color: var(--color-accent);
   background: linear-gradient(
     180deg,
@@ -3567,36 +3562,12 @@ main { padding-bottom: var(--space-8); }
   );
   border-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
-.casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao'] svg,
-.casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao'] svg,
-.casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao'] svg,
-.casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao'] svg,
-.casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro'] svg,
-.casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro'] svg,
-.casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro'] svg,
-.casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro'] svg,
-.casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa'] svg,
-.casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa'] svg,
-.casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa'] svg,
-.casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa'] svg,
-.casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa'] svg,
-.casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa'] svg,
-.casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa'] svg { opacity: 1; }
-.casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao']::after,
-.casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao']::after,
-.casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao']::after,
-.casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao']::after,
-.casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro']::after,
-.casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro']::after,
-.casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro']::after,
-.casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro']::after,
-.casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa']::after,
-.casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa']::after,
-.casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa']::after,
-.casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa']::after,
-.casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa']::after,
-.casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa']::after,
-.casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa']::after {
+.casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao'] svg,
+.casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro'] svg,
+.casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa'] svg { opacity: 1; }
+.casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao']::after,
+.casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro']::after,
+.casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa']::after {
   content: '';
   position: absolute;
   left: var(--space-3);
@@ -3641,22 +3612,9 @@ main { padding-bottom: var(--space-8); }
 /* Só o bloco do módulo aberto aparece. Condicional por seção, não por largura:
    a mesma regra vale em 360px e em 1440px. */
 .contexto__bloco { display: none; }
-.casco:has([data-secao='dia']) .contexto__bloco[data-modulo='operacao'],
-.casco:has([data-secao='agenda']) .contexto__bloco[data-modulo='operacao'],
-.casco:has([data-secao='fila']) .contexto__bloco[data-modulo='operacao'],
-.casco:has([data-secao='avisos']) .contexto__bloco[data-modulo='operacao'],
-.casco:has([data-secao='caixa']) .contexto__bloco[data-modulo='dinheiro'],
-.casco:has([data-secao='comanda']) .contexto__bloco[data-modulo='dinheiro'],
-.casco:has([data-secao='fiado']) .contexto__bloco[data-modulo='dinheiro'],
-.casco:has([data-secao='comissao']) .contexto__bloco[data-modulo='dinheiro'],
-.casco:has([data-secao='painel']) .contexto__bloco[data-modulo='casa'],
-.casco:has([data-secao='cadastro']) .contexto__bloco[data-modulo='casa'],
-.casco:has([data-secao='equipe']) .contexto__bloco[data-modulo='casa'],
-.casco:has([data-secao='importar']) .contexto__bloco[data-modulo='casa'],
-.casco:has([data-secao='trilha']) .contexto__bloco[data-modulo='casa'],
-.casco:has([data-secao='seguranca']) .contexto__bloco[data-modulo='casa'],
-.casco:has([data-secao='configuracoes']) .contexto__bloco[data-modulo='casa'],
-.casco:not(:has([data-secao])) .contexto__bloco[data-modulo='operacao'] {
+.casco:has([data-modulo-atual='operacao']) .contexto__bloco[data-modulo='operacao'],
+.casco:has([data-modulo-atual='dinheiro']) .contexto__bloco[data-modulo='dinheiro'],
+.casco:has([data-modulo-atual='casa']) .contexto__bloco[data-modulo='casa'] {
   display: flex;
   flex-direction: row;
   gap: var(--space-2);
@@ -3822,21 +3780,9 @@ main { padding-bottom: var(--space-8); }
     overflow: hidden;
     clip-path: inset(50%);
   }
-  .casco:has([data-secao='dia']) .trilho__botao[data-modulo='operacao']::after,
-  .casco:has([data-secao='agenda']) .trilho__botao[data-modulo='operacao']::after,
-  .casco:has([data-secao='fila']) .trilho__botao[data-modulo='operacao']::after,
-  .casco:has([data-secao='avisos']) .trilho__botao[data-modulo='operacao']::after,
-  .casco:has([data-secao='caixa']) .trilho__botao[data-modulo='dinheiro']::after,
-  .casco:has([data-secao='comanda']) .trilho__botao[data-modulo='dinheiro']::after,
-  .casco:has([data-secao='fiado']) .trilho__botao[data-modulo='dinheiro']::after,
-  .casco:has([data-secao='comissao']) .trilho__botao[data-modulo='dinheiro']::after,
-  .casco:has([data-secao='painel']) .trilho__botao[data-modulo='casa']::after,
-  .casco:has([data-secao='cadastro']) .trilho__botao[data-modulo='casa']::after,
-  .casco:has([data-secao='equipe']) .trilho__botao[data-modulo='casa']::after,
-  .casco:has([data-secao='importar']) .trilho__botao[data-modulo='casa']::after,
-  .casco:has([data-secao='trilha']) .trilho__botao[data-modulo='casa']::after,
-  .casco:has([data-secao='seguranca']) .trilho__botao[data-modulo='casa']::after,
-  .casco:has([data-secao='configuracoes']) .trilho__botao[data-modulo='casa']::after {
+  .casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao']::after,
+  .casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro']::after,
+  .casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa']::after {
     left: calc(var(--space-3) * -1);
     right: auto;
     top: 50%;
@@ -3861,22 +3807,9 @@ main { padding-bottom: var(--space-8); }
     border-bottom: 1px solid var(--color-border);
   }
   .contexto__lista { padding: var(--space-2); overflow-y: auto; }
-  .casco:has([data-secao='dia']) .contexto__bloco[data-modulo='operacao'],
-  .casco:has([data-secao='agenda']) .contexto__bloco[data-modulo='operacao'],
-  .casco:has([data-secao='fila']) .contexto__bloco[data-modulo='operacao'],
-  .casco:has([data-secao='avisos']) .contexto__bloco[data-modulo='operacao'],
-  .casco:has([data-secao='caixa']) .contexto__bloco[data-modulo='dinheiro'],
-  .casco:has([data-secao='comanda']) .contexto__bloco[data-modulo='dinheiro'],
-  .casco:has([data-secao='fiado']) .contexto__bloco[data-modulo='dinheiro'],
-  .casco:has([data-secao='comissao']) .contexto__bloco[data-modulo='dinheiro'],
-  .casco:has([data-secao='painel']) .contexto__bloco[data-modulo='casa'],
-  .casco:has([data-secao='cadastro']) .contexto__bloco[data-modulo='casa'],
-  .casco:has([data-secao='equipe']) .contexto__bloco[data-modulo='casa'],
-  .casco:has([data-secao='importar']) .contexto__bloco[data-modulo='casa'],
-  .casco:has([data-secao='trilha']) .contexto__bloco[data-modulo='casa'],
-  .casco:has([data-secao='seguranca']) .contexto__bloco[data-modulo='casa'],
-  .casco:has([data-secao='configuracoes']) .contexto__bloco[data-modulo='casa'],
-  .casco:not(:has([data-secao])) .contexto__bloco[data-modulo='operacao'] {
+  .casco:has([data-modulo-atual='operacao']) .contexto__bloco[data-modulo='operacao'],
+  .casco:has([data-modulo-atual='dinheiro']) .contexto__bloco[data-modulo='dinheiro'],
+  .casco:has([data-modulo-atual='casa']) .contexto__bloco[data-modulo='casa'] {
     flex-direction: column;
     gap: 2px;
     overflow: visible;

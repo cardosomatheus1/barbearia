@@ -6,6 +6,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAtendimento, acaoSair } from '../acoes';
 import { ProNav } from '../pro-nav';
+import { secao } from '../secoes';
 
 /**
  * O dia do barbeiro.
@@ -143,7 +144,7 @@ export default async function MeuDiaPage({ searchParams }: Props) {
 
   if (!painel.ok) {
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" {...secao('meu-dia')}>
         {topo}
         <ProNav atual="/admin/meu-dia" />
         <h1 className="painel__titulo">Meu dia</h1>
@@ -168,7 +169,7 @@ export default async function MeuDiaPage({ searchParams }: Props) {
   const dia = recortarMeuDia(painel.dados.entries, new Date());
 
   return (
-    <main className="ui-container meu-dia">
+    <main className="ui-container meu-dia" {...secao('meu-dia')}>
       {topo}
       <ProNav atual="/admin/meu-dia" />
 

@@ -27,15 +27,10 @@ import type { ReactNode } from 'react';
  * para saber em que página estamos.
  */
 
-export type Modulo = 'operacao' | 'dinheiro' | 'casa';
+import { MODULOS as REGISTRO, type Modulo } from './secoes';
 
-interface Destino {
-  readonly href: string;
-  readonly nome: string;
-  readonly secao: string;
-  /** Uma frase do que a tela faz. É o que o mock põe embaixo de cada item. */
-  readonly nota: string;
-}
+export type { Modulo, Secao } from './secoes';
+export { secao, SECOES_POR_MODULO } from './secoes';
 
 /** Traço fino, sem preenchimento: é o desenho do mock, não um emoji. */
 const traco = (d: string, tamanho = 20) => (
@@ -50,49 +45,14 @@ const traco = (d: string, tamanho = 20) => (
   </svg>
 );
 
-const MODULOS: readonly {
-  readonly id: Modulo;
-  readonly nome: string;
-  readonly icone: ReactNode;
-  readonly telas: readonly Destino[];
-}[] = [
-  {
-    id: 'operacao',
-    nome: 'Operação',
-    icone: traco('M4 7h16M4 12h16M4 17h10'),
-    telas: [
-      { href: '/admin/dia', nome: 'O dia', secao: 'dia', nota: 'quem chegou e quem falta' },
-      { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', nota: 'dia, semana e lista' },
-      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'quem veio sem marcar' },
-      { href: '/admin/avisos', nome: 'Avisos', secao: 'avisos', nota: 'lembretes e retorno' },
-    ],
-  },
-  {
-    id: 'dinheiro',
-    nome: 'Dinheiro',
-    icone: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
-    telas: [
-      { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', nota: 'abertura e fechamento' },
-      { href: '/admin/comanda', nome: 'Comanda', secao: 'comanda', nota: 'cobrar o atendimento' },
-      { href: '/admin/fiado', nome: 'Fiado', secao: 'fiado', nota: 'quem ficou devendo' },
-      { href: '/admin/comissao', nome: 'Comissão', secao: 'comissao', nota: 'período e fechamento' },
-    ],
-  },
-  {
-    id: 'casa',
-    nome: 'A casa',
-    icone: traco('M4 11l8-6 8 6v9H4zM10 20v-5h4v5'),
-    telas: [
-      { href: '/admin/painel', nome: 'Painel', secao: 'painel', nota: 'os números do dia' },
-      { href: '/admin/catalogo', nome: 'Cadastro', secao: 'cadastro', nota: 'serviços e equipe' },
-      { href: '/admin/equipe', nome: 'Equipe', secao: 'equipe', nota: 'contas e permissões' },
-      { href: '/admin/importar', nome: 'Trazer base', secao: 'importar', nota: 'migrar de outro sistema' },
-      { href: '/admin/trilha', nome: 'Trilha', secao: 'trilha', nota: 'quem mexeu em quê' },
-      { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'segundo fator' },
-      { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'janela e políticas' },
-    ],
-  },
-];
+/** O desenho de cada módulo. O registro é dado; o ícone é desenho, e mora aqui. */
+const ICONE: Readonly<Record<Modulo, ReactNode>> = {
+  operacao: traco('M4 7h16M4 12h16M4 17h10'),
+  dinheiro: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
+  casa: traco('M4 11l8-6 8 6v9H4zM10 20v-5h4v5'),
+};
+
+const MODULOS = REGISTRO;
 
 export function Casco({
   children,
@@ -127,7 +87,7 @@ export function Casco({
             key={modulo.id}
             title={modulo.nome}
           >
-            {modulo.icone}
+            {ICONE[modulo.id]}
             <span className="trilho__legenda">{modulo.nome}</span>
           </a>
         ))}
@@ -178,10 +138,3 @@ export function Casco({
     </div>
   );
 }
-
-/** As seções de cada módulo — o CSS precisa delas para acender o par certo. */
-export const SECOES_POR_MODULO: Readonly<Record<Modulo, readonly string[]>> = {
-  operacao: MODULOS[0]!.telas.map((t) => t.secao),
-  dinheiro: MODULOS[1]!.telas.map((t) => t.secao),
-  casa: MODULOS[2]!.telas.map((t) => t.secao),
-};

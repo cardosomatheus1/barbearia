@@ -18,6 +18,7 @@ import {
   acaoSair,
 } from '../acoes';
 import { CadastroNav } from '../cadastro-nav';
+import { secao } from '../secoes';
 
 /**
  * Trazer a base do sistema antigo — SPEC §5.8.
@@ -208,7 +209,7 @@ export default async function ImportarPage({ searchParams }: Props) {
   const emPreview = conferir?.ok && conferir.dados.status === 'previewed' ? conferir.dados : null;
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="importar">
+    <main className="ui-container painel__conteudo" {...secao('importar')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}

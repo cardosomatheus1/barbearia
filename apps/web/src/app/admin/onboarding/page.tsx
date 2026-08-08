@@ -9,6 +9,7 @@ import {
   acaoSair,
   acaoServicos,
 } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * Onboarding em seis etapas.
@@ -84,7 +85,7 @@ export default async function OnboardingPage({ searchParams }: Props) {
   const templates = passo === 3 ? await templatesDeServico(token) : null;
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" {...secao('onboarding')}>
       <header className="painel__topo">
         <p className="painel__marca">{estado.dados.businessName}</p>
         <form action={acaoSair}>

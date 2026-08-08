@@ -4,6 +4,7 @@ import { fotosDaBarbearia, type AlvosDeFoto } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoFotos, acaoSair } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * Fotos da barbearia.
@@ -84,7 +85,7 @@ export default async function FotosPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo" data-secao="cadastro">
+      <main className="ui-container painel__conteudo" {...secao('cadastro')}>
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar as fotos. <a href="/admin/fotos">Tentar de novo</a>
         </div>
@@ -99,7 +100,7 @@ export default async function FotosPage({ searchParams }: Props) {
     fotos.services.filter((s) => s.photoUrl).length;
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="cadastro">
+    <main className="ui-container painel__conteudo" {...secao('cadastro')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         <form action={acaoSair}>

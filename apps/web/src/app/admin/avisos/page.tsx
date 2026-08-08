@@ -4,6 +4,7 @@ import { avisos, type EnvioRegistrado, type TipoDeAviso } from '@/lib/admin-api'
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAvisos, acaoSair } from '../acoes';
+import { secao } from '../secoes';
 
 /**
  * Avisos ao cliente.
@@ -104,7 +105,7 @@ export default async function AvisosPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo" data-secao="avisos">
+      <main className="ui-container painel__conteudo" {...secao('avisos')}>
         {topo}
         <h1 className="painel__titulo">Avisos</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
@@ -118,7 +119,7 @@ export default async function AvisosPage({ searchParams }: Props) {
   const { settings, log } = resposta.dados;
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="avisos">
+    <main className="ui-container painel__conteudo" {...secao('avisos')}>
       {topo}
 
       <h1 className="painel__titulo">Avisos ao cliente</h1>

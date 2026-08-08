@@ -18,6 +18,7 @@ import {
   acaoSair,
 } from '../../acoes';
 import { BalcaoNav } from '../../balcao-nav';
+import { secao } from '../../secoes';
 
 /**
  * A comanda: do atendimento ao dinheiro.
@@ -167,7 +168,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
       redirect('/admin/seguranca?de=comanda');
     }
     return (
-      <main className="ui-container painel__conteudo">
+      <main className="ui-container painel__conteudo" {...secao('comanda')}>
         {topo}
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[comanda.code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
@@ -186,7 +187,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   const profissionais = catalogo.ok ? catalogo.dados.professionals : [];
 
   return (
-    <main className="ui-container painel__conteudo">
+    <main className="ui-container painel__conteudo" {...secao('comanda')}>
       {topo}
       <BalcaoNav atual="/admin/comanda" />
 

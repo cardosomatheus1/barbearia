@@ -10,6 +10,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoExigenciasDoServico, acaoSair, acaoSalvarRecursos } from '../acoes';
 import { CadastroNav } from '../cadastro-nav';
+import { secao } from '../secoes';
 
 /**
  * Recursos: cadeira, lavatório, sala.
@@ -156,7 +157,7 @@ export default async function RecursosPage({ searchParams }: Props) {
   if (!recursos.ok || !catalogo.ok) {
     const code = recursos.ok ? (catalogo.ok ? 'request_failed' : catalogo.code) : recursos.code;
     return (
-      <main className="ui-container painel__conteudo" data-secao="cadastro">
+      <main className="ui-container painel__conteudo" {...secao('cadastro')}>
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -174,7 +175,7 @@ export default async function RecursosPage({ searchParams }: Props) {
   const emBranco = Array.from({ length: LINHAS_EM_BRANCO }, (_, i) => i);
 
   return (
-    <main className="ui-container painel__conteudo" data-secao="cadastro">
+    <main className="ui-container painel__conteudo" {...secao('cadastro')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}
