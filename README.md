@@ -13,14 +13,14 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila e permissões — lógica pura, sem banco e sem relógio | 242 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções e permissões — lógica pura, sem banco e sem relógio | 260 testes ✅ |
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 27 invariantes + 10 testes ✅ |
-| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão e a fila | 110 testes ✅ |
+| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 130 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, auditoria | 75 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 84 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, equipe, cadastro | 154 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, equipe e cadastro, com SSR (Next.js) | 36 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro | 169 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe e cadastro, com SSR (Next.js) | 37 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -827,13 +827,128 @@ NOTICE nenhuma, o `grep` não casava nada, e a única pista era o código de sa�
 Foi assim que a prova nova da fila ficou minutos parecendo "não ter rodado". A
 saída passou a ir para arquivo, e a falha imprime as últimas linhas do erro.
 
+## A dívida mais antiga do projeto fechou
+
+`schedule_exceptions` existia desde o **bloco 1**: cinco tipos, alvo por
+profissional ou por unidade, índice parcial, RLS, e a precedência resolvida e
+testada — bloqueio vence exceção do profissional, que vence a da unidade, que
+vence o feriado, que vence a jornada semanal.
+
+**Nada nunca escreveu nela.** Quatorze blocos de motor com teste verde, e o
+barbeiro sem como avisar que ia faltar na sexta. Era a terceira aparição do
+mesmo padrão, depois de `blocks` — que é a mesma tabela com outro `kind` — e de
+`resource_pools`, fechado no bloco 13.
+
+O teste que faltava não era do motor. Era do caminho inteiro: cria o bloqueio
+pela mesma porta que a tela usa, e confere que **a grade pública perde aqueles
+horários** e que a reserva passa a recusá-los. Ele fica vermelho se a escrita
+for para a data errada — provado.
+
+Com isso o grupo A da [§7.1 da SPEC](SPEC.md#71-distância-entre-esta-spec-e-o-que-está-construído)
+ficou vazio: hoje nenhum campo que o motor lê está sem porta de entrada.
+
+### Bloquear não cancela ninguém
+
+Fechar as 14h de sexta com três clientes marcados ali é operação legítima — o
+dentista existe. Fazê-lo sem ver os nomes não é.
+
+A primeira chamada devolve quem ficaria dentro do bloqueio e **não grava**; a
+segunda, com confirmação, grava. E grava só a exceção: o agendamento continua
+lá, dentro de um horário fechado, porque cancelar em nome da casa é decisão de
+gente. Semiaberto como todo intervalo do sistema — o corte que termina às 14h
+não conflita com o bloqueio que começa às 14h.
+
+### A assimetria era a escalada
+
+Criar tem duas rotas de propósito: bloquear uma hora é `appointments.create`
+(trabalho de recepção, dez vezes por semana), e folga, férias, feriado e horário
+diferente são `settings.manage` (mudam o funcionamento da barbearia).
+
+Só que **apagar** exigia apenas `appointments.create`. A recepcionista não
+conseguia criar um feriado e apagava o que o dono criou — reabrindo a barbearia
+no dia em que ela deveria estar fechada, sem nenhuma permissão a mais.
+
+A guarda da rota é estática e declara o piso; o tipo só se conhece depois de ler
+a linha. A simetria mora no domínio, e há teste que a prova.
+
+### Arrastar não entrou, e o motivo está escrito
+
+A SPEC §2.14 pede drag-and-drop. O que entrou foi **mover** — formulário com dia,
+hora e profissional no cartão de cada compromisso, passando pelo mesmo motor da
+página pública e recusando choque pela constraint de exclusão.
+
+Duas razões, nesta ordem:
+
+- **A WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste.** Mover
+  teria que existir de qualquer forma; arrastar é acabamento sobre ele, não a
+  funcionalidade.
+- Seria o **primeiro componente de cliente do produto**, que hoje é inteiro
+  renderizado no servidor. Essa decisão merece bloco próprio e pacote medido,
+  não entrar de carona numa tela.
+
+Está na tabela de lacunas com esse texto. O verificador não deixa o bloco 15
+fechar sem que ela aponte para outro lugar.
+
+### O que a `/security-review` encontrou
+
+Três achados, os três meus, e o padrão entre eles vale mais que cada um:
+**a permissão estava certa na criação e ausente em toda operação vizinha.**
+
+- **A lista de conflitos era um oráculo.** A primeira chamada devolve quem
+  ficaria dentro do bloqueio e não grava — então quem enxerga só a própria
+  agenda pedia um bloqueio e recebia de volta o livro da casa: nome de cliente,
+  hora e id. Sem criar nada, sem aparecer em lugar nenhum. O recorte de
+  permissão que `applyAttendance` aplica não chegava até aqui.
+- **Mover não tinha recorte.** `appointments.reschedule` está no papel do
+  barbeiro por padrão. Com o id em mãos — que o oráculo acima entregava — ele
+  remarcava o cliente do colega, ou o empurrava para um terceiro. RLS separa
+  barbearias, não profissionais dentro de uma.
+- **Bloqueio das 00:00 às 24:00 é um feriado com outra etiqueta.** A rota
+  recusava o `kind`, e o meu teste conferia a **grafia**. O motor subtrai
+  bloqueio da unidade do dia de todo mundo: a barbearia sumia da grade pública
+  sem ninguém ter `settings.manage`.
+
+O terceiro produziu a lição mais útil. Ao escrever o teste da correção, ele
+passou verde com a correção **desligada** — porque a faixa que eu bloqueava não
+continha o agendamento. Um teste que parece prova e não é, exatamente como o que
+ele estava consertando.
+
+A correção do terceiro é um teto de duração, não uma proibição de alvo: exigir
+profissional impediria a recepcionista de fechar uma hora para a reunião, que é
+trabalho legítimo. **Limite assumido e escrito:** seis bloqueios de quatro horas
+cobrem o dia. A diferença é que ficam seis linhas hachuradas, datadas e com
+motivo na agenda — não um `holiday` silencioso.
+
+### O mesmo defeito de CSS pela terceira vez virou teste
+
+`min-width: auto` em item de grade: o `.ui-scroll-x` clipa a rolagem, mas o
+elemento continua sendo item de grade, a faixa cresce até o min-content do
+conteúdo largo, e a página inteira passa a rolar de lado. Aconteceu no cadastro,
+na fila e agora na agenda — e as três vezes quem pegou foi a medição no
+navegador.
+
+Regra do projeto: não abstrair antes do terceiro caso. Chegou. Agora há teste:
+toda classe que aparece ao lado de `ui-scroll-x` no markup precisa declarar
+`min-width: 0`. Ele achou **mais sete** recipientes na mesma condição, latentes,
+passando por sorte do contexto.
+
+E encontrou um defeito no próprio conjunto de testes de CSS: o casamento de
+regra tratava **comentário** como seletor, então um comentário que citava uma
+classe fazia essa classe herdar o corpo da regra seguinte. Foi assim que a
+guarda nova aprovou `.colunas` por causa do comentário que a explicava — o teste
+passou a testar a própria documentação. Vale para o teste de imagens também, que
+usa a mesma técnica desde o bloco 11.
+
+**Limite declarado:** a guarda cobre o recipiente, não os ancestrais dele. Na
+agenda, o elemento que envolve o `.colunas` precisou do mesmo `min-width: 0`, e
+disso quem avisou foi a medição. As duas se completam e nenhuma substitui a
+outra.
+
 ## Próximos passos
 
-Bloco 15 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
+Bloco 16 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
 
-Agenda do admin: dia, semana e lista, arrastar, e o bloqueio pontual — que é
-onde entra a escrita de `schedule_exceptions`, hoje a única dívida declarada em
-[`SPEC.md` §7.1 grupo A](SPEC.md#71-distância-entre-esta-spec-e-o-que-está-construído).
+`app-pro`: a agenda do barbeiro, o próximo cliente e as preferências dele.
 
 ## Responsividade é medida, não olhada
 
@@ -847,7 +962,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as vinte e uma
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as vinte e quatro
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar

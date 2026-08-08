@@ -26,7 +26,18 @@ const css = readFileSync(
  * largura. Procurar largura fixa sem separar os dois acusa o próprio
  * mobile-first de quebrar o mobile-first.
  */
-const semCondicoes = css.replace(/@media[^{]+\{/g, '{');
+/**
+ * O CSS sem comentários.
+ *
+ * O casamento de regra é `([^{}]+)\{([^}]*)\}`, e comentário é texto entre
+ * chaves como qualquer outro: um comentário que **cita** uma classe fazia essa
+ * classe herdar o corpo da regra seguinte. Foi assim que a guarda de
+ * `min-width: 0` aprovou `.colunas` por causa de um comentário que a explicava
+ * — o teste passou a testar a própria documentação.
+ */
+const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+const semCondicoes = semComentarios.replace(/@media[^{]+\{/g, '{');
 
 /**
  * Separa o CSS base do que está dentro de `@media`, contando chaves.
@@ -67,7 +78,7 @@ function separar(fonte: string): { base: string; dentroDeMedia: string } {
   return { base, dentroDeMedia };
 }
 
-const { base: cssBase, dentroDeMedia } = separar(css);
+const { base: cssBase, dentroDeMedia } = separar(semComentarios);
 
 /** Piso de projeto: o Android popular no Brasil. */
 const PISO = 360;
@@ -125,6 +136,47 @@ describe('CSS das telas', () => {
 
     expect(revividos, `escondido no celular e revivido no desktop: ${revividos.join(', ')}`)
       .toEqual([]);
+  });
+
+  it('recipiente que rola dentro de grade declara `min-width: 0`', () => {
+    // Terceira vez que este defeito aparece: `.ui-scroll-x` clipa a rolagem,
+    // mas o **elemento** continua sendo item de grade ou de flex, e item nasce
+    // com `min-width: auto` — a faixa cresce até o min-content do conteúdo
+    // largo, e a página inteira passa a rolar de lado.
+    //
+    // Só a medição no navegador pegava, porque depende da largura intrínseca do
+    // conteúdo. Este teste pega antes, e é barato: toda classe que aparece ao
+    // lado de `ui-scroll-x` no markup precisa zerar o mínimo.
+    //
+    // **Limite conhecido:** cobre o recipiente, não os ancestrais dele. Na
+    // agenda o `.agenda-dia` que envolve o `.colunas` precisou do mesmo
+    // `min-width: 0`, e disso quem avisou foi a medição. Verificar a cadeia
+    // inteira exigiria montar o layout, que é o que o navegador faz — as duas
+    // guardas se completam e nenhuma substitui a outra.
+    const comRolagem = new Set<string>();
+    for (const arquivo of telas(SRC)) {
+      const fonte = readFileSync(arquivo, 'utf8');
+      for (const [, lista = ''] of fonte.matchAll(/className="([^"]*\bui-scroll-x\b[^"]*)"/g)) {
+        for (const classe of lista.split(/\s+/).filter(Boolean)) {
+          if (classe !== 'ui-scroll-x') comRolagem.add(classe);
+        }
+      }
+    }
+
+    expect(comRolagem.size, 'nenhum `ui-scroll-x` com classe própria').toBeGreaterThan(0);
+
+    const porClasse = new Map<string, string>();
+    for (const [, seletor = '', corpo = ''] of semCondicoes.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      for (const [, classe = ''] of seletor.matchAll(/\.([\w-]+)/g)) {
+        if (comRolagem.has(classe)) porClasse.set(classe, (porClasse.get(classe) ?? '') + corpo);
+      }
+    }
+
+    const frouxas = [...comRolagem].filter(
+      (classe) => !/min-width:\s*0/.test(porClasse.get(classe) ?? ''),
+    );
+
+    expect(frouxas, `recipiente que rola sem \`min-width: 0\`: ${frouxas.join(', ')}`).toEqual([]);
   });
 
   it('toda tela do painel começa no piso, sem exigir notebook', () => {

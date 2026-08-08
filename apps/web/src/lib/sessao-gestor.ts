@@ -200,3 +200,59 @@ export async function lerLinkDaFila(): Promise<{ nome: string; token: string } |
   }
   return null;
 }
+
+/**
+ * A exceção recusada e quem ficaria de fora, do servidor para a tela seguinte.
+ *
+ * Mesmo motivo dos outros dois cookies de vida curta: a lista de conflitos traz
+ * **nome de cliente**, e a URL do painel para no histórico do balcão — máquina
+ * compartilhada — e no `Referer` de toda requisição seguinte.
+ */
+const CONFLITO_AGENDA = 'agenda-conflito';
+const CAMINHO_AGENDA = '/admin/agenda';
+
+export interface ExcecaoEmConflito {
+  readonly kind: string;
+  readonly date: string;
+  readonly startMinute?: number | null;
+  readonly endMinute?: number | null;
+  readonly professionalId?: string;
+  readonly reason?: string;
+  readonly conflitos: readonly {
+    appointmentId: string;
+    start: string;
+    customerName: string | null;
+    professionalName: string;
+  }[];
+}
+
+export async function guardarConflitoDaAgenda(dados: ExcecaoEmConflito): Promise<void> {
+  const jar = await cookies();
+  jar.set(CONFLITO_AGENDA, JSON.stringify(dados), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: CAMINHO_AGENDA,
+    maxAge: SEGUNDOS_PARA_CONFIRMAR,
+  });
+}
+
+export async function lerConflitoDaAgenda(): Promise<ExcecaoEmConflito | null> {
+  const bruto = (await cookies()).get(CONFLITO_AGENDA)?.value;
+  if (!bruto) return null;
+
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (
+      typeof lido === 'object' && lido !== null &&
+      'kind' in lido && typeof lido.kind === 'string' &&
+      'date' in lido && typeof lido.date === 'string' &&
+      'conflitos' in lido && Array.isArray(lido.conflitos)
+    ) {
+      return lido as unknown as ExcecaoEmConflito;
+    }
+  } catch {
+    // Cookie corrompido não derruba a agenda inteira.
+  }
+  return null;
+}

@@ -11,6 +11,7 @@ import { AuthController, SessionController } from './auth/auth.controller.js';
 import { OnboardingController, StaffAuthController } from './admin/admin.controller.js';
 import { BoardController } from './admin/board.controller.js';
 import { CatalogoController } from './admin/catalogo.controller.js';
+import { AgendaController } from './admin/agenda.controller.js';
 import { FilaController } from './admin/fila.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
@@ -33,6 +34,7 @@ import { TenantService } from './tenant/tenant.service.js';
     BoardController,
     CatalogoController,
     FilaController,
+    AgendaController,
     FilaPublicaController,
     TeamController,
     MeController,

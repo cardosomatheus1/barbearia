@@ -565,6 +565,15 @@ export interface RescheduleRequest {
   readonly professionalId?: string;
   /** Mesma razão de `CancelRequest.customerId`: a RLS não separa clientes. */
   readonly customerId?: string;
+  /**
+   * Recorte de permissão da equipe: a RLS também não separa profissionais.
+   *
+   * Quem não tem `appointments.view_all_professionals` só remarca o próprio
+   * cliente. Sem isto, `appointments.reschedule` — que todo barbeiro tem por
+   * padrão — permitia mover o cliente do colega, ou empurrá-lo para a cadeira
+   * de um terceiro.
+   */
+  readonly onlyProfessionalId?: string | null;
   readonly now?: Date;
 }
 
@@ -602,6 +611,11 @@ export async function rescheduleAppointment(
       WHERE a.id = ${request.appointmentId}::uuid
         AND (${request.customerId ?? null}::uuid IS NULL
              OR a.customer_id = ${request.customerId ?? null}::uuid)
+        -- RLS separa barbearias, não profissionais dentro de uma. Sem este
+        -- recorte, quem enxerga só a própria agenda remarcava o cliente do
+        -- colega — bastava ter o id, e a lista de conflitos dava o id.
+        AND (${request.onlyProfessionalId ?? null}::uuid IS NULL
+             OR a.professional_id = ${request.onlyProfessionalId ?? null}::uuid)
       GROUP BY a.id
     `;
 

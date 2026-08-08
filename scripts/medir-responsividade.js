@@ -324,12 +324,50 @@ async function prepararFila(token) {
   return { link };
 }
 
+/**
+ * Bloqueia uma hora e fecha um dia, para medir a agenda com conteúdo.
+ *
+ * Agenda vazia não prova nada sobre agenda cheia: o que estoura layout é a
+ * coluna com nome composto, cartão com buffer e bloqueio hachurado ao lado.
+ */
+async function prepararAgenda(token, dia) {
+  const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+  const catalogo = await (await fetch(`${API}/v1/admin/catalog`, { headers: cabecalho })).json();
+
+  await fetch(`${API}/v1/admin/agenda/blocks`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({
+      kind: 'block',
+      date: dia,
+      startMinute: 780,
+      endMinute: 840,
+      professionalId: catalogo.professionals[0]?.id,
+      reason: 'Consulta no dentista da Maria Aparecida',
+      confirmarConflitos: true,
+    }),
+  });
+
+  await fetch(`${API}/v1/admin/agenda/exceptions`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({
+      kind: 'day_off',
+      date: dia,
+      professionalId: catalogo.professionals[1]?.id,
+      reason: 'Folga combinada',
+      confirmarConflitos: true,
+    }),
+  });
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
   const balcao = await prepararBalcao(token);
   await prepararRecursos(token);
   const filaPreparada = await prepararFila(token);
+  await prepararAgenda(token, balcao.dia);
 
   const telas = [
     { nome: 'pública', url: `/${slug}` },
@@ -347,6 +385,9 @@ async function main() {
     { nome: 'jornada aberta', url: `/admin/profissionais?pessoa=${balcao.profissionalLivre}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recursos', url: '/admin/recursos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trocar senha', url: '/admin/trocar-senha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'agenda — dia', url: `/admin/agenda?de=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'agenda — semana', url: `/admin/agenda?v=semana&de=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'agenda — lista', url: `/admin/agenda?v=lista&de=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fila (balcão)', url: '/admin/fila', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     ...(filaPreparada.link
       ? [{ nome: 'fila (cliente)', url: `/${slug}/fila/${filaPreparada.link}` }]

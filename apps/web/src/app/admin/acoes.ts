@@ -19,6 +19,11 @@ import {
   salvarServicos,
   trocarMinhaSenha,
   trocarPapel,
+  criarBloqueio,
+  criarExcecao,
+  moverAgendamento,
+  removerExcecao,
+  type TipoDeExcecao,
   criarProfissional,
   entrarNaFila,
   moverNaFila,
@@ -37,10 +42,11 @@ import {
   type EntradaDeServico,
   type Papel,
 } from '@/lib/admin-api';
-import { DIAS, lerJornada } from '@/lib/jornada';
+import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
 import {
   apagarSessaoGestor,
+  guardarConflitoDaAgenda,
   guardarConflitoDeJornada,
   guardarLinkDaFila,
   guardarSenhaDeUmaVez,
@@ -673,4 +679,109 @@ export async function acaoSentarDaFila(form: FormData): Promise<void> {
   const resultado = await sentarDaFila(token, texto(form, 'id'), texto(form, 'professionalId'));
   if (!resultado.ok) falhar('/admin/fila', resultado.code);
   redirect('/admin/dia');
+}
+
+// -- Agenda -------------------------------------------------------------------
+
+/**
+ * Para onde voltar depois de mexer na agenda.
+ *
+ * Mesmo motivo de `destinoDoBalcao`: valor de formulário virando `redirect` é
+ * redirecionador aberto, e o cookie do painel altera catálogo, equipe e preço.
+ * A volta é montada aqui a partir de campos conhecidos, nunca aceita pronta.
+ */
+function voltarParaAgenda(form: FormData): string {
+  const busca = new URLSearchParams();
+  const de = texto(form, 'de');
+  const vista = texto(form, 'v');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(de)) busca.set('de', de);
+  if (['dia', 'semana', 'lista'].includes(vista)) busca.set('v', vista);
+  const query = busca.toString();
+  return `/admin/agenda${query ? `?${query}` : ''}`;
+}
+
+/**
+ * Cria bloqueio, folga, feriado ou horário diferente.
+ *
+ * A rota é escolhida pelo tipo, não por um parâmetro: bloqueio é operação de
+ * recepção, o resto muda o funcionamento da barbearia. Ver `criarBloqueio`.
+ */
+export async function acaoCriarExcecao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const destino = voltarParaAgenda(form);
+
+  const kind = texto(form, 'kind') as TipoDeExcecao;
+  if (!['block', 'day_off', 'holiday', 'vacation', 'custom_hours'].includes(kind)) {
+    falhar(destino, 'tipo_invalido');
+  }
+
+  const comFaixa = kind === 'block' || kind === 'custom_hours';
+  const inicio = minutosOuNulo(texto(form, 'inicio'));
+  const fim = minutosOuNulo(texto(form, 'fim'));
+  if (comFaixa && (inicio === null || fim === null)) falhar(destino, 'faixa_ausente');
+
+  const profissional = texto(form, 'professionalId');
+
+  const dados = {
+    kind,
+    date: texto(form, 'date'),
+    // Dia inteiro manda nulo mesmo que o campo de hora tenha algo digitado: o
+    // domínio recusa faixa em tipo que fecha o dia, e mandar o resíduo de um
+    // campo escondido viraria erro que a pessoa não entende.
+    startMinute: comFaixa ? inicio : null,
+    endMinute: comFaixa ? fim : null,
+    ...(profissional ? { professionalId: profissional } : {}),
+    ...(texto(form, 'reason') ? { reason: texto(form, 'reason') } : {}),
+    confirmarConflitos: form.get('confirmarConflitos') === '1',
+  };
+
+  const resultado =
+    kind === 'block' ? await criarBloqueio(token, dados) : await criarExcecao(token, dados);
+
+  if (!resultado.ok) falhar(destino, resultado.code);
+
+  if (!resultado.dados.saved) {
+    await guardarConflitoDaAgenda({
+      ...dados,
+      conflitos: resultado.dados.conflitos,
+    });
+    redirect(destino);
+  }
+
+  const separador = destino.includes('?') ? '&' : '?';
+  redirect(`${destino}${separador}salvo=1`);
+}
+
+export async function acaoRemoverExcecao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const destino = voltarParaAgenda(form);
+  const resultado = await removerExcecao(token, texto(form, 'id'));
+  if (!resultado.ok) falhar(destino, resultado.code);
+
+  const separador = destino.includes('?') ? '&' : '?';
+  redirect(`${destino}${separador}salvo=1`);
+}
+
+/**
+ * Move um agendamento.
+ *
+ * É o que o "arrastar" da SPEC faz por baixo, e é a versão que funciona no
+ * teclado, no leitor de tela e no celular de 360px — que a WCAG 2.5.7 exige de
+ * qualquer coisa que se arraste, e que aqui é o caminho principal.
+ */
+export async function acaoMoverAgendamento(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const destino = voltarParaAgenda(form);
+
+  const profissional = texto(form, 'professionalId');
+  const resultado = await moverAgendamento(token, texto(form, 'id'), {
+    date: texto(form, 'date'),
+    start: texto(form, 'start'),
+    ...(profissional ? { professionalId: profissional } : {}),
+  });
+
+  if (!resultado.ok) falhar(destino, resultado.code);
+
+  const separador = destino.includes('?') ? '&' : '?';
+  redirect(`${destino}${separador}salvo=1`);
 }

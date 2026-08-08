@@ -58,7 +58,7 @@
 
 .hoje { padding: var(--space-6) 0 var(--space-5); }
 
-.faixa { margin: 0 calc(var(--space-4) * -1); padding: 0 var(--space-4); }
+.faixa { min-width: 0; margin: 0 calc(var(--space-4) * -1); padding: 0 var(--space-4); }
 .faixa__lista {
   display: flex;
   gap: var(--space-2);
@@ -439,7 +439,7 @@ main { padding-bottom: var(--space-8); }
 
 /* -- Dias e horas ---------------------------------------------------------- */
 
-.dias { margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
+.dias { min-width: 0; margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
 .dias__lista { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 
 .dia {
@@ -711,7 +711,7 @@ main { padding-bottom: var(--space-8); }
 
 /* Trocar de profissional ao remarcar. Régua horizontal como a de dias: no
    celular a equipe não cabe empilhada sem empurrar a grade para fora da tela. */
-.quem { margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: 0 var(--space-4); }
+.quem { min-width: 0; margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: 0 var(--space-4); }
 .quem__lista { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .quem__opcao {
   display: inline-flex;
@@ -929,7 +929,7 @@ main { padding-bottom: var(--space-8); }
 .balcao__hoje { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
 
 /* Faixa de números: rola dentro de si, nunca leva a página junto. */
-.balcao__totais {
+.balcao__totais { min-width: 0;
   display: flex;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
@@ -949,7 +949,7 @@ main { padding-bottom: var(--space-8); }
 .totalzinho__valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
 .totalzinho__nome { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
-.balcao__equipe, .balcao__regua { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
+.balcao__equipe, .balcao__regua { min-width: 0; min-width: 0; display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
 .filtro {
   display: inline-flex;
   align-items: center;
@@ -1237,7 +1237,7 @@ main { padding-bottom: var(--space-8); }
    nome, o que muda a decisão, e uma ação — e o formulário atrás de `<details>`.
    --------------------------------------------------------------------------- */
 
-.cadastro-nav { margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
+.cadastro-nav { min-width: 0; margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
 .cadastro-nav__lista {
   display: flex;
   gap: var(--space-2);
@@ -1500,4 +1500,109 @@ main { padding-bottom: var(--space-8); }
   .cadeiras { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
   .espera { grid-template-columns: auto 1fr auto; align-items: start; }
   .espera__acoes { grid-column: auto; }
+}
+
+/* ---------------------------------------------------------------------------
+   Agenda do admin (bloco 15)
+
+   Colunas por profissional, como a SPEC §2.14 pede. A coluna é larga por
+   natureza — rola dentro de `.ui-scroll-x`, nunca leva a página junto.
+   --------------------------------------------------------------------------- */
+
+.agenda-dias { display: grid; gap: var(--space-5); margin-bottom: var(--space-6); }
+/* Item de grade nasce com `min-width: auto`, e `.colunas` tem min-content de
+   15rem × N profissionais. Sem isto o dia empurra a página inteira — é a
+   terceira vez que este mesmo defeito aparece, sempre onde há recipiente que
+   rola dentro de uma grade. */
+.agenda-dia { min-width: 0; }
+.agenda-dia__titulo { min-width: 0; overflow-wrap: anywhere; }
+.agenda-dia__titulo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-base);
+}
+.agenda-dia__semana { text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.agenda-dia__hoje {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-size: var(--font-size-xs);
+}
+
+.colunas { display: flex; gap: var(--space-3); align-items: flex-start; min-width: 0; }
+.coluna {
+  flex: 1 0 15rem;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.coluna__nome {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.coluna__contagem { color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.coluna__vazia { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.compromissos { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.compromisso {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.compromisso--confirmed { border-left-color: var(--color-success); }
+.compromisso--in_progress { border-left-color: var(--color-accent); }
+.compromisso--checked_in, .compromisso--waiting { border-left-color: var(--color-warning); }
+.compromisso__hora { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; }
+.compromisso__hora time { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.compromisso__ate { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+/* O buffer é o que explica o horário seguinte não estar livre. Discreto, mas
+   presente: escondê-lo devolveria a pergunta "por que não dá para marcar?". */
+.compromisso__buffer {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border-bottom: 1px dashed var(--color-border);
+}
+.compromisso__quem { margin-top: var(--space-1); min-width: 0; }
+.compromisso__nome { margin: 0; font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.compromisso__servico { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.compromisso__estado { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.compromisso__mover { margin-top: var(--space-2); }
+
+.bloqueios { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: grid; gap: var(--space-2); }
+.bloqueio {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  /* Hachurado, como a SPEC pede: o bloqueio não é um compromisso, é a ausência
+     de um — e a diferença precisa ser visível de relance. */
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-surface-hover),
+    var(--color-surface-hover) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border: 1px dashed var(--color-border);
+}
+.bloqueio__quando { margin: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.bloqueio__oque { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.bloqueio__acao { margin-top: var(--space-1); }
+.bloqueio__miuda { padding: 0 var(--space-2); font-size: var(--font-size-xs); }
+
+@media (min-width: 768px) {
+  /* A partir daqui as colunas param de rolar e cabem lado a lado. */
+  .colunas { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
 }

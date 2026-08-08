@@ -295,18 +295,23 @@ decide se algo é dívida ou sequência.
 O único grupo que não é escolha de ordem. Aqui a spec descreve um comportamento,
 o motor o implementa e é testado, e **nada no produto consegue produzir o dado
 que o alimenta**. Campo que o motor aceita e ninguém preenche é mentira do
-sistema, e é a terceira vez que o padrão aparece (`blocks`, `resource_pools` e
-agora este).
+sistema, e o padrão já apareceu três vezes: `blocks`, `resource_pools` e
+`schedule_exceptions`.
 
-| Comportamento | Onde está especificado | O que existe | O que não existe |
-|---|---|---|---|
-| Folga, feriado, horário diferente num dia e bloqueio pontual | Parte 2, §"Exceções por data" e a precedência de §3.1 | `schedule_exceptions` com os cinco tipos, a precedência resolvida e testada (`bloqueio > exceção do profissional > exceção da unidade > feriado > jornada`), índice parcial e RLS | **nenhuma escrita**: nem domínio, nem rota, nem tela. Hoje só por SQL. Bloco 15 |
+**Este grupo está vazio.** As três foram fechadas — recursos no bloco 13,
+exceções de agenda no bloco 15 — e a última levou junto o `blocks`, que era o
+mesmo `schedule_exceptions` com outro `kind`.
 
-Nota de correção: `bloqueio pontual` e `folga/feriado` foram registrados por um
-tempo como duas lacunas diferentes. São o mesmo `schedule_exceptions`, separados
-só pelo `kind` — e a linha do bloqueio afirmava ter "API", o que vendia demais:
-a API **respeita** o bloqueio e recusa agendamento em cima dele; criar um nunca
-foi possível.
+Grupo vazio não significa que não volte a acontecer: significa que hoje nenhum
+campo que o motor lê está sem porta de entrada. Quando um novo aparecer, ele
+entra aqui, e o [verificador de lacunas](#71-distância-entre-esta-spec-e-o-que-está-construído)
+impede que o bloco responsável feche sem resolvê-lo.
+
+Nota de correção histórica: `bloqueio pontual` e `folga/feriado` foram
+registrados por um tempo como duas lacunas diferentes. São o mesmo
+`schedule_exceptions`, separados só pelo `kind` — e a linha do bloqueio afirmava
+ter "API", o que vendia demais: a API **respeitava** o bloqueio e recusava
+agendamento em cima dele; criar um só era possível por SQL.
 
 ## B. Bloqueadas em infraestrutura que o projeto não tem — sequência, não dívida
 
