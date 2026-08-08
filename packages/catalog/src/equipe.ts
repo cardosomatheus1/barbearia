@@ -30,6 +30,10 @@ export interface Profissional {
   /** Dias da semana em que trabalha, para a lista dizer quem tem grade. */
   readonly weekdays: readonly number[];
   readonly futureAppointments: number;
+  /** Já tem conta de acesso ligada a esta cadeira. Uma cadeira, uma conta. */
+  readonly hasAccount: boolean;
+  /** Para onde o convite vai. Guardado na cadeira para o reenvio não repetir. */
+  readonly phone: string | null;
 }
 
 export async function listProfessionals(
@@ -51,6 +55,8 @@ export async function listProfessionals(
         service_ids: string[] | null;
         weekdays: number[] | null;
         future_appointments: bigint;
+        has_account: boolean;
+        phone_e164: string | null;
       }[]
     >`
       SELECT p.id, p.name, p.kind, p.bookable_online, p.daily_limit, p.active,
@@ -63,7 +69,9 @@ export async function listProfessionals(
                WHERE a.professional_id = p.id
                  AND a.service_starts_at >= ${now}
                  AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
-             ) AS future_appointments
+             ) AS future_appointments,
+             EXISTS (SELECT 1 FROM staff_users s WHERE s.professional_id = p.id) AS has_account,
+             p.phone_e164
       FROM professionals p
       WHERE p.location_id = ${locationId}::uuid
       ORDER BY p.active DESC, p.name
@@ -81,6 +89,8 @@ export async function listProfessionals(
       serviceIds: linha.service_ids ?? [],
       weekdays: [...(linha.weekdays ?? [])].sort((a, b) => a - b),
       futureAppointments: Number(linha.future_appointments),
+      hasAccount: linha.has_account,
+      phone: linha.phone_e164,
     }));
   });
 }

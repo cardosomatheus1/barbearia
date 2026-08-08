@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import {
   changeOwnPassword,
   changeStaffRole,
+  convidarProfissional,
   createStaffUser,
   listStaff,
   permissionsByRole,
@@ -25,6 +26,7 @@ import {
   roleSchema,
   staffIdSchema,
 } from './team.schemas.js';
+import { conviteSchema } from './ficha.schemas.js';
 
 const STATUS: Record<string, number> = {
   email_taken: 409,
@@ -34,6 +36,10 @@ const STATUS: Record<string, number> = {
   invalid_role: 400,
   invalid_phone: 400,
   staff_not_found: 404,
+  professional_not_found: 404,
+  // 409, não 403: quem pede tem `team.manage`. O que recusa é o estado da
+  // cadeira, que já tem dono.
+  professional_already_invited: 409,
   // 409, não 403: quem pede tem `team.manage`. O que recusa é a regra de que o
   // dono não se tranca para fora da própria barbearia.
   owner_protected: 409,
@@ -175,6 +181,38 @@ export class TeamController {
         tenantId: staff.tenantId,
         actor: { id: staff.staffUserId, name: staff.name },
         staffUserId: id,
+        messaging: this.messaging,
+        ...contexto(request),
+      });
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  /**
+   * Convida o barbeiro — lacuna aberta no bloco 12.
+   *
+   * `team.manage`, e não `settings.manage`: isto **cria uma conta**, e não é
+   * porque o caminho da tela sai do cadastro de profissionais que a permissão
+   * muda. O papel é sempre `professional` e não entra pelo corpo — aceitar o
+   * papel aqui transformaria "convidar o Ruan" numa forma silenciosa de criar
+   * um gerente, fora da tela que exige `team.manage` justamente para isso.
+   */
+  @Exige('team.manage')
+  @Post('invite')
+  async invite(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(conviteSchema))
+    body: { professionalId: string; email: string; phone?: string },
+    @Req() request: Request,
+  ) {
+    try {
+      return await convidarProfissional({
+        tenantId: staff.tenantId,
+        actor: { id: staff.staffUserId, name: staff.name },
+        professionalId: body.professionalId,
+        email: body.email,
+        ...(body.phone ? { phone: body.phone } : {}),
         messaging: this.messaging,
         ...contexto(request),
       });

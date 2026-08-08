@@ -12,8 +12,10 @@ import {
   sairDoGestor,
   salvarEmpresa,
   salvarFotos,
+  convidarProfissional,
   salvarAvisos,
   salvarJanela,
+  salvarPreferenciasDoCliente,
   salvarPagamentos,
   salvarProfissionais,
   reemitirSenha,
@@ -60,6 +62,7 @@ import {
   salvarConfiguracaoDeComissao,
   fecharComissao,
 } from '@/lib/admin-api';
+import { ehConversa } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
 import {
@@ -1153,4 +1156,84 @@ export async function acaoAvisos(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/avisos', resultado.code);
   redirect('/admin/avisos?salvo=1');
+}
+
+// -- A ficha do cliente ------------------------------------------------------
+
+/**
+ * Só dois destinos de volta, e conferidos.
+ *
+ * O campo vem do formulário, que é entrada externa como qualquer outra — e um
+ * `redirect` cru com ele é redirecionamento aberto. Mesmo motivo de
+ * `destinoDoBalcao`, com o agravante de que o cookie do painel altera preço,
+ * catálogo e equipe.
+ */
+function destinoDaFicha(bruto: string): string {
+  return bruto === '/admin/meu-dia' ? '/admin/meu-dia' : '/admin/dia';
+}
+
+export async function acaoPreferencias(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const customerId = texto(form, 'customerId');
+  const de = destinoDaFicha(texto(form, 'de'));
+  const rota = `/admin/cliente/${customerId}?de=${de === '/admin/meu-dia' ? 'meu-dia' : 'dia'}`;
+
+  const conversa = texto(form, 'conversa');
+  if (!ehConversa(conversa)) falhar(rota, 'preferencia_invalida');
+
+  const resultado = await salvarPreferenciasDoCliente(token, customerId, {
+    maquinaLaterais: texto(form, 'maquinaLaterais') || null,
+    tipoDegrade: texto(form, 'tipoDegrade') || null,
+    topo: texto(form, 'topo') || null,
+    barbaEstilo: texto(form, 'barbaEstilo') || null,
+    produtosEvitar: texto(form, 'produtosEvitar') || null,
+    conversa,
+    observacoes: texto(form, 'observacoes') || null,
+  });
+
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}&salvo=1`);
+}
+
+/**
+ * Convida o barbeiro para o aplicativo dele.
+ *
+ * A senha volta na resposta **e** sai por mensagem: o provedor pode estar fora
+ * do ar, e o dono precisa poder ler em voz alta para quem está do lado.
+ *
+ * Ela vai para a tela seguinte por **cookie de vida curta, nunca pela URL** —
+ * mesma decisão de `acaoCriarMembro`, e pelo mesmo motivo, que a primeira
+ * versão deste convite esqueceu: senha em parâmetro de consulta fica no
+ * histórico e no autocompletar do balcão, que é máquina compartilhada, e viaja
+ * no `Referer` de toda requisição da página. E "morre no primeiro uso" é mais
+ * fraco do que parece: `must_change_password` bloqueia o painel, não o login —
+ * quem lê a URL primeiro fica com a conta.
+ */
+export async function acaoConvidar(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const professionalId = texto(form, 'professionalId');
+  const telefone = texto(form, 'phone');
+  const resultado = await convidarProfissional(token, {
+    professionalId,
+    email: texto(form, 'email'),
+    ...(telefone ? { phone: telefone } : {}),
+  });
+
+  if (!resultado.ok) falhar(`/admin/profissionais?pessoa=${professionalId}`, resultado.code);
+
+  await guardarSenhaDeUmaVez(
+    resultado.dados.member.name,
+    resultado.dados.senhaInicial,
+    'profissionais',
+  );
+
+  const busca = new URLSearchParams({
+    pessoa: professionalId,
+    // Só isto na URL: qual cadeira abrir e o que dizer sobre a entrega. Nenhum
+    // dos dois é segredo.
+    entrega: resultado.dados.entrega,
+  });
+  redirect(`/admin/profissionais?${busca.toString()}`);
 }

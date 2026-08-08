@@ -8,6 +8,7 @@ import {
   createStaffUser,
   listStaff,
   permissionsByRole,
+  convidarProfissional,
   resetStaffPassword,
   setStaffActive,
 } from './team.js';
@@ -552,5 +553,158 @@ describeIfDb('equipe e permissões', () => {
         active: false,
       }),
     ).rejects.toMatchObject({ code: 'staff_not_found' });
+  });
+  // -- o convite do barbeiro ---------------------------------------------------
+
+  /** Cria uma cadeira no cadastro, como o onboarding faz. */
+  async function cadeira(tenantId: string, nome = 'Ruan', kind = 'professional'): Promise<string> {
+    const linhas = await admin.$queryRawUnsafe<{ id: string; loc: string }[]>(`
+      WITH unidade AS (SELECT id FROM locations WHERE tenant_id = '${tenantId}' LIMIT 1)
+      INSERT INTO professionals (tenant_id, location_id, name, kind)
+      SELECT '${tenantId}', unidade.id, '${nome}', '${kind}'::professional_kind FROM unidade
+      RETURNING id, location_id AS loc
+    `);
+    const id = linhas[0]?.id;
+    if (!id) throw new Error('não deu para criar a cadeira');
+    return id;
+  }
+
+  it('convidar liga a cadeira à conta e manda a senha', async () => {
+    /**
+     * A lacuna do bloco 12: `professional_id` tinha coluna, chave estrangeira e
+     * recorte de agenda — e nada a preenchia. O barbeiro entrava com a conta do
+     * dono, que é o incidente que aquele bloco existia para impedir.
+     */
+    const dono = await abrirBarbearia();
+    const ruan = await cadeira(dono.tenantId);
+
+    const convidado = await convidarProfissional({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      professionalId: ruan,
+      email: 'ruan@domari.com.br',
+      phone: '(71) 96666-5555',
+    });
+
+    expect(convidado.member.role).toBe('professional');
+    expect(convidado.member.professionalId).toBe(ruan);
+    expect(convidado.member.name).toBe('Ruan');
+    expect(convidado.entrega).toBe('enviada');
+    expect(messaging.senhas[0]?.password).toBe(convidado.senhaInicial);
+
+    // Ele entra, e a sessão dele resolve para a própria cadeira.
+    const dele = await staffLogin({
+      email: 'ruan@domari.com.br',
+      password: convidado.senhaInicial,
+    });
+    expect((await resolveStaffSession(dele.token)).professionalId).toBe(ruan);
+  });
+
+  it('o telefone fica na cadeira, para o reenvio não pedir de novo', async () => {
+    const dono = await abrirBarbearia();
+    const ruan = await cadeira(dono.tenantId);
+
+    await convidarProfissional({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      professionalId: ruan,
+      email: 'ruan@domari.com.br',
+      phone: '(71) 96666-5555',
+    });
+
+    const linhas = await admin.$queryRawUnsafe<{ phone_e164: string }[]>(
+      `SELECT phone_e164 FROM professionals WHERE id = '${ruan}'`,
+    );
+    expect(linhas[0]?.phone_e164).toBe('+5571966665555');
+  });
+
+  it('a mesma cadeira não recebe dois convites', async () => {
+    // Duas contas na mesma cadeira veriam a mesma agenda como "minha", e a
+    // comissão — que sai de `professional_id` — teria dois donos.
+    const dono = await abrirBarbearia();
+    const ruan = await cadeira(dono.tenantId);
+
+    const convidar = (email: string) =>
+      convidarProfissional({
+        messaging,
+        tenantId: dono.tenantId,
+        actor: ator(dono),
+        professionalId: ruan,
+        email,
+      });
+
+    await convidar('ruan@domari.com.br');
+    await expect(convidar('outro@domari.com.br')).rejects.toMatchObject({
+      code: 'professional_already_invited',
+    });
+  });
+
+  it('agenda de recurso não é pessoa e não recebe convite', async () => {
+    /**
+     * O defeito D12 do sistema analisado: duas das quatro "agendas" eram contas
+     * de balcão com jornada 08:00–23:00. Mandar senha para "Cadeira 2" cria uma
+     * conta que ninguém usa e que ninguém desliga.
+     */
+    const dono = await abrirBarbearia();
+    const balcao = await cadeira(dono.tenantId, 'Cadeira 2', 'resource_only');
+
+    await expect(
+      convidarProfissional({
+        messaging,
+        tenantId: dono.tenantId,
+        actor: ator(dono),
+        professionalId: balcao,
+        email: 'cadeira2@domari.com.br',
+      }),
+    ).rejects.toMatchObject({ code: 'professional_not_found' });
+  });
+
+  it('a cadeira de outra barbearia não existe para quem convida', async () => {
+    /**
+     * A chave estrangeira **não** protege: a checagem de integridade
+     * referencial ignora row security. O que recusa é o `SELECT` sob RLS antes
+     * de gravar — sem ele, o dono da rival criaria uma conta na barbearia dele
+     * apontando para a cadeira da casa, e leria a agenda alheia.
+     */
+    const dono = await abrirBarbearia();
+    const ruan = await cadeira(dono.tenantId);
+
+    const rival = await signUpOwner({
+      ...DONO,
+      email: 'rival@rival.com.br',
+      businessName: 'Rival Barbearia',
+    });
+    if (!rival.created) throw new Error('a rival deveria ter sido criada');
+
+    await expect(
+      convidarProfissional({
+        messaging,
+        tenantId: rival.session.tenantId,
+        actor: ator(rival.session),
+        professionalId: ruan,
+        email: 'espiao@rival.com.br',
+      }),
+    ).rejects.toMatchObject({ code: 'professional_not_found' });
+  });
+
+  it('o convite registra na trilha quem criou a conta', async () => {
+    const dono = await abrirBarbearia();
+    const ruan = await cadeira(dono.tenantId);
+
+    const convidado = await convidarProfissional({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      professionalId: ruan,
+      email: 'ruan@domari.com.br',
+    });
+
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx));
+    const criacao = eventos.find(
+      (linha) => linha.action === 'staff.created' && linha.entityId === convidado.member.id,
+    );
+    expect(criacao?.actorName).toBe(DONO.name);
   });
 });

@@ -251,10 +251,34 @@ async function prepararBalcao(token) {
     )
   ).json();
 
+  // A ficha precisa de um cliente com histórico: anotação preenchida e
+  // atendimento concluído. Ficha em branco mede o estado vazio, que também
+  // importa — mas é a cheia que estoura layout.
+  const clienteId = psql(
+    `select id from customers order by created_at desc limit 1`,
+  ) || null;
+  if (clienteId) {
+    await fetch(`${API}/v1/admin/customers/${clienteId}/preferences`, {
+      method: 'PUT',
+      headers: cabecalho,
+      body: JSON.stringify({
+        produtosEvitar: 'Pós-barba com álcool e qualquer produto com mentol',
+        maquinaLaterais: 'Máquina 1 com pente de meio',
+        tipoDegrade: 'Degradê médio, começando na altura da orelha',
+        topo: 'Tesoura, deixando comprimento',
+        barbaEstilo: 'Aparar sem navalha, manter o desenho do queixo',
+        conversa: 'silencioso',
+        observacoes:
+          'Redemoinho do lado direito abre para cima. Não gosta de espelho na frente durante o corte.',
+      }),
+    });
+  }
+
   return {
     dia: dataLivre,
     servicoId: servico.id,
     dataLivre,
+    clienteId,
     horaLivre: grade.days[0]?.slots?.[0]?.start,
     profissionalLivre: grade.days[0]?.slots?.[0]?.professionalId,
   };
@@ -481,6 +505,43 @@ async function prepararCaixa(token, catalogo) {
   return { ok: true, orderId };
 }
 
+/**
+ * Convida um barbeiro e devolve a sessão dele.
+ *
+ * A tela `/admin/meu-dia` precisa ser medida com a conta de quem ela serve: com
+ * o cookie do dono ela renderiza, mas mostrando o salão inteiro — que é
+ * justamente o layout que ela existe para não ter.
+ */
+async function prepararBarbeiro(token, profissionalId) {
+  const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+  const email = `barbeiro${Date.now()}@teste.com`;
+
+  const convite = await fetch(`${API}/v1/admin/team/invite`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({ professionalId: profissionalId, email }),
+  });
+  if (!convite.ok) return null;
+  const { senhaInicial } = await convite.json();
+
+  const entrar = (senha) =>
+    fetch(`${API}/v1/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: senha }),
+    }).then((r) => r.json());
+
+  const primeira = await entrar(senhaInicial);
+  await fetch(`${API}/v1/admin/me/password`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${primeira.token}` },
+    body: JSON.stringify({ currentPassword: senhaInicial, newPassword: 'a-senha-do-barbeiro' }),
+  });
+
+  const dele = await entrar('a-senha-do-barbeiro');
+  return dele.token ?? null;
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
@@ -492,6 +553,10 @@ async function main() {
     headers: { authorization: `Bearer ${token}` },
   })).json();
   const caixa = await prepararCaixa(token, catalogo);
+  const tokenBarbeiro = balcao.profissionalLivre
+    ? await prepararBarbeiro(token, balcao.profissionalLivre)
+    : null;
+  if (!tokenBarbeiro) console.warn('  aviso: barbeiro não convidado; "meu dia" fora da medição');
   if (!caixa.ok) console.warn(`  aviso: caixa não preparado (${caixa.motivo})`);
 
   const telas = [
@@ -535,6 +600,15 @@ async function main() {
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    // A tela do barbeiro e a ficha do cliente. O `token` aqui é o do dono, que
+    // vê tudo — o recorte por profissional é do servidor e tem teste próprio;
+    // o que se mede aqui é o layout.
+    ...(balcao.clienteId
+      ? [{ nome: 'ficha do cliente', url: `/admin/cliente/${balcao.clienteId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
+      : []),
+    ...(tokenBarbeiro
+      ? [{ nome: 'meu dia (barbeiro)', url: '/admin/meu-dia', cookie: { nome: 'gestor', valor: tokenBarbeiro, caminho: '/admin' } }]
+      : []),
   ];
 
   const browser = await chromium.launch({

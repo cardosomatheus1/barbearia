@@ -355,6 +355,108 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
   return { ...criacao, entrega };
 }
 
+/**
+ * O convite do barbeiro — lacuna aberta no bloco 12.
+ *
+ * `staff_users.professional_id` existia desde lá, com chave estrangeira e com o
+ * recorte da agenda por profissional já implementado. Nada preenchia a coluna:
+ * o profissional nascia no onboarding como **cadeira**, não como pessoa que
+ * entra no sistema. Na prática o barbeiro usava a conta do dono — o incidente
+ * exato que o bloco 12 existia para impedir.
+ *
+ * Três decisões:
+ *
+ * 1. **O papel é sempre `professional`.** Convidar não é escolher permissão: a
+ *    tela de equipe faz isso, com `team.manage`. Deixar o papel entrar por aqui
+ *    transformaria "convidar o Ruan" numa forma silenciosa de criar um gerente.
+ * 2. **O telefone fica na cadeira, não só na conta.** Reenviar o convite depois
+ *    não pode obrigar o dono a digitar o número de novo — e é `professionals`
+ *    que ele edita no cadastro.
+ * 3. **A cadeira é conferida sob RLS antes de gravar.** A chave estrangeira não
+ *    protege: a checagem de integridade referencial do Postgres ignora row
+ *    security, e sozinha aceitaria a cadeira de outra barbearia.
+ */
+export async function convidarProfissional(request: {
+  readonly tenantId: string;
+  readonly actor: { readonly id: string; readonly name: string };
+  readonly professionalId: string;
+  readonly email: string;
+  readonly phone?: string;
+  readonly messaging: MessagingProvider;
+  readonly ip?: string | undefined;
+  readonly userAgent?: string | undefined;
+}): Promise<{
+  readonly member: StaffMember;
+  readonly senhaInicial: string;
+  readonly entrega: EntregaDaSenha;
+}> {
+  const cadeira = await withTenant(request.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { name: string; kind: string; phone_e164: string | null; convidado: string | null }[]
+    >`
+      SELECT p.name, p.kind::text AS kind, p.phone_e164,
+             (SELECT s.id::text FROM staff_users s WHERE s.professional_id = p.id) AS convidado
+        FROM professionals p WHERE p.id = ${request.professionalId}::uuid
+    `;
+    return linhas[0] ?? null;
+  });
+
+  if (!cadeira) {
+    throw new StaffError('professional_not_found', 'Profissional não encontrado.');
+  }
+  if (cadeira.convidado) {
+    // Uma cadeira, uma conta — o índice único do banco garante, mas a recusa
+    // aqui diz *por quê*, em vez de devolver erro de banco ao dono.
+    throw new StaffError(
+      'professional_already_invited',
+      'Este profissional já tem conta. Use "reemitir a senha" se ele perdeu o acesso.',
+    );
+  }
+  /**
+   * Agenda que não é gente não recebe convite.
+   *
+   * `kind` distingue a pessoa da cadeira compartilhada — foi o defeito D12 do
+   * sistema analisado, em que duas das quatro "agendas" eram contas de balcão
+   * com jornada 08:00–23:00. Mandar senha de acesso para "Cadeira 2" cria uma
+   * conta que ninguém usa e que ninguém desliga.
+   */
+  if (cadeira.kind !== 'professional') {
+    throw new StaffError(
+      'professional_not_found',
+      'Só profissional recebe convite; agenda de recurso não é pessoa.',
+    );
+  }
+
+  const telefone = request.phone ?? cadeira.phone_e164 ?? undefined;
+
+  const criado = await createStaffUser({
+    tenantId: request.tenantId,
+    actor: request.actor,
+    name: cadeira.name,
+    email: request.email,
+    role: 'professional',
+    professionalId: request.professionalId,
+    messaging: request.messaging,
+    ...(telefone ? { phone: telefone } : {}),
+    ...(request.ip !== undefined ? { ip: request.ip } : {}),
+    ...(request.userAgent !== undefined ? { userAgent: request.userAgent } : {}),
+  });
+
+  // O número fica na cadeira para o próximo reenvio. Depois da conta criada, de
+  // propósito: se a criação falhar, o cadastro não guarda um telefone que
+  // ninguém usou.
+  if (telefone) {
+    await withTenant(request.tenantId, async (tx) => {
+      await tx.$executeRaw`
+        UPDATE professionals SET phone_e164 = ${normalizePhone(telefone)}, updated_at = now()
+         WHERE id = ${request.professionalId}::uuid
+      `;
+    });
+  }
+
+  return criado;
+}
+
 async function carregar(
   tx: TransactionClient,
   staffUserId: string,

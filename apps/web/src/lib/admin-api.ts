@@ -1,4 +1,4 @@
-import type { ServiceTemplate } from '@barbearia/core';
+import type { Conversa, ServiceTemplate } from '@barbearia/core';
 
 /**
  * Cliente da API do painel.
@@ -85,7 +85,7 @@ export interface EstadoOnboarding {
   publishedAt: string | null;
   locationId: string;
   counts: { services: number; professionals: number; schedules: number };
-  staff: { name: string; role: string; permissions: string[] };
+  staff: { name: string; role: string; permissions: string[]; professionalId: string | null };
 }
 
 export const estadoDoPainel = (token: string) =>
@@ -145,6 +145,7 @@ export interface LinhaDoDia {
   professionalName: string;
   customerName: string | null;
   customerPhoneTail: string | null;
+  customerId: string | null;
   services: string[];
   priceCents: number;
   realDurationMinutes: number | null;
@@ -429,6 +430,8 @@ export interface ProfissionalDoCadastro {
   serviceIds: string[];
   weekdays: number[];
   futureAppointments: number;
+  hasAccount: boolean;
+  phone: string | null;
 }
 
 export interface EntradaDeProfissional {
@@ -1080,3 +1083,62 @@ export const avisos = (token: string) =>
 
 export const salvarAvisos = (token: string, dados: PreferenciasDeAviso) =>
   chamar<{ saved: boolean }>('PUT', '/v1/admin/notifications', dados, token);
+
+// -- A ficha do cliente -------------------------------------------------------
+
+export interface PreferenciasDoCliente {
+  maquinaLaterais: string | null;
+  tipoDegrade: string | null;
+  topo: string | null;
+  barbaEstilo: string | null;
+  produtosEvitar: string | null;
+  conversa: Conversa;
+  observacoes: string | null;
+}
+
+export interface VisitaNaFicha {
+  id: string;
+  quando: string;
+  status: string;
+  profissional: string;
+  servicos: string[];
+  precoCents: number;
+}
+
+export interface FichaDoCliente {
+  customerId: string;
+  nome: string;
+  telefoneFinal: string;
+  preferencias: PreferenciasDoCliente;
+  anotadoEm: string | null;
+  anotadoPor: string | null;
+  linhaDoTempo: VisitaNaFicha[];
+  visitas: number;
+  desde: string | null;
+}
+
+export const fichaDoCliente = (token: string, customerId: string) =>
+  chamar<FichaDoCliente>('GET', `/v1/admin/customers/${customerId}/ficha`, undefined, token);
+
+export const salvarPreferenciasDoCliente = (
+  token: string,
+  customerId: string,
+  dados: PreferenciasDoCliente,
+) =>
+  chamar<{ saved: boolean }>(
+    'PUT',
+    `/v1/admin/customers/${customerId}/preferences`,
+    dados,
+    token,
+  );
+
+export const convidarProfissional = (
+  token: string,
+  dados: { professionalId: string; email: string; phone?: string },
+) =>
+  chamar<{ member: { id: string; name: string }; senhaInicial: string; entrega: string }>(
+    'POST',
+    '/v1/admin/team/invite',
+    dados,
+    token,
+  );

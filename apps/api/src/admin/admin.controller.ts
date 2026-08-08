@@ -164,7 +164,15 @@ export class OnboardingController {
     // (CLAUDE.md). E é uma ida ao banco a menos que uma rota `/me` por página.
     return {
       ...estado,
-      staff: { name: staff.name, role: staff.role, permissions: staff.permissions },
+      staff: {
+        name: staff.name,
+        role: staff.role,
+        permissions: staff.permissions,
+        // A tela do barbeiro precisa saber que ele **é** um barbeiro para se
+        // desviar até ela. O recorte por profissional continua sendo decidido
+        // no servidor, a partir da sessão — isto aqui só decide para onde ir.
+        professionalId: staff.professionalId,
+      },
     };
   }
 

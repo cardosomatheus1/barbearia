@@ -7,7 +7,7 @@ import {
   type PainelDoDia,
 } from '@/lib/admin-api';
 import { addDays, localTime, weekdayShort } from '@/lib/date';
-import { painelOuDesvio, podeNaTela } from '@/lib/painel';
+import { painelDoBalcaoOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAtendimento, acaoSair } from '../acoes';
 
@@ -249,7 +249,9 @@ export default async function DiaPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
-  const estado = await painelOuDesvio(token);
+  // O barbeiro tem `appointments.view` e esta tela funcionaria para ele.
+  // Funcionar não é servir: a dele é `/admin/meu-dia`.
+  const estado = await painelDoBalcaoOuDesvio(token);
 
   const query = await searchParams;
   const dataPedida = first(query['d']);

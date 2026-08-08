@@ -393,6 +393,7 @@ pnpm --filter @barbearia/db test            # invariantes do schema
 pnpm --filter @barbearia/scheduling test    # pipeline banco -> motor
 pnpm --filter @barbearia/finance test       # comanda, caixa e fiado
 pnpm --filter @barbearia/jobs test          # fila, avisos e falta automática
+pnpm --filter @barbearia/crm test           # a ficha do cliente
 ```
 
 Testes de banco exigem Postgres 16+ com `pgcrypto`, `citext` e `btree_gist`.
@@ -423,6 +424,8 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Permissão exibida na tela | sai da mesma função que a API aplica — nunca recalculada na view |
 | Permissão numa rota | declarada com `@Exige(...)`; rota sem declaração é **recusada**, não liberada |
 | Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
+| Conta de barbeiro | uma cadeira, uma conta — índice único parcial em `staff_users(professional_id)`; o papel do convite é sempre `professional` e nunca vem do corpo |
+| Senha de primeiro acesso na tela | cookie `httpOnly` de dois minutos com caminho restrito (`guardarSenhaDeUmaVez`), **nunca** parâmetro de consulta — há teste que lê o código e reprova |
 | Trabalho fora de requisição | tarefa em `jobs`, enfileirada **dentro** da transação que cria o fato; nunca depois |
 | Tarefa de fila | sempre com `tenant_id`; o handler abre `withTenant` com ele. `jobs` não tem RLS, e por isso o `payload` guarda id, nunca conteúdo |
 | Credencial entregue por mensagem | inline depois do commit, como o OTP — **nunca** pela fila, que é durável e legível sem tenant |

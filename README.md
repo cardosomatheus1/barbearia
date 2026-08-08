@@ -13,16 +13,17 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 375 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 77 invariantes + 10 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 393 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 86 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
-| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP) e auditoria | 119 testes ✅ |
+| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP), convite do barbeiro e auditoria | 125 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro, do banco para a tela | 54 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente e falta automática — o que acontece sem ninguém esperando | 41 testes ✅ |
+| `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão e avisos | 209 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão e avisos, com SSR (Next.js) | 37 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos e ficha do cliente | 217 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, o dia do barbeiro e a ficha do cliente, com SSR (Next.js) | 42 testes ✅ |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos e marca a falta | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
@@ -979,7 +980,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e duas
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e quatro
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
@@ -1364,3 +1365,74 @@ O ramo de erro. Nove telas do painel tinham a saída do estado de erro como um
 `<a>` cru — 16px de altura, contra o piso de 44. Nenhuma medição pegava, porque
 o caminho feliz nunca renderiza aquele ramo; a tela de avisos foi a primeira
 cujo erro apareceu na régua, e a correção valeu para as nove.
+
+## Bloco 16 — a quarta superfície, e duas colunas que estavam vazias
+
+O barbeiro era o único dos quatro perfis da SPEC sem tela. Ele entrava no painel
+do balcão — que funciona para ele, porque a API já recortava a agenda pela
+cadeira dele desde o bloco 12 — e via uma tabela de cinco cadeiras feita para um
+notebook aberto o dia inteiro. Funcionar não é servir.
+
+### Duas colunas que existiam há quatro blocos sem nada atrás
+
+`customers.view_notes` é permissão desde o bloco 12. O papel `professional` a
+recebe por padrão, a `PermissaoGuard` a aplica, a recepção é excluída dela de
+propósito — e não havia uma única coluna de anotação no schema. É o defeito de
+`blocks` ao contrário: lá o motor aceitava um campo que ninguém preenchia, aqui
+a permissão é que estava vazia.
+
+`staff_users.professional_id` idem: coluna, chave estrangeira e recorte da
+agenda prontos, e nada que ligasse a cadeira à conta. Sem esse caminho o
+barbeiro usa a conta do dono — o incidente exato que o bloco 12 existia para
+impedir.
+
+### Uma cadeira, uma conta
+
+`professional_id` era livre. Duas contas na mesma cadeira veriam a mesma agenda
+como "minha", e a comissão do bloco 19 — que sai de `professional_id` — passaria
+a ter dois donos. Índice único parcial, que ignora o nulo de quem não é
+barbeiro. E agenda de estação ou sala não recebe convite: mandar senha de acesso
+para "Cadeira 2" cria conta que ninguém usa e ninguém desliga, que foi o defeito
+D12 do sistema analisado.
+
+### O recorte do barbeiro é outro recorte, não um filtro
+
+A recepção pergunta "como está o salão?"; o barbeiro pergunta "quem é o próximo
+e o que ele gosta?". `recortarMeuDia` separa quem está na cadeira **agora** de
+quem entra **depois**, e devolve o tempo entre os dois **assinado** — "atrasado
+12 min" e "começa em 12 min" levam a decisões opostas, e zerar no piso
+transformaria o primeiro no segundo.
+
+### A ficha: estruturada onde vira filtro, livre onde vira gente
+
+Os seis campos da SPEC §4.1 respondem perguntas de operação — quantos preferem
+silêncio, que produto evitar ao repor estoque. O texto livre existe ao lado
+porque nenhuma lista fechada cobre "o redemoinho do lado direito abre para
+cima". Só `conversa` é fechado, e por um motivo: ele muda o comportamento de
+quem atende e precisa ser legível de relance com a mesma palavra sempre —
+"quieto", "não gosta de conversa" e "silêncio" leem como três coisas para quem
+está com pressa.
+
+Na tela, **o que evitar vem primeiro**, apesar de ser o campo menos preenchido:
+é o único cuja falha machuca. E a anotação aparece com quem escreveu e quando —
+ninguém confia numa anotação sem dono.
+
+### O que a `/security-review` encontrou, e o que ela ensinou sobre o portão
+
+Um defeito, e ele era uma regressão contra uma regra que este repositório já
+tinha escrita **e** já tinha mecanismo para cumprir.
+
+O convite mandava a senha de primeiro acesso na URL
+(`?convidado=...`). `sessao-gestor.ts` explica desde o bloco 12 por que isso não
+pode: senha em parâmetro de consulta fica no histórico e no autocompletar do
+balcão — máquina compartilhada — e viaja no `Referer` de toda requisição da
+página. E "morre no primeiro uso" é mais fraco do que parece, porque
+`must_change_password` bloqueia o painel, não o login: quem lê a URL primeiro
+fica com a conta. O mecanismo certo, `guardarSenhaDeUmaVez`, existia ao lado.
+
+O portão não pegou porque nada lia aquela regra. Agora lê
+(`senha-na-url.test.ts`) — e a primeira versão **desse teste** também não pegava:
+ela conferia linha a linha, e `new URLSearchParams({` e `convidado: senhaInicial,`
+são linhas diferentes. Só a versão que parte o arquivo por instrução ficou
+vermelha. Teste que só pega o vazamento escrito numa linha só não pega vazamento
+nenhum.

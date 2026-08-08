@@ -9,6 +9,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BoardController } from '../src/admin/board.controller.js';
 import { MeController, TeamController } from '../src/admin/team.controller.js';
 import { AvisosController } from '../src/admin/avisos.controller.js';
+import { FichaController } from '../src/admin/ficha.controller.js';
+import { CatalogoController } from '../src/admin/catalogo.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
@@ -58,6 +60,8 @@ describeIfDb('equipe e permissões pela HTTP', () => {
         TeamController,
         MeController,
         AvisosController,
+        FichaController,
+        CatalogoController,
       ],
       providers: [
         TenantService,
@@ -484,5 +488,223 @@ describeIfDb('equipe e permissões pela HTTP', () => {
     // O telefone sai mascarado e a credencial não aparece em lugar nenhum.
     expect(senha.telefone).not.toContain('977776666');
     expect(JSON.stringify(avisos.body)).not.toContain(criada.body.senhaInicial);
+  });
+  // -- o convite e a ficha ------------------------------------------------------
+
+  /** Cria a cadeira pelo cadastro e devolve o id. */
+  async function cadeira(dono: string, nome = 'Ruan'): Promise<string> {
+    await com(dono)(
+      http().put('/v1/admin/professionals').send({
+        professionals: [{ name: nome, schedule: [{ weekday: 2, startMinute: 540, endMinute: 1080 }] }],
+      }),
+    ).expect(200);
+    const catalogo = await com(dono)(http().get('/v1/admin/catalog')).expect(200);
+    const achado = catalogo.body.professionals.find((p: { name: string }) => p.name === nome);
+    expect(achado, `${nome} não apareceu no catálogo`).toBeDefined();
+    return achado.id;
+  }
+
+  /** Convida e devolve a sessão do barbeiro, já com a senha trocada. */
+  async function barbeiro(dono: string, email = 'ruan@domari.com.br') {
+    const id = await cadeira(dono);
+    const convite = await com(dono)(
+      http().post('/v1/admin/team/invite').send({ professionalId: id, email }),
+    ).expect(201);
+
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: convite.body.senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password').send({
+        currentPassword: convite.body.senhaInicial,
+        newPassword: 'a-senha-do-ruan',
+      }),
+    ).expect(200);
+    const dele = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: 'a-senha-do-ruan' })
+      .expect(201);
+
+    return { token: dele.body.token as string, professionalId: id, convite: convite.body };
+  }
+
+  /** Um cliente na base. Criar cliente é do balcão, não deste bloco. */
+  async function cliente(dono: string, nome = 'Carlos Souza'): Promise<string> {
+    const estado = await com(dono)(http().get('/v1/admin/state')).expect(200);
+    const linhas = await admin.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO customers (tenant_id, name, phone_e164)
+      VALUES ('${estado.body.tenantId}', '${nome}', '+55719888877${Math.floor(Math.random() * 90) + 10}')
+      RETURNING id
+    `);
+    const id = linhas[0]?.id;
+    if (!id) throw new Error('não deu para criar o cliente');
+    return id;
+  }
+
+  it('convidar cria a conta do barbeiro ligada à cadeira dele', async () => {
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    expect(ruan.convite.member.role).toBe('professional');
+    expect(ruan.convite.member.professionalId).toBe(ruan.professionalId);
+
+    // E ele entra já vendo só a própria agenda.
+    const dia = await com(ruan.token)(http().get('/v1/admin/day')).expect(200);
+    expect(dia.body.professionals.map((p: { name: string }) => p.name)).toEqual(['Ruan']);
+  });
+
+  it('convidar é criar conta, e nem quem configura a barbearia pode', async () => {
+    /**
+     * O caminho da tela sai do cadastro de profissionais, que é
+     * `settings.manage`. A permissão **não** acompanha o caminho.
+     *
+     * O caso que separa as duas é o **gerente**: ele tem `settings.manage` e
+     * não tem `team.manage`. Provar com a recepcionista não provaria nada —
+     * ela não tem nenhuma das duas, e a rota a recusaria de qualquer jeito.
+     */
+    const dono = await entrarComoDono();
+    const id = await cadeira(dono);
+
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({
+        name: 'Bruno Gerente',
+        email: 'bruno@domari.com.br',
+        role: 'manager',
+      }),
+    ).expect(201);
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'bruno@domari.com.br', password: criada.body.senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password').send({
+        currentPassword: criada.body.senhaInicial,
+        newPassword: 'a-senha-do-bruno',
+      }),
+    ).expect(200);
+    const gerente = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'bruno@domari.com.br', password: 'a-senha-do-bruno' })
+      .expect(201);
+
+    // Ele configura a barbearia...
+    await com(gerente.body.token)(http().get('/v1/admin/catalog')).expect(200);
+    // ...e não cria conta por isso.
+    await com(gerente.body.token)(
+      http().post('/v1/admin/team/invite').send({
+        professionalId: id,
+        email: 'complice@domari.com.br',
+      }),
+    ).expect(403);
+  });
+
+  it('a mesma cadeira não recebe dois convites', async () => {
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    const segundo = await com(dono)(
+      http().post('/v1/admin/team/invite').send({
+        professionalId: ruan.professionalId,
+        email: 'outro@domari.com.br',
+      }),
+    ).expect(409);
+    expect(segundo.body.error.code).toBe('professional_already_invited');
+  });
+
+  it('o barbeiro lê e escreve a ficha do cliente', async () => {
+    // `customers.view_notes` está no padrão de fábrica do papel `professional`
+    // desde o bloco 12 — e até agora não havia anotação nenhuma para ver.
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    const carlos = await cliente(dono);
+
+    const antes = await com(ruan.token)(
+      http().get(`/v1/admin/customers/${carlos}/ficha`),
+    ).expect(200);
+    expect(antes.body.preferencias.conversa).toBe('indiferente');
+    expect(antes.body.linhaDoTempo).toEqual([]);
+
+    await com(ruan.token)(
+      http().put(`/v1/admin/customers/${carlos}/preferences`).send({
+        produtosEvitar: 'Álcool no pós-barba',
+        conversa: 'silencioso',
+      }),
+    ).expect(200);
+
+    const depois = await com(ruan.token)(
+      http().get(`/v1/admin/customers/${carlos}/ficha`),
+    ).expect(200);
+    expect(depois.body.preferencias.produtosEvitar).toBe('Álcool no pós-barba');
+    expect(depois.body.anotadoPor).toBe('Ruan');
+  });
+
+  it('a recepção não lê nem escreve a anotação do cliente', async () => {
+    /**
+     * Ela precisa **achar** o cliente, não ler o que anotaram sobre ele.
+     * `customers.view_notes` é negada ao papel `receptionist` no padrão de
+     * fábrica desde o bloco 12; agora existe dado atrás disso.
+     */
+    const dono = await entrarComoDono();
+    const maria = await recepcionista(dono);
+    const carlos = await cliente(dono);
+
+    await com(maria.token)(http().get(`/v1/admin/customers/${carlos}/ficha`)).expect(403);
+
+    await com(maria.token)(
+      http().put(`/v1/admin/customers/${carlos}/preferences`).send({
+        conversa: 'conversa',
+        observacoes: 'anotação indevida',
+      }),
+    ).expect(403);
+  });
+
+  it('vocabulário de conversa fora da lista é recusado na borda', async () => {
+    const dono = await entrarComoDono();
+    const carlos = await cliente(dono);
+
+    await com(dono)(
+      http().put(`/v1/admin/customers/${carlos}/preferences`).send({ conversa: 'quieto' }),
+    ).expect(400);
+  });
+
+  it('anotação longa demais é recusada na borda, não pelo banco', async () => {
+    /**
+     * A CHECK da migração 0021 tem o mesmo teto. Deixar o banco recusar
+     * transformaria "escrevi demais" em erro de banco na cara do barbeiro, em
+     * vez de uma mensagem que diz o que fazer.
+     */
+    const dono = await entrarComoDono();
+    const carlos = await cliente(dono);
+
+    const recusado = await com(dono)(
+      http().put(`/v1/admin/customers/${carlos}/preferences`).send({
+        conversa: 'indiferente',
+        observacoes: 'a'.repeat(1001),
+      }),
+    ).expect(400);
+    expect(recusado.body.error.code).toBe('invalid_request');
+  });
+
+  it('a ficha de um cliente da outra barbearia é 404, não 403', async () => {
+    /**
+     * 403 confirmaria que o id existe em algum lugar da plataforma. A RLS
+     * devolve zero linhas, e a resposta é a mesma de um id inventado.
+     */
+    const dono = await entrarComoDono();
+    const carlos = await cliente(dono);
+
+    await http().post('/v1/admin/signup').send({
+      ...DONO,
+      email: 'rival@rival.com.br',
+      businessName: 'Rival Barbearia',
+    }).expect(202);
+    const rival = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'rival@rival.com.br', password: DONO.password })
+      .expect(201);
+
+    await com(rival.body.token)(http().get(`/v1/admin/customers/${carlos}/ficha`)).expect(404);
   });
 });

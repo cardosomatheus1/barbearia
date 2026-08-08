@@ -8,9 +8,20 @@ import {
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
-import { lerConflitoDeJornada, lerSessaoGestor, type JornadaEmConflito } from '@/lib/sessao-gestor';
+import {
+  lerConflitoDeJornada,
+  lerSenhaDeUmaVez,
+  lerSessaoGestor,
+  type JornadaEmConflito,
+} from '@/lib/sessao-gestor';
 import { DIAS, linhasDaJornada, type LinhaDoFormulario } from '@/lib/jornada';
-import { acaoLigarProfissional, acaoSair, acaoSalvarJornada, acaoSalvarProfissional } from '../acoes';
+import {
+  acaoConvidar,
+  acaoLigarProfissional,
+  acaoSair,
+  acaoSalvarJornada,
+  acaoSalvarProfissional,
+} from '../acoes';
 import { CadastroNav } from '../cadastro-nav';
 
 /**
@@ -322,6 +333,98 @@ function Jornada({
   );
 }
 
+/**
+ * O convite para o aplicativo do barbeiro — lacuna aberta no bloco 12.
+ *
+ * Fica aqui, e não na tela de equipe, porque é aqui que o dono está quando
+ * pensa nisso: ele acabou de cadastrar o Ruan como cadeira e a pergunta
+ * seguinte é "o Ruan vê a agenda dele?". A permissão exigida continua sendo
+ * `team.manage` — o caminho da tela não muda quem pode criar conta.
+ *
+ * Só para `professional`: agenda de estação ou sala não é pessoa, e mandar
+ * senha de acesso para "Cadeira 2" cria uma conta que ninguém usa e ninguém
+ * desliga. Foi o defeito D12 do sistema analisado.
+ */
+function Convite({
+  pessoa,
+  senha,
+  entrega,
+}: {
+  readonly pessoa: ProfissionalDoCadastro;
+  readonly senha?: string | undefined;
+  readonly entrega?: string | undefined;
+}) {
+  if (pessoa.kind !== 'professional') return null;
+
+  if (senha) {
+    return (
+      <div className="convite convite--pronto">
+        <p className="convite__titulo">Conta criada para {pessoa.name}</p>
+        <p className="convite__senha tabular">{senha}</p>
+        <p className="convite__sobre">
+          {entrega === 'enviada'
+            ? 'A senha foi enviada por mensagem. Ela some desta tela em dois minutos — no primeiro acesso ele troca por uma dele.'
+            : entrega === 'falhou'
+              ? 'A mensagem não saiu: o canal estava fora do ar. Passe a senha para ele — ela some desta tela em dois minutos.'
+              : 'Sem celular cadastrado, então nada foi enviado. Passe a senha para ele — ela some desta tela em dois minutos.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (pessoa.hasAccount) {
+    return (
+      <p className="convite__ja">
+        Já tem conta. Se perdeu o acesso, reemita a senha em <a href="/admin/equipe">Equipe</a>.
+      </p>
+    );
+  }
+
+  return (
+    <form action={acaoConvidar} className="convite">
+      <input name="professionalId" type="hidden" value={pessoa.id} />
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`convite-email-${pessoa.id}`}>
+          E-mail de {pessoa.name}
+        </label>
+        <input
+          autoComplete="off"
+          className="ui-field__input"
+          id={`convite-email-${pessoa.id}`}
+          name="email"
+          placeholder="ruan@exemplo.com"
+          required
+          type="email"
+        />
+        <p className="ui-field__hint">É por ele que o barbeiro entra.</p>
+      </div>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`convite-phone-${pessoa.id}`}>
+          Celular
+        </label>
+        <input
+          className="ui-field__input"
+          defaultValue={pessoa.phone ?? ''}
+          id={`convite-phone-${pessoa.id}`}
+          inputMode="tel"
+          name="phone"
+          placeholder="(71) 90000-0000"
+          type="tel"
+        />
+        <p className="ui-field__hint">
+          Para onde a senha de primeiro acesso vai. Sem ele, ela só aparece nesta tela.
+        </p>
+      </div>
+
+      <button className="ui-button ui-button--secondary ui-button--block" type="submit">
+        Criar acesso
+      </button>
+    </form>
+  );
+}
+
 export default async function ProfissionaisPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -339,6 +442,18 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
   const orfaos = Number(first(query['orfaos']) ?? 0);
   const conflito = await lerConflitoDeJornada();
   const aberta = first(query['pessoa']) ?? conflito?.professionalId;
+  /**
+   * A senha vem do cookie de vida curta, nunca da URL.
+   *
+   * A primeira versão deste convite a mandava na query — e o `/security-review`
+   * pegou. Senha em parâmetro de consulta fica no histórico e no autocompletar
+   * do balcão, que é máquina compartilhada, e viaja no `Referer` de toda
+   * requisição da página. O mecanismo certo já existia desde o bloco 12, na
+   * tela de equipe; faltava usá-lo aqui.
+   */
+  const recemCriada = await lerSenhaDeUmaVez();
+  const senhaNova = recemCriada?.senha;
+  const entrega = first(query['entrega']);
 
   if (!equipe.ok || !catalogo.ok) {
     const code = equipe.ok ? (catalogo.ok ? 'request_failed' : catalogo.code) : equipe.code;
@@ -472,6 +587,19 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
                 <CamposDaPessoa pessoa={pessoa} prefixo={`p-${pessoa.id}`} servicos={servicos} />
               </details>
 
+              {pessoa.kind === 'professional' ? (
+                <details className="dobra" open={pessoa.id === aberta && Boolean(senhaNova)}>
+                  <summary className="dobra__titulo">
+                    Acesso ao aplicativo{pessoa.hasAccount ? ' — criado' : ''}
+                  </summary>
+                  <Convite
+                    entrega={pessoa.id === aberta ? entrega : undefined}
+                    pessoa={pessoa}
+                    senha={pessoa.id === aberta ? senhaNova : undefined}
+                  />
+                </details>
+              ) : null}
+
               {pessoa.id === emFoco?.id ? (
                 <details className="dobra" open>
                   <summary className="dobra__titulo">Jornada da semana</summary>
@@ -505,8 +633,9 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
       </section>
 
       <p className="painel__nota">
-        Conta de acesso ao sistema é outra coisa e fica em <a href="/admin/equipe">Equipe</a>: nem
-        todo barbeiro precisa de login, e nem toda conta atende cliente.
+        Recepção e gerência têm conta sem cadeira, e ficam em{' '}
+        <a href="/admin/equipe">Equipe</a>. Aqui é o contrário: a cadeira que ganha uma conta, para
+        o barbeiro ver a agenda dele — uma cadeira, uma conta.
       </p>
     </main>
   );

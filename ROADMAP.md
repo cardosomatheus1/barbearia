@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 18 de 78 blocos.**
+**Status: 19 de 78 blocos.**
 
 ---
 
@@ -54,11 +54,11 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
 | Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
-| Convite do barbeiro por WhatsApp | o profissional é criado no onboarding | o convite e o login próprio dele | 16 (`app-pro`) — sem a agenda do barbeiro não há para onde o convite levar |
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
 | Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
 | Taxa de cartão rateada com o profissional | a comissão calcula sobre líquido ou bruto, e o desconto tem tratamento configurável — as duas escolhas que a SPEC §3.4 exige que sejam explícitas | a terceira: a taxa do adquirente absorvida pela casa **ou** rateada. Hoje ela é sempre absorvida, por omissão | 36 (cartão e link de pagamento): a alíquota do adquirente não existe em lugar nenhum do produto. Oferecer "rateada" agora daria zero em toda comanda — campo que o motor aceita e ninguém preenche |
 | Comissão sobre assinatura | comissão por profissional, serviço e categoria, nas três modalidades | os três modelos que a SPEC §3.4 descreve para assinante, e a simulação que compara os três | 48 (rentabilidade da assinatura): não há assinatura no produto até o bloco 45. Antes disso seria regra sem fato a que se aplicar |
+| Permissão própria para escrever a anotação do cliente | ler e escrever a ficha exigem `customers.view_notes`, negada à recepção por padrão; o vocabulário de "conversa" é fechado e o teto de cada campo é conferido na borda e no banco | uma permissão que diga *escrever* em vez de tomar emprestada a de *ler* | 30 (RBAC: telas de gestão): hoje nenhum papel lê a anotação sem também precisar escrevê-la — quem lê "não usar navalha" é o barbeiro com o cliente na cadeira, que é quem escreveu. Inventá-la agora criaria permissão que nenhum papel distingue, que é o mesmo erro que o bloco 18 declarou em vez de cometer. Ela entra junto com a tela que permite conceder |
 | Permissão própria para dar desconto | desconto exige `finance.view` (dono e gerente), separado de `cashier.open` (recepção) — então quem opera o balcão **não** zera uma conta; é auditado com antes e depois, e o valor fica congelado em centavos | uma permissão que diga *desconto* em vez de tomar emprestada a de *ver dinheiro*; e um teto, porque hoje 100% é permitido a quem tem `finance.view` | 30 (RBAC: telas de gestão): inventá-la agora criaria uma permissão que nenhum papel concede, e que portanto recusaria todo mundo. Ela entra junto com a tela que permite conceder |
 | Editar as permissões de cada papel pela tela | `role_permissions` é por barbearia e editável — tirar `appointments.cancel` da recepção é um `DELETE` e vale na requisição seguinte | a tela que faz isso sem SQL | 30 (RBAC: telas de gestão): o mecanismo está pronto de propósito para o bloco 30 precisar só de tela, não de migração |
 | Ler a trilha de auditoria pela tela | tabela `audit_log` append-only no banco, escrita na mesma transação da mudança, com antes e depois, e leitura paginada por cursor | a tela que mostra | 21 (dashboard): a trilha já registra; falta onde olhar sem `psql` |
@@ -98,7 +98,7 @@ atual sem perder nenhuma capacidade que usava.
 | 13 | Admin: CRUD de catálogo, equipe, jornadas, recursos | ✅ |
 | 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | ✅ |
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | ✅ |
-| 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
+| 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | ✅ |
 | 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |
 | 18 | Comanda + checkout + caixa + **fiado** | ✅ |
 | 19 | Comissão básica + fechamento | ✅ |

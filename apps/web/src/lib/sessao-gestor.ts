@@ -62,13 +62,31 @@ const SENHA_NOVA = 'senha-nova';
 const CAMINHO_EQUIPE = '/admin/equipe';
 const SEGUNDOS_NA_TELA = 120;
 
-export async function guardarSenhaDeUmaVez(nome: string, senha: string): Promise<void> {
+/**
+ * Onde a senha pode aparecer.
+ *
+ * Duas telas criam conta: a de equipe (recepção, gerência) e a de profissionais
+ * (o convite do barbeiro). O caminho continua restrito — não é `/admin` — para
+ * que o cookie não acompanhe a navegação pelo resto do painel.
+ */
+export type TelaDaSenha = 'equipe' | 'profissionais';
+
+const CAMINHO_DA_TELA: Record<TelaDaSenha, string> = {
+  equipe: CAMINHO_EQUIPE,
+  profissionais: '/admin/profissionais',
+};
+
+export async function guardarSenhaDeUmaVez(
+  nome: string,
+  senha: string,
+  tela: TelaDaSenha = 'equipe',
+): Promise<void> {
   const jar = await cookies();
   jar.set(SENHA_NOVA, JSON.stringify({ nome, senha }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: CAMINHO_EQUIPE,
+    path: CAMINHO_DA_TELA[tela],
     maxAge: SEGUNDOS_NA_TELA,
   });
 }

@@ -30,7 +30,11 @@ export type StaffFailure =
   | 'email_unavailable'
   | 'invalid_role'
   | 'staff_not_found'
-  | 'owner_protected';
+  | 'owner_protected'
+  // Convite do barbeiro: a cadeira precisa existir nesta barbearia, e não pode
+  // já ter dono.
+  | 'professional_not_found'
+  | 'professional_already_invited';
 
 export class StaffError extends Error {
   constructor(readonly code: StaffFailure, message: string) {
