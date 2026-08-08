@@ -38,3 +38,38 @@ export const conviteSchema = z.object({
   email: z.string().trim().email().max(200),
   phone: z.string().trim().max(30).optional(),
 });
+
+/**
+ * A meta de faturamento de um mês.
+ *
+ * `metaCents` nulo apaga — é o único jeito de dizer "sem meta". Zero seria uma
+ * segunda forma de dizer o mesmo, e a CHECK do banco a recusa de propósito:
+ * duas maneiras de expressar a ausência é como a tela acaba mostrando
+ * "0% de R$ 0,00".
+ */
+export const metaSchema = z.object({
+  professionalId: z.string().uuid(),
+  /**
+   * Data que existe, não só data com a forma certa.
+   *
+   * O formato sozinho aceita `2026-99-01`, que atravessa a borda inteira e só
+   * morre no Postgres — virando 500 sobre uma entrada que a borda tinha
+   * obrigação de recusar com 400. O `refine` fecha isso perguntando ao
+   * calendário, que é quem sabe se o mês existe e quantos dias ele tem.
+   */
+  mes: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'mês no formato YYYY-MM-DD')
+    .refine((valor) => {
+      const [ano, mes, dia] = valor.split('-').map(Number);
+      if (!ano || !mes || !dia) return false;
+      const data = new Date(Date.UTC(ano, mes - 1, dia));
+      return (
+        data.getUTCFullYear() === ano &&
+        data.getUTCMonth() === mes - 1 &&
+        data.getUTCDate() === dia
+      );
+    }, 'data inexistente'),
+  // O teto acompanha a CHECK da migração 0022: R$ 1.000.000,00.
+  metaCents: z.number().int().min(1).max(100_000_000).nullable(),
+});

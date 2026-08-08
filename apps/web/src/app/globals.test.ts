@@ -264,3 +264,45 @@ describe('imagens nas telas', () => {
     expect(frouxas, `imagem sem limite ou sem proporção: ${frouxas.join(', ')}`).toEqual([]);
   });
 });
+
+/**
+ * Token que não existe apaga a propriedade inteira.
+ *
+ * `var(--space-10)` num `padding` de três valores não deixa o terceiro valor
+ * cair no padrão: o CSS trata a **declaração inteira** como inválida no tempo
+ * de valor computado, e o `padding` vira zero — inclusive as laterais, que
+ * estavam corretas.
+ *
+ * Foi o que aconteceu com `.meu-dia` no bloco 17: a escala vai até
+ * `--space-8`, eu escrevi `--space-10`, e a tela do barbeiro ficou sem recuo
+ * nenhum. A régua pegou no navegador, e só porque a barra de navegação
+ * transbordou — o sintoma apareceu num elemento que não tinha defeito.
+ *
+ * Este teste é mais barato que a régua e aponta para a linha certa.
+ */
+describe('tokens usados existem', () => {
+  const tokens = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../../../packages/ui/dist/tokens.css'),
+    'utf8',
+  );
+
+  /** Todo `--nome:` declarado no design system, mais os locais desta folha. */
+  const declarados = new Set([
+    ...[...tokens.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
+    ...[...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
+  ]);
+
+  it('o teste enxerga a escala do design system', () => {
+    // Sem esta guarda, um caminho errado para `tokens.css` deixaria o teste
+    // abaixo verde sobre um conjunto vazio de declarados — e ele acusaria tudo,
+    // ou nada, dependendo da ordem. Melhor falhar aqui.
+    expect(declarados.has('--space-4')).toBe(true);
+    expect(declarados.has('--color-accent')).toBe(true);
+  });
+
+  it('nenhum var() aponta para token inexistente', () => {
+    const usados = [...css.matchAll(/var\(\s*(--[a-z0-9-]+)/g)].map((m) => m[1]);
+    const orfaos = [...new Set(usados)].filter((nome) => !declarados.has(nome));
+    expect(orfaos, 'token inexistente invalida a declaração inteira').toEqual([]);
+  });
+});

@@ -18,6 +18,7 @@ import { MfaController } from './admin/mfa.controller.js';
 import { ComissaoController } from './admin/comissao.controller.js';
 import { AvisosController } from './admin/avisos.controller.js';
 import { FichaController } from './admin/ficha.controller.js';
+import { ProController } from './admin/pro.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
@@ -45,6 +46,7 @@ import { TenantService } from './tenant/tenant.service.js';
     ComissaoController,
     AvisosController,
     FichaController,
+    ProController,
     FilaPublicaController,
     TeamController,
     MeController,

@@ -11,6 +11,7 @@ import { MeController, TeamController } from '../src/admin/team.controller.js';
 import { AvisosController } from '../src/admin/avisos.controller.js';
 import { FichaController } from '../src/admin/ficha.controller.js';
 import { CatalogoController } from '../src/admin/catalogo.controller.js';
+import { ProController } from '../src/admin/pro.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
@@ -62,6 +63,7 @@ describeIfDb('equipe e permissões pela HTTP', () => {
         AvisosController,
         FichaController,
         CatalogoController,
+        ProController,
       ],
       providers: [
         TenantService,
@@ -706,5 +708,196 @@ describeIfDb('equipe e permissões pela HTTP', () => {
       .expect(201);
 
     await com(rival.body.token)(http().get(`/v1/admin/customers/${carlos}/ficha`)).expect(404);
+  });
+  // -- os números do barbeiro e a meta ------------------------------------------
+
+  it('o barbeiro vê os próprios números sem segundo fator', async () => {
+    /**
+     * É o holerite de quem pergunta, e o recorte sai de `staff.professionalId`
+     * — nunca de um parâmetro. Pôr um código de seis dígitos entre o barbeiro e
+     * a primeira tela que ele abre é como a barbearia acaba procurando como
+     * desligar a proteção inteira.
+     */
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    const meus = await com(ruan.token)(http().get('/v1/admin/pro/me')).expect(200);
+    expect(meus.body.professionalId).toBe(ruan.professionalId);
+    expect(meus.body.professionalName).toBe('Ruan');
+    expect(meus.body.meta.metaCents).toBe(0);
+  });
+
+  it('a resposta do barbeiro não traz o número de mais ninguém', async () => {
+    // Comparar barbeiro com barbeiro é o que faz um recusar o corte rápido para
+    // pegar o do vizinho (SPEC §4.21).
+    const dono = await entrarComoDono();
+    await com(dono)(
+      http().put('/v1/admin/professionals').send({
+        professionals: [
+          { name: 'Ruan', schedule: [{ weekday: 2, startMinute: 540, endMinute: 1080 }] },
+          { name: 'Gleidson', schedule: [{ weekday: 2, startMinute: 540, endMinute: 1080 }] },
+        ],
+      }),
+    ).expect(200);
+
+    const catalogo = await com(dono)(http().get('/v1/admin/catalog')).expect(200);
+    const ruanId = catalogo.body.professionals.find((p: { name: string }) => p.name === 'Ruan').id;
+
+    const convite = await com(dono)(
+      http().post('/v1/admin/team/invite').send({
+        professionalId: ruanId,
+        email: 'ruan2@domari.com.br',
+      }),
+    ).expect(201);
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'ruan2@domari.com.br', password: convite.body.senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password').send({
+        currentPassword: convite.body.senhaInicial,
+        newPassword: 'a-senha-do-ruan',
+      }),
+    ).expect(200);
+    const dele = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'ruan2@domari.com.br', password: 'a-senha-do-ruan' })
+      .expect(201);
+
+    const meus = await com(dele.body.token)(http().get('/v1/admin/pro/me')).expect(200);
+    expect(JSON.stringify(meus.body)).not.toContain('Gleidson');
+  });
+
+  it('conta sem cadeira recebe 409 explicando, não os números de ninguém', async () => {
+    /**
+     * O padrão seguro do bloco 19: sem vínculo, sem números — em vez de sem
+     * vínculo, vê tudo. A recepcionista não tem `commission.view_own`, então
+     * quem chega aqui é uma conta de barbeiro que ninguém ligou a uma cadeira.
+     */
+    const dono = await entrarComoDono();
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({
+        name: 'Sem cadeira',
+        email: 'semcadeira@domari.com.br',
+        role: 'professional',
+      }),
+    ).expect(201);
+
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'semcadeira@domari.com.br', password: criada.body.senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password').send({
+        currentPassword: criada.body.senhaInicial,
+        newPassword: 'a-senha-dele-agora',
+      }),
+    ).expect(200);
+    const dele = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'semcadeira@domari.com.br', password: 'a-senha-dele-agora' })
+      .expect(201);
+
+    const resposta = await com(dele.body.token)(http().get('/v1/admin/pro/me')).expect(409);
+    expect(resposta.body.error.code).toBe('sem_cadeira');
+  });
+
+  it('o barbeiro não define a própria meta', async () => {
+    // Meta que o próprio cobrado escolhe não é meta.
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    await com(ruan.token)(
+      http().put('/v1/admin/pro/goals').send({
+        professionalId: ruan.professionalId,
+        mes: '2026-09-01',
+        metaCents: 1,
+      }),
+    ).expect(403);
+
+    await com(ruan.token)(http().get('/v1/admin/pro/goals')).expect(403);
+  });
+
+  it('o dono define a meta e o barbeiro passa a ver o ritmo', async () => {
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    const metas = await com(dono)(http().get('/v1/admin/pro/goals')).expect(200);
+    expect(metas.body.metas.find((m: { professionalId: string }) => m.professionalId === ruan.professionalId))
+      .toMatchObject({ metaCents: null });
+
+    await com(dono)(
+      http().put('/v1/admin/pro/goals').send({
+        professionalId: ruan.professionalId,
+        mes: metas.body.mes,
+        metaCents: 1_500_000,
+      }),
+    ).expect(200);
+
+    const meus = await com(ruan.token)(http().get('/v1/admin/pro/me')).expect(200);
+    expect(meus.body.meta.metaCents).toBe(1_500_000);
+    // O número que transforma meta em orientação.
+    expect(meus.body.meta.esperadoAteHojeCents).toBeGreaterThan(0);
+  });
+
+  it('meta zero é recusada na borda: sem meta é campo vazio', async () => {
+    // Zero seria uma segunda forma de dizer "sem meta", e a CHECK do banco a
+    // recusa. Duas maneiras de expressar a ausência é como a tela acaba
+    // mostrando "0% de R$ 0,00".
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    const recusado = await com(dono)(
+      http().put('/v1/admin/pro/goals').send({
+        professionalId: ruan.professionalId,
+        mes: '2026-09-01',
+        metaCents: 0,
+      }),
+    ).expect(400);
+    expect(recusado.body.error.code).toBe('invalid_request');
+  });
+
+  it('mês com a forma certa mas inexistente é 400, não 500', async () => {
+    /**
+     * `2026-99-01` passa numa validação de formato e só morre no Postgres —
+     * virando erro de servidor sobre entrada que a borda tinha obrigação de
+     * recusar. Foi o que a `/security-review` apontou.
+     */
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    for (const mes of ['2026-99-01', '2026-02-30']) {
+      const recusado = await com(dono)(
+        http().put('/v1/admin/pro/goals').send({
+          professionalId: ruan.professionalId,
+          mes,
+          metaCents: 1_000_000,
+        }),
+      ).expect(400);
+      expect(recusado.body.error.code).toBe('invalid_request');
+    }
+  });
+
+  it('a cadeira de outra barbearia não recebe meta', async () => {
+    const dono = await entrarComoDono();
+    const ruan = await barbeiro(dono);
+
+    await http().post('/v1/admin/signup').send({
+      ...DONO,
+      email: 'rival2@rival.com.br',
+      businessName: 'Rival Dois',
+    }).expect(202);
+    const rival = await http()
+      .post('/v1/admin/login')
+      .send({ email: 'rival2@rival.com.br', password: DONO.password })
+      .expect(201);
+
+    await com(rival.body.token)(
+      http().put('/v1/admin/pro/goals').send({
+        professionalId: ruan.professionalId,
+        mes: '2026-09-01',
+        metaCents: 1_000_000,
+      }),
+    ).expect(404);
   });
 });

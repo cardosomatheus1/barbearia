@@ -1142,3 +1142,56 @@ export const convidarProfissional = (
     dados,
     token,
   );
+
+// -- Os números do barbeiro ---------------------------------------------------
+
+export interface NumerosDoMes {
+  faturamentoCents: number;
+  atendimentos: number;
+  ticketMedioCents: number;
+  taxaDeRetorno: number;
+  produtosVendidos: number;
+}
+
+export interface MeusNumeros {
+  professionalId: string;
+  professionalName: string;
+  mes: string;
+  hoje: NumerosDoMes;
+  mesAtual: NumerosDoMes;
+  mesAnterior: NumerosDoMes;
+  variacaoDoFaturamento: number | null;
+  meta: {
+    metaCents: number;
+    realizadoCents: number;
+    percentual: number;
+    faltamCents: number;
+    esperadoAteHojeCents: number;
+    noRitmo: boolean;
+    porDiaRestanteCents: number;
+  };
+}
+
+export const meusNumeros = (token: string) =>
+  chamar<MeusNumeros>('GET', '/v1/admin/pro/me', undefined, token);
+
+export interface MetaDoProfissional {
+  professionalId: string;
+  professionalName: string;
+  mes: string;
+  metaCents: number | null;
+  anteriorCents: number | null;
+}
+
+export const metasDaCasa = (token: string) =>
+  chamar<{ mes: string; metas: MetaDoProfissional[] }>(
+    'GET',
+    '/v1/admin/pro/goals',
+    undefined,
+    token,
+  );
+
+export const salvarMetaDoProfissional = (
+  token: string,
+  dados: { professionalId: string; mes: string; metaCents: number | null },
+) => chamar<{ saved: boolean }>('PUT', '/v1/admin/pro/goals', dados, token);

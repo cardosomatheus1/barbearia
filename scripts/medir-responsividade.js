@@ -539,7 +539,22 @@ async function prepararBarbeiro(token, profissionalId) {
   });
 
   const dele = await entrar('a-senha-do-barbeiro');
-  return dele.token ?? null;
+  if (!dele.token) return null;
+
+  // Meta definida: sem ela a tela mostra "sem meta", que é um estado legítimo e
+  // o mais curto — medir só ele deixaria a barra e o ritmo fora da régua.
+  const hoje = new Date().toISOString().slice(0, 10);
+  await fetch(`${API}/v1/admin/pro/goals`, {
+    method: 'PUT',
+    headers: cabecalho,
+    body: JSON.stringify({
+      professionalId: profissionalId,
+      mes: `${hoje.slice(0, 7)}-01`,
+      metaCents: 1_500_000,
+    }),
+  });
+
+  return dele.token;
 }
 
 async function main() {
@@ -607,7 +622,10 @@ async function main() {
       ? [{ nome: 'ficha do cliente', url: `/admin/cliente/${balcao.clienteId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
     ...(tokenBarbeiro
-      ? [{ nome: 'meu dia (barbeiro)', url: '/admin/meu-dia', cookie: { nome: 'gestor', valor: tokenBarbeiro, caminho: '/admin' } }]
+      ? [
+          { nome: 'meu dia (barbeiro)', url: '/admin/meu-dia', cookie: { nome: 'gestor', valor: tokenBarbeiro, caminho: '/admin' } },
+          { nome: 'meus números', url: '/admin/meus-numeros', cookie: { nome: 'gestor', valor: tokenBarbeiro, caminho: '/admin' } },
+        ]
       : []),
   ];
 

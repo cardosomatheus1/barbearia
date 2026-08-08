@@ -2030,7 +2030,7 @@ main { padding-bottom: var(--space-8); }
    sair, e ele é lido de longe.
    ============================================================================ */
 
-.meu-dia { padding: var(--space-4) var(--space-4) var(--space-10); max-width: 34rem; }
+.meu-dia { padding: var(--space-4) var(--space-4) var(--space-8); max-width: 34rem; }
 
 .meu-dia__intervalo {
   margin: 0 0 var(--space-6);
@@ -2261,3 +2261,91 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-muted);
 }
 .convite__ja a { color: var(--color-accent); }
+
+/* ============================================================================
+   Os números do barbeiro.
+
+   A meta vem antes dos indicadores porque é a única coisa aqui que muda o que
+   ele faz hoje; o resto é leitura. E não há nome de colega em lugar nenhum —
+   a comparação é com o próprio passado, que é decisão da SPEC §4.21 e não
+   omissão de tela.
+   ============================================================================ */
+
+.meta {
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
+  min-width: 0;
+}
+.meta--sem { color: var(--color-text-muted); }
+
+.meta__frase {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  text-wrap: balance;
+}
+.meta__valores { margin: var(--space-4) 0 0; font-size: var(--font-size-xl); }
+.meta__de { color: var(--color-text-muted); font-size: var(--font-size-base); }
+
+/* A barra é decoração do número, nunca o número: o valor e a porcentagem estão
+   escritos acima e abaixo dela, para quem não distingue as cores e para quem
+   usa leitor de tela. */
+.meta__barra {
+  /* Declarado aqui com padrão, e não só no `style` do componente: token que só
+     existe inline invalida a declaração que o usa se o inline faltar — e o
+     `width` da barra viraria `auto`, que é a barra cheia. */
+  --parte: 0%;
+  margin-top: var(--space-3);
+  height: 0.5rem;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.meta__parte {
+  display: block;
+  width: var(--parte);
+  height: 100%;
+  background: var(--color-success);
+  border-radius: var(--radius-full);
+}
+.meta__parte--atras { background: var(--color-warning); }
+.meta__pe { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.numeros {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+.numero {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.numero__rotulo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.numero__valor {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  /* Faturamento de cinco dígitos em 360px quebra em vez de estourar a caixa. */
+  overflow-wrap: anywhere;
+}
+.numero__nota {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 768px) {
+  .numeros { grid-template-columns: repeat(3, 1fr); }
+}

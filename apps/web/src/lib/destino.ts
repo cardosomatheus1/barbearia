@@ -23,3 +23,32 @@ export function destinoSeguro(bruto: string | null | undefined, slug: string): s
 
   return bruto;
 }
+
+/**
+ * Para onde voltar depois de mover um atendimento no balcão.
+ *
+ * Mesmo risco de `destinoSeguro`, com o alvo mais sensível: o cookie do painel
+ * altera catálogo, equipe e preço. A lista é fechada — duas telas movem
+ * atendimento, e nenhuma outra.
+ *
+ * Mora aqui, e não junto das server actions, pelo mesmo motivo da função
+ * acima: guarda de redirecionamento sem teste é guarda que ninguém confere. Ela
+ * viveu quatro blocos dentro de `acoes.ts`, que é `'use server'` e por isso não
+ * dá para importar num teste — e foi assim que ela deixou de aceitar
+ * `/admin/meu-dia` sem ninguém notar, fazendo o barbeiro rodar dois
+ * redirecionamentos a cada botão.
+ */
+const DESTINOS_DO_BALCAO = ['/admin/dia', '/admin/meu-dia'] as const;
+
+export function destinoDoBalcao(bruto: string): string {
+  const padrao = '/admin/dia';
+  if (!bruto) return padrao;
+  // `//outro.site` é caminho relativo de protocolo: o navegador o trata como
+  // externo. Exigir uma barra só é o que fecha essa porta.
+  if (bruto.startsWith('//')) return padrao;
+
+  const aceito = DESTINOS_DO_BALCAO.some(
+    (destino) => bruto === destino || bruto.startsWith(`${destino}?`),
+  );
+  return aceito ? bruto : padrao;
+}

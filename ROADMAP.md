@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 19 de 78 blocos.**
+**Status: 20 de 78 blocos.**
 
 ---
 
@@ -58,6 +58,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
 | Taxa de cartão rateada com o profissional | a comissão calcula sobre líquido ou bruto, e o desconto tem tratamento configurável — as duas escolhas que a SPEC §3.4 exige que sejam explícitas | a terceira: a taxa do adquirente absorvida pela casa **ou** rateada. Hoje ela é sempre absorvida, por omissão | 36 (cartão e link de pagamento): a alíquota do adquirente não existe em lugar nenhum do produto. Oferecer "rateada" agora daria zero em toda comanda — campo que o motor aceita e ninguém preenche |
 | Comissão sobre assinatura | comissão por profissional, serviço e categoria, nas três modalidades | os três modelos que a SPEC §3.4 descreve para assinante, e a simulação que compara os três | 48 (rentabilidade da assinatura): não há assinatura no produto até o bloco 45. Antes disso seria regra sem fato a que se aplicar |
+| Ranking entre barbeiros (gamificação) | cada barbeiro vê os próprios números, a meta do mês com ritmo, o `rebooking rate` e a comissão do período — tudo comparado com o **próprio** passado | os rankings de faturamento, vendas, avaliações e retenção da SPEC §4.21, com o interruptor por barbearia e a escolha de quais são visíveis para a equipe | sem bloco: a própria SPEC manda vir **desligado por padrão** e explica por quê — ranking público produz disputa por cliente bom, empurra produto e faz recusar atendimento rápido. Entregar o motor de ranking antes de existir demanda real seria construir o que a SPEC pede para manter desligado. Entra quando uma barbearia pedir, junto do interruptor |
 | Permissão própria para escrever a anotação do cliente | ler e escrever a ficha exigem `customers.view_notes`, negada à recepção por padrão; o vocabulário de "conversa" é fechado e o teto de cada campo é conferido na borda e no banco | uma permissão que diga *escrever* em vez de tomar emprestada a de *ler* | 30 (RBAC: telas de gestão): hoje nenhum papel lê a anotação sem também precisar escrevê-la — quem lê "não usar navalha" é o barbeiro com o cliente na cadeira, que é quem escreveu. Inventá-la agora criaria permissão que nenhum papel distingue, que é o mesmo erro que o bloco 18 declarou em vez de cometer. Ela entra junto com a tela que permite conceder |
 | Permissão própria para dar desconto | desconto exige `finance.view` (dono e gerente), separado de `cashier.open` (recepção) — então quem opera o balcão **não** zera uma conta; é auditado com antes e depois, e o valor fica congelado em centavos | uma permissão que diga *desconto* em vez de tomar emprestada a de *ver dinheiro*; e um teto, porque hoje 100% é permitido a quem tem `finance.view` | 30 (RBAC: telas de gestão): inventá-la agora criaria uma permissão que nenhum papel concede, e que portanto recusaria todo mundo. Ela entra junto com a tela que permite conceder |
 | Editar as permissões de cada papel pela tela | `role_permissions` é por barbearia e editável — tirar `appointments.cancel` da recepção é um `DELETE` e vale na requisição seguinte | a tela que faz isso sem SQL | 30 (RBAC: telas de gestão): o mecanismo está pronto de propósito para o bloco 30 precisar só de tela, não de migração |
@@ -99,7 +100,7 @@ atual sem perder nenhuma capacidade que usava.
 | 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | ✅ |
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | ✅ |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | ✅ |
-| 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |
+| 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | ✅ |
 | 18 | Comanda + checkout + caixa + **fiado** | ✅ |
 | 19 | Comissão básica + fechamento | ✅ |
 | 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | ✅ |

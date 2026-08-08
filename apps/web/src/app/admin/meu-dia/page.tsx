@@ -5,6 +5,7 @@ import { painelDoDia, type LinhaDoDia } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAtendimento, acaoSair } from '../acoes';
+import { ProNav } from '../pro-nav';
 
 /**
  * O dia do barbeiro.
@@ -144,6 +145,7 @@ export default async function MeuDiaPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo">
         {topo}
+        <ProNav atual="/admin/meu-dia" />
         <h1 className="painel__titulo">Meu dia</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[painel.code] ?? FALHA['request_failed']}
@@ -168,6 +170,7 @@ export default async function MeuDiaPage({ searchParams }: Props) {
   return (
     <main className="ui-container meu-dia">
       {topo}
+      <ProNav atual="/admin/meu-dia" />
 
       <h1 className="painel__titulo">Meu dia</h1>
 

@@ -4,9 +4,12 @@ import {
   catalogoDeServicos,
   equipeDoCadastro,
   jornadaDoProfissional,
+  metasDaCasa,
+  type MetaDoProfissional,
   type ProfissionalDoCadastro,
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
+import { reaisDoCampo } from '@/lib/dinheiro';
 import { painelOuDesvio } from '@/lib/painel';
 import {
   lerConflitoDeJornada,
@@ -18,6 +21,7 @@ import { DIAS, linhasDaJornada, type LinhaDoFormulario } from '@/lib/jornada';
 import {
   acaoConvidar,
   acaoLigarProfissional,
+  acaoMeta,
   acaoSair,
   acaoSalvarJornada,
   acaoSalvarProfissional,
@@ -425,6 +429,64 @@ function Convite({
   );
 }
 
+/**
+ * A meta do mês — SPEC §4.21.
+ *
+ * Fica na cadeira, não numa tela de relatório, porque é aqui que o dono está
+ * quando pensa nisso: ele acabou de olhar quem atende e a pergunta seguinte é
+ * "quanto o Ruan precisa fazer este mês?".
+ *
+ * O campo vem preenchido com a meta do mês anterior quando não há a deste mês —
+ * **sugestão, não renovação automática.** Meta que se renova sozinha vira número
+ * que ninguém escolheu e que todo mundo ignora. Campo vazio apaga, que é o único
+ * jeito de dizer "sem meta".
+ */
+function Meta({
+  pessoa,
+  meta,
+  mes,
+}: {
+  readonly pessoa: ProfissionalDoCadastro;
+  readonly meta: MetaDoProfissional | undefined;
+  readonly mes: string;
+}) {
+  if (pessoa.kind !== 'professional') return null;
+
+  const atual = meta?.metaCents ?? null;
+  const sugestao = meta?.anteriorCents ?? null;
+
+  return (
+    <form action={acaoMeta} className="convite">
+      <input name="professionalId" type="hidden" value={pessoa.id} />
+      <input name="mes" type="hidden" value={mes} />
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`meta-${pessoa.id}`}>
+          Meta de faturamento do mês
+        </label>
+        <input
+          className="ui-field__input tabular"
+          defaultValue={atual === null ? '' : reaisDoCampo(atual)}
+          id={`meta-${pessoa.id}`}
+          inputMode="decimal"
+          name="metaReais"
+          placeholder={sugestao === null ? '15.000,00' : reaisDoCampo(sugestao)}
+          type="text"
+        />
+        <p className="ui-field__hint">
+          {atual === null && sugestao !== null
+            ? `No mês passado foi R$ ${reaisDoCampo(sugestao)}. Deixe em branco para ficar sem meta.`
+            : 'Deixe em branco para ficar sem meta. Ele vê o quanto falta e o ritmo, ninguém vê a dos outros.'}
+        </p>
+      </div>
+
+      <button className="ui-button ui-button--secondary ui-button--block" type="submit">
+        Salvar meta
+      </button>
+    </form>
+  );
+}
+
 export default async function ProfissionaisPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -451,6 +513,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
    * requisição da página. O mecanismo certo já existia desde o bloco 12, na
    * tela de equipe; faltava usá-lo aqui.
    */
+  const metas = await metasDaCasa(token);
   const recemCriada = await lerSenhaDeUmaVez();
   const senhaNova = recemCriada?.senha;
   const entrega = first(query['entrega']);
@@ -586,6 +649,17 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
                 <summary className="dobra__titulo">Editar cadastro</summary>
                 <CamposDaPessoa pessoa={pessoa} prefixo={`p-${pessoa.id}`} servicos={servicos} />
               </details>
+
+              {pessoa.kind === 'professional' && metas.ok ? (
+                <details className="dobra">
+                  <summary className="dobra__titulo">Meta do mês</summary>
+                  <Meta
+                    mes={metas.dados.mes}
+                    meta={metas.dados.metas.find((m) => m.professionalId === pessoa.id)}
+                    pessoa={pessoa}
+                  />
+                </details>
+              ) : null}
 
               {pessoa.kind === 'professional' ? (
                 <details className="dobra" open={pessoa.id === aberta && Boolean(senhaNova)}>

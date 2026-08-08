@@ -13,17 +13,17 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 393 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 86 invariantes + 10 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 413 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 93 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP), convite do barbeiro e auditoria | 125 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
-| `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro, do banco para a tela | 54 testes ✅ |
+| `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 74 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente e falta automática — o que acontece sem ninguém esperando | 41 testes ✅ |
 | `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos e ficha do cliente | 217 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, o dia do barbeiro e a ficha do cliente, com SSR (Next.js) | 42 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente e metas | 225 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, o dia e os números do barbeiro e a ficha do cliente, com SSR (Next.js) | 51 testes ✅ |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos e marca a falta | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
@@ -980,7 +980,7 @@ Duas guardas, porque uma só não bastava:
   fixa acima do piso, e nada escondido no celular para reaparecer no desktop.
   Existia só para `packages/ui` — e o arquivo que mais cresce, o das telas, era o
   que ninguém verificava.
-- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e quatro
+- **Medição no navegador** (`scripts/medir-responsividade.js`): abre as trinta e cinco
   telas em 360 · 390 · 768 · 1280 e mede elemento a elemento — com fotos de
   verdade carregadas, porque imagem é o que mais estoura layout e medir a página
   sem elas mediria uma versão que não existe. O CSS pode estar
@@ -1436,3 +1436,65 @@ ela conferia linha a linha, e `new URLSearchParams({` e `convidado: senhaInicial
 são linhas diferentes. Só a versão que parte o arquivo por instrução ficou
 vermelha. Teste que só pega o vazamento escrito numa linha só não pega vazamento
 nenhum.
+
+## Bloco 17 — o número que muda o que se faz hoje
+
+A SPEC §4.21 pede indicadores e metas para o barbeiro. Os indicadores já eram
+deriváveis; **meta não é** — é um número que alguém escolhe, e foi a única coisa
+desta parte da SPEC que precisou de tabela.
+
+**Meta é do mês, não da pessoa.** Uma linha por profissional e por mês:
+dezembro não tem a meta de fevereiro, e comparar o realizado de março contra um
+número que mudou em abril é como se perde a confiança no indicador. Sem
+renovação automática — meta que se renova sozinha vira número que ninguém
+escolheu. A tela sugere a do mês anterior preenchida, que é diferente de decidir
+por alguém.
+
+**Um número sem referência não muda comportamento.** "R$ 12.400" não diz nada;
+"82% da meta, e faltam 9 dias" diz. Daí o ritmo — quanto deveria ter faturado
+até hoje. Sem ele o barbeiro descobre no dia 30 que estava atrás desde o dia 8.
+E o tom da frase muda com o estado: cobrar quem já bateu é o jeito mais rápido
+de fazer alguém parar de olhar a tela.
+
+**O `rebooking rate` é medido contra o instante do atendimento**, não contra
+agora. Perguntar "tem agendamento futuro hoje?" contaria quem voltou em novembro
+por outro motivo, e a taxa de setembro mudaria toda vez que alguém abrisse a
+tela.
+
+**A comparação é com o próprio passado, nunca com o colega.** Não há nome de
+outra pessoa na tela do barbeiro, e não é omissão: a SPEC §4.21 é explícita
+sobre por quê, e o ranking ficou declarado como lacuna — entregar o motor de
+ranking antes de existir demanda seria construir o que a SPEC pede para manter
+desligado.
+
+### Três guardas que nasceram de erros deste bloco
+
+**Crase dentro de consulta SQL.** Fecha o *tagged template*, e o erro sai como
+`TS1005` em cima de uma linha de prosa. Aconteceu três vezes em três blocos.
+Agora há teste — e ele nasceu errado duas vezes: a primeira versão procurava a
+crase logo depois de `$queryRaw` e não via `$queryRaw<Linha[]>`; a segunda lia
+só arquivos rastreados, e não via o arquivo recém-escrito, que é onde o defeito
+nasce. A terceira pegou o erro que eu cometi enquanto escrevia o comentário
+sobre não cometê-lo.
+
+**Token de CSS que não existe.** `var(--space-10)` num `padding` de três valores
+não faz o terceiro cair no padrão: invalida a **declaração inteira**, e o
+`padding` vira zero — inclusive as laterais, que estavam certas. A escala vai
+até `--space-8`. A régua pegou no navegador, e só porque a barra de navegação
+transbordou: o sintoma apareceu num elemento que não tinha defeito. Agora
+`globals.test.ts` confere todo `var()` contra os tokens declarados — e o teste
+achou um segundo caso na hora, um token que só existia no `style` inline do
+componente.
+
+**`destinoDoBalcao` saiu de `acoes.ts`.** A guarda contra redirecionamento
+aberto vivia num arquivo `'use server'`, que não dá para importar num teste.
+Quatro blocos sem cobertura — e foi assim que ela deixou de aceitar
+`/admin/meu-dia` sem ninguém notar, fazendo o barbeiro rodar dois
+redirecionamentos a cada botão. Agora mora em `lib/destino.ts`, ao lado de
+`destinoSeguro`, com sete casos incluindo prefixo parecido (`/admin/diabolico`).
+
+### O que a `/security-review` encontrou
+
+Nada de segurança. Apontou um defeito de robustez que virou teste: `2026-99-01`
+passava pelo formato, atravessava a borda inteira e só morria no Postgres —
+virando 500 sobre entrada que a borda tinha obrigação de recusar com 400.

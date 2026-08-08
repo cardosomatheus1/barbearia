@@ -15,6 +15,7 @@ import {
   convidarProfissional,
   salvarAvisos,
   salvarJanela,
+  salvarMetaDoProfissional,
   salvarPreferenciasDoCliente,
   salvarPagamentos,
   salvarProfissionais,
@@ -65,6 +66,7 @@ import {
 import { ehConversa } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
+import { destinoDoBalcao } from '@/lib/destino';
 import {
   apagarSessaoGestor,
   guardarConflitoDaAgenda,
@@ -107,18 +109,6 @@ function falhar(rota: string, code: string): never {
 const ACOES_DE_ATENDIMENTO: ReadonlySet<string> = new Set([
   'confirm', 'check_in', 'wait', 'start', 'complete', 'no_show', 'undo_no_show', 'cancel',
 ]);
-
-/**
- * Para onde voltar depois de mover um atendimento.
- *
- * Mesmo motivo de `destinoSeguro` no fluxo do cliente: valor de formulário
- * virando `redirect` é redirecionador aberto. Aqui o alvo é ainda mais
- * sensível — o cookie do painel altera catálogo, equipe e preço.
- */
-function destinoDoBalcao(bruto: string): string {
-  if (bruto.startsWith('//')) return '/admin/dia';
-  return bruto === '/admin/dia' || bruto.startsWith('/admin/dia?') ? bruto : '/admin/dia';
-}
 
 async function exigirSessao(): Promise<string> {
   const token = await lerSessaoGestor();
@@ -1236,4 +1226,32 @@ export async function acaoConvidar(form: FormData): Promise<void> {
     entrega: resultado.dados.entrega,
   });
   redirect(`/admin/profissionais?${busca.toString()}`);
+}
+
+// -- A meta do profissional --------------------------------------------------
+
+/**
+ * Define ou apaga a meta do mês.
+ *
+ * Campo vazio apaga, e é o único jeito de dizer "sem meta" — zero seria uma
+ * segunda forma de dizer o mesmo, e a CHECK do banco a recusa de propósito.
+ */
+export async function acaoMeta(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const professionalId = texto(form, 'professionalId');
+  const bruto = texto(form, 'metaReais');
+  const rota = `/admin/profissionais?pessoa=${professionalId}`;
+
+  const metaCents = bruto ? centavosDoCampo(bruto) : null;
+  if (bruto && metaCents === null) falhar(rota, 'meta_invalida');
+
+  const resultado = await salvarMetaDoProfissional(token, {
+    professionalId,
+    mes: texto(form, 'mes'),
+    metaCents,
+  });
+
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}&salvo=1`);
 }

@@ -426,6 +426,10 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
 | Conta de barbeiro | uma cadeira, uma conta — índice único parcial em `staff_users(professional_id)`; o papel do convite é sempre `professional` e nunca vem do corpo |
 | Senha de primeiro acesso na tela | cookie `httpOnly` de dois minutos com caminho restrito (`guardarSenhaDeUmaVez`), **nunca** parâmetro de consulta — há teste que lê o código e reprova |
+| Meta do profissional | por mês, nunca acumulada na pessoa; sem renovação automática — a tela sugere a do mês anterior preenchida |
+| Indicador do barbeiro | comparado com o **próprio** passado, nunca com o colega (SPEC §4.21); ranking é lacuna declarada, e a SPEC manda vir desligado |
+| Comentário dentro de consulta SQL | `--` e **sem crase** — crase fecha o tagged template; há teste que reprova |
+| Espaçamento em CSS | sempre `var(--space-N)` **existente**; token inexistente invalida a declaração inteira, e há teste que confere |
 | Trabalho fora de requisição | tarefa em `jobs`, enfileirada **dentro** da transação que cria o fato; nunca depois |
 | Tarefa de fila | sempre com `tenant_id`; o handler abre `withTenant` com ele. `jobs` não tem RLS, e por isso o `payload` guarda id, nunca conteúdo |
 | Credencial entregue por mensagem | inline depois do commit, como o OTP — **nunca** pela fila, que é durável e legível sem tenant |
