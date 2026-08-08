@@ -125,16 +125,29 @@ else
   precisa() { return 0; }
 fi
 
+#
+# O `typecheck` do web sai separado dos outros, e **depois** do build dele.
+#
+# `apps/web/tsconfig.json` inclui `.next/types/**`, que o `next build` apaga e
+# regera. Rodando os dois em paralelo, o tsc lê a pasta no meio da troca e
+# reprova com `TS6053: File not found` sobre arquivo que ninguém escreveu — uma
+# falha intermitente no portão, que é o tipo de vermelho que ensina todo mundo a
+# ignorar vermelho. Encadeados, o par custa ~29s e continua cabendo abaixo do
+# e2e da API, que é o caminho crítico: não se perde tempo de relógio nenhum.
 if [ -n "$RAPIDO" ] && [ -n "$AFETADOS" ]; then
   # `--filter` por pacote, em vez de `-r`: no modo rápido conferir os dez tipos
   # quando um mudou é a mesma gordura que rodar as dez suítes.
   FILTROS=()
-  while read -r pacote; do [ -n "$pacote" ] && FILTROS+=(--filter "$pacote"); done <<<"$AFETADOS"
-  lancar "typecheck" pnpm "${FILTROS[@]}" typecheck
+  while read -r pacote; do
+    [ -n "$pacote" ] && [ "$pacote" != "@barbearia/web" ] && FILTROS+=(--filter "$pacote")
+  done <<<"$AFETADOS"
+  [ ${#FILTROS[@]} -gt 0 ] && lancar "typecheck" pnpm "${FILTROS[@]}" typecheck
 else
-  lancar "typecheck" pnpm -r typecheck
+  lancar "typecheck" pnpm --filter '!@barbearia/web' -r typecheck
 fi
-precisa "@barbearia/web" && lancar "build do web" pnpm --filter @barbearia/web build
+
+precisa "@barbearia/web" && lancar "build do web + typecheck" \
+  sh -c 'pnpm --filter @barbearia/web build && pnpm --filter @barbearia/web typecheck'
 precisa "@barbearia/api" && lancar "build da api" pnpm --filter @barbearia/api build
 precisa "@barbearia/core" && lancar "core — unitários" pnpm --filter @barbearia/core test
 precisa "@barbearia/ui" && lancar "ui — tokens e componentes" pnpm --filter @barbearia/ui test
