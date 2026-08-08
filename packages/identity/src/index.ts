@@ -5,3 +5,4 @@ export * from './staff.js';
 export * from './team.js';
 export * from './audit.js';
 export * from './mfa.js';
+export * from './mfa-staff.js';

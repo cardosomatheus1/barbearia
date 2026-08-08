@@ -37,13 +37,62 @@ step "ui — tokens e componentes" pnpm --filter @barbearia/ui test
 # redirecionamento aberto no login e precisa correr aqui.
 step "web — lógica de tela" pnpm --filter @barbearia/web test
 
+# ---------------------------------------------------------------------------
+# Suítes de banco, em paralelo.
+#
+# Cada uma cria e destrói o **próprio** banco descartável (`TEST_DB_NAME` sai do
+# nome do pacote), então elas não disputam estado nenhum. Em série gastavam o
+# tempo somado; aqui gastam o da mais lenta.
+#
+# O que se paga por isso: a saída chega junta no fim, em vez de etapa a etapa.
+# Por isso o log de cada uma é guardado inteiro e impresso na ordem fixa abaixo
+# — ler saída de sete processos entrelaçada seria pior que esperar.
+# ---------------------------------------------------------------------------
+COM_BANCO=(
+  "db — invariantes:@barbearia/db"
+  "identity — OTP, sessão e segundo fator:@barbearia/identity"
+  "scheduling — integração:@barbearia/scheduling"
+  "onboarding — seis etapas:@barbearia/onboarding"
+  "catalog — CRUD do admin:@barbearia/catalog"
+  "finance — comanda, caixa e fiado:@barbearia/finance"
+  "api — e2e:@barbearia/api"
+)
+
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
-  step "db — invariantes"   pnpm --filter @barbearia/db test
-  step "identity — OTP e sessão" pnpm --filter @barbearia/identity test
-  step "scheduling — integração" pnpm --filter @barbearia/scheduling test
-  step "onboarding — seis etapas" pnpm --filter @barbearia/onboarding test
-  step "catalog — CRUD do admin" pnpm --filter @barbearia/catalog test
-  step "api — e2e"          pnpm --filter @barbearia/api test
+  # Uma senha efêmera para a execução inteira, e não uma por suíte.
+  # `bootstrap-role.sh` faz `ALTER ROLE ... PASSWORD`, que é global ao cluster:
+  # em paralelo, cada suíte trocaria a senha debaixo das outras e seis das sete
+  # falhariam ao conectar. Continua sendo aleatória por execução — o que a regra
+  # pede é que não haja credencial previsível, não que haja sete.
+  export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
+
+  printf '\n\033[1m==> suítes de banco (em paralelo)\033[0m\n'
+  saida=$(mktemp -d)
+  pids=()
+
+  for entrada in "${COM_BANCO[@]}"; do
+    pacote="${entrada##*:}"
+    pnpm --filter "$pacote" test >"$saida/${pacote##*/}.log" 2>&1 &
+    pids+=($!)
+  done
+
+  # Espera cada uma pelo pid, na mesma ordem em que foram lançadas, para casar
+  # o código de saída com o nome certo.
+  for i in "${!COM_BANCO[@]}"; do
+    entrada="${COM_BANCO[$i]}"
+    nome="${entrada%%:*}"
+    pacote="${entrada##*:}"
+    printf '\n\033[1m==> %s\033[0m\n' "$nome"
+    if wait "${pids[$i]}"; then
+      printf '\033[32m    ok\033[0m\n'
+    else
+      printf '\033[31m    FALHOU\033[0m\n'
+      sed 's/^/    /' "$saida/${pacote##*/}.log" | tail -25
+      failures+=("$nome")
+    fi
+  done
+
+  rm -rf "$saida"
 else
   printf '\n\033[33m==> testes de banco PULADOS\033[0m\n'
   printf '    defina ADMIN_DATABASE_URL para rodá-los. Um bloco não pode ser\n'

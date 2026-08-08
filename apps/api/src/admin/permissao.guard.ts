@@ -6,7 +6,8 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { podeTudo, type Permissao } from '@barbearia/core';
+import { podeTudo, PERMISSOES_DE_DINHEIRO, type Permissao } from '@barbearia/core';
+import { segundoFatorValido } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import type { StaffRequest } from './staff.guard.js';
 
@@ -90,6 +91,50 @@ export class PermissaoGuard implements CanActivate {
       );
     }
 
+    exigirSegundoFator(staff, exigidas);
     return true;
+  }
+}
+
+/**
+ * O segundo fator do dinheiro, cobrado a partir da própria declaração da rota.
+ *
+ * A regra do `CLAUDE.md` é "MFA obrigatório para papéis com permissão
+ * `finance.*`", e a tentação era um decorador `@ExigeSegundoFator()` à parte.
+ * Seria a mesma classe de defeito que a rota sem `@Exige`: uma rota de dinheiro
+ * nova, sem o segundo decorador, e a regra deixa de valer exatamente onde mais
+ * importa — sem nada ficar vermelho.
+ *
+ * Derivar da permissão declarada elimina o esquecimento: quem escreve
+ * `@Exige('finance.view')` já cobrou o segundo fator, queira ou não.
+ *
+ * Mora dentro da `PermissaoGuard`, e não numa guarda separada, pela mesma
+ * razão: esta aqui é obrigatória em toda rota do painel (a ausência de `@Exige`
+ * é recusa), então não existe caminho que passe ao lado dela.
+ */
+function exigirSegundoFator(
+  staff: NonNullable<StaffRequest['staff']>,
+  exigidas: readonly Permissao[],
+): void {
+  const mexeEmDinheiro = exigidas.some((p) => PERMISSOES_DE_DINHEIRO.includes(p));
+  if (!mexeEmDinheiro) return;
+
+  // Códigos próprios, e não 403 genérico: a tela precisa saber a diferença
+  // entre "cadastre o segundo fator" e "digite o código". Com uma resposta só,
+  // o operador do balcão vê "sem permissão" numa conta que tem permissão.
+  if (!staff.mfaEnabled) {
+    throw new DomainError(
+      'mfa_setup_required',
+      403,
+      'Ative o segundo fator antes de acessar o financeiro.',
+    );
+  }
+
+  if (!segundoFatorValido(staff.mfaVerifiedAt, new Date())) {
+    throw new DomainError(
+      'mfa_required',
+      403,
+      'Confirme o código do segundo fator para continuar.',
+    );
   }
 }

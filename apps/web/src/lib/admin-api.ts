@@ -14,7 +14,7 @@ export type Resposta<T> =
   | { ok: false; code: string; message: string; detail?: unknown };
 
 async function chamar<T>(
-  metodo: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  metodo: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
   token?: string,
@@ -741,5 +741,193 @@ export const moverAgendamento = (
     'POST',
     `/v1/admin/agenda/appointments/${id}/move`,
     dados,
+    token,
+  );
+
+// -- Comanda, caixa e fiado -----------------------------------------------------
+
+/** Espelha `FORMAS_DE_PAGAMENTO` do core, que é o que a borda da API aceita. */
+export type FormaDePagamento =
+  | 'cash' | 'pix' | 'debit' | 'credit' | 'link' | 'transfer' | 'fiado';
+export type TipoDeItemDaComanda = 'service' | 'product' | 'consumable';
+
+export interface ItemDaComandaNaTela {
+  id: string;
+  tipo: TipoDeItemDaComanda;
+  descricao: string;
+  quantidade: number;
+  precoUnitarioCents: number;
+  professionalId: string | null;
+  professionalName: string | null;
+}
+
+export interface Comanda {
+  id: string;
+  status: 'open' | 'paid' | 'cancelled';
+  customerId: string | null;
+  customerName: string | null;
+  appointmentId: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  itens: ItemDaComandaNaTela[];
+  gorjetaCents: number;
+  subtotalCents: number;
+  descontoCents: number;
+  totalCents: number;
+  trocoCents: number;
+  pagamentos: { forma: FormaDePagamento; valorCents: number }[];
+  /** Saldo e limite de quem vai pagar. Nulo quando a comanda é de avulso. */
+  conta: { saldoCents: number; limiteCents: number } | null;
+}
+
+export interface MovimentoDoCaixa {
+  id: string;
+  kind: string;
+  amountCents: number;
+  reason: string | null;
+  createdByName: string;
+  createdAt: string;
+}
+
+export interface SessaoDeCaixa {
+  id: string;
+  status: 'open' | 'closed';
+  openedByName: string;
+  openedAt: string;
+  openingCents: number;
+  closedByName: string | null;
+  closedAt: string | null;
+  countedCents: number | null;
+  expectedCents: number | null;
+  differenceCents: number | null;
+  movimentos: MovimentoDoCaixa[];
+  esperadoAgoraCents: number | null;
+}
+
+export const caixaDaUnidade = (token: string) =>
+  chamar<{ timezone: string; aberto: SessaoDeCaixa | null; historico: SessaoDeCaixa[] }>(
+    'GET',
+    '/v1/admin/cash',
+    undefined,
+    token,
+  );
+
+export const abrirOCaixa = (token: string, openingCents: number) =>
+  chamar<{ id: string }>('POST', '/v1/admin/cash/open', { openingCents }, token);
+
+export const movimentarOCaixa = (
+  token: string,
+  dados: { kind: 'withdrawal' | 'supply'; amountCents: number; reason: string },
+) => chamar<{ ok: true }>('POST', '/v1/admin/cash/movements', dados, token);
+
+/**
+ * Fecha o caixa.
+ *
+ * O contado vai; o esperado só volta. É o fechamento cego da SPEC §3.10 — e ele
+ * só é cego se a tela não souber o número antes de o operador contar.
+ */
+export const fecharOCaixa = (token: string, countedCents: number, notes?: string) =>
+  chamar<{ esperadoCents: number; contadoCents: number; divergenciaCents: number }>(
+    'POST',
+    '/v1/admin/cash/close',
+    { countedCents, ...(notes ? { notes } : {}) },
+    token,
+  );
+
+export const comandaAberta = (token: string, id: string) =>
+  chamar<Comanda>('GET', `/v1/admin/orders/${id}`, undefined, token);
+
+export const abrirComandaNoBalcao = (
+  token: string,
+  dados: { appointmentId?: string; customerId?: string },
+  idempotencyKey: string,
+) => chamar<Comanda>('POST', '/v1/admin/orders', dados, token, idempotencyKey);
+
+export const adicionarNaComanda = (
+  token: string,
+  id: string,
+  dados: {
+    tipo: TipoDeItemDaComanda;
+    serviceId?: string;
+    descricao: string;
+    quantidade: number;
+    precoUnitarioCents: number;
+    professionalId?: string;
+  },
+) => chamar<Comanda>('POST', `/v1/admin/orders/${id}/items`, dados, token);
+
+export const removerDaComanda = (token: string, id: string, itemId: string) =>
+  chamar<Comanda>('DELETE', `/v1/admin/orders/${id}/items/${itemId}`, undefined, token);
+
+export const ajustarAComanda = (
+  token: string,
+  id: string,
+  dados: {
+    desconto?: { tipo: 'amount' | 'percent'; valor: number; motivo?: string } | null;
+    gorjetaCents?: number;
+  },
+) => chamar<Comanda>('PATCH', `/v1/admin/orders/${id}`, dados, token);
+
+export const fecharAComanda = (
+  token: string,
+  id: string,
+  pagamentos: { forma: FormaDePagamento; valorCents: number }[],
+  idempotencyKey: string,
+) => chamar<Comanda>('POST', `/v1/admin/orders/${id}/close`, { pagamentos }, token, idempotencyKey);
+
+export interface Devedor {
+  id: string;
+  name: string;
+  saldoCents: number;
+}
+
+export const quemDeve = (token: string) =>
+  chamar<{ devedores: Devedor[] }>('GET', '/v1/admin/debts', undefined, token);
+
+export const receberDoFiado = (
+  token: string,
+  dados: { customerId: string; amountCents: number; forma: 'cash' | 'debit' | 'credit' | 'pix' },
+) => chamar<{ saldoCents: number }>('POST', '/v1/admin/debts/receive', dados, token);
+
+export interface FaturamentoDoDia {
+  dia: string;
+  recebidoCents: number;
+  fiadoCents: number;
+  gorjetaCents: number;
+  porForma: { forma: FormaDePagamento; valorCents: number }[];
+  comandas: number;
+}
+
+export const faturamentoDeHoje = (token: string, dia?: string) =>
+  chamar<FaturamentoDoDia>(
+    'GET',
+    `/v1/admin/revenue${dia ? `?dia=${encodeURIComponent(dia)}` : ''}`,
+    undefined,
+    token,
+  );
+
+// -- Segundo fator --------------------------------------------------------------
+
+export interface EstadoDoSegundoFator {
+  ativo: boolean;
+  pendente: boolean;
+  obrigatorio: boolean;
+  verificadoNestaSessao: boolean;
+}
+
+export const segundoFator = (token: string) =>
+  chamar<EstadoDoSegundoFator>('GET', '/v1/admin/mfa', undefined, token);
+
+export const comecarSegundoFator = (token: string) =>
+  chamar<{ segredoBase32: string; uri: string }>('POST', '/v1/admin/mfa/setup', {}, token);
+
+export const confirmarSegundoFator = (token: string, codigo: string) =>
+  chamar<{ codigosDeRecuperacao: string[] }>('POST', '/v1/admin/mfa/confirm', { codigo }, token);
+
+export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
+  chamar<{ usouRecuperacao: boolean; restantes: number }>(
+    'POST',
+    '/v1/admin/mfa/verify',
+    { codigo },
     token,
   );

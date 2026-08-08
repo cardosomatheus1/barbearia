@@ -362,3 +362,17 @@ export async function primaryLocation(
     };
   });
 }
+
+/**
+ * O nome da barbearia, para o rótulo do autenticador.
+ *
+ * Sem ele, três barbearias administradas pela mesma pessoa viram três entradas
+ * "Barbearia" idênticas no celular — e o segundo fator de qual delas é qual
+ * vira tentativa e erro na hora de fechar o caixa.
+ */
+export async function tenantName(tenantId: string): Promise<string | null> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ name: string }[]>`SELECT name FROM tenants LIMIT 1`;
+    return linhas[0]?.name ?? null;
+  });
+}

@@ -6,12 +6,13 @@ import { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { PERMISSOES, PERMISSOES_DE_DINHEIRO, ehPermissao } from '@barbearia/core';
+import { VALIDADE_DO_SEGUNDO_FATOR_MINUTOS } from '@barbearia/identity';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 
 /**
  * A guarda decide; estes testes cuidam de duas coisas que ela sozinha não
- * garante: que nenhuma rota esqueça de declarar, e que nenhuma exija dinheiro
- * antes de existir segundo fator.
+ * garante: que nenhuma rota esqueça de declarar, e que toda rota de dinheiro
+ * seja cobrada pelo segundo fator.
  */
 
 const CONTROLLERS = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'admin');
@@ -167,28 +168,69 @@ describe('as rotas do painel', () => {
   });
 
   /**
-   * O `CLAUDE.md` exige MFA para papéis com permissão `finance.*`, e não há
-   * segundo fator neste sistema ainda.
+   * O `CLAUDE.md` exige MFA para papéis com permissão `finance.*`.
    *
-   * Enquanto não houver, nenhuma rota pode exigir uma dessas — é o que mantém a
-   * regra verdadeira em vez de escrita. Quando a primeira tela de faturamento
-   * chegar (bloco 18), este teste fica vermelho e obriga a decisão a ser tomada
-   * junto, e não seis blocos depois.
+   * Até o bloco 18 este teste dizia o contrário — **nenhuma** rota podia exigir
+   * uma dessas, porque o segundo fator não existia. Era uma trava: manter a
+   * regra verdadeira em vez de escrita, e ficar vermelho no dia em que a
+   * primeira tela de dinheiro chegasse, obrigando a decisão a ser tomada junto.
+   *
+   * Ele ficou vermelho neste bloco e virou o que sempre quis ser: toda rota de
+   * dinheiro **é** cobrada pelo segundo fator. E não é uma declaração à parte
+   * que alguém possa esquecer — a `PermissaoGuard` deriva a exigência da
+   * própria permissão declarada. O que este teste guarda é que ela continue
+   * fazendo isso, para toda permissão do grupo.
    */
-  it('nenhuma rota exige permissão de dinheiro enquanto não existe MFA', () => {
-    const comDinheiro: string[] = [];
+  it('toda permissão de dinheiro cobra o segundo fator na guarda', () => {
+    const semSegundoFator: string[] = [];
 
-    for (const { arquivo, corpo } of controllers()) {
-      for (const [, lista = ''] of corpo.matchAll(/@Exige\(([^)]*)\)/g)) {
-        for (const permissao of PERMISSOES_DE_DINHEIRO) {
-          if (lista.includes(`'${permissao}'`)) comDinheiro.push(`${arquivo}: ${permissao}`);
-        }
+    for (const permissao of PERMISSOES_DE_DINHEIRO) {
+      const dono = { ...DONO, mfaEnabled: true, mfaVerifiedAt: null };
+      try {
+        guardaCom([permissao]).canActivate(contexto(dono));
+        semSegundoFator.push(permissao);
+      } catch {
+        // Recusou, que é o esperado: o dono tem a permissão e mesmo assim não
+        // passa sem ter provado o código nesta sessão.
       }
     }
 
+    expect(PERMISSOES_DE_DINHEIRO.length, 'o grupo de dinheiro ficou vazio').toBeGreaterThan(0);
     expect(
-      comDinheiro,
-      `rota exige permissão de dinheiro sem MFA implementado: ${comDinheiro.join(', ')}`,
+      semSegundoFator,
+      `permissão de dinheiro que passa sem segundo fator: ${semSegundoFator.join(', ')}`,
     ).toEqual([]);
+  });
+
+  it('quem tem a permissão mas não cadastrou o segundo fator recebe outro código', () => {
+    // A tela precisa distinguir "cadastre" de "digite o código": com uma
+    // resposta só, quem tem permissão veria "sem permissão" e não teria saída.
+    expect(() =>
+      guardaCom(['finance.view']).canActivate(
+        contexto({ ...DONO, mfaEnabled: false, mfaVerifiedAt: null }),
+      ),
+    ).toThrowError(/ative o segundo fator/i);
+  });
+
+  it('a prova do segundo fator vence com o tempo, mesmo com a sessão viva', () => {
+    const dono = (verificadoEm: Date) => ({ ...DONO, mfaEnabled: true, mfaVerifiedAt: verificadoEm });
+    const agora = Date.now();
+
+    expect(guardaCom(['finance.view']).canActivate(contexto(dono(new Date(agora))))).toBe(true);
+
+    const vencido = new Date(agora - (VALIDADE_DO_SEGUNDO_FATOR_MINUTOS + 1) * 60_000);
+    expect(() => guardaCom(['finance.view']).canActivate(contexto(dono(vencido)))).toThrowError(
+      /confirme o código/i,
+    );
+  });
+
+  it('rota sem permissão de dinheiro não pede segundo fator', () => {
+    // A recepção passa o dia marcando horário. Cobrar código aí seria o que
+    // faria a barbearia procurar como desligar isso.
+    expect(
+      guardaCom(['appointments.create']).canActivate(
+        contexto({ ...DONO, mfaEnabled: false, mfaVerifiedAt: null }),
+      ),
+    ).toBe(true);
   });
 });

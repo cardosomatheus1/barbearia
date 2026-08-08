@@ -45,6 +45,17 @@ ALTER TABLE staff_users
 
 COMMENT ON COLUMN staff_users.totp_secret IS 'Segredo TOTP cifrado (AES-256-GCM).';
 
+/**
+ * Quando **esta sessão** provou o segundo fator.
+ *
+ * Fica na sessão e não no usuário de propósito. Segundo fator conferido só no
+ * login protegeria o momento de entrar e nada depois: o notebook do balcão fica
+ * aberto o dia inteiro, e é exatamente ali que alguém encosta para dar uma
+ * sangria. Aqui a exigência é por sessão e com validade curta, então mexer em
+ * dinheiro pede o código de novo mesmo com a sessão viva.
+ */
+ALTER TABLE staff_sessions ADD COLUMN mfa_verified_at timestamptz;
+
 -- ---------------------------------------------------------------------------
 -- Conta do cliente: fiado e crédito
 -- ---------------------------------------------------------------------------
@@ -177,7 +188,12 @@ CREATE TABLE orders (
   change_cents    integer NOT NULL DEFAULT 0,
   discount_reason text,
 
+  -- Duas chaves porque são duas operações com efeitos diferentes: abrir a
+  -- comanda e cobrá-la. Uma só faria o duplo toque no "Receber" ser confundido
+  -- com o duplo toque no "Cobrar", e a segunda chamada devolveria a comanda
+  -- errada.
   idempotency_key text,
+  close_idempotency_key text,
 
   CONSTRAINT orders_valores_non_negative CHECK (
     subtotal_cents >= 0 AND discount_cents >= 0 AND tip_cents >= 0
@@ -200,6 +216,10 @@ CREATE UNIQUE INDEX orders_uma_aberta_por_agendamento
 
 CREATE UNIQUE INDEX orders_idempotency_idx
   ON orders (tenant_id, location_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+CREATE UNIQUE INDEX orders_close_idempotency_idx
+  ON orders (tenant_id, location_id, close_idempotency_key)
+  WHERE close_idempotency_key IS NOT NULL;
 
 CREATE INDEX orders_abertas_idx ON orders (location_id, opened_at) WHERE status = 'open';
 -- O faturamento do dia lê as pagas de uma faixa. Índice parcial porque comanda

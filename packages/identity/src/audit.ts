@@ -23,7 +23,21 @@ export type AuditAction =
   | 'staff.deactivated'
   | 'staff.reactivated'
   | 'staff.password_reset'
-  | 'permissions.changed';
+  | 'permissions.changed'
+  // Dinheiro. A SPEC pede sangria auditada por nome; o resto entrou junto pelo
+  // mesmo motivo — a pergunta do dia seguinte nunca é só sobre a sangria, é
+  // "quem mexeu na gaveta e o que fez".
+  | 'cash.opened'
+  | 'cash.closed'
+  | 'cash.withdrawal'
+  | 'cash.supply'
+  | 'order.closed'
+  | 'order.discount'
+  | 'debt.received'
+  // Segundo fator: ligar e desligar mudam quem consegue chegar ao caixa.
+  | 'mfa.enabled'
+  | 'mfa.disabled'
+  | 'mfa.recovery_used';
 
 export interface AuditEntry {
   readonly actorId: string | null;

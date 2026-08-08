@@ -17,6 +17,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'barbearia_app') THEN
     CREATE ROLE barbearia_app LOGIN;
   END IF;
+EXCEPTION
+  -- Duas suítes de teste em paralelo podem ver "não existe" ao mesmo tempo e
+  -- tentar criar as duas. `CREATE ROLE` não aceita `IF NOT EXISTS`, então a
+  -- corrida é fechada aqui: quem perde encontra o role já pronto, que é o
+  -- estado desejado de qualquer forma.
+  WHEN duplicate_object THEN NULL;
 END $$;
 SQL
 

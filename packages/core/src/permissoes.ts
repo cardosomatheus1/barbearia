@@ -74,11 +74,17 @@ export function ehPermissao(valor: string): valor is Permissao {
  *
  * Existem como grupo porque o `CLAUDE.md` exige MFA para quem as tem, e uma
  * regra que depende de alguém lembrar de conferir prefixo em cada rota não é
- * uma regra. Há teste que impede uma rota de exigir qualquer uma delas
- * enquanto o segundo fator não existir.
+ * uma regra. A `PermissaoGuard` cobra o segundo fator a partir daqui.
+ *
+ * **`cashier.` entrou no bloco 18, quando a gaveta passou a existir.** O grupo
+ * nasceu como "o prefixo `finance.`" porque era o único que havia, e o nome
+ * dele sempre disse "move ou revela dinheiro" — `cashier.withdraw` é
+ * literalmente tirar dinheiro da gaveta. Deixar de fora significaria segundo
+ * fator para *ver* o faturamento e nenhum para *levar* a sangria, que é o
+ * inverso do risco.
  */
 export const PERMISSOES_DE_DINHEIRO: readonly Permissao[] = PERMISSOES.filter(
-  (p): p is Permissao => p.startsWith('finance.'),
+  (p): p is Permissao => p.startsWith('finance.') || p.startsWith('cashier.'),
 );
 
 export type Papel = 'owner' | 'manager' | 'receptionist' | 'professional';

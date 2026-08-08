@@ -1606,3 +1606,246 @@ main { padding-bottom: var(--space-8); }
   /* A partir daqui as colunas param de rolar e cabem lado a lado. */
   .colunas { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
 }
+
+/* ---------------------------------------------------------------------------
+   Balcão: comanda, caixa, fiado e segundo fator.
+
+   A densidade aqui é do admin — a recepção passa o dia nesta tela e rolagem
+   custa tempo. Duas exceções deliberadas, e as duas por legibilidade a um
+   metro de distância: o total da comanda e o valor da gaveta. Esses dois
+   números são lidos de pé, muitas vezes com o cliente olhando junto, e ler o
+   valor errado é o defeito mais caro que um balcão pode ter.
+   --------------------------------------------------------------------------- */
+
+.cartao-balcao {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.cartao-balcao__titulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.cartao-balcao__texto {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O número que a recepção procura: quanto tem na gaveta agora. */
+.gaveta {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+}
+.gaveta__rotulo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.gaveta__valor {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.gaveta__quem { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.resumo-dia { margin-top: var(--space-4); }
+.resumo-dia__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.resumo-dia__lista { display: grid; gap: var(--space-2); margin: 0; }
+.resumo-dia__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  min-width: 0;
+}
+.resumo-dia__item dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.resumo-dia__item dd { margin: 0; font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+.resumo-dia__nota { margin: var(--space-2) 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.movimentos, .fechamentos, .itens-comanda, .devedores, .para-cobrar-lista, .pagamentos {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2);
+}
+
+.movimento, .pagamentos__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.movimento__quem { display: grid; min-width: 0; }
+.movimento__tipo { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.movimento__detalhe { font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.movimento__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); white-space: nowrap; }
+/* Sinal e cor juntos: cor sozinha não serve para quem não a distingue. */
+.movimento__valor--saiu { color: var(--color-text-muted); }
+
+.fechamento {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.fechamento__quando { display: flex; gap: var(--space-2); font-size: var(--font-size-sm); min-width: 0; }
+.fechamento__quem { color: var(--color-text-muted); overflow-wrap: anywhere; }
+.fechamento__contado { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
+.fechamento__divergencia { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.fechamento__divergencia--fora { color: var(--color-danger); font-weight: var(--font-weight-medium); }
+
+.item-comanda {
+  display: grid;
+  gap: var(--space-2);
+  align-items: baseline;
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.item-comanda__quem { display: grid; min-width: 0; }
+.item-comanda__nome { font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.item-comanda__executor { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.item-comanda__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
+.item-comanda__tirar { padding: 0 var(--space-2); font-size: var(--font-size-sm); }
+
+.total-comanda {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+}
+.total-comanda__linhas { display: grid; gap: var(--space-1); margin: 0 0 var(--space-3); }
+.total-comanda__linha { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-sm); min-width: 0; }
+.total-comanda__linha dt { color: var(--color-text-muted); }
+.total-comanda__linha dd { margin: 0; font-variant-numeric: tabular-nums; }
+.total-comanda__rotulo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.total-comanda__valor {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.pagamento-linha {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.pagamento-linha__legenda {
+  padding: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.devedor {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.devedor__cabeca { display: flex; justify-content: space-between; gap: var(--space-3); align-items: baseline; min-width: 0; }
+.devedor__nome { margin: 0; font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
+.devedor__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-semibold); white-space: nowrap; }
+
+.para-cobrar {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.para-cobrar__quem { display: grid; min-width: 0; }
+.para-cobrar__nome { font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.para-cobrar__detalhe { font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.para-cobrar__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
+
+.cartao-seguranca {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.cartao-seguranca--destaque { border-color: var(--color-accent); }
+.cartao-seguranca__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.cartao-seguranca__texto { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* O segredo é digitado à mão num celular: monoespaçado, grande e quebrável. */
+.segredo-mfa {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  border: 1px dashed var(--color-border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+.codigos-recuperacao {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.codigos-recuperacao__item {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-base);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.campo-codigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.atalhos-dinheiro { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@media (min-width: 480px) {
+  /* Com um pouco mais de largura, o item da comanda deixa de empilhar: o valor
+     ao lado do nome é como se lê uma conta de papel. */
+  .item-comanda { grid-template-columns: 1fr auto auto; }
+  .para-cobrar { grid-template-columns: 1fr auto auto; align-items: center; }
+  .fechamento { grid-template-columns: 1fr auto auto; align-items: baseline; }
+}
+
+@media (min-width: 768px) {
+  .resumo-dia__lista { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+  .codigos-recuperacao { grid-template-columns: repeat(2, 1fr); }
+}

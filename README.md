@@ -13,14 +13,15 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções e permissões — lógica pura, sem banco e sem relógio | 260 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 27 invariantes + 10 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda e permissões — lógica pura, sem banco e sem relógio | 305 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 43 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 130 testes ✅ |
-| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, auditoria | 75 testes ✅ |
+| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP) e auditoria | 109 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
-| `packages/ui` | Design system: tokens, tema, componentes acessíveis | 84 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro | 169 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe e cadastro, com SSR (Next.js) | 37 testes ✅ |
+| `packages/finance` | Comanda, checkout, caixa e fiado — o dinheiro, do banco para a tela | 27 testes ✅ |
+| `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
+| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa e comanda | 192 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa e comanda, com SSR (Next.js) | 37 testes ✅ |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -51,6 +52,20 @@ pnpm --filter @barbearia/api test         # e2e da API
 O role da aplicação é criado por `scripts/bootstrap-role.sh`, que exige
 `APP_DB_PASSWORD` e não tem default — os scripts de teste geram uma senha
 efêmera por execução, então não há credencial no repositório.
+
+### Variáveis que a API exige
+
+Nenhuma tem valor padrão, e é de propósito: as duas protegem dado, e um padrão
+fraco em silêncio subiria o sistema funcionando com a proteção desligada.
+
+| Variável | Para quê | Como gerar |
+|---|---|---|
+| `STAFF_EMAIL_PEPPER` | HMAC do e-mail em `staff_directory`, que é tabela sem RLS por natureza | `openssl rand -hex 32` |
+| `MFA_SECRET_KEY` | AES-256-GCM do segredo TOTP guardado em `staff_users` | `openssl rand -base64 32` (32 bytes) |
+
+Trocar `MFA_SECRET_KEY` invalida todos os segundos fatores cadastrados: os
+segredos ficam indecifráveis e cada gestor precisa cadastrar de novo. Ela é
+chave de dado em repouso, não credencial rotacionável sem plano.
 
 ## Decisões que valem conhecer antes de mexer
 
@@ -1010,6 +1025,136 @@ no `CLAUDE.md`.
 A primeira versão desta guarda tinha exatamente o defeito que ela existe para
 pegar: lia só a primeira das três tabelas de blocos do ROADMAP e concluiu que o
 bloco 30 "não existe".
+
+## Bloco 18 — o dinheiro
+
+### A trava que existia para ficar vermelha
+
+Desde o bloco 12 havia um teste afirmando que **nenhuma rota podia exigir
+`finance.*`**, porque o `CLAUDE.md` exige MFA para essas permissões e não havia
+MFA. Parece um teste absurdo — ele proibia um recurso do produto. Era o
+contrário: era o que mantinha a regra verdadeira em vez de escrita, e ficou
+vermelho exatamente no dia previsto, obrigando a decisão a ser tomada junto com
+a primeira tela de dinheiro e não seis blocos depois.
+
+Hoje ele afirma o oposto, e é mais forte: **toda** permissão do grupo de
+dinheiro cobra o segundo fator.
+
+### A exigência é derivada, não declarada
+
+A tentação era um decorador `@ExigeSegundoFator()` ao lado do `@Exige(...)`.
+Seria a mesma classe de defeito que a rota sem `@Exige`: uma rota de dinheiro
+nova, sem o segundo decorador, e a regra deixa de valer justamente onde mais
+importa — sem nada ficar vermelho.
+
+A `PermissaoGuard` deriva a exigência da permissão que a rota já declara. Quem
+escreve `@Exige('cashier.withdraw')` cobrou o segundo fator, queira ou não. E
+mora dentro dela, não numa guarda separada, porque esta é obrigatória em toda
+rota do painel (rota sem `@Exige` é recusada) — não existe caminho que passe ao
+lado.
+
+`cashier.*` entrou no grupo de dinheiro neste bloco. O grupo nasceu como "o
+prefixo `finance.`" porque era o único que havia, mas o nome dele sempre disse
+"move ou revela dinheiro", e `cashier.withdraw` é literalmente tirar dinheiro da
+gaveta. Segundo fator para *ver* o faturamento e nenhum para *levar* a sangria
+seria o inverso do risco.
+
+### A prova é por sessão, e vence
+
+Conferir o código só no login protegeria o momento de entrar e nada depois. O
+notebook do balcão fica logado o dia inteiro, e é ali que alguém encosta para
+dar uma sangria. `staff_sessions.mfa_verified_at` guarda quando **aquele
+aparelho** provou, com validade de 30 minutos: curto o bastante para a máquina
+esquecida não ser porta aberta, longo o bastante para não pedir código entre uma
+comanda e a seguinte. Fosse por operação, a recepção digitaria dez vezes por
+hora e o desfecho real seria colar o autenticador de alguém na parede.
+
+### Sem caixa aberto não se fecha comanda
+
+Parece rigor e é o contrário: a venda precisa saber **em qual gaveta** entrou.
+Sem isso, a divergência do fechamento não tem dono — que é a única coisa que
+controle de caixa existe para dar.
+
+### Fiado é forma de pagamento, não estado da comanda
+
+A comanda fecha; o que fica em aberto é a **conta do cliente**. Modelar fiado
+como comanda aberta faria o faturamento do dia esperar o cliente voltar. E
+`entraNaGaveta` o exclui: fiado não é dinheiro agora, e somá-lo ao caixa faria a
+gaveta nunca bater. Quando o cliente volta e paga, entra como `debt_payment`,
+separado de `sale` — no mesmo balde, o faturamento contaria o mesmo corte duas
+vezes.
+
+### O bug que o próprio teste pegou
+
+`verifyPassword` devolve `{ valid, needsRehash }`, e a primeira versão da
+verificação de código de recuperação fazia `if (await verifyPassword(...))` — um
+`if` sobre um objeto, sempre verdadeiro. **Qualquer texto** era aceito como
+código de recuperação: bypass completo do segundo fator, com o primeiro já
+vencido. O teste "código inventado não acha nada" ficou vermelho na primeira
+execução.
+
+### Um teste que falhava sozinho, e o motivo não era o código
+
+O e2e do caixa liga o MFA e prova o código. Ele gerava o segundo código a partir
+de `now + 31s` — e falhava umas duas vezes em dez. Quando a confirmação caía
+perto do fim de uma janela de trinta segundos, trinta e um segundos adiante já
+eram *dois* passos à frente, fora da tolerância de ±1 que o servidor aplica ao
+relógio real, que não andou junto. A correção não foi no código: foi somar 1 ao
+número do passo em vez de inventar um relógio. Está escrito no teste.
+
+### O que a `/security-review` encontrou no bloco do dinheiro
+
+Quatro coisas, e as quatro eram minhas.
+
+**Fechar comanda validava antes de travar.** `exigirAberta` lia a comanda sem
+`FOR UPDATE`, e o `UPDATE … SET status = 'paid'` não tinha `WHERE status =
+'open'`. Dois toques simultâneos no "Receber" — celular lento na recepção, que é
+o caso que a idempotência existe para cobrir — passavam os dois: dois
+pagamentos, dois movimentos de caixa e duas linhas num extrato que é append-only
+e não dá para corrigir. O mesmo instantâneo velho furava o limite de fiado:
+cada transação via a dívida de antes da outra e as duas concluíam que cabia.
+
+Agora a linha é travada, o saldo é relido sob trava e o `UPDATE` carrega o
+`AND status = 'open'` — a garantia que não depende de ninguém ter lembrado de
+travar.
+
+**O `Idempotency-Key` do fechamento era decorativo.** A rota aceitava o
+cabeçalho, validava o tamanho e **não o passava adiante**. O formulário da tela
+ainda trazia um comentário explicando a proteção que não existia. É a regra do
+projeto ao contrário: campo que o sistema aceita e ninguém usa é mentira. Hoje
+ele é gravado em `orders.close_idempotency_key` e a repetição devolve a comanda
+paga em vez de um 409 — que soava como falha para uma operação que deu certo.
+
+**Uma permissão de leitura autorizava toda a escrita de dinheiro.** Comanda,
+item, fechamento e recebimento de fiado estavam sob `finance.view`. O efeito
+prático era pior que o teórico: a recepcionista tem `cashier.open` e não tem
+`finance.view`, então ela conseguia abrir o caixa e não conseguia registrar uma
+única venda. Operar o balcão passou para `cashier.open`; **desconto** ficou em
+`finance.view` de propósito, que é o que dono e gerente têm e a recepção não —
+um desconto de 100% é a mesma capacidade que um estorno.
+
+**Três eventos de auditoria declarados e nunca emitidos.** `mfa.enabled`,
+`mfa.disabled` e `mfa.recovery_used` entraram no vocabulário com um comentário
+explicando por que importavam, e nenhuma das três era chamada. A que mais doía é
+a terceira: código do aplicativo e código de recuperação entram pelo mesmo
+endpoint, e a única diferença visível de fora é um booleano na resposta — que
+vai para quem acabou de usar o código. Um cartão de recuperação achado numa
+gaveta destrancava o caixa por trinta minutos e o único rastro no sistema era um
+contador caindo de 8 para 7, que nenhuma tela mostra.
+
+Junto: `desligarMfa` limpava a prova só da sessão que chamou. Inofensivo hoje,
+porque sem `totp_confirmed_at` a guarda já recusa — mas bastaria cadastrar um
+autenticador novo para as outras sessões voltarem a valer carregando prova feita
+contra o fator antigo.
+
+**E um laço sem saída**, que a revisão pegou como observação e era o mais fácil
+de sofrer na prática: a tela perguntava `mfaVerifiedAt !== null` e a guarda
+aplicava a janela de trinta minutos. Passado esse tempo, `/admin/seguranca` dizia
+"confirmado neste aparelho" e escondia o campo do código, enquanto o caixa
+recusava e mandava de volta para lá. Sem sair e entrar de novo, não havia como
+destravar. Hoje as duas chamam `segundoFatorValido` — a regra do projeto de que
+a permissão exibida sai da mesma função que a API aplica, custando caro por não
+ter sido seguida.
 
 **Lacunas conhecidas** estão na tabela
 [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), cada

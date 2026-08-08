@@ -77,7 +77,10 @@ externa.** Na prática: quase todos.
   telefone existente e inexistente.
 - OTP: 6 dígitos, TTL 5 min, máximo 5 tentativas, invalidação no acerto,
   cooldown progressivo no reenvio.
-- MFA obrigatório para papéis com permissão `finance.*`.
+- MFA obrigatório para papéis com permissão `finance.*` — e para `cashier.*`,
+  que move dinheiro de verdade. A `PermissaoGuard` **deriva** a exigência da
+  permissão declarada na rota: não há decorador separado a esquecer. A prova é
+  por sessão e vence em 30 minutos, porque o balcão fica logado o dia inteiro.
 
 ### Dinheiro e efeitos colaterais
 
@@ -107,8 +110,8 @@ externa.** Na prática: quase todos.
 ### Sempre
 
 - Segredo nunca no repositório. Configuração por variável de ambiente. Variável
-  que protege dado (`STAFF_EMAIL_PEPPER`) falha alto quando ausente — nunca cai
-  num padrão fraco em silêncio.
+  que protege dado (`STAFF_EMAIL_PEPPER`, `MFA_SECRET_KEY`) falha alto quando
+  ausente — nunca cai num padrão fraco em silêncio.
 - Sem SQL concatenado com entrada de usuário — parâmetro sempre.
 - Id público é UUID/ULID. Id sequencial em URL permite enumerar a base.
 - Erro para o cliente é genérico; o detalhe vai para o log.
@@ -160,7 +163,8 @@ rode `/security-review` antes do commit.**
                  ├── identity ────┤
 core  ←──────────┤                ├──  api  ←  web
                  ├── onboarding ──┤
-                 └── catalog ─────┘
+                 ├── catalog ─────┤
+                 └── finance ─────┘
   ↑                      ↓
   └───────────────── db (Prisma/SQL)
 ```
@@ -175,6 +179,11 @@ bastante para não compartilharem código. O onboarding substitui o conjunto
 inteiro, o que é certo para quem está abrindo e errado a partir do dia seguinte
 — `appointment_services` aponta para `services.id`, e recriar o catálogo
 desfaz o vínculo com o que já foi vendido.
+
+`finance` depende de `identity` por uma coisa só: `audit()`. A trilha precisa
+ser gravada **dentro da transação** que move o dinheiro, então ela não pode ser
+chamada de fora — e é o mesmo precedente de `onboarding`, que já dependia de
+`identity`. Nenhuma seta volta: `identity` não sabe que existe caixa.
 
 - **`packages/core` não depende de nada.** Sem banco, sem rede, sem relógio, sem
   framework. É lógica pura e é onde mora a regra de negócio. Há teste que falha
@@ -379,6 +388,7 @@ pnpm -r build
 pnpm --filter @barbearia/core test          # puro, sem banco
 pnpm --filter @barbearia/db test            # invariantes do schema
 pnpm --filter @barbearia/scheduling test    # pipeline banco -> motor
+pnpm --filter @barbearia/finance test       # comanda, caixa e fiado
 ```
 
 Testes de banco exigem Postgres 16+ com `pgcrypto`, `citext` e `btree_gist`.
@@ -410,6 +420,8 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Permissão numa rota | declarada com `@Exige(...)`; rota sem declaração é **recusada**, não liberada |
 | Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
 | Evento auditado | gravado por `audit()` **dentro da transação** que muda o estado; `audit_log` é append-only por `REVOKE` |
+| Segundo fator | TOTP RFC 6238 do `node:crypto`; segredo cifrado com AES-256-GCM; passo consumido gravado; código de recuperação some ao ser usado |
+| Prova do segundo fator | por **sessão** (`staff_sessions.mfa_verified_at`), com validade de 30 min — nunca só no login |
 
 ---
 

@@ -100,14 +100,30 @@ describe('padrão de fábrica dos papéis', () => {
 });
 
 describe('permissões de dinheiro', () => {
-  it('agrupa exatamente o prefixo finance', () => {
+  it('agrupa o que revela dinheiro e o que o move', () => {
     // O `CLAUDE.md` exige MFA para quem as tem. Uma regra que depende de
     // alguém lembrar de conferir prefixo em cada rota não é uma regra.
+    //
+    // `cashier.` entrou no bloco 18, com a gaveta: segundo fator para *ver* o
+    // faturamento e nenhum para *levar* a sangria seria o inverso do risco.
     expect([...PERMISSOES_DE_DINHEIRO].sort()).toEqual([
+      'cashier.close',
+      'cashier.open',
+      'cashier.withdraw',
       'finance.export',
       'finance.view',
       'finance.view_profit',
     ]);
+  });
+
+  it('nenhuma permissão de dinheiro fica de fora do grupo', () => {
+    // A lista acima é literal e por isso envelhece: uma permissão nova de
+    // dinheiro passaria despercebida e nasceria sem segundo fator. Esta é a
+    // rede — bate a lista contra o catálogo inteiro.
+    const foraDoGrupo = PERMISSOES.filter(
+      (p) => /^(finance|cashier)\./.test(p) && !PERMISSOES_DE_DINHEIRO.includes(p),
+    );
+    expect(foraDoGrupo, `sem segundo fator: ${foraDoGrupo.join(', ')}`).toEqual([]);
   });
 });
 

@@ -361,6 +361,82 @@ async function prepararAgenda(token, dia) {
   });
 }
 
+
+/**
+ * O balcão com dinheiro dentro: caixa aberto, comanda com itens e um fiado.
+ *
+ * Sem isso as três telas novas seriam medidas vazias — e estado vazio é
+ * justamente o layout que **não** quebra. Nome composto de barbeiro, serviço de
+ * nome longo e preço de quatro dígitos são o que estoura grade, e só aparecem
+ * com conteúdo de verdade (CLAUDE.md §5).
+ */
+async function prepararCaixa(token, catalogo) {
+  const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+  const { codigoDoPasso, passoAgora } = require('../packages/identity/dist/mfa.js');
+
+  const inicio = await fetch(`${API}/v1/admin/mfa/setup`, { method: 'POST', headers: cabecalho });
+  if (!inicio.ok) return { ok: false, motivo: `mfa/setup: ${inicio.status}` };
+  const { segredoBase32 } = await inicio.json();
+
+  // O passo confirmado é queimado, então a verificação usa o **seguinte**.
+  // Dormir 31 segundos até ele chegar seria meio minuto por execução sem ganho
+  // nenhum: o código do passo+1 já é aceito agora, dentro da tolerância de ±1.
+  const passo = passoAgora(new Date());
+  await fetch(`${API}/v1/admin/mfa/confirm`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({ codigo: codigoDoPasso(segredoBase32, passo) }),
+  });
+  await fetch(`${API}/v1/admin/mfa/verify`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({ codigo: codigoDoPasso(segredoBase32, passo + 1) }),
+  });
+
+  await fetch(`${API}/v1/admin/cash/open`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({ openingCents: 20000 }),
+  });
+
+  await fetch(`${API}/v1/admin/cash/movements`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({
+      kind: 'withdrawal',
+      amountCents: 15000,
+      reason: 'Depósito no Banco do Brasil da avenida',
+    }),
+  });
+
+  const comanda = await fetch(`${API}/v1/admin/orders`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({}),
+  });
+  if (!comanda.ok) return { ok: false, motivo: `orders: ${comanda.status}` };
+  const { id: orderId } = await comanda.json();
+
+  const proNome = catalogo.professionals[0];
+  for (const item of [
+    { descricao: 'Corte degradê com máquina e tesoura', precoUnitarioCents: 129000 },
+    { descricao: 'Barba terapêutica com toalha quente', precoUnitarioCents: 4900 },
+  ]) {
+    await fetch(`${API}/v1/admin/orders/${orderId}/items`, {
+      method: 'POST',
+      headers: cabecalho,
+      body: JSON.stringify({
+        tipo: 'service',
+        quantidade: 1,
+        professionalId: proNome?.id,
+        ...item,
+      }),
+    });
+  }
+
+  return { ok: true, orderId };
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
@@ -368,6 +444,11 @@ async function main() {
   await prepararRecursos(token);
   const filaPreparada = await prepararFila(token);
   await prepararAgenda(token, balcao.dia);
+  const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
+    headers: { authorization: `Bearer ${token}` },
+  })).json();
+  const caixa = await prepararCaixa(token, catalogo);
+  if (!caixa.ok) console.warn(`  aviso: caixa não preparado (${caixa.motivo})`);
 
   const telas = [
     { nome: 'pública', url: `/${slug}` },
@@ -400,6 +481,13 @@ async function main() {
       url: `/admin/dia/marcar?s=${balcao.servicoId}&p=${balcao.profissionalLivre}&d=${balcao.dataLivre}&h=${balcao.horaLivre}&e=d&q=nascimento`,
       cookie: { nome: 'gestor', valor: token, caminho: '/admin' },
     },
+    { nome: 'segurança (MFA)', url: '/admin/seguranca', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'caixa', url: '/admin/caixa', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'cobrar', url: '/admin/comanda', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    ...(caixa.ok
+      ? [{ nome: 'comanda', url: `/admin/comanda/${caixa.orderId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
+      : []),
+    { nome: 'fiado', url: '/admin/fiado', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
   ];
 
   const browser = await chromium.launch({

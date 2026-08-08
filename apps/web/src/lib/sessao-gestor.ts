@@ -256,3 +256,80 @@ export async function lerConflitoDaAgenda(): Promise<ExcecaoEmConflito | null> {
   }
   return null;
 }
+
+/**
+ * O segredo do segundo fator e os códigos de recuperação, do servidor para a
+ * tela seguinte.
+ *
+ * Mesmo mecanismo do cookie de senha e pelo mesmo motivo, agravado: o segredo
+ * TOTP é a chave que gera todos os códigos futuros, e os de recuperação valem
+ * como segundo fator inteiro. Nenhum dos dois pode ir na URL — ela fica no
+ * histórico do navegador do balcão, que é máquina compartilhada, e em log de
+ * proxy.
+ *
+ * Caminho restrito a `/admin/seguranca` e vida de dois minutos: tempo de ler o
+ * QR Code e anotar os oito códigos, não mais.
+ */
+const SEGREDO_MFA = 'mfa-segredo';
+const CAMINHO_SEGURANCA = '/admin/seguranca';
+
+export interface SegredoDoSegundoFator {
+  readonly segredoBase32: string;
+  readonly uri: string;
+}
+
+export async function guardarSegredoDoMfa(dados: SegredoDoSegundoFator): Promise<void> {
+  const jar = await cookies();
+  jar.set(SEGREDO_MFA, JSON.stringify(dados), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: CAMINHO_SEGURANCA,
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+export async function lerSegredoDoMfa(): Promise<SegredoDoSegundoFator | null> {
+  const bruto = (await cookies()).get(SEGREDO_MFA)?.value;
+  if (!bruto) return null;
+
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (
+      typeof lido === 'object' && lido !== null &&
+      'segredoBase32' in lido && typeof lido.segredoBase32 === 'string' &&
+      'uri' in lido && typeof lido.uri === 'string'
+    ) {
+      return { segredoBase32: lido.segredoBase32, uri: lido.uri };
+    }
+  } catch {
+    // Cookie corrompido não derruba a tela de segurança.
+  }
+  return null;
+}
+
+const CODIGOS_MFA = 'mfa-recuperacao';
+
+export async function guardarCodigosDeRecuperacao(codigos: readonly string[]): Promise<void> {
+  const jar = await cookies();
+  jar.set(CODIGOS_MFA, JSON.stringify(codigos), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: CAMINHO_SEGURANCA,
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+export async function lerCodigosDeRecuperacao(): Promise<string[] | null> {
+  const bruto = (await cookies()).get(CODIGOS_MFA)?.value;
+  if (!bruto) return null;
+
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (Array.isArray(lido) && lido.every((c) => typeof c === 'string')) return lido as string[];
+  } catch {
+    // Cookie corrompido não derruba a tela de segurança.
+  }
+  return null;
+}

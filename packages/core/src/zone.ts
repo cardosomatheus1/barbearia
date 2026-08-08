@@ -162,3 +162,40 @@ export function weekdayIn(timeZone: string, date: string): number {
   if (index < 0) throw new Error(`Dia da semana não reconhecido: ${name}`);
   return index;
 }
+
+/**
+ * A janela de um dia da barbearia, em instantes UTC.
+ *
+ * O relatório do dia é `[meia-noite local, meia-noite local do dia seguinte)` —
+ * semiaberto, como todo intervalo deste sistema. Calcular com `new Date(dia)`
+ * daria meia-noite **UTC**, e uma barbearia em Salvador veria as três últimas
+ * horas de ontem somadas ao faturamento de hoje: o fechamento de caixa não
+ * bateria com o relatório e ninguém saberia qual dos dois está certo.
+ *
+ * `dia` nulo significa "hoje na unidade" — e hoje é resolvido pelo fuso dela,
+ * nunca pelo do aparelho de quem abriu a tela (defeito D2).
+ */
+export function diaNaUnidade(
+  dia: string | null,
+  timeZone: string,
+  now: Date,
+): { readonly dia: string; readonly de: Date; readonly ate: Date } {
+  const escolhido = dia ?? instantToLocal(timeZone, now).date;
+  // Valida o formato: dia inválido viraria intervalo silenciosamente errado.
+  const partes = parseDate(escolhido);
+  const seguinte = new Date(Date.UTC(partes.year, partes.month - 1, partes.day + 1));
+
+  return {
+    dia: escolhido,
+    de: localToInstant(timeZone, escolhido, 0),
+    ate: localToInstant(
+      timeZone,
+      formatDate({
+        year: seguinte.getUTCFullYear(),
+        month: seguinte.getUTCMonth() + 1,
+        day: seguinte.getUTCDate(),
+      }),
+      0,
+    ),
+  };
+}

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 15 de 78 blocos.**
+**Status: 16 de 78 blocos.**
 
 ---
 
@@ -59,10 +59,9 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
 | Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
 | Entregar a senha de primeiro acesso por mensagem | a senha é gerada, mostrada uma vez e morre no primeiro uso — a conta nasce obrigada a trocá-la | entrega por WhatsApp em vez de o dono ler em voz alta | 20 (fila + worker): é onde nasce o canal transacional. Até lá a alternativa real na barbearia é entregar de viva-voz para quem está do lado |
-| Segundo fator para quem mexe em dinheiro | as permissões `finance.*` existem no catálogo e em nenhum papel além do dono | o MFA que o `CLAUDE.md` exige para elas | 18 (comanda e caixa): é a primeira tela que precisa de `finance.*`. Há teste que reprova qualquer rota que exija uma dessas antes do MFA existir, então a regra não some por esquecimento |
+| Permissão própria para dar desconto | desconto exige `finance.view` (dono e gerente), separado de `cashier.open` (recepção) — então quem opera o balcão **não** zera uma conta; é auditado com antes e depois, e o valor fica congelado em centavos | uma permissão que diga *desconto* em vez de tomar emprestada a de *ver dinheiro*; e um teto, porque hoje 100% é permitido a quem tem `finance.view` | 30 (RBAC: telas de gestão): inventá-la agora criaria uma permissão que nenhum papel concede, e que portanto recusaria todo mundo. Ela entra junto com a tela que permite conceder |
 | Editar as permissões de cada papel pela tela | `role_permissions` é por barbearia e editável — tirar `appointments.cancel` da recepção é um `DELETE` e vale na requisição seguinte | a tela que faz isso sem SQL | 30 (RBAC: telas de gestão): o mecanismo está pronto de propósito para o bloco 30 precisar só de tela, não de migração |
 | Ler a trilha de auditoria pela tela | tabela `audit_log` append-only no banco, escrita na mesma transação da mudança, com antes e depois, e leitura paginada por cursor | a tela que mostra | 21 (dashboard): a trilha já registra; falta onde olhar sem `psql` |
-| Faturamento do dia no balcão | o painel soma e mostra esperados, chegaram, atendendo, concluídos e faltaram | o valor realizado, que saiu de propósito: é `finance.view`, e a recepção não tem | 18 (comanda e caixa), junto com o MFA que o `CLAUDE.md` exige de quem enxerga dinheiro |
 | Falta automática ao fim da tolerância | `no_show_after_minutes` na unidade, o relógio calculado no domínio e mostrado no painel antes de o prazo acabar | quem vira o status é uma pessoa — nada faz isso sozinho | 20 (fila + worker): é a primeira vez que existe processo rodando fora de uma requisição. Até lá a tela diz "tolerância acaba em", nunca "automática" |
 | Painel do dia que se atualiza sozinho | recarga manual e recarga a cada ação; a tela sempre reflete o banco no instante em que foi montada | atualização sem toque, para o balcão que fica aberto | 20 (fila + worker) para o empurrão do servidor; antes disso qualquer solução seria pesquisa em laço, que é o que o produto cobra dos outros |
 | Encerrar sessão nos outros aparelhos | revogação e "Sair" deste aparelho, para cliente e para gestor | listagem de sessões ativas | sem bloco: o cliente de barbearia usa um celular só. Entra se aparecer demanda real, não por simetria |
@@ -102,7 +101,7 @@ atual sem perder nenhuma capacidade que usava.
 | 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | ✅ |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | |
 | 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | |
-| 18 | Comanda + checkout + caixa + **fiado** | |
+| 18 | Comanda + checkout + caixa + **fiado** | ✅ |
 | 19 | Comissão básica + fechamento | |
 | 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | |
 | 21 | Dashboard básico + validador de catálogo | |

@@ -41,6 +41,19 @@ import {
   type EntradaDeProfissional,
   type EntradaDeServico,
   type Papel,
+  abrirOCaixa,
+  movimentarOCaixa,
+  fecharOCaixa,
+  abrirComandaNoBalcao,
+  adicionarNaComanda,
+  removerDaComanda,
+  ajustarAComanda,
+  fecharAComanda,
+  receberDoFiado,
+  comecarSegundoFator,
+  confirmarSegundoFator,
+  verificarSegundoFatorAgora,
+  type FormaDePagamento,
 } from '@/lib/admin-api';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
@@ -52,6 +65,8 @@ import {
   guardarSenhaDeUmaVez,
   gravarSessaoGestor,
   lerSessaoGestor,
+  guardarSegredoDoMfa,
+  guardarCodigosDeRecuperacao,
 } from '@/lib/sessao-gestor';
 
 
@@ -784,4 +799,218 @@ export async function acaoMoverAgendamento(form: FormData): Promise<void> {
 
   const separador = destino.includes('?') ? '&' : '?';
   redirect(`${destino}${separador}salvo=1`);
+}
+
+// -- Balcão: comanda, caixa e fiado -------------------------------------------
+
+/**
+ * Valor em centavos vindo do formulário.
+ *
+ * `centavosDoCampo` monta o número a partir dos dígitos — nunca
+ * `Number(campo) * 100`, que em ponto flutuante devolve 4899 para "48,99". Um
+ * centavo por comanda é o que faz o caixa não bater no fim do dia.
+ *
+ * **Valor malformado vira erro, não zero.** Um `?? 0` aqui transformaria
+ * "5o,00" (com a letra o) em corte de graça, e ninguém veria — nem o operador,
+ * que digitou algo, nem o dono, que só veria a gaveta faltando no fechamento.
+ */
+function centavos(form: FormData, campo: string, rota: string): number {
+  const valor = centavosDoCampo(texto(form, campo));
+  if (valor === null) falhar(rota, 'valor_invalido');
+  return valor;
+}
+
+/** Campo opcional: vazio é zero, mas escrito errado continua sendo erro. */
+function centavosOpcionais(form: FormData, campo: string, rota: string): number {
+  return texto(form, campo) === '' ? 0 : centavos(form, campo, rota);
+}
+
+export async function acaoAbrirCaixa(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await abrirOCaixa(token, centavos(form, 'openingCents', '/admin/caixa'));
+  if (!resultado.ok) falhar('/admin/caixa', resultado.code);
+  redirect('/admin/caixa?salvo=1');
+}
+
+export async function acaoMovimentarCaixa(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const kind = texto(form, 'kind');
+  if (kind !== 'withdrawal' && kind !== 'supply') falhar('/admin/caixa', 'invalid_request');
+
+  const resultado = await movimentarOCaixa(token, {
+    kind,
+    amountCents: centavos(form, 'amountCents', '/admin/caixa'),
+    reason: texto(form, 'reason'),
+  });
+  if (!resultado.ok) falhar('/admin/caixa', resultado.code);
+  redirect('/admin/caixa?salvo=1');
+}
+
+/**
+ * Fecha o caixa e guarda a divergência para a tela seguinte mostrar.
+ *
+ * A divergência vai por query string, e é o único número deste módulo que pode:
+ * é a diferença da própria pessoa que acabou de contar, não é credencial e não
+ * identifica ninguém.
+ */
+export async function acaoFecharCaixa(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await fecharOCaixa(token, centavos(form, 'countedCents', '/admin/caixa'), texto(form, 'notes'));
+  if (!resultado.ok) falhar('/admin/caixa', resultado.code);
+  redirect(`/admin/caixa?divergencia=${resultado.dados.divergenciaCents}`);
+}
+
+export async function acaoAbrirComanda(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const appointmentId = texto(form, 'appointmentId');
+  const customerId = texto(form, 'customerId');
+
+  const resultado = await abrirComandaNoBalcao(
+    token,
+    {
+      ...(appointmentId ? { appointmentId } : {}),
+      ...(customerId ? { customerId } : {}),
+    },
+    texto(form, 'idempotencyKey'),
+  );
+  if (!resultado.ok) falhar('/admin/comanda', resultado.code);
+  redirect(`/admin/comanda/${resultado.dados.id}`);
+}
+
+export async function acaoAdicionarItem(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+  const tipo = texto(form, 'tipo');
+  if (tipo !== 'service' && tipo !== 'product' && tipo !== 'consumable') {
+    falhar(`/admin/comanda/${id}`, 'invalid_request');
+  }
+
+  const serviceId = texto(form, 'serviceId');
+  const professionalId = texto(form, 'professionalId');
+
+  const resultado = await adicionarNaComanda(token, id, {
+    tipo,
+    descricao: texto(form, 'descricao'),
+    quantidade: Math.max(1, numero(form, 'quantidade', 1)),
+    precoUnitarioCents: centavos(form, 'precoUnitarioCents', `/admin/comanda/${id}`),
+    ...(serviceId ? { serviceId } : {}),
+    ...(professionalId ? { professionalId } : {}),
+  });
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}`);
+}
+
+export async function acaoRemoverItem(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+  const resultado = await removerDaComanda(token, id, texto(form, 'itemId'));
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}`);
+}
+
+export async function acaoAjustarComanda(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+  const tipo = texto(form, 'descontoTipo');
+
+  // Percentual é inteiro; valor é centavos. Mandar os dois pelo mesmo campo
+  // sem separar aqui faria "10" virar dez centavos de desconto.
+  const desconto =
+    tipo === 'percent'
+      ? { tipo: 'percent' as const, valor: numero(form, 'descontoValor', 0), motivo: texto(form, 'motivo') }
+      : {
+          tipo: 'amount' as const,
+          valor: centavosOpcionais(form, 'descontoValor', `/admin/comanda/${id}`),
+          motivo: texto(form, 'motivo'),
+        };
+
+  const resultado = await ajustarAComanda(token, id, {
+    desconto: desconto.valor > 0 ? desconto : null,
+    gorjetaCents: centavosOpcionais(form, 'gorjetaCents', `/admin/comanda/${id}`),
+  });
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}?salvo=1`);
+}
+
+/**
+ * Fecha a comanda.
+ *
+ * Aceita até três formas na mesma conta — pagamento dividido é rotina em
+ * barbearia ("cem no pix e o resto em dinheiro"). Os campos vazios são
+ * descartados aqui para não mandar zero, que a borda recusaria.
+ */
+export async function acaoFecharComanda(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+
+  const pagamentos = [0, 1, 2]
+    .map((i) => ({
+      forma: texto(form, `forma${i}`) as FormaDePagamento,
+      valorCents: centavosOpcionais(form, `valor${i}`, `/admin/comanda/${id}`),
+    }))
+    .filter((p) => p.valorCents > 0 && p.forma);
+
+  if (pagamentos.length === 0) falhar(`/admin/comanda/${id}`, 'sem_pagamento');
+
+  const resultado = await fecharAComanda(token, id, pagamentos, texto(form, 'idempotencyKey'));
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}?pago=1`);
+}
+
+export async function acaoReceberFiado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const forma = texto(form, 'forma');
+  if (!['cash', 'debit', 'credit', 'pix'].includes(forma)) {
+    falhar('/admin/fiado', 'invalid_request');
+  }
+
+  const resultado = await receberDoFiado(token, {
+    customerId: texto(form, 'customerId'),
+    amountCents: centavos(form, 'amountCents', '/admin/fiado'),
+    forma: forma as 'cash' | 'debit' | 'credit' | 'pix',
+  });
+  if (!resultado.ok) falhar('/admin/fiado', resultado.code);
+  redirect('/admin/fiado?salvo=1');
+}
+
+// -- Segundo fator ------------------------------------------------------------
+
+export async function acaoComecarSegundoFator(): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await comecarSegundoFator(token);
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+
+  // Segredo em cookie de vida curta, nunca na URL: ele gera todos os códigos
+  // futuros e a URL fica no histórico da máquina do balcão.
+  await guardarSegredoDoMfa(resultado.dados);
+  redirect('/admin/seguranca');
+}
+
+export async function acaoConfirmarSegundoFator(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await confirmarSegundoFator(token, texto(form, 'codigo'));
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+
+  await guardarCodigosDeRecuperacao(resultado.dados.codigosDeRecuperacao);
+  redirect('/admin/seguranca?ativado=1');
+}
+
+/**
+ * Prova o segundo fator para esta sessão.
+ *
+ * O destino é montado a partir de uma lista fechada, nunca aceito pronto do
+ * formulário: é o mesmo cuidado de `destinoDoBalcao`, e aqui o alvo é a tela
+ * que a pessoa acabou de ser impedida de abrir — dinheiro.
+ */
+export async function acaoVerificarSegundoFator(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await verificarSegundoFatorAgora(token, texto(form, 'codigo'));
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+
+  const destinos: Record<string, string> = {
+    caixa: '/admin/caixa',
+    fiado: '/admin/fiado',
+    comanda: '/admin/comanda',
+  };
+  redirect(destinos[texto(form, 'voltarPara')] ?? '/admin/caixa');
 }

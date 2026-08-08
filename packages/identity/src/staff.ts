@@ -371,6 +371,16 @@ export interface AuthenticatedStaff {
    * equipe promete "a própria agenda" para esse papel.
    */
   readonly professionalId: string | null;
+  /** O segundo fator está confirmado nesta conta. */
+  readonly mfaEnabled: boolean;
+  /**
+   * Quando **esta sessão** provou o segundo fator, se provou.
+   *
+   * Vem junto da sessão pelo mesmo motivo das permissões: a guarda do dinheiro
+   * roda em toda rota de caixa, e buscar isto à parte seria uma segunda ida ao
+   * banco por requisição.
+   */
+  readonly mfaVerifiedAt: Date | null;
 }
 
 export async function resolveStaffSession(token: string): Promise<AuthenticatedStaff> {
@@ -390,10 +400,14 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         must_change_password: boolean;
         professional_id: string | null;
         permissions: string[];
+        mfa_enabled: boolean;
+        mfa_verified_at: Date | null;
       }[]
     >`
       SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role,
              u.must_change_password, u.professional_id,
+             u.totp_confirmed_at IS NOT NULL AS mfa_enabled,
+             s.mfa_verified_at,
              COALESCE(
                array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
                '{}'
@@ -406,7 +420,8 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         AND s.expires_at > now()
         AND u.active
       GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role,
-               u.must_change_password, u.professional_id
+               u.must_change_password, u.professional_id,
+               u.totp_confirmed_at, s.mfa_verified_at
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -428,6 +443,8 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       permissions: sessao.permissions,
       mustChangePassword: sessao.must_change_password,
       professionalId: sessao.professional_id,
+      mfaEnabled: sessao.mfa_enabled,
+      mfaVerifiedAt: sessao.mfa_verified_at,
     };
   });
 }

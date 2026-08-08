@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cutoffMinuteFor,
+  diaNaUnidade,
   instantToLocal,
   localToInstant,
   offsetMinutesAt,
@@ -134,5 +135,43 @@ describe('weekdayIn', () => {
       const viaUtc = new Date(`${date}T12:00:00Z`).getUTCDay();
       expect(weekdayIn(BAHIA, date)).toBe(viaUtc);
     }
+  });
+});
+
+describe('a janela do dia na unidade', () => {
+  it('vai da meia-noite local à meia-noite local seguinte', () => {
+    // Salvador é UTC-3 o ano inteiro: o dia começa às 03:00 UTC.
+    const janela = diaNaUnidade('2026-03-10', 'America/Bahia', new Date('2026-03-10T12:00:00Z'));
+
+    expect(janela.de.toISOString()).toBe('2026-03-10T03:00:00.000Z');
+    expect(janela.ate.toISOString()).toBe('2026-03-11T03:00:00.000Z');
+  });
+
+  it('meia-noite UTC não serve: o faturamento pegaria três horas de ontem', () => {
+    const janela = diaNaUnidade('2026-03-10', 'America/Bahia', new Date('2026-03-10T12:00:00Z'));
+    // O erro que este teste existe para impedir.
+    expect(janela.de.toISOString()).not.toBe('2026-03-10T00:00:00.000Z');
+  });
+
+  it('sem dia informado, "hoje" é o da unidade e não o do aparelho', () => {
+    // 01:30 UTC ainda é o dia anterior em Salvador (22:30). Um relógio lendo
+    // UTC mostraria o faturamento de amanhã, vazio, às dez e meia da noite.
+    const janela = diaNaUnidade(null, 'America/Bahia', new Date('2026-03-11T01:30:00Z'));
+    expect(janela.dia).toBe('2026-03-10');
+  });
+
+  it('atravessa a virada do mês', () => {
+    const janela = diaNaUnidade('2026-01-31', 'America/Bahia', new Date('2026-01-31T12:00:00Z'));
+    expect(janela.ate.toISOString()).toBe('2026-02-01T03:00:00.000Z');
+  });
+
+  it('o intervalo é semiaberto: a meia-noite seguinte é do outro dia', () => {
+    const hoje = diaNaUnidade('2026-03-10', 'America/Bahia', new Date('2026-03-10T12:00:00Z'));
+    const amanha = diaNaUnidade('2026-03-11', 'America/Bahia', new Date('2026-03-11T12:00:00Z'));
+    expect(hoje.ate.toISOString()).toBe(amanha.de.toISOString());
+  });
+
+  it('data malformada é recusada, não vira intervalo errado em silêncio', () => {
+    expect(() => diaNaUnidade('10/03/2026', 'America/Bahia', new Date())).toThrow();
   });
 });
