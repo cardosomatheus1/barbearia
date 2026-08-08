@@ -451,6 +451,17 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 O bloco é entregue inteiro. O que dá para acelerar é o **jeito de trabalhar**,
 e nada aqui abre mão de teste, de segurança ou de medição.
 
+O portão está em ~90s (era ~208s). Como se chegou lá, e o que a medição
+desmentiu, está no cabeçalho de `scripts/verify.sh` — vale ler antes de tentar
+otimizar de novo, porque o palpite mais óbvio (trocar as migrações por
+`CREATE DATABASE ... TEMPLATE`) estava errado: elas custam 1s.
+
+**Antes de otimizar o portão, quebre-o de propósito.** Um portão paralelo que
+engole falha é pior que um lento, e um que inventa falha treina todo mundo a
+ignorar vermelho. Quebre três testes em pacotes diferentes e confira que as
+três — e só as três — aparecem na lista final. Foi assim que apareceu a corrida
+do `ALTER ROLE` acusando `onboarding`, que ninguém tinha tocado.
+
 - **Provar teste vermelho em lote.** Quebre cinco regras de uma vez e rode a
   suíte uma vez, conferindo que os cinco testes certos falharam. Cinco ciclos
   de quebrar-rodar-restaurar custam cinco execuções e provam o mesmo.

@@ -12,6 +12,19 @@ cleanup() { psql "$ADMIN_URL" -q -c "DROP DATABASE IF EXISTS $DB_NAME WITH (FORC
 trap cleanup EXIT
 cleanup
 
+# O e2e importa `@barbearia/core` e `@barbearia/identity` de `dist`, não de
+# `src`. Rodando esta suíte sozinha, um `dist` velho produz falha de um defeito
+# que já foi corrigido no fonte — aconteceu duas vezes no bloco 18, e as duas
+# vezes o tempo foi gasto investigando o que não existia. Com `incremental`
+# ligado, reconstruir sem mudança custa ~4s.
+#
+# Dentro do `pnpm verify` isto é redundante (a fase 1 já construiu), e é barato
+# o bastante para não valer uma variável de ambiente que alguém esqueceria de
+# passar no caminho que importa.
+if [ -z "${PULAR_BUILD_DAS_DEPENDENCIAS:-}" ]; then
+  pnpm --filter "@barbearia/api^..." build >/dev/null
+fi
+
 ADMIN_DATABASE_URL="$ADMIN_URL" ../../scripts/bootstrap-role.sh >/dev/null
 psql "$ADMIN_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE $DB_NAME;"
 for migration in ../../packages/db/migrations/*.sql; do

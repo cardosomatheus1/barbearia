@@ -31,7 +31,8 @@
         "./src/*"
       ]
     },
-    "isolatedModules": true
+    "isolatedModules": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsc-typecheck.tsbuildinfo"
   },
   "include": [
     "next-env.d.ts",

@@ -5,7 +5,8 @@
     "rootDir": "./src",
     "types": [
       "node"
-    ]
+    ],
+    "tsBuildInfoFile": "./node_modules/.cache/tsc-build.tsbuildinfo"
   },
   "include": [
     "src/**/*"

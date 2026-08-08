@@ -4,7 +4,8 @@
     "noEmit": true,
     "types": [
       "node"
-    ]
+    ],
+    "tsBuildInfoFile": "./node_modules/.cache/tsc-typecheck.tsbuildinfo"
   },
   "include": [
     "src/**/*"
