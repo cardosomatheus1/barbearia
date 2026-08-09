@@ -980,6 +980,39 @@ async function main() {
       }
 
       /**
+       * Esperar o CSS **aplicar**, e não só a rede sossegar.
+       *
+       * `networkidle` diz que nada mais está sendo baixado; não diz que a folha
+       * de estilo já entrou em vigor. A janela entre as duas coisas é curta e
+       * existe: nela a página é HTML cru, o trilho mede 17px de altura e o selo
+       * transborda — e a medição reprova uma tela que está certa.
+       *
+       * Isso aconteceu de verdade: a tela de regras de comissão reprovou uma vez
+       * em 360px e passou na execução seguinte, sem nenhuma mudança de CSS. Um
+       * portão que inventa falha é pior que um lento — ele treina todo mundo a
+       * ignorar vermelho.
+       */
+      try {
+        await page.waitForFunction(
+          () =>
+            [...document.styleSheets].some((folha) => {
+              try {
+                return folha.cssRules.length > 0;
+              } catch {
+                // Folha de outra origem: se ela está listada, foi aplicada.
+                return true;
+              }
+            }),
+          { timeout: 5000 },
+        );
+      } catch {
+        console.log(`FALHA ${tela.nome.padEnd(20)} ${largura}px o CSS não aplicou em 5s`);
+        problemas += 1;
+        await ctx.close();
+        continue;
+      }
+
+      /**
        * Uma tela que não carregou passa em qualquer largura.
        *
        * O estado de erro é uma caixa curta e centrada — nunca rola, nunca

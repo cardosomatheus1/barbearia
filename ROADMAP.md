@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 35 de 79 blocos.**
+**Status: 36 de 79 blocos.**
 
 ---
 
@@ -210,7 +210,7 @@ não é vendável.
 |---|---|
 | 34 | `PaymentProvider`: abstração, fake e o cliente Stripe compartilhado | ✅ |
 | 35 | Pix pela Stripe: QR Code, webhook, conciliação | ✅ |
-| 36 | Cartão e link de pagamento pela Stripe |
+| 36 | Cartão e link de pagamento pela Stripe | ✅ |
 | 37 | Sinal seletivo + política de reembolso |
 | 38 | Lista de espera: entradas, expiração, gatilho de cancelamento |
 | 39 | Lista de espera: priority queue, janela exclusiva, notificação |
