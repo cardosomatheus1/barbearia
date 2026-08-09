@@ -24,3 +24,4 @@ export * from './notificacao.js';
 export * from './csv.js';
 export * from './importacao.js';
 export * from './alertas.js';
+export * from './cobranca.js';

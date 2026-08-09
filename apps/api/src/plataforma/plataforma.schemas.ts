@@ -97,3 +97,17 @@ export const cancelamentoSchema = z.object({
 });
 
 export type EntradaDeCancelamento = z.infer<typeof cancelamentoSchema>;
+
+/**
+ * O registro do pagamento pelo Super Admin.
+ *
+ * A lista é fechada porque cada valor tem consequência de relatório: `manual` é
+ * transferência conferida no extrato, e é o único que existe de verdade até o
+ * bloco 29 ligar o PSP. Aceitar texto livre aqui produziria um campo de método
+ * com dez grafias da mesma coisa.
+ */
+export const pagamentoSchema = z.object({
+  metodo: z.enum(['manual', 'card', 'pix', 'boleto']),
+});
+
+export type EntradaDePagamento = z.infer<typeof pagamentoSchema>;

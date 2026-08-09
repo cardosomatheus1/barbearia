@@ -37,7 +37,16 @@ const css = readFileSync(
  */
 const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-const semCondicoes = semComentarios.replace(/@media[^{]+\{/g, '{');
+/**
+ * `@container` entra junto com `@media`, e não é detalhe.
+ *
+ * A condição de uma consulta de recipiente é `min-width: 640px` como a de uma
+ * media query — e, como ela, não obriga nada a ter 640px. Quando a vitrine de
+ * planos do bloco 28 estreou, a guarda a acusou de exigir notebook: ela lia a
+ * condição como se fosse uma declaração de largura. Deixar passar seria pior,
+ * mas o certo é a guarda saber que as duas são condição.
+ */
+const semCondicoes = semComentarios.replace(/@(?:media|container)[^{]+\{/g, '{');
 
 /**
  * Separa o CSS base do que está dentro de `@media`, contando chaves.
@@ -52,7 +61,7 @@ function separar(fonte: string): { base: string; dentroDeMedia: string } {
   let i = 0;
 
   while (i < fonte.length) {
-    const inicio = fonte.indexOf('@media', i);
+    const inicio = proximaCondicao(fonte, i);
     if (inicio === -1) {
       base += fonte.slice(i);
       break;
@@ -78,6 +87,15 @@ function separar(fonte: string): { base: string; dentroDeMedia: string } {
   return { base, dentroDeMedia };
 }
 
+/** A primeira `@media` ou `@container` a partir de `i`, o que vier antes. */
+function proximaCondicao(fonte: string, i: number): number {
+  const media = fonte.indexOf('@media', i);
+  const container = fonte.indexOf('@container', i);
+  if (media === -1) return container;
+  if (container === -1) return media;
+  return Math.min(media, container);
+}
+
 const { base: cssBase, dentroDeMedia } = separar(semComentarios);
 
 /** Piso de projeto: o Android popular no Brasil. */
@@ -88,7 +106,15 @@ describe('CSS das telas', () => {
     // `max-width` significa "desfazer o que fiz para tela grande", o que inverte
     // a ordem de trabalho e transforma o celular em caso excepcional. Vale para
     // o painel também: notebook é o aparelho principal do balcão, não o único.
-    const queries = [...css.matchAll(/@media\s*([^{]+)\{/g)].map((m) => (m[1] ?? '').trim());
+    // `@container` entra na mesma conta: a consulta de recipiente também
+    // começa no menor e cresce, e uma escrita ao contrário faz o cartão nascer
+    // largo para depois ser desfeito na coluna estreita.
+    // Sobre o CSS sem comentários, pela mesma razão que já valia para as outras
+    // guardas deste arquivo: um comentário que **cita** `@container` fazia a
+    // própria documentação ser lida como consulta de layout.
+    const queries = [...semComentarios.matchAll(/@(?:media|container)\s*([^{]+)\{/g)].map((m) =>
+      (m[1] ?? '').trim(),
+    );
     const layout = queries.filter((q) => !q.includes('prefers-'));
 
     expect(layout.length).toBeGreaterThan(0);

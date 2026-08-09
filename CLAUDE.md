@@ -180,6 +180,13 @@ inteiro, o que é certo para quem está abrindo e errado a partir do dia seguint
 — `appointment_services` aponta para `services.id`, e recriar o catálogo
 desfaz o vínculo com o que já foi vendido.
 
+`platform` depende de `jobs` por uma coisa só: `enfileirarPara()`. A régua de
+cobrança precisa enfileirar o aviso ao dono **dentro** da transação que muda o
+estado da fatura — mandar depois do commit cria a janela em que a barbearia foi
+bloqueada e ninguém soube. É o mesmo precedente de `finance → identity`, e a
+seta não volta: `jobs` continua sem saber que existe plataforma, e recebe o que
+precisa da camada de cima por injeção no `Contexto` do worker.
+
 `finance` depende de `identity` por uma coisa só: `audit()`. A trilha precisa
 ser gravada **dentro da transação** que move o dinheiro, então ela não pode ser
 chamada de fora — e é o mesmo precedente de `onboarding`, que já dependia de

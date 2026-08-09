@@ -41,6 +41,7 @@ function carregarPlaywright() {
 
 const { chromium } = carregarPlaywright();
 const { execFileSync } = require('node:child_process');
+const { mkdirSync } = require('node:fs');
 
 const WEB = process.env.WEB_URL ?? 'http://127.0.0.1:3001';
 const API = process.env.API_URL ?? 'http://127.0.0.1:3000';
@@ -86,6 +87,10 @@ async function baixarFoto(url) {
 }
 
 const psql = (sql) => execFileSync('psql', [DB, '-tAc', sql], { encoding: 'utf8' }).trim();
+
+/** Pasta dos prints, se alguém pediu. Vazio é o padrão: medir não é fotografar. */
+const PRINTS = process.env.MEDICAO_PRINTS ?? '';
+if (PRINTS) mkdirSync(PRINTS, { recursive: true });
 
 /**
  * Prepara a conta da plataforma e uma barbearia bloqueada.
@@ -141,6 +146,27 @@ async function prepararPlataforma() {
       ` appointments_online, no_shows, minutes_sold, minutes_available, revenue_cents)` +
       ` SELECT tenant_id, '${ontem}'::date, 412, 268, 31, 18400, 26400, 1284900` +
       ` FROM tenant_platform ON CONFLICT DO NOTHING`,
+  );
+
+  /**
+   * Faturas em aberto, porque a fila de cobrança vazia não mede nada.
+   *
+   * Uma vencida e uma a vencer: o cartão da vencida carrega o selo de prazo
+   * crítico, o número de tentativas e os dois formulários lado a lado — é o mais
+   * largo da tela, e é onde a linha estoura em 360px se estourar. Valor de
+   * quatro dígitos e nome comprido pelo mesmo motivo de sempre.
+   */
+  psql(
+    `INSERT INTO invoices (tenant_id, plan_code, amount_cents, period_start, period_end, due_at,` +
+      ` attempts, past_due_at)` +
+      ` SELECT tenant_id, 'business', 24900, now() - interval '20 days',` +
+      ` now() + interval '10 days', now() - interval '15 days', 3, now() - interval '15 days'` +
+      ` FROM tenant_platform ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO invoices (tenant_id, kind, plan_code, amount_cents, period_start, period_end,` +
+      ` due_at) SELECT tenant_id, 'proration', 'pro', 7450, now(), now() + interval '30 days',` +
+      ` now() + interval '4 days' FROM tenant_platform`,
   );
 
   return token;
@@ -707,6 +733,7 @@ async function main() {
           { nome: 'plataforma — métricas', url: '/plataforma/metricas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — trilha', url: '/plataforma/trilha', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — segurança', url: '/plataforma/seguranca', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          { nome: 'plataforma — cobrança', url: '/plataforma/faturas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
         ]
       : []),
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
@@ -915,6 +942,27 @@ async function main() {
       });
 
       resultados.push({ largura, ...medida });
+
+      /**
+       * O print, quando `MEDICAO_PRINTS` aponta para uma pasta.
+       *
+       * A medição vê rolagem, transbordo e alvo de toque — e é cega para o que
+       * mais estraga uma tela: coluna que colapsa, texto que some de tão
+       * apertado, botão desalinhado. No bloco 26 o cartão da barbearia passou
+       * na medição com o nome espremido em noventa pixels, e só olhar pegou.
+       *
+       * **Depois de medir, e com a janela esticada.** O painel rola dentro do
+       * próprio recipiente, então `fullPage` corta na altura da janela e a
+       * primeira versão daqui fotografou só o topo de cada tela. Esticar antes
+       * de medir mudaria o que se mede — a altura entra no cálculo de alvo de
+       * toque e de transbordo.
+       */
+      if (PRINTS) {
+        await page.setViewportSize({ width: largura, height: 2400 });
+        const arquivo = `${tela.nome.replace(/[^\p{L}\p{N}]+/gu, '-')}-${largura}.png`;
+        await page.screenshot({ path: `${PRINTS}/${arquivo}`, fullPage: true });
+      }
+
       await ctx.close();
     }
 

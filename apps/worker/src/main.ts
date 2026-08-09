@@ -5,7 +5,14 @@ import {
   rodarWorker,
   type ResultadoDaRodada,
 } from '@barbearia/jobs';
-import { recursoLigado } from '@barbearia/platform';
+import {
+  CobrancaManualProvider,
+  ConsoleGestorProvider,
+  aplicarRegua,
+  executarAvisoDeCobranca,
+  recursoLigado,
+  type AssuntoDoAviso,
+} from '@barbearia/platform';
 
 /**
  * O segundo processo do produto.
@@ -55,6 +62,27 @@ async function main(): Promise<void> {
       // não conhece a camada de cima, do mesmo jeito que não conhece o provedor
       // de mensagem. Quem monta o processo é quem liga as duas pontas.
       recursoLigado,
+      /**
+       * A cobrança da assinatura (bloco 28), ligada aqui pelo mesmo motivo.
+       *
+       * O provedor é o manual: até o bloco 29 nada é debitado sozinho, e o que
+       * quita uma fatura é alguém registrando no painel o pagamento que viu no
+       * extrato. A régua roda inteira em cima disso — emite, avisa, marca
+       * vencida e suspende quem passou de 21 dias.
+       */
+      avisarDeCobranca: (aviso) =>
+        executarAvisoDeCobranca({
+          tenantId: aviso.tenantId,
+          faturaId: aviso.faturaId,
+          assunto: aviso.assunto as AssuntoDoAviso,
+          provider: new ConsoleGestorProvider(),
+          agora: aviso.agora,
+        }),
+      rodarRegua: async (agora) => {
+        const resultado = await aplicarRegua({ agora, provider: new CobrancaManualProvider() });
+        const mexeu = Object.values(resultado).some((n) => n > 0);
+        if (mexeu) console.log('[cobranca] régua do dia', resultado);
+      },
     },
     {
       intervaloMs: INTERVALO_MS,

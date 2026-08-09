@@ -61,6 +61,29 @@ export interface Contexto {
    * pararia de valer sem nada ficar vermelho.
    */
   readonly recursoLigado: (tenantId: string, code: 'avisos') => Promise<boolean>;
+  /**
+   * O aviso de cobrança ao dono (bloco 28), injetado pelo mesmo motivo.
+   *
+   * Ele fala **pela plataforma com a barbearia**, ao contrário de tudo o mais
+   * nesta fila, que fala pela barbearia com os clientes dela. Deixar `jobs`
+   * importar `@barbearia/platform` para isso inverteria a seta — e o remetente
+   * errado apareceria como cobrança saindo do WhatsApp da própria barbearia.
+   */
+  readonly avisarDeCobranca: (aviso: {
+    readonly tenantId: string;
+    readonly faturaId: string;
+    readonly assunto: string;
+    readonly agora: Date;
+  }) => Promise<void>;
+  /**
+   * Uma volta da régua de cobrança.
+   *
+   * Não é tarefa da fila, e não pode ser: `jobs.tenant_id` é `NOT NULL` desde o
+   * bloco 20, e "quem venceu hoje?" atravessa todas as barbearias. Ela roda no
+   * laço, ao lado da varredura de órfãs, pelo mesmo motivo que a apuração
+   * diária roda ali.
+   */
+  readonly rodarRegua: (agora: Date) => Promise<void>;
 }
 
 const avisoDeAgendamento =
@@ -138,6 +161,25 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     const dia = String(tarefa.payload['dia'] ?? '');
     if (!dia) throw new Error('tarefa de métricas sem dia');
     await apurarDiaDaBarbearia(tarefa.tenantId, dia);
+  },
+
+  /**
+   * O aviso de cobrança ao dono (bloco 28).
+   *
+   * O handler só repassa: quem lê a fatura, confere se ela ainda está aberta e
+   * respeita a janela de silêncio da unidade é a plataforma, porque é lá que a
+   * cobrança mora. Aqui ficaria a segunda cópia dessas regras.
+   */
+  'cobranca.aviso': async (tarefa, contexto) => {
+    const faturaId = String(tarefa.payload['faturaId'] ?? '');
+    const assunto = String(tarefa.payload['assunto'] ?? '');
+    if (!faturaId || !assunto) throw new Error('aviso de cobrança sem fatura ou assunto');
+    await contexto.avisarDeCobranca({
+      tenantId: tarefa.tenantId,
+      faturaId,
+      assunto,
+      agora: contexto.relogio.agora(),
+    });
   },
 
   'agendamento.marcar_falta': async (tarefa, contexto) => {
@@ -221,9 +263,26 @@ export async function rodarWorker(
    * segundos para depois o banco recusar tudo.
    */
   let ultimaApuracao: string | null = null;
+  /**
+   * O último dia em que **este** processo rodou a régua de cobrança.
+   *
+   * Dois workers rodam duas voltas no mesmo dia, e está certo assim: a régua é
+   * reentrante por construção — a emissão é idempotente pelo índice, o aviso
+   * pela chave da fila, e o passo de cada fatura sai de datas já gravadas. A
+   * variável evita a volta repetida a cada cinco segundos, não a repetida entre
+   * processos; querer exatidão aqui exigiria uma tarefa sem tenant, que é
+   * justamente o que `jobs` recusa desde o bloco 20.
+   */
+  let ultimaRegua: string | null = null;
 
   while (!parar()) {
     await soltarOrfas(15, contexto.relogio.agora());
+
+    const hoje = contexto.relogio.agora().toISOString().slice(0, 10);
+    if (hoje !== ultimaRegua) {
+      ultimaRegua = hoje;
+      await contexto.rodarRegua(contexto.relogio.agora());
+    }
 
     // A apuração diária mora aqui, ao lado da varredura de órfãs, porque é a
     // outra coisa que o worker faz **sem** ser uma tarefa: alguém precisa

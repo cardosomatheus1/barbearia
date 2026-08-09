@@ -849,6 +849,121 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(200);
   });
 
+  // -- cobrança (bloco 28) ---------------------------------------------------
+
+  it('o dono troca de plano e paga só o que falta do período', async () => {
+    const doDono = await tokenDoDono();
+
+    const opcoes = await http()
+      .get('/v1/admin/plano/opcoes')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+
+    // O Enterprise não é oferecido por autoatendimento: quem chega nele veio de
+    // uma conversa, e um botão o colocaria num plano sem preço.
+    expect(opcoes.body.map((o: { code: string }) => o.code)).toEqual([
+      'starter',
+      'pro',
+      'business',
+    ]);
+    const business = opcoes.body.find((o: { code: string }) => o.code === 'business');
+    expect(business.atual).toBe(false);
+    expect(business.cobrarCents).toBeGreaterThan(0);
+    expect(business.cobrarCents).toBeLessThan(24900);
+
+    const trocada = await http()
+      .post('/v1/admin/plano')
+      .set('authorization', `Bearer ${doDono}`)
+      .set('idempotency-key', 'troca-1')
+      .send({ planoCode: 'business' })
+      .expect(201);
+
+    expect(trocada.body.cobrarCents).toBe(business.cobrarCents);
+    expect(trocada.body.faturaId).toEqual(expect.any(String));
+
+    const extrato = await http()
+      .get('/v1/admin/plano/faturas')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+    expect(extrato.body).toHaveLength(1);
+    expect(extrato.body[0]).toMatchObject({
+      tipo: 'proration',
+      estado: 'open',
+      valorCents: business.cobrarCents,
+    });
+
+    // O mesmo POST de novo devolve o mesmo acerto e **não** emite a segunda
+    // cobrança. Sem a chave, o duplo toque cobraria duas vezes pela mesma troca.
+    const repetida = await http()
+      .post('/v1/admin/plano')
+      .set('authorization', `Bearer ${doDono}`)
+      .set('idempotency-key', 'troca-1')
+      .send({ planoCode: 'business' })
+      .expect(201);
+    expect(repetida.body.faturaId).toBe(trocada.body.faturaId);
+
+    const depois = await http()
+      .get('/v1/admin/plano/faturas')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+    expect(depois.body).toHaveLength(1);
+  });
+
+  it('o Super Admin registra o pagamento e a fatura sai da fila', async () => {
+    const token = await tokenDaPlataforma();
+
+    const fila = await http()
+      .get('/v1/plataforma/faturas')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    const minha = fila.body.faturas.find(
+      (f: { tenantId: string }) => f.tenantId === DOMARI,
+    );
+    expect(minha).toBeDefined();
+
+    await http()
+      .post(`/v1/plataforma/faturas/${minha.id}/pagamento`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ metodo: 'manual' })
+      .expect(201);
+
+    // Encerrada não se paga de novo: a segunda baixa seria dinheiro contado
+    // duas vezes no relatório da plataforma.
+    await http()
+      .post(`/v1/plataforma/faturas/${minha.id}/pagamento`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ metodo: 'manual' })
+      .expect(409);
+
+    const doDono = await tokenDoDono();
+    const extrato = await http()
+      .get('/v1/admin/plano/faturas')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+    expect(extrato.body[0]).toMatchObject({ estado: 'paid' });
+  });
+
+  it('a barbearia não enxerga o extrato da vizinha', async () => {
+    // A RLS de `invoices` é mais estrita que a de `subscriptions`: aqui há
+    // histórico de pagamento, e extrato é informação de negócio de quem o
+    // recebeu. O caminho de leitura do dono não tem por onde pedir outro tenant,
+    // e é isso que este teste fixa — a rota é do próprio, sempre.
+    const doDono = await tokenDoDono();
+    const extrato = await http()
+      .get('/v1/admin/plano/faturas')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+
+    const token = await tokenDaPlataforma();
+    const daVizinha = await http()
+      .get(`/v1/plataforma/barbearias/${VIZINHA}/faturas`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const meus = new Set(extrato.body.map((f: { id: string }) => f.id));
+    expect(daVizinha.body.faturas.some((f: { id: string }) => meus.has(f.id))).toBe(false);
+  });
+
   it('descer para um plano menor que a equipe é recusado com o que fazer', async () => {
     const token = await tokenDaPlataforma();
     const recusada = await http()

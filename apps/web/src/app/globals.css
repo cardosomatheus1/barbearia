@@ -4872,3 +4872,230 @@ main { padding-bottom: var(--space-8); }
   padding: var(--space-1) var(--space-2);
 }
 .plano__selo--fora { color: var(--color-text-muted); border-color: var(--color-border); }
+
+/* -- Plano: as opções e o extrato (bloco 28) -------------------------------- */
+
+/*
+   Cartão por recipiente e não por tela.
+
+   A vitrine de planos aparece aqui em largura cheia e, no dia em que couber
+   numa barra lateral, o cartão precisa virar coluna única sem que ninguém
+   escreva outra media query. `@container` responde à largura disponível, que é
+   o que de fato decide o formato.
+
+   **O recipiente é a seção, não a própria lista.** Consulta de recipiente
+   pergunta ao ancestral: um elemento que declara `container-type` não responde
+   sobre si mesmo. A primeira versão punha `container-type` na `<ul>` e
+   consultava a `<ul>` — nenhuma das duas condições casava, e os três planos
+   ficavam empilhados em 1280px. A medição não pegou: uma coluna só nunca rola
+   nem estoura, e olhar foi o que pegou. De novo.
+*/
+.plano-vitrine { container-type: inline-size; }
+
+.plano-opcoes {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+@container (min-width: 640px) {
+  .plano-opcoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (min-width: 960px) {
+  .plano-opcoes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.plano-opcao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+
+/* O plano em que se está ganha a borda de acento — hierarquia por posição e
+   peso antes de cor, mas aqui a cor é o que responde "onde eu estou". */
+.plano-opcao--atual { border-color: var(--color-accent); }
+
+.plano-opcao__nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.plano-opcao__preco {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+}
+.plano-opcao__mes {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+.plano-opcao__publico,
+.plano-opcao__cadeiras {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano-opcao__acerto {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+}
+.plano-opcao__impedimento {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+/* `margin-top: auto` alinha o botão no rodapé de todos os cartões da linha,
+   mesmo com textos de alturas diferentes — sem ele a fileira fica serrilhada.
+
+   A borda existe porque o `ghost` do design system é transparente e sem
+   contorno: certo para "Sair" na barra, errado para o único botão de um cartão,
+   que sem ela lê como legenda centralizada. */
+.plano-opcao__botao {
+  margin-top: auto;
+  width: 100%;
+  border: 1px solid var(--color-border);
+}
+
+.plano__vazio {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+}
+
+.plano-faturas {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  /* Data, período e valor não quebram em duas linhas: a tabela rola dentro do
+     `.ui-scroll-x`, que é o recipiente, e nunca leva a página junto. */
+  white-space: nowrap;
+}
+.plano-faturas th,
+.plano-faturas td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.plano-faturas th {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+.plano-fatura__estado {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+.plano-fatura__estado--open { color: var(--color-danger); border-color: var(--color-danger); }
+.plano-fatura__estado--paid { color: var(--color-accent); border-color: var(--color-accent); }
+
+/* -- Plataforma: a fila de cobrança (bloco 28) ------------------------------ */
+
+.cobranca__total {
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.cobranca__lista {
+  container-type: inline-size;
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cobranca__item {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+
+/* Nome à esquerda, valor à direita — e os dois na mesma linha só quando cabem.
+   Em 360px o valor desce, que é melhor do que espremer o nome da barbearia. */
+.cobranca__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.cobranca__barbearia {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  min-width: 0;
+}
+.cobranca__valor {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+.cobranca__sobre {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.cobranca__prazo {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+}
+/* Cinco dias ou menos até a suspensão é o que muda a ordem do dia do suporte.
+   Cor **depois** da informação, nunca no lugar dela: o texto já diz quantos. */
+.cobranca__prazo--critico { color: var(--color-danger); border-color: var(--color-danger); }
+
+.cobranca__acoes {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+@container (min-width: 620px) {
+  .cobranca__acoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.cobranca__forma {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+}
+/* O `<select>` herda a altura do campo de texto, e com ela o alvo de 44px que
+   vale em qualquer largura — mouse impreciso não é exclusividade do celular. */
+.cobranca__metodo { width: 100%; }
+
+/* Mesma razão do botão do cartão de plano: sem contorno, o `ghost` some no
+   fundo e "Cancelar fatura" lê como aviso, não como ação. */
+.cobranca__forma .ui-button--ghost { border: 1px solid var(--color-border); }

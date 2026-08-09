@@ -13,17 +13,17 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão e permissões — lógica pura, sem banco e sem relógio | 413 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 93 invariantes + 10 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão, permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 542 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 168 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP), convite do barbeiro e auditoria | 125 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 74 testes ✅ |
-| `packages/jobs` | Fila de trabalho, avisos ao cliente e falta automática — o que acontece sem ninguém esperando | 41 testes ✅ |
+| `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática e apuração diária — o que acontece sem ninguém esperando | 63 testes ✅ |
 | `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
-| `packages/platform` | A camada de plataforma: planos, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 37 testes ✅ |
+| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 77 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública, do painel e **da plataforma**: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas e o Super Admin | 330 testes ✅ |
+| `apps/api` | API pública, do painel e **da plataforma**: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano e o Super Admin | 334 testes ✅ |
 | `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 66 testes ✅ |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos, marca a falta e apura as métricas do dia | — |
 
@@ -269,8 +269,15 @@ afrouxar alargaria em silêncio todas as que já existem.
 
 A saída são **tabelas novas de plataforma**, com `USING (true)` e nada de
 pessoa dentro: `tenant_platform`, `plans`, `tenant_metrics_daily`,
-`tenant_lifecycle`, `feature_flags`, `support_sessions`. O Super Admin nunca lê
-`appointments`, `customers` ou `orders`.
+`tenant_lifecycle`, `feature_flags`, `support_sessions`, `subscriptions`. O
+Super Admin nunca lê `appointments`, `customers` ou `orders`.
+
+`invoices` (bloco 28) entra nesse conjunto com **leitura mais estrita**: a
+plataforma lê todas, e cada barbearia lê só as próprias. A diferença tem motivo
+— as outras guardam plano, contagem e preço de tabela; o extrato guarda
+histórico de pagamento com data e método, e isso é informação de negócio de
+quem a recebeu. Escrever continua sendo só da plataforma, senão a barbearia se
+daria baixa sozinha.
 
 O que ele precisa saber sobre a operação de cada barbearia — ocupação, no-show,
 adoção — chega por **agregado que a própria barbearia escreve**, por dentro do

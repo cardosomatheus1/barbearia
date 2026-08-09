@@ -13,6 +13,8 @@ import {
   provarSegundoFator,
   sairDaPlataforma,
   trocarPlano,
+  anularFatura,
+  registrarPagamento,
 } from '@/lib/plataforma-api';
 import {
   apagarSessaoDaPlataforma,
@@ -148,4 +150,20 @@ export async function acaoEncerrarSuporte(form: FormData): Promise<void> {
   const resultado = await encerrarSuporte(token, texto(form, 'tenantId'));
   if (!resultado.ok) falhar('/plataforma', resultado.code);
   redirect('/plataforma?feito=suporte_encerrado');
+}
+
+// -- Cobrança (bloco 28) ------------------------------------------------------
+
+export async function acaoRegistrarPagamento(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await registrarPagamento(token, texto(form, 'faturaId'), texto(form, 'metodo'));
+  if (!resultado.ok) falhar('/plataforma/faturas', resultado.code);
+  redirect('/plataforma/faturas?pago=1');
+}
+
+export async function acaoAnularFatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await anularFatura(token, texto(form, 'faturaId'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar('/plataforma/faturas', resultado.code);
+  redirect('/plataforma/faturas?anulada=1');
 }

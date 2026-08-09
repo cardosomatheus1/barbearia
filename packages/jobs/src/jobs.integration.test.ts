@@ -59,6 +59,35 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
   }
 }
 
+
+/**
+ * O que a plataforma liga no worker, de mentira.
+ *
+ * `jobs` não conhece `@barbearia/platform` de propósito — o aviso de cobrança
+ * fala **pela plataforma com a barbearia**, ao contrário de tudo o mais nesta
+ * fila. Aqui esse contrato aparece como duas funções injetadas, e é o que
+ * permite provar que o handler chama a certa com o que veio no `payload`.
+ */
+const avisosDeCobranca: { tenantId: string; faturaId: string; assunto: string }[] = [];
+let reguasRodadas = 0;
+
+const ligacoesDaPlataforma = () => ({
+  avisarDeCobranca: async (aviso: {
+    readonly tenantId: string;
+    readonly faturaId: string;
+    readonly assunto: string;
+  }) => {
+    avisosDeCobranca.push({
+      tenantId: aviso.tenantId,
+      faturaId: aviso.faturaId,
+      assunto: aviso.assunto,
+    });
+  },
+  rodarRegua: async () => {
+    reguasRodadas += 1;
+  },
+});
+
 describeIfDb('fila de trabalho', () => {
   let provider: FakeNotificationProvider;
   let contexto: Contexto;
@@ -98,7 +127,13 @@ describeIfDb('fila de trabalho', () => {
     `);
 
     provider = new FakeNotificationProvider();
-    contexto = { provider, relogio: { agora: () => AGORA }, recursoLigado: async () => recursosLigados };
+    avisosDeCobranca.length = 0;
+    contexto = {
+      provider,
+      relogio: { agora: () => AGORA },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    };
   });
 
   const enfileirarNoTenant = (tarefa: Parameters<typeof enfileirar>[1]) =>
@@ -383,6 +418,7 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
       recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
     });
 
     expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
@@ -408,6 +444,7 @@ describeIfDb('fila de trabalho', () => {
         provider,
         relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
         recursoLigado: async () => recursosLigados,
+        ...ligacoesDaPlataforma(),
       });
 
       expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
@@ -429,6 +466,7 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
       recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
     });
 
     expect(resultado).toMatchObject({ concluidas: 0, reagendadas: 1 });
@@ -585,6 +623,43 @@ describeIfDb('fila de trabalho', () => {
     expect(Number(daRival[0]?.n)).toBe(0);
   });
 
+  it('o aviso de cobrança é repassado à plataforma, com a fatura do payload', async () => {
+    // O handler não sabe cobrar nem escrever mensagem: quem lê a fatura, confere
+    // se ela ainda está aberta e respeita a janela de silêncio da unidade é a
+    // plataforma. Aqui ficaria a segunda cópia dessas regras.
+    await enfileirarAvulso(TENANT, {
+      kind: 'cobranca.aviso',
+      payload: { faturaId: '11111111-2222-3333-4444-555555555555', assunto: 'venceu' },
+      idempotencyKey: 'cobranca:teste:venceu',
+    });
+
+    const resultado = await rodada(contexto);
+
+    expect(resultado.concluidas).toBe(1);
+    expect(avisosDeCobranca).toEqual([
+      {
+        tenantId: TENANT,
+        faturaId: '11111111-2222-3333-4444-555555555555',
+        assunto: 'venceu',
+      },
+    ]);
+  });
+
+  it('aviso sem fatura falha em vez de sumir da fila', async () => {
+    // Tarefa que some marcada como feita leva junto o aviso de que alguém
+    // enfileirou algo quebrado — e o dono nunca soube que a conta venceu.
+    await enfileirarAvulso(TENANT, {
+      kind: 'cobranca.aviso',
+      payload: { assunto: 'venceu' },
+      idempotencyKey: 'cobranca:sem-fatura',
+    });
+
+    const resultado = await rodada(contexto);
+
+    expect(resultado.concluidas).toBe(0);
+    expect(avisosDeCobranca).toHaveLength(0);
+  });
+
   it('a falta entra na fila como tarefa da própria barbearia', async () => {
     await enfileirarAvulso(TENANT, {
       kind: 'agendamento.marcar_falta',
@@ -596,6 +671,7 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => VENCEU },
       recursoLigado: async () => true,
+      ...ligacoesDaPlataforma(),
     });
     expect(resultado.concluidas).toBe(1);
 

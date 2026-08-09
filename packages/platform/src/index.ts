@@ -4,3 +4,5 @@ export * from './recursos.js';
 export * from './mfa.js';
 export * from './suporte.js';
 export * from './assinatura.js';
+export * from './cobranca.js';
+export * from './gestor.js';

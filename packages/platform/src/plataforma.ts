@@ -163,10 +163,15 @@ export async function listarBarbearias(): Promise<readonly BarbeariaNaPlataforma
  *
  * Continua recebendo `tx`: a trilha é gravada **dentro** da transação que muda
  * o estado, e uma versão que abrisse a própria conexão perderia exatamente isso.
+ *
+ * `adminId` nulo é a régua de cobrança (bloco 28) — o único autor sem gente por
+ * trás. A coluna já era anulável desde o bloco 24; o tipo é que insistia em
+ * exigir alguém, e o bloqueio automático é justamente o evento que mais precisa
+ * de linha na trilha e menos tem a quem atribuir.
  */
 export async function registrarNaTrilha(
   tx: TransactionClient,
-  adminId: string,
+  adminId: string | null,
   tenantId: string | null,
   acao: string,
   detalhe: Record<string, unknown>,
@@ -184,7 +189,7 @@ export async function registrarNaTrilha(
  * dela de propósito: `platform_audit` é lida por gente, e renomear uma ação lá
  * é decisão de texto que não pode mexer num número de negócio em silêncio.
  */
-async function marcarCiclo(
+export async function marcarCiclo(
   tx: TransactionClient,
   tenantId: string,
   evento: 'blocked' | 'unblocked',

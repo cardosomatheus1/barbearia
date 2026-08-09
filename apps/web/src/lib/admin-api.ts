@@ -1398,3 +1398,51 @@ export interface PlanoDaBarbearia {
 
 export const planoDaBarbearia = (token: string) =>
   chamar<PlanoDaBarbearia>('GET', '/v1/admin/plano', undefined, token);
+
+export interface OpcaoDePlano {
+  code: string;
+  nome: string;
+  publico: string;
+  precoCents: number;
+  tetoDeCadeiras: number | null;
+  atual: boolean;
+  impedimento: string | null;
+  cobrarCents: number;
+  creditarCents: number;
+  diasRestantes: number;
+}
+
+export const opcoesDePlano = (token: string) =>
+  chamar<OpcaoDePlano[]>('GET', '/v1/admin/plano/opcoes', undefined, token);
+
+export interface FaturaDaBarbearia {
+  id: string;
+  tipo: 'subscription' | 'proration';
+  estado: 'open' | 'paid' | 'void';
+  planoCode: string;
+  valorCents: number;
+  vencimento: string;
+  periodoDe: string;
+  periodoAte: string;
+  pagaEm: string | null;
+  canceladaEm: string | null;
+}
+
+export const faturasDoPlano = (token: string) =>
+  chamar<FaturaDaBarbearia[]>('GET', '/v1/admin/plano/faturas', undefined, token);
+
+/**
+ * Troca de plano com `Idempotency-Key`.
+ *
+ * A chave é obrigatória aqui e não opcional: subir de plano emite cobrança, e
+ * o segundo clique do botão — ou o retry do navegador numa rede ruim — não pode
+ * virar a segunda fatura.
+ */
+export const trocarDePlano = (token: string, planoCode: string, chave: string) =>
+  chamar<{ cobrarCents: number; creditarCents: number; faturaId: string | null }>(
+    'POST',
+    '/v1/admin/plano',
+    { planoCode },
+    token,
+    chave,
+  );

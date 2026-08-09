@@ -227,3 +227,38 @@ export const encerrarSuporte = (token: string, tenantId: string) =>
     undefined,
     token,
   );
+
+/**
+ * A cobrança, do lado da plataforma (bloco 28).
+ *
+ * O que o painel faz aqui é o que a régua não faz sozinha: registrar o
+ * pagamento que alguém conferiu no extrato e perdoar o que foi acordado. As
+ * duas coisas ficam na trilha com autor, ao contrário do que a régua escreve —
+ * que vai com autor nulo, porque não teve gente.
+ */
+export interface FaturaNaPlataforma {
+  id: string;
+  tenantId: string;
+  tipo: 'subscription' | 'proration';
+  estado: 'open' | 'paid' | 'void';
+  planoCode: string;
+  valorCents: number;
+  vencimento: string;
+  periodoDe: string;
+  periodoAte: string;
+  tentativas: number;
+  vencidaEm: string | null;
+  pagaEm: string | null;
+  metodo: string | null;
+  canceladaEm: string | null;
+  motivoDoCancelamento: string | null;
+}
+
+export const faturasEmCobranca = (token: string) =>
+  chamar<{ faturas: FaturaNaPlataforma[] }>('GET', '/v1/plataforma/faturas', undefined, token);
+
+export const registrarPagamento = (token: string, faturaId: string, metodo: string) =>
+  chamar<{ ok: true }>('POST', `/v1/plataforma/faturas/${faturaId}/pagamento`, { metodo }, token);
+
+export const anularFatura = (token: string, faturaId: string, motivo: string) =>
+  chamar<{ ok: true }>('DELETE', `/v1/plataforma/faturas/${faturaId}`, { motivo }, token);

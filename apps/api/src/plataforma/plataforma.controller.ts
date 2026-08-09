@@ -37,6 +37,11 @@ import {
   mudarPlanoDaAssinatura,
   assinaturaDaBarbearia,
   assinaturas,
+  cancelarFatura,
+  faturasDaBarbearia,
+  faturasEmCobranca,
+  pagarFatura,
+  type Fatura,
   cancelarAssinatura,
   reativarAssinatura,
   type AdminDaPlataforma,
@@ -48,6 +53,7 @@ import { Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataform
 import {
   bloqueioSchema,
   cancelamentoSchema,
+  pagamentoSchema,
   codigoSchema,
   janelaSchema,
   recursoSchema,
@@ -58,6 +64,7 @@ import {
   trocaDePlanoSchema,
   type Bloqueio,
   type EntradaDeCancelamento,
+  type EntradaDePagamento,
   type EntradaDeCodigo,
   type EntradaDeRecurso,
   type EntradaDeSuporte,
@@ -97,6 +104,8 @@ const STATUS: Record<string, number> = {
   not_blockable: 409,
   not_blocked: 409,
   reason_required: 400,
+  not_payable: 409,
+  not_voidable: 409,
   email_taken: 409,
   weak_password: 400,
 };
@@ -124,6 +133,25 @@ const paraJson = (a: Awaited<ReturnType<typeof assinaturaDaBarbearia>>) =>
         periodoAte: a.periodoAte.toISOString(),
         canceladaEm: a.canceladaEm?.toISOString() ?? null,
       };
+
+/** O extrato na borda: datas em texto, e sem a chave de idempotência do cliente. */
+const faturaParaJson = (f: Fatura) => ({
+  id: f.id,
+  tenantId: f.tenantId,
+  tipo: f.tipo,
+  estado: f.estado,
+  planoCode: f.planoCode,
+  valorCents: f.valorCents,
+  vencimento: f.vencimento.toISOString(),
+  periodoDe: f.periodoInicio.toISOString(),
+  periodoAte: f.periodoFim.toISOString(),
+  tentativas: f.tentativas,
+  vencidaEm: f.vencidaEm?.toISOString() ?? null,
+  pagaEm: f.pagaEm?.toISOString() ?? null,
+  metodo: f.metodo,
+  canceladaEm: f.canceladaEm?.toISOString() ?? null,
+  motivoDoCancelamento: f.motivoDoCancelamento,
+});
 
 function paraHttp(erro: unknown): never {
   if (erro instanceof PlataformaError) {
@@ -241,6 +269,62 @@ export class PlataformaController {
   ) {
     try {
       await reativarAssinatura({ adminId: admin.id, tenantId });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  // -- cobrança (bloco 28) ---------------------------------------------------
+
+  /** A fila do suporte: quem está em cobrança, de quem vence primeiro. */
+  @Get('faturas')
+  async emCobranca() {
+    const faturas = await faturasEmCobranca();
+    return { faturas: faturas.map(faturaParaJson) };
+  }
+
+  @Get('barbearias/:tenantId/faturas')
+  async extrato(@Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string) {
+    const faturas = await faturasDaBarbearia(tenantId);
+    return { faturas: faturas.map(faturaParaJson) };
+  }
+
+  /**
+   * Registra o pagamento que o Super Admin viu no extrato.
+   *
+   * É o caminho que **de fato** quita uma fatura hoje: até o bloco 29 não há
+   * débito automático, e a régua conta com alguém dando a baixa. Quitar a
+   * última fatura aberta destranca a barbearia suspensa pela régua — e só por
+   * ela, porque bloqueio posto por gente tem motivo escrito e não tem boleto.
+   */
+  @Post('faturas/:faturaId/pagamento')
+  async pagar(
+    @Param('faturaId', new ZodValidationPipe(tenantIdSchema)) faturaId: string,
+    @Body(new ZodValidationPipe(pagamentoSchema)) corpo: EntradaDePagamento,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      const { tenantId } = await pagarFatura({ adminId: admin.id, faturaId, metodo: corpo.metodo });
+      // Quitar destranca, e sem isto a barbearia continuaria fora do ar por até
+      // meio minuto depois de o painel dizer que ela voltou.
+      this.tenants.esquecerBloqueio(tenantId);
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  /** Perdoa a fatura. Não é o mesmo que pagar, e o relatório distingue as duas. */
+  @Delete('faturas/:faturaId')
+  async anular(
+    @Param('faturaId', new ZodValidationPipe(tenantIdSchema)) faturaId: string,
+    @Body(new ZodValidationPipe(cancelamentoSchema)) corpo: EntradaDeCancelamento,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      const { tenantId } = await cancelarFatura({ adminId: admin.id, faturaId, motivo: corpo.motivo });
+      this.tenants.esquecerBloqueio(tenantId);
       return { ok: true };
     } catch (erro) {
       return paraHttp(erro);

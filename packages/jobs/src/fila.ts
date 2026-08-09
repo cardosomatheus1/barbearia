@@ -216,6 +216,37 @@ export async function soltarOrfas(
   );
 }
 
+/**
+ * Enfileira com o dono dito na chamada, dentro de uma transação já aberta.
+ *
+ * `enfileirar` tira o tenant de `current_setting`, o que é o certo para quem
+ * roda dentro de `withTenant` — a tarefa herda o dono do fato que a originou e
+ * não há como enfileirar para a barbearia errada.
+ *
+ * A régua de cobrança não tem esse contexto: ela roda sem tenant, porque a
+ * pergunta "quem venceu hoje?" atravessa todas as barbearias. Sem esta porta,
+ * ela escreveria em `jobs` na mão — e a fila voltaria a ser conhecimento
+ * espalhado, que é justamente o que este arquivo evita.
+ */
+export async function enfileirarPara(
+  tx: TransactionClient,
+  tenantId: string,
+  tarefa: Parameters<typeof enfileirar>[1],
+): Promise<void> {
+  await tx.$executeRaw`
+    INSERT INTO jobs (tenant_id, kind, payload, run_after, idempotency_key, max_attempts)
+    VALUES (
+      ${tenantId}::uuid,
+      ${tarefa.kind},
+      ${JSON.stringify(tarefa.payload ?? {})}::jsonb,
+      ${tarefa.rodarApos ?? new Date()},
+      ${tarefa.idempotencyKey ?? null},
+      ${tarefa.maxAttempts ?? 5}
+    )
+    ON CONFLICT DO NOTHING
+  `;
+}
+
 /** Enfileira fora de uma transação de domínio, abrindo a sua própria. */
 export async function enfileirarAvulso(
   tenantId: string,

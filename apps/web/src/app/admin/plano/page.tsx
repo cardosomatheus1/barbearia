@@ -1,8 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { planoDaBarbearia, type PlanoDaBarbearia } from '@/lib/admin-api';
+import {
+  faturasDoPlano,
+  opcoesDePlano,
+  planoDaBarbearia,
+  type FaturaDaBarbearia,
+  type OpcaoDePlano,
+  type PlanoDaBarbearia,
+} from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { acaoTrocarDePlano } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -58,8 +67,8 @@ function Estado({ p }: { readonly p: PlanoDaBarbearia }) {
   if (p.estado === 'past_due') {
     return (
       <div className="ui-alert ui-alert--danger" role="alert">
-        Há uma cobrança em aberto desde {dia(p.periodoAte)}. A barbearia continua no ar — procure o
-        suporte para regularizar.
+        Há uma cobrança em aberto desde {dia(p.periodoAte)}. A barbearia continua no ar — o extrato
+        abaixo mostra o que está em aberto.
       </div>
     );
   }
@@ -79,7 +88,80 @@ function Estado({ p }: { readonly p: PlanoDaBarbearia }) {
   );
 }
 
-export default async function PlanoPage() {
+/**
+ * O cartão de um plano ao qual se pode mudar.
+ *
+ * O preço da troca aparece **antes** do botão, e é o que separa esta tela de
+ * um formulário: "R$ 75,00 agora pelos 15 dias que faltam" é uma decisão que o
+ * dono consegue tomar; "mudar para Business" sozinho não é.
+ */
+function CartaoDePlano({ o }: { readonly o: OpcaoDePlano }) {
+  const bloqueado = o.impedimento !== null;
+
+  return (
+    <li className={`plano-opcao ${o.atual ? 'plano-opcao--atual' : ''}`}>
+      <p className="plano-opcao__nome">
+        {o.nome}
+        {o.atual ? <span className="plano__selo">seu plano</span> : null}
+      </p>
+      <p className="plano-opcao__preco">
+        {reais(o.precoCents)}
+        <span className="plano-opcao__mes">/mês</span>
+      </p>
+      <p className="plano-opcao__publico">{o.publico}</p>
+      <p className="plano-opcao__cadeiras">
+        {o.tetoDeCadeiras === null
+          ? 'Cadeiras sem limite'
+          : `Até ${o.tetoDeCadeiras} ${o.tetoDeCadeiras === 1 ? 'cadeira' : 'cadeiras'}`}
+      </p>
+
+      {o.atual ? null : (
+        <>
+          <p className="plano-opcao__acerto">
+            {o.cobrarCents > 0 ? (
+              <>
+                <strong>{reais(o.cobrarCents)}</strong> agora, pelos {o.diasRestantes}{' '}
+                {o.diasRestantes === 1 ? 'dia que falta' : 'dias que faltam'} deste período.
+              </>
+            ) : o.creditarCents > 0 ? (
+              <>
+                <strong>{reais(o.creditarCents)}</strong> de crédito, que abatem a próxima
+                mensalidade.
+              </>
+            ) : (
+              <>Sem acerto agora — a mudança vale a partir do próximo período.</>
+            )}
+          </p>
+
+          {bloqueado ? (
+            <p className="plano-opcao__impedimento">{o.impedimento}</p>
+          ) : (
+            <form action={acaoTrocarDePlano}>
+              <input name="planoCode" type="hidden" value={o.code} />
+              <input name="idempotencyKey" type="hidden" value={randomUUID()} />
+              <button className="ui-button ui-button--ghost plano-opcao__botao" type="submit">
+                Mudar para {o.nome}
+              </button>
+            </form>
+          )}
+        </>
+      )}
+    </li>
+  );
+}
+
+const ESTADO_DA_FATURA: Readonly<Record<FaturaDaBarbearia['estado'], string>> = {
+  open: 'Em aberto',
+  paid: 'Paga',
+  void: 'Cancelada',
+};
+
+export default async function PlanoPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ trocado?: string; erro?: string }>;
+}) {
+  const parametros = await searchParams;
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
@@ -87,7 +169,11 @@ export default async function PlanoPage() {
   // trocada; o retorno é o estado do painel, que esta tela não usa.
   await painelOuDesvio(token);
 
-  const resposta = await planoDaBarbearia(token);
+  const [resposta, respostaOpcoes, respostaFaturas] = await Promise.all([
+    planoDaBarbearia(token),
+    opcoesDePlano(token),
+    faturasDoPlano(token),
+  ]);
 
   if (!resposta.ok) {
     return (
@@ -103,11 +189,25 @@ export default async function PlanoPage() {
   const p = resposta.dados;
   const teto = p.cadeiras.teto;
   const cheio = teto !== null && p.cadeiras.emUso >= teto;
+  const opcoes = respostaOpcoes.ok ? respostaOpcoes.dados : [];
+  const faturas = respostaFaturas.ok ? respostaFaturas.dados : [];
+  const emAberto = faturas.filter((f) => f.estado === 'open');
 
   return (
     <main className="ui-container painel__conteudo" {...secao('plano')}>
       <h1 className="painel__titulo">Plano</h1>
       <p className="painel__sub">O que a barbearia contratou, e o que vem junto.</p>
+
+      {parametros.trocado ? (
+        <div className="ui-alert ui-alert--success" role="status">
+          Plano alterado. O acerto do período, quando existe, aparece no extrato abaixo.
+        </div>
+      ) : null}
+      {parametros.erro ? (
+        <div className="ui-alert ui-alert--danger" role="alert">
+          Não deu para trocar de plano ({parametros.erro}). Confira a mensagem e tente de novo.
+        </div>
+      ) : null}
 
       <Estado p={p} />
 
@@ -126,8 +226,8 @@ export default async function PlanoPage() {
           // O limite só é útil se aparecer **antes** de a pessoa tentar
           // cadastrar e levar um erro que não explica nada.
           <p className="plano__aviso">
-            Você está no limite do plano. Para abrir mais uma cadeira, fale com o suporte sobre
-            subir de plano — ou desligue alguém que não atende mais.
+            Você está no limite do plano. Para abrir mais uma cadeira, suba de plano abaixo — ou
+            desligue alguém que não atende mais.
           </p>
         ) : null}
       </section>
@@ -152,10 +252,74 @@ export default async function PlanoPage() {
         </ul>
       </section>
 
-      <p className="painel__nota">
-        Para trocar de plano, fale com o suporte. A mudança no meio do período muda o valor
-        cobrado, e essa conta ainda não é feita por aqui.
-      </p>
+      <section className="painel__grupo plano-vitrine">
+        <h2 className="painel__secao">Mudar de plano</h2>
+        {opcoes.length === 0 ? (
+          <p className="plano__vazio">
+            Não deu para carregar as opções agora. Recarregue a página.
+          </p>
+        ) : (
+          <>
+            <p className="painel__nota">
+              A troca vale na hora. O que muda no valor é só o que falta deste período — o resto
+              entra na próxima mensalidade.
+            </p>
+            <ul className="plano-opcoes">
+              {opcoes.map((o) => (
+                <CartaoDePlano key={o.code} o={o} />
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <section className="painel__grupo">
+        <h2 className="painel__secao">Faturas</h2>
+        {faturas.length === 0 ? (
+          <p className="plano__vazio">
+            Nenhuma fatura ainda. A primeira é emitida quando o período de teste terminar.
+          </p>
+        ) : (
+          <>
+            {emAberto.length > 0 ? (
+              <p className="plano__aviso">
+                {emAberto.length === 1 ? 'Há 1 fatura em aberto' : `Há ${emAberto.length} faturas em aberto`}
+                . Pague por transferência e fale com o suporte para dar baixa.
+              </p>
+            ) : null}
+            <div className="ui-scroll-x">
+              <table className="plano-faturas">
+                <thead>
+                  <tr>
+                    <th scope="col">Vencimento</th>
+                    <th scope="col">Referente a</th>
+                    <th scope="col">Valor</th>
+                    <th scope="col">Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {faturas.map((f) => (
+                    <tr key={f.id}>
+                      <td>{dia(f.vencimento)}</td>
+                      <td>
+                        {f.tipo === 'proration'
+                          ? 'Acerto da troca de plano'
+                          : `${dia(f.periodoDe)} a ${dia(f.periodoAte)}`}
+                      </td>
+                      <td>{reais(f.valorCents)}</td>
+                      <td>
+                        <span className={`plano-fatura__estado plano-fatura__estado--${f.estado}`}>
+                          {ESTADO_DA_FATURA[f.estado]}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
     </main>
   );
 }

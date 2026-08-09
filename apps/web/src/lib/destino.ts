@@ -68,7 +68,11 @@ export function destinoDoBalcao(bruto: string): string {
  * A lista é fechada porque as telas que pedem o segundo fator são conhecidas: a
  * de barbearias, que é de onde se entra numa conta, e a própria de segurança.
  */
-const DESTINOS_DA_PLATAFORMA = ['/plataforma', '/plataforma/seguranca'] as const;
+const DESTINOS_DA_PLATAFORMA = [
+  '/plataforma',
+  '/plataforma/seguranca',
+  '/plataforma/faturas',
+] as const;
 
 export function destinoDaPlataforma(bruto: string | null | undefined): string {
   const padrao = '/plataforma';

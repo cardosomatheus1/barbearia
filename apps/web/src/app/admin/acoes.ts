@@ -38,6 +38,7 @@ import {
   sentarDaFila,
   type StatusNaFila,
   criarServico,
+  trocarDePlano,
   editarProfissional,
   editarServico,
   exigenciasDoServico,
@@ -1333,4 +1334,26 @@ export async function acaoAdicionarSlug(form: FormData): Promise<void> {
   if (!resultado.ok) falhar('/admin/importar', resultado.code);
 
   redirect('/admin/importar?slug=1');
+}
+
+// -- Plano --------------------------------------------------------------------
+
+/**
+ * Troca o plano pelo autoatendimento (bloco 28).
+ *
+ * A chave de idempotência vem do formulário, gerada quando a tela foi montada —
+ * mesmo motivo da comanda e da fila: gerá-la aqui daria uma chave nova a cada
+ * envio, e o duplo toque emitiria a segunda cobrança do mesmo acerto.
+ */
+export async function acaoTrocarDePlano(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const resultado = await trocarDePlano(
+    token,
+    texto(form, 'planoCode'),
+    texto(form, 'idempotencyKey'),
+  );
+
+  if (!resultado.ok) falhar('/admin/plano', resultado.code);
+  redirect('/admin/plano?trocado=1');
 }
