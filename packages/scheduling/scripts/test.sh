@@ -21,7 +21,8 @@ done
 
 # A aplicação conecta pelo role restrito. Apontar DATABASE_URL para
 # superusuário desligaria a RLS e os testes de isolamento passariam vazios.
-export DATABASE_URL="${BASE/postgres:\/\/postgres/postgres://barbearia_app:$APP_DB_PASSWORD}/$DB_NAME"
+DATABASE_URL="$(../../scripts/url-do-app.sh "$ADMIN_URL" "$APP_DB_PASSWORD" "$DB_NAME")"
+export DATABASE_URL
 export APP_DATABASE_URL="$DATABASE_URL"
 export SEED_DATABASE_URL="$BASE/$DB_NAME"
 exec vitest run

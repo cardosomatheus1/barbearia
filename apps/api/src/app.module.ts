@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
@@ -30,6 +30,7 @@ import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
 import { ConsoleMessagingProvider } from '@barbearia/identity';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { HealthController } from './common/health.controller.js';
+import { LogInterceptor } from './common/log.interceptor.js';
 import { TenantService } from './tenant/tenant.service.js';
 
 @Module({
@@ -69,6 +70,7 @@ import { TenantService } from './tenant/tenant.service.js';
     { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
+    { provide: APP_INTERCEPTOR, useClass: LogInterceptor },
   ],
 })
 export class AppModule {}
