@@ -71,6 +71,7 @@ import {
   registrarConsentimentoNoBalcao,
   abrirPedidoDeDados,
   encerrarPedidoDeDados,
+  anonimizarCliente as anonimizarClienteNaApi,
 } from '@/lib/admin-api';
 import { versaoDoConsentimento } from '@/lib/politica';
 import { ehConversa } from '@barbearia/core';
@@ -1457,4 +1458,38 @@ export async function acaoEncerrarPedidoDeDados(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/lgpd', resultado.code);
   redirect('/admin/lgpd?salvo=1');
+}
+
+/**
+ * Apaga os dados de um cliente (bloco 32).
+ *
+ * É a única ação sem volta do painel, e a tela cobra confirmação escrita antes
+ * de chegar aqui. O motivo é obrigatório em três camadas — borda, domínio e a
+ * função do banco — porque daqui a seis meses "por que este cadastro sumiu?" só
+ * tem resposta se alguém tiver escrito.
+ */
+export async function acaoAnonimizarCliente(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const customerId = texto(form, 'customerId');
+  const de = destinoDaFicha(texto(form, 'de'));
+  const rota = `/admin/cliente/${customerId}?de=${de === '/admin/meu-dia' ? 'meu-dia' : 'dia'}`;
+
+  /**
+   * A confirmação digitada, conferida aqui e não só no navegador.
+   *
+   * Sem JavaScript no cliente não existe `confirm()`, e é bom que não exista:
+   * digitar a palavra é uma barreira mais forte que um diálogo que se fecha no
+   * reflexo. A conferência mora no servidor porque a do navegador é sugestão.
+   */
+  if (texto(form, 'confirmacao').toUpperCase() !== 'APAGAR') {
+    falhar(rota, 'confirmacao_invalida');
+  }
+
+  const resultado = await anonimizarClienteNaApi(token, customerId, texto(form, 'motivo'));
+  if (!resultado.ok) falhar(rota, resultado.code);
+
+  // Volta para a lista, não para a ficha: a ficha que ele estava vendo não
+  // existe mais como cadastro de pessoa, e mostrá-la vazia parece defeito.
+  redirect(`${de}?apagado=1`);
 }

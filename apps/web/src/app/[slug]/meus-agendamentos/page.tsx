@@ -49,6 +49,9 @@ const FEITO: Record<string, string> = {
   remarcado: 'Horário remarcado.',
   aceitou: 'Pronto — você vai receber as promoções desta barbearia.',
   pediu: 'Pedido registrado. A barbearia responde em até 15 dias.',
+  pediu_exclusao:
+    'Pedido de exclusão registrado. A barbearia tem 15 dias para responder — ela confere antes '
+    + 'se alguma obrigação legal a impede de apagar tudo.',
   recusou: 'Pronto — você não recebe mais promoção. O aviso do seu horário continua.',
 };
 
@@ -270,14 +273,40 @@ function MeusDados({
 
       <form action={pedirDados}>
         <input name="slug" type="hidden" value={slug} />
+        <input name="tipo" type="hidden" value="export" />
         <button className="ui-button ui-button--ghost meus__consentimento-botao" type="submit">
           Pedir uma cópia dos meus dados
         </button>
       </form>
 
+      {/*
+        Apagar fica atrás de um `details` (bloco 32).
+
+        Não é para esconder — o texto do resumo diz exatamente o que há dentro,
+        e nada some no celular. É para não ficar do lado de "pedir uma cópia"
+        com o mesmo peso visual: são pedidos de gravidade muito diferente, e um
+        toque errado no botão vizinho é fácil demais com o polegar, em pé, na
+        rua. Abrir é o passo que separa a intenção do acidente.
+      */}
+      <details className="meus__apagar">
+        <summary className="meus__apagar-abrir">Quero apagar meus dados</summary>
+        <p className="meus__consentimento-estado">
+          A {nome} apaga o seu nome, telefone e as anotações sobre você. O que a lei manda ela
+          guardar — as vendas e o que você deve ou tem de crédito — continua, mas sem ligação com
+          você. Isso não tem volta, e você perde o histórico dos seus cortes.
+        </p>
+        <form action={pedirDados}>
+          <input name="slug" type="hidden" value={slug} />
+          <input name="tipo" type="hidden" value="deletion" />
+          <button className="ui-button ui-button--ghost meus__consentimento-botao" type="submit">
+            Pedir para apagar meus dados
+          </button>
+        </form>
+      </details>
+
       {encarregado ? (
         <p className="meus__consentimento-estado">
-          Para corrigir ou apagar um dado, fale com {encarregado.nome}
+          Para corrigir um dado ou tirar dúvida, fale com {encarregado.nome}
           {encarregado.email ? (
             <>
               {' '}

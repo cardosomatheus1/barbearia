@@ -74,6 +74,24 @@ export const PERMISSOES = [
    * conversa" não é necessariamente quem deve reescrever isso.
    */
   'customers.edit_notes',
+  /**
+   * Anonimizar um cadastro (bloco 32).
+   *
+   * Permissão própria, e não `settings.manage`, porque é a **única operação
+   * irreversível do produto**: o nome, o telefone, o nascimento, a ficha e as
+   * notas somem, e não há de onde trazê-los de volta. Toda a outra destruição
+   * que o sistema permite é reversível — desativar profissional, cancelar
+   * atendimento, desfazer importação.
+   *
+   * A `PermissaoGuard` diz que "isto **ou** aquilo" é sinal de duas rotas. Aqui
+   * é o mesmo raciocínio um passo antes: atender um pedido de cópia e atender
+   * um pedido de exclusão parecem a mesma tarefa e não são, e amarrá-las na
+   * mesma permissão faria quem responde e-mail poder apagar a base.
+   *
+   * Só o dono tem por padrão — como `customers.export`, e pelo motivo espelhado:
+   * uma é o vetor de roubo da base, a outra é o de destruição dela.
+   */
+  'customers.anonymize',
   'reports.finance',
   'reports.operational',
   'inventory.view',

@@ -98,21 +98,29 @@ export async function decidirMarketing(form: FormData): Promise<void> {
 }
 
 /**
- * Pedir uma cópia dos próprios dados (bloco 31).
+ * Pedir uma cópia dos próprios dados, ou pedir para ser apagado.
  *
- * O botão registra o pedido; quem responde é a barbearia, que é a controladora.
- * Devolver o arquivo aqui mandaria dado pessoal por uma rota cuja única prova de
- * identidade é a posse de um celular — e o titular pode ter trocado de número.
+ * O botão **registra** o pedido; quem responde é a barbearia, que é a
+ * controladora. Devolver o arquivo aqui mandaria dado pessoal por uma rota cuja
+ * única prova de identidade é a posse de um celular — e o titular pode ter
+ * trocado de número. Apagar aqui seria pior ainda pelo mesmo motivo, e tiraria
+ * da barbearia a conferência de guarda legal que a lei manda ela fazer.
+ *
+ * O tipo vem do formulário e é conferido: campo de formulário é entrada
+ * externa, e um valor solto viraria `data_request_kind` inválido no banco.
  */
 export async function pedirDados(form: FormData): Promise<void> {
   const slug = String(form.get('slug') ?? '');
   const token = await lerSessao(slug);
   if (!token) redirect(`/${slug}/entrar`);
 
-  const resultado = await pedirMeusDados(slug, token);
+  const bruto = String(form.get('tipo') ?? '');
+  const tipo = bruto === 'deletion' ? 'deletion' : 'export';
+
+  const resultado = await pedirMeusDados(slug, token, tipo);
   redirect(
     resultado.ok
-      ? `/${slug}/meus-agendamentos?feito=pediu`
+      ? `/${slug}/meus-agendamentos?feito=${tipo === 'deletion' ? 'pediu_exclusao' : 'pediu'}`
       : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
   );
 }

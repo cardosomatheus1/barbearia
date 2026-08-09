@@ -18,6 +18,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
 import {
   acaoAbrirPedidoDeDados,
+  acaoAnonimizarCliente,
   acaoConsentimentoNoBalcao,
   acaoPreferencias,
   acaoSair,
@@ -55,6 +56,8 @@ const first = (valor: string | string[] | undefined): string | undefined =>
 
 const FALHA: Record<string, string> = {
   cliente_nao_encontrado: 'Este cliente não existe mais.',
+  confirmacao_invalida: 'Para apagar, digite APAGAR no campo de confirmação.',
+  forbidden_anonimizar: 'Sua conta não apaga dados de cliente.',
   preferencia_invalida: 'Escolha uma das opções de conversa.',
   forbidden: 'Sua conta não vê as anotações dos clientes.',
   invalid_request: 'Confira os campos: alguma anotação ficou longa demais.',
@@ -253,6 +256,73 @@ function DireitosDoTitular({
   );
 }
 
+/**
+ * Apagar os dados desta pessoa (bloco 32).
+ *
+ * ## Separada do resto, e com a confirmação digitada
+ *
+ * É a única ação sem volta do painel. Um botão a mais no meio dos outros é
+ * clicado por engano — sobretudo no celular, que é onde metade do balcão
+ * trabalha. A palavra digitada não é cerimônia: sem componente de cliente não
+ * existe `confirm()`, e é bom que não exista, porque um diálogo se fecha no
+ * reflexo e uma palavra precisa ser lida para ser escrita.
+ *
+ * ## O que o texto precisa dizer, e diz
+ *
+ * O que sai, o que fica e por que fica. Um aviso genérico de "esta ação é
+ * irreversível" faria o dono achar que perde a venda junto — e ele não perde:
+ * a obrigação fiscal é justamente o motivo de anonimizar em vez de apagar.
+ */
+function Apagar({
+  customerId,
+  de,
+  nome,
+}: {
+  readonly customerId: string;
+  readonly de: string;
+  readonly nome: string;
+}) {
+  return (
+    <details className="anotar perigo">
+      <summary className="anotar__abrir perigo__abrir">Apagar os dados deste cliente</summary>
+
+      <p className="consentimentos__nota">
+        Apaga o nome, o telefone, o nascimento e tudo que foi anotado sobre {nome}. As vendas, o
+        que ele deve e a comissão que já foi paga continuam — a lei obriga a guardar —, mas sem
+        ligação com uma pessoa identificável. <strong>Isso não tem volta.</strong>
+      </p>
+
+      <form action={acaoAnonimizarCliente} className="formulario">
+        <input name="customerId" type="hidden" value={customerId} />
+        <input name="de" type="hidden" value={de} />
+
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="motivo">Por quê</label>
+          <input className="ui-field__input" id="motivo" maxLength={300} name="motivo"
+                 required type="text"
+                 placeholder="Pedido de exclusão do titular, por WhatsApp em 09/08" />
+          <p className="ui-field__hint">
+            Fica na trilha. Daqui a seis meses é a única resposta para &ldquo;por que este
+            cadastro sumiu?&rdquo;.
+          </p>
+        </div>
+
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="confirmacao">
+            Digite APAGAR para confirmar
+          </label>
+          <input className="ui-field__input" id="confirmacao" maxLength={10} name="confirmacao"
+                 required type="text" autoComplete="off" />
+        </div>
+
+        <button className="ui-button ui-button--danger ui-button--block" type="submit">
+          Apagar os dados de {nome}
+        </button>
+      </form>
+    </details>
+  );
+}
+
 export default async function FichaPage({ params, searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -319,7 +389,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
           ? 'Primeira vez aqui'
           : `${ficha.dados.visitas} ${ficha.dados.visitas === 1 ? 'visita' : 'visitas'}`}
         {ficha.dados.desde ? ` · cliente desde ${dia(ficha.dados.desde)}` : ''}
-        {` · final ${ficha.dados.telefoneFinal}`}
+        {ficha.dados.telefoneFinal ? ` · final ${ficha.dados.telefoneFinal}` : ''}
       </p>
 
       {erro ? (
@@ -444,7 +514,22 @@ export default async function FichaPage({ params, searchParams }: Props) {
         </form>
       </details>
 
-      {consentimentos.ok ? (
+      {/*
+        O cadastro apagado precisa se explicar (bloco 32).
+
+        Sem este aviso a ficha aparece com um nome estranho, sem telefone e sem
+        anotação — que é indistinguível de defeito, e o barbeiro liga para o
+        dono. Estado desenhado, não improvisado.
+      */}
+      {ficha.dados.anonimizado ? (
+        <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+          Os dados desta pessoa foram apagados a pedido dela ou por tempo sem vir. O histórico de
+          atendimento e o que ela deve continuam, porque a lei obriga a guardar — o que saiu foi
+          tudo que identificava quem era.
+        </div>
+      ) : null}
+
+      {consentimentos.ok && !ficha.dados.anonimizado ? (
         <Consentimentos
           consentimentos={consentimentos.dados}
           customerId={ficha.dados.customerId}
@@ -453,6 +538,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
         />
       ) : null}
 
+      {ficha.dados.anonimizado ? null : (
       <DireitosDoTitular
         customerId={ficha.dados.customerId}
         de={voltar}
@@ -469,6 +555,11 @@ export default async function FichaPage({ params, searchParams }: Props) {
           'customers.view_notes',
         ])}
       />
+      )}
+
+      {estado.staff.permissions.includes('customers.anonymize') && !ficha.dados.anonimizado ? (
+        <Apagar customerId={ficha.dados.customerId} de={voltar} nome={ficha.dados.nome} />
+      ) : null}
 
       <h2 className="ficha__titulo">Últimas vezes</h2>
 

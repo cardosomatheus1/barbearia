@@ -771,6 +771,27 @@ async function prepararLgpd(token, clienteId) {
   return true;
 }
 
+/**
+ * Um cadastro avisado por retenção, para a tela de privacidade ser medida com a
+ * lista cheia (bloco 32).
+ *
+ * Pelo banco e não pela API, como as métricas da plataforma acima: quem carimba
+ * `retention_notified_at` é a varredura do worker, de madrugada, e a medição não
+ * sobe worker. O que ela precisa é do **estado**, que é o que a tela desenha.
+ *
+ * Nome comprido de propósito: é ele que estoura a linha do cartão em 360px, ao
+ * lado do prazo.
+ */
+function prepararRetencao(clienteId) {
+  if (!clienteId) return false;
+  psql(
+    `UPDATE customers SET name = 'Sebastião Nascimento Albuquerque',` +
+      ` retention_notified_at = now() - interval '27 days'` +
+      ` WHERE id = '${clienteId}'`,
+  );
+  return true;
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
@@ -791,6 +812,11 @@ async function main() {
   if (!importacao) console.warn('  aviso: importação não preparada; passo 2 fora da medição');
   const lgpd = await prepararLgpd(token, balcao.clienteId);
   if (!lgpd) console.warn('  aviso: LGPD não preparada; a fila de pedidos entra vazia');
+  // Depois do `prepararLgpd`: ele registra consentimento e abre pedidos usando o
+  // mesmo cliente, e renomeá-lo antes faria a ficha ser medida com outro nome.
+  if (!prepararRetencao(balcao.clienteId)) {
+    console.warn('  aviso: retenção não preparada; o aviso prévio entra vazio');
+  }
   const tokenPlataforma = await prepararPlataforma();
 
   const telas = [

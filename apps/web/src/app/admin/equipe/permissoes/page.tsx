@@ -87,6 +87,9 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'customers.view_photos': 'Ver fotos do cliente',
   'customers.view_notes': 'Ler a anotação sobre o cliente',
   'customers.edit_notes': 'Escrever a anotação sobre o cliente',
+  // O rótulo diz o que acontece, não o nome técnico: quem marca esta caixa
+  // precisa entender que está entregando a única ação sem volta do sistema.
+  'customers.anonymize': 'Apagar os dados de um cliente (não tem volta)',
   'reports.finance': 'Relatórios financeiros',
   'reports.operational': 'Relatórios de operação',
   'inventory.view': 'Ver o estoque',

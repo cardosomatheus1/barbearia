@@ -70,6 +70,8 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
  */
 const avisosDeCobranca: { tenantId: string; faturaId: string; assunto: string }[] = [];
 let reguasRodadas = 0;
+/** As varreduras de retenção que o worker mandou rodar, por barbearia. */
+const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
 
 const ligacoesDaPlataforma = () => ({
   avisarDeCobranca: async (aviso: {
@@ -85,6 +87,10 @@ const ligacoesDaPlataforma = () => ({
   },
   rodarRegua: async () => {
     reguasRodadas += 1;
+  },
+  varrerRetencao: async (tenantId: string, agora: Date) => {
+    retencoesRodadas.push({ tenantId, agora });
+    return { avisados: 0, anonimizados: 0 };
   },
 });
 
@@ -128,6 +134,7 @@ describeIfDb('fila de trabalho', () => {
 
     provider = new FakeNotificationProvider();
     avisosDeCobranca.length = 0;
+    retencoesRodadas.length = 0;
     contexto = {
       provider,
       relogio: { agora: () => AGORA },

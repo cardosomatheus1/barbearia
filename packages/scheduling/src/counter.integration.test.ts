@@ -105,6 +105,31 @@ describeIfDb('balcão — busca de cliente', () => {
     expect(JSON.stringify(achados)).not.toContain('+5571988887777');
   });
 
+  it('cadastro anonimizado não é achável no balcão, nem por nome', async () => {
+    /**
+     * Bloco 32. A anonimização corta o vínculo com a pessoa — e a busca do
+     * balcão é a única tela onde esse vínculo é usado todo dia.
+     *
+     * O apelido (`cliente_anonimizado_xxxx`) não bate com "silva", mas o teste
+     * não confia nisso: ele procura pelo **apelido**, que é o termo que
+     * realmente encontraria a linha se o filtro não existisse. E o telefone
+     * ficou nulo, então a busca por dígitos já não alcança — o que este caso
+     * prova é a outra metade, a do nome.
+     */
+    await exec(admin, `
+      UPDATE customers
+         SET name = 'cliente_anonimizado_cccc', phone_e164 = NULL, anonymized_at = now()
+       WHERE id = '${JOAO}'
+    `);
+
+    expect(await buscar('anonimizado')).toHaveLength(0);
+
+    // E os outros continuam sendo achados: o filtro é sobre a linha apagada,
+    // não sobre a consulta inteira.
+    const outros = await buscar('silv');
+    expect(outros.map((c) => c.name)).toEqual(['Maria Silveira']);
+  });
+
   it('não lista a base para quem digita pouco', async () => {
     expect(await buscar('jo')).toEqual([]);
     expect(await buscar('')).toEqual([]);

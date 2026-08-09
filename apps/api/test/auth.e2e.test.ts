@@ -856,17 +856,55 @@ describeIfDb('fluxo do cliente', () => {
     const primeiro = await http()
       .post('/v1/b/domari/auth/pedido-de-dados')
       .set('Authorization', `Bearer ${token}`)
+      .send({ tipo: 'export' })
       .expect(201);
 
     const segundo = await http()
       .post('/v1/b/domari/auth/pedido-de-dados')
       .set('Authorization', `Bearer ${token}`)
+      .send({ tipo: 'export' })
       .expect(201);
 
     expect(segundo.body.id).toBe(primeiro.body.id);
     expect(segundo.body.venceEm).toBe(primeiro.body.venceEm);
 
-    await http().post('/v1/b/domari/auth/pedido-de-dados').expect(401);
+    await http()
+      .post('/v1/b/domari/auth/pedido-de-dados')
+      .send({ tipo: 'export' })
+      .expect(401);
+  });
+
+  it('o titular pede a exclusão, e o pedido não apaga nada sozinho', async () => {
+    /**
+     * O direito é dele; a execução é da barbearia (bloco 32).
+     *
+     * Apagar no clique daria a qualquer pessoa com o celular do titular na mão
+     * o poder de destruir o cadastro — e tiraria da barbearia a conferência de
+     * guarda legal que a lei manda ela fazer antes.
+     */
+    const token = await login(CARLOS);
+
+    const pedido = await http()
+      .post('/v1/b/domari/auth/pedido-de-dados')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ tipo: 'deletion' })
+      .expect(201);
+    expect(pedido.body.tipo).toBe('deletion');
+
+    // A sessão continua valendo: nada foi apagado, e o cliente segue vendo os
+    // agendamentos dele enquanto a barbearia decide.
+    await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    // Tipo fora da lista é recusado na borda: `data_request_kind` é um enum do
+    // banco, e valor solto viraria erro de sintaxe em vez de 400.
+    await http()
+      .post('/v1/b/domari/auth/pedido-de-dados')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ tipo: 'tudo' })
+      .expect(400);
   });
 
   it('nunca vaza detalhe interno em erro de rota autenticada', async () => {

@@ -289,8 +289,12 @@ export const decidirConsentimento = (
  * Reenviar devolve o mesmo pedido: o segundo toque do botão não reinicia a
  * contagem do prazo de 15 dias.
  */
-export const pedirMeusDados = (slug: string, token: string) =>
-  post<{ id: string; venceEm: string }>(`/v1/b/${slug}/auth/pedido-de-dados`, {}, token);
+export const pedirMeusDados = (slug: string, token: string, tipo: 'export' | 'deletion') =>
+  post<{ id: string; tipo: string; venceEm: string }>(
+    `/v1/b/${slug}/auth/pedido-de-dados`,
+    { tipo },
+    token,
+  );
 
 /** Revoga a sessão no servidor. Apagar só o cookie deixaria o token válido. */
 export const encerrarSessao = (slug: string, token: string) =>

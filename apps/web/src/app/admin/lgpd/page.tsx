@@ -1,6 +1,12 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { pedidosDeDados, politicasDaCasa, type PedidoNaTela } from '@/lib/admin-api';
+import {
+  cadastrosParaSair,
+  pedidosDeDados,
+  politicasDaCasa,
+  type PedidoNaTela,
+} from '@/lib/admin-api';
+import { RETENCAO_ANOS } from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { faltamDias } from '@/lib/prazo';
@@ -124,9 +130,10 @@ export default async function LgpdPage({ searchParams }: Props) {
   const erro = first(query['erro']);
   const salvo = first(query['salvo']) === '1';
 
-  const [resposta, politicas] = await Promise.all([
+  const [resposta, politicas, retencao] = await Promise.all([
     pedidosDeDados(token),
     politicasDaCasa(token),
+    cadastrosParaSair(token),
   ]);
 
   const agora = new Date();
@@ -213,6 +220,50 @@ export default async function LgpdPage({ searchParams }: Props) {
           {abertos.map((p) => <Pedido agora={agora} key={p.id} pedido={p} />)}
         </ul>
       )}
+
+      {/*
+        O aviso prévio da retenção (bloco 32, SPEC §1.8 regra 6).
+
+        Fica **abaixo** da fila de pedidos e acima do histórico porque é o que
+        tem prazo correndo sem ninguém ter pedido nada — e é a única lista do
+        painel em que não fazer nada tem consequência irreversível.
+
+        Aparece só quando há alguém: um bloco vazio dizendo "nenhum cadastro
+        sai" seria ruído permanente numa tela que a barbearia abre para
+        responder pedido.
+      */}
+      {retencao.ok && retencao.dados.cadastros.length > 0 ? (
+        <>
+          <h2 className="ficha__titulo">Cadastros que saem por inatividade</h2>
+          <p className="painel__nota">
+            A lei não deixa guardar dado de quem parou de vir. Estes clientes estão há{' '}
+            {RETENCAO_ANOS} anos sem atendimento, comanda ou fiado — o nome e o telefone deles são
+            apagados na data abaixo, e não tem volta. Um atendimento novo cancela a saída.
+          </p>
+          <ul className="pedidos">
+            {retencao.dados.cadastros.map((c) => {
+              const quando = faltamDias(new Date(c.saiEm), agora);
+              return (
+                <li className={`pedido${quando.urgente ? ' pedido--urgente' : ''}`} key={c.customerId}>
+                  <div className="pedido__cabeca">
+                    <span className="pedido__tipo">{c.nome}</span>
+                    <span className="pedido__prazo">sai · {quando.texto}</span>
+                  </div>
+                  {/*
+                    Alvo de toque próprio: aqui o link está **sozinho** na
+                    linha, então a isenção da WCAG 2.5.8 para link dentro de
+                    frase não vale — e a medição pegou os 18px. No cartão do
+                    pedido ele vive no meio de uma frase, e lá a isenção vale.
+                  */}
+                  <a className="pedido__ficha" href={`/admin/cliente/${c.customerId}`}>
+                    abrir a ficha
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
 
       {encerrados.length > 0 ? (
         <>

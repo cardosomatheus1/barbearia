@@ -1156,7 +1156,9 @@ export interface VisitaNaFicha {
 export interface FichaDoCliente {
   customerId: string;
   nome: string;
-  telefoneFinal: string;
+  /** Nulo depois da anonimização: o telefone é a coluna que mais identifica. */
+  telefoneFinal: string | null;
+  anonimizado: boolean;
   preferencias: PreferenciasDoCliente;
   anotadoEm: string | null;
   anotadoPor: string | null;
@@ -1557,6 +1559,36 @@ export const exportarDadosDoCliente = (token: string, customerId: string) =>
   chamar<Record<string, unknown>>(
     'GET',
     `/v1/admin/customers/${customerId}/dados`,
+    undefined,
+    token,
+  );
+
+/**
+ * Apaga os dados de um cliente (bloco 32).
+ *
+ * A API exige `customers.anonymize`, que só o dono tem por padrão. Ela também
+ * fecha o pedido de exclusão aberto, se houver — as duas coisas na mesma
+ * transação, porque metade feita aqui não é detectável depois.
+ */
+export const anonimizarCliente = (token: string, customerId: string, motivo: string) =>
+  chamar<{ anonimizou: boolean; pedidosFechados: number }>(
+    'POST',
+    `/v1/admin/customers/${customerId}/anonimizar`,
+    { motivo },
+    token,
+  );
+
+export interface CadastroParaSair {
+  customerId: string;
+  nome: string;
+  ultimaInteracao: string;
+  saiEm: string;
+}
+
+export const cadastrosParaSair = (token: string) =>
+  chamar<{ cadastros: CadastroParaSair[]; prazoDeAvisoDias: number }>(
+    'GET',
+    '/v1/admin/customers/lgpd/retencao',
     undefined,
     token,
   );

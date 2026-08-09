@@ -120,7 +120,10 @@ interface Guardado {
  */
 async function telefonesExistentes(tx: TransactionClient): Promise<Set<string>> {
   const linhas = await tx.$queryRaw<{ phone_e164: string }[]>`
-    SELECT phone_e164 FROM customers
+    -- Filtra nulo desde o bloco 32: cadastro anonimizado tem telefone nulo, e
+    -- ele não pode entrar no conjunto de deduplicação — quem foi apagado a
+    -- pedido não volta porque alguém reimportou a base velha.
+    SELECT phone_e164 FROM customers WHERE phone_e164 IS NOT NULL
   `;
   return new Set(linhas.map((linha) => linha.phone_e164));
 }

@@ -41,7 +41,14 @@ export interface CustomerHit {
   readonly id: string;
   readonly name: string;
   /** Mascarado: a tela do balcão fica virada para o salão. */
-  readonly phoneMasked: string;
+  /**
+   * Nulo depois da anonimização (bloco 32).
+   *
+   * Na prática a busca não devolve cadastro anonimizado — as duas consultas o
+   * excluem. O tipo aceita nulo mesmo assim porque a coluna aceita, e um tipo
+   * que mente sobre o banco é como o `.slice(-4)` da ficha quebrou.
+   */
+  readonly phoneMasked: string | null;
   readonly lastVisitAt: string | null;
   /** Quantas vezes faltou. É o que faz a recepção pedir confirmação. */
   readonly noShows: number;
@@ -50,7 +57,7 @@ export interface CustomerHit {
 interface CustomerRow {
   id: string;
   name: string;
-  phone_e164: string;
+  phone_e164: string | null;
   last_visit: Date | null;
   no_shows: bigint;
 }
@@ -59,7 +66,7 @@ function toHit(row: CustomerRow): CustomerHit {
   return {
     id: row.id,
     name: row.name,
-    phoneMasked: maskPhone(row.phone_e164),
+    phoneMasked: row.phone_e164 === null ? null : maskPhone(row.phone_e164),
     lastVisitAt: row.last_visit?.toISOString() ?? null,
     noShows: Number(row.no_shows),
   };
@@ -106,7 +113,8 @@ export async function searchCustomers(params: {
                    count(*) FILTER (WHERE status = 'no_show') AS no_shows
             FROM appointments WHERE customer_id = c.id
           ) h ON true
-          WHERE reverse(c.phone_e164) LIKE ${`${[...digitos].reverse().join('')}%`}
+          WHERE c.anonymized_at IS NULL
+            AND reverse(c.phone_e164) LIKE ${`${[...digitos].reverse().join('')}%`}
           ORDER BY c.name
           LIMIT ${limite}
         `
@@ -118,7 +126,11 @@ export async function searchCustomers(params: {
                    count(*) FILTER (WHERE status = 'no_show') AS no_shows
             FROM appointments WHERE customer_id = c.id
           ) h ON true
-          WHERE sem_acento(lower(c.name)) LIKE
+          -- Cadastro anonimizado não é achável no balcão (bloco 32). Cortar o
+          -- vínculo com a pessoa e continuar devolvendo a linha na busca seria
+          -- desfazer a anonimização na única tela onde ela importa.
+          WHERE c.anonymized_at IS NULL
+            AND sem_acento(lower(c.name)) LIKE
                 '%' || replace(replace(replace(
                   sem_acento(lower(${termo})), '\\', '\\\\'), '%', '\\%'), '_', '\\_'
                 ) || '%' ESCAPE '\\'

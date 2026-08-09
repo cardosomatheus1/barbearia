@@ -44,6 +44,9 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'customer.data_exported': 'exportou os dados de',
   'lgpd.request_fulfilled': 'atendeu o pedido de dados de',
   'lgpd.request_refused': 'recusou o pedido de dados de',
+  // Bloco 32. O verbo é forte de propósito: "anonimizou" é jargão, e quem lê a
+  // trilha precisa entender de primeira que o cadastro não volta.
+  'customer.anonymized': 'apagou os dados de',
   'slug.added': 'cadastrou um endereço antigo da barbearia',
 
   // Suporte assistido (bloco 26). Estas três não descrevem o que **a equipe**

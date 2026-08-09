@@ -5357,3 +5357,41 @@ main { padding-bottom: var(--space-8); }
     align-items: center;
   }
 }
+
+/* O pedido de exclusão, atrás de um passo (bloco 32). Ver o comentário na tela:
+   não é esconder, é separar de "pedir uma cópia", que tem outra gravidade. */
+.meus__apagar { margin: 0 0 var(--space-4); }
+.meus__apagar-abrir {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+/* ============================================================================
+   A zona de perigo (bloco 32).
+
+   Um `details` como os outros, com a borda e o rótulo em vermelho. O
+   destaque é de **cor e não de tamanho**, de propósito: a ação mais
+   destrutiva do painel não pode ser a coisa mais chamativa de uma tela que
+   o barbeiro abre para ver como cortar o cabelo.
+   ============================================================================ */
+
+.perigo {
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+.perigo__abrir { color: var(--color-danger); }
+.perigo .formulario { margin-top: var(--space-4); }
+
+/* Link sozinho na linha é alvo autônomo, e alvo autônomo tem 44px — em
+   qualquer largura. A medição do bloco 32 pegou este com 18px. */
+.pedido__ficha {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  font-size: var(--font-size-sm);
+}

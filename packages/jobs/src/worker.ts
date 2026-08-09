@@ -9,6 +9,7 @@ import {
 } from './fila.js';
 import { marcarFalta } from './faltas.js';
 import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
+import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
   executarAvisoDeAgendamento,
@@ -84,6 +85,20 @@ export interface Contexto {
    * diária roda ali.
    */
   readonly rodarRegua: (agora: Date) => Promise<void>;
+  /**
+   * A varredura de retenção de uma barbearia (bloco 32), injetada.
+   *
+   * Mesma razão do `provider` e da régua: ela vive em `packages/crm`, que é
+   * camada de cima, e `jobs` não pode conhecê-la sem inverter a seta. O que
+   * chega aqui é a função pronta; quem a liga é `apps/worker`.
+   *
+   * Devolve quantos foram avisados e quantos saíram, só para o log — a decisão
+   * de avisar ou anonimizar é tomada lá dentro, sobre a regra pura de `core`.
+   */
+  readonly varrerRetencao: (
+    tenantId: string,
+    agora: Date,
+  ) => Promise<{ readonly avisados: number; readonly anonimizados: number }>;
 }
 
 const avisoDeAgendamento =
@@ -182,6 +197,21 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     });
   },
 
+  /**
+   * A retenção do dia de uma barbearia (bloco 32).
+   *
+   * Uma tarefa por barbearia, com `withTenant` lá dentro, exatamente como a
+   * apuração e a falta automática — e pelo mesmo motivo: `customers` tem RLS, e
+   * nenhuma varredura de plataforma consegue lê-la.
+   *
+   * **Não** confere recurso ligado. Retenção de dado pessoal é obrigação legal,
+   * não recurso opcional: um interruptor aqui seria um botão para deixar de
+   * cumprir a lei.
+   */
+  'lgpd.retencao': async (tarefa, contexto) => {
+    await contexto.varrerRetencao(tarefa.tenantId, contexto.relogio.agora());
+  },
+
   'agendamento.marcar_falta': async (tarefa, contexto) => {
     const appointmentId = String(tarefa.payload['appointmentId'] ?? '');
     if (!appointmentId) throw new Error('tarefa de falta sem agendamento');
@@ -274,6 +304,8 @@ export async function rodarWorker(
    * justamente o que `jobs` recusa desde o bloco 20.
    */
   let ultimaRegua: string | null = null;
+  /** O último dia em que este processo enfileirou a varredura de retenção. */
+  let ultimaRetencao: string | null = null;
 
   while (!parar()) {
     await soltarOrfas(15, contexto.relogio.agora());
@@ -292,6 +324,15 @@ export async function rodarWorker(
     if (pendente.dia !== ultimaApuracao) {
       ultimaApuracao = pendente.dia;
       await agendarApuracaoDeTodas(pendente);
+    }
+
+    // A retenção mora ao lado da apuração pelo mesmo motivo: alguém precisa
+    // enfileirar a primeira, e uma barbearia criada hoje não está em nenhuma
+    // corrente iniciada ontem.
+    const retencao = retencaoPendente(contexto.relogio.agora());
+    if (retencao.dia !== ultimaRetencao) {
+      ultimaRetencao = retencao.dia;
+      await agendarRetencaoDeTodas(retencao);
     }
 
     const resultado = await rodada(contexto);

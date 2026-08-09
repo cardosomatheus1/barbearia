@@ -187,6 +187,12 @@ bloqueada e ninguém soube. É o mesmo precedente de `finance → identity`, e a
 seta não volta: `jobs` continua sem saber que existe plataforma, e recebe o que
 precisa da camada de cima por injeção no `Contexto` do worker.
 
+`jobs` **não** depende de `crm`, e a varredura de retenção mora lá. O handler
+recebe `varrerRetencao` injetada no `Contexto`, como o `provider` de mensagem e
+a régua de cobrança: quem monta o processo (`apps/worker`) liga as duas pontas.
+Obrigatória e não opcional no tipo — opcional, ela seria esquecida no primeiro
+worker novo e a lei deixaria de ser cumprida sem nada ficar vermelho.
+
 `crm` depende de `identity` pelo mesmo motivo de `finance`: `audit()`. A trilha
 do consentimento registrado pelo balcão e a do pedido de titular encerrado
 precisam ser gravadas **dentro** da transação que muda o estado — a exportação
@@ -471,6 +477,9 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Permissão de rota que agrega | declara **todas** as permissões do que ela devolve, e não a mais próxima do nome. A exportação do titular exige `customers.export` + `finance.view` + `customers.view_notes`, porque o arquivo contém o razão do fiado e a anotação privada — com uma só, ela virava o caminho mais curto para as outras duas, e o segundo fator derivado deixava de ser cobrado. Achado da `/security-review` do bloco 31 |
 | Exportação de dado pessoal | lista de consultas **escrita**, nunca varredura de catálogo — e há teste que reprova quando uma tabela nova com `customer_id` fica de fora. Sessão e trilha não entram: a primeira é credencial viva, a segunda traz o nome de terceiros |
 | Encarregado de dados | por barbearia (`tenants.dpo_name/dpo_email`) e **público** — LGPD art. 41 §1 manda divulgar identidade e contato. A barbearia é controladora; a plataforma é operadora e não responde por dado que não é dela |
+| Anonimização | **anonimizar, não apagar**: o direito à exclusão e a obrigação fiscal de guarda são as duas verdadeiras ao mesmo tempo, e um `DELETE` levaria a venda junto. A pessoa sai de dentro do cadastro; a linha e os centavos ficam. Único caminho: a função `anonimizar_cliente` — `SECURITY DEFINER`, porque metade do dado mora em tabela append-only, e com filtro de tenant **escrito dentro dela**, porque `SECURITY DEFINER` roda como dono e a RLS pode não valer |
+| Permissão de destruir | `customers.anonymize`, própria e só do dono por padrão. É a única operação irreversível do produto, e não acompanha `settings.manage`: responder pedido de LGPD e apagar a base são tarefas diferentes |
+| Retenção | cinco anos sem **interação** — atendimento, comanda, fiado, fila —, nunca `updated_at`, que a importação de base mexe em mil e duzentos cadastros de uma vez. Aviso prévio de trinta dias, e uma visita nova cancela a saída: a pergunta "já voltou?" vem **antes** de "o prazo venceu?" |
 | Pedido do titular | prazo gravado na criação, nunca calculado na leitura; um aberto por pessoa e por tipo (índice único parcial), então pedir de novo devolve o mesmo pedido em vez de reiniciar a contagem; recusa exige motivo escrito, no domínio e por `CHECK` |
 
 ---

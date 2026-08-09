@@ -1,4 +1,5 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
+import { varrerRetencao } from '@barbearia/crm';
 import {
   ConsoleNotificationProvider,
   RELOGIO_REAL,
@@ -107,6 +108,24 @@ async function main(): Promise<void> {
           provider: new ConsoleGestorProvider(),
           agora: aviso.agora,
         }),
+      /**
+       * A retenção de dado pessoal (bloco 32), ligada aqui pelo mesmo motivo
+       * da cobrança: ela mora em `packages/crm`, e `jobs` não conhece a camada
+       * de cima.
+       */
+      varrerRetencao: async (tenantId, agora) => {
+        const resultado = await varrerRetencao({ tenantId, agora });
+        if (resultado.avisados.length > 0 || resultado.anonimizados > 0) {
+          console.log('[lgpd] retenção', {
+            tenantId,
+            // Só a contagem: nome de cliente prestes a ser anonimizado no log
+            // seria dado pessoal sobrevivendo à própria anonimização.
+            avisados: resultado.avisados.length,
+            anonimizados: resultado.anonimizados,
+          });
+        }
+        return { avisados: resultado.avisados.length, anonimizados: resultado.anonimizados };
+      },
       rodarRegua: async (agora) => {
         /**
          * A conciliação vem **antes** da régua, e a ordem é decisão.

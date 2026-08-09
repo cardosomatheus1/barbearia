@@ -5,6 +5,9 @@ import {
   apuracaoPendente,
   apurarDiaDaBarbearia,
 } from './metricas.js';
+// A retenção mora em arquivo próprio e é medida aqui porque a armadilha é a
+// mesma: o índice de idempotência de `jobs` é global.
+import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
 
 /**
  * A apuração diária contra Postgres real.
@@ -242,6 +245,39 @@ describeIfDb('apuração diária da barbearia', () => {
     expect(Number(linhas[0]?.n)).toBe(2);
   });
 
+  it('a retenção também sai uma por barbearia, com a chave carregando o tenant', async () => {
+    /**
+     * Mesmo índice global de idempotência, mesma armadilha: uma chave só com o
+     * dia deixaria uma barbearia ser varrida e as outras seriam engolidas pelo
+     * `ON CONFLICT` sem erro nenhum — e ninguém notaria, porque o resultado
+     * esperado da varredura é "nada a fazer" na maioria dos dias.
+     */
+    await agendarRetencaoDeTodas({ dia: DIA });
+    await agendarRetencaoDeTodas({ dia: DIA });
+
+    const linhas = await admin.$queryRawUnsafe<{ tenant_id: string; idempotency_key: string }[]>(
+      `SELECT tenant_id, idempotency_key FROM jobs WHERE kind = 'lgpd.retencao' ORDER BY tenant_id`,
+    );
+    expect(linhas).toHaveLength(2);
+    expect(new Set(linhas.map((l) => l.idempotency_key)).size).toBe(2);
+  });
+
+  it('barbearia bloqueada não varre retenção — ela não pode nem ler o aviso', async () => {
+    // Anonimizar cadastro de quem está fora do ar seria apagar dado pelas
+    // costas de alguém sem chance de reagir ao aviso prévio.
+    await exec(`
+      UPDATE tenant_platform SET blocked_at = now(), blocked_reason = 'inadimplente'
+       WHERE tenant_id = '${RIVAL}'
+    `);
+
+    await agendarRetencaoDeTodas({ dia: DIA });
+
+    const linhas = await admin.$queryRawUnsafe<{ tenant_id: string }[]>(
+      `SELECT tenant_id FROM jobs WHERE kind = 'lgpd.retencao'`,
+    );
+    expect(linhas.map((l) => l.tenant_id)).toEqual([DOMARI]);
+  });
+
   it('barbearia bloqueada não é apurada', async () => {
     await exec(`
       UPDATE tenant_platform SET blocked_at = now(), blocked_reason = 'inadimplente'
@@ -254,6 +290,24 @@ describeIfDb('apuração diária da barbearia', () => {
       `SELECT tenant_id FROM jobs WHERE kind = 'metricas.dia'`,
     );
     expect(linhas.map((l) => l.tenant_id)).toEqual([DOMARI]);
+  });
+});
+
+describe('quando varrer a retenção', () => {
+  it('roda de madrugada, com o Brasil inteiro fechado', () => {
+    // A varredura **escreve**, e escrever no meio do expediente disputa conexão
+    // com o balcão. 5h UTC são 2h em Salvador e meia-noite em Rio Branco.
+    const { dia, quando } = retencaoPendente(new Date('2026-09-13T14:00:00Z'));
+    expect(dia).toBe('2026-09-13');
+    expect(quando.toISOString()).toBe('2026-09-13T05:00:00.000Z');
+  });
+
+  it('o dia é o mesmo durante as vinte e quatro horas', () => {
+    // A variável do worker compara o dia para não reenfileirar a cada volta do
+    // laço. Um dia que mudasse no meio da tarde faria a varredura sair duas
+    // vezes — inofensivo pelo índice, e ruidoso à toa.
+    expect(retencaoPendente(new Date('2026-09-13T00:01:00Z')).dia).toBe('2026-09-13');
+    expect(retencaoPendente(new Date('2026-09-13T23:59:00Z')).dia).toBe('2026-09-13');
   });
 });
 

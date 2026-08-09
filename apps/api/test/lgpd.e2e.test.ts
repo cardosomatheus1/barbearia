@@ -142,6 +142,30 @@ describeIfDb('direitos do titular pela HTTP', () => {
     return entrou.body.token as string;
   }
 
+  /** Uma conta de papel qualquer, com a senha de primeiro acesso já trocada. */
+  async function conta(dono: string, email: string, papel: string): Promise<string> {
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({ name: 'Bruno Gerente', email, role: papel }),
+    ).expect(201);
+
+    const senhaInicial: string = criada.body.senhaInicial;
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http()
+        .put('/v1/admin/me/password')
+        .send({ currentPassword: senhaInicial, newPassword: 'a-senha-dele-agora' }),
+    ).expect(200);
+
+    const entrou = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: 'a-senha-dele-agora' })
+      .expect(201);
+    return entrou.body.token as string;
+  }
+
   /** Liga o segundo fator e o prova para esta sessão. */
   async function comSegundoFator(token: string): Promise<void> {
     const inicio = await com(token)(http().post('/v1/admin/mfa/setup')).expect(201);
@@ -437,6 +461,112 @@ describeIfDb('direitos do titular pela HTTP', () => {
     const fila = await com(dono)(http().get('/v1/admin/customers/lgpd/pedidos')).expect(200);
     expect(fila.body.pedidos[0].estado).toBe('refused');
     expect(fila.body.pedidos[0].nota).toMatch(/guarda fiscal/i);
+  });
+
+  // -- exclusão (bloco 32) ---------------------------------------------------
+
+  it('apagar o cadastro é permissão própria — não acompanha settings.manage', async () => {
+    /**
+     * `customers.anonymize` é a única permissão do produto que autoriza uma
+     * operação sem volta. Ela não vai junto de `settings.manage` porque
+     * responder pedido de LGPD e destruir a base são tarefas diferentes: o
+     * gerente que responde e-mail não deveria poder apagar cliente.
+     */
+    const dono = await entrar(DONO);
+    const carlos = await cliente(dono);
+
+    await com(dono)(
+      http()
+        .put('/v1/admin/team/permissoes/manager')
+        .send({ permissoes: ['settings.manage', 'customers.view', 'customers.edit'] }),
+    ).expect(200);
+
+    const gerente = await conta(dono, 'bruno@domari.com.br', 'manager');
+
+    const negado = await com(gerente)(
+      http().post(`/v1/admin/customers/${carlos}/anonimizar`).send({ motivo: 'pedido' }),
+    ).expect(403);
+    expect(negado.body.error.code).toBe('forbidden');
+
+    // O cadastro continua inteiro.
+    const [linha] = await admin.$queryRawUnsafe<{ phone_e164: string | null }[]>(
+      `SELECT phone_e164 FROM customers WHERE id = '${carlos}'`,
+    );
+    expect(linha?.phone_e164).not.toBeNull();
+  });
+
+  it('apagar exige motivo escrito, e o motivo fica na trilha sem o nome', async () => {
+    const dono = await entrar(DONO);
+    const carlos = await cliente(dono);
+
+    await com(dono)(
+      http().post(`/v1/admin/customers/${carlos}/anonimizar`).send({ motivo: 'ok' }),
+    ).expect(400);
+
+    await com(dono)(
+      http()
+        .post(`/v1/admin/customers/${carlos}/anonimizar`)
+        .send({ motivo: 'Pedido de exclusão por WhatsApp' }),
+    ).expect(201);
+
+    const trilha = await admin.$queryRawUnsafe<{ after: unknown }[]>(
+      `SELECT after FROM audit_log WHERE action = 'customer.anonymized'`,
+    );
+    expect(trilha).toHaveLength(1);
+    expect(JSON.stringify(trilha[0]?.after)).not.toContain('Carlos');
+  });
+
+  it('atender exclusão fecha o pedido aberto, e o cliente da vizinha não é alcançado', async () => {
+    const dono = await entrar(DONO);
+    const rita = await entrar(VIZINHA);
+    const carlos = await cliente(dono);
+    const dela = await cliente(rita, 'Cliente da Vizinha');
+
+    await com(dono)(
+      http().post(`/v1/admin/customers/${carlos}/lgpd/pedidos`).send({ tipo: 'deletion' }),
+    ).expect(201);
+
+    const feito = await com(dono)(
+      http().post(`/v1/admin/customers/${carlos}/anonimizar`).send({ motivo: 'pedido do titular' }),
+    ).expect(201);
+    expect(feito.body.anonimizou).toBe(true);
+    expect(feito.body.pedidosFechados).toBe(1);
+
+    const fila = await com(dono)(http().get('/v1/admin/customers/lgpd/pedidos')).expect(200);
+    expect(fila.body.pedidos[0].estado).toBe('done');
+
+    // O cadastro da vizinha continua intacto: a função do banco filtra o tenant
+    // dentro dela, e não depende da RLS para isso.
+    const semEfeito = await com(dono)(
+      http().post(`/v1/admin/customers/${dela}/anonimizar`).send({ motivo: 'tentativa' }),
+    ).expect(201);
+    expect(semEfeito.body.anonimizou).toBe(false);
+
+    const [linha] = await admin.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM customers WHERE id = '${dela}'`,
+    );
+    expect(linha?.name).toBe('Cliente da Vizinha');
+  });
+
+  it('marcar um pedido de exclusão como atendido pela rota de encerrar é recusado', async () => {
+    // Silenciar seria o pior resultado: o registro dizendo que a obrigação foi
+    // cumprida enquanto o cadastro continua inteiro.
+    const dono = await entrar(DONO);
+    const carlos = await cliente(dono);
+
+    const aberto = await com(dono)(
+      http().post(`/v1/admin/customers/${carlos}/lgpd/pedidos`).send({ tipo: 'deletion' }),
+    ).expect(201);
+
+    const recusa = await com(dono)(
+      http().put(`/v1/admin/customers/lgpd/pedidos/${aberto.body.id}`).send({ atendido: true }),
+    ).expect(409);
+    expect(recusa.body.error.code).toBe('exclusao_tem_caminho_proprio');
+
+    const [linha] = await admin.$queryRawUnsafe<{ phone_e164: string | null }[]>(
+      `SELECT phone_e164 FROM customers WHERE id = '${carlos}'`,
+    );
+    expect(linha?.phone_e164).not.toBeNull();
   });
 
   it('a fila de pedidos é de quem responde pela empresa, não do balcão', async () => {

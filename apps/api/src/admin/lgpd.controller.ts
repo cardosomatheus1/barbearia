@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs
 import type { Request } from 'express';
 import {
   abrirPedidoDoTitular,
+  atenderExclusao,
+  aVencerPorRetencao,
   consentimentosDoCliente,
   encerrarPedidoDoTitular,
   exportarDadosDoTitular,
@@ -10,13 +12,19 @@ import {
   registrarConsentimento,
 } from '@barbearia/crm';
 import { audit, type AuthenticatedStaff } from '@barbearia/identity';
+import { AVISO_DE_RETENCAO_DIAS } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
-import { consentimentoSchema, encerramentoSchema, pedidoSchema } from './lgpd.schemas.js';
+import {
+  anonimizacaoSchema,
+  consentimentoSchema,
+  encerramentoSchema,
+  pedidoSchema,
+} from './lgpd.schemas.js';
 
 /**
  * Os direitos do titular, do lado de quem responde por eles (bloco 31).
@@ -41,6 +49,9 @@ const STATUS: Record<string, number> = {
   customer_not_found: 404,
   invalid_purpose: 400,
   version_required: 400,
+  // 409 e não 400: o pedido é válido, o caminho é que é outro. A tela precisa
+  // distinguir "você errou o corpo" de "isto se faz na outra porta".
+  exclusao_tem_caminho_proprio: 409,
 };
 
 function toHttp(erro: unknown): never {
@@ -183,6 +194,34 @@ export class LgpdController {
     }
   }
 
+  /**
+   * Quem sai por retenção, e quando (bloco 32).
+   *
+   * É o **aviso prévio ao tenant** que a SPEC §1.8 regra 6 exige. A tela é o
+   * canal: uma mensagem que ninguém lê cumpriria a letra e não a intenção, e a
+   * lista aberta aqui é onde o dono decide se corre atrás de alguém.
+   *
+   * `settings.manage` e não `customers.view`: é informação sobre a base
+   * encolhendo, e a decisão que ela pede — trazer o cliente de volta ou deixar
+   * sair — é de quem responde pela empresa.
+   */
+  @Exige('settings.manage')
+  @Get('lgpd/retencao')
+  async retencao(@Staff() staff: AuthenticatedStaff) {
+    const lista = await aVencerPorRetencao(staff.tenantId);
+    return {
+      prazoDeAvisoDias: AVISO_DE_RETENCAO_DIAS,
+      cadastros: lista.map((c) => ({
+        customerId: c.customerId,
+        nome: c.nome,
+        ultimaInteracao: c.ultimaInteracao.toISOString(),
+        saiEm: new Date(
+          (c.avisadoEm ?? c.ultimaInteracao).getTime() + AVISO_DE_RETENCAO_DIAS * 86_400_000,
+        ).toISOString(),
+      })),
+    };
+  }
+
   @Exige('settings.manage')
   @Get('lgpd/pedidos')
   async pedidos(@Staff() staff: AuthenticatedStaff) {
@@ -237,6 +276,53 @@ export class LgpdController {
         ator: { id: staff.staffUserId, name: staff.name },
       });
       return { ok: true };
+    } catch (erro) {
+      return toHttp(erro);
+    }
+  }
+
+  /**
+   * A exclusão de verdade (bloco 32).
+   *
+   * ## Rota própria, e permissão própria
+   *
+   * Ela não fica em `PUT lgpd/pedidos/:id` porque não é a mesma coisa: encerrar
+   * um pedido é marcar uma linha e é `settings.manage`; **apagar a pessoa** é a
+   * única operação irreversível do produto. Amarrar as duas na mesma permissão
+   * faria quem responde e-mail de cliente poder destruir a base.
+   *
+   * `customers.anonymize` nasce só para o dono — como `customers.export`, e
+   * pelo motivo espelhado: uma é o vetor de roubo da base, a outra é o de
+   * destruição dela. O dono delega pela tela de permissões se quiser.
+   *
+   * ## Funciona sem pedido aberto, de propósito
+   *
+   * Quem pede exclusão na frente do barbeiro não deveria precisar que alguém
+   * abra um chamado primeiro. Havendo pedido aberto, ele é encerrado na mesma
+   * transação; não havendo, a trilha da anonimização é o registro.
+   */
+  @Exige('customers.anonymize')
+  @Post(':id/anonimizar')
+  async anonimizar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(anonimizacaoSchema)) corpo: { motivo: string },
+  ) {
+    try {
+      const resultado = await atenderExclusao({
+        tenantId: staff.tenantId,
+        customerId: id,
+        motivo: corpo.motivo,
+        ator: { id: staff.staffUserId, name: staff.name },
+      });
+
+      // `anonimizou: false` é o cadastro que já estava anonimizado — não é erro,
+      // e devolver 404 faria a tela dizer "não existe" sobre uma linha que está
+      // ali, no estado certo.
+      if (!resultado.anonimizou) {
+        return { anonimizou: false, pedidosFechados: 0 };
+      }
+      return resultado;
     } catch (erro) {
       return toHttp(erro);
     }

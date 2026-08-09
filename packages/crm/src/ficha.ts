@@ -41,7 +41,10 @@ export interface Ficha {
   readonly customerId: string;
   readonly nome: string;
   /** Só os quatro últimos dígitos: a tela fica virada para o salão. */
-  readonly telefoneFinal: string;
+  /** Nulo depois da anonimização (bloco 32): não há mais telefone para mostrar. */
+  readonly telefoneFinal: string | null;
+  /** O cadastro deixou de identificar uma pessoa. A tela precisa dizer isso. */
+  readonly anonimizado: boolean;
   readonly preferencias: Preferencias;
   readonly anotadoEm: string | null;
   readonly anotadoPor: string | null;
@@ -53,7 +56,8 @@ export interface Ficha {
 
 interface LinhaDaFicha {
   name: string;
-  phone_e164: string;
+  phone_e164: string | null;
+  anonymized_at: Date | null;
   maquina_laterais: string | null;
   tipo_degrade: string | null;
   topo: string | null;
@@ -81,7 +85,7 @@ export async function lerFicha(tenantId: string, customerId: string): Promise<Fi
     // Uma consulta para a ficha e uma para a linha do tempo. Duas, não uma por
     // visita: a tela abre com o cliente sentado na cadeira.
     const linhas = await tx.$queryRaw<LinhaDaFicha[]>`
-      SELECT c.name, c.phone_e164,
+      SELECT c.name, c.phone_e164, c.anonymized_at,
              p.maquina_laterais, p.tipo_degrade, p.topo, p.barba_estilo,
              p.produtos_evitar, p.conversa, p.observacoes,
              p.updated_at AS anotado_em, s.name AS anotado_por,
@@ -129,7 +133,16 @@ export async function lerFicha(tenantId: string, customerId: string): Promise<Fi
     return {
       customerId,
       nome: linha.name,
-      telefoneFinal: linha.phone_e164.slice(-4),
+      /**
+       * Nulo depois da anonimização (bloco 32).
+       *
+       * A coluna passou a aceitar nulo, e este `.slice(-4)` quebrava a ficha
+       * inteira de um cadastro apagado. O tipo do banco não avisa o TypeScript:
+       * quem escreve a interface da linha é quem escreve a consulta, e ela
+       * dizia `string`.
+       */
+      telefoneFinal: linha.phone_e164?.slice(-4) ?? null,
+      anonimizado: linha.anonymized_at !== null,
       preferencias: dasColunas(linha),
       anotadoEm: linha.anotado_em?.toISOString() ?? null,
       anotadoPor: linha.anotado_por,

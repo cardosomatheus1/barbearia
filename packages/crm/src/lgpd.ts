@@ -1,5 +1,6 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
+import { anonimizarCliente } from './anonimizacao.js';
 
 /**
  * Os direitos do titular (bloco 31, SPEC Parte 1 §1.8).
@@ -24,7 +25,11 @@ export type Finalidade = (typeof FINALIDADES)[number];
 
 export class LgpdError extends Error {
   constructor(
-    readonly code: 'customer_not_found' | 'invalid_purpose' | 'version_required',
+    readonly code:
+      | 'customer_not_found'
+      | 'invalid_purpose'
+      | 'version_required'
+      | 'exclusao_tem_caminho_proprio',
     message: string,
   ) {
     super(message);
@@ -454,6 +459,17 @@ export async function pedidosDoTitular(
  * Recusar exige motivo escrito, no banco e aqui. A LGPD admite recusa — pedido
  * de exclusão que conflita com obrigação legal de guarda, por exemplo —, mas
  * recusa sem motivo registrado é a que não se defende depois.
+ *
+ * ## Pedido de exclusão não é atendido por aqui (bloco 32)
+ *
+ * Marcar "atendido" num pedido de exclusão sem apagar nada seria a prova por
+ * escrito de um descumprimento — e apagar aqui dentro faria a rota de encerrar
+ * pedidos, que é `settings.manage`, destruir cadastro. São duas coisas
+ * diferentes com permissões diferentes, então são duas funções:
+ * `atenderExclusao` faz a exclusão e fecha o pedido junto.
+ *
+ * **Recusar** um pedido de exclusão continua aqui, e está certo: recusar não
+ * destrói nada, e é a resposta legítima quando a guarda fiscal obriga.
  */
 export async function encerrarPedidoDoTitular(entrada: {
   readonly tenantId: string;
@@ -468,16 +484,37 @@ export async function encerrarPedidoDoTitular(entrada: {
   }
 
   await withTenant(entrada.tenantId, async (tx) => {
-    const alteradas = await tx.$executeRaw`
+    const abertos = await tx.$queryRaw<{ kind: string }[]>`
+      SELECT kind FROM data_requests
+       WHERE id = ${entrada.pedidoId}::uuid AND status = 'open'
+       FOR UPDATE
+    `;
+    const pedido = abertos[0];
+    if (!pedido) {
+      throw new LgpdError('customer_not_found', 'Pedido inexistente ou já encerrado');
+    }
+
+    /**
+     * A recusa de encerrar exclusão por aqui, e o porquê de ela ser explícita.
+     *
+     * Silenciar — marcar atendido e não apagar — é o pior resultado: a
+     * barbearia acredita ter cumprido, e o registro diz que cumpriu. O erro
+     * aponta para o caminho certo, que exige a permissão de destruir.
+     */
+    if (pedido.kind === 'deletion' && entrada.atendido) {
+      throw new LgpdError(
+        'exclusao_tem_caminho_proprio',
+        'Pedido de exclusão é atendido apagando o cadastro, não marcando a linha',
+      );
+    }
+
+    await tx.$executeRaw`
       UPDATE data_requests
          SET status = ${entrada.atendido ? 'done' : 'refused'}::data_request_status,
              settled_at = now(),
              note = ${nota.length > 0 ? nota : null}
        WHERE id = ${entrada.pedidoId}::uuid AND status = 'open'
     `;
-    if (alteradas === 0) {
-      throw new LgpdError('customer_not_found', 'Pedido inexistente ou já encerrado');
-    }
 
     await audit(tx, {
       actorId: entrada.ator.id,
@@ -487,6 +524,62 @@ export async function encerrarPedidoDoTitular(entrada: {
       entityId: entrada.pedidoId,
       after: { nota: nota.length > 0 ? nota : null },
     });
+  });
+}
+
+/**
+ * Atende um pedido de exclusão: apaga a pessoa e fecha o pedido, junto.
+ *
+ * As duas coisas na **mesma transação**, porque separá-las cria os dois estados
+ * ruins e nenhum é detectável depois: o pedido fechado sobre um cadastro
+ * intacto (a barbearia acredita ter cumprido) e o cadastro apagado com o pedido
+ * ainda na fila (alguém apaga de novo, e o prazo continua correndo sobre uma
+ * obrigação já cumprida).
+ *
+ * Funciona **sem** pedido aberto, de propósito: a pessoa que pede exclusão no
+ * balcão, na frente do barbeiro, não deveria precisar que alguém abra um
+ * chamado antes. Quando existe pedido aberto, ele é fechado; quando não existe,
+ * a trilha da anonimização é o registro.
+ */
+export async function atenderExclusao(entrada: {
+  readonly tenantId: string;
+  readonly customerId: string;
+  readonly motivo: string;
+  readonly ator: { readonly id: string; readonly name: string };
+}): Promise<{ readonly anonimizou: boolean; readonly pedidosFechados: number }> {
+  return withTenant(entrada.tenantId, async (tx) => {
+    const resultado = await anonimizarCliente({
+      tenantId: entrada.tenantId,
+      customerId: entrada.customerId,
+      motivo: entrada.motivo,
+      ator: entrada.ator,
+      tx,
+    });
+
+    if (!resultado.anonimizado) {
+      return { anonimizou: false, pedidosFechados: 0 };
+    }
+
+    const fechados = await tx.$executeRaw`
+      UPDATE data_requests
+         SET status = 'done', settled_at = now(),
+             note = COALESCE(note, 'Cadastro anonimizado')
+       WHERE customer_id = ${entrada.customerId}::uuid
+         AND kind = 'deletion' AND status = 'open'
+    `;
+
+    if (fechados > 0) {
+      await audit(tx, {
+        actorId: entrada.ator.id,
+        actorName: entrada.ator.name,
+        action: 'lgpd.request_fulfilled',
+        entity: 'customers',
+        entityId: entrada.customerId,
+        after: { apelido: resultado.apelido },
+      });
+    }
+
+    return { anonimizou: true, pedidosFechados: fechados };
   });
 }
 

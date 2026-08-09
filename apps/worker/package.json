@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@barbearia/core": "workspace:*",
+    "@barbearia/crm": "workspace:*",
     "@barbearia/db": "workspace:*",
     "@barbearia/jobs": "workspace:*",
     "@barbearia/platform": "workspace:*"

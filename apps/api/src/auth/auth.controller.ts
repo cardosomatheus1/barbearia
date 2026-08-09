@@ -13,7 +13,12 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { slugSchema } from '../booking/booking.schemas.js';
 import { Customer, CustomerGuard, TenantId } from './customer.guard.js';
-import { consentimentoDoTitularSchema, requestOtpSchema, verifyOtpSchema } from './auth.schemas.js';
+import {
+  consentimentoDoTitularSchema,
+  pedidoDoTitularSchema,
+  requestOtpSchema,
+  verifyOtpSchema,
+} from './auth.schemas.js';
 import {
   abrirPedidoDoTitular,
   consentimentosDoCliente,
@@ -185,22 +190,28 @@ export class SessionController {
    * qual canal aquela pessoa quer receber. Entregar o arquivo aqui também
    * mandaria dado pessoal por uma rota que só prova posse de um celular.
    *
-   * `deletion` não entra: o pipeline de exclusão é do bloco 32, e aceitar o
-   * pedido antes de existir como atendê-lo seria abrir fila que ninguém
-   * consegue esvaziar dentro do prazo.
+   * ## O tipo vem do corpo, e o pedido de exclusão **não** apaga nada aqui
+   *
+   * Desde o bloco 32 o titular também pede a exclusão por esta rota — era a
+   * lacuna declarada. O que ela faz continua sendo registrar: quem apaga é a
+   * barbearia, com `customers.anonymize`, depois de conferir se alguma
+   * obrigação legal de guarda impede. Apagar direto no clique tiraria dela a
+   * decisão que a lei lhe dá — e daria a qualquer pessoa com o celular do
+   * titular na mão o poder de destruir o cadastro.
    */
   @Post('pedido-de-dados')
   async pedirDados(
     @TenantId() tenantId: string,
     @Customer() customer: AuthenticatedCustomer,
+    @Body(new ZodValidationPipe(pedidoDoTitularSchema)) corpo: { tipo: 'export' | 'deletion' },
   ) {
     const pedido = await abrirPedidoDoTitular({
       tenantId,
       customerId: customer.customerId,
-      tipo: 'export',
+      tipo: corpo.tipo,
     });
     // Reenviar devolve o mesmo pedido, com o mesmo vencimento: o segundo toque
     // do botão não pode reiniciar a contagem do prazo.
-    return { id: pedido.id, venceEm: pedido.venceEm.toISOString() };
+    return { id: pedido.id, tipo: pedido.tipo, venceEm: pedido.venceEm.toISOString() };
   }
 }

@@ -294,7 +294,7 @@ export async function getQueue(params: {
         status: QueueStatus;
         customer_id: string;
         customer_name: string;
-        customer_phone: string;
+        customer_phone: string | null;
         professional_id: string | null;
         joined_at: Date;
         finished_at: Date | null;
@@ -342,7 +342,9 @@ export async function getQueue(params: {
         posicao: indice + 1,
         customerId: linha.customer_id,
         customerName: linha.customer_name,
-        customerPhoneTail: linha.customer_phone.slice(-4),
+        // Nulo depois da anonimização (bloco 32): a coluna aceita nulo desde a
+        // migração 0034, e o `.slice` quebrava a fila inteira.
+        customerPhoneTail: linha.customer_phone?.slice(-4) ?? null,
         status: linha.status,
         services: linha.service_names ?? [],
         duracaoMinutos: duracaoDe(linha.service_ids ?? []),

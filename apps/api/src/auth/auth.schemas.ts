@@ -47,3 +47,15 @@ export const consentimentoDoTitularSchema = z.object({
   marketing: z.boolean(),
   versaoDoTexto: z.string().trim().min(1).max(80),
 });
+
+/**
+ * O pedido do titular, do lado dele (bloco 32).
+ *
+ * Os dois tipos são aceitos. `deletion` **registra** o pedido; quem apaga é a
+ * barbearia, com permissão própria, depois de conferir a guarda legal. Aceitar
+ * o registro e recusar a execução aqui é o desenho: o direito é do titular, a
+ * responsabilidade pelo que a lei manda guardar é de quem controla o dado.
+ */
+export const pedidoDoTitularSchema = z.object({
+  tipo: z.enum(['export', 'deletion']),
+});

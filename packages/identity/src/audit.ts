@@ -54,6 +54,15 @@ export type AuditAction =
   | 'customer.data_exported'
   | 'lgpd.request_fulfilled'
   | 'lgpd.request_refused'
+  /**
+   * A anonimização (bloco 32).
+   *
+   * É a única ação do produto que destrói dado sem volta, e por isso a trilha
+   * dela guarda o **apelido** e o motivo — nunca o nome que saiu. Registrar
+   * "anonimizou Carlos Souza" gravaria o nome numa tabela append-only: a
+   * operação apagaria o dado de um lugar e o eternizaria noutro.
+   */
+  | 'customer.anonymized'
   // Endereço público novo apontando para a barbearia. Quem adiciona um slug
   // muda por onde o cliente chega — e é a única ação deste produto que altera
   // algo visível fora dele.
@@ -131,6 +140,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'customer.data_exported',
   'lgpd.request_fulfilled',
   'lgpd.request_refused',
+  'customer.anonymized',
 ];
 
 export interface AuditEntry {

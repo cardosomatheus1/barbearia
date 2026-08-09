@@ -29,3 +29,14 @@ export const encerramentoSchema = z.object({
   atendido: z.boolean(),
   nota: z.string().trim().max(500).optional(),
 });
+
+/**
+ * O motivo da anonimização (bloco 32).
+ *
+ * Obrigatório na borda, no domínio e por `RAISE` dentro da função do banco. Três
+ * vezes porque é a única operação sem volta do produto: seis meses depois, "por
+ * que este cadastro sumiu?" só tem resposta se alguém tiver escrito.
+ */
+export const anonimizacaoSchema = z.object({
+  motivo: z.string().trim().min(3).max(300),
+});

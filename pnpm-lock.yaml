@@ -133,6 +133,9 @@ importers:
       '@barbearia/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@barbearia/crm':
+        specifier: workspace:*
+        version: link:../../packages/crm
       '@barbearia/db':
         specifier: workspace:*
         version: link:../../packages/db
