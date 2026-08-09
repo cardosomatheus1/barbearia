@@ -31,7 +31,7 @@ import type { PrismaClient } from '@prisma/client';
  *
  * O que **não** seria certo é aumentar o tempo de espera e torcer. Por isso:
  *
- * - `lock_timeout` curto, para falhar rápido em vez de pendurar o portão;
+ * - `lock_timeout` curto, para esperar o suficiente sem pendurar o portão;
  * - número de tentativas fechado, para um banco genuinamente travado reprovar
  *   em vez de girar para sempre;
  * - só `40P01` (deadlock) e `55P03` (lock não disponível) são retentados.
@@ -40,7 +40,8 @@ import type { PrismaClient } from '@prisma/client';
  *
  * Os dois mecanismos cobrem casos diferentes, e vale saber qual faz o quê:
  * o `lock_timeout` **espera** a consulta em voo terminar, e é ele que resolve a
- * contenção comum; a retentativa cobre o deadlock de verdade, que o Postgres
+ * contenção comum — por isso ele é curto: o que ele gasta sai do orçamento do
+ * teste seguinte; a retentativa cobre o deadlock de verdade, que o Postgres
  * aborta na hora e que esperar não resolve.
  *
  * Reproduzido contra banco real, com uma segunda conexão segurando a tabela por
@@ -68,9 +69,11 @@ export async function limparBanco(
 ): Promise<void> {
   for (let tentativa = 1; ; tentativa++) {
     try {
-      // Dois segundos: mais que o suficiente para uma consulta em voo terminar,
-      // e pouco o bastante para cinco tentativas não somarem um minuto.
-      await admin.$executeRawUnsafe(`SET lock_timeout = '2s'`);
+      // Um segundo: mais que suficiente para uma consulta em voo terminar, e
+      // curto o bastante para as cinco tentativas somarem menos de seis — bem
+      // dentro do teto do `beforeEach`. Dois segundos foi a primeira escolha e
+      // era gordura: na esteira ela ia direto para o orçamento do teste.
+      await admin.$executeRawUnsafe(`SET lock_timeout = '1s'`);
       for (const tabela of tabelas) {
         await admin.$executeRawUnsafe(`TRUNCATE ${tabela} CASCADE`);
       }
