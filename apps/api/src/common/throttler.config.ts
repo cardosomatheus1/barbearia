@@ -20,7 +20,28 @@ function envInt(name: string, fallback: number): number {
  */
 export function throttlerConfig(): ThrottlerModuleOptions {
   return [
-    { name: 'short', ttl: envInt('RATE_LIMIT_SHORT_TTL_MS', 10_000), limit: envInt('RATE_LIMIT_SHORT', 20) },
-    { name: 'long', ttl: envInt('RATE_LIMIT_LONG_TTL_MS', 60_000), limit: envInt('RATE_LIMIT_LONG', 120) },
+    { name: NOMES_DOS_LIMITES[0], ttl: envInt('RATE_LIMIT_SHORT_TTL_MS', 10_000), limit: envInt('RATE_LIMIT_SHORT', 20) },
+    { name: NOMES_DOS_LIMITES[1], ttl: envInt('RATE_LIMIT_LONG_TTL_MS', 60_000), limit: envInt('RATE_LIMIT_LONG', 120) },
   ];
 }
+
+/** Os limitadores configurados, na ordem em que o módulo os registra. */
+export const NOMES_DOS_LIMITES = ['short', 'long'] as const;
+
+/**
+ * O mapa que `@SkipThrottle` precisa receber para isentar uma rota de verdade.
+ *
+ * `@SkipThrottle()` sem argumento significa `{ default: true }` — e isenta
+ * **só** o limitador chamado `default`. Como os nossos se chamam `short` e
+ * `long`, o decorador nu não isentava nada, e a sonda de saúde ficava sujeita
+ * ao teto como qualquer rota. O balanceador que consulta `/health` de segundo
+ * em segundo levaria 429 em vinte segundos, e o orquestrador mataria um
+ * processo saudável achando que ele caiu.
+ *
+ * Derivado da mesma lista que configura o módulo, e não copiado à mão: um
+ * limitador novo passa a ser isentado sozinho. Há teste que confere os dois
+ * lados.
+ */
+export const FORA_DO_LIMITE: Readonly<Record<string, boolean>> = Object.fromEntries(
+  NOMES_DOS_LIMITES.map((nome) => [nome, true]),
+);

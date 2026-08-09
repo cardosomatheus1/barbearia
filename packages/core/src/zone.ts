@@ -73,25 +73,93 @@ function formatter(timeZone: string): Intl.DateTimeFormat {
   return created;
 }
 
-/** Deslocamento do fuso, em minutos, no instante dado. Leste do meridiano é positivo. */
-export function offsetMinutesAt(timeZone: string, instant: Date): number {
+/** O cálculo exato, via Intl. É a fonte da verdade; o cache acima só o evita. */
+function offsetPeloIntl(timeZone: string, instant: Date): number {
   const parts = formatter(timeZone).formatToParts(instant);
-  const read = (type: Intl.DateTimeFormatPartTypes): number => {
-    const part = parts.find((candidate) => candidate.type === type);
-    if (!part) throw new Error(`Intl não devolveu "${type}" para ${timeZone}`);
-    return Number(part.value);
-  };
 
-  const asUtc = Date.UTC(
-    read('year'),
-    read('month') - 1,
-    read('day'),
-    read('hour'),
-    read('minute'),
-    read('second'),
-  );
+  // Uma passada só. `parts.find()` por campo eram seis varreduras e seis
+  // closures por chamada, e esta função é a mais quente do produto.
+  let year = 0;
+  let month = 0;
+  let day = 0;
+  let hour = 0;
+  let minute = 0;
+  let second = 0;
+  let lidos = 0;
+  for (const part of parts) {
+    switch (part.type) {
+      case 'year': year = Number(part.value); lidos++; break;
+      case 'month': month = Number(part.value); lidos++; break;
+      case 'day': day = Number(part.value); lidos++; break;
+      case 'hour': hour = Number(part.value); lidos++; break;
+      case 'minute': minute = Number(part.value); lidos++; break;
+      case 'second': second = Number(part.value); lidos++; break;
+      default: break;
+    }
+  }
+  if (lidos < 6) throw new Error(`Intl não devolveu a data completa para ${timeZone}`);
+
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
   // Arredonda ao minuto: alguns fusos históricos têm offset com segundos.
   return Math.round((asUtc - instant.getTime()) / 60_000);
+}
+
+const DIA_MS = 86_400_000;
+
+/**
+ * Offset por dia UTC — ou `null` quando o dia tem transição dentro dele.
+ *
+ * O `Intl.DateTimeFormat` já era reaproveitado; o **resultado** não era, e é
+ * ele que custa. Uma consulta de sete dias × cinco cadeiras chamava
+ * `formatToParts` cerca de vinte mil vezes, e o perfil de CPU mostrou esta
+ * função sozinha em 69% do tempo não-ocioso da API.
+ */
+const offsetPorDia = new Map<string, number | null>();
+
+/**
+ * Teto do cache.
+ *
+ * Uma entrada por fuso por dia consultado. Um processo de vida longa
+ * atravessando anos de agenda cresceria sem limite — pequeno, mas sem limite é
+ * vazamento. Ao estourar, esvazia inteiro: é cache, não estado.
+ */
+const TETO_DO_CACHE = 4096;
+
+/**
+ * Deslocamento do fuso, em minutos, no instante dado. Leste do meridiano é positivo.
+ *
+ * ## Por que dá para guardar por dia sem errar o horário de verão
+ *
+ * O offset de um fuso é constante entre transições, e transição acontece no
+ * máximo duas vezes por ano. Guardar "o offset deste dia" seria errado
+ * **exatamente** no dia da virada — então o dia não é aceito no cache sem
+ * antes provar que ele é uniforme: mede-se o primeiro e o último instante do
+ * dia UTC, e só se os dois derem igual o valor é reaproveitado. No dia da
+ * transição eles diferem, o dia é marcado como irregular e todo instante dele
+ * volta a passar pelo Intl.
+ *
+ * Continua sendo função pura do par (fuso, instante): mesma entrada, mesma
+ * saída, com ou sem cache. Há teste que percorre a virada de Nova York minuto
+ * a minuto comparando as duas.
+ */
+export function offsetMinutesAt(timeZone: string, instant: Date): number {
+  const t = instant.getTime();
+  const dia = Math.floor(t / DIA_MS);
+  const chave = `${timeZone}|${dia}`;
+
+  const guardado = offsetPorDia.get(chave);
+  if (guardado !== undefined) {
+    return guardado === null ? offsetPeloIntl(timeZone, instant) : guardado;
+  }
+
+  const inicio = offsetPeloIntl(timeZone, new Date(dia * DIA_MS));
+  const fim = offsetPeloIntl(timeZone, new Date(dia * DIA_MS + DIA_MS - 1));
+  const uniforme = inicio === fim ? inicio : null;
+
+  if (offsetPorDia.size >= TETO_DO_CACHE) offsetPorDia.clear();
+  offsetPorDia.set(chave, uniforme);
+
+  return uniforme === null ? offsetPeloIntl(timeZone, instant) : uniforme;
 }
 
 /**

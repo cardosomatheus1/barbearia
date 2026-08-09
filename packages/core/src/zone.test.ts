@@ -175,3 +175,69 @@ describe('a janela do dia na unidade', () => {
     expect(() => diaNaUnidade('10/03/2026', 'America/Bahia', new Date())).toThrow();
   });
 });
+
+describe('o cache de offset não muda a resposta', () => {
+  /**
+   * A otimização do bloco 23 guarda o offset por dia UTC quando o dia é
+   * uniforme. O risco inteiro dela mora num lugar só: o dia da virada.
+   *
+   * Este teste percorre a virada de Nova York **minuto a minuto** — as duas,
+   * a que adianta e a que atrasa — e compara o resultado com o cálculo direto
+   * do Intl. Se o cache pegar o offset de antes e servir depois, ele falha.
+   */
+  const direto = (timeZone: string, instant: Date): number => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(instant);
+    const ler = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+    const asUtc = Date.UTC(ler('year'), ler('month') - 1, ler('day'), ler('hour'), ler('minute'), ler('second'));
+    return Math.round((asUtc - instant.getTime()) / 60_000);
+  };
+
+  it.each([
+    ['início do horário de verão', Date.UTC(2026, 2, 8, 0, 0)],
+    ['fim do horário de verão', Date.UTC(2026, 10, 1, 0, 0)],
+  ])('Nova York, %s: cada minuto do dia bate com o Intl', (_nome, inicioDoDia) => {
+    const divergencias: string[] = [];
+
+    for (let m = 0; m < 24 * 60; m++) {
+      const instante = new Date(inicioDoDia + m * 60_000);
+      const comCache = offsetMinutesAt('America/New_York', instante);
+      const semCache = direto('America/New_York', instante);
+      if (comCache !== semCache) {
+        divergencias.push(`${instante.toISOString()}: cache ${comCache} ≠ Intl ${semCache}`);
+      }
+    }
+
+    expect(divergencias).toEqual([]);
+  });
+
+  it('o dia da virada de fato tem dois offsets — senão o teste acima não prova nada', () => {
+    // Sem esta linha, um dia sem transição passaria no teste anterior e daria
+    // a impressão de que o caso difícil foi coberto.
+    const dia = Date.UTC(2026, 2, 8, 0, 0);
+    const primeiro = offsetMinutesAt('America/New_York', new Date(dia));
+    const ultimo = offsetMinutesAt('America/New_York', new Date(dia + 86_399_000));
+
+    expect(primeiro).not.toBe(ultimo);
+  });
+
+  it('a segunda chamada devolve o mesmo que a primeira', () => {
+    // O caminho quente: dia uniforme, valor servido do cache.
+    const instante = new Date(Date.UTC(2026, 5, 15, 14, 30));
+    const primeira = offsetMinutesAt('America/Bahia', instante);
+    const segunda = offsetMinutesAt('America/Bahia', instante);
+    const outroMinuto = offsetMinutesAt('America/Bahia', new Date(Date.UTC(2026, 5, 15, 3, 7)));
+
+    expect(primeira).toBe(-180);
+    expect(segunda).toBe(-180);
+    expect(outroMinuto).toBe(-180);
+  });
+});

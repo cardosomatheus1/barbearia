@@ -29,11 +29,13 @@ import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
 import { ConsoleMessagingProvider } from '@barbearia/identity';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
+import { HealthController } from './common/health.controller.js';
 import { TenantService } from './tenant/tenant.service.js';
 
 @Module({
   imports: [ThrottlerModule.forRoot(throttlerConfig())],
   controllers: [
+    HealthController,
     BookingController,
     AuthController,
     SessionController,
