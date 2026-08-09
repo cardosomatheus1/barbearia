@@ -12,6 +12,20 @@ import type { CobrancaProvider, ResultadoDaCobranca } from './cobranca.js';
  * do produto é que **este tem duas direções**: nós pedimos a cobrança, e ele
  * responde depois, por webhook.
  *
+ * ## O provedor escolhido é a Stripe
+ *
+ * A implementação contra ela entra no bloco 34, junto com o cliente
+ * compartilhado que serve às duas pontas — a plataforma cobrando a barbearia
+ * (este arquivo) e a barbearia cobrando o cliente dela. A abstração continua
+ * valendo depois disso: ela é o que permite o `FakePspProvider` exercer a régua
+ * inteira em teste sem rede, e é o que torna o próximo provedor uma
+ * implementação em vez de uma reescrita.
+ *
+ * Duas coisas precisam ser conferidas **contra a documentação da Stripe** antes
+ * do bloco 35, e nenhuma delas está verificada aqui: se o Pix está disponível
+ * na conta brasileira e sob quais condições, e se o split que os blocos 49 e 50
+ * exigem cabe no Connect. As duas mudam o desenho daqueles blocos, não deste.
+ *
  * ## Por que a resposta imediata não é a verdade
  *
  * Cartão responde na hora; Pix e boleto não. Uma implementação que tratasse

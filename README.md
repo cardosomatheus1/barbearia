@@ -305,7 +305,7 @@ não cumpre isso.
 A sessão de suporte dura trinta minutos, exige o segundo fator provado, e é
 somente leitura — a lista do que ela alcança está em `PERMISSOES_DO_SUPORTE`
 (`packages/core`), e quem aplica é a mesma `PermissaoGuard` de toda rota do
-painel. Não há lista de rotas proibidas: a rota que alguém escrever no bloco 40
+painel. Não há lista de rotas proibidas: a rota que alguém escrever no bloco 44
 nasce coberta.
 
 ## Documentação
@@ -313,7 +313,7 @@ nasce coberta.
 | Documento | Conteúdo |
 |---|---|
 | [`SPEC.md`](SPEC.md) | Visão, evidências de campo, métricas |
-| [`ROADMAP.md`](ROADMAP.md) | Os 78 blocos de execução e o escopo recomendado |
+| [`ROADMAP.md`](ROADMAP.md) | Os 79 blocos de execução e o escopo recomendado |
 | [`docs/spec/`](docs/spec/) | Especificação detalhada em 5 partes |
 | [`docs/01-analise-salonsoft.md`](docs/01-analise-salonsoft.md) | Engenharia reversa do concorrente em produção |
 | [`docs/02-benchmark-apps-barbearia.md`](docs/02-benchmark-apps-barbearia.md) | Matriz competitiva e preços de mercado |
@@ -1027,7 +1027,9 @@ outra.
 
 ## Próximos passos
 
-Bloco 16 de 78 — ver [`ROADMAP.md`](ROADMAP.md).
+Ver [`ROADMAP.md`](ROADMAP.md) — ele é a fonte do que está feito e do que vem.
+Esta seção dizia "bloco 16 de 78" e envelheceu catorze blocos sem ninguém
+perceber: contador repetido em dois arquivos é contador que diverge.
 
 `app-pro`: a agenda do barbeiro, o próximo cliente e as preferências dele.
 

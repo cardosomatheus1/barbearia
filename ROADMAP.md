@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 30 de 78 blocos.**
+**Status: 30 de 79 blocos.**
 
 ---
 
@@ -72,8 +72,8 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Canal por onde o alerta sai | as regras decidem, o coletor alimenta, `alertasDaBarbearia` devolve a lista pronta, e desde o bloco 28 existe `GestorProvider` — o primeiro canal do produto dirigido ao dono, com janela de silêncio pelo fuso da unidade | ligar o **alerta operacional** nesse canal: hoje só a cobrança o usa | 33 (segurança: hardening, auditoria de acesso): o que faltava era o canal, e ele chegou. O que sobra é decisão de produto — o que merece interromper o dono, e com que frequência —, e ela cabe junto da tela de preferências de notificação do gestor, que é do mesmo bloco |
 | Deploy contínuo e ambiente de staging | a esteira roda o portão inteiro, a medição de navegador e a carga a cada push; as sondas de vivo e pronto existem; o ensaio de restauração confere dado, RLS, trigger e versão do schema | o CD: um ambiente para onde publicar, e a publicação automática | sem bloco definido: **não há infraestrutura contratada**. Escrever um passo de deploy apontando para lugar nenhum seria configuração que ninguém executa. O que dependia de código está pronto — a sonda de pronto é o que a publicação vai consultar |
 | Tracing distribuído | log estruturado por requisição, com `x-request-id` aceito do proxy, devolvido na resposta e presente em toda linha — que é correlação ponta a ponta dentro do processo | spans com duração por camada, e propagação para fora | sem bloco definido: o produto é um monólito modular com um processo e um banco. Span entre camadas do mesmo processo responde o que o perfil de CPU responde melhor, e foi o perfil que achou o gargalo de fuso deste bloco. Entra quando houver um segundo serviço em jogo |
-| Fatura em PDF e nota fiscal | a fatura tem período, plano, valor, vencimento e situação, e o dono a lê na tela | o documento para baixar e a nota fiscal do serviço | sem bloco definido: nota fiscal da **plataforma** é emissão sobre a própria empresa, não sobre a barbearia — outro regime, outro provedor, e nada a ver com o `FiscalProvider` que o bloco 40 traz para a comanda. Entra quando houver contabilidade de verdade por trás |
-| Adquirente de verdade | a integração inteira existe: `PspProvider` com cobrança, consulta e estorno; webhook assinado com janela e comparação em tempo constante; conciliação por polling; e `psp_events` como trilha do que o provedor disse | contratar um adquirente e implementar a interface contra ele — hoje o único provedor é o `FakePspProvider`, e o worker só o liga com `PSP_MODO=fake` | sem bloco definido: **não há conta contratada**, e essa é uma decisão comercial, não de código. O que dependia de código está pronto, e é a mesma situação do deploy contínuo — ambiente e contrato são o que falta, não implementação |
+| Fatura em PDF e nota fiscal | a fatura tem período, plano, valor, vencimento e situação, e o dono a lê na tela | o documento para baixar e a nota fiscal do serviço | sem bloco definido: nota fiscal da **plataforma** é emissão sobre a própria empresa, não sobre a barbearia — outro regime, outro provedor, e nada a ver com o `FiscalProvider` dos blocos 53 e 54, que emite sobre o serviço da barbearia. Entra quando houver contabilidade de verdade por trás |
+| Adquirente de verdade | a integração inteira existe: `PspProvider` com cobrança, consulta e estorno; webhook assinado com janela e comparação em tempo constante; conciliação por polling; e `psp_events` como trilha do que o provedor disse | implementar a interface contra a **Stripe**, que é o provedor escolhido — hoje o único é o `FakePspProvider`, e o worker só o liga com `PSP_MODO=fake` | 34 (`PaymentProvider`: abstração, fake e o cliente Stripe compartilhado): é lá que o cliente Stripe de verdade nasce, e as duas pontas se ligam nele — a plataforma cobrando a barbearia (bloco 29) e a barbearia cobrando o cliente dela. O que falta além do código é a conta contratada, que é decisão comercial |
 | Entrega concorrente do mesmo webhook | a chave primária de `psp_events` trava a entrega repetida, e a máquina de estados da fatura carrega o caso sequencial (provado quebrando a chave de propósito: os testes de reentrega continuaram verdes sem ela) | um teste que exercite duas entregas **ao mesmo tempo** | sem bloco definido: o pool serializa as duas transações neste ambiente e o caso não se reproduz. Provar exigiria segurar uma transação por fora — o que testaria o arranjo do teste, não o produto. Fica escrito porque a garantia é real e não é provada |
 | Split de pagamento e a comissão da plataforma | o adquirente entra pela mensalidade: a plataforma cobra a barbearia | a outra receita da SPEC §9.1 — percentual sobre a transação que a **barbearia** processa dos clientes dela | sem bloco definido: split exige que o pagamento do cliente final passe pelo nosso adquirente, e hoje ele é registrado na comanda depois de acontecer na maquininha da barbearia. É outro produto dentro do produto, com cadastro de recebedor, repasse e regime fiscal próprios |
 | Papel novo criado pelo dono | os quatro papéis têm o conjunto de permissões editável pela tela, por barbearia, com trilha de antes e depois | criar um **quinto** papel — "caixa", "gerente de unidade" — em vez de só reconfigurar os quatro | sem bloco definido: `staff_role` é um enum do Postgres, e papel criado por barbearia teria que virar tabela com chave própria, migrando `staff_users.role`, `role_permissions.role` e a semente. É trabalho real e o ganho é pequeno enquanto os quatro cobrem o que a SPEC §1.3 descreve — quatro conjuntos editáveis já respondem "a recepção pode dar desconto?" |
@@ -205,20 +205,52 @@ não é vendável.
 
 ---
 
-## R2 — dinheiro e ocupação (10 blocos)
+## R2 — dinheiro e ocupação (11 blocos)
 
 | # | Bloco |
 |---|---|
-| 34 | `PaymentProvider`: abstração, fake, testes |
-| 35 | Pix: QR Code, webhook, conciliação |
-| 36 | Cartão e link de pagamento |
+| 34 | `PaymentProvider`: abstração, fake e o cliente Stripe compartilhado |
+| 35 | Pix pela Stripe: QR Code, webhook, conciliação |
+| 36 | Cartão e link de pagamento pela Stripe |
 | 37 | Sinal seletivo + política de reembolso |
 | 38 | Lista de espera: entradas, expiração, gatilho de cancelamento |
 | 39 | Lista de espera: priority queue, janela exclusiva, notificação |
+| 40 | Sugestões e reclamações do cliente |
 | 41 | Fidelidade: pontos, visitas ou cashback |
 | 42 | Pacotes: venda, consumo, validade, receita diferida |
 | 43 | Avaliações + fluxo de recuperação de nota baixa |
 | 44 | Produtos, estoque, ficha de consumo, CMV |
+
+### O bloco 40 e o 43 são irmãos, e não a mesma coisa
+
+A SPEC §4.10 descreve **avaliação**: 1 a 5 estrelas, vinculada a um atendimento
+concluído de verdade, com janela de recuperação quando a nota é baixa. Ela é
+confiável justamente por ser vinculada — é o que a separa de review aberta de
+marketplace, e é o bloco 43.
+
+Falta o outro lado, e ele não estava em lugar nenhum da SPEC nem do roadmap: o
+cliente que quer **dizer alguma coisa sem ter uma nota para dar**. "A cadeira
+do fundo está bamba", "vocês deviam abrir no domingo", "fui atendido bem, mas
+esperei quarenta minutos". Nada disso cabe numa estrela, e nada disso exige um
+atendimento concluído — quem desistiu da fila e foi embora é justamente quem
+mais tem o que contar.
+
+Por isso é bloco próprio e não um campo no 43:
+
+- **A entrada é diferente.** Avaliação nasce de um atendimento; sugestão nasce
+  de uma vontade. Amarrá-la a `appointment_id` perderia quem nunca chegou a ser
+  atendido.
+- **O destino é diferente.** Nota baixa vira alerta de recuperação com prazo de
+  48h. Sugestão vira fila de triagem sem prazo, que alguém lê quando dá.
+- **A publicação é diferente.** Avaliação vai para o perfil público. Sugestão e
+  reclamação **não vão** — são conversa entre o cliente e a casa, e publicá-las
+  seria transformar um canal de melhoria em vitrine de problema.
+
+O que o bloco entrega: o canal do lado do cliente (na página pública e no
+próprio link de agendamento, sem exigir conta), a fila de triagem no admin com
+estado e responsável, resposta ao cliente pelo canal que ele já usa, e o
+vínculo opcional com atendimento quando existir um. O limite ético do §4.10 vale
+igual — o produto não oferece apagar reclamação.
 
 ---
 
@@ -308,7 +340,7 @@ adiantamento descontado da comissão, e comissão é o bloco 19.
 
 ## Escopo recomendado
 
-78 blocos é produto de time, horizonte de mais de um ano. Duas decisões cortam
+79 blocos é produto de time, horizonte de mais de um ano. Duas decisões cortam
 isso pela metade sem prejudicar o que é vendável:
 
 ### 1. Adiar R4 e R5 por dependência, não por preguiça

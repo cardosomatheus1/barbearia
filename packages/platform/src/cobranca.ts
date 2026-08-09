@@ -14,8 +14,9 @@ import { PlataformaError, marcarCiclo, registrarNaTrilha } from './plataforma.js
  *   virar.
  * - **este arquivo** faz *o quê*: lê o estado, chama a decisão, grava o
  *   resultado e enfileira o aviso na mesma transação.
- * - **o provedor** tenta *cobrar de verdade*. É abstração porque o PSP é do
- *   bloco 29 e porque teste de régua não pode depender de rede.
+ * - **o provedor** tenta *cobrar de verdade*. É abstração porque teste de régua
+ *   não pode depender de rede, e porque o adquirente escolhido — a Stripe — só
+ *   entra de fato no bloco 34.
  *
  * ## Cobrança é adiantada, e é isso que ordena o resto
  *
@@ -126,10 +127,11 @@ const paraFatura = (l: LinhaDeFatura): Fatura => ({
  *
  * Abstração como `NotificationProvider` e pelos mesmos dois motivos (CLAUDE.md
  * §4): o adquirente é bloqueio de fornecedor, e teste de régua não pode
- * depender de um sandbox de PSP no ar. O bloco 29 implementa esta interface
- * contra o provedor real e concilia por webhook; até lá o caminho que **de
- * fato** quita uma fatura é o Super Admin registrando o pagamento que viu no
- * extrato, que é como toda operação pequena começa.
+ * depender de um sandbox de PSP no ar. O bloco 29 entregou o webhook e a
+ * conciliação sobre esta interface; a implementação contra a **Stripe**, que é
+ * o provedor escolhido, entra no bloco 34. Até lá o caminho que **de fato**
+ * quita uma fatura é o Super Admin registrando o pagamento que viu no extrato,
+ * que é como toda operação pequena começa.
  */
 export interface CobrancaProvider {
   cobrar(pedido: {

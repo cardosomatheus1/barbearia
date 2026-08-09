@@ -46,10 +46,10 @@ const INTERVALO_MS = Number(process.env['WORKER_INTERVALO_MS'] ?? 5_000);
  * debitado sozinho e quem quita fatura é o Super Admin registrando o pagamento
  * que viu no extrato.
  *
- * **Não há credencial neste arquivo.** O dia em que houver um provedor de
- * verdade, ele entra por variável de ambiente como todo o resto — e a escolha
- * de qual provedor usar continua sendo desta função, que é o único lugar do
- * produto que sabe que adquirente existe.
+ * **Não há credencial neste arquivo.** A Stripe é o provedor escolhido e entra
+ * no bloco 34; as chaves dela chegam por variável de ambiente, como todo o
+ * resto. A escolha de qual provedor usar continua sendo desta função, que é o
+ * único lugar do produto que sabe que adquirente existe.
  */
 function ligarAdquirente(): { psp: PspProvider | null; cobranca: CobrancaProvider } {
   if (process.env['PSP_MODO'] !== 'fake') {
@@ -94,9 +94,9 @@ async function main(): Promise<void> {
       /**
        * A cobrança da assinatura (bloco 28), ligada aqui pelo mesmo motivo.
        *
-       * O provedor é o manual: até o bloco 29 nada é debitado sozinho, e o que
-       * quita uma fatura é alguém registrando no painel o pagamento que viu no
-       * extrato. A régua roda inteira em cima disso — emite, avisa, marca
+       * O provedor é o manual: até a Stripe entrar no bloco 34, nada é
+       * debitado sozinho, e o que quita uma fatura é alguém registrando no
+       * painel o pagamento que viu no extrato. A régua roda inteira em cima disso — emite, avisa, marca
        * vencida e suspende quem passou de 21 dias.
        */
       avisarDeCobranca: (aviso) =>

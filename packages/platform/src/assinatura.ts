@@ -331,9 +331,10 @@ export async function planosParaODono(entrada: {
  *
  * Subir gera fatura na hora: a barbearia passa a usar o plano maior naquela
  * tarde, e o acerto do que falta do período vence em cinco dias. Descer gera
- * **crédito**, que abate a próxima mensalidade — devolver dinheiro exigiria
- * estorno no adquirente, que é o bloco 29, e emitir fatura negativa criaria um
- * documento que ninguém sabe pagar.
+ * **crédito**, que abate a próxima mensalidade. Devolver em dinheiro chegou no
+ * bloco 29 (`estornarCredito`) e só funciona de verdade quando a Stripe entrar
+ * no bloco 34; emitir fatura negativa nunca foi opção, porque é documento que
+ * ninguém sabe pagar.
  */
 export async function trocarPlanoPeloDono(entrada: {
   readonly tenantId: string;
