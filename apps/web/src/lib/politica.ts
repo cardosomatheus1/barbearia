@@ -13,3 +13,63 @@ export function regraDeCancelamento(horas: number): string {
   if (horas <= 0) return 'Dá para cancelar até a hora do atendimento.';
   return `Cancele com pelo menos ${horas === 1 ? '1 hora' : `${horas} horas`} de antecedência.`;
 }
+
+/**
+ * A versão do texto de consentimento de marketing (bloco 31).
+ *
+ * Constante e versionada num lugar só, porque é ela que fica gravada com a
+ * decisão do titular. **Mudar o texto exige mudar a versão** — uma decisão
+ * tomada sob "receber promoções e novidades" não é a mesma tomada sob um texto
+ * que amanhã inclua compartilhamento com terceiros, e a versão é o que separa
+ * as duas numa contestação.
+ */
+export const VERSAO_DO_CONSENTIMENTO = 'marketing-2026-08';
+
+export const TEXTO_DO_CONSENTIMENTO =
+  'Quero receber promoções e novidades desta barbearia por WhatsApp.';
+
+/**
+ * Os aceites que o balcão registra pelo cliente, cada um com o seu texto.
+ *
+ * Três e não um, porque a SPEC §1.8 os separa e a LGPD também: quem autoriza
+ * uma foto na ficha não autorizou a foto no Instagram, e quem quer receber
+ * promoção não autorizou nenhuma das duas. Um consentimento único ("aceito
+ * tudo") é o que a lei chama de consentimento genérico, e não vale.
+ *
+ * `service` fica de fora: é o tratamento necessário para executar o serviço
+ * contratado, que não depende de consentimento e sim da própria execução do
+ * contrato. Pedir aceite para ele confundiria o cliente sobre o que é
+ * opcional — e é justamente a distinção que o resto desta lista preserva.
+ */
+export const CONSENTIMENTOS_DO_BALCAO = [
+  {
+    finalidade: 'marketing',
+    titulo: 'Promoções por WhatsApp',
+    texto: TEXTO_DO_CONSENTIMENTO,
+    versao: VERSAO_DO_CONSENTIMENTO,
+  },
+  {
+    finalidade: 'photos',
+    titulo: 'Foto do corte na ficha',
+    texto: 'Autorizo fotografar o meu corte para ficar guardado na minha ficha.',
+    versao: 'fotos-2026-08',
+  },
+  {
+    finalidade: 'photos_public',
+    titulo: 'Foto nas redes da barbearia',
+    texto: 'Autorizo a barbearia a publicar fotos do meu corte nas redes dela.',
+    versao: 'fotos-publicas-2026-08',
+  },
+] as const;
+
+/**
+ * A versão é do texto, e cada finalidade tem o seu.
+ *
+ * Gravar `marketing-2026-08` numa decisão sobre foto diria que a pessoa
+ * concordou com um texto que não fala de foto nenhuma — prova que se desmonta
+ * na primeira leitura. Por isso a versão sai daqui pela finalidade e nunca do
+ * formulário, que é entrada externa.
+ */
+export function versaoDoConsentimento(finalidade: string): string | null {
+  return CONSENTIMENTOS_DO_BALCAO.find((c) => c.finalidade === finalidade)?.versao ?? null;
+}

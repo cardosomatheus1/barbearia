@@ -187,6 +187,14 @@ bloqueada e ninguém soube. É o mesmo precedente de `finance → identity`, e a
 seta não volta: `jobs` continua sem saber que existe plataforma, e recebe o que
 precisa da camada de cima por injeção no `Contexto` do worker.
 
+`crm` depende de `identity` pelo mesmo motivo de `finance`: `audit()`. A trilha
+do consentimento registrado pelo balcão e a do pedido de titular encerrado
+precisam ser gravadas **dentro** da transação que muda o estado — a exportação
+é a única exceção, e ela é escrita: exportar é uma leitura longa de nove
+tabelas, e segurar a transação aberta para escrever uma linha no fim aumentaria
+a janela sem ganhar nada, porque o que importa é o registro existir e não ser
+atômico com um `SELECT`.
+
 `finance` depende de `identity` por uma coisa só: `audit()`. A trilha precisa
 ser gravada **dentro da transação** que move o dinheiro, então ela não pode ser
 chamada de fora — e é o mesmo precedente de `onboarding`, que já dependia de
@@ -458,6 +466,12 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Dia de uma venda | `orders.business_day`, o dia **da unidade** — `closed_at` responde "que instante", não "de que dia é este dinheiro" |
 | Alíquota | pontos-base inteiros (4000 = 40%), nunca fração |
 | Prova do segundo fator | por **sessão** (`staff_sessions.mfa_verified_at`), com validade de 30 min — nunca só no login |
+| Consentimento | histórico append-only em `customer_consents`: revogar é **inserir** a revogação, nunca apagar a concessão. `customers.accepts_marketing` é espelho derivado por gatilho, e só avança se a decisão for a mais recente — importação fora de ordem não ressuscita aceite revogado |
+| Versão do texto aceito | obrigatória e **sem padrão**, uma por finalidade, saindo de `politica.ts` e nunca do formulário. Aceite sem dizer o que a pessoa leu não é prova; um `'v1'` silencioso é pior, porque tem cara de prova |
+| Permissão de rota que agrega | declara **todas** as permissões do que ela devolve, e não a mais próxima do nome. A exportação do titular exige `customers.export` + `finance.view` + `customers.view_notes`, porque o arquivo contém o razão do fiado e a anotação privada — com uma só, ela virava o caminho mais curto para as outras duas, e o segundo fator derivado deixava de ser cobrado. Achado da `/security-review` do bloco 31 |
+| Exportação de dado pessoal | lista de consultas **escrita**, nunca varredura de catálogo — e há teste que reprova quando uma tabela nova com `customer_id` fica de fora. Sessão e trilha não entram: a primeira é credencial viva, a segunda traz o nome de terceiros |
+| Encarregado de dados | por barbearia (`tenants.dpo_name/dpo_email`) e **público** — LGPD art. 41 §1 manda divulgar identidade e contato. A barbearia é controladora; a plataforma é operadora e não responde por dado que não é dela |
+| Pedido do titular | prazo gravado na criação, nunca calculado na leitura; um aberto por pessoa e por tipo (índice único parcial), então pedir de novo devolve o mesmo pedido em vez de reiniciar a contagem; recusa exige motivo escrito, no domínio e por `CHECK` |
 
 ---
 

@@ -1,10 +1,27 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { CONVERSAS, destaquesDaFicha, fichaEstaVazia, fraseDaConversa } from '@barbearia/core';
-import { fichaDoCliente, type VisitaNaFicha } from '@/lib/admin-api';
+import {
+  CONVERSAS,
+  destaquesDaFicha,
+  fichaEstaVazia,
+  fraseDaConversa,
+  podeTudo,
+} from '@barbearia/core';
+import {
+  consentimentosDaFicha,
+  fichaDoCliente,
+  type ConsentimentosNaFicha,
+  type VisitaNaFicha,
+} from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoPreferencias, acaoSair } from '../../acoes';
+import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
+import {
+  acaoAbrirPedidoDeDados,
+  acaoConsentimentoNoBalcao,
+  acaoPreferencias,
+  acaoSair,
+} from '../../acoes';
 import { secao } from '../../secoes';
 
 /**
@@ -79,6 +96,163 @@ function Visita({ visita }: { readonly visita: VisitaNaFicha }) {
   );
 }
 
+/**
+ * O que esta pessoa autorizou (bloco 31).
+ *
+ * ## Por que fica na ficha e não numa tela de LGPD
+ *
+ * A pergunta "posso tirar uma foto do seu corte?" acontece na cadeira, com o
+ * barbeiro olhando esta tela. Uma tela separada de consentimento seria
+ * preenchida por ninguém — e consentimento que ninguém registra é o mesmo que a
+ * barbearia tratando dado sem base legal.
+ *
+ * ## Um botão por finalidade, e o texto à vista
+ *
+ * O texto exato aparece acima do botão porque é ele que fica gravado com a
+ * decisão. Registrar "aceitou" sem mostrar o que foi aceito produz a linha que
+ * não se defende: numa contestação, o que vale é o que a pessoa leu.
+ *
+ * Fechado por padrão (`details`): o barbeiro abre a ficha para ver como cortar,
+ * e empurrar três aceites para o topo enterraria o que ele veio buscar.
+ */
+function Consentimentos({
+  consentimentos,
+  customerId,
+  de,
+  podeEditar,
+}: {
+  readonly consentimentos: ConsentimentosNaFicha;
+  readonly customerId: string;
+  readonly de: string;
+  readonly podeEditar: boolean;
+}) {
+  return (
+    <details className="anotar">
+      <summary className="anotar__abrir">O que este cliente autorizou</summary>
+
+      <ul className="consentimentos">
+        {CONSENTIMENTOS_DO_BALCAO.map((item) => {
+          const atual = consentimentos.atuais[item.finalidade];
+          const aceita = atual?.concedido ?? false;
+
+          return (
+            <li className="consentimentos__item" key={item.finalidade}>
+              <div className="consentimentos__texto">
+                <span className="consentimentos__titulo">{item.titulo}</span>
+                <span className="consentimentos__frase">{item.texto}</span>
+                <span className="consentimentos__estado">
+                  {atual === undefined
+                    ? 'Nunca perguntado'
+                    : `${aceita ? 'Autorizou' : 'Recusou'} em ${dia(atual.decididoEm)}`}
+                </span>
+              </div>
+
+              {podeEditar ? (
+                <form action={acaoConsentimentoNoBalcao}>
+                  <input name="customerId" type="hidden" value={customerId} />
+                  <input name="de" type="hidden" value={de} />
+                  <input name="finalidade" type="hidden" value={item.finalidade} />
+                  {/*
+                    A versão do texto **não** vem daqui. Ela sai de `politica.ts`
+                    na ação, pela finalidade: um campo escondido editável faria a
+                    prova virar o que o navegador digitou.
+                  */}
+                  <input name="concedido" type="hidden" value={aceita ? '0' : '1'} />
+                  <button
+                    className="ui-button ui-button--secondary consentimentos__botao"
+                    type="submit"
+                  >
+                    {aceita ? 'Registrar recusa' : 'Registrar autorização'}
+                  </button>
+                </form>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="consentimentos__nota">
+        Registre só o que o cliente disser a você. Ele também decide sozinho, pela página dele —
+        e a decisão mais recente é a que vale.
+      </p>
+    </details>
+  );
+}
+
+/**
+ * O pedido do titular, e a exportação.
+ *
+ * A exportação é uma rota própria (`/dados`) e não um botão que baixa da API
+ * direto: o token do painel é um cookie `httpOnly` de caminho `/admin`, e o
+ * navegador não consegue montar o `Authorization` que a API exige. O servidor
+ * de tela faz a ponte.
+ */
+function DireitosDoTitular({
+  customerId,
+  de,
+  podeExportar,
+  podeAbrirPedido,
+}: {
+  readonly customerId: string;
+  readonly de: string;
+  readonly podeExportar: boolean;
+  readonly podeAbrirPedido: boolean;
+}) {
+  if (!podeExportar && !podeAbrirPedido) return null;
+
+  return (
+    <details className="anotar">
+      <summary className="anotar__abrir">Pedido de dados (LGPD)</summary>
+
+      <p className="consentimentos__nota">
+        Quando o cliente pedir os dados dele — ou pedir para ser apagado — registre aqui. O prazo
+        de 15 dias começa a contar hoje, e a fila fica em{' '}
+        <a href="/admin/lgpd">Pedidos de dados</a>.
+      </p>
+
+      <div className="consentimentos__acoes">
+        {podeAbrirPedido ? (
+          <>
+            <form action={acaoAbrirPedidoDeDados}>
+              <input name="customerId" type="hidden" value={customerId} />
+              <input name="de" type="hidden" value={de} />
+              <input name="tipo" type="hidden" value="export" />
+              <button className="ui-button ui-button--secondary" type="submit">
+                Registrar pedido de cópia
+              </button>
+            </form>
+            <form action={acaoAbrirPedidoDeDados}>
+              <input name="customerId" type="hidden" value={customerId} />
+              <input name="de" type="hidden" value={de} />
+              <input name="tipo" type="hidden" value="deletion" />
+              <button className="ui-button ui-button--secondary" type="submit">
+                Registrar pedido de exclusão
+              </button>
+            </form>
+          </>
+        ) : null}
+
+        {podeExportar ? (
+          <a
+            className="ui-button ui-button--secondary"
+            href={`/admin/cliente/${customerId}/dados`}
+            download
+          >
+            Baixar os dados deste cliente
+          </a>
+        ) : null}
+      </div>
+
+      {podeExportar ? (
+        <p className="consentimentos__nota">
+          O arquivo sai com tudo que a barbearia guarda sobre esta pessoa, e o download fica
+          registrado na trilha com o seu nome.
+        </p>
+      ) : null}
+    </details>
+  );
+}
+
 export default async function FichaPage({ params, searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -92,7 +266,15 @@ export default async function FichaPage({ params, searchParams }: Props) {
   // mesmo buraco de um `redirect` cru com entrada externa.
   const voltar = first(query['de']) === 'meu-dia' ? '/admin/meu-dia' : '/admin/dia';
 
-  const ficha = await fichaDoCliente(token, id);
+  const pediu = first(query['pedido']) === '1';
+
+  // As duas leituras juntas: são independentes, e encadeá-las somaria a
+  // latência de uma na outra numa tela que o barbeiro abre com o cliente
+  // sentado.
+  const [ficha, consentimentos] = await Promise.all([
+    fichaDoCliente(token, id),
+    consentimentosDaFicha(token, id),
+  ]);
 
   const topo = (
     <header className="painel__topo">
@@ -149,6 +331,13 @@ export default async function FichaPage({ params, searchParams }: Props) {
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Anotação salva.
+        </div>
+      ) : null}
+
+      {pediu ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Pedido registrado. Ele vence em 15 dias e aparece em{' '}
+          <a href="/admin/lgpd">Pedidos de dados</a>.
         </div>
       ) : null}
 
@@ -254,6 +443,32 @@ export default async function FichaPage({ params, searchParams }: Props) {
           </button>
         </form>
       </details>
+
+      {consentimentos.ok ? (
+        <Consentimentos
+          consentimentos={consentimentos.dados}
+          customerId={ficha.dados.customerId}
+          de={voltar}
+          podeEditar={estado.staff.permissions.includes('customers.edit')}
+        />
+      ) : null}
+
+      <DireitosDoTitular
+        customerId={ficha.dados.customerId}
+        de={voltar}
+        podeAbrirPedido={estado.staff.permissions.includes('customers.edit')}
+        /*
+          As três que a API exige, conferidas pela mesma função que ela usa.
+          Recalcular "é só `customers.export`" aqui mostraria um botão que
+          responde 403 — e a regra da casa é que a permissão exibida saia de
+          onde a permissão é aplicada.
+        */
+        podeExportar={podeTudo(estado.staff.permissions, [
+          'customers.export',
+          'finance.view',
+          'customers.view_notes',
+        ])}
+      />
 
       <h2 className="ficha__titulo">Últimas vezes</h2>
 

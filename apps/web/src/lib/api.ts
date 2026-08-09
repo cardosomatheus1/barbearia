@@ -24,6 +24,8 @@ export interface PublicProfile {
   name: string;
   logoUrl: string | null;
   instagram: string | null;
+  /** O encarregado de dados, que a LGPD art. 41 §1 manda divulgar publicamente. */
+  encarregado: { nome: string; email: string | null } | null;
   location: {
     id: string; name: string; timezone: string;
     street: string | null; district: string | null; city: string | null;
@@ -194,9 +196,10 @@ async function post<T>(
   path: string,
   body: unknown,
   token?: string,
+  metodo: 'POST' | 'PUT' = 'POST',
 ): Promise<Resultado<T>> {
   const response = await fetch(`${BASE}${path}`, {
-    method: 'POST',
+    method: metodo,
     headers: {
       'content-type': 'application/json',
       ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -235,6 +238,59 @@ export interface SessaoCriada {
 
 export const conferirCodigo = (slug: string, phone: string, code: string) =>
   post<SessaoCriada>(`/v1/b/${slug}/auth/verify`, { phone, code });
+
+/**
+ * O consentimento de marketing, decidido pelo próprio titular (bloco 31).
+ *
+ * A versão do texto viaja com a decisão porque é ela que se mostra numa
+ * contestação — sem dizer o que a pessoa leu, "ela aceitou" não responde nada.
+ */
+export interface ConsentimentoDoTitular {
+  marketing: boolean;
+  decididoEm: string | null;
+}
+
+/**
+ * A leitura vai por `POST`? Não: vai por `fetch` direto.
+ *
+ * `get` deste arquivo é para conteúdo público com revalidação — ele não manda
+ * cabeçalho de autorização, e a decisão do titular exige sessão. Repetir doze
+ * linhas de `fetch` seria pior; reaproveitar o `get` público seria mandar uma
+ * leitura autenticada por um caminho que cacheia.
+ */
+export async function lerConsentimento(
+  slug: string,
+  token: string,
+): Promise<ConsentimentoDoTitular | null> {
+  const resposta = await fetch(`${BASE}/v1/b/${slug}/auth/consentimento`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!resposta.ok) return null;
+  return (await resposta.json()) as ConsentimentoDoTitular;
+}
+
+export const decidirConsentimento = (
+  slug: string,
+  token: string,
+  marketing: boolean,
+  versaoDoTexto: string,
+) =>
+  post<ConsentimentoDoTitular>(
+    `/v1/b/${slug}/auth/consentimento`,
+    { marketing, versaoDoTexto },
+    token,
+    'PUT',
+  );
+
+/**
+ * O titular pedindo uma cópia dos próprios dados.
+ *
+ * Reenviar devolve o mesmo pedido: o segundo toque do botão não reinicia a
+ * contagem do prazo de 15 dias.
+ */
+export const pedirMeusDados = (slug: string, token: string) =>
+  post<{ id: string; venceEm: string }>(`/v1/b/${slug}/auth/pedido-de-dados`, {}, token);
 
 /** Revoga a sessão no servidor. Apagar só o cookie deixaria o token válido. */
 export const encerrarSessao = (slug: string, token: string) =>

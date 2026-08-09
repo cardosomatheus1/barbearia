@@ -70,6 +70,7 @@ export const MODULOS = [
       { href: '/admin/trilha', nome: 'Trilha', secao: 'trilha', nota: 'quem mexeu em quê' },
       { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'segundo fator' },
       { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'janela e políticas' },
+      { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', nota: 'pedidos dos clientes' },
       { href: '/admin/plano', nome: 'Plano', secao: 'plano', nota: 'assinatura e limites' },
     ],
     dentro: ['onboarding'],

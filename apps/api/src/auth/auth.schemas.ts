@@ -35,3 +35,15 @@ export const rescheduleSchema = z.object({
 export const cancelSchema = z.object({
   reason: z.string().max(300).optional(),
 });
+
+/**
+ * A decisão do titular sobre marketing (bloco 31).
+ *
+ * A versão do texto vem da tela e é obrigatória: ela é o que se mostra numa
+ * contestação — "ele aceitou" sem dizer o que ele leu não responde nada. O
+ * domínio recusa vazio de novo, e a duplicação é deliberada.
+ */
+export const consentimentoDoTitularSchema = z.object({
+  marketing: z.boolean(),
+  versaoDoTexto: z.string().trim().min(1).max(80),
+});

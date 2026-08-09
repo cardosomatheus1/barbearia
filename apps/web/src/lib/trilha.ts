@@ -37,6 +37,13 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
 
   'import.applied': 'trouxe a base do sistema antigo',
   'import.reverted': 'desfez a importação da base',
+  // LGPD (bloco 31). O verbo diz quem decidiu: a barbearia **registrou** o que
+  // o cliente disse no balcão — a decisão tomada pelo próprio titular na conta
+  // dele não passa por aqui, e é assim que se sabe qual foi qual.
+  'customer.consent_recorded': 'registrou o consentimento de',
+  'customer.data_exported': 'exportou os dados de',
+  'lgpd.request_fulfilled': 'atendeu o pedido de dados de',
+  'lgpd.request_refused': 'recusou o pedido de dados de',
   'slug.added': 'cadastrou um endereço antigo da barbearia',
 
   // Suporte assistido (bloco 26). Estas três não descrevem o que **a equipe**

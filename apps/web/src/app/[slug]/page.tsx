@@ -371,6 +371,40 @@ export default async function BarbershopPage({ params }: Params) {
             </p>
           </div>
         </section>
+
+        {/*
+          O encarregado de dados, publicado porque a lei manda publicar.
+
+          LGPD art. 41 §1: a identidade e o contato do encarregado são de
+          divulgação **pública**. Escondê-lo atrás do login deixaria de fora
+          justamente quem ainda não é cliente e quer saber o que a barbearia faz
+          com o telefone que ele está prestes a digitar.
+
+          Só aparece quando existe: um bloco com "não informado" seria pior que
+          a ausência — anuncia o descumprimento em vez de resolvê-lo, e a tela
+          de configurações já cobra o cadastro de quem administra.
+        */}
+        {profile.encarregado ? (
+          <section className="secao secao--miudo">
+            <div>
+              <h2 className="rotulo">Seus dados</h2>
+              <p className="politica">
+                Para pedir, corrigir ou apagar os seus dados, fale com{' '}
+                {profile.encarregado.nome}
+                {profile.encarregado.email ? (
+                  <>
+                    {' '}
+                    pelo{' '}
+                    <a href={`mailto:${profile.encarregado.email}`}>
+                      {profile.encarregado.email}
+                    </a>
+                  </>
+                ) : null}
+                .
+              </p>
+            </div>
+          </section>
+        ) : null}
         </aside>
         </div>
       </main>

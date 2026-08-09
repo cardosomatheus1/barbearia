@@ -708,6 +708,69 @@ async function prepararImportacao(token) {
   return (await resposta.json()).id;
 }
 
+/**
+ * Um pedido de titular aberto, o encarregado cadastrado e um consentimento
+ * registrado — para a tela de privacidade ser medida cheia.
+ *
+ * A fila vazia é a versão fácil: mede-se o estado vazio, que é uma caixa de
+ * texto curta, e não passa pela linha com prazo, motivo escrito e o formulário
+ * de encerramento aberto, que é o que de fato disputa largura em 360px.
+ */
+async function prepararLgpd(token, clienteId) {
+  if (!clienteId) return false;
+  const cabecalho = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+
+  await fetch(`${API}/v1/admin/change-window`, {
+    method: 'PUT',
+    headers: cabecalho,
+    body: JSON.stringify({
+      cancelMinHours: 2,
+      rescheduleMinHours: 2,
+      maxReschedules: 2,
+      dpoName: 'Matheus Cardoso de Albuquerque',
+      dpoEmail: 'protecao.de.dados@domaribarberclub.com.br',
+    }),
+  });
+
+  await fetch(`${API}/v1/admin/customers/${clienteId}/consentimentos`, {
+    method: 'PUT',
+    headers: cabecalho,
+    body: JSON.stringify({
+      finalidade: 'marketing',
+      concedido: true,
+      versaoDoTexto: 'marketing-2026-08',
+    }),
+  });
+
+  const aberto = await fetch(`${API}/v1/admin/customers/${clienteId}/lgpd/pedidos`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({ tipo: 'export' }),
+  });
+  if (!aberto.ok) return false;
+
+  // Um segundo pedido, já respondido com motivo comprido: é a linha que mais
+  // estica, e ela só aparece na seção "já respondidos".
+  const outro = await fetch(`${API}/v1/admin/customers/${clienteId}/lgpd/pedidos`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({ tipo: 'deletion' }),
+  });
+  if (outro.ok) {
+    const { id } = await outro.json();
+    await fetch(`${API}/v1/admin/customers/lgpd/pedidos/${id}`, {
+      method: 'PUT',
+      headers: cabecalho,
+      body: JSON.stringify({
+        atendido: false,
+        nota: 'Recusado por obrigação legal de guarda fiscal dos comprovantes por cinco anos',
+      }),
+    });
+  }
+
+  return true;
+}
+
 async function main() {
   const { token, slug } = await preparar();
   const tokenCliente = await prepararCliente(slug);
@@ -726,6 +789,8 @@ async function main() {
   if (!caixa.ok) console.warn(`  aviso: caixa não preparado (${caixa.motivo})`);
   const importacao = await prepararImportacao(token);
   if (!importacao) console.warn('  aviso: importação não preparada; passo 2 fora da medição');
+  const lgpd = await prepararLgpd(token, balcao.clienteId);
+  if (!lgpd) console.warn('  aviso: LGPD não preparada; a fila de pedidos entra vazia');
   const tokenPlataforma = await prepararPlataforma();
 
   const telas = [
@@ -750,6 +815,7 @@ async function main() {
       : []),
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'privacidade (LGPD)', url: '/admin/lgpd', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'equipe', url: '/admin/equipe', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'catálogo', url: '/admin/catalogo', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

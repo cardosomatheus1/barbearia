@@ -814,6 +814,61 @@ describeIfDb('fluxo do cliente', () => {
       .expect(401);
   });
 
+  it('o titular decide sobre promoção e a decisão vira histórico', async () => {
+    const token = await login(CARLOS);
+
+    const antes = await http()
+      .get('/v1/b/domari/auth/consentimento')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(antes.body.marketing).toBe(false);
+
+    await http()
+      .put('/v1/b/domari/auth/consentimento')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ marketing: true, versaoDoTexto: 'marketing-2026-08' })
+      .expect(200);
+
+    const depois = await http()
+      .get('/v1/b/domari/auth/consentimento')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(depois.body.marketing).toBe(true);
+
+    // Sem versão do texto não passa: "ele aceitou" sem dizer o que ele leu não
+    // responde nada numa contestação.
+    await http()
+      .put('/v1/b/domari/auth/consentimento')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ marketing: false })
+      .expect(400);
+
+    // E o consentimento é da pessoa que está logada, não de quem o corpo disser:
+    // não há campo de cliente na rota.
+    await http().put('/v1/b/domari/auth/consentimento').send({ marketing: true }).expect(401);
+  });
+
+  it('pedir os próprios dados duas vezes não reinicia o prazo', async () => {
+    // O segundo toque do botão numa rede ruim não pode empurrar a obrigação
+    // legal quinze dias para a frente.
+    const token = await login(CARLOS);
+
+    const primeiro = await http()
+      .post('/v1/b/domari/auth/pedido-de-dados')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+
+    const segundo = await http()
+      .post('/v1/b/domari/auth/pedido-de-dados')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+
+    expect(segundo.body.id).toBe(primeiro.body.id);
+    expect(segundo.body.venceEm).toBe(primeiro.body.venceEm);
+
+    await http().post('/v1/b/domari/auth/pedido-de-dados').expect(401);
+  });
+
   it('nunca vaza detalhe interno em erro de rota autenticada', async () => {
     const token = await login(CARLOS);
     const response = await http()

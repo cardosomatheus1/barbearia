@@ -204,7 +204,9 @@
 .horarios tr + tr th, .horarios tr + tr td { border-top: 1px solid var(--color-border); }
 .horarios--fechado { color: var(--color-text-muted); }
 
-.politica { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: var(--size-readable); }
+/* `overflow-wrap` porque o encarregado entrou aqui no bloco 31: e-mail é uma
+   palavra só, e um domínio comprido transborda em 360px. */
+.politica { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: var(--size-readable); overflow-wrap: anywhere; }
 
 /* A barra fixa cobriria o fim do conteúdo sem esta folga. */
 main { padding-bottom: var(--space-8); }
@@ -2190,7 +2192,11 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-muted);
 }
 
-.anotar { margin-bottom: var(--space-6); }
+/* Recipiente para o que vive dentro dela — a lista de consentimentos pergunta
+   a largura **daqui**, não da janela. E é aqui e não na lista porque um
+   elemento não casa a própria `@container`: com o `container-type` na lista, a
+   consulta nunca acerta e as colunas ficam empilhadas em 1280px. */
+.anotar { margin-bottom: var(--space-6); container-type: inline-size; }
 .anotar__abrir {
   display: flex;
   align-items: center;
@@ -5204,3 +5210,150 @@ main { padding-bottom: var(--space-8); }
 }
 
 .permissao__salvar { margin-top: var(--space-4); }
+
+/* -- Consentimento do titular (bloco 31) ------------------------------------ */
+
+.meus__consentimento {
+  margin-top: var(--space-8);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.meus__secao {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+}
+.meus__consentimento-texto { margin: 0 0 var(--space-2); }
+.meus__consentimento-estado {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  /* O e-mail do encarregado é uma palavra só e pode ser comprido. Em 360px ele
+     encosta na borda do cartão; um domínio maior transbordaria. */
+  overflow-wrap: anywhere;
+}
+/* Contorno pelo mesmo motivo dos blocos 28 e 30: o `ghost` do design system é
+   transparente, e sem borda a única ação da seção lê como legenda. */
+.meus__consentimento-botao {
+  width: 100%;
+  border: 1px solid var(--color-border);
+}
+
+/* ============================================================================
+   Consentimento e pedidos de dados (bloco 31).
+
+   Duas telas, um princípio: o texto que a pessoa aceitou fica **maior que o
+   botão** que a registra. Consentimento cujo texto virou letra miúda ao lado do
+   botão é o consentimento que não se defende — e a tentação de encolher a
+   frase para caber é exatamente o que a lei recusa.
+   ============================================================================ */
+
+.consentimentos {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.consentimentos__item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.consentimentos__texto { display: grid; gap: var(--space-1); min-width: 0; }
+
+.consentimentos__titulo { font-weight: var(--font-weight-semibold); }
+
+.consentimentos__frase { overflow-wrap: anywhere; }
+
+.consentimentos__estado {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Largura própria, não a da linha: um botão esticado em 1280px viraria a coisa
+   mais pesada da tela, e a decisão é do cliente, não da tela. */
+.consentimentos__botao { justify-self: start; }
+
+.consentimentos__nota {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.consentimentos__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.pedidos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pedido {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+/* A borda muda, não o fundo: fundo colorido em cima de texto de prazo derruba o
+   contraste medido, e o que precisa saltar é a linha, não a leitura. */
+.pedido--urgente { border-color: var(--color-danger); }
+
+.pedido__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.pedido__tipo { font-weight: var(--font-weight-semibold); }
+
+.pedido__prazo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.pedido--urgente .pedido__prazo {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-medium);
+}
+
+.pedido__quando,
+.pedido__nota {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.pedido__forma { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+
+.pedido__botoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@container (min-width: 30rem) {
+  /* Com largura, o texto e o botão dividem a linha — a lista fica mais curta e
+     o balcão vê os três aceites sem rolar. Quem decide é o recipiente: esta
+     lista também aparece dentro da coluna estreita da ficha. */
+  .consentimentos__item {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}

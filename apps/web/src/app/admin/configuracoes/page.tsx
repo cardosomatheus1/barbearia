@@ -37,6 +37,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
   const politicas = resposta.ok ? resposta.dados : null;
   const query = await searchParams;
   const salvo = (Array.isArray(query['salvo']) ? query['salvo'][0] : query['salvo']) === '1';
+  const erro = Array.isArray(query['erro']) ? query['erro'][0] : query['erro'];
 
   return (
     <main className="ui-container painel__conteudo" {...secao('configuracoes')}>
@@ -55,6 +56,20 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Configuração salva.
+        </div>
+      ) : null}
+
+      {/*
+        A recusa precisa dizer o que fazer.
+        "Não deu para salvar" manda o dono conferir cinco campos; o e-mail do
+        encarregado é o único que o servidor recusa por formato, e é o que a
+        mensagem nomeia.
+      */}
+      {erro ? (
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          {erro === 'invalid_request'
+            ? 'Confira o e-mail do encarregado: ele precisa ter o formato nome@dominio.'
+            : 'Não deu para salvar. Tente de novo.'}
         </div>
       ) : null}
 
@@ -116,6 +131,40 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             &ldquo;dar desconto&rdquo;; este número é o limite dela. Zero desliga o desconto.
           </p>
         </div>
+
+        {/*
+          O encarregado de dados (bloco 31).
+
+          A LGPD art. 41 §1 manda **divulgar publicamente** quem é e como
+          falar com ele. Por isso os dois campos saem daqui direto para a
+          página pública: encarregado cadastrado e não publicado é o mesmo
+          que não ter — o titular continua sem saber para quem escrever.
+        */}
+        <fieldset className="painel__grupo">
+          <legend className="ui-field__label">Encarregado de dados (LGPD)</legend>
+          <p className="ui-field__hint">
+            Quem responde quando um cliente pedir os dados dele. Costuma ser o dono. O nome e o
+            contato aparecem na sua página, porque a lei manda divulgá-los.
+          </p>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="dpoName">Nome</label>
+            <input className="ui-field__input" defaultValue={politicas?.dpoName ?? ''}
+                   id="dpoName" maxLength={120} name="dpoName" type="text"
+                   placeholder="Marcos Andrade" />
+          </div>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="dpoEmail">E-mail</label>
+            <input className="ui-field__input" defaultValue={politicas?.dpoEmail ?? ''}
+                   id="dpoEmail" maxLength={160} name="dpoEmail" type="email"
+                   placeholder="contato@suabarbearia.com.br" />
+          </div>
+
+          <p className="painel__nota">
+            Os pedidos que chegarem ficam em <a href="/admin/lgpd">Pedidos de dados</a>.
+          </p>
+        </fieldset>
 
         <div className="ui-field">
           <label className="ui-field__label" htmlFor="cancellationPolicy">

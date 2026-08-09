@@ -444,6 +444,16 @@ export interface ChangeWindowInput {
    * de janela do bloco 9 continue funcionando sem mandá-lo.
    */
   readonly maxDiscountBps?: number;
+
+  /**
+   * O encarregado de dados (bloco 31).
+   *
+   * Fica na mesma tela porque é do mesmo tipo: uma decisão da casa que a
+   * operação e a página pública obedecem. String vazia é "apagar" — é como a
+   * tela diz que a barbearia trocou de encarregado e ainda não tem outro.
+   */
+  readonly dpoName?: string | null;
+  readonly dpoEmail?: string | null;
 }
 
 /**
@@ -475,6 +485,20 @@ export async function saveChangeWindow(
          WHERE id = ${tenantId}::uuid
       `;
     }
+
+    // Os dois juntos, e não um campo por vez: encarregado é nome **e** contato,
+    // e salvar metade deixaria o e-mail do antecessor apontando para o nome do
+    // sucessor. Vazio vira nulo — a CHECK do banco recusa `''` como e-mail.
+    if (input.dpoName !== undefined || input.dpoEmail !== undefined) {
+      const nome = (input.dpoName ?? '').trim();
+      const email = (input.dpoEmail ?? '').trim();
+      await tx.$executeRaw`
+        UPDATE tenants SET dpo_name = ${nome.length > 0 ? nome : null},
+                           dpo_email = ${email.length > 0 ? email : null},
+                           updated_at = now()
+         WHERE id = ${tenantId}::uuid
+      `;
+    }
   });
 }
 
@@ -485,6 +509,8 @@ export async function getPolicies(tenantId: string): Promise<{
   readonly maxReschedules: number;
   readonly cancellationPolicy: string | null;
   readonly maxDiscountBps: number;
+  readonly dpoName: string | null;
+  readonly dpoEmail: string | null;
 } | null> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
@@ -494,10 +520,12 @@ export async function getPolicies(tenantId: string): Promise<{
         max_reschedules: number;
         cancellation_policy: string | null;
         max_discount_bps: number;
+        dpo_name: string | null;
+        dpo_email: string | null;
       }[]
     >`
       SELECT l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules,
-             l.cancellation_policy, t.max_discount_bps
+             l.cancellation_policy, t.max_discount_bps, t.dpo_name, t.dpo_email
         FROM locations l
         JOIN tenants t ON t.id = l.tenant_id
        ORDER BY l.created_at
@@ -511,6 +539,8 @@ export async function getPolicies(tenantId: string): Promise<{
       maxReschedules: linha.max_reschedules,
       cancellationPolicy: linha.cancellation_policy,
       maxDiscountBps: linha.max_discount_bps,
+      dpoName: linha.dpo_name,
+      dpoEmail: linha.dpo_email,
     };
   });
 }

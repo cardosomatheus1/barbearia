@@ -123,6 +123,8 @@ export const salvarJanela = (
     maxReschedules: number;
     cancellationPolicy?: string;
     maxDiscountBps?: number;
+    dpoName?: string;
+    dpoEmail?: string;
   },
 ) => chamar<{ saved: boolean }>('PUT', '/v1/admin/change-window', dados, token);
 
@@ -132,6 +134,8 @@ export interface PoliticasDaCasa {
   maxReschedules: number;
   cancellationPolicy: string | null;
   maxDiscountBps: number;
+  dpoName: string | null;
+  dpoEmail: string | null;
 }
 
 export const politicasDaCasa = (token: string) =>
@@ -1478,4 +1482,81 @@ export const trocarDePlano = (token: string, planoCode: string, chave: string) =
     { planoCode },
     token,
     chave,
+  );
+
+// -- LGPD ---------------------------------------------------------------------
+
+export interface DecisaoNaFicha {
+  finalidade: 'service' | 'marketing' | 'photos' | 'photos_public';
+  concedido: boolean;
+  versaoDoTexto: string;
+  decididoEm: string;
+  registradoPeloBalcao: boolean;
+}
+
+export interface ConsentimentosNaFicha {
+  atuais: Partial<
+    Record<
+      'service' | 'marketing' | 'photos' | 'photos_public',
+      { concedido: boolean; versaoDoTexto: string; decididoEm: string }
+    >
+  >;
+  historico: DecisaoNaFicha[];
+}
+
+export const consentimentosDaFicha = (token: string, customerId: string) =>
+  chamar<ConsentimentosNaFicha>(
+    'GET',
+    `/v1/admin/customers/${customerId}/consentimentos`,
+    undefined,
+    token,
+  );
+
+export const registrarConsentimentoNoBalcao = (
+  token: string,
+  customerId: string,
+  dados: { finalidade: string; concedido: boolean; versaoDoTexto: string },
+) =>
+  chamar<{ finalidade: string; concedido: boolean; decididoEm: string }>(
+    'PUT',
+    `/v1/admin/customers/${customerId}/consentimentos`,
+    dados,
+    token,
+  );
+
+export interface PedidoNaTela {
+  id: string;
+  tipo: 'export' | 'deletion';
+  estado: 'open' | 'done' | 'refused';
+  customerId: string | null;
+  pedidoEm: string;
+  venceEm: string;
+  encerradoEm: string | null;
+  nota: string | null;
+}
+
+export const pedidosDeDados = (token: string) =>
+  chamar<{ pedidos: PedidoNaTela[] }>('GET', '/v1/admin/customers/lgpd/pedidos', undefined, token);
+
+export const abrirPedidoDeDados = (token: string, customerId: string, tipo: string) =>
+  chamar<{ id: string; venceEm: string }>(
+    'POST',
+    `/v1/admin/customers/${customerId}/lgpd/pedidos`,
+    { tipo },
+    token,
+  );
+
+export const encerrarPedidoDeDados = (
+  token: string,
+  pedidoId: string,
+  dados: { atendido: boolean; nota?: string },
+) =>
+  chamar<{ ok: boolean }>('PUT', `/v1/admin/customers/lgpd/pedidos/${pedidoId}`, dados, token);
+
+export const exportarDadosDoCliente = (token: string, customerId: string) =>
+  chamar<Record<string, unknown>>(
+    'GET',
+    `/v1/admin/customers/${customerId}/dados`,
+    undefined,
+    token,
   );

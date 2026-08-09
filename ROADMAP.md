@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 30 de 79 blocos.**
+**Status: 31 de 79 blocos.**
 
 ---
 
@@ -85,6 +85,8 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | CAC e payback | GMV, MRR e churn saem de dado que o produto tem | as duas métricas da SPEC §8 que dependem de **custo de aquisição** | sem bloco definido: não existe origem de dado. Quanto se gastou para trazer uma barbearia mora em ferramenta de marketing, não aqui, e inventar um campo "custo" que ninguém preenche é o defeito de `blocks` outra vez |
 | Assinaturas ativas e MRR de assinatura do tenant | o MRR **da plataforma** — o que as barbearias pagam a nós | o outro MRR da SPEC §8: o que os clientes pagam às barbearias | 45 (clube de assinatura): não há assinatura no produto até lá. É a mesma espera da comissão sobre assinatura |
 | O dono encerrar sozinho o suporte na conta dele | a plataforma abre, lista e **encerra** o suporte por rota própria (`DELETE`), que derruba todas as sessões abertas na conta; o dono vê na trilha dele quem entrou, o que abriu e quando saiu | o botão **do lado do dono**, para ele expulsar o suporte sem pedir | 33 (segurança: hardening, auditoria de acesso): é a mesma tela de "sessões ativas" que falta para o gestor e para o Super Admin, e ela vale mais entregue de uma vez do que três vezes pela metade. Enquanto isso, o prazo de trinta minutos é o teto, e a trilha é imediata |
+| Foto do cliente só sai com o consentimento na mão | o aceite existe e é coletado: `photos` e `photos_public` são finalidades distintas no histórico append-only, com texto e versão próprios, registráveis na ficha pelo balcão e conferíveis por consulta | a **guarda** que impede subir a foto de quem não autorizou, e a que separa "guardar na ficha" de "publicar nas redes" | 74 (foto de cliente e antes/depois): não existe foto de cliente no produto — não há coluna, tela nem armazenamento. Escrever a guarda agora seria função que ninguém chama, e é o defeito de `blocks` outra vez. O aceite entra antes de propósito: consentimento é o que precede a coleta, então coletá-lo primeiro é a ordem certa, e é o oposto de campo vazio |
+| O titular pedir a exclusão sozinho | ele pede a **cópia** pela tela dele, com um toque, e o pedido nasce com prazo; o balcão registra os dois tipos pela ficha, e a fila mostra o que vence primeiro | o botão de exclusão do lado do cliente | 32 (LGPD: anonimização, retenção, pipeline de exclusão): aceitar o pedido de exclusão direto abriria fila que ninguém consegue esvaziar — não existe como apagar sem quebrar a nota fiscal, a comissão fechada e o razão do fiado, que é justamente o que o bloco 32 resolve. Enquanto isso o direito não fica sem caminho: a página pública e a tela do cliente publicam o encarregado, que é a via que a LGPD art. 41 §1 exige |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -199,7 +201,7 @@ não é vendável.
 | 28 | Billing: upgrade/downgrade, inadimplência, régua de retentativa | ✅ |
 | 29 | Billing: integração com PSP, conciliação | ✅ |
 | 30 | RBAC: telas de gestão de papéis e permissões editáveis pelo dono | ✅ |
-| 31 | LGPD: consentimentos, exportação de dados | |
+| 31 | LGPD: consentimentos, exportação de dados | ✅ |
 | 32 | LGPD: anonimização, retenção, pipeline de exclusão | |
 | 33 | Segurança: hardening, rate limit global, auditoria de acesso | |
 

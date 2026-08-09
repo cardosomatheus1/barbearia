@@ -20,11 +20,11 @@ integridade do banco.
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 89 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática e apuração diária — o que acontece sem ninguém esperando | 63 testes ✅ |
-| `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
+| `packages/crm` | A ficha do cliente, a importação de base e os direitos do titular: consentimento com histórico e a exportação dos dados | 73 testes ✅ |
 | `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 98 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública, do painel, **da plataforma** e o webhook do adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano e o Super Admin | 336 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 66 testes ✅ |
+| `apps/api` | API pública, do painel, **da plataforma** e o webhook do adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, direitos do titular (LGPD) e o Super Admin | 352 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 81 testes ✅ |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos, marca a falta e apura as métricas do dia | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der

@@ -46,6 +46,14 @@ export type AuditAction =
   // seguinte é "quem fez isso?".
   | 'import.applied'
   | 'import.reverted'
+  // LGPD (bloco 31). A SPEC §1.2 já listava exportação de clientes entre os
+  // eventos de auditoria obrigatória; o pedido do titular entra junto porque a
+  // pergunta de um fiscal é "vocês atenderam, e quando?" — e a resposta não
+  // pode ser o estado atual da fila, que já mudou.
+  | 'customer.consent_recorded'
+  | 'customer.data_exported'
+  | 'lgpd.request_fulfilled'
+  | 'lgpd.request_refused'
   // Endereço público novo apontando para a barbearia. Quem adiciona um slug
   // muda por onde o cliente chega — e é a única ação deste produto que altera
   // algo visível fora dele.
@@ -110,6 +118,19 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'support.started',
   'support.accessed',
   'support.ended',
+  /**
+   * Os direitos do titular (bloco 31).
+   *
+   * Do lado da gestão e não do dinheiro, apesar de tocarem dado sensível: a
+   * separação das duas listas é **por permissão**, e é dela que sai a exigência
+   * de segundo fator. Empurrar a exportação de uma ficha para o lado do dinheiro
+   * faria a aba de faturamento listá-la — e faria a trilha de quem administra a
+   * casa esconder justamente o evento que a LGPD manda registrar.
+   */
+  'customer.consent_recorded',
+  'customer.data_exported',
+  'lgpd.request_fulfilled',
+  'lgpd.request_refused',
 ];
 
 export interface AuditEntry {

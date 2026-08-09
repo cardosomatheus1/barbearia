@@ -49,6 +49,16 @@ export interface PublicProfile {
   readonly name: string;
   readonly logoUrl: string | null;
   readonly instagram: string | null;
+  /**
+   * O encarregado de dados, público de propósito (bloco 31).
+   *
+   * A LGPD art. 41 §1 manda divulgar publicamente a identidade e o contato do
+   * encarregado — não é dado interno que vaza, é obrigação de quem controla
+   * dado pessoal. Sem isso o titular que quer exercer um direito não tem para
+   * quem escrever, e o pedido cai no suporte da plataforma, que é **operadora**
+   * e não tem competência para responder por dado que não é dela.
+   */
+  readonly encarregado: { readonly nome: string; readonly email: string | null } | null;
   readonly location: {
     readonly id: string;
     readonly name: string;
@@ -167,8 +177,14 @@ export async function getPublicProfile(
   now: Date = new Date(),
 ): Promise<PublicProfile | null> {
   return withTenant(tenantId, async (tx) => {
-    const tenants = await tx.$queryRaw<{ name: string; logo_url: string | null; instagram: string | null }[]>`
-      SELECT name, logo_url, instagram FROM tenants WHERE id = ${tenantId}::uuid
+    const tenants = await tx.$queryRaw<
+      {
+        name: string; logo_url: string | null; instagram: string | null;
+        dpo_name: string | null; dpo_email: string | null;
+      }[]
+    >`
+      SELECT name, logo_url, instagram, dpo_name, dpo_email
+        FROM tenants WHERE id = ${tenantId}::uuid
     `;
     const tenant = tenants[0];
     if (!tenant) return null;
@@ -293,6 +309,11 @@ export async function getPublicProfile(
       name: tenant.name,
       logoUrl: tenant.logo_url,
       instagram: tenant.instagram,
+      // Sem nome não há encarregado: e-mail solto não diz a quem se escreve, e
+      // a lei pede identidade **e** contato.
+      encarregado: tenant.dpo_name
+        ? { nome: tenant.dpo_name, email: tenant.dpo_email }
+        : null,
       location: {
         id: location.id,
         name: location.name,

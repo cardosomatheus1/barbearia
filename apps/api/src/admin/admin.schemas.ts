@@ -101,6 +101,22 @@ export const changeWindowSchema = z.object({
   // Pontos-base inteiros, como toda alíquota do produto: 2000 é 20%. O teto do
   // schema acompanha a CHECK do banco.
   maxDiscountBps: z.number().int().min(0).max(10_000).optional(),
+  /**
+   * O encarregado de dados (bloco 31).
+   *
+   * O formato do e-mail é conferido aqui **e** por CHECK no banco. Duas vezes
+   * de propósito: a borda devolve erro legível, e a CHECK vale para quem entrar
+   * por outro caminho — importação, script, correção manual.
+   */
+  dpoName: z.string().trim().max(120).optional(),
+  dpoEmail: z
+    .string()
+    .trim()
+    .max(160)
+    .refine((v) => v.length === 0 || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), {
+      message: 'E-mail inválido',
+    })
+    .optional(),
 });
 
 /**

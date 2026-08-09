@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
-import { getProfile, listarAgendamentos, type AgendamentoDoCliente } from '@/lib/api';
+import {
+  getProfile,
+  lerConsentimento,
+  listarAgendamentos,
+  type AgendamentoDoCliente,
+} from '@/lib/api';
 import { humanInstant } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
-import { cancelar, sair } from './acoes';
+import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
+import { cancelar, decidirMarketing, pedirDados, sair } from './acoes';
 
 /**
  * Meus agendamentos.
@@ -41,7 +47,54 @@ const FALHA: Record<string, string> = {
 const FEITO: Record<string, string> = {
   cancelado: 'Agendamento cancelado.',
   remarcado: 'Horário remarcado.',
+  aceitou: 'Pronto — você vai receber as promoções desta barbearia.',
+  pediu: 'Pedido registrado. A barbearia responde em até 15 dias.',
+  recusou: 'Pronto — você não recebe mais promoção. O aviso do seu horário continua.',
 };
+
+/**
+ * A decisão sobre promoção, do lado de quem decide (bloco 31).
+ *
+ * ## Fica aqui e não no agendamento, e é decisão
+ *
+ * Consentimento de marketing precisa ser informado e **separado** do necessário
+ * para executar o serviço (SPEC §1.8). Enfiá-lo no fluxo de agendar produz o
+ * aceite que ninguém leu: a pessoa está tentando marcar um horário. Aqui ela já
+ * entrou, já se identificou, e a decisão é o único assunto do bloco.
+ *
+ * ## Um botão, não uma caixa de seleção
+ *
+ * Caixa de seleção precisa de um "Salvar" ao lado, e um formulário de um campo
+ * com botão de salvar é onde a pessoa marca e vai embora achando que salvou. O
+ * botão diz o que vai acontecer e acontece no clique.
+ */
+function Promocao({
+  slug,
+  aceita,
+}: {
+  readonly slug: string;
+  readonly aceita: boolean;
+}) {
+  return (
+    <section className="meus__consentimento">
+      <h2 className="meus__secao">Promoções</h2>
+      <p className="meus__consentimento-texto">{TEXTO_DO_CONSENTIMENTO}</p>
+      <p className="meus__consentimento-estado">
+        {aceita ? 'Você aceita receber.' : 'Você não recebe promoção desta barbearia.'}{' '}
+        {/* A frase existe porque a dúvida é real e faz gente recusar por medo de
+            perder o lembrete do próprio corte. */}
+        O aviso do seu horário chega de qualquer jeito — ele é parte do serviço.
+      </p>
+      <form action={decidirMarketing}>
+        <input name="slug" type="hidden" value={slug} />
+        <input name="marketing" type="hidden" value={aceita ? '0' : '1'} />
+        <button className="ui-button ui-button--ghost meus__consentimento-botao" type="submit">
+          {aceita ? 'Parar de receber promoções' : 'Quero receber promoções'}
+        </button>
+      </form>
+    </section>
+  );
+}
 
 /**
  * Rótulo do que já passou.
@@ -81,6 +134,10 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
   // `null` é sessão morta, não lista vazia. Mostrar "nenhum agendamento" aqui
   // faria o cliente achar que perdeu o horário.
   if (agendamentos === null) redirect(`/${slug}/entrar`);
+
+  // Lido junto e não numa segunda volta: são duas rotas independentes e a tela
+  // precisa das duas para montar. Em série, o cliente espera as duas somadas.
+  const consentimento = await lerConsentimento(slug, token);
 
   const proximos = agendamentos.filter((a) => a.state === 'active');
   const anteriores = agendamentos.filter((a) => a.state !== 'active');
@@ -167,7 +224,70 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
           </div>
         </div>
       ) : null}
+
+      {consentimento ? <Promocao aceita={consentimento.marketing} slug={slug} /> : null}
+      <MeusDados encarregado={profile.encarregado} nome={profile.name} slug={slug} />
     </main>
+  );
+}
+
+/**
+ * Os dados do titular, do lado dele (bloco 31, SPEC §1.8.4).
+ *
+ * ## O botão existe porque o caminho de trás depende de memória
+ *
+ * A recepção também registra o pedido pela ficha. Só que o pedido chega por
+ * WhatsApp num sábado cheio, e o prazo de 15 dias corre da conversa — não de
+ * quando alguém anotar. Aqui quem pede já está identificado, e o registro é
+ * imediato.
+ *
+ * ## Por que o encarregado aparece com nome e e-mail
+ *
+ * A LGPD art. 41 §1 manda divulgar publicamente quem é e como falar com ele.
+ * Uma tela que só oferece um botão diz ao titular o que **este produto** faz;
+ * o contato é o que resta quando ele quer algo que o botão não cobre — corrigir
+ * um dado errado, reclamar, ou pedir a exclusão.
+ */
+function MeusDados({
+  slug,
+  nome,
+  encarregado,
+}: {
+  readonly slug: string;
+  readonly nome: string;
+  readonly encarregado: { readonly nome: string; readonly email: string | null } | null;
+}) {
+  return (
+    <section className="meus__consentimento">
+      <h2 className="meus__secao">Meus dados</h2>
+      <p className="meus__consentimento-texto">
+        Você pode pedir uma cópia de tudo que a {nome} guarda sobre você.
+      </p>
+      <p className="meus__consentimento-estado">
+        O pedido é registrado agora e a barbearia responde em até 15 dias. Pedir de novo não
+        adianta o prazo — é o mesmo pedido.
+      </p>
+
+      <form action={pedirDados}>
+        <input name="slug" type="hidden" value={slug} />
+        <button className="ui-button ui-button--ghost meus__consentimento-botao" type="submit">
+          Pedir uma cópia dos meus dados
+        </button>
+      </form>
+
+      {encarregado ? (
+        <p className="meus__consentimento-estado">
+          Para corrigir ou apagar um dado, fale com {encarregado.nome}
+          {encarregado.email ? (
+            <>
+              {' '}
+              pelo <a href={`mailto:${encarregado.email}`}>{encarregado.email}</a>
+            </>
+          ) : null}
+          .
+        </p>
+      ) : null}
+    </section>
   );
 }
 

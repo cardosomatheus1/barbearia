@@ -68,7 +68,11 @@ import {
   removerRegraDeComissao,
   salvarConfiguracaoDeComissao,
   fecharComissao,
+  registrarConsentimentoNoBalcao,
+  abrirPedidoDeDados,
+  encerrarPedidoDeDados,
 } from '@/lib/admin-api';
+import { versaoDoConsentimento } from '@/lib/politica';
 import { ehConversa } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
@@ -305,6 +309,12 @@ export async function acaoJanela(form: FormData): Promise<void> {
     ...(texto(form, 'cancellationPolicy')
       ? { cancellationPolicy: texto(form, 'cancellationPolicy') }
       : {}),
+    // O encarregado vai sempre que o formulário o traz, inclusive vazio: apagar
+    // o campo é uma decisão legítima — a barbearia trocou de encarregado e
+    // ainda não tem outro — e ignorá-la deixaria na página pública o contato de
+    // quem não responde mais por isso.
+    ...(form.has('dpoName') ? { dpoName: texto(form, 'dpoName') } : {}),
+    ...(form.has('dpoEmail') ? { dpoEmail: texto(form, 'dpoEmail') } : {}),
   });
 
   if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
@@ -1379,4 +1389,72 @@ export async function acaoPermissoesDoPapel(form: FormData): Promise<void> {
   const resultado = await salvarPermissoesDoPapel(token, papel, permissoes);
   if (!resultado.ok) falhar('/admin/equipe/permissoes', resultado.code);
   redirect('/admin/equipe/permissoes?salvo=1');
+}
+
+// -- LGPD ---------------------------------------------------------------------
+
+/**
+ * O consentimento registrado pelo balcão (bloco 31).
+ *
+ * A versão do texto vem de `politica.ts` e **não** do formulário, igual ao lado
+ * do cliente: o que fica gravado é o que a pessoa leu, e um campo escondido
+ * editável transformaria a prova no que o navegador digitou.
+ *
+ * Quem registra fica gravado em `recorded_by` — a diferença entre "ele clicou"
+ * e "alguém da casa marcou por ele" é o que responde a uma contestação.
+ */
+export async function acaoConsentimentoNoBalcao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const customerId = texto(form, 'customerId');
+  const de = destinoDaFicha(texto(form, 'de'));
+  const rota = `/admin/cliente/${customerId}?de=${de === '/admin/meu-dia' ? 'meu-dia' : 'dia'}`;
+
+  const finalidade = texto(form, 'finalidade');
+  const versao = versaoDoConsentimento(finalidade);
+  if (versao === null) falhar(rota, 'finalidade_invalida');
+
+  const resultado = await registrarConsentimentoNoBalcao(token, customerId, {
+    finalidade,
+    concedido: texto(form, 'concedido') === '1',
+    versaoDoTexto: versao,
+  });
+
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}&salvo=1`);
+}
+
+/**
+ * Abre o pedido do titular a partir da ficha.
+ *
+ * O pedido nasce **antes** de ser atendido, e é de propósito: o prazo de 15
+ * dias conta da chegada, e um registro criado só no fim serviria para dizer que
+ * tudo sempre foi respondido no mesmo dia.
+ */
+export async function acaoAbrirPedidoDeDados(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const customerId = texto(form, 'customerId');
+  const de = destinoDaFicha(texto(form, 'de'));
+  const rota = `/admin/cliente/${customerId}?de=${de === '/admin/meu-dia' ? 'meu-dia' : 'dia'}`;
+
+  const tipo = texto(form, 'tipo');
+  if (tipo !== 'export' && tipo !== 'deletion') falhar(rota, 'pedido_invalido');
+
+  const resultado = await abrirPedidoDeDados(token, customerId, tipo);
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}&pedido=1`);
+}
+
+export async function acaoEncerrarPedidoDeDados(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const nota = texto(form, 'nota');
+  const resultado = await encerrarPedidoDeDados(token, texto(form, 'pedidoId'), {
+    atendido: texto(form, 'atendido') === '1',
+    ...(nota ? { nota } : {}),
+  });
+
+  if (!resultado.ok) falhar('/admin/lgpd', resultado.code);
+  redirect('/admin/lgpd?salvo=1');
 }
