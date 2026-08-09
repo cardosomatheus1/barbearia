@@ -13,6 +13,7 @@ import { BookingController } from '../src/booking/booking.controller.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
 import { throttlerConfig } from '../src/common/throttler.config.js';
+import { limparBanco } from './limpar.js';
 
 /**
  * Painel do gestor pela HTTP.
@@ -74,8 +75,7 @@ describeIfDb('painel do gestor', () => {
   });
 
   beforeEach(async () => {
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
-    await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
+    await limparBanco(admin, ['tenants', 'staff_directory']);
     // O cache de slugs sobrevive ao TRUNCATE: sem limpar, o teste seguinte
     // recria o mesmo slug e resolve para um tenant que já não existe.
     for (const slug of ['domari-barber-club', 'domari-barber-club-2', 'rival', 'outra']) {

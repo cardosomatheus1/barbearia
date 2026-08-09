@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BookingController } from '../src/booking/booking.controller.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
+import { limparBanco } from './limpar.js';
 
 /** Perfil público — o que a página SSR consome antes de qualquer interação. */
 
@@ -38,7 +39,7 @@ describeIfDb('GET /v1/b/:slug', () => {
     if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
     admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
 
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await limparBanco(admin);
     await exec(admin, `
       INSERT INTO tenants (id, name, instagram) VALUES
         ('${TENANT}', 'Domari Barber Club', 'domaribarberclub');

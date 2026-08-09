@@ -27,6 +27,7 @@ import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
 import { throttlerConfig } from '../src/common/throttler.config.js';
+import { limparBanco } from './limpar.js';
 
 /**
  * O caminho inteiro, numa corrida só (bloco 23).
@@ -155,8 +156,7 @@ describeIfDb('o dia inteiro de uma barbearia', () => {
 
   beforeEach(async () => {
     mensagens.clear();
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
-    await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
+    await limparBanco(admin, ['tenants', 'staff_directory']);
     tenants.forget('domari-barber-club');
   });
 

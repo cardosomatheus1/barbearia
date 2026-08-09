@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
+import { limparBanco } from './limpar.js';
 
 /**
  * End-to-end de `GET /v1/b/:slug/availability`.
@@ -49,7 +50,7 @@ describeIfDb('GET /v1/b/:slug/availability', () => {
     if (!ADMIN_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
     admin = new PrismaClient({ datasources: { db: { url: ADMIN_URL } } });
 
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await limparBanco(admin);
     await exec(admin, `
       INSERT INTO tenants (id, name) VALUES
         ('${TENANT}', 'Domari Barber Club'), ('${RIVAL}', 'Barbearia Rival');

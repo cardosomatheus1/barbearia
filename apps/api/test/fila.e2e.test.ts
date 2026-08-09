@@ -18,6 +18,7 @@ import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
 import { throttlerConfig } from '../src/common/throttler.config.js';
+import { limparBanco } from './limpar.js';
 
 /**
  * A fila presencial pela HTTP.
@@ -98,8 +99,7 @@ describeIfDb('fila presencial pela HTTP', () => {
   });
 
   beforeEach(async () => {
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
-    await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
+    await limparBanco(admin, ['tenants', 'staff_directory']);
     for (const slug of ['domari-barber-club', 'rival-barbearia']) tenants.forget(slug);
   });
 

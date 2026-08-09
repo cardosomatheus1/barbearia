@@ -17,6 +17,7 @@ import { MESSAGING_PROVIDER } from '../src/auth/messaging.token.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { TenantService } from '../src/tenant/tenant.service.js';
 import { throttlerConfig } from '../src/common/throttler.config.js';
+import { limparBanco } from './limpar.js';
 
 /**
  * Fluxo completo do cliente: código no WhatsApp, sessão, agendar, listar,
@@ -91,7 +92,7 @@ describeIfDb('fluxo do cliente', () => {
 
   beforeEach(async () => {
     messaging.clear();
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await limparBanco(admin);
     await exec(admin, `
       INSERT INTO tenants (id, name) VALUES
         ('${TENANT}', 'Domari Barber Club'), ('${RIVAL}', 'Rival');
