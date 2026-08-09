@@ -1393,6 +1393,13 @@ export interface PlanoDaBarbearia {
   testeAte: string | null;
   periodoAte: string;
   cadeiras: { emUso: number; teto: number | null };
+  cobranca: {
+    bandeira: string | null;
+    final: string | null;
+    validadeMes: number | null;
+    validadeAno: number | null;
+    cadastrado: boolean;
+  } | null;
   recursos: { code: string; nome: string; descricao: string; ligado: boolean; noPlano: boolean }[];
 }
 

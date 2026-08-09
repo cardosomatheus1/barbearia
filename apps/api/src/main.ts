@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { assertRlsEnforced } from '@barbearia/db';
 import { AppModule } from './app.module.js';
 import { TETO_DO_ARQUIVO } from './admin/importacao.schemas.js';
+import { guardarCorpoCru } from './common/corpo-cru.js';
 
 async function bootstrap(): Promise<void> {
   // Antes de servir a primeira requisição: se a conexão ignora RLS, o
@@ -33,7 +34,20 @@ async function bootstrap(): Promise<void> {
    * `node dist/main.js` — que os testes não pegam, porque eles montam a
    * aplicação sem passar por este arquivo.
    */
-  app.useBodyParser('json', { limit: TETO_DO_ARQUIVO });
+  /**
+   * `verify` guarda o corpo cru, e existe por uma rota só: o webhook do
+   * adquirente (bloco 29).
+   *
+   * A assinatura HMAC é sobre os bytes que o provedor assinou. Reserializar o
+   * objeto já analisado mudaria espaço em branco e ordem de chave, e a
+   * conferência passaria a depender do `JSON.stringify` do Node em vez do que
+   * o adquirente mandou — o que **passa** em teste e falha em produção.
+   *
+   * A função mora em `common/corpo-cru.ts` e não aqui: os testes montam a
+   * aplicação sem passar por este arquivo e aplicam o **mesmo** parser. Uma
+   * configuração que só vale em produção é uma configuração que ninguém testa.
+   */
+  app.useBodyParser('json', { limit: TETO_DO_ARQUIVO, verify: guardarCorpoCru });
 
   // A API fica atrás de proxy; sem isso o rate limit enxerga um IP só.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);

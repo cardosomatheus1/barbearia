@@ -148,6 +148,58 @@ function Cabecalho({ resumo, ate }: { readonly resumo: ResumoDaPlataforma; reado
   );
 }
 
+/**
+ * Como o dinheiro entrou nas barbearias (bloco 29).
+ *
+ * Separado do cabeçalho de propósito: aquele fala da **plataforma** — o que as
+ * barbearias pagam a nós —, e este fala do que elas receberam dos clientes
+ * delas. Misturar os dois no mesmo bloco de números é como uma tela de
+ * faturamento acaba dizendo duas coisas diferentes com o mesmo rótulo.
+ *
+ * A soma dos quatro **não** fecha com a receita, e a nota diz isso: fiado é
+ * venda registrada que ainda não virou dinheiro.
+ */
+function Recebimentos({ resumo }: { readonly resumo: ResumoDaPlataforma }) {
+  const recebido =
+    resumo.recebidoPixCents +
+    resumo.recebidoCartaoCents +
+    resumo.recebidoDinheiroCents +
+    resumo.recebidoOutrosCents;
+
+  if (recebido === 0) return null;
+
+  const fatia = (valor: number): string =>
+    `${Math.round((valor / recebido) * 100)}% do recebido`;
+
+  return (
+    <>
+      <h2 className="painel__secao">Como entrou nas barbearias</h2>
+      <p className="painel__sub">
+        Pagamentos lançados nas comandas dos últimos {resumo.dias} dias. Não fecha com a receita:
+        o fiado é venda registrada, não dinheiro recebido.
+      </p>
+      <div className="indicadores">
+        <Numero rotulo="Pix" valor={reais(resumo.recebidoPixCents)} nota={fatia(resumo.recebidoPixCents)} />
+        <Numero
+          rotulo="Cartão"
+          valor={reais(resumo.recebidoCartaoCents)}
+          nota={fatia(resumo.recebidoCartaoCents)}
+        />
+        <Numero
+          rotulo="Dinheiro"
+          valor={reais(resumo.recebidoDinheiroCents)}
+          nota={fatia(resumo.recebidoDinheiroCents)}
+        />
+        <Numero
+          rotulo="Outros"
+          valor={reais(resumo.recebidoOutrosCents)}
+          nota="link, transferência e fiado"
+        />
+      </div>
+    </>
+  );
+}
+
 export default async function MetricasPage({ searchParams }: Props) {
   const token = await lerSessaoDaPlataforma();
   if (!token) redirect('/plataforma/entrar');
@@ -198,6 +250,8 @@ export default async function MetricasPage({ searchParams }: Props) {
       </nav>
 
       <Cabecalho ate={ate} resumo={resumo} />
+
+      <Recebimentos resumo={resumo} />
 
       <h2 className="painel__secao">Por barbearia</h2>
       <p className="painel__sub">

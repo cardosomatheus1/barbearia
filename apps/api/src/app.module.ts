@@ -28,6 +28,7 @@ import {
   PlataformaAuthController,
   PlataformaController,
 } from './plataforma/plataforma.controller.js';
+import { WebhookDoPspController } from './plataforma/webhook.controller.js';
 import { PlataformaGuard } from './plataforma/plataforma.guard.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
@@ -69,6 +70,7 @@ import { TenantService } from './tenant/tenant.service.js';
     AppointmentsController,
     PlataformaAuthController,
     PlataformaController,
+    WebhookDoPspController,
   ],
   providers: [
     TenantService,

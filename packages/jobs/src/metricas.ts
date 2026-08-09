@@ -47,6 +47,11 @@ export interface DiaApurado {
   readonly minutosDisponiveis: number;
   readonly receitaCents: number;
   readonly comandasPagas: number;
+  /** A quebra por meio (bloco 29). Não fecha com a receita quando há fiado. */
+  readonly receitaPixCents: number;
+  readonly receitaCartaoCents: number;
+  readonly receitaDinheiroCents: number;
+  readonly receitaOutrosCents: number;
 }
 
 interface LinhaApurada {
@@ -59,6 +64,10 @@ interface LinhaApurada {
   minutos_disponiveis: bigint;
   receita_cents: bigint;
   comandas_pagas: bigint;
+  receita_pix_cents: bigint;
+  receita_cartao_cents: bigint;
+  receita_dinheiro_cents: bigint;
+  receita_outros_cents: bigint;
 }
 
 /**
@@ -116,11 +125,34 @@ export async function apurarDiaDaBarbearia(
         FROM orders o
         CROSS JOIN alvo
         WHERE o.status = 'paid' AND o.business_day = alvo.d
+      ),
+      -- A quebra por meio de pagamento (bloco 29).
+      --
+      -- Sai de order_payments e não de orders: a comanda pode ser paga em dois
+      -- meios, e somar o total no meio "principal" inventaria um número. Por
+      -- isso ela não fecha com a receita quando há fiado — e é assim que tem
+      -- que ser: fiado é venda registrada, não dinheiro recebido.
+      meios AS (
+        SELECT
+          coalesce(sum(op.amount_cents) FILTER (WHERE op.method = 'pix'), 0)::bigint AS pix,
+          coalesce(sum(op.amount_cents) FILTER (
+            WHERE op.method IN ('debit', 'credit')
+          ), 0)::bigint AS cartao,
+          coalesce(sum(op.amount_cents) FILTER (WHERE op.method = 'cash'), 0)::bigint AS dinheiro,
+          coalesce(sum(op.amount_cents) FILTER (
+            WHERE op.method IN ('link', 'transfer', 'fiado')
+          ), 0)::bigint AS outros
+        FROM order_payments op
+        JOIN orders o ON o.id = op.order_id
+        CROSS JOIN alvo
+        WHERE o.status = 'paid' AND o.business_day = alvo.d
       )
       SELECT ags.agendamentos, ags.online, ags.faltas, ags.cancelamentos, ags.concluidos,
              ags.minutos_vendidos, cap.minutos AS minutos_disponiveis,
-             vendas.cents AS receita_cents, vendas.comandas AS comandas_pagas
-      FROM ags, cap, vendas
+             vendas.cents AS receita_cents, vendas.comandas AS comandas_pagas,
+             meios.pix AS receita_pix_cents, meios.cartao AS receita_cartao_cents,
+             meios.dinheiro AS receita_dinheiro_cents, meios.outros AS receita_outros_cents
+      FROM ags, cap, vendas, meios
     `;
 
     const l = linhas[0];
@@ -134,18 +166,26 @@ export async function apurarDiaDaBarbearia(
       minutosDisponiveis: Number(l?.minutos_disponiveis ?? 0),
       receitaCents: Number(l?.receita_cents ?? 0),
       comandasPagas: Number(l?.comandas_pagas ?? 0),
+      receitaPixCents: Number(l?.receita_pix_cents ?? 0),
+      receitaCartaoCents: Number(l?.receita_cartao_cents ?? 0),
+      receitaDinheiroCents: Number(l?.receita_dinheiro_cents ?? 0),
+      receitaOutrosCents: Number(l?.receita_outros_cents ?? 0),
     };
 
     await tx.$executeRaw`
       INSERT INTO tenant_metrics_daily (
         tenant_id, business_day, appointments_total, appointments_online,
         no_shows, cancellations, completed, minutes_sold, minutes_available,
-        revenue_cents, orders_paid, computed_at
+        revenue_cents, orders_paid,
+        revenue_pix_cents, revenue_card_cents, revenue_cash_cents, revenue_other_cents,
+        computed_at
       ) VALUES (
         ${tenantId}::uuid, ${dia}::date, ${apurado.agendamentos}, ${apurado.online},
         ${apurado.faltas}, ${apurado.cancelamentos}, ${apurado.concluidos},
         ${apurado.minutosVendidos}, ${apurado.minutosDisponiveis},
-        ${apurado.receitaCents}, ${apurado.comandasPagas}, now()
+        ${apurado.receitaCents}, ${apurado.comandasPagas},
+        ${apurado.receitaPixCents}, ${apurado.receitaCartaoCents},
+        ${apurado.receitaDinheiroCents}, ${apurado.receitaOutrosCents}, now()
       )
       ON CONFLICT (tenant_id, business_day) DO UPDATE SET
         appointments_total = EXCLUDED.appointments_total,
@@ -157,6 +197,10 @@ export async function apurarDiaDaBarbearia(
         minutes_available = EXCLUDED.minutes_available,
         revenue_cents = EXCLUDED.revenue_cents,
         orders_paid = EXCLUDED.orders_paid,
+        revenue_pix_cents = EXCLUDED.revenue_pix_cents,
+        revenue_card_cents = EXCLUDED.revenue_card_cents,
+        revenue_cash_cents = EXCLUDED.revenue_cash_cents,
+        revenue_other_cents = EXCLUDED.revenue_other_cents,
         computed_at = EXCLUDED.computed_at
     `;
 

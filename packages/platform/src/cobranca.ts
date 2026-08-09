@@ -73,6 +73,8 @@ export interface Fatura {
   readonly metodo: string | null;
   readonly canceladaEm: Date | null;
   readonly motivoDoCancelamento: string | null;
+  /** A cobrança no adquirente, quando já existe uma em curso (bloco 29). */
+  readonly chargeId: string | null;
   readonly criadaEm: Date;
 }
 
@@ -94,6 +96,7 @@ interface LinhaDeFatura {
   voided_at: Date | null;
   void_reason: string | null;
   idempotency_key: string | null;
+  psp_charge_id: string | null;
   created_at: Date;
 }
 
@@ -114,6 +117,7 @@ const paraFatura = (l: LinhaDeFatura): Fatura => ({
   metodo: l.paid_method,
   canceladaEm: l.voided_at,
   motivoDoCancelamento: l.void_reason,
+  chargeId: l.psp_charge_id,
   criadaEm: l.created_at,
 });
 
@@ -138,7 +142,18 @@ export interface CobrancaProvider {
 
 export type ResultadoDaCobranca =
   | { readonly pago: true; readonly metodo: MetodoDePagamento }
-  | { readonly pago: false; readonly motivo: string };
+  | {
+      readonly pago: false;
+      readonly motivo: string;
+      /**
+       * A cobrança saiu e a resposta vem depois (bloco 29).
+       *
+       * Cartão responde na hora; Pix e boleto não. Sem esta distinção, todo Pix
+       * emitido gastaria um degrau da escada de retentativa, e a barbearia
+       * seria suspensa por um pagamento que estava a caminho.
+       */
+      readonly aguardando?: boolean;
+    };
 
 /**
  * O provedor de mentira: recusa por padrão.
@@ -247,7 +262,7 @@ export async function emitirFatura(entrada: {
       ON CONFLICT (tenant_id, period_start) WHERE kind = 'subscription' DO NOTHING
       RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
                 period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-                paid_method, voided_at, void_reason, idempotency_key, created_at
+                paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
     `;
     const criada = criadas[0];
     if (!criada) return null;
@@ -290,7 +305,7 @@ export async function emitirRateio(entrada: {
             ${vencimento}, ${entrada.idempotencyKey ?? null})
     RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
               period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-              paid_method, voided_at, void_reason, idempotency_key, created_at
+              paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
   `;
   const criada = criadas[0];
   if (!criada) throw new PlataformaError('invoice_failed', 'Não foi possível emitir o acerto');
@@ -310,7 +325,7 @@ export async function faturasDaBarbearia(tenantId: string): Promise<readonly Fat
       await tx.$queryRaw<LinhaDeFatura[]>`
         SELECT id, tenant_id, kind, status, plan_code, amount_cents, period_start,
                period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-               paid_method, voided_at, void_reason, idempotency_key, created_at
+               paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
           FROM invoices WHERE tenant_id = ${tenantId}::uuid
          ORDER BY created_at DESC
          LIMIT 60
@@ -326,7 +341,7 @@ export async function faturasEmCobranca(): Promise<readonly Fatura[]> {
       await tx.$queryRaw<LinhaDeFatura[]>`
         SELECT id, tenant_id, kind, status, plan_code, amount_cents, period_start,
                period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-               paid_method, voided_at, void_reason, idempotency_key, created_at
+               paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
           FROM invoices WHERE status = 'open'
          ORDER BY due_at
          LIMIT 500
@@ -358,7 +373,7 @@ export async function pagarFatura(entrada: {
        WHERE id = ${entrada.faturaId}::uuid AND status = 'open'
       RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
                 period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-                paid_method, voided_at, void_reason, idempotency_key, created_at
+                paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
     `;
     const fatura = linhas[0];
     if (!fatura) throw new PlataformaError('not_payable', 'Fatura inexistente ou já encerrada');
@@ -402,7 +417,7 @@ export async function cancelarFatura(entrada: {
        WHERE id = ${entrada.faturaId}::uuid AND status = 'open'
       RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
                 period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-                paid_method, voided_at, void_reason, idempotency_key, created_at
+                paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
     `;
     const fatura = linhas[0];
     if (!fatura) throw new PlataformaError('not_voidable', 'Fatura inexistente ou já encerrada');
@@ -473,6 +488,8 @@ export interface ResultadoDaRegua {
   readonly avisadas: number;
   readonly vencidas: number;
   readonly cobradas: number;
+  /** Cobranças que saíram e cuja resposta vem por webhook (bloco 29). */
+  readonly aguardando: number;
   readonly pagas: number;
   readonly bloqueadas: number;
 }
@@ -494,7 +511,15 @@ export async function aplicarRegua(entrada: {
   readonly agora: Date;
   readonly provider: CobrancaProvider;
 }): Promise<ResultadoDaRegua> {
-  const contagem = { emitidas: 0, avisadas: 0, vencidas: 0, cobradas: 0, pagas: 0, bloqueadas: 0 };
+  const contagem = {
+    emitidas: 0,
+    avisadas: 0,
+    vencidas: 0,
+    cobradas: 0,
+    aguardando: 0,
+    pagas: 0,
+    bloqueadas: 0,
+  };
 
   for (const tenantId of await aEmitir(entrada.agora)) {
     if (await emitirFatura({ tenantId, agora: entrada.agora })) contagem.emitidas += 1;
@@ -512,6 +537,16 @@ export async function aplicarRegua(entrada: {
     if (passo === 'nada') continue;
 
     if (passo === 'retentar') {
+      /**
+       * Cobrança em curso não vira segunda cobrança.
+       *
+       * A partir do bloco 29 a tentativa pode ficar pendente — Pix e boleto
+       * respondem depois. Enquanto houver `psp_charge_id` amarrado, quem
+       * resolve é o webhook (ou a conciliação, que é a rede). Insistir aqui
+       * emitiria um Pix por dia para a mesma fatura.
+       */
+      if (fatura.chargeId) continue;
+
       /**
        * A cobrança acontece **fora** da transação, e é a única coisa neste
        * arquivo que sai da máquina.
@@ -531,6 +566,20 @@ export async function aplicarRegua(entrada: {
       if (resultado.pago) {
         await pagarFatura({ adminId: null, faturaId: fatura.id, metodo: resultado.metodo });
         contagem.pagas += 1;
+      } else if (resultado.aguardando) {
+        /**
+         * Saiu e ainda não voltou: marca a data e **não** gasta um degrau.
+         *
+         * Nem avisa o dono — "seu pagamento não passou" para quem acabou de
+         * gerar um Pix é a mensagem que faz o próximo aviso ser ignorado.
+         */
+        await semTenant(async (tx) => {
+          await tx.$executeRaw`
+            UPDATE invoices SET last_attempt_at = ${entrada.agora}, updated_at = now()
+             WHERE id = ${fatura.id}::uuid AND status = 'open'
+          `;
+        });
+        contagem.aguardando += 1;
       } else {
         await semTenant(async (tx) => {
           await tx.$executeRaw`

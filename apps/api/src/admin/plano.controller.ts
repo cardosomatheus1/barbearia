@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common'
 import {
   assinaturaDaBarbearia,
   faturasDaBarbearia,
+  meioDePagamento,
   PlataformaError,
   planosParaODono,
   recursosDaBarbearia,
@@ -40,7 +41,10 @@ export class PlanoController {
     const assinatura = await assinaturaDaBarbearia(staff.tenantId);
     if (!assinatura) throw notFound('unknown_subscription', 'Assinatura não encontrada');
 
-    const recursos = await recursosDaBarbearia(staff.tenantId);
+    const [recursos, meio] = await Promise.all([
+      recursosDaBarbearia(staff.tenantId),
+      meioDePagamento(staff.tenantId),
+    ]);
 
     return {
       plano: {
@@ -53,6 +57,22 @@ export class PlanoController {
       testeAte: assinatura.testeAte?.toISOString() ?? null,
       periodoAte: assinatura.periodoAte.toISOString(),
       cadeiras: { emUso: assinatura.cadeirasEmUso, teto: assinatura.tetoDeCadeiras },
+      /**
+       * O cartão que a plataforma vai debitar (bloco 29).
+       *
+       * Marca, final e validade — o que o dono precisa para reconhecer qual
+       * cartão está na conta, e nada além. O identificador do adquirente fica
+       * de fora: ele não serve para nenhuma tela, e circular menos é melhor.
+       */
+      cobranca: meio
+        ? {
+            bandeira: meio.bandeira,
+            final: meio.final,
+            validadeMes: meio.validadeMes,
+            validadeAno: meio.validadeAno,
+            cadastrado: meio.pspMethodId !== null,
+          }
+        : null,
       /**
        * Os recursos com a origem de cada resposta.
        *

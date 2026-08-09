@@ -20,6 +20,16 @@ import { FilaPublicaController } from '../src/booking/fila-publica.controller.js
 import { SuporteInterceptor } from '../src/admin/suporte.interceptor.js';
 import { StaffAuthController } from '../src/admin/admin.controller.js';
 import { MeController } from '../src/admin/team.controller.js';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { guardarCorpoCru } from '../src/common/corpo-cru.js';
+import { WebhookDoPspController } from '../src/plataforma/webhook.controller.js';
+import {
+  aplicarRegua,
+  assinarWebhook,
+  FakePspProvider,
+  PspCobrancaProvider,
+  salvarMeioDePagamento,
+} from '@barbearia/platform';
 import { PlanoController } from '../src/admin/plano.controller.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
@@ -56,7 +66,7 @@ const TOKEN_DA_FILA = 'token-de-acompanhamento-do-bloco-26';
 const SENHA = 'senha-do-dono-24';
 const SENHA_DA_PLATAFORMA = 'senha-super-admin-24';
 
-let app: INestApplication;
+let app: NestExpressApplication;
 let admin: PrismaClient;
 let tenants: TenantService;
 
@@ -67,6 +77,23 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
 }
 
 const http = () => request(app.getHttpServer());
+
+/**
+ * O segredo do webhook, fixado pela suíte.
+ *
+ * Ele é lido de `process.env` pelo controller, como em produção — o teste
+ * define a variável em vez de injetar o valor, porque o que precisa ser provado
+ * é o caminho completo, incluindo "sem a variável, a rota recusa".
+ */
+const SEGREDO_DO_WEBHOOK = 'segredo-do-webhook-no-e2e';
+
+/** O id do Super Admin, para as chamadas de domínio que exigem autor. */
+async function adminDaPlataforma(): Promise<{ id: string }> {
+  const linhas = await admin.$queryRaw<{ id: string }[]>`SELECT id FROM platform_admins LIMIT 1`;
+  const linha = linhas[0];
+  if (!linha) throw new Error('nenhum admin de plataforma no seed');
+  return linha;
+}
 
 async function tokenDaPlataforma(): Promise<string> {
   const resposta = await http()
@@ -214,6 +241,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         StaffAuthController,
         MeController,
         PlanoController,
+        WebhookDoPspController,
         BoardController,
         FilaController,
         FilaPublicaController,
@@ -230,7 +258,18 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       ],
     }).compile();
 
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication<NestExpressApplication>();
+    /**
+     * O mesmo parser de `apps/api/src/main.ts`, e é por isso que ele foi
+     * exportado de lá.
+     *
+     * A assinatura do webhook do adquirente é sobre os bytes recebidos. Um
+     * teste que montasse a aplicação sem o `verify` provaria uma configuração
+     * que não é a de produção — e o defeito apareceria no primeiro webhook de
+     * verdade, que é o pior lugar para descobrir.
+     */
+    app.useBodyParser('json', { verify: guardarCorpoCru });
+    process.env['PSP_WEBHOOK_SECRET'] = SEGREDO_DO_WEBHOOK;
     await app.init();
     tenants = app.get(TenantService);
   });
@@ -993,6 +1032,98 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(409);
     expect(erro.body.error.code).toBe('chairs_exceed_plan');
     expect(erro.body.error.message).toMatch(/desligue/i);
+  });
+
+  // -- adquirente (bloco 29) -------------------------------------------------
+
+  it('o webhook recusa sem assinatura, com assinatura de outro segredo e fora da janela', async () => {
+    const corpo = { id: 'evt_e2e_1', type: 'charge.paid', chargeId: 'ch_e2e_1', data: {} };
+    const cru = JSON.stringify(corpo);
+    const agora = Math.floor(Date.now() / 1000);
+
+    await http().post('/v1/webhooks/psp').send(corpo).expect(400);
+
+    await http()
+      .post('/v1/webhooks/psp')
+      .set('x-psp-signature', `t=${agora},v1=${assinarWebhook({ corpoCru: cru, segredo: 'outro', instante: agora })}`)
+      .send(corpo)
+      .expect(400);
+
+    const velho = agora - 3600;
+    await http()
+      .post('/v1/webhooks/psp')
+      .set(
+        'x-psp-signature',
+        `t=${velho},v1=${assinarWebhook({ corpoCru: cru, segredo: SEGREDO_DO_WEBHOOK, instante: velho })}`,
+      )
+      .send(corpo)
+      .expect(400);
+  });
+
+  it('o webhook assinado quita a fatura, e a reentrega não quita de novo', async () => {
+    // A cobrança nasce pendente pelo adquirente de mentira, exatamente como um
+    // Pix nasce: o dinheiro chega depois, e é o webhook que conta.
+    const psp = new FakePspProvider();
+    psp.proximoEstado = 'pendente';
+    const provider = new PspCobrancaProvider(psp);
+    const base = new Date('2026-06-01T12:00:00Z');
+    const emDias = (n: number) => new Date(base.getTime() + n * 86_400_000);
+
+    await exec(admin, `
+      UPDATE subscriptions
+         SET period_start = '2026-05-18T12:00:00Z', period_end = '${base.toISOString()}'
+       WHERE tenant_id = '${DOMARI}'
+    `);
+    await salvarMeioDePagamento({
+      adminId: (await adminDaPlataforma()).id,
+      tenantId: DOMARI,
+      pspCustomerId: 'cus_e2e',
+      pspMethodId: 'pm_e2e',
+      bandeira: 'visa',
+      final: '4242',
+    });
+
+    await aplicarRegua({ agora: emDias(-3), provider });
+    await aplicarRegua({ agora: emDias(5), provider });
+    await aplicarRegua({ agora: emDias(6), provider });
+
+    const emitida = psp.cobrancas.length;
+    expect(emitida).toBe(1);
+    const chargeId = 'ch_fake_1';
+
+    const corpo = { id: 'evt_e2e_pago', type: 'charge.paid', chargeId, data: {} };
+    const cru = JSON.stringify(corpo);
+    const agora = Math.floor(Date.now() / 1000);
+    const cabecalho = `t=${agora},v1=${assinarWebhook({ corpoCru: cru, segredo: SEGREDO_DO_WEBHOOK, instante: agora })}`;
+
+    const primeira = await http()
+      .post('/v1/webhooks/psp')
+      .set('x-psp-signature', cabecalho)
+      .send(corpo)
+      .expect(201);
+    expect(primeira.body.desfecho).toBe('paid');
+
+    // O adquirente reentrega o que não recebeu 2xx, e reentrega o que recebeu
+    // também. A segunda vez responde 2xx e não move nada.
+    const segunda = await http()
+      .post('/v1/webhooks/psp')
+      .set('x-psp-signature', cabecalho)
+      .send(corpo)
+      .expect(201);
+    expect(segunda.body.desfecho).toBe('ignored');
+
+    // A suíte é sequencial e a barbearia já tem histórico de testes anteriores;
+    // o que importa é que **esta** cobrança virou uma baixa, e uma só.
+    const baixas = await admin.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM invoices
+       WHERE psp_charge_id = ${chargeId} AND status = 'paid'
+    `;
+    expect(Number(baixas[0]?.n)).toBe(1);
+
+    const eventos = await admin.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM psp_events WHERE event_id = 'evt_e2e_pago'
+    `;
+    expect(Number(eventos[0]?.n)).toBe(1);
   });
 
   it('sair invalida o token da plataforma', async () => {

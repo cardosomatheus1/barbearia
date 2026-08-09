@@ -446,6 +446,9 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Fuso e janela de silêncio do aviso | da unidade, nunca do aparelho; entre 21h e 8h nada sai |
 | Evento auditado | gravado por `audit()` **dentro da transação** que muda o estado; `audit_log` é append-only por `REVOKE` |
 | Segundo fator | TOTP RFC 6238 do `node:crypto`; segredo cifrado com AES-256-GCM; passo consumido gravado; código de recuperação some ao ser usado |
+| Webhook do adquirente | HMAC-SHA256 sobre `${instante}.${corpo cru}`, janela de 5 min, comparação em tempo constante; segredo ausente **recusa**. Reentrega é normal e responde 2xx |
+| Cartão | só token do provedor, marca e os quatro últimos; não existe coluna para PAN nem CVV, e há invariante que reprova se alguém criar uma |
+| Cobrança pendente | Pix e boleto respondem depois: `pendente` ≠ recusa, e não gasta degrau da escada de retentativa |
 | Comissão | lançamento guarda **base + regra copiada**, nunca o valor; o valor é derivado, porque faixa depende do acumulado do período |
 | Comissão fechada | imutável por trigger e `REVOKE`; estorno é lançamento novo com sinal negativo no período aberto, jamais `DELETE` |
 | Dia de uma venda | `orders.business_day`, o dia **da unidade** — `closed_at` responde "que instante", não "de que dia é este dinheiro" |

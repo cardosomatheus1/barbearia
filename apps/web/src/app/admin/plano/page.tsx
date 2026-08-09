@@ -274,6 +274,38 @@ export default async function PlanoPage({
       </section>
 
       <section className="painel__grupo">
+        <h2 className="painel__secao">Como a conta é paga</h2>
+        {p.cobranca?.cadastrado ? (
+          <>
+            <p className="plano-cartao">
+              <span className="plano-cartao__bandeira">{p.cobranca.bandeira ?? 'Cartão'}</span>
+              <span className="plano-cartao__final">•••• {p.cobranca.final}</span>
+              {p.cobranca.validadeMes && p.cobranca.validadeAno ? (
+                <span className="plano-cartao__validade">
+                  vence {String(p.cobranca.validadeMes).padStart(2, '0')}/{p.cobranca.validadeAno}
+                </span>
+              ) : null}
+            </p>
+            <p className="painel__nota">
+              A mensalidade é debitada neste cartão no vencimento. Para trocá-lo, fale com o
+              suporte.
+            </p>
+          </>
+        ) : (
+          // Estado vazio desenhado, e com o que fazer em seguida: sem cartão a
+          // cobrança não é automática, e o dono precisa saber disso **antes** de
+          // a fatura vencer.
+          <div className="plano__vazio">
+            <p className="plano-cartao__sem">Nenhum cartão cadastrado.</p>
+            <p>
+              As faturas são pagas por transferência, e alguém do suporte precisa dar baixa. Para
+              deixar automático, fale com o suporte.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="painel__grupo">
         <h2 className="painel__secao">Faturas</h2>
         {faturas.length === 0 ? (
           <p className="plano__vazio">

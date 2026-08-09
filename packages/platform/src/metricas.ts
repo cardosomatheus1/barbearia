@@ -46,6 +46,18 @@ export interface ResumoDaPlataforma {
   readonly ocupacaoEmPontos: number;
   readonly faltasEmPontos: number;
   readonly receitaCents: number;
+  /**
+   * A quebra do que foi **recebido**, por meio (bloco 29).
+   *
+   * Não fecha com `receitaCents` e não deveria: aquela é a soma das comandas
+   * pagas, esta é a soma dos pagamentos lançados. A diferença é o fiado — venda
+   * registrada que ainda não virou dinheiro. Somar os dois no mesmo número
+   * seria contar como caixa o que ainda está para receber.
+   */
+  readonly recebidoPixCents: number;
+  readonly recebidoCartaoCents: number;
+  readonly recebidoDinheiroCents: number;
+  readonly recebidoOutrosCents: number;
   /** Barbearias que apuraram pelo menos um dia no período. */
   readonly barbeariasComMovimento: number;
 }
@@ -84,6 +96,10 @@ interface LinhaDeOperacao {
   minutos_vendidos: bigint;
   minutos_disponiveis: bigint;
   receita_cents: bigint;
+  pix_cents: bigint;
+  cartao_cents: bigint;
+  dinheiro_cents: bigint;
+  outros_cents: bigint;
   com_movimento: bigint;
 }
 
@@ -150,6 +166,10 @@ export async function resumoDaPlataforma(params: {
         coalesce(sum(m.minutes_sold), 0)::bigint AS minutos_vendidos,
         coalesce(sum(m.minutes_available), 0)::bigint AS minutos_disponiveis,
         coalesce(sum(m.revenue_cents), 0)::bigint AS receita_cents,
+        coalesce(sum(m.revenue_pix_cents), 0)::bigint AS pix_cents,
+        coalesce(sum(m.revenue_card_cents), 0)::bigint AS cartao_cents,
+        coalesce(sum(m.revenue_cash_cents), 0)::bigint AS dinheiro_cents,
+        coalesce(sum(m.revenue_other_cents), 0)::bigint AS outros_cents,
         count(DISTINCT m.tenant_id) FILTER (WHERE m.appointments_total > 0)::bigint AS com_movimento
       FROM tenant_metrics_daily m
       WHERE m.business_day BETWEEN ${de}::date AND ${params.ate}::date
@@ -177,6 +197,10 @@ export async function resumoDaPlataforma(params: {
       ),
       faltasEmPontos: emPontos(Number(operacao?.faltas ?? 0), agendamentos),
       receitaCents: Number(operacao?.receita_cents ?? 0),
+      recebidoPixCents: Number(operacao?.pix_cents ?? 0),
+      recebidoCartaoCents: Number(operacao?.cartao_cents ?? 0),
+      recebidoDinheiroCents: Number(operacao?.dinheiro_cents ?? 0),
+      recebidoOutrosCents: Number(operacao?.outros_cents ?? 0),
       barbeariasComMovimento: Number(operacao?.com_movimento ?? 0),
     };
   });

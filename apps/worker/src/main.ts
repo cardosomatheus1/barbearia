@@ -8,10 +8,15 @@ import {
 import {
   CobrancaManualProvider,
   ConsoleGestorProvider,
+  FakePspProvider,
+  PspCobrancaProvider,
   aplicarRegua,
+  conciliarPendentes,
   executarAvisoDeCobranca,
   recursoLigado,
   type AssuntoDoAviso,
+  type CobrancaProvider,
+  type PspProvider,
 } from '@barbearia/platform';
 
 /**
@@ -31,6 +36,30 @@ import {
  */
 
 const INTERVALO_MS = Number(process.env['WORKER_INTERVALO_MS'] ?? 5_000);
+
+/**
+ * O adquirente, quando há um configurado.
+ *
+ * `PSP_MODO=fake` liga o provedor de mentira — é o que roda em desenvolvimento
+ * e na demonstração, e ele recusa por padrão para que a régua seja exercida de
+ * verdade. Sem a variável, a plataforma segue no modo do bloco 28: nada é
+ * debitado sozinho e quem quita fatura é o Super Admin registrando o pagamento
+ * que viu no extrato.
+ *
+ * **Não há credencial neste arquivo.** O dia em que houver um provedor de
+ * verdade, ele entra por variável de ambiente como todo o resto — e a escolha
+ * de qual provedor usar continua sendo desta função, que é o único lugar do
+ * produto que sabe que adquirente existe.
+ */
+function ligarAdquirente(): { psp: PspProvider | null; cobranca: CobrancaProvider } {
+  if (process.env['PSP_MODO'] !== 'fake') {
+    return { psp: null, cobranca: new CobrancaManualProvider() };
+  }
+  const psp = new FakePspProvider();
+  return { psp, cobranca: new PspCobrancaProvider(psp) };
+}
+
+const { psp, cobranca } = ligarAdquirente();
 
 async function main(): Promise<void> {
   // Mesma guarda da API: se a conexão ignora RLS, o isolamento entre barbearias
@@ -79,7 +108,20 @@ async function main(): Promise<void> {
           agora: aviso.agora,
         }),
       rodarRegua: async (agora) => {
-        const resultado = await aplicarRegua({ agora, provider: new CobrancaManualProvider() });
+        /**
+         * A conciliação vem **antes** da régua, e a ordem é decisão.
+         *
+         * A rede de segurança fecha o que o webhook não fechou; rodar depois
+         * faria a régua da mesma volta enxergar como em aberto uma fatura que
+         * já estava paga — e, no dia 21, suspender uma barbearia adimplente por
+         * causa de um webhook perdido.
+         */
+        if (psp) {
+          const conciliadas = await conciliarPendentes({ provider: psp });
+          if (conciliadas.consultadas > 0) console.log('[cobranca] conciliação', conciliadas);
+        }
+
+        const resultado = await aplicarRegua({ agora, provider: cobranca });
         const mexeu = Object.values(resultado).some((n) => n > 0);
         if (mexeu) console.log('[cobranca] régua do dia', resultado);
       },

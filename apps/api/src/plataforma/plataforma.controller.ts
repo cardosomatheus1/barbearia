@@ -38,6 +38,11 @@ import {
   assinaturaDaBarbearia,
   assinaturas,
   cancelarFatura,
+  estornarCredito,
+  estornosDaBarbearia,
+  meioDePagamento,
+  salvarMeioDePagamento,
+  FakePspProvider,
   faturasDaBarbearia,
   faturasEmCobranca,
   pagarFatura,
@@ -53,6 +58,8 @@ import { Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataform
 import {
   bloqueioSchema,
   cancelamentoSchema,
+  estornoSchema,
+  meioDePagamentoSchema,
   pagamentoSchema,
   codigoSchema,
   janelaSchema,
@@ -64,6 +71,8 @@ import {
   trocaDePlanoSchema,
   type Bloqueio,
   type EntradaDeCancelamento,
+  type EntradaDeEstorno,
+  type EntradaDeMeioDePagamento,
   type EntradaDePagamento,
   type EntradaDeCodigo,
   type EntradaDeRecurso,
@@ -106,6 +115,10 @@ const STATUS: Record<string, number> = {
   reason_required: 400,
   not_payable: 409,
   not_voidable: 409,
+  no_payment_method: 409,
+  insufficient_credit: 409,
+  invalid_amount: 400,
+  refund_failed: 500,
   email_taken: 409,
   weak_password: 400,
 };
@@ -326,6 +339,80 @@ export class PlataformaController {
       const { tenantId } = await cancelarFatura({ adminId: admin.id, faturaId, motivo: corpo.motivo });
       this.tenants.esquecerBloqueio(tenantId);
       return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  // -- adquirente (bloco 29) -------------------------------------------------
+
+  /**
+   * O meio de pagamento da barbearia.
+   *
+   * Devolve marca, final e validade — e nada mais existe para devolver: o
+   * schema da migração 0031 não tem coluna para o número do cartão. O
+   * identificador do adquirente fica de fora da resposta de propósito: ele não
+   * serve para nenhuma tela e circular menos é melhor.
+   */
+  @Get('barbearias/:tenantId/cobranca')
+  async meio(@Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string) {
+    const meio = await meioDePagamento(tenantId);
+    return {
+      meio: meio
+        ? {
+            bandeira: meio.bandeira,
+            final: meio.final,
+            validadeMes: meio.validadeMes,
+            validadeAno: meio.validadeAno,
+            cadastrado: meio.pspMethodId !== null,
+          }
+        : null,
+      estornos: (await estornosDaBarbearia(tenantId)).map((e) => ({
+        id: e.id,
+        valorCents: e.valorCents,
+        motivo: e.motivo,
+        estado: e.estado,
+        criadoEm: e.criadoEm.toISOString(),
+      })),
+    };
+  }
+
+  @Put('barbearias/:tenantId/cobranca')
+  async salvarMeio(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(meioDePagamentoSchema)) corpo: EntradaDeMeioDePagamento,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await salvarMeioDePagamento({ adminId: admin.id, tenantId, ...corpo });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  /**
+   * Devolve em dinheiro o crédito que a descida de plano gerou.
+   *
+   * A lacuna que o bloco 28 declarou. O `FakePspProvider` está aqui porque
+   * ainda não há adquirente contratado — o dia em que houver, ele entra por
+   * injeção como o provedor de mensagem, e esta linha é a única que muda.
+   */
+  @Post('barbearias/:tenantId/estorno')
+  async estornar(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(estornoSchema)) corpo: EntradaDeEstorno,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      const estorno = await estornarCredito({
+        adminId: admin.id,
+        tenantId,
+        valorCents: corpo.valorCents,
+        motivo: corpo.motivo,
+        provider: new FakePspProvider(),
+      });
+      return { id: estorno.id, valorCents: estorno.valorCents, estado: estorno.estado };
     } catch (erro) {
       return paraHttp(erro);
     }

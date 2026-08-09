@@ -111,3 +111,35 @@ export const pagamentoSchema = z.object({
 });
 
 export type EntradaDePagamento = z.infer<typeof pagamentoSchema>;
+
+/**
+ * O meio de pagamento, como o adquirente o devolve.
+ *
+ * **Nunca o número do cartão.** O que entra aqui é token e os quatro últimos
+ * dígitos — a borda recusa qualquer coisa com mais de quatro, e o `CHECK` da
+ * migração 0031 recusa de novo. Duas defesas porque esta é a entrada de dado de
+ * cartão do produto inteiro, e uma delas sempre é a que alguém contorna.
+ */
+export const meioDePagamentoSchema = z.object({
+  pspCustomerId: z.string().trim().min(1).max(200),
+  pspMethodId: z.string().trim().min(1).max(200).nullable().default(null),
+  bandeira: z.string().trim().min(1).max(40).nullable().default(null),
+  final: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{4}$/, 'informe apenas os quatro últimos dígitos')
+    .nullable()
+    .default(null),
+  validadeMes: z.coerce.number().int().min(1).max(12).nullable().default(null),
+  validadeAno: z.coerce.number().int().min(2024).max(2100).nullable().default(null),
+});
+
+export type EntradaDeMeioDePagamento = z.infer<typeof meioDePagamentoSchema>;
+
+/** O estorno do crédito em dinheiro. Centavos inteiros, como todo dinheiro. */
+export const estornoSchema = z.object({
+  valorCents: z.coerce.number().int().positive().max(100_000_000),
+  motivo: z.string().trim().min(3).max(500),
+});
+
+export type EntradaDeEstorno = z.infer<typeof estornoSchema>;

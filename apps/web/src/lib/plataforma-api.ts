@@ -122,6 +122,10 @@ export interface ResumoDaPlataforma {
   ocupacaoEmPontos: number;
   faltasEmPontos: number;
   receitaCents: number;
+  recebidoPixCents: number;
+  recebidoCartaoCents: number;
+  recebidoDinheiroCents: number;
+  recebidoOutrosCents: number;
   barbeariasComMovimento: number;
 }
 

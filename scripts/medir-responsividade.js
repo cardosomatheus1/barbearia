@@ -143,8 +143,12 @@ async function prepararPlataforma() {
   const ontem = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   psql(
     `INSERT INTO tenant_metrics_daily (tenant_id, business_day, appointments_total,` +
-      ` appointments_online, no_shows, minutes_sold, minutes_available, revenue_cents)` +
-      ` SELECT tenant_id, '${ontem}'::date, 412, 268, 31, 18400, 26400, 1284900` +
+      ` appointments_online, no_shows, minutes_sold, minutes_available, revenue_cents,` +
+      ` revenue_pix_cents, revenue_card_cents, revenue_cash_cents, revenue_other_cents)` +
+      ` SELECT tenant_id, '${ontem}'::date, 412, 268, 31, 18400, 26400, 1284900,` +
+      // A quebra por meio (bloco 29) não fecha com a receita de propósito: o
+      // resto é fiado, que é venda registrada e não dinheiro recebido.
+      ` 604300, 431200, 187400, 41800` +
       ` FROM tenant_platform ON CONFLICT DO NOTHING`,
   );
 
@@ -167,6 +171,14 @@ async function prepararPlataforma() {
     `INSERT INTO invoices (tenant_id, kind, plan_code, amount_cents, period_start, period_end,` +
       ` due_at) SELECT tenant_id, 'proration', 'pro', 7450, now(), now() + interval '30 days',` +
       ` now() + interval '4 days' FROM tenant_platform`,
+  );
+
+  // O cartão na conta (bloco 29): a tela do plano tem dois estados, e o
+  // preenchido é o que tem marca, final e validade na mesma linha.
+  psql(
+    `INSERT INTO billing_customers (tenant_id, psp_customer_id, psp_method_id, brand, last4,` +
+      ` exp_month, exp_year) SELECT tenant_id, 'cus_medicao', 'pm_medicao', 'mastercard',` +
+      ` '4242', 11, 2029 FROM tenant_platform ON CONFLICT DO NOTHING`,
   );
 
   return token;

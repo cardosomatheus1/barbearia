@@ -14,16 +14,16 @@ integridade do banco.
 | Pacote | O que é | Estado |
 |---|---|---|
 | `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão, permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 542 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 168 invariantes + 10 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 181 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP), convite do barbeiro e auditoria | 125 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 74 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática e apuração diária — o que acontece sem ninguém esperando | 63 testes ✅ |
 | `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
-| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 77 testes ✅ |
+| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 98 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública, do painel e **da plataforma**: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano e o Super Admin | 334 testes ✅ |
+| `apps/api` | API pública, do painel, **da plataforma** e o webhook do adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano e o Super Admin | 336 testes ✅ |
 | `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 66 testes ✅ |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos, marca a falta e apura as métricas do dia | — |
 
@@ -80,6 +80,11 @@ fraco em silêncio subiria o sistema funcionando com a proteção desligada.
 |---|---|---|
 | `STAFF_EMAIL_PEPPER` | HMAC do e-mail em `staff_directory`, que é tabela sem RLS por natureza | `openssl rand -hex 32` |
 | `MFA_SECRET_KEY` | AES-256-GCM do segredo TOTP guardado em `staff_users` **e em `platform_admins`** | `openssl rand -base64 32` (32 bytes) |
+| `PSP_WEBHOOK_SECRET` | HMAC do webhook do adquirente, que é a única rota sem sessão com efeito sobre dinheiro | o provedor gera, no painel dele |
+
+`PSP_WEBHOOK_SECRET` ausente **recusa** todo webhook — nunca libera. É o que
+separa "a rota está fechada" de "a rota está aberta e ninguém percebeu": um
+padrão vazio faria toda assinatura conferir.
 
 Trocar `MFA_SECRET_KEY` invalida todos os segundos fatores cadastrados: os
 segredos ficam indecifráveis e cada gestor precisa cadastrar de novo. Ela é
@@ -271,6 +276,11 @@ A saída são **tabelas novas de plataforma**, com `USING (true)` e nada de
 pessoa dentro: `tenant_platform`, `plans`, `tenant_metrics_daily`,
 `tenant_lifecycle`, `feature_flags`, `support_sessions`, `subscriptions`. O
 Super Admin nunca lê `appointments`, `customers` ou `orders`.
+
+`billing_customers`, `psp_events` e `refunds` (bloco 29) fecham a lista. O
+evento bruto do adquirente é o mais fechado de todos — nem a barbearia dona da
+fatura o lê, porque o que há nele é identificador do provedor, que não serve
+para nenhuma tela dela.
 
 `invoices` (bloco 28) entra nesse conjunto com **leitura mais estrita**: a
 plataforma lê todas, e cada barbearia lê só as próprias. A diferença tem motivo

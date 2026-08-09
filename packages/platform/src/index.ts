@@ -6,3 +6,5 @@ export * from './suporte.js';
 export * from './assinatura.js';
 export * from './cobranca.js';
 export * from './gestor.js';
+export * from './psp.js';
+export * from './conciliacao.js';
