@@ -18,6 +18,8 @@ import {
   listarBarbearias,
   listarPlanos,
   PlataformaError,
+  resumoDaPlataforma,
+  saudeDasBarbearias,
   sairDaPlataforma,
   trilhaDaPlataforma,
   trocarPlano,
@@ -29,14 +31,27 @@ import { TenantService } from '../tenant/tenant.service.js';
 import { Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataforma.guard.js';
 import {
   bloqueioSchema,
+  janelaSchema,
   loginDaPlataformaSchema,
   tenantIdSchema,
   trilhaQuerySchema,
   trocaDePlanoSchema,
   type Bloqueio,
+  type Janela,
   type TrilhaQuery,
   type TrocaDePlano,
 } from './plataforma.schemas.js';
+
+/**
+ * O último dia que a apuração garante fechado.
+ *
+ * O dia anterior em UTC, que é o mesmo critério de `apuracaoPendente`. Mostrar
+ * hoje pela metade faria toda comparação parecer queda logo depois do almoço.
+ */
+const ultimoDiaFechado = (agora = new Date()): string =>
+  new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate() - 1))
+    .toISOString()
+    .slice(0, 10);
 
 const STATUS: Record<string, number> = {
   invalid_credentials: 401,
@@ -157,6 +172,18 @@ export class PlataformaController {
     } catch (erro) {
       return paraHttp(erro);
     }
+  }
+
+  @Get('metricas')
+  async metricas(@Query(new ZodValidationPipe(janelaSchema)) query: Janela) {
+    const ate = query.ate ?? ultimoDiaFechado();
+    return { ate, resumo: await resumoDaPlataforma({ ate, dias: query.dias }) };
+  }
+
+  @Get('saude')
+  async saude(@Query(new ZodValidationPipe(janelaSchema)) query: Janela) {
+    const ate = query.ate ?? ultimoDiaFechado();
+    return { ate, barbearias: await saudeDasBarbearias({ ate, dias: query.dias }) };
   }
 
   @Get('trilha')

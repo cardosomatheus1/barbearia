@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 24 de 78 blocos.**
+**Status: 25 de 78 blocos.**
 
 ---
 
@@ -79,6 +79,10 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Teto de cadeiras do plano aplicado | `plans.max_chairs` existe, é editável, aparece em cada opção da lista e viaja na troca de plano auditada | recusar a cadeira número seis quando o plano permite cinco | 27 (billing: planos, trial, assinatura): o que fazer ao estourar o teto é **decisão de cobrança**, não de cadastro — recusar, cobrar o excedente ou oferecer o plano de cima são três produtos diferentes, e o terceiro é o que a SPEC quer. Aplicar "recusar" agora fixaria a resposta mais hostil antes de existir tela que ofereça a saída |
 | Avisar a barbearia de que foi bloqueada | o bloqueio é imediato, o motivo fica escrito e o dono o lê ao tentar entrar | mandar o aviso antes, por e-mail ou WhatsApp do dono | 28 (billing: inadimplência, régua de retentativa): bloqueio sem aviso prévio é a régua de cobrança faltando, não uma notificação faltando. E é a mesma dependência que segura o alerta operacional — o produto não tem canal dirigido ao gestor |
 | Papéis dentro da plataforma | uma conta de plataforma, com todas as capacidades | separar quem só consulta de quem bloqueia conta | 33 (segurança: hardening, auditoria de acesso): hoje há uma conta e ela é criada por quem tem acesso ao banco de produção. Inventar papéis antes de existir a segunda pessoa criaria permissão que nenhuma conta distingue — o mesmo erro que os blocos 18 e 21 declararam em vez de cometer |
+| Série histórica e gráfico nas métricas da plataforma | MRR, churn, adoção, ocupação e falta apurados dia a dia por barbearia, com janela de 7, 30 ou 90 dias | a linha do tempo: MRR mês a mês, safra de entrada, curva de retenção | 62 (churn score com explicação): a série **existe** no banco desde este bloco — o que falta é histórico acumulado nela. Desenhar tendência sobre o primeiro mês de dados é inventar inclinação, e é a mesma decisão que já segura o gráfico no painel do dono |
+| CAC e payback | GMV, MRR e churn saem de dado que o produto tem | as duas métricas da SPEC §8 que dependem de **custo de aquisição** | sem bloco definido: não existe origem de dado. Quanto se gastou para trazer uma barbearia mora em ferramenta de marketing, não aqui, e inventar um campo "custo" que ninguém preenche é o defeito de `blocks` outra vez |
+| Pagamentos processados e % Pix nas métricas globais | a receita das comandas pagas, somada por dia e por barbearia | a quebra por meio de pagamento e o que o PSP de fato processou | 29 (billing: integração com PSP, conciliação): a comanda registra o meio, mas "processado" é o que o adquirente confirma — e ele não existe no produto até lá. Somar o declarado e chamar de processado seria número errado com nome certo |
+| Assinaturas ativas e MRR de assinatura do tenant | o MRR **da plataforma** — o que as barbearias pagam a nós | o outro MRR da SPEC §8: o que os clientes pagam às barbearias | 45 (clube de assinatura): não há assinatura no produto até lá. É a mesma espera da comissão sobre assinatura |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -187,7 +191,7 @@ não é vendável.
 | # | Bloco | Estado |
 |---|---|---|
 | 24 | Super Admin: tenants, planos, bloqueio de conta | ✅ |
-| 25 | Super Admin: métricas globais, MRR, churn | |
+| 25 | Super Admin: métricas globais, MRR, churn | ✅ |
 | 26 | Super Admin: feature flags, impersonação auditada | |
 | 27 | Billing: planos, trial, assinatura da barbearia | |
 | 28 | Billing: upgrade/downgrade, inadimplência, régua de retentativa | |

@@ -340,6 +340,73 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(404);
   });
 
+  // -- métricas (bloco 25) ---------------------------------------------------
+
+  it('as métricas exigem sessão de plataforma como todo o resto', async () => {
+    await http().get('/v1/plataforma/metricas').expect(401);
+    await http().get('/v1/plataforma/saude').expect(401);
+  });
+
+  it('sem nenhum dia apurado, o painel responde zero em vez de quebrar', async () => {
+    // É o estado do primeiro dia de operação **e** o do worker parado. A tela
+    // tem os dois desenhados, então a API não pode explodir em nenhum.
+    const token = await tokenDaPlataforma();
+    const resposta = await http()
+      .get('/v1/plataforma/metricas')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(resposta.body.resumo.agendamentos).toBe(0);
+    expect(resposta.body.resumo.ocupacaoEmPontos).toBe(0);
+    expect(resposta.body.ate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('o MRR sai dos planos, e a lista traz uma linha por barbearia', async () => {
+    const token = await tokenDaPlataforma();
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${VIZINHA}/plano`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ planoCode: 'completo' })
+      .expect(200);
+
+    const metricas = await http()
+      .get('/v1/plataforma/metricas')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    // A Domari ficou no 'essencial' (9900) num teste anterior; a vizinha acabou
+    // de entrar no 'completo' (19900).
+    expect(metricas.body.resumo.mrrCents).toBe(29800);
+
+    const saude = await http()
+      .get('/v1/plataforma/saude')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(saude.body.barbearias).toHaveLength(2);
+    expect(saude.body.barbearias.every((b: { ultimoDia: null }) => b.ultimoDia === null)).toBe(true);
+  });
+
+  it('janela fora do permitido morre na borda, não no banco', async () => {
+    const token = await tokenDaPlataforma();
+    await http()
+      .get('/v1/plataforma/metricas?dias=9999')
+      .set('authorization', `Bearer ${token}`)
+      .expect(400);
+    await http()
+      .get('/v1/plataforma/metricas?ate=ontem')
+      .set('authorization', `Bearer ${token}`)
+      .expect(400);
+    // Formato certo e data que não existe. Sem a conferência, esta passa da
+    // borda e estoura lá dentro na aritmética de data — 500 sobre entrada do
+    // cliente, que é a definição de validação faltando.
+    await http()
+      .get('/v1/plataforma/metricas?ate=0000-00-00')
+      .set('authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+
   it('sair invalida o token da plataforma', async () => {
     const token = await tokenDaPlataforma();
     await http().post('/v1/plataforma/logout').set('authorization', `Bearer ${token}`).expect(201);

@@ -171,6 +171,24 @@ async function registrar(
   `;
 }
 
+/**
+ * O ciclo de vida da conta, que é de onde sai o churn.
+ *
+ * Escrito **na mesma transação** que muda o estado, como a trilha — e separado
+ * dela de propósito: `platform_audit` é lida por gente, e renomear uma ação lá
+ * é decisão de texto que não pode mexer num número de negócio em silêncio.
+ */
+async function marcarCiclo(
+  tx: TransactionClient,
+  tenantId: string,
+  evento: 'blocked' | 'unblocked',
+): Promise<void> {
+  await tx.$executeRaw`
+    INSERT INTO tenant_lifecycle (tenant_id, event)
+    VALUES (${tenantId}::uuid, ${evento}::tenant_lifecycle_event)
+  `;
+}
+
 export async function trocarPlano(entrada: {
   readonly adminId: string;
   readonly tenantId: string;
@@ -232,6 +250,7 @@ export async function bloquearBarbearia(entrada: {
       throw new PlataformaError('not_blockable', 'Barbearia inexistente ou já bloqueada');
     }
     await registrar(tx, entrada.adminId, entrada.tenantId, 'tenant.blocked', { motivo });
+    await marcarCiclo(tx, entrada.tenantId, 'blocked');
   });
 }
 
@@ -249,6 +268,7 @@ export async function desbloquearBarbearia(entrada: {
       throw new PlataformaError('not_blocked', 'Barbearia inexistente ou já ativa');
     }
     await registrar(tx, entrada.adminId, entrada.tenantId, 'tenant.unblocked', {});
+    await marcarCiclo(tx, entrada.tenantId, 'unblocked');
   });
 }
 

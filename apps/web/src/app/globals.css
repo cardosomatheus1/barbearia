@@ -4556,3 +4556,116 @@ main { padding-bottom: var(--space-8); }
     gap: var(--space-5);
   }
 }
+
+/* ----------------------------------------------------------------------------
+   Métricas da plataforma (bloco 25)
+
+   Seis números em cima e uma tabela larga embaixo. A tabela é larga por
+   natureza — oito colunas —, então ela rola **dentro do próprio recipiente**
+   (`.ui-scroll-x`), e o recipiente zera o mínimo para não empurrar a página de
+   lado quando um nome de barbearia é comprido.
+   ---------------------------------------------------------------------------- */
+
+.painel__secao {
+  margin: var(--space-7) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.01em;
+}
+
+.janelas {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+.janelas__opcao {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+.janelas__opcao--atual {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+}
+.indicador {
+  padding: var(--space-4);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+/* Cor é o **último** recurso da hierarquia, e aqui ela não carrega nenhuma
+   informação sozinha: o número e a nota já dizem o que houve. A borda só chama
+   o olho para a linha que merece uma ligação hoje. */
+.indicador--alerta { border-color: var(--color-danger); }
+.indicador__rotulo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.indicador__valor {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-variant-numeric: tabular-nums;
+  /* Nome de barbearia longo e "R$ 1.234.567,89" cabem no mesmo cartão de
+     360px porque a palavra quebra em vez de esticar a caixa. */
+  overflow-wrap: anywhere;
+}
+.indicador__nota {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.saude-rolagem { min-width: 0; }
+.saude {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+.saude__legenda {
+  text-align: start;
+  padding-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.saude th,
+.saude td {
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: start;
+  white-space: nowrap;
+}
+.saude thead th {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.saude__nome {
+  white-space: normal;
+  font-weight: var(--font-weight-semibold);
+}
+.saude__num { text-align: end; }
+.saude__quando { color: var(--color-text-muted); }
+/* Barbearia sem nenhum agendamento na janela: é a linha que a tela existe para
+   destacar, e ela vem primeiro por ordenação, não por cor. */
+.saude__linha--sem-sinal .saude__nome { color: var(--color-danger); }
+.saude__nunca,
+.saude__parada { color: var(--color-danger); }

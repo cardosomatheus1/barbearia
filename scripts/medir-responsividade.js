@@ -131,6 +131,18 @@ async function prepararPlataforma() {
     body: JSON.stringify({ motivo: 'inadimplente há 60 dias, sem retorno no telefone do cadastro' }),
   });
 
+  // Métricas com a tabela cheia. Medir a tela vazia mediria o estado vazio —
+  // que também precisa passar, mas não é onde oito colunas estouram os 360px.
+  // Nome comprido e receita de sete dígitos de propósito: são eles que quebram
+  // layout, e só aparecem com conteúdo de verdade.
+  const ontem = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  psql(
+    `INSERT INTO tenant_metrics_daily (tenant_id, business_day, appointments_total,` +
+      ` appointments_online, no_shows, minutes_sold, minutes_available, revenue_cents)` +
+      ` SELECT tenant_id, '${ontem}'::date, 412, 268, 31, 18400, 26400, 1284900` +
+      ` FROM tenant_platform ON CONFLICT DO NOTHING`,
+  );
+
   return token;
 }
 
@@ -692,6 +704,7 @@ async function main() {
     ...(tokenPlataforma
       ? [
           { nome: 'plataforma — barbearias', url: '/plataforma', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          { nome: 'plataforma — métricas', url: '/plataforma/metricas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — trilha', url: '/plataforma/trilha', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
         ]
       : []),

@@ -107,3 +107,49 @@ export const trilhaDaPlataforma = (token: string, limite = 100) =>
     undefined,
     token,
   );
+
+export interface ResumoDaPlataforma {
+  mrrCents: number;
+  barbeariasAtivas: number;
+  barbeariasBloqueadas: number;
+  semPlano: number;
+  saidasNoPeriodo: number;
+  entradasNoPeriodo: number;
+  churnEmPontos: number;
+  dias: number;
+  agendamentos: number;
+  adocaoOnlineEmPontos: number;
+  ocupacaoEmPontos: number;
+  faltasEmPontos: number;
+  receitaCents: number;
+  barbeariasComMovimento: number;
+}
+
+export interface SaudeDaBarbearia {
+  tenantId: string;
+  nome: string;
+  bloqueada: boolean;
+  planoCode: string | null;
+  agendamentos: number;
+  adocaoOnlineEmPontos: number;
+  ocupacaoEmPontos: number;
+  faltasEmPontos: number;
+  receitaCents: number;
+  ultimoDia: string | null;
+}
+
+export const metricasDaPlataforma = (token: string, dias = 30) =>
+  chamar<{ ate: string; resumo: ResumoDaPlataforma }>(
+    'GET',
+    `/v1/plataforma/metricas?dias=${dias}`,
+    undefined,
+    token,
+  );
+
+export const saudeDasBarbearias = (token: string, dias = 30) =>
+  chamar<{ ate: string; barbearias: SaudeDaBarbearia[] }>(
+    'GET',
+    `/v1/plataforma/saude?dias=${dias}`,
+    undefined,
+    token,
+  );

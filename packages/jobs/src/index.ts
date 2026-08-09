@@ -4,3 +4,4 @@ export * from './notificacoes.js';
 export * from './preferencias.js';
 export * from './worker.js';
 export * from './alertas.js';
+export * from './metricas.js';

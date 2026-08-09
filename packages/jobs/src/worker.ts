@@ -8,6 +8,7 @@ import {
   type Tarefa,
 } from './fila.js';
 import { marcarFalta } from './faltas.js';
+import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
   executarAvisoDeAgendamento,
@@ -103,6 +104,19 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     );
   },
 
+  /**
+   * A apuração do dia de uma barbearia (bloco 25).
+   *
+   * Uma tarefa por barbearia, com `withTenant`, exatamente como a falta
+   * automática — e pelo mesmo motivo: `appointments` tem RLS, e nenhuma
+   * varredura de plataforma consegue lê-la.
+   */
+  'metricas.dia': async (tarefa) => {
+    const dia = String(tarefa.payload['dia'] ?? '');
+    if (!dia) throw new Error('tarefa de métricas sem dia');
+    await apurarDiaDaBarbearia(tarefa.tenantId, dia);
+  },
+
   'agendamento.marcar_falta': async (tarefa, contexto) => {
     const appointmentId = String(tarefa.payload['appointmentId'] ?? '');
     if (!appointmentId) throw new Error('tarefa de falta sem agendamento');
@@ -176,9 +190,27 @@ export async function rodarWorker(
 ): Promise<void> {
   const intervalo = opcoes.intervaloMs ?? 5_000;
   const parar = opcoes.parar ?? (() => false);
+  /**
+   * O último dia já enfileirado por **este** processo.
+   *
+   * A correção contra dois workers é o índice único de `jobs`, não esta
+   * variável — ela só evita gastar um `INSERT ... SELECT` a cada cinco
+   * segundos para depois o banco recusar tudo.
+   */
+  let ultimaApuracao: string | null = null;
 
   while (!parar()) {
     await soltarOrfas(15, contexto.relogio.agora());
+
+    // A apuração diária mora aqui, ao lado da varredura de órfãs, porque é a
+    // outra coisa que o worker faz **sem** ser uma tarefa: alguém precisa
+    // enfileirar a primeira, e uma barbearia criada hoje não estaria em
+    // nenhuma corrente iniciada ontem.
+    const pendente = apuracaoPendente(contexto.relogio.agora());
+    if (pendente.dia !== ultimaApuracao) {
+      ultimaApuracao = pendente.dia;
+      await agendarApuracaoDeTodas(pendente);
+    }
 
     const resultado = await rodada(contexto);
     opcoes.aoRodar?.(resultado);
