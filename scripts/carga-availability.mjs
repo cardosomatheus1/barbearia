@@ -137,23 +137,40 @@ async function encherAgenda(casa) {
   let recusados = 0;
   let primeiraRecusa = null;
 
+  const grade = async (data, proId) =>
+    json(
+      await fetch(
+        `${API}/v1/b/${casa.slug}/availability?locationId=${casa.locationId}` +
+          `&serviceIds=${servico.id}&dateFrom=${data}&professionalId=${proId}`,
+      ),
+    );
+
   for (let d = 0; d < ALVO.dias; d++) {
     const data = dia(d);
     for (const pro of casa.profissionais) {
-      const grade = await json(
-        await fetch(
-          `${API}/v1/b/${casa.slug}/availability?locationId=${casa.locationId}` +
-            `&serviceIds=${servico.id}&dateFrom=${data}&professionalId=${pro.id}`,
-        ),
-      );
-      const livres = grade.days?.[0]?.slots ?? [];
-      const quantos = Math.floor(livres.length * OCUPACAO);
+      const primeira = await grade(data, pro.id);
+      const disponiveis = primeira.days?.[0]?.slots?.length ?? 0;
+      const alvo = Math.floor(disponiveis * OCUPACAO);
 
-      for (let i = 0; i < quantos; i++) {
-        // Um sim, um não: buracos espalhados custam mais ao motor do que um
-        // bloco contíguo, e é o que a agenda de verdade parece.
-        const slot = livres[i * 2];
-        if (!slot) break;
+      let feitos = 0;
+      // Teto de voltas: sem ele, um motor que passa a recusar tudo faria o
+      // laço girar para sempre em vez de a medição reprovar dizendo por quê.
+      for (let volta = 0; feitos < alvo && volta < alvo * 3; volta++) {
+        // A grade é relida a cada marcação. A primeira versão lia uma vez e
+        // marcava `livres[i * 2]` dali, o que só funciona se marcar não mudar
+        // a grade — e muda: na estratégia ancorada, o horário vendido desloca
+        // todos os seguintes. Nesta máquina ainda entravam 840; na esteira,
+        // com o fuso da unidade em outro dia, entraram **7 de 1400**, e a
+        // guarda do mínimo reprovou a medição em vez de deixá-la mentir.
+        const atual = await grade(data, pro.id);
+        const livres = atual.days?.[0]?.slots ?? [];
+        if (livres.length === 0) break;
+
+        // O segundo, quando existe: deixa um buraco entre uma venda e outra.
+        // Agenda cheia em bloco contíguo é mais barata para o motor do que a
+        // esburacada, e a esburacada é a que a barbearia real tem.
+        const slot = livres[1] ?? livres[0];
+
         const r = await post(
           '/v1/admin/appointments',
           {
@@ -161,19 +178,20 @@ async function encherAgenda(casa) {
             professionalId: pro.id,
             date: data,
             start: slot.start,
-            name: `Cliente ${d}-${i}`,
+            name: `Cliente ${d}-${feitos}`,
             phone: `(71) 9${String(80000000 + marcados).slice(0, 8)}`,
           },
           casa.token,
-          { 'idempotency-key': `carga-${d}-${pro.id}-${i}` },
+          { 'idempotency-key': `carga-${d}-${pro.id}-${feitos}-${volta}` },
         );
-        if (r.ok) marcados++;
-        else {
+
+        if (r.ok) {
+          marcados++;
+          feitos++;
+        } else {
           recusados++;
           // A primeira recusa carrega o motivo. Sem guardá-la, uma mudança de
-          // schema vira "agenda vazia" e o número passa a medir o caso fácil —
-          // que foi exatamente o que aconteceu na primeira execução deste
-          // script, com `customerName` onde a rota espera `name`.
+          // contrato vira "agenda vazia" e o número passa a medir o caso fácil.
           if (!primeiraRecusa) primeiraRecusa = `${r.status} ${JSON.stringify(await r.json())}`;
         }
       }
