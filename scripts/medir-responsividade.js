@@ -13,7 +13,33 @@
  *   node scripts/medir-responsividade.js
  */
 
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+/**
+ * O Playwright entra por resolução normal, com o caminho da instalação global
+ * como plano B.
+ *
+ * Ele era pedido **só** pelo caminho absoluto de uma instalação global desta
+ * máquina, o que fazia a medição funcionar aqui e em lugar nenhum. Na esteira o
+ * `require` falharia com "Cannot find module" sobre uma pasta que nunca
+ * existiu, e a etapa apareceria quebrada por um motivo que não é dela.
+ *
+ * A ordem importa: primeiro o do repositório (é o que a esteira instala e o que
+ * o `pnpm-lock` fixa), depois o global (é o que já está aqui e evita baixar
+ * navegador de novo no ambiente de desenvolvimento).
+ */
+function carregarPlaywright() {
+  for (const origem of ['playwright', '/opt/node22/lib/node_modules/playwright']) {
+    try {
+      return require(origem);
+    } catch (erro) {
+      if (erro.code !== 'MODULE_NOT_FOUND') throw erro;
+    }
+  }
+  throw new Error(
+    'Playwright não encontrado. Rode `pnpm install` na raiz — ele é devDependency do repositório.',
+  );
+}
+
+const { chromium } = carregarPlaywright();
 const { execFileSync } = require('node:child_process');
 
 const WEB = process.env.WEB_URL ?? 'http://127.0.0.1:3001';
@@ -679,7 +705,9 @@ async function main() {
   ];
 
   const browser = await chromium.launch({
-    executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    // Sem `executablePath`: o Playwright usa o navegador que ele mesmo
+    // instalou. `PLAYWRIGHT_BROWSERS_PATH` aponta a pasta quando ela já existe,
+    // e é assim que o ambiente daqui e o da esteira usam o mesmo código.
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
 

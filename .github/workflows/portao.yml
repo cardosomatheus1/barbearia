@@ -1,0 +1,193 @@
+# O Definition of Done, fora da máquina de quem escreveu o código.
+#
+# `pnpm verify` já era o portão; até aqui ele só rodava onde o autor mandasse.
+# "Passa na minha máquina" é a categoria inteira de defeito que esta esteira
+# fecha — e ela achou o primeiro antes de existir: o script de medição pedia o
+# Playwright por um caminho absoluto de instalação global, e funcionava só neste
+# container.
+#
+# ## Por que dois jobs, e não um
+#
+# O `portao` é o que decide se o commit presta: typecheck, testes contra
+# Postgres de verdade e build. Ele precisa ser verde sempre.
+#
+# A `medicao` sobe os dois servidores e mede navegador e carga. É legítimo ela
+# ser mais lenta e mais barulhenta — o que ela não pode é atrasar o retorno do
+# portão. Separada, o autor sabe em ~3 minutos se quebrou alguma regra, e a
+# medição chega quando chegar.
+
+name: portão
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Push seguido cancela a execução anterior do mesmo ramo: ninguém lê o
+# resultado de um commit que já foi substituído, e a fila é compartilhada.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # A senha do role da aplicação é sorteada por execução. Sem default: senha
+  # previsível é senha vazada (CLAUDE.md §2), e o `bootstrap-role.sh` recusa
+  # rodar sem ela.
+  ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+jobs:
+  portao:
+    name: pnpm verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        # A imagem oficial já traz pgcrypto, citext, btree_gist, pg_trgm e
+        # unaccent no contrib; as migrações as criam sozinhas.
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: instalar dependências
+        # O navegador é da medição, não do portão. Baixá-lo aqui seria ~150 MB
+        # por execução para nada.
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: cliente do prisma
+        # O `pnpm install --ignore-scripts` da esteira não roda o postinstall
+        # do Prisma, e sem o cliente gerado o typecheck reprova sobre um tipo
+        # que existe.
+        run: pnpm --filter @barbearia/db db:generate
+
+      - name: verify
+        run: pnpm verify
+        env:
+          APP_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-portao
+
+      - name: varredura de dependências
+        # SPEC §5.12 pede varredura de dependências. Ela **não** derruba o
+        # portão: um aviso novo publicado numa madrugada travaria o time inteiro
+        # por algo que ninguém introduziu. Fica visível e é olhada.
+        continue-on-error: true
+        run: pnpm audit --audit-level high
+
+  medicao:
+    name: navegador e carga
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Só depois do portão: medir o layout de um commit que não compila é gastar
+    # três minutos para descobrir o que o portão já disse em um.
+    needs: portao
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-medicao
+      DEMO_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/demo
+      API_URL: http://127.0.0.1:3000
+      WEB_URL: http://127.0.0.1:3001
+      STAFF_EMAIL_PEPPER: pepper-da-esteira
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: cliente do prisma
+        run: pnpm --filter @barbearia/db db:generate
+
+      - name: instalar o navegador
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: preparar o banco de demonstração
+        run: |
+          set -euo pipefail
+          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE demo;'
+          ./scripts/bootstrap-role.sh
+          for m in packages/db/migrations/*.sql; do
+            psql "$DEMO_DATABASE_URL" -q -v ON_ERROR_STOP=1 -f "$m"
+          done
+
+      - name: construir
+        run: pnpm -r build
+
+      - name: subir a API e o web
+        run: |
+          set -euo pipefail
+          # Sorteado por execução, não guardado como segredo do repositório: o
+          # banco é descartável e nada aqui sobrevive ao job. Um segredo de
+          # esteira que ninguém configurou faria a etapa falhar por
+          # configuração ausente, o que é ruído e não sinal.
+          export MFA_SECRET_KEY="$(openssl rand -base64 32)"
+          export DATABASE_URL="postgres://barbearia_app:$APP_DB_PASSWORD@127.0.0.1:5432/demo"
+          export APP_DATABASE_URL="$DATABASE_URL"
+
+          # `nohup` com a saída redirecionada: sem isso os processos morrem
+          # junto com o shell do passo e as etapas seguintes medem o nada.
+          nohup node apps/api/dist/main.js > /tmp/api.log 2>&1 &
+          nohup pnpm --filter @barbearia/web exec next start -p 3001 > /tmp/web.log 2>&1 &
+
+          # Espera pela sonda de pronto, não por um `sleep`: ela só responde ok
+          # com o banco respondendo **e** a conexão sem BYPASSRLS. Um `sleep 10`
+          # esconderia atrás de um número uma API que subiu quebrada.
+          for i in $(seq 1 60); do
+            if curl -fsS "$API_URL/health/pronto" | grep -q '"status":"ok"'; then
+              echo "API pronta"; break
+            fi
+            if [ "$i" = 60 ]; then echo "API não ficou pronta"; cat /tmp/api.log; exit 1; fi
+            sleep 1
+          done
+          for i in $(seq 1 60); do
+            if curl -fsS "$WEB_URL/" > /dev/null; then echo "web pronto"; break; fi
+            if [ "$i" = 60 ]; then echo "web não subiu"; cat /tmp/web.log; exit 1; fi
+            sleep 1
+          done
+
+      - name: responsividade em 360, 390, 768 e 1280
+        run: node scripts/medir-responsividade.js
+
+      - name: carga em /availability
+        run: node scripts/carga-availability.mjs
+
+      - name: log dos servidores
+        # Só quando algo falhou: a medição que reprova quase nunca explica
+        # sozinha se o defeito é da tela ou de um servidor que caiu no meio.
+        if: failure()
+        run: |
+          echo '--- api ---'; tail -100 /tmp/api.log || true
+          echo '--- web ---'; tail -100 /tmp/web.log || true
