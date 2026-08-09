@@ -141,60 +141,13 @@ jobs:
       - name: instalar o navegador
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: preparar o banco de demonstração
-        run: |
-          set -euo pipefail
-          psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE demo;'
-          ./scripts/bootstrap-role.sh
-          for m in packages/db/migrations/*.sql; do
-            psql "$DEMO_DATABASE_URL" -q -v ON_ERROR_STOP=1 -f "$m"
-          done
-
-      - name: construir
-        run: pnpm -r build
-
-      - name: subir a API e o web
-        run: |
-          set -euo pipefail
-          # Sorteado por execução, não guardado como segredo do repositório: o
-          # banco é descartável e nada aqui sobrevive ao job. Um segredo de
-          # esteira que ninguém configurou faria a etapa falhar por
-          # configuração ausente, o que é ruído e não sinal.
-          export MFA_SECRET_KEY="$(openssl rand -base64 32)"
-          export DATABASE_URL="postgres://barbearia_app:$APP_DB_PASSWORD@127.0.0.1:5432/demo"
-          export APP_DATABASE_URL="$DATABASE_URL"
-
-          # `nohup` com a saída redirecionada: sem isso os processos morrem
-          # junto com o shell do passo e as etapas seguintes medem o nada.
-          nohup node apps/api/dist/main.js > /tmp/api.log 2>&1 &
-          nohup pnpm --filter @barbearia/web exec next start -p 3001 > /tmp/web.log 2>&1 &
-
-          # Espera pela sonda de pronto, não por um `sleep`: ela só responde ok
-          # com o banco respondendo **e** a conexão sem BYPASSRLS. Um `sleep 10`
-          # esconderia atrás de um número uma API que subiu quebrada.
-          for i in $(seq 1 60); do
-            if curl -fsS "$API_URL/health/pronto" | grep -q '"status":"ok"'; then
-              echo "API pronta"; break
-            fi
-            if [ "$i" = 60 ]; then echo "API não ficou pronta"; cat /tmp/api.log; exit 1; fi
-            sleep 1
-          done
-          for i in $(seq 1 60); do
-            if curl -fsS "$WEB_URL/" > /dev/null; then echo "web pronto"; break; fi
-            if [ "$i" = 60 ]; then echo "web não subiu"; cat /tmp/web.log; exit 1; fi
-            sleep 1
-          done
-
-      - name: responsividade em 360, 390, 768 e 1280
-        run: node scripts/medir-responsividade.js
-
-      - name: carga em /availability
-        run: node scripts/carga-availability.mjs
-
-      - name: log dos servidores
-        # Só quando algo falhou: a medição que reprova quase nunca explica
-        # sozinha se o defeito é da tela ou de um servidor que caiu no meio.
-        if: failure()
-        run: |
-          echo '--- api ---'; tail -100 /tmp/api.log || true
-          echo '--- web ---'; tail -100 /tmp/web.log || true
+      - name: medição
+        # Um passo só, chamando o mesmo script que roda na máquina de quem
+        # escreve. O job era uma sequência de comandos soltos dentro deste
+        # YAML — criar banco, migrar, construir, subir, esperar, medir — e nada
+        # daquilo rodava localmente. O resultado foi depurar por tentativa
+        # contra um laço de oito minutos por volta, aprendendo um fato por
+        # execução. Quatro voltas, quatro causas, todas reproduzíveis aqui.
+        #
+        # A regra que fica: a esteira não contém lógica que não roda fora dela.
+        run: scripts/medicao.sh
