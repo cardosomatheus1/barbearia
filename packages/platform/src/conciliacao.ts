@@ -1,7 +1,7 @@
 import { semTenant, type TransactionClient } from '@barbearia/db';
 import { PlataformaError, registrarNaTrilha } from './plataforma.js';
 import { faturasEmCobranca, pagarFatura } from './cobranca.js';
-import type { EstadoDaCobranca, PspProvider } from './psp.js';
+import { EstornoRecusado, type EstadoDaCobranca, type PspProvider } from './psp.js';
 
 /**
  * A conciliação (bloco 29, SPEC §9.1).
@@ -253,6 +253,36 @@ export async function estornarCredito(entrada: {
     throw new PlataformaError('no_payment_method', 'Esta barbearia não tem conta no adquirente');
   }
 
+  /**
+   * De qual cobrança o dinheiro sai — decidido **antes** de debitar o crédito.
+   *
+   * Adquirente nenhum estorna "da conta": ele estorna uma cobrança. Descobrir
+   * isso depois do débito seria descobrir com o saldo da barbearia já reduzido
+   * e nada a caminho dela. Por isso a pergunta vem primeiro, e a ausência de
+   * resposta é recusa e não tentativa.
+   *
+   * A escolhida é a **última fatura paga**, que é a que ainda está dentro da
+   * janela de estorno de qualquer adquirente. Filtra `<> ''` porque a versão
+   * anterior de `amarrarCobranca` deixava esse rastro em fatura recusada.
+   */
+  const cobranca = await semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{ psp_charge_id: string }[]>`
+      SELECT psp_charge_id FROM invoices
+       WHERE tenant_id = ${entrada.tenantId}::uuid
+         AND status = 'paid'
+         AND psp_charge_id IS NOT NULL AND psp_charge_id <> ''
+       ORDER BY paid_at DESC NULLS LAST
+       LIMIT 1
+    `;
+    return linhas[0] ?? null;
+  });
+  if (!cobranca) {
+    throw new PlataformaError(
+      'no_charge_to_refund',
+      'Não há cobrança paga no adquirente para estornar',
+    );
+  }
+
   const lancamento = await semTenant(async (tx) => {
     const debitadas = await tx.$executeRaw`
       UPDATE subscriptions
@@ -282,11 +312,44 @@ export async function estornarCredito(entrada: {
     return criado;
   });
 
-  const { refundId } = await entrada.provider.estornar({
-    tenantId: entrada.tenantId,
-    pspCustomerId: conta.psp_customer_id,
-    valorCents: entrada.valorCents,
-  });
+  let refundId: string;
+  try {
+    ({ refundId } = await entrada.provider.estornar({
+      tenantId: entrada.tenantId,
+      pspCustomerId: conta.psp_customer_id,
+      pspChargeId: cobranca.psp_charge_id,
+      valorCents: entrada.valorCents,
+      estornoId: lancamento.id,
+    }));
+  } catch (erro) {
+    /**
+     * Recusa definitiva devolve o crédito; indisponibilidade não.
+     *
+     * `EstornoRecusado` é o adquirente dizendo que **nada saiu** da conta — a
+     * cobrança não existe, já foi estornada, o valor não cabe. Deixar o crédito
+     * debitado nesse caso é a barbearia perdendo saldo por um estorno que
+     * jamais aconteceu.
+     *
+     * Qualquer outra falha fica como está, e é de propósito: 5xx e queda de
+     * rede são ambíguos — o estorno pode ter sido feito e a resposta ter se
+     * perdido. Devolver o crédito aí pagaria a barbearia duas vezes. O
+     * lançamento continua `pending`, que é visível e retomável.
+     */
+    if (erro instanceof EstornoRecusado) {
+      await semTenant(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE subscriptions
+             SET credit_cents = credit_cents + ${entrada.valorCents}, updated_at = now()
+           WHERE tenant_id = ${entrada.tenantId}::uuid
+        `;
+        await tx.$executeRaw`
+          UPDATE refunds SET status = 'failed' WHERE id = ${lancamento.id}::uuid
+        `;
+      });
+      throw new PlataformaError('refund_refused', 'O adquirente recusou o estorno');
+    }
+    throw erro;
+  }
 
   /**
    * O desfecho, e só ele.

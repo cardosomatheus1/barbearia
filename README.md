@@ -13,7 +13,7 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão, permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 547 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão, permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 573 testes ✅ |
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 186 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | 137 testes ✅ |
@@ -21,7 +21,7 @@ integridade do banco.
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 89 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática, apuração diária, varredura de retenção e varredura de alerta — o que acontece sem ninguém esperando | 67 testes ✅ |
 | `packages/crm` | A ficha do cliente, a importação de base e os direitos do titular: consentimento com histórico, exportação, anonimização e retenção | 88 testes ✅ |
-| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin, suporte assistido, papéis internos e o canal de alerta ao dono | 108 testes ✅ |
+| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin, suporte assistido, papéis internos, o canal de alerta ao dono e o cliente Stripe das duas pontas | 149 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
 | `apps/api` | API pública, do painel, **da plataforma** e o webhook do adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, direitos do titular e anonimização (LGPD) e o Super Admin | 364 testes ✅ |
 | `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 81 testes ✅ |
@@ -81,10 +81,29 @@ fraco em silêncio subiria o sistema funcionando com a proteção desligada.
 | `STAFF_EMAIL_PEPPER` | HMAC do e-mail em `staff_directory`, que é tabela sem RLS por natureza | `openssl rand -hex 32` |
 | `MFA_SECRET_KEY` | AES-256-GCM do segredo TOTP guardado em `staff_users` **e em `platform_admins`** | `openssl rand -base64 32` (32 bytes) |
 | `PSP_WEBHOOK_SECRET` | HMAC do webhook do adquirente, que é a única rota sem sessão com efeito sobre dinheiro | o provedor gera, no painel dele |
+| `STRIPE_SECRET_KEY` | falar com a Stripe. Só exigida quando `PSP_MODO=stripe` | o painel da Stripe |
 
 `PSP_WEBHOOK_SECRET` ausente **recusa** todo webhook — nunca libera. É o que
 separa "a rota está fechada" de "a rota está aberta e ninguém percebeu": um
 padrão vazio faria toda assinatura conferir.
+
+### Qual adquirente está no ar: `PSP_MODO`
+
+Uma variável, três valores, e **uma única função no produto que os lê**
+(`adquirenteDaPlataforma`/`adquirenteDaComanda`, em `packages/platform`). O
+motivo de ser uma só: dois processos cobram — a API e o worker —, e cada um
+escolhendo por si significa ligar a Stripe num e esquecer no outro, com a régua
+debitando de verdade enquanto o estorno devolve dinheiro de mentira.
+
+| `PSP_MODO` | O que acontece |
+|---|---|
+| ausente ou `nenhum` | **padrão.** Nada é debitado sozinho; quem quita fatura é o Super Admin registrando o que viu no extrato. O estorno de crédito recusa com `no_acquirer` em vez de fingir |
+| `fake` | provedor de mentira, que **recusa por padrão** — é o que exerce a régua de retentativa inteira em desenvolvimento |
+| `stripe` | a Stripe de verdade, nas duas direções. Exige `STRIPE_SECRET_KEY` |
+
+Valor desconhecido **falha alto** em vez de virar `nenhum`. Um `PSP_MODO=stripe_test`
+lido com tolerância faria a plataforma parar de cobrar sem ninguém perceber por
+um ciclo inteiro de faturamento.
 
 Trocar `MFA_SECRET_KEY` invalida todos os segundos fatores cadastrados: os
 segredos ficam indecifráveis e cada gestor precisa cadastrar de novo. Ela é

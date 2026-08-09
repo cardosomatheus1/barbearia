@@ -171,6 +171,42 @@ describeIfDb('adquirente e conciliação', () => {
     expect(psp.cobrancas).toHaveLength(1);
   });
 
+  it('cartão recusado não trava a amarração da tentativa seguinte', async () => {
+    /**
+     * O achado da `/security-review` do bloco 34.
+     *
+     * A Stripe recusa sem devolver id de cobrança, e a primeira tradução disso
+     * foi string vazia. Vazio não é nulo: `amarrarCobranca` só escreve enquanto
+     * `psp_charge_id IS NULL`, então a fatura ficava amarrada a nada **para
+     * sempre**. A tentativa seguinte cobraria de verdade, o webhook dela
+     * procuraria a fatura pelo id da cobrança, não acharia ninguém, e a
+     * barbearia seria suspensa por uma fatura que pagou.
+     *
+     * O `FakePspProvider` escondia isso porque devolvia `ch_fake_N` até quando
+     * recusava — fake que responde mais bonito que o provedor de verdade é
+     * teste verde sobre caminho que não existe.
+     */
+    const psp = new FakePspProvider();
+    const provider = new PspCobrancaProvider(psp);
+
+    await aplicarRegua({ agora: depois(-3), provider });
+    await aplicarRegua({ agora: depois(5), provider });
+    // A primeira tentativa é recusada — `proximoEstado` já nasce assim.
+    await aplicarRegua({ agora: depois(6), provider });
+
+    const [recusada] = await faturasDaBarbearia(DOMARI);
+    expect(recusada?.chargeId).toBeNull();
+
+    psp.proximoEstado = 'paga';
+    expect(await aplicarRegua({ agora: depois(9), provider })).toMatchObject({ pagas: 1 });
+
+    const [paga] = await faturasDaBarbearia(DOMARI);
+    expect(paga?.estado).toBe('paid');
+    // E a cobrança que deu certo ficou amarrada: é por este id que o webhook e
+    // a conciliação reencontram a fatura.
+    expect(paga?.chargeId).toBe('ch_fake_2');
+  });
+
   it('sem cartão cadastrado a régua segue no caminho manual', async () => {
     await semTenant((tx) => tx.$executeRaw`DELETE FROM billing_customers`);
     const psp = new FakePspProvider();
@@ -464,8 +500,31 @@ describeIfDb('adquirente e conciliação', () => {
 
   // -- estorno ----------------------------------------------------------------
 
+  /**
+   * Uma fatura paga com cobrança amarrada.
+   *
+   * Estorno sai **de uma cobrança**, nunca "da conta" — adquirente nenhum
+   * aceita a segunda coisa. Sem esta fatura no cenário, o que se testaria seria
+   * a recusa, não a devolução.
+   */
+  async function faturaPagaComCobranca(chargeId = 'ch_paga_1'): Promise<void> {
+    await semTenant(async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO invoices
+          (tenant_id, kind, status, plan_code, amount_cents, due_at,
+           period_start, period_end, psp_charge_id, paid_at, paid_method)
+        VALUES (
+          ${DOMARI}::uuid, 'subscription', 'paid', 'pro', 24900,
+          ${FIM_DO_TESTE}, ${FIM_DO_TESTE}, ${depois(30)},
+          ${chargeId}, ${FIM_DO_TESTE}, 'card'
+        )
+      `;
+    });
+  }
+
   it('devolve o crédito em dinheiro e baixa o saldo na mesma transação', async () => {
     await exec(`UPDATE subscriptions SET credit_cents = 7500 WHERE tenant_id = '${DOMARI}'`);
+    await faturaPagaComCobranca();
     const psp = new FakePspProvider();
 
     const estorno = await estornarCredito({
@@ -477,7 +536,13 @@ describeIfDb('adquirente e conciliação', () => {
     });
 
     expect(estorno).toMatchObject({ valorCents: 5000, estado: 'done' });
-    expect(psp.estornos[0]).toMatchObject({ pspCustomerId: 'cus_domari', valorCents: 5000 });
+    expect(psp.estornos[0]).toMatchObject({
+      pspCustomerId: 'cus_domari',
+      valorCents: 5000,
+      // Qual cobrança está sendo estornada. Sem isto a chamada não existe do
+      // lado de lá — foi o que o provedor de verdade mostrou no bloco 34.
+      pspChargeId: 'ch_paga_1',
+    });
 
     const saldo = await semTenant(
       (tx) => tx.$queryRaw<{ credit_cents: number }[]>`
@@ -490,6 +555,7 @@ describeIfDb('adquirente e conciliação', () => {
 
   it('não devolve mais do que existe de crédito', async () => {
     await exec(`UPDATE subscriptions SET credit_cents = 1000 WHERE tenant_id = '${DOMARI}'`);
+    await faturaPagaComCobranca();
 
     await expect(
       estornarCredito({
@@ -510,6 +576,73 @@ describeIfDb('adquirente e conciliação', () => {
     );
     expect(saldo[0]?.credit_cents).toBe(1000);
     expect(await estornosDaBarbearia(DOMARI)).toHaveLength(0);
+  });
+
+  it('sem cobrança paga no adquirente, recusa **antes** de debitar o crédito', async () => {
+    /**
+     * A ordem é o que importa. Descobrir que não há o que estornar depois do
+     * débito seria descobrir com o saldo da barbearia já reduzido e nada a
+     * caminho dela — dinheiro que some de um lado sem aparecer no outro.
+     */
+    await exec(`UPDATE subscriptions SET credit_cents = 7500 WHERE tenant_id = '${DOMARI}'`);
+
+    await expect(
+      estornarCredito({
+        adminId: ADMIN,
+        tenantId: DOMARI,
+        valorCents: 5000,
+        motivo: 'sem cobrança para estornar',
+        provider: new FakePspProvider(),
+      }),
+    ).rejects.toMatchObject({ code: 'no_charge_to_refund' });
+
+    const saldo = await semTenant(
+      (tx) => tx.$queryRaw<{ credit_cents: number }[]>`
+        SELECT credit_cents FROM subscriptions WHERE tenant_id = ${DOMARI}::uuid
+      `,
+    );
+    expect(saldo[0]?.credit_cents).toBe(7500);
+    expect(await estornosDaBarbearia(DOMARI)).toHaveLength(0);
+  });
+
+  it('recusa definitiva do adquirente devolve o crédito debitado', async () => {
+    /**
+     * 4xx é a Stripe dizendo que **nada saiu** da conta — a cobrança já foi
+     * estornada, o valor não cabe. Deixar o crédito debitado nesse caso é a
+     * barbearia perdendo saldo por um estorno que jamais aconteceu.
+     *
+     * O oposto — indisponibilidade — é ambíguo e **não** devolve, porque o
+     * estorno pode ter sido feito e a resposta ter se perdido. Esse caminho
+     * está provado no teste unitário do provedor, onde dá para escolher o
+     * código HTTP.
+     */
+    await exec(`UPDATE subscriptions SET credit_cents = 7500 WHERE tenant_id = '${DOMARI}'`);
+    await faturaPagaComCobranca();
+    const psp = new FakePspProvider();
+    psp.recusaOEstorno = true;
+
+    await expect(
+      estornarCredito({
+        adminId: ADMIN,
+        tenantId: DOMARI,
+        valorCents: 5000,
+        motivo: 'adquirente recusou',
+        provider: psp,
+      }),
+    ).rejects.toMatchObject({ code: 'refund_refused' });
+
+    const saldo = await semTenant(
+      (tx) => tx.$queryRaw<{ credit_cents: number }[]>`
+        SELECT credit_cents FROM subscriptions WHERE tenant_id = ${DOMARI}::uuid
+      `,
+    );
+    expect(saldo[0]?.credit_cents).toBe(7500);
+
+    // O lançamento fica, marcado como falho: apagá-lo esconderia que alguém
+    // tentou devolver e não conseguiu, que é a pergunta seguinte.
+    const lancamentos = await estornosDaBarbearia(DOMARI);
+    expect(lancamentos).toHaveLength(1);
+    expect(lancamentos[0]?.estado).toBe('failed');
   });
 
   it('estorno exige motivo e valor positivo', async () => {

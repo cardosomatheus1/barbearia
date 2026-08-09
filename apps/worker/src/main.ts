@@ -14,8 +14,8 @@ import {
 import {
   CobrancaManualProvider,
   ConsoleGestorProvider,
-  FakePspProvider,
   PspCobrancaProvider,
+  adquirenteDaPlataforma,
   aplicarRegua,
   conciliarPendentes,
   executarAvisoDeCobranca,
@@ -46,22 +46,22 @@ const INTERVALO_MS = Number(process.env['WORKER_INTERVALO_MS'] ?? 5_000);
 /**
  * O adquirente, quando há um configurado.
  *
- * `PSP_MODO=fake` liga o provedor de mentira — é o que roda em desenvolvimento
- * e na demonstração, e ele recusa por padrão para que a régua seja exercida de
- * verdade. Sem a variável, a plataforma segue no modo do bloco 28: nada é
- * debitado sozinho e quem quita fatura é o Super Admin registrando o pagamento
- * que viu no extrato.
+ * Quem escolhe é `adquirenteDaPlataforma` (bloco 34), e é de propósito que a
+ * escolha não more aqui: a API também cobra — estorno de crédito hoje, comanda
+ * a partir do bloco 35 — e dois processos decidindo cada um por si significa
+ * ligar a Stripe num e esquecer no outro, com a régua debitando de verdade
+ * enquanto o estorno devolve dinheiro de mentira.
  *
- * **Não há credencial neste arquivo.** A Stripe é o provedor escolhido e entra
- * no bloco 34; as chaves dela chegam por variável de ambiente, como todo o
- * resto. A escolha de qual provedor usar continua sendo desta função, que é o
- * único lugar do produto que sabe que adquirente existe.
+ * Sem `PSP_MODO`, a plataforma segue no modo do bloco 28: nada é debitado
+ * sozinho e quem quita fatura é o Super Admin registrando o pagamento que viu
+ * no extrato.
+ *
+ * **Não há credencial neste arquivo.** As chaves da Stripe chegam por variável
+ * de ambiente, como todo o resto.
  */
 function ligarAdquirente(): { psp: PspProvider | null; cobranca: CobrancaProvider } {
-  if (process.env['PSP_MODO'] !== 'fake') {
-    return { psp: null, cobranca: new CobrancaManualProvider() };
-  }
-  const psp = new FakePspProvider();
+  const psp = adquirenteDaPlataforma();
+  if (psp === null) return { psp: null, cobranca: new CobrancaManualProvider() };
   return { psp, cobranca: new PspCobrancaProvider(psp) };
 }
 
@@ -100,10 +100,10 @@ async function main(): Promise<void> {
       /**
        * A cobrança da assinatura (bloco 28), ligada aqui pelo mesmo motivo.
        *
-       * O provedor é o manual: até a Stripe entrar no bloco 34, nada é
-       * debitado sozinho, e o que quita uma fatura é alguém registrando no
-       * painel o pagamento que viu no extrato. A régua roda inteira em cima disso — emite, avisa, marca
-       * vencida e suspende quem passou de 21 dias.
+       * O provedor sai de `ligarAdquirente`. Sem `PSP_MODO` ele é o manual, e
+       * o que quita uma fatura é alguém registrando no painel o pagamento que
+       * viu no extrato. A régua roda inteira em cima de qualquer um dos dois —
+       * emite, avisa, marca vencida e suspende quem passou de 21 dias.
        */
       avisarDeCobranca: (aviso) =>
         executarAvisoDeCobranca({

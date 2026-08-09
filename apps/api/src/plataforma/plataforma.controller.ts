@@ -42,7 +42,7 @@ import {
   estornosDaBarbearia,
   meioDePagamento,
   salvarMeioDePagamento,
-  FakePspProvider,
+  adquirenteDaPlataforma,
   faturasDaBarbearia,
   faturasEmCobranca,
   pagarFatura,
@@ -116,6 +116,9 @@ const STATUS: Record<string, number> = {
   not_payable: 409,
   not_voidable: 409,
   no_payment_method: 409,
+  no_acquirer: 409,
+  no_charge_to_refund: 409,
+  refund_refused: 409,
   insufficient_credit: 409,
   invalid_amount: 400,
   refund_failed: 500,
@@ -400,9 +403,11 @@ export class PlataformaController {
   /**
    * Devolve em dinheiro o crédito que a descida de plano gerou.
    *
-   * A lacuna que o bloco 28 declarou. O `FakePspProvider` está aqui porque
-   * ainda não há adquirente contratado — o dia em que houver, ele entra por
-   * injeção como o provedor de mensagem, e esta linha é a única que muda.
+   * A lacuna que o bloco 28 declarou, fechada no 34. O provedor sai de
+   * `adquirenteDaPlataforma()` — a mesma função que o worker usa —, e é isso
+   * que impede o estado em que a régua debita de verdade enquanto o estorno
+   * devolve dinheiro de mentira. Sem `PSP_MODO` não há adquirente, e devolver
+   * dinheiro volta a ser trabalho de quem tem acesso ao extrato.
    */
   @AgeNaConta()
   @Post('barbearias/:tenantId/estorno')
@@ -412,12 +417,19 @@ export class PlataformaController {
     @Admin() admin: AdminDaPlataforma,
   ) {
     try {
+      const provider = adquirenteDaPlataforma();
+      if (provider === null) {
+        // Recusa em vez de fingir. Um estorno "feito" sem adquirente sairia do
+        // crédito da barbearia sem sair de conta nenhuma — o dinheiro some do
+        // saldo dela e não chega em lugar algum.
+        throw new PlataformaError('no_acquirer', 'Não há adquirente configurado');
+      }
       const estorno = await estornarCredito({
         adminId: admin.id,
         tenantId,
         valorCents: corpo.valorCents,
         motivo: corpo.motivo,
-        provider: new FakePspProvider(),
+        provider,
       });
       return { id: estorno.id, valorCents: estorno.valorCents, estado: estorno.estado };
     } catch (erro) {

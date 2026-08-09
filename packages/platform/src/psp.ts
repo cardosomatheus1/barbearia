@@ -14,17 +14,16 @@ import type { CobrancaProvider, ResultadoDaCobranca } from './cobranca.js';
  *
  * ## O provedor escolhido é a Stripe
  *
- * A implementação contra ela entra no bloco 34, junto com o cliente
+ * A implementação entrou no bloco 34 (`stripe-pagamento.ts`), sobre o cliente
  * compartilhado que serve às duas pontas — a plataforma cobrando a barbearia
  * (este arquivo) e a barbearia cobrando o cliente dela. A abstração continua
  * valendo depois disso: ela é o que permite o `FakePspProvider` exercer a régua
  * inteira em teste sem rede, e é o que torna o próximo provedor uma
  * implementação em vez de uma reescrita.
  *
- * Duas coisas precisam ser conferidas **contra a documentação da Stripe** antes
- * do bloco 35, e nenhuma delas está verificada aqui: se o Pix está disponível
- * na conta brasileira e sob quais condições, e se o split que os blocos 49 e 50
- * exigem cabe no Connect. As duas mudam o desenho daqueles blocos, não deste.
+ * Uma coisa continua **não** verificada, e está na tabela de lacunas: se o
+ * split que os blocos 49 e 50 exigem cabe no Connect. Isso muda o desenho
+ * daqueles blocos, não deste.
  *
  * ## Por que a resposta imediata não é a verdade
  *
@@ -57,6 +56,36 @@ export interface PedidoDeEstorno {
   readonly tenantId: string;
   readonly pspCustomerId: string;
   readonly valorCents: number;
+  /**
+   * **Qual cobrança** está sendo estornada.
+   *
+   * Entrou no bloco 34, quando o primeiro provedor de verdade mostrou que o
+   * contrato estava incompleto: `{ cliente, valor }` descreve "tire dinheiro
+   * desta conta", que não é uma operação que adquirente nenhum aceita sem saber
+   * de onde. O fake aceitava, e por isso a falta não aparecia.
+   */
+  readonly pspChargeId: string;
+  /** O lançamento em `refunds`. É dele que sai a chave de idempotência. */
+  readonly estornoId: string;
+}
+
+/**
+ * O adquirente disse não, e disse definitivamente.
+ *
+ * Separado de qualquer outra falha porque o que se faz depois é o oposto:
+ * recusa definitiva significa que **nada saiu** da conta, então o crédito
+ * debitado tem que voltar. Indisponibilidade é ambígua — o estorno pode ter
+ * sido feito e a resposta ter se perdido —, e devolver o crédito nesse caso
+ * pagaria a barbearia duas vezes.
+ */
+export class EstornoRecusado extends Error {
+  constructor(
+    readonly code: string,
+    mensagem: string,
+  ) {
+    super(mensagem);
+    this.name = 'EstornoRecusado';
+  }
 }
 
 export interface PspProvider {
@@ -81,11 +110,21 @@ export class FakePspProvider implements PspProvider {
   async cobrar(pedido: PedidoDeCobranca): Promise<RespostaDaCobranca> {
     this.cobrancas.push(pedido);
     this.contador += 1;
+    /**
+     * A recusa volta **sem** id de cobrança, como a Stripe (bloco 34).
+     *
+     * Antes ela devolvia `ch_fake_N` até quando recusava, e o fake escondia o
+     * defeito que a `/security-review` achou: a amarração da fatura sendo
+     * gravada vazia e travando toda tentativa posterior. Fake que responde mais
+     * bonito que o provedor de verdade é teste verde sobre caminho que não
+     * existe.
+     */
+    if (this.proximoEstado === 'recusada') {
+      return { estado: 'recusada', chargeId: '', motivo: 'cartão recusado' };
+    }
     const chargeId = `ch_fake_${this.contador}`;
     this.estados.set(chargeId, this.proximoEstado);
-    return this.proximoEstado === 'recusada'
-      ? { estado: 'recusada', chargeId, motivo: 'cartão recusado' }
-      : { estado: this.proximoEstado, chargeId };
+    return { estado: this.proximoEstado, chargeId };
   }
 
   private readonly estados = new Map<string, EstadoDaCobranca>();
@@ -99,7 +138,25 @@ export class FakePspProvider implements PspProvider {
     this.estados.set(chargeId, estado);
   }
 
+  /**
+   * Liga a recusa definitiva do adquirente — o 4xx da Stripe.
+   *
+   * Existe para o teste exercer o caminho em que o crédito debitado precisa
+   * voltar. Sem ele esse caminho só apareceria em produção, com o saldo de
+   * alguém.
+   */
+  recusaOEstorno = false;
+
   async estornar(pedido: PedidoDeEstorno): Promise<{ readonly refundId: string }> {
+    // O fake recusa o que o adquirente de verdade recusa. Aceitar um estorno
+    // sem cobrança foi exatamente o que fez o contrato ficar incompleto por
+    // cinco blocos sem ninguém notar.
+    if (!pedido.pspChargeId) {
+      throw new EstornoRecusado('missing_charge', 'Sem cobrança para estornar');
+    }
+    if (this.recusaOEstorno) {
+      throw new EstornoRecusado('charge_already_refunded', 'Cobrança já estornada');
+    }
     this.estornos.push(pedido);
     this.contador += 1;
     return { refundId: `re_fake_${this.contador}` };
@@ -140,7 +197,18 @@ export class PspCobrancaProvider implements CobrancaProvider {
       pspMethodId: conta.pspMethodId,
     });
 
-    await amarrarCobranca(pedido.faturaId, resposta.chargeId);
+    /**
+     * Só amarra quando há o que amarrar.
+     *
+     * Sem a guarda, uma recusa que volta sem id do adquirente grava string
+     * vazia em `psp_charge_id` — e o `AND psp_charge_id IS NULL` do `UPDATE`
+     * faz disso um caminho **sem volta**: nenhuma tentativa posterior consegue
+     * amarrar a cobrança que der certo. O webhook dela chega, procura a fatura
+     * pelo id da cobrança, não encontra ninguém, e a barbearia é suspensa por
+     * uma fatura que pagou. O `FakePspProvider` escondia isso porque devolvia
+     * um id de mentira até quando recusava.
+     */
+    if (resposta.chargeId) await amarrarCobranca(pedido.faturaId, resposta.chargeId);
 
     if (resposta.estado === 'paga') return { pago: true, metodo: 'card' };
     /**
