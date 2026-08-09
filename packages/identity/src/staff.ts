@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { normalizePhone, InvalidPhoneError } from '@barbearia/core';
 import { emailKey, hashPassword, verifyPassword } from './password.js';
+import { limparFalhasDeLogin, reservarTentativaDeLogin } from './forca-bruta.js';
 import { seedRolePermissions } from './team.js';
 
 /**
@@ -270,6 +271,22 @@ export interface LoginRequest {
 export async function staffLogin(request: LoginRequest): Promise<StaffSession> {
   const chave = emailKey(request.email, pepper());
 
+  /**
+   * A escada de espera vem **antes** de qualquer derivação de senha (bloco 33).
+   *
+   * A ordem é a proteção: derivar primeiro gastaria um scrypt de propósito em
+   * cima de quem já está bloqueado, que é justamente o custo que um atacante
+   * quer impor ao servidor. E ela vale para conta inexistente também — a
+   * contagem é pela chave do e-mail, não pelo cadastro, senão o bloqueio
+   * responderia mais rápido para e-mail que não existe e viraria o oráculo que
+   * o resto desta função paga caro para fechar.
+   *
+   * A tentativa é **reservada** aqui, não contada no fim: o acerto a desfaz
+   * logo abaixo. Contar só o erro exigiria ler agora e escrever depois, e essa
+   * janela deixava mil requisições simultâneas passarem todas juntas.
+   */
+  await reservarTentativaDeLogin(chave, request.ip ?? null);
+
   const destino = await withTenant(
     // Consulta ao índice, que não tem escopo de tenant. O UUID nulo deixa a
     // política das outras tabelas negando tudo enquanto isto roda.
@@ -308,8 +325,15 @@ export async function staffLogin(request: LoginRequest): Promise<StaffSession> {
 
     const conferido = await verifyPassword(request.password, usuario.password_hash);
     if (!conferido.valid || !usuario.active) {
+      // A reserva feita lá em cima permanece: conta desativada avança a escada
+      // como qualquer erro, de propósito — quem varre senha não deve descobrir,
+      // pela ausência de castigo, que achou uma conta real.
       throw new StaffError('invalid_credentials', 'E-mail ou senha incorretos.');
     }
+
+    // Acertou: a escada zera. Sem isto, cinco enganos espalhados por meses
+    // colocariam na espera quem nunca foi atacado.
+    await limparFalhasDeLogin(chave);
 
     // Custo do hash subiu desde o cadastro: regrava agora, que é a única hora em
     // que a senha em claro está disponível.
@@ -478,4 +502,108 @@ export async function revokeStaffSession(tenantId: string, sessionId: string): P
       WHERE id = ${sessionId}::uuid AND revoked_at IS NULL
     `;
   });
+}
+
+/** Uma sessão aberta do gestor, do jeito que a tela dele mostra. */
+export interface SessaoAberta {
+  readonly id: string;
+  /**
+   * O aparelho, em palavras.
+   *
+   * Derivado do `user-agent` e não o `user-agent` cru: ninguém reconhece a
+   * própria sessão numa linha de setenta caracteres com versões de motor de
+   * renderização. "Celular Android" é o que a pessoa compara com o que tem na
+   * mão.
+   */
+  readonly aparelho: string;
+  readonly criadaEm: Date;
+}
+
+/**
+ * O `user-agent` reduzido ao que a pessoa reconhece.
+ *
+ * Grosseiro de propósito. Identificar navegador com precisão exigiria uma
+ * biblioteca e uma tabela que envelhece — e a pergunta aqui não é "qual versão
+ * do Chrome?", é "este aparelho é meu?". Para isso, "Celular Android" resolve e
+ * "Mozilla/5.0 (Linux; Android 14; SM-A546E) AppleWebKit/537.36…" não.
+ */
+export function aparelhoDoAgente(agente: string | null): string {
+  if (!agente) return 'Aparelho desconhecido';
+  const texto = agente.toLowerCase();
+
+  // A ordem importa: todo iPad diz "safari", e quase todo Android diz "linux".
+  if (texto.includes('iphone')) return 'iPhone';
+  if (texto.includes('ipad')) return 'iPad';
+  if (texto.includes('android')) return 'Celular Android';
+  if (texto.includes('windows')) return 'Computador Windows';
+  if (texto.includes('macintosh') || texto.includes('mac os')) return 'Mac';
+  if (texto.includes('linux')) return 'Computador Linux';
+  return 'Aparelho desconhecido';
+}
+
+/**
+ * As sessões vivas desta pessoa.
+ *
+ * Só as dela: a tela responde "onde eu estou logado", e listar as dos colegas
+ * seria dar a quem administra a casa um mapa de quando cada funcionário abre o
+ * sistema — vigilância que ninguém pediu e que a permissão não cobre.
+ */
+/**
+ * Sem "último uso", e é decisão de custo.
+ *
+ * `customer_sessions` tem a coluna desde o bloco 5; `staff_sessions` não, e
+ * acrescentá-la significaria um `UPDATE` por requisição autenticada — no
+ * caminho mais quente do painel, para responder uma pergunta que "entrou em
+ * 12/08 num Celular Android" já responde bem o bastante.
+ *
+ * O que a tela precisa é que a pessoa reconheça a sessão, e ela reconhece pelo
+ * aparelho e pela data de entrada.
+ */
+export async function sessoesDoGestor(
+  tenantId: string,
+  staffUserId: string,
+  agora: Date = new Date(),
+): Promise<readonly SessaoAberta[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { id: string; user_agent: string | null; created_at: Date }[]
+    >`
+      SELECT id, user_agent, created_at
+        FROM staff_sessions
+       WHERE staff_user_id = ${staffUserId}::uuid
+         AND revoked_at IS NULL
+         AND expires_at > ${agora}
+       ORDER BY created_at DESC
+       LIMIT 50
+    `;
+
+    return linhas.map((l) => ({
+      id: l.id,
+      aparelho: aparelhoDoAgente(l.user_agent),
+      criadaEm: l.created_at,
+    }));
+  });
+}
+
+/**
+ * Encerra uma sessão **desta** pessoa.
+ *
+ * O `staff_user_id` no `WHERE` não é redundância com a RLS: a política separa
+ * barbearias, não separa pessoas dentro de uma. Sem ele, o id de uma sessão da
+ * colega — que é UUID e portanto não se adivinha, mas aparece em log e em
+ * suporte — derrubaria a sessão dela.
+ */
+export async function revogarSessaoDoGestor(
+  tenantId: string,
+  staffUserId: string,
+  sessionId: string,
+): Promise<number> {
+  return withTenant(tenantId, async (tx) =>
+    tx.$executeRaw`
+      UPDATE staff_sessions SET revoked_at = now()
+       WHERE id = ${sessionId}::uuid
+         AND staff_user_id = ${staffUserId}::uuid
+         AND revoked_at IS NULL
+    `,
+  );
 }

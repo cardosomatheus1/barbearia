@@ -7,6 +7,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LgpdController } from '../src/admin/lgpd.controller.js';
+import { AlertasController } from '../src/admin/alertas.controller.js';
 import { MeController, TeamController } from '../src/admin/team.controller.js';
 import { MfaController } from '../src/admin/mfa.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
@@ -80,6 +81,7 @@ describeIfDb('direitos do titular pela HTTP', () => {
         // da permissão: sem este controller o dono não consegue prová-lo.
         MfaController,
         LgpdController,
+        AlertasController,
       ],
       providers: [
         TenantService,
@@ -567,6 +569,59 @@ describeIfDb('direitos do titular pela HTTP', () => {
       `SELECT phone_e164 FROM customers WHERE id = '${carlos}'`,
     );
     expect(linha?.phone_e164).not.toBeNull();
+  });
+
+  it('a preferência de alerta é lida e gravada no caminho que a tela chama', async () => {
+    /**
+     * O defeito que a `/security-review` do bloco 33 apontou, e que nenhum
+     * teste pegava: as rotas estavam num controller montado em
+     * `v1/admin/notifications`, e a tela chamava `/v1/admin/alertas/…`.
+     * Resultado: 404 na leitura e na gravação, a tela mostrando os padrões e o
+     * botão Salvar sem salvar — em silêncio, porque falha de leitura é tratada
+     * como "ainda não escolheu".
+     *
+     * O teste exercita **o caminho**, não a função. É a única forma de pegar
+     * este tipo de erro.
+     */
+    const dono = await entrar(DONO);
+
+    const padrao = await com(dono)(http().get('/v1/admin/alertas/preferencias')).expect(200);
+    expect(padrao.body).toEqual({
+      enviarCritico: true,
+      enviarAviso: false,
+      enviarRetencao: true,
+    });
+
+    const salvo = await com(dono)(
+      http()
+        .put('/v1/admin/alertas/preferencias')
+        .send({ enviarCritico: false, enviarAviso: true, enviarRetencao: true }),
+    ).expect(200);
+    expect(salvo.body.enviarCritico).toBe(false);
+    expect(salvo.body.enviarAviso).toBe(true);
+
+    // E persiste: a releitura devolve o que foi gravado, não o padrão.
+    const relido = await com(dono)(http().get('/v1/admin/alertas/preferencias')).expect(200);
+    expect(relido.body.enviarCritico).toBe(false);
+  });
+
+  it('a preferência de alerta não some quando o aviso ao cliente é desligado', async () => {
+    /**
+     * A segunda metade do mesmo achado: as rotas herdavam
+     * `@Recurso('avisos')`, então desligar o aviso **ao cliente** — decisão
+     * sobre custo de mensagem — desligava junto o alerta **ao dono**, que é
+     * sobre a barbearia estar de pé. São dois assuntos.
+     */
+    const dono = await entrar(DONO);
+    const estado = await com(dono)(http().get('/v1/admin/state')).expect(200);
+
+    await admin.$executeRawUnsafe(`
+      INSERT INTO tenant_features (tenant_id, flag_code, enabled)
+      VALUES ('${estado.body.tenantId}', 'avisos', false)
+      ON CONFLICT (tenant_id, flag_code) DO UPDATE SET enabled = false
+    `);
+
+    await com(dono)(http().get('/v1/admin/alertas/preferencias')).expect(200);
   });
 
   it('a fila de pedidos é de quem responde pela empresa, não do balcão', async () => {

@@ -1,5 +1,5 @@
 import { withTenant } from '@barbearia/db';
-import type { TipoDeNotificacao } from '@barbearia/core';
+import type { Alerta, TipoDeNotificacao } from '@barbearia/core';
 import {
   concluirTarefa,
   falharTarefa,
@@ -10,6 +10,8 @@ import {
 import { marcarFalta } from './faltas.js';
 import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
 import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
+import { agendarAlertasDeTodas, alertaPendente } from './alerta-agendado.js';
+import { alertasDaBarbearia } from './alertas.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
   executarAvisoDeAgendamento,
@@ -99,6 +101,20 @@ export interface Contexto {
     tenantId: string,
     agora: Date,
   ) => Promise<{ readonly avisados: number; readonly anonimizados: number }>;
+  /**
+   * O alerta operacional saindo pelo canal do gestor (bloco 33), injetado.
+   *
+   * Era lacuna declarada desde o bloco 22: as regras decidiam, o coletor
+   * alimentava, e a lista pronta não ia para lugar nenhum. Quem a produz é este
+   * pacote (`alertasDaBarbearia`); quem a entrega é a plataforma, que conhece o
+   * dono e o canal. A seta não volta — `apps/worker` liga as duas pontas, como
+   * já faz com a régua de cobrança.
+   */
+  readonly avisarDaOperacao: (
+    tenantId: string,
+    alertas: readonly Alerta[],
+    agora: Date,
+  ) => Promise<void>;
 }
 
 const avisoDeAgendamento =
@@ -212,6 +228,23 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     await contexto.varrerRetencao(tarefa.tenantId, contexto.relogio.agora());
   },
 
+  /**
+   * A varredura de alerta de uma barbearia (bloco 33).
+   *
+   * Uma por barbearia e com `withTenant` lá dentro, como a apuração e a
+   * retenção: `appointments` e `jobs` têm RLS, e nenhuma varredura de
+   * plataforma consegue lê-las.
+   *
+   * O que decide se sai mensagem é a preferência do dono, e ela mora do lado da
+   * plataforma junto do canal. Aqui só se coleta e se repassa.
+   */
+  'alerta.varredura': async (tarefa, contexto) => {
+    const agora = contexto.relogio.agora();
+    const alertas = await alertasDaBarbearia(tarefa.tenantId, agora);
+    if (alertas.length === 0) return;
+    await contexto.avisarDaOperacao(tarefa.tenantId, alertas, agora);
+  },
+
   'agendamento.marcar_falta': async (tarefa, contexto) => {
     const appointmentId = String(tarefa.payload['appointmentId'] ?? '');
     if (!appointmentId) throw new Error('tarefa de falta sem agendamento');
@@ -306,6 +339,8 @@ export async function rodarWorker(
   let ultimaRegua: string | null = null;
   /** O último dia em que este processo enfileirou a varredura de retenção. */
   let ultimaRetencao: string | null = null;
+  /** E a de alerta, que roda de manhã em vez de de madrugada. */
+  let ultimoAlerta: string | null = null;
 
   while (!parar()) {
     await soltarOrfas(15, contexto.relogio.agora());
@@ -333,6 +368,12 @@ export async function rodarWorker(
     if (retencao.dia !== ultimaRetencao) {
       ultimaRetencao = retencao.dia;
       await agendarRetencaoDeTodas(retencao);
+    }
+
+    const alerta = alertaPendente(contexto.relogio.agora());
+    if (alerta.dia !== ultimoAlerta) {
+      ultimoAlerta = alerta.dia;
+      await agendarAlertasDeTodas(alerta);
     }
 
     const resultado = await rodada(contexto);

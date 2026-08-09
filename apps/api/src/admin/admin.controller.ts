@@ -22,6 +22,7 @@ import {
   saveServices,
   templatesForOnboarding,
 } from '@barbearia/onboarding';
+import { BloqueioDeLogin } from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -54,6 +55,19 @@ const ONBOARDING_STATUS: Record<string, number> = {
 };
 
 function toHttp(error: unknown): never {
+  /**
+   * A escada de espera responde 429, e não 500 (bloco 33).
+   *
+   * Sem este ramo ela caía no tratador genérico e virava erro do servidor: a
+   * pessoa via "algo deu errado" numa situação que tem explicação e prazo, e o
+   * monitoramento contava como falha de infraestrutura o que é o produto
+   * funcionando. `Retry-After` em segundos é o que o cliente HTTP entende.
+   */
+  if (error instanceof BloqueioDeLogin) {
+    throw new DomainError('too_many_attempts', 429, error.message, {
+      retryAfterSeconds: error.esperarSegundos,
+    });
+  }
   if (error instanceof StaffError) {
     throw new DomainError(error.code, STAFF_STATUS[error.code] ?? 400, error.message);
   }

@@ -19,9 +19,9 @@ integridade do banco.
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | 137 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 89 testes ✅ |
-| `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática, apuração diária e a varredura de retenção — o que acontece sem ninguém esperando | 67 testes ✅ |
+| `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática, apuração diária, varredura de retenção e varredura de alerta — o que acontece sem ninguém esperando | 67 testes ✅ |
 | `packages/crm` | A ficha do cliente, a importação de base e os direitos do titular: consentimento com histórico, exportação, anonimização e retenção | 88 testes ✅ |
-| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 98 testes ✅ |
+| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin, suporte assistido, papéis internos e o canal de alerta ao dono | 108 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
 | `apps/api` | API pública, do painel, **da plataforma** e o webhook do adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, direitos do titular e anonimização (LGPD) e o Super Admin | 364 testes ✅ |
 | `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 81 testes ✅ |

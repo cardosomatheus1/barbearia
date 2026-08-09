@@ -21,6 +21,8 @@ import { FichaController } from './admin/ficha.controller.js';
 import { ProController } from './admin/pro.controller.js';
 import { PainelController } from './admin/painel.controller.js';
 import { PlanoController } from './admin/plano.controller.js';
+import { SessoesController } from './admin/sessoes.controller.js';
+import { AlertasController } from './admin/alertas.controller.js';
 import { LgpdController } from './admin/lgpd.controller.js';
 import { ImportacaoController } from './admin/importacao.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
@@ -64,6 +66,8 @@ import { TenantService } from './tenant/tenant.service.js';
     PainelController,
     PlanoController,
     LgpdController,
+    SessoesController,
+    AlertasController,
     ImportacaoController,
     FilaPublicaController,
     TeamController,

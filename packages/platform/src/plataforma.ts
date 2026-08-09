@@ -1,6 +1,12 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { semTenant, type TransactionClient } from '@barbearia/db';
-import { emailKey, hashPassword, verifyPassword } from '@barbearia/identity';
+import {
+  emailKey,
+  hashPassword,
+  limparFalhasDeLogin,
+  reservarTentativaDeLogin,
+  verifyPassword,
+} from '@barbearia/identity';
 
 /**
  * A camada de plataforma: quem administra o SaaS, não a barbearia.
@@ -284,15 +290,40 @@ export async function bloqueioDaBarbearia(
 // A porta
 // ---------------------------------------------------------------------------
 
+/**
+ * O que uma conta de plataforma pode (bloco 33).
+ *
+ * `viewer` consulta: métricas, lista de barbearias, trilha. `operator` também
+ * **age**: bloqueia conta, liga recurso, entra por suporte assistido, cancela
+ * cobrança.
+ *
+ * Era lacuna declarada desde o bloco 26, e o motivo de esperar está escrito lá:
+ * havia uma conta só, e inventar papéis antes de existir a segunda pessoa
+ * criaria permissão que nenhuma conta distingue. O que mudou é que agora existe
+ * o que separar — depois dos blocos 28 e 29, uma conta daqui entra na conta do
+ * cliente e cancela cobrança. É poder demais para quem foi contratado para
+ * responder chamado.
+ */
+export type PapelDaPlataforma = 'viewer' | 'operator';
+
 export interface AdminDaPlataforma {
   readonly id: string;
   readonly nome: string;
+  readonly papel: PapelDaPlataforma;
 }
 
 export async function criarAdminDaPlataforma(entrada: {
   readonly nome: string;
   readonly email: string;
   readonly senha: string;
+  /**
+   * Padrão `viewer`, e não `operator`.
+   *
+   * A conta nova nasce sem poder de agir sobre a conta de ninguém. Promover é
+   * uma decisão que alguém toma; o contrário — nascer podendo tudo e depender
+   * de alguém lembrar de rebaixar — é como toda conta acaba com acesso total.
+   */
+  readonly papel?: PapelDaPlataforma;
 }): Promise<AdminDaPlataforma> {
   if (entrada.senha.length < 12) {
     throw new PlataformaError('weak_password', 'A senha precisa de pelo menos 12 caracteres');
@@ -302,15 +333,16 @@ export async function criarAdminDaPlataforma(entrada: {
   const hash = await hashPassword(entrada.senha);
 
   return semTenant(async (tx) => {
+    const papel = entrada.papel ?? 'viewer';
     const linhas = await tx.$queryRaw<{ id: string }[]>`
-      INSERT INTO platform_admins (email_key, name, password_hash)
-      VALUES (${chave}, ${entrada.nome}, ${hash})
+      INSERT INTO platform_admins (email_key, name, password_hash, role)
+      VALUES (${chave}, ${entrada.nome}, ${hash}, ${papel}::platform_role)
       ON CONFLICT (email_key) DO NOTHING
       RETURNING id
     `;
     const linha = linhas[0];
     if (!linha) throw new PlataformaError('email_taken', 'Já existe uma conta com este e-mail');
-    return { id: linha.id, nome: entrada.nome };
+    return { id: linha.id, nome: entrada.nome, papel };
   });
 }
 
@@ -331,14 +363,47 @@ export interface SessaoDaPlataforma {
 export async function entrarNaPlataforma(entrada: {
   readonly email: string;
   readonly senha: string;
+  /** Origem da tentativa, para a escada de espera ser por conta **e** aparelho. */
+  readonly ip?: string | null;
   readonly agora?: Date;
 }): Promise<SessaoDaPlataforma> {
   const agora = entrada.agora ?? new Date();
   const chave = emailKey(entrada.email, pepper());
 
+  /**
+   * A escada da plataforma tem **domínio próprio**, e a `/security-review` do
+   * bloco 33 é quem cobrou.
+   *
+   * As duas portas usam o mesmo HMAC do mesmo e-mail. Sem separar, marretar
+   * `/v1/admin/login` — que é a porta que qualquer um alcança — com o endereço
+   * do plantonista trancaria o painel da **plataforma**, que é justamente a
+   * ferramenta com que se responde ao incidente.
+   *
+   * O prefixo entra no material antes do HMAC: as duas chaves passam a ser
+   * incomparáveis mesmo com o mesmo segredo.
+   */
+  const chaveDaEscada = emailKey(`plataforma:${entrada.email}`, pepper());
+
+  /**
+   * A escada vem antes do scrypt, como no login da barbearia.
+   *
+   * Esta porta é mais grave que a outra: uma conta daqui enxerga todas as
+   * barbearias.
+   */
+  await reservarTentativaDeLogin(chaveDaEscada, entrada.ip ?? null, agora);
+
   const contas = await semTenant(async (tx) =>
-    tx.$queryRaw<{ id: string; name: string; password_hash: string; disabled_at: Date | null }[]>`
-      SELECT id, name, password_hash, disabled_at FROM platform_admins WHERE email_key = ${chave}
+    tx.$queryRaw<
+      {
+        id: string;
+        name: string;
+        role: PapelDaPlataforma;
+        password_hash: string;
+        disabled_at: Date | null;
+      }[]
+    >`
+      SELECT id, name, role, password_hash, disabled_at
+        FROM platform_admins WHERE email_key = ${chave}
     `,
   );
 
@@ -358,6 +423,8 @@ export async function entrarNaPlataforma(entrada: {
     throw new PlataformaError('invalid_credentials', 'E-mail ou senha inválidos');
   }
 
+  await limparFalhasDeLogin(chaveDaEscada);
+
   const token = randomBytes(32).toString('base64url');
   const expiraEm = new Date(agora.getTime() + DURACAO_DA_SESSAO_MS);
 
@@ -369,7 +436,7 @@ export async function entrarNaPlataforma(entrada: {
     await registrarNaTrilha(tx, conta.id, null, 'platform.login', {});
   });
 
-  return { token, admin: { id: conta.id, nome: conta.name }, expiraEm };
+  return { token, admin: { id: conta.id, nome: conta.name, papel: conta.role }, expiraEm };
 }
 
 export async function resolverSessaoDaPlataforma(
@@ -379,8 +446,16 @@ export async function resolverSessaoDaPlataforma(
   // Comparação por hash, e o hash é a chave primária: o token em claro nunca
   // toca o banco. Um dump de `platform_sessions` não dá sessão a ninguém.
   const linhas = await semTenant(async (tx) =>
-    tx.$queryRaw<{ id: string; name: string; expires_at: Date; disabled_at: Date | null }[]>`
-      SELECT a.id, a.name, s.expires_at, a.disabled_at
+    tx.$queryRaw<
+      {
+        id: string;
+        name: string;
+        role: PapelDaPlataforma;
+        expires_at: Date;
+        disabled_at: Date | null;
+      }[]
+    >`
+      SELECT a.id, a.name, a.role, s.expires_at, a.disabled_at
       FROM platform_sessions s
       JOIN platform_admins a ON a.id = s.admin_id
       WHERE s.token_hash = ${sha256(token)}
@@ -392,7 +467,14 @@ export async function resolverSessaoDaPlataforma(
     throw new PlataformaError('unauthorized', 'Sessão inválida');
   }
 
-  return { id: linha.id, nome: linha.name };
+  /**
+   * O papel sai da **sessão resolvida**, a cada requisição.
+   *
+   * Não do token: rebaixar alguém de `operator` para `viewer` precisa valer no
+   * pedido seguinte, e um papel carregado no token só valeria no próximo login
+   * — que numa conta de plataforma pode demorar semanas.
+   */
+  return { id: linha.id, nome: linha.name, papel: linha.role };
 }
 
 export async function sairDaPlataforma(token: string): Promise<void> {

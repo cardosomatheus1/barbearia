@@ -6,3 +6,4 @@ export * from './worker.js';
 export * from './alertas.js';
 export * from './metricas.js';
 export * from './retencao.js';
+export * from './alerta-agendado.js';

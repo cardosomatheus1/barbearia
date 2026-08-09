@@ -8,6 +8,8 @@ import {
   StaffError,
   staffLogin,
 } from './staff.js';
+import { BloqueioDeLogin } from './forca-bruta.js';
+import { ERROS_ANTES_DA_ESPERA } from '@barbearia/core';
 
 /**
  * Conta de gestor, contra Postgres real.
@@ -46,6 +48,9 @@ describeIfDb('conta de gestor', () => {
   beforeEach(async () => {
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
     await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
+    // A escada de espera é por chave de e-mail e não tem tenant: sem limpar,
+    // o teste seguinte herda a contagem do anterior e falha por motivo errado.
+    await admin.$executeRawUnsafe('TRUNCATE login_attempts');
   });
 
   // -- cadastro --------------------------------------------------------------
@@ -244,6 +249,159 @@ describeIfDb('conta de gestor', () => {
     await expect(resolveStaffSession(criado.token)).rejects.toMatchObject({
       code: 'invalid_session',
     });
+  });
+
+  // -- força bruta (bloco 33) -------------------------------------------------
+
+  it('erra a senha demais e a conta entra na escada de espera', async () => {
+    /**
+     * O teto por IP não segura isto, e é por isso que a escada existe: quem
+     * adivinha senha usa mil endereços, e é barato. O atacante não escolhe de
+     * qual conta é a senha que ele quer — então o teto que funciona é o da
+     * conta.
+     */
+    await cadastrar();
+
+    const errar = () =>
+      staffLogin({ email: CONTA.email, password: 'senha-errada-mesmo', ip: '203.0.113.7' });
+
+    // Os cinco primeiros erros passam batido: quem digita errado no celular,
+    // com pressa, não pode ser tratado como ataque.
+    for (let i = 0; i < ERROS_ANTES_DA_ESPERA; i++) {
+      await expect(errar()).rejects.toMatchObject({ code: 'invalid_credentials' });
+    }
+
+    // O sexto entra na escada...
+    await expect(errar()).rejects.toMatchObject({ code: 'invalid_credentials' });
+    // ...e a partir daí nem a senha certa passa **naquele aparelho** enquanto a
+    // espera não vencer.
+    await expect(
+      staffLogin({ email: CONTA.email, password: CONTA.password, ip: '203.0.113.7' }),
+    ).rejects.toBeInstanceOf(BloqueioDeLogin);
+  });
+
+  it('a escada tranca o atacante, não o dono', async () => {
+    /**
+     * O defeito que a `/security-review` do bloco 33 encontrou, e que era o mais
+     * grave do bloco: contando só por conta, a proteção virava arma. Errar de
+     * propósito uma senha a cada meia hora — 48 requisições por dia, de qualquer
+     * endereço — trancava o dono fora do próprio negócio para sempre, e não
+     * havia caminho de volta sem acesso ao banco.
+     *
+     * Com a origem na chave, o atacante tranca a escada **dele**.
+     */
+    await cadastrar();
+
+    for (let i = 0; i <= ERROS_ANTES_DA_ESPERA; i++) {
+      await expect(
+        staffLogin({ email: CONTA.email, password: 'errada', ip: '198.51.100.9' }),
+      ).rejects.toBeDefined();
+    }
+
+    // O atacante está de castigo...
+    await expect(
+      staffLogin({ email: CONTA.email, password: CONTA.password, ip: '198.51.100.9' }),
+    ).rejects.toBeInstanceOf(BloqueioDeLogin);
+
+    // ...e o dono entra normalmente, do aparelho dele.
+    const sessao = await staffLogin({
+      email: CONTA.email,
+      password: CONTA.password,
+      ip: '203.0.113.55',
+    });
+    expect(sessao.token).toBeDefined();
+  });
+
+  it('tentativas simultâneas não passam todas pela mesma brecha', async () => {
+    /**
+     * O segundo achado da revisão: conferir e incrementar em transações
+     * separadas, com um scrypt no meio, deixava mil requisições disparadas
+     * juntas lerem `failures = 0` todas — e todas ganhavam um palpite. A escada
+     * limitava rodadas sequenciais, não palpites.
+     *
+     * Com a reserva atômica, quem chega junto serializa na linha: uma parte das
+     * dez esbarra na escada em vez de todas passarem.
+     */
+    await cadastrar();
+
+    const resultados = await Promise.allSettled(
+      Array.from({ length: 10 }, () =>
+        staffLogin({ email: CONTA.email, password: 'errada', ip: '198.51.100.30' }),
+      ),
+    );
+
+    const bloqueadas = resultados.filter(
+      (r) => r.status === 'rejected' && r.reason instanceof BloqueioDeLogin,
+    );
+    expect(bloqueadas.length).toBeGreaterThan(0);
+  });
+
+  it('a escada não gasta scrypt em quem já está bloqueado', async () => {
+    /**
+     * A ordem é a proteção: conferir depois de derivar a senha faria o servidor
+     * pagar o custo do scrypt por tentativa bloqueada — que é exatamente o que
+     * um atacante quer impor.
+     *
+     * A prova é indireta e é a que dá para fazer sem cronômetro: o bloqueio
+     * dispara mesmo para um e-mail que **não existe**, e o caminho da conta
+     * inexistente é justamente o que deriva a senha à toa.
+     */
+    const inexistente = 'ninguem@lugar-nenhum.com.br';
+    for (let i = 0; i <= ERROS_ANTES_DA_ESPERA; i++) {
+      await expect(
+        staffLogin({ email: inexistente, password: 'tanto-faz-a-senha', ip: '203.0.113.7' }),
+      ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    }
+
+    await expect(
+      staffLogin({ email: inexistente, password: 'outra-senha-qualquer', ip: '203.0.113.7' }),
+    ).rejects.toBeInstanceOf(BloqueioDeLogin);
+  });
+
+  it('acertar a senha zera a contagem', async () => {
+    // Sem isto, cinco enganos espalhados por meses colocariam na espera quem
+    // nunca foi atacado — e ninguém entenderia por quê.
+    await cadastrar();
+
+    for (let i = 0; i < ERROS_ANTES_DA_ESPERA - 1; i++) {
+      await expect(
+        staffLogin({ email: CONTA.email, password: 'errada', ip: '203.0.113.7' }),
+      ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    }
+
+    await staffLogin({ email: CONTA.email, password: CONTA.password, ip: '203.0.113.7' });
+
+    const linhas = await admin.$queryRawUnsafe<{ failures: number }[]>(
+      `SELECT failures FROM login_attempts`,
+    );
+    expect(linhas[0]?.failures).toBe(0);
+
+    // E o próximo engano recomeça do primeiro degrau, não do quinto.
+    await expect(
+      staffLogin({ email: CONTA.email, password: 'errada', ip: '203.0.113.7' }),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+    await staffLogin({ email: CONTA.email, password: CONTA.password, ip: '203.0.113.7' });
+  });
+
+  it('a conta de uma barbearia não tranca a conta de outra pessoa', async () => {
+    // A escada é por chave de e-mail. Se fosse por IP, o balcão inteiro sairia
+    // do ar quando a recepcionista errasse a senha — todos atrás do mesmo NAT.
+    await cadastrar();
+    await cadastrar({ ...CONTA, email: 'outro@domari.com.br', businessName: 'Outra' });
+
+    for (let i = 0; i <= ERROS_ANTES_DA_ESPERA; i++) {
+      await expect(
+        staffLogin({ email: CONTA.email, password: 'errada', ip: '203.0.113.7' }),
+      ).rejects.toBeDefined();
+    }
+
+    // A outra conta entra normalmente, até do mesmo aparelho.
+    const sessao = await staffLogin({
+      email: 'outro@domari.com.br',
+      password: CONTA.password,
+      ip: '203.0.113.7',
+    });
+    expect(sessao.token).toBeDefined();
   });
 
   it('uma barbearia não enxerga o gestor da outra', async () => {

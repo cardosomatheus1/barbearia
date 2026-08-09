@@ -72,6 +72,8 @@ const avisosDeCobranca: { tenantId: string; faturaId: string; assunto: string }[
 let reguasRodadas = 0;
 /** As varreduras de retenção que o worker mandou rodar, por barbearia. */
 const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
+/** Os alertas que o worker mandou o canal do gestor entregar. */
+const alertasEntregues: { tenantId: string; quantos: number }[] = [];
 
 const ligacoesDaPlataforma = () => ({
   avisarDeCobranca: async (aviso: {
@@ -91,6 +93,9 @@ const ligacoesDaPlataforma = () => ({
   varrerRetencao: async (tenantId: string, agora: Date) => {
     retencoesRodadas.push({ tenantId, agora });
     return { avisados: 0, anonimizados: 0 };
+  },
+  avisarDaOperacao: async (tenantId: string, alertas: readonly unknown[]) => {
+    alertasEntregues.push({ tenantId, quantos: alertas.length });
   },
 });
 
@@ -135,6 +140,7 @@ describeIfDb('fila de trabalho', () => {
     provider = new FakeNotificationProvider();
     avisosDeCobranca.length = 0;
     retencoesRodadas.length = 0;
+    alertasEntregues.length = 0;
     contexto = {
       provider,
       relogio: { agora: () => AGORA },

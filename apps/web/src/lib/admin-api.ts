@@ -1592,3 +1592,45 @@ export const cadastrosParaSair = (token: string) =>
     undefined,
     token,
   );
+
+// -- Segurança da conta (bloco 33) --------------------------------------------
+
+export interface SessaoNaTela {
+  id: string;
+  atual: boolean;
+  aparelho: string;
+  criadaEm: string;
+}
+
+export interface SuporteNaTela {
+  quem: string | null;
+  motivo: string;
+  abertoEm: string;
+  expiraEm: string;
+}
+
+export const sessoesDaConta = (token: string) =>
+  chamar<{ sessoes: SessaoNaTela[]; suporte: SuporteNaTela[] }>(
+    'GET',
+    '/v1/admin/sessoes',
+    undefined,
+    token,
+  );
+
+export const encerrarSessao = (token: string, id: string) =>
+  chamar<{ encerradas: number }>('DELETE', `/v1/admin/sessoes/${id}`, undefined, token);
+
+export const expulsarSuporte = (token: string) =>
+  chamar<{ encerradas: number }>('DELETE', '/v1/admin/sessoes/suporte/tudo', undefined, token);
+
+export interface PreferenciasDeAlerta {
+  enviarCritico: boolean;
+  enviarAviso: boolean;
+  enviarRetencao: boolean;
+}
+
+export const preferenciasDeAlerta = (token: string) =>
+  chamar<PreferenciasDeAlerta>('GET', '/v1/admin/alertas/preferencias', undefined, token);
+
+export const salvarPreferenciasDeAlerta = (token: string, dados: PreferenciasDeAlerta) =>
+  chamar<PreferenciasDeAlerta>('PUT', '/v1/admin/alertas/preferencias', dados, token);

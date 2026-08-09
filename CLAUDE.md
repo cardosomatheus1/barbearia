@@ -471,6 +471,9 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Comissão fechada | imutável por trigger e `REVOKE`; estorno é lançamento novo com sinal negativo no período aberto, jamais `DELETE` |
 | Dia de uma venda | `orders.business_day`, o dia **da unidade** — `closed_at` responde "que instante", não "de que dia é este dinheiro" |
 | Alíquota | pontos-base inteiros (4000 = 40%), nunca fração |
+| Força bruta no login | escada de espera **por conta**, no banco e portanto compartilhada entre processos: cinco erros livres, depois dobra a partir de 30s até o teto de 30 min, e esquece em 24h. Conferida **antes** de derivar a senha — depois, o servidor pagaria o scrypt de cada tentativa bloqueada. Teto por IP continua existindo e resolve outra coisa: ele não segura adivinhação (mil endereços são baratos) e aperta a barbearia inteira atrás do mesmo NAT |
+| Papel na plataforma | `viewer` lê, `operator` age sobre a conta de uma barbearia. Conta nova nasce `viewer`. A polaridade do `@AgeNaConta` é o **inverso** do `@Exige`: aqui a ausência libera a leitura, porque toda conta de plataforma já lê tudo — o que se separa é o que se **faz**. Há teste que percorre o controller e cobra o decorador em todo `@Post`, `@Put` e `@Delete` sobre `barbearias/` e `faturas/` |
+| Aviso ao dono | crítico e retenção ligados, aviso desligado; um por regra por dia; nada entre 21h e 8h **da unidade**. Alerta que dispara à toa é alerta que se aprende a ignorar, e um canal ignorado é pior que canal nenhum. A retenção tem interruptor próprio porque é obrigação legal, não sinal operacional |
 | Prova do segundo fator | por **sessão** (`staff_sessions.mfa_verified_at`), com validade de 30 min — nunca só no login |
 | Consentimento | histórico append-only em `customer_consents`: revogar é **inserir** a revogação, nunca apagar a concessão. `customers.accepts_marketing` é espelho derivado por gatilho, e só avança se a decisão for a mais recente — importação fora de ordem não ressuscita aceite revogado |
 | Versão do texto aceito | obrigatória e **sem padrão**, uma por finalidade, saindo de `politica.ts` e nunca do formulário. Aceite sem dizer o que a pessoa leu não é prova; um `'v1'` silencioso é pior, porque tem cara de prova |
@@ -509,6 +512,46 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 
 O bloco é entregue inteiro. O que dá para acelerar é o **jeito de trabalhar**,
 e nada aqui abre mão de teste, de segurança ou de medição.
+
+### A ordem do bloco, medida em blocos que demoraram demais
+
+Os blocos 31, 32 e 33 passaram de uma hora cada. Metade foi escopo legítimo — o
+33 sozinho carregava **quatro lacunas declaradas** de blocos anteriores. A outra
+metade foi processo, e é o que esta seção corrige. Os números são deste
+repositório, nesta máquina.
+
+| Passo | Custo | Quantas vezes por bloco |
+|---|---|---|
+| `scripts/verify.sh --rapido` | 30–70 s | à vontade |
+| `pnpm verify` | ~3,5 min | **uma**, no fechamento |
+| `scripts/medicao.sh` | ~4 min | **uma**, no fechamento |
+| `/security-review` | ~8 min | uma, e **cedo** |
+| `npx vitest run scripts/crase-em-sql.test.mjs` | 3 s | sempre que tocar SQL |
+
+**A ordem que funciona:**
+
+1. Migração e domínio, com os testes. `--rapido` no laço.
+2. API. `--rapido`.
+3. **Dispare a `/security-review` aqui**, antes das telas. Ela leva oito minutos
+   e acha coisa de verdade — no bloco 33 achou que a escada de login virava
+   arma: errar uma senha de propósito a cada meia hora trancava o dono fora do
+   próprio negócio para sempre. Achado no fim, o conserto custa mais uma volta
+   inteira de portão; achado aqui, ele entra enquanto as telas são construídas.
+4. Telas, enquanto a revisão roda.
+5. `pnpm verify` inteiro, `scripts/medicao.sh`, prints, commit.
+
+**Os desperdícios concretos, para não repetir:**
+
+- **Rodar o portão inteiro no laço interno.** Cinco execuções de `pnpm verify`
+  num bloco são doze minutos que o `--rapido` resolveria em três. Ele diz a cada
+  execução que não fecha bloco; é para ser usado assim mesmo.
+- **Rodar a medição de navegador a cada tela.** Ela é do fechamento, com todas
+  as telas de uma vez.
+- **Descobrir crase dentro de SQL pelo build.** O guarda custa três segundos e o
+  build custa um minuto — e o erro sai como sintaxe em cima de uma linha de
+  prosa, que é caro de ler. Rode o guarda logo depois de escrever a consulta.
+- **Deixar a revisão de segurança para o último passo.** É o item mais caro do
+  fechamento e o único que pode obrigar a refazer desenho.
 
 O portão está em ~90s (era ~208s). Como se chegou lá, e o que a medição
 desmentiu, está no cabeçalho de `scripts/verify.sh` — vale ler antes de tentar

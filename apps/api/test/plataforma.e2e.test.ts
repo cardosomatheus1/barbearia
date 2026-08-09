@@ -14,6 +14,7 @@ import {
 } from '@barbearia/platform';
 import { codigoDoPasso, passoAgora } from '@barbearia/identity';
 import { BookingController } from '../src/booking/booking.controller.js';
+import { SessoesController } from '../src/admin/sessoes.controller.js';
 import { BoardController } from '../src/admin/board.controller.js';
 import { FilaController } from '../src/admin/fila.controller.js';
 import { FilaPublicaController } from '../src/booking/fila-publica.controller.js';
@@ -233,6 +234,16 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       nome: 'Super',
       email: 'super@plataforma.test',
       senha: SENHA_DA_PLATAFORMA,
+      // Explícito desde o bloco 33: conta nova nasce `viewer`, e a suíte
+      // inteira exercita ações sobre a conta de barbearias.
+      papel: 'operator',
+    });
+
+    // A conta de leitura, para provar que a separação vale de verdade.
+    await criarAdminDaPlataforma({
+      nome: 'Consulta',
+      email: 'consulta@plataforma.test',
+      senha: SENHA_DA_PLATAFORMA,
     });
 
     const moduleRef = await Test.createTestingModule({
@@ -243,6 +254,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         PlanoController,
         WebhookDoPspController,
         BoardController,
+        SessoesController,
         FilaController,
         FilaPublicaController,
         PlataformaAuthController,
@@ -839,6 +851,108 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(409);
   });
 
+  it('o dono expulsa o suporte sozinho, sem pedir para ninguém', async () => {
+    /**
+     * Era lacuna declarada desde o bloco 26 (bloco 33).
+     *
+     * A capacidade existia inteira — a plataforma abria, listava e encerrava, e
+     * o dono via na trilha quem tinha entrado. O que faltava era a porta do
+     * lado de quem é dono do dado: até aqui, ver alguém dentro da conta e não
+     * concordar significava ligar para a plataforma e pedir que saíssem.
+     */
+    const daPlataforma = await comSegundoFator();
+    const aberta = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ motivo: 'chamado 8891' })
+      .expect(201);
+
+    const dono = await tokenDoDono();
+
+    // O dono vê quem está na conta dele.
+    const lista = await http()
+      .get('/v1/admin/sessoes')
+      .set('authorization', `Bearer ${dono}`)
+      .expect(200);
+    expect(lista.body.suporte).toHaveLength(1);
+    expect(lista.body.suporte[0].motivo).toBe('chamado 8891');
+    // E a própria sessão dele aparece marcada, para ele não encerrá-la por
+    // engano achando que é de outro aparelho.
+    expect(lista.body.sessoes.some((s: { atual: boolean }) => s.atual)).toBe(true);
+
+    // E expulsa.
+    const fora = await http()
+      .delete('/v1/admin/sessoes/suporte/tudo')
+      .set('authorization', `Bearer ${dono}`)
+      .expect(200);
+    expect(fora.body.encerradas).toBe(1);
+
+    // O token do suporte morre na hora, como quando a plataforma encerra.
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${aberta.body.token}`)
+      .expect(401);
+
+    // E some da lista do dono.
+    const depois = await http()
+      .get('/v1/admin/sessoes')
+      .set('authorization', `Bearer ${dono}`)
+      .expect(200);
+    expect(depois.body.suporte).toEqual([]);
+
+    // Sem suporte aberto, o botão responde que não há o que encerrar.
+    await http()
+      .delete('/v1/admin/sessoes/suporte/tudo')
+      .set('authorization', `Bearer ${dono}`)
+      .expect(404);
+  });
+
+  it('o dono encerra a sessão de outro aparelho, e não a do colega', async () => {
+    /**
+     * A outra lacuna que esta tela fecha — "encerrar sessão nos outros
+     * aparelhos", sem bloco desde o 5.
+     *
+     * O `staff_user_id` no `WHERE` não é redundância com a RLS: a política
+     * separa barbearias, não separa pessoas dentro de uma. Sem ele, o id de uma
+     * sessão da colega derrubaria a sessão dela.
+     */
+    const primeiro = await tokenDoDono();
+    const segundo = await tokenDoDono();
+
+    const lista = await http()
+      .get('/v1/admin/sessoes')
+      .set('authorization', `Bearer ${segundo}`)
+      .expect(200);
+    expect(lista.body.sessoes.length).toBeGreaterThanOrEqual(2);
+
+    const outra = lista.body.sessoes.find((s: { atual: boolean }) => !s.atual);
+    expect(outra).toBeDefined();
+
+    await http()
+      .delete(`/v1/admin/sessoes/${outra.id}`)
+      .set('authorization', `Bearer ${segundo}`)
+      .expect(200);
+
+    // O primeiro token morreu; o segundo continua.
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${primeiro}`)
+      .expect(401);
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${segundo}`)
+      .expect(200);
+
+    // A do próprio pedido é recusada: "Sair" já faz isso, e encerrá-la aqui
+    // devolveria um 401 que parece defeito.
+    const atual = lista.body.sessoes.find((s: { atual: boolean }) => s.atual);
+    const recusa = await http()
+      .delete(`/v1/admin/sessoes/${atual.id}`)
+      .set('authorization', `Bearer ${segundo}`)
+      .expect(400);
+    expect(recusa.body.error.code).toBe('sessao_atual');
+  });
+
   // -- assinatura (bloco 27) -------------------------------------------------
 
   it('a barbearia nasce em teste, e o dono consegue ver o próprio plano', async () => {
@@ -1124,6 +1238,71 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       SELECT count(*) AS n FROM psp_events WHERE event_id = 'evt_e2e_pago'
     `;
     expect(Number(eventos[0]?.n)).toBe(1);
+  });
+
+  // -- papéis dentro da plataforma (bloco 33) ---------------------------------
+
+  it('a conta de consulta lê tudo e não age sobre a conta de ninguém', async () => {
+    /**
+     * Era lacuna declarada desde o bloco 26. Havia **uma** conta, com todas as
+     * capacidades, e a lacuna dizia por que esperar: inventar papéis antes de
+     * existir a segunda pessoa criaria permissão que nenhuma conta distingue.
+     *
+     * O que mudou é que agora existe o que separar. Depois dos blocos 28 e 29,
+     * uma conta de plataforma bloqueia barbearia, liga recurso, entra na conta
+     * do cliente por suporte assistido e cancela cobrança.
+     */
+    const consulta = await http()
+      .post('/v1/plataforma/login')
+      .send({ email: 'consulta@plataforma.test', senha: SENHA_DA_PLATAFORMA })
+      .expect(201);
+    const token: string = consulta.body.token;
+
+    // Lê tudo, como antes.
+    const como = (req: request.Test) => req.set('authorization', `Bearer ${token}`);
+
+    await como(http().get('/v1/plataforma/barbearias')).expect(200);
+    await como(http().get('/v1/plataforma/metricas')).expect(200);
+    await como(http().get('/v1/plataforma/trilha')).expect(200);
+
+    // E não age.
+    const negado = await como(
+      http()
+        .post(`/v1/plataforma/barbearias/${DOMARI}/bloqueio`)
+        .send({ motivo: 'tentativa de quem não deveria poder' }),
+    ).expect(403);
+    expect(negado.body.error.code).toBe('forbidden');
+
+    await como(
+      http()
+        .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+        .send({ motivo: 'entrar na conta do cliente sem ser operador' }),
+    ).expect(403);
+
+    // A barbearia continua no ar: nada do que ela tentou aconteceu.
+    const estado = await admin.$queryRaw<{ blocked_at: Date | null }[]>`
+      SELECT blocked_at FROM tenant_platform WHERE tenant_id = ${DOMARI}::uuid
+    `;
+    expect(estado[0]?.blocked_at).toBeNull();
+  });
+
+  it('o segundo fator da própria conta não exige ser operador', async () => {
+    // Exigir `operator` no autenticador **dele** trancaria a conta de leitura
+    // fora do próprio segundo fator, que é o oposto de endurecer.
+    const consulta = await http()
+      .post('/v1/plataforma/login')
+      .send({ email: 'consulta@plataforma.test', senha: SENHA_DA_PLATAFORMA })
+      .expect(201);
+
+    // A chave do segundo fator falha alto quando ausente, de propósito
+    // (CLAUDE.md §2). Sem ela a rota devolveria 500 e o teste passaria a medir
+    // a falta da variável em vez do papel.
+    process.env['MFA_SECRET_KEY'] = Buffer.alloc(32, 3).toString('base64');
+
+    await http()
+      .post('/v1/plataforma/mfa')
+      .set('authorization', `Bearer ${consulta.body.token}`)
+      .expect(201);
   });
 
   it('sair invalida o token da plataforma', async () => {

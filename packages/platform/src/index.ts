@@ -8,3 +8,4 @@ export * from './cobranca.js';
 export * from './gestor.js';
 export * from './psp.js';
 export * from './conciliacao.js';
+export * from './aviso-operacional.js';

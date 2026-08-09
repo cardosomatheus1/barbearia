@@ -14,3 +14,16 @@ export const preferenciasDeAvisoSchema = z.object({
   retorno: z.boolean(),
   diasParaRetorno: z.number().int().min(7).max(365),
 });
+
+/**
+ * O que o dono quer receber (bloco 33).
+ *
+ * Os três explícitos e sem padrão: um `optional` aqui faria o formulário com a
+ * caixa desmarcada — que é como o navegador manda "desligado" — ser lido como
+ * "não mexa nisso", e desligar um alerta deixaria de funcionar pela tela.
+ */
+export const preferenciasDeAlertaSchema = z.object({
+  enviarCritico: z.boolean(),
+  enviarAviso: z.boolean(),
+  enviarRetencao: z.boolean(),
+});

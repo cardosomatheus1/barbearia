@@ -54,7 +54,7 @@ import {
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
-import { Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataforma.guard.js';
+import { AgeNaConta, Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataforma.guard.js';
 import {
   bloqueioSchema,
   cancelamentoSchema,
@@ -230,6 +230,7 @@ export class PlataformaController {
     };
   }
 
+  @AgeNaConta()
   @Put('barbearias/:tenantId/plano')
   async plano(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -261,6 +262,7 @@ export class PlataformaController {
     return paraJson(assinatura);
   }
 
+  @AgeNaConta()
   @Post('barbearias/:tenantId/cancelamento')
   async cancelar(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -275,6 +277,7 @@ export class PlataformaController {
     }
   }
 
+  @AgeNaConta()
   @Delete('barbearias/:tenantId/cancelamento')
   async reativar(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -311,6 +314,7 @@ export class PlataformaController {
    * última fatura aberta destranca a barbearia suspensa pela régua — e só por
    * ela, porque bloqueio posto por gente tem motivo escrito e não tem boleto.
    */
+  @AgeNaConta()
   @Post('faturas/:faturaId/pagamento')
   async pagar(
     @Param('faturaId', new ZodValidationPipe(tenantIdSchema)) faturaId: string,
@@ -329,6 +333,7 @@ export class PlataformaController {
   }
 
   /** Perdoa a fatura. Não é o mesmo que pagar, e o relatório distingue as duas. */
+  @AgeNaConta()
   @Delete('faturas/:faturaId')
   async anular(
     @Param('faturaId', new ZodValidationPipe(tenantIdSchema)) faturaId: string,
@@ -377,6 +382,7 @@ export class PlataformaController {
     };
   }
 
+  @AgeNaConta()
   @Put('barbearias/:tenantId/cobranca')
   async salvarMeio(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -398,6 +404,7 @@ export class PlataformaController {
    * ainda não há adquirente contratado — o dia em que houver, ele entra por
    * injeção como o provedor de mensagem, e esta linha é a única que muda.
    */
+  @AgeNaConta()
   @Post('barbearias/:tenantId/estorno')
   async estornar(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -418,6 +425,7 @@ export class PlataformaController {
     }
   }
 
+  @AgeNaConta()
   @Post('barbearias/:tenantId/bloqueio')
   async bloquear(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -435,6 +443,7 @@ export class PlataformaController {
     }
   }
 
+  @AgeNaConta()
   @Delete('barbearias/:tenantId/bloqueio')
   async desbloquear(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -472,11 +481,21 @@ export class PlataformaController {
   }
 
   @Post('mfa')
-  async cadastrarMfa(@Admin() admin: AdminDaPlataforma, @Body() corpo: { email?: unknown }) {
+  async cadastrarMfa(
+    @Admin() admin: AdminDaPlataforma,
+    @Body() corpo: { email?: unknown } | undefined,
+  ) {
     try {
-      // O e-mail entra só no rótulo do QR Code — o banco guarda o HMAC dele, e
-      // decifrar não é possível nem desejável.
-      const email = typeof corpo.email === 'string' ? corpo.email : admin.nome;
+      /**
+       * O e-mail entra só no rótulo do QR Code — o banco guarda o HMAC dele, e
+       * decifrar não é possível nem desejável.
+       *
+       * `corpo` pode chegar indefinido: um POST sem corpo nem `content-type`
+       * não passa pelo interpretador de JSON, e ler `.email` ali derrubava a
+       * rota com 500. O campo sempre foi opcional; faltava o caminho em que
+       * **nada** é enviado, que é o que um cliente enxuto faz.
+       */
+      const email = typeof corpo?.email === 'string' ? corpo.email : admin.nome;
       return await iniciarCadastroDoSegundoFator({ adminId: admin.id, email });
     } catch (erro) {
       return paraHttp(erro);
@@ -527,6 +546,7 @@ export class PlataformaController {
     return { recursos: await recursosDaBarbearia(tenantId) };
   }
 
+  @AgeNaConta()
   @Put('barbearias/:tenantId/recursos')
   async definirRecursoDa(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -555,6 +575,7 @@ export class PlataformaController {
     };
   }
 
+  @AgeNaConta()
   @Post('barbearias/:tenantId/suporte')
   async entrarNaConta(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
@@ -581,6 +602,7 @@ export class PlataformaController {
     }
   }
 
+  @AgeNaConta()
   @Delete('barbearias/:tenantId/suporte')
   async sairDaConta(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,

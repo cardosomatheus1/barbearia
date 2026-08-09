@@ -236,7 +236,19 @@ async function nomeDoAdmin(adminId: string): Promise<string> {
  * gestor. Sem isto, a única saída seria esperar os trinta minutos.
  */
 export async function encerrarSuporteDaBarbearia(entrada: {
-  readonly adminId: string;
+  /**
+   * Nulo quando quem encerra é o **dono** (bloco 33).
+   *
+   * Era lacuna declarada desde o bloco 26: a plataforma abria, listava e
+   * encerrava o suporte; o dono via na trilha quem tinha entrado e não tinha
+   * como expulsar sem pedir. A capacidade já estava toda aqui — faltava a
+   * porta do lado dele.
+   *
+   * O `adminId` vira `null` na trilha da plataforma, e é a leitura correta:
+   * ninguém da plataforma encerrou. Quem encerrou foi a barbearia, e o nome de
+   * quem clicou fica na trilha **dela**, que é onde o dono procura.
+   */
+  readonly adminId: string | null;
   readonly adminNome: string;
   readonly tenantId: string;
 }): Promise<number> {
@@ -280,6 +292,9 @@ export async function encerrarSuporteDaBarbearia(entrada: {
     `;
     await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.support_ended', {
       sessoes: ids.length,
+      // Quem puxou o gatilho, para a trilha da plataforma não parecer que a
+      // sessão venceu sozinha.
+      encerradoPelo: entrada.adminId === null ? 'dono' : 'plataforma',
     });
   });
 
@@ -362,6 +377,53 @@ export async function suportesAbertos(
       JOIN tenant_platform tp ON tp.tenant_id = ss.tenant_id
       LEFT JOIN platform_admins a ON a.id = ss.admin_id
       WHERE ss.ended_at IS NULL AND ss.expires_at > ${agora}
+      ORDER BY ss.started_at DESC
+    `;
+    return linhas.map((l) => ({
+      tenantId: l.tenant_id,
+      barbearia: l.barbearia,
+      adminNome: l.admin_nome,
+      motivo: l.reason,
+      abertoEm: l.started_at,
+      expiraEm: l.expires_at,
+    }));
+  });
+}
+
+/**
+ * O suporte aberto **nesta** barbearia, para o dono ver (bloco 33).
+ *
+ * Existe ao lado de `suportesAbertos`, que é a lista de todas as barbearias e
+ * serve ao painel da plataforma. Aqui a pergunta é outra e o público é outro:
+ * "tem alguém da plataforma dentro da minha conta agora?".
+ *
+ * `semTenant` porque `support_sessions` é tabela de plataforma, com política
+ * `USING (true)` — o filtro por barbearia é escrito na consulta. É o mesmo
+ * arranjo de `suportesAbertos`, e o `tenant_id` no `WHERE` aqui não é
+ * redundância com RLS: aquela política não separa nada.
+ */
+export async function suporteNaConta(
+  tenantId: string,
+  agora: Date = new Date(),
+): Promise<readonly SuporteAberto[]> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        tenant_id: string;
+        barbearia: string;
+        admin_nome: string | null;
+        reason: string;
+        started_at: Date;
+        expires_at: Date;
+      }[]
+    >`
+      SELECT ss.tenant_id, tp.name AS barbearia, a.name AS admin_nome,
+             ss.reason, ss.started_at, ss.expires_at
+      FROM support_sessions ss
+      JOIN tenant_platform tp ON tp.tenant_id = ss.tenant_id
+      LEFT JOIN platform_admins a ON a.id = ss.admin_id
+      WHERE ss.tenant_id = ${tenantId}::uuid
+        AND ss.ended_at IS NULL AND ss.expires_at > ${agora}
       ORDER BY ss.started_at DESC
     `;
     return linhas.map((l) => ({

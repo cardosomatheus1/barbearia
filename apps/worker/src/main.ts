@@ -1,6 +1,11 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import { varrerRetencao } from '@barbearia/crm';
 import {
+  avisarDaOperacao,
+  CODIGO_DA_RETENCAO,
+  ConsoleOperacaoProvider,
+} from '@barbearia/platform';
+import {
   ConsoleNotificationProvider,
   RELOGIO_REAL,
   rodarWorker,
@@ -124,7 +129,54 @@ async function main(): Promise<void> {
             anonimizados: resultado.anonimizados,
           });
         }
+        /**
+         * O aviso de retenção sai pelo mesmo canal do alerta (bloco 33).
+         *
+         * Era lacuna declarada: a varredura carimbava quem estava para sair e a
+         * tela listava, mas quem não abrisse a tela em trinta dias perdia
+         * cadastro sem nunca ter sido avisado ativamente. É obrigação legal, não
+         * cortesia — por isso `enviar_retencao` nasce ligado.
+         *
+         * Uma mensagem por dia com a **contagem**, e não uma por cliente: o
+         * nome de quem está para ser anonimizado não pode viajar por mensagem
+         * nem ficar em log. A lista com nome está na tela, atrás de login.
+         */
+        if (resultado.avisados.length > 0) {
+          await avisarDaOperacao({
+            tenantId,
+            agora,
+            provider: new ConsoleOperacaoProvider(),
+            alertas: [
+              {
+                regra: CODIGO_DA_RETENCAO,
+                severidade: 'critico',
+                frase:
+                  `${resultado.avisados.length} cadastro(s) sem atendimento há cinco anos ` +
+                  'serão apagados em 30 dias. Veja quem em Privacidade.',
+                valor: resultado.avisados.length,
+                referencia: 0,
+              },
+            ],
+          });
+        }
+
         return { avisados: resultado.avisados.length, anonimizados: resultado.anonimizados };
+      },
+      /**
+       * O alerta operacional (bloco 33), ligado aqui pelo mesmo motivo dos
+       * outros dois: quem produz a lista é `jobs`, quem conhece o dono e o
+       * canal é a plataforma, e nenhum dos dois deve conhecer o outro.
+       */
+      avisarDaOperacao: async (tenantId, alertas, agora) => {
+        const resultado = await avisarDaOperacao({
+          tenantId,
+          alertas,
+          agora,
+          provider: new ConsoleOperacaoProvider(),
+        });
+        if (resultado.enviados > 0) {
+          console.log('[operacao] alerta', { tenantId, enviados: resultado.enviados });
+        }
       },
       rodarRegua: async (agora) => {
         /**

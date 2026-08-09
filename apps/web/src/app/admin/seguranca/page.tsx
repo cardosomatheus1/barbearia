@@ -1,6 +1,13 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { segundoFator } from '@/lib/admin-api';
+import {
+  preferenciasDeAlerta,
+  segundoFator,
+  sessoesDaConta,
+  type PreferenciasDeAlerta,
+  type SessaoNaTela,
+  type SuporteNaTela,
+} from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import {
   lerCodigosDeRecuperacao,
@@ -10,6 +17,9 @@ import {
 import {
   acaoComecarSegundoFator,
   acaoConfirmarSegundoFator,
+  acaoEncerrarSessao,
+  acaoExpulsarSuporte,
+  acaoPreferenciasDeAlerta,
   acaoSair,
   acaoVerificarSegundoFator,
 } from '../acoes';
@@ -80,6 +90,13 @@ export default async function SegurancaPage({ searchParams }: Props) {
   const erro = first(query['erro']);
   const ativado = first(query['ativado']) === '1';
   const voltarPara = first(query['de']) ?? 'caixa';
+
+  // Lidas junto com o resto: são rotas independentes, e em série o dono espera
+  // as três somadas numa tela que ele abre com pressa.
+  const [sessoes, preferencias] = await Promise.all([
+    sessoesDaConta(token),
+    preferenciasDeAlerta(token),
+  ]);
 
   const segredo = await lerSegredoDoMfa();
   const codigos = await lerCodigosDeRecuperacao();
@@ -255,6 +272,144 @@ export default async function SegurancaPage({ searchParams }: Props) {
           </form>
         </section>
       )}
+
+      {/*
+        Quem está na minha conta, e o que me interrompe (bloco 33).
+
+        Fica **nesta** tela e não numa nova porque é a mesma pergunta que o
+        segundo fator responde do outro lado: quem consegue entrar aqui. Uma
+        tela separada chamada "sessões" faria o dono ter que saber de antemão
+        que segurança da conta mora em dois lugares.
+      */}
+      <QuemEstaNaConta
+        encerrada={first(query['encerrada']) === '1'}
+        expulso={first(query['suporte']) === 'fora'}
+        salvo={first(query['salvo']) === '1'}
+        sessoes={sessoes.ok ? sessoes.dados.sessoes : []}
+        suporte={sessoes.ok ? sessoes.dados.suporte : []}
+        preferencias={preferencias.ok ? preferencias.dados : null}
+      />
     </main>
   );
 }
+
+/**
+ * As sessões abertas, o suporte na conta e o que interrompe o dono.
+ *
+ * Duas lacunas declaradas fechavam aqui — "encerrar sessão nos outros
+ * aparelhos" (sem bloco desde o 5) e "o dono encerrar sozinho o suporte" (do
+ * 26) — e elas eram a mesma tela: uma lista do que está aberto, com um botão ao
+ * lado. Entregá-las separadas produziria duas telas que respondem à mesma
+ * pergunta com metade da resposta.
+ *
+ * O suporte vem **primeiro** quando existe. A pergunta que o dono faz não é
+ * "quantos aparelhos meus estão logados?", é "quem está na minha conta?" — e a
+ * resposta que ele não espera é a que precisa estar no topo.
+ */
+function QuemEstaNaConta({
+  sessoes,
+  suporte,
+  preferencias,
+  encerrada,
+  expulso,
+  salvo,
+}: {
+  readonly sessoes: readonly SessaoNaTela[];
+  readonly suporte: readonly SuporteNaTela[];
+  readonly preferencias: PreferenciasDeAlerta | null;
+  readonly encerrada: boolean;
+  readonly expulso: boolean;
+  readonly salvo: boolean;
+}) {
+  return (
+    <>
+      <h2 className="ficha__titulo">Quem está na sua conta</h2>
+
+      {encerrada ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Aparelho desconectado.
+        </div>
+      ) : null}
+      {expulso ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          O suporte saiu da sua conta.
+        </div>
+      ) : null}
+
+      {suporte.length > 0 ? (
+        <div className="ui-alert ui-alert--warning painel__aviso" role="alert">
+          <p>
+            <strong>{suporte[0]?.quem ?? 'Alguém do suporte'}</strong> está na sua conta agora —
+            {' '}&ldquo;{suporte[0]?.motivo}&rdquo;. O acesso vence sozinho em até 30 minutos.
+          </p>
+          <form action={acaoExpulsarSuporte}>
+            <button className="ui-button ui-button--secondary" type="submit">
+              Tirar o suporte agora
+            </button>
+          </form>
+        </div>
+      ) : null}
+
+      <ul className="sessoes">
+        {sessoes.map((sessao) => (
+          <li className="sessoes__item" key={sessao.id}>
+            <div className="sessoes__texto">
+              <span className="sessoes__aparelho">{sessao.aparelho}</span>
+              <span className="sessoes__quando">
+                Entrou em {dataCurta(sessao.criadaEm)}
+                {sessao.atual ? ' · este aparelho' : ''}
+              </span>
+            </div>
+            {sessao.atual ? null : (
+              <form action={acaoEncerrarSessao}>
+                <input name="id" type="hidden" value={sessao.id} />
+                <button className="ui-button ui-button--ghost sessoes__botao" type="submit">
+                  Desconectar
+                </button>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <h2 className="ficha__titulo">O que me avisar</h2>
+      {salvo ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Preferências salvas.
+        </div>
+      ) : null}
+
+      <form action={acaoPreferenciasDeAlerta} className="formulario">
+        <label className="marca" htmlFor="enviarCritico">
+          <input defaultChecked={preferencias?.enviarCritico ?? true} id="enviarCritico"
+                 name="enviarCritico" type="checkbox" />
+          <span>Problemas que precisam de você hoje (fila travada, queda de agendamento)</span>
+        </label>
+
+        <label className="marca" htmlFor="enviarAviso">
+          <input defaultChecked={preferencias?.enviarAviso ?? false} id="enviarAviso"
+                 name="enviarAviso" type="checkbox" />
+          <span>Sinais mais leves, para acompanhar de perto</span>
+        </label>
+
+        <label className="marca" htmlFor="enviarRetencao">
+          <input defaultChecked={preferencias?.enviarRetencao ?? true} id="enviarRetencao"
+                 name="enviarRetencao" type="checkbox" />
+          <span>Clientes que a lei manda apagar por falta de contato</span>
+        </label>
+
+        <p className="ui-field__hint">
+          Nada sai entre 21h e 8h, e o mesmo aviso não se repete no mesmo dia.
+        </p>
+
+        <button className="ui-button ui-button--primary ui-button--block" type="submit">
+          Salvar
+        </button>
+      </form>
+    </>
+  );
+}
+
+const dataCurta = (iso: string): string =>
+  new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    .format(new Date(iso));

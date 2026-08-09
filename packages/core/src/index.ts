@@ -26,3 +26,4 @@ export * from './importacao.js';
 export * from './alertas.js';
 export * from './cobranca.js';
 export * from './retencao.js';
+export * from './login.js';

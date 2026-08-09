@@ -72,6 +72,9 @@ import {
   abrirPedidoDeDados,
   encerrarPedidoDeDados,
   anonimizarCliente as anonimizarClienteNaApi,
+  encerrarSessao as encerrarSessaoDoAparelho,
+  expulsarSuporte,
+  salvarPreferenciasDeAlerta,
 } from '@/lib/admin-api';
 import { versaoDoConsentimento } from '@/lib/politica';
 import { ehConversa } from '@barbearia/core';
@@ -1492,4 +1495,42 @@ export async function acaoAnonimizarCliente(form: FormData): Promise<void> {
   // Volta para a lista, não para a ficha: a ficha que ele estava vendo não
   // existe mais como cadastro de pessoa, e mostrá-la vazia parece defeito.
   redirect(`${de}?apagado=1`);
+}
+
+// -- Segurança da conta (bloco 33) --------------------------------------------
+
+export async function acaoEncerrarSessao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await encerrarSessaoDoAparelho(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  redirect('/admin/seguranca?encerrada=1');
+}
+
+/**
+ * Expulsa o suporte da plataforma da conta.
+ *
+ * Sem confirmação digitada, ao contrário de apagar cliente: aqui o pior caso é
+ * o suporte ter que pedir de novo, e travar a saída de alguém que está dentro
+ * da sua conta seria proteger a coisa errada.
+ */
+export async function acaoExpulsarSuporte(): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await expulsarSuporte(token);
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  redirect('/admin/seguranca?suporte=fora');
+}
+
+export async function acaoPreferenciasDeAlerta(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  // A caixa desmarcada simplesmente não é enviada pelo navegador — então a
+  // ausência é "desligado", e não "não mexa nisso".
+  const resultado = await salvarPreferenciasDeAlerta(token, {
+    enviarCritico: form.get('enviarCritico') !== null,
+    enviarAviso: form.get('enviarAviso') !== null,
+    enviarRetencao: form.get('enviarRetencao') !== null,
+  });
+
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  redirect('/admin/seguranca?salvo=1');
 }
