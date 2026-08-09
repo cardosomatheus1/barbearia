@@ -5,6 +5,23 @@ import { catchError, tap, throwError } from 'rxjs';
 import type { Observable } from 'rxjs';
 import { DomainError } from './errors.js';
 import { idDaRequisicao, montarLinha } from './log.js';
+import type { LinhaDeLog } from './log.js';
+
+/**
+ * Uma linha por requisição é o que se quer em produção e é ruído puro numa
+ * suíte: os quase trezentos casos do e2e enterravam a mensagem do teste que
+ * falhou debaixo de trezentas linhas de JSON. `LOG_REQUISICOES=nao` desliga,
+ * e é o que o `scripts/test.sh` exporta.
+ *
+ * O padrão é ligado: um log que só aparece quando alguém lembra de ligar é um
+ * log que não existe no dia do incidente.
+ */
+const LIGADO = process.env['LOG_REQUISICOES'] !== 'nao';
+
+function escreverLinha(linha: LinhaDeLog): void {
+  if (!LIGADO) return;
+  process.stdout.write(`${JSON.stringify(linha)}\n`);
+}
 
 /**
  * Uma linha estruturada por requisição (SPEC §5.12).
@@ -46,7 +63,7 @@ export class LogInterceptor implements NestInterceptor {
         tenantId: (requisicao as { tenantId?: string }).tenantId,
         ...(erro ? { erro } : {}),
       });
-      process.stdout.write(`${JSON.stringify(linha)}\n`);
+      escreverLinha(linha);
     };
 
     return proximo.handle().pipe(

@@ -40,5 +40,7 @@ export SEED_DATABASE_URL="$BASE/$DB_NAME"
 # próprio (rate-limit.e2e.test.ts); aqui ele não pode virar ruído.
 export RATE_LIMIT_SHORT="${RATE_LIMIT_SHORT:-100000}"
 export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-100000}"
+# Uma linha por requisição enterraria a mensagem do teste que falhou.
+export LOG_REQUISICOES=nao
 export STAFF_EMAIL_PEPPER="${STAFF_EMAIL_PEPPER:-pepper-de-teste}"
 exec vitest run
