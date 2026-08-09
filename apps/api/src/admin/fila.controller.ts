@@ -15,7 +15,7 @@ import { findCustomer } from '@barbearia/scheduling';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
-import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
 import {
   fitQuerySchema,
   joinQueueSchema,
@@ -57,6 +57,9 @@ function toHttp(error: unknown): never {
  * a tela do balcão numa lista de chaves para a posição de cada cliente.
  */
 @Controller('v1/admin/queue')
+// A fila inteira é o recurso: barbearia que atende só com hora marcada desliga
+// e a tela some junto (bloco 26).
+@Recurso('fila')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class FilaController {
   private async unidade(tenantId: string) {

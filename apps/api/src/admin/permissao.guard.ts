@@ -6,8 +6,14 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { podeTudo, PERMISSOES_DE_DINHEIRO, type Permissao } from '@barbearia/core';
+import {
+  podeTudo,
+  suportePode,
+  PERMISSOES_DE_DINHEIRO,
+  type Permissao,
+} from '@barbearia/core';
 import { segundoFatorValido } from '@barbearia/identity';
+import { recursoLigado, type CodigoDeRecurso } from '@barbearia/platform';
 import { DomainError } from '../common/errors.js';
 import type { StaffRequest } from './staff.guard.js';
 
@@ -36,6 +42,20 @@ export const PERMISSAO_EXIGIDA = 'permissao_exigida';
 export const Exige = (...permissoes: readonly Permissao[]) =>
   SetMetadata(PERMISSAO_EXIGIDA, permissoes);
 
+export const RECURSO_EXIGIDO = 'recurso_exigido';
+
+/**
+ * Declara que a rota pertence a um recurso ligável (bloco 26).
+ *
+ * Ao contrário de `@Exige`, a **ausência libera** — e isso não é inconsistência.
+ * A maioria das rotas não faz parte de nenhum recurso opcional, e recusar por
+ * omissão desligaria o produto inteiro. O que a ausência custa aqui é uma rota
+ * de fila que continua respondendo com a fila desligada: um recurso a mais no
+ * ar, não um dado a menos protegido. Já a ausência de `@Exige` custaria acesso
+ * sem permissão, que é de outra ordem.
+ */
+export const Recurso = (code: CodigoDeRecurso) => SetMetadata(RECURSO_EXIGIDO, code);
+
 @Injectable()
 export class PermissaoGuard implements CanActivate {
   // `@Inject` explícito: `emitDecoratorMetadata` está desligado neste projeto,
@@ -44,7 +64,7 @@ export class PermissaoGuard implements CanActivate {
   // constrói a guarda à mão e nunca veria isso.
   constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const exigidas = this.reflector.getAllAndOverride<readonly Permissao[] | undefined>(
       PERMISSAO_EXIGIDA,
       [context.getHandler(), context.getClass()],
@@ -91,7 +111,34 @@ export class PermissaoGuard implements CanActivate {
       );
     }
 
+    /**
+     * Sessão de suporte é somente leitura.
+     *
+     * A regra mora aqui, e não numa lista de rotas proibidas, pelo mesmo motivo
+     * que o segundo fator do dinheiro: a rota que alguém escrever no bloco 40
+     * nasceria fora de qualquer lista, e ninguém veria. Aqui ela nasce coberta.
+     */
+    if (staff.impersonatedBy && !suportePode(exigidas)) {
+      throw new DomainError(
+        'support_read_only',
+        403,
+        'A sessão de suporte é somente leitura.',
+      );
+    }
+
     exigirSegundoFator(staff, exigidas);
+
+    const recurso = this.reflector.getAllAndOverride<CodigoDeRecurso | undefined>(
+      RECURSO_EXIGIDO,
+      [context.getHandler(), context.getClass()],
+    );
+    if (recurso && !(await recursoLigado(staff.tenantId, recurso))) {
+      // 404 e não 403: para quem está do outro lado, um recurso desligado não
+      // existe. "Sem permissão" mandaria a recepção procurar o dono para
+      // liberar algo que o dono também não tem.
+      throw new DomainError('feature_off', 404, 'Este recurso não está disponível.');
+    }
+
     return true;
   }
 }

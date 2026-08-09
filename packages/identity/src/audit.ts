@@ -49,7 +49,14 @@ export type AuditAction =
   // Endereço público novo apontando para a barbearia. Quem adiciona um slug
   // muda por onde o cliente chega — e é a única ação deste produto que altera
   // algo visível fora dele.
-  | 'slug.added';
+  | 'slug.added'
+  // Suporte assistido (bloco 26). A SPEC §1.2 é explícita: o registro grava
+  // quem impersonou, quando, por quanto tempo e o que acessou — **e o tenant
+  // deve poder consultar esse log**. Por isso as três moram aqui, na trilha da
+  // barbearia, e não só na trilha da plataforma, que o dono não lê.
+  | 'support.started'
+  | 'support.accessed'
+  | 'support.ended';
 
 /**
  * O vocabulário partido em dois, porque a leitura não é uma permissão só.
@@ -98,6 +105,11 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'import.applied',
   'import.reverted',
   'slug.added',
+  // Nenhuma carrega centavo, e a pergunta que respondem — "quem entrou na minha
+  // conta?" — é de quem administra a casa. Fica do lado da gestão.
+  'support.started',
+  'support.accessed',
+  'support.ended',
 ];
 
 export interface AuditEntry {

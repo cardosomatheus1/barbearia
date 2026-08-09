@@ -4669,3 +4669,88 @@ main { padding-bottom: var(--space-8); }
 .saude__linha--sem-sinal .saude__nome { color: var(--color-danger); }
 .saude__nunca,
 .saude__parada { color: var(--color-danger); }
+
+/* ----------------------------------------------------------------------------
+   Suporte assistido e recursos (bloco 26)
+   ---------------------------------------------------------------------------- */
+
+/* A faixa é a única superfície do painel com fundo de alerta ocupando a largura
+   inteira. É de propósito: ela não pode competir com o conteúdo, ela precisa
+   ganhar dele. */
+.faixa-suporte {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  padding-inline: max(var(--space-4), env(safe-area-inset-left));
+  background: var(--color-danger);
+  color: var(--color-text-on-danger);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.conta__recursos { min-width: 0; }
+.recursos {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.recursos__forma { display: contents; }
+.recursos__botao {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  /* 44px em qualquer largura, como todo alvo autônomo. */
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.recursos__botao--ligado {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+.recursos__estado {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+/* O segredo do segundo fator aparece uma vez e é digitado à mão no celular:
+   quebra em qualquer ponto e usa numerais tabulares para não dançar. */
+.segredo-mfa {
+  margin: var(--space-3) 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  overflow-wrap: anywhere;
+}
+.codigos-mfa {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--space-2);
+}
+.codigos-mfa__item {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-align: center;
+}

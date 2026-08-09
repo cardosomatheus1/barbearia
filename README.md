@@ -21,10 +21,11 @@ integridade do banco.
 | `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 74 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente e falta automática — o que acontece sem ninguém esperando | 41 testes ✅ |
 | `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
+| `packages/platform` | A camada de plataforma: planos, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 37 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública e do painel: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente e metas | 225 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, o dia e os números do barbeiro e a ficha do cliente, com SSR (Next.js) | 51 testes ✅ |
-| `apps/worker` | O segundo processo: consome a fila, manda os avisos e marca a falta | — |
+| `apps/api` | API pública, do painel e **da plataforma**: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas e o Super Admin | 330 testes ✅ |
+| `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 66 testes ✅ |
+| `apps/worker` | O segundo processo: consome a fila, manda os avisos, marca a falta e apura as métricas do dia | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
@@ -56,6 +57,20 @@ O role da aplicação é criado por `scripts/bootstrap-role.sh`, que exige
 `APP_DB_PASSWORD` e não tem default — os scripts de teste geram uma senha
 efêmera por execução, então não há credencial no repositório.
 
+### Primeira conta da plataforma
+
+Não há rota de cadastro para ela, e isso é decisão: um `POST` público de criação
+de Super Admin é um caminho para qualquer pessoa na internet virar
+administradora de todas as barbearias, e nenhum "só a primeira conta" resolve —
+no dia em que a primeira for apagada, a porta reabre.
+
+```bash
+DATABASE_URL=... STAFF_EMAIL_PEPPER=... \
+  node scripts/criar-super-admin.mjs "Nome" email@dominio
+```
+
+A senha é lida da entrada padrão, sem eco. Depois disso, `/plataforma/entrar`.
+
 ### Variáveis que a API exige
 
 Nenhuma tem valor padrão, e é de propósito: as duas protegem dado, e um padrão
@@ -64,7 +79,7 @@ fraco em silêncio subiria o sistema funcionando com a proteção desligada.
 | Variável | Para quê | Como gerar |
 |---|---|---|
 | `STAFF_EMAIL_PEPPER` | HMAC do e-mail em `staff_directory`, que é tabela sem RLS por natureza | `openssl rand -hex 32` |
-| `MFA_SECRET_KEY` | AES-256-GCM do segredo TOTP guardado em `staff_users` | `openssl rand -base64 32` (32 bytes) |
+| `MFA_SECRET_KEY` | AES-256-GCM do segredo TOTP guardado em `staff_users` **e em `platform_admins`** | `openssl rand -base64 32` (32 bytes) |
 
 Trocar `MFA_SECRET_KEY` invalida todos os segundos fatores cadastrados: os
 segredos ficam indecifráveis e cada gestor precisa cadastrar de novo. Ela é
@@ -244,6 +259,37 @@ reaproveita conexões e uma sessão herdaria o tenant da requisição anterior.
 
 O role da aplicação é `NOBYPASSRLS` de propósito. As consultas do repositório
 deliberadamente não repetem `tenant_id` no `WHERE` — quem filtra é a política.
+
+### A plataforma vê todas as barbearias sem afrouxar nenhuma política
+
+O Super Admin precisa do contrário do que o produto inteiro garante. A saída
+tentadora — afrouxar a política de `tenants` sob alguma condição — seria fatal
+e não pelo motivo óbvio: como nenhuma consulta repete `tenant_id` no `WHERE`,
+afrouxar alargaria em silêncio todas as que já existem.
+
+A saída são **tabelas novas de plataforma**, com `USING (true)` e nada de
+pessoa dentro: `tenant_platform`, `plans`, `tenant_metrics_daily`,
+`tenant_lifecycle`, `feature_flags`, `support_sessions`. O Super Admin nunca lê
+`appointments`, `customers` ou `orders`.
+
+O que ele precisa saber sobre a operação de cada barbearia — ocupação, no-show,
+adoção — chega por **agregado que a própria barbearia escreve**, por dentro do
+próprio tenant, numa tarefa da fila. Varredura de plataforma sobre tabela com
+RLS não funciona: ela devolve zero linhas, e o bloco 20 já descobriu isso na
+falta automática.
+
+### Entrar na conta de um cliente deixa rastro dos dois lados
+
+`platform_audit` registra o ato do Super Admin. O `audit_log` **da barbearia**
+registra que entraram na conta dela, e cada tela aberta durante a sessão. A SPEC
+§1.2 pede que o tenant possa consultar esse log, e uma trilha só do nosso lado
+não cumpre isso.
+
+A sessão de suporte dura trinta minutos, exige o segundo fator provado, e é
+somente leitura — a lista do que ela alcança está em `PERMISSOES_DO_SUPORTE`
+(`packages/core`), e quem aplica é a mesma `PermissaoGuard` de toda rota do
+painel. Não há lista de rotas proibidas: a rota que alguém escrever no bloco 40
+nasce coberta.
 
 ## Documentação
 

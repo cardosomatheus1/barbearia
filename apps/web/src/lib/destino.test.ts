@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { destinoDoBalcao, destinoSeguro } from './destino';
+import { destinoDoBalcao, destinoSeguro, destinoDaPlataforma } from './destino';
 
 const PADRAO = '/domari/meus-agendamentos';
 
@@ -76,5 +76,38 @@ describe('destino do balcão', () => {
 
   it('campo vazio cai no padrão', () => {
     expect(destinoDoBalcao('')).toBe('/admin/dia');
+  });
+});
+
+describe('destino depois do segundo fator da plataforma', () => {
+  it('aceita as telas que pedem o código', () => {
+    expect(destinoDaPlataforma('/plataforma')).toBe('/plataforma');
+    expect(destinoDaPlataforma('/plataforma?feito=1')).toBe('/plataforma?feito=1');
+    expect(destinoDaPlataforma('/plataforma/seguranca')).toBe('/plataforma/seguranca');
+  });
+
+  it('recusa endereço externo', () => {
+    // O ataque descrito pela /security-review: link no domínio verdadeiro, tela
+    // legítima pedindo o TOTP, e a queda numa cópia da tela de entrada logo
+    // depois. O prêmio é a base de clientes de todas as barbearias.
+    expect(destinoDaPlataforma('https://evil.example/plataforma/entrar')).toBe('/plataforma');
+    expect(destinoDaPlataforma('http://evil.example')).toBe('/plataforma');
+  });
+
+  it('recusa caminho relativo de protocolo', () => {
+    // `//outro.site` não tem esquema e mesmo assim é externo.
+    expect(destinoDaPlataforma('//evil.example/plataforma')).toBe('/plataforma');
+  });
+
+  it('recusa caminho interno fora da plataforma', () => {
+    // O painel da barbearia usa outro cookie; mandar para lá depois de provar o
+    // segundo fator da plataforma só confundiria quem clicou.
+    expect(destinoDaPlataforma('/admin/dia')).toBe('/plataforma');
+    expect(destinoDaPlataforma('/plataformafalsa')).toBe('/plataforma');
+  });
+
+  it('sem destino, volta para a lista', () => {
+    expect(destinoDaPlataforma(undefined)).toBe('/plataforma');
+    expect(destinoDaPlataforma('')).toBe('/plataforma');
   });
 });

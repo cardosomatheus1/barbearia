@@ -12,7 +12,8 @@
   "dependencies": {
     "@barbearia/core": "workspace:*",
     "@barbearia/db": "workspace:*",
-    "@barbearia/jobs": "workspace:*"
+    "@barbearia/jobs": "workspace:*",
+    "@barbearia/platform": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

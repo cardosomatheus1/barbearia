@@ -1,5 +1,6 @@
 import { Controller, Get, Inject, Param } from '@nestjs/common';
 import { primaryLocation, queuePositionByToken } from '@barbearia/scheduling';
+import { recursoLigado } from '@barbearia/platform';
 import { notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
@@ -28,6 +29,13 @@ export class FilaPublicaController {
   ) {
     const tenantId = await this.tenants.resolve(slug);
     if (!tenantId) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
+
+    // O link do cliente cai junto com a fila. Sem isto, desligar o recurso
+    // tiraria a fila do balcão e deixaria no ar um link que mostra a posição de
+    // uma fila que ninguém mais move — pior do que não ter fila nenhuma.
+    if (!(await recursoLigado(tenantId, 'fila'))) {
+      throw notFound('queue_entry_not_found', 'Este link não está mais válido');
+    }
 
     const local = await primaryLocation(tenantId);
     if (!local) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');

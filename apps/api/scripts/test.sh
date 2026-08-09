@@ -43,6 +43,10 @@ export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-100000}"
 # Uma linha por requisição enterraria a mensagem do teste que falhou.
 export LOG_REQUISICOES=nao
 export STAFF_EMAIL_PEPPER="${STAFF_EMAIL_PEPPER:-pepper-de-teste}"
+# Sorteada por execução: o banco é descartável e o segredo não sobrevive a ela.
+# Sem esta variável o segundo fator falha alto, de propósito — e a suíte do
+# bloco 26 exercita justamente o TOTP da plataforma.
+export MFA_SECRET_KEY="${MFA_SECRET_KEY:-$(openssl rand -base64 32)}"
 # `"$@"`: rodar um arquivo só durante o laço interno. Sem isto, provar que um
 # teste fica vermelho custa a suíte inteira por quebra.
 exec vitest run "$@"

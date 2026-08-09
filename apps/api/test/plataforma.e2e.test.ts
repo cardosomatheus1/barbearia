@@ -1,13 +1,23 @@
 import 'reflect-metadata';
+import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { emailKey, hashPassword } from '@barbearia/identity';
-import { criarAdminDaPlataforma } from '@barbearia/platform';
+import {
+  confirmarCadastroDoSegundoFator,
+  criarAdminDaPlataforma,
+  iniciarCadastroDoSegundoFator,
+} from '@barbearia/platform';
+import { codigoDoPasso, passoAgora } from '@barbearia/identity';
 import { BookingController } from '../src/booking/booking.controller.js';
+import { BoardController } from '../src/admin/board.controller.js';
+import { FilaController } from '../src/admin/fila.controller.js';
+import { FilaPublicaController } from '../src/booking/fila-publica.controller.js';
+import { SuporteInterceptor } from '../src/admin/suporte.interceptor.js';
 import { StaffAuthController } from '../src/admin/admin.controller.js';
 import { MeController } from '../src/admin/team.controller.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
@@ -41,6 +51,7 @@ const LOCAL_VIZINHA = 'a2424242-0000-0000-0000-000000000002';
 const DONO = 'b2424242-0000-0000-0000-000000000001';
 const EMAIL_DO_DONO = 'dono@domari.test';
 const SERVICO = 'e2424242-0000-0000-0000-000000000001';
+const TOKEN_DA_FILA = 'token-de-acompanhamento-do-bloco-26';
 const SENHA = 'senha-do-dono-24';
 const SENHA_DA_PLATAFORMA = 'senha-super-admin-24';
 
@@ -70,6 +81,72 @@ async function tokenDoDono(): Promise<string> {
     .send({ email: EMAIL_DO_DONO, password: SENHA })
     .expect(201);
   return resposta.body.token as string;
+}
+
+/**
+ * Uma sessão de plataforma com o segundo fator já provado.
+ *
+ * O código é gerado do mesmo segredo que o cadastro devolveu — TOTP de verdade,
+ * não um atalho. Mocar a conferência aqui seria mocar justamente a barreira que
+ * separa "senha vazada" de "base de clientes de todas as barbearias".
+ */
+async function comSegundoFator(): Promise<string> {
+  // Uma sessão, uma prova. Provar de novo na mesma janela de trinta segundos é
+  // **recusado de propósito** — o TOTP não aceita reuso de passo —, e reabrir
+  // sessão a cada teste tropeçaria nisso. Também é o que uma pessoa do suporte
+  // faz: entra uma vez, confirma o código uma vez, trabalha trinta minutos.
+  if (tokenProvado) return tokenProvado;
+
+  const token = await tokenDaPlataforma();
+  const estado = await http()
+    .get('/v1/plataforma/mfa')
+    .set('authorization', `Bearer ${token}`)
+    .expect(200);
+
+  if (!estado.body.ligado) {
+    const cadastro = await http()
+      .post('/v1/plataforma/mfa')
+      .set('authorization', `Bearer ${token}`)
+      .send({ email: 'super@plataforma.test' })
+      .expect(201);
+    segredoDoMfa = cadastro.body.segredoBase32 as string;
+
+    await http()
+      .post('/v1/plataforma/mfa/confirmar')
+      .set('authorization', `Bearer ${token}`)
+      .send({ codigo: codigoDoPasso(segredoDoMfa, passoAgora(new Date())) })
+      .expect(201);
+  }
+
+  await http()
+    .post('/v1/plataforma/mfa/provar')
+    .set('authorization', `Bearer ${token}`)
+    // Um passo à frente: o de agora já foi consumido na confirmação, e o TOTP
+    // recusa reuso dentro da mesma janela de trinta segundos — de propósito.
+    .send({ codigo: codigoDoPasso(segredoDoMfa, passoAgora(new Date()) + 1) })
+    .expect(201);
+
+  tokenProvado = token;
+  return token;
+}
+
+let segredoDoMfa = '';
+let tokenProvado = '';
+
+/** A trilha da barbearia, relendo até a gravação assíncrona aparecer. */
+async function esperarTrilha(
+  acao: string,
+): Promise<{ actor_name: string; after: unknown }[]> {
+  for (let i = 0; i < 40; i++) {
+    const linhas = await admin.$queryRawUnsafe<{ actor_name: string; after: unknown }[]>(
+      `SELECT actor_name, after FROM audit_log WHERE action = '${acao}' ORDER BY id DESC`,
+    );
+    if (linhas.length > 0) return linhas;
+    // Espera pela **condição**, não pelo relógio: um `sleep` fixo seria lento
+    // quando dá certo e instável quando a máquina está sob carga.
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return [];
 }
 
 const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
@@ -116,6 +193,14 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       VALUES ('${emailKey(EMAIL_DO_DONO, pepper)}', '${DOMARI}', '${DONO}');
     `);
 
+    // Sem o padrão de fábrica, nem o dono consegue fazer nada — e o teste do
+    // recurso desligado mediria a falta de permissão em vez do recurso.
+    const { seedRolePermissions } = await import('@barbearia/identity');
+    const { withTenant } = await import('@barbearia/db');
+    for (const tenant of [DOMARI, VIZINHA]) {
+      await withTenant(tenant, (tx) => seedRolePermissions(tx, tenant));
+    }
+
     await criarAdminDaPlataforma({
       nome: 'Super',
       email: 'super@plataforma.test',
@@ -127,6 +212,9 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         BookingController,
         StaffAuthController,
         MeController,
+        BoardController,
+        FilaController,
+        FilaPublicaController,
         PlataformaAuthController,
         PlataformaController,
       ],
@@ -136,6 +224,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         PermissaoGuard,
         PlataformaGuard,
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
+        { provide: APP_INTERCEPTOR, useClass: SuporteInterceptor },
       ],
     }).compile();
 
@@ -405,6 +494,288 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .get('/v1/plataforma/metricas?ate=0000-00-00')
       .set('authorization', `Bearer ${token}`)
       .expect(400);
+  });
+
+  // -- recursos e suporte (bloco 26) -----------------------------------------
+
+  it('recurso desligado tira a rota do ar e devolve 404, não 403', async () => {
+    // 403 mandaria a recepção procurar o dono para liberar algo que o dono
+    // também não tem. Para quem está do outro lado, recurso desligado não
+    // existe.
+    const daPlataforma = await tokenDaPlataforma();
+    const doDono = await tokenDoDono();
+
+    await http().get('/v1/admin/queue').set('authorization', `Bearer ${doDono}`).expect(200);
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ code: 'fila', ligado: false })
+      .expect(200);
+
+    const recusada = await http()
+      .get('/v1/admin/queue')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(404);
+    expect(recusada.body.error.code).toBe('feature_off');
+
+    // E não vazou para a vizinha.
+    const daVizinha = await http()
+      .get(`/v1/plataforma/barbearias/${VIZINHA}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .expect(200);
+    expect(
+      daVizinha.body.recursos.find((r: { code: string }) => r.code === 'fila').ligado,
+    ).toBe(true);
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ code: 'fila', ligado: true })
+      .expect(200);
+  });
+
+  it('desligar a fila derruba também o link que o cliente já tem na mão', async () => {
+    // A quebra que passou despercebida no ensaio de vermelho: a checagem existia
+    // na rota pública e nada a provava. Desligar o recurso no balcão e deixar no
+    // ar um link que mostra a posição de uma fila que ninguém mais move é pior
+    // do que não ter fila.
+    //
+    // Um 404 sozinho não prova nada aqui — token inválido também dá 404, de
+    // propósito. Por isso a entrada é real, e o teste mede a **diferença** entre
+    // o recurso ligado e desligado com o mesmo link.
+    const daPlataforma = await tokenDaPlataforma();
+    await exec(admin, `
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('c2424242-0000-0000-0000-000000000009', '${DOMARI}', 'Carlos', '+5571988880099');
+
+      INSERT INTO queue_entries (tenant_id, location_id, customer_id, public_token_hash)
+      VALUES ('${DOMARI}', '${LOCAL}', 'c2424242-0000-0000-0000-000000000009',
+              '${createHash('sha256').update(TOKEN_DA_FILA).digest('hex')}');
+    `);
+
+    await http().get(`/v1/b/domari24/queue/${TOKEN_DA_FILA}`).expect(200);
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ code: 'fila', ligado: false })
+      .expect(200);
+
+    await http().get(`/v1/b/domari24/queue/${TOKEN_DA_FILA}`).expect(404);
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ code: 'fila', ligado: true })
+      .expect(200);
+  });
+
+  it('recurso que o código não conhece morre na borda', async () => {
+    const token = await tokenDaPlataforma();
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ code: 'inventado', ligado: false })
+      .expect(400);
+  });
+
+  it('entrar na conta de um cliente exige o segundo fator provado', async () => {
+    // A capacidade mais grave do produto. Sem esta recusa, uma senha vazada da
+    // plataforma abre a base de clientes de todas as barbearias.
+    const token = await tokenDaPlataforma();
+    const recusada = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4471' })
+      .expect(403);
+    expect(recusada.body.error.code).toBe('mfa_required');
+  });
+
+  it('e exige um motivo escrito, como o bloqueio', async () => {
+    const token = await comSegundoFator();
+    await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: ' ' })
+      .expect(400);
+  });
+
+  it('a sessão de suporte lê a agenda e não escreve nada', async () => {
+    const token = await comSegundoFator();
+    const aberta = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4471: horário sumindo da grade' })
+      .expect(201);
+
+    const suporte = aberta.body.token as string;
+    expect(aberta.body.barbearia).toBe('Domari Barber Club');
+
+    // Lê.
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${suporte}`)
+      .expect(200);
+
+    // Não escreve. `appointments.attend` é o que move um atendimento.
+    const escrita = await http()
+      .post(`/v1/admin/appointments/${DOMARI}/attendance`)
+      .set('authorization', `Bearer ${suporte}`)
+      .send({ action: 'check_in' })
+      .expect(403);
+    expect(escrita.body.error.code).toBe('support_read_only');
+  });
+
+  it('e não troca a senha do dono pela porta que não pede permissão', async () => {
+    // `@Exige()` vazio é a fuga da guarda, e existe para o que a conta faz sobre
+    // si mesma. `every` sobre lista vazia é verdadeiro: sem a cláusula
+    // explícita, esta requisição trocaria a senha do dono da barbearia.
+    const token = await comSegundoFator();
+    const aberta = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4472' })
+      .expect(201);
+
+    const recusada = await http()
+      .put('/v1/admin/me/password')
+      .set('authorization', `Bearer ${aberta.body.token}`)
+      .send({ currentPassword: SENHA, newPassword: 'senha-do-invasor-24' })
+      .expect(403);
+    expect(recusada.body.error.code).toBe('support_read_only');
+
+    // E a senha continua sendo a do dono.
+    await http()
+      .post('/v1/admin/login')
+      .send({ email: EMAIL_DO_DONO, password: SENHA })
+      .expect(201);
+  });
+
+  it('o que o suporte acessou fica na trilha **da barbearia**', async () => {
+    // A metade da SPEC que uma trilha só de plataforma não cumpre: "o tenant
+    // deve poder consultar esse log".
+    const token = await comSegundoFator();
+    const aberta = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4473' })
+      .expect(201);
+
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${aberta.body.token}`)
+      .expect(200);
+
+    // O interceptador grava fora do caminho da resposta; a trilha aparece logo
+    // depois, sem `sleep` — a consulta é a espera.
+    const linhas = await esperarTrilha('support.accessed');
+    expect(linhas.length).toBeGreaterThan(0);
+    expect(linhas[0]?.actor_name).toContain('Super');
+    // A rota entra genérica: gravar o id da ficha faria a trilha de auditoria
+    // virar mais uma cópia de dado pessoal.
+    expect(JSON.stringify(linhas[0]?.after)).not.toContain(DOMARI);
+
+    const inicio = await esperarTrilha('support.started');
+    expect(JSON.stringify(inicio[0]?.after)).toContain('chamado');
+  });
+
+  it('e o que o suporte digitou na busca **não** fica na trilha', async () => {
+    // A /security-review encontrou o caminho: a busca de clientes é
+    // `?q=<termo>`, e mascarar só UUID e sequência de seis dígitos deixa nome
+    // próprio e telefone com grupos curtos passarem limpos — para dentro de uma
+    // tabela append-only por REVOKE, que nem pedido de exclusão apaga.
+    const token = await comSegundoFator();
+    const aberta = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4475' })
+      .expect(201);
+
+    await http()
+      .get('/v1/admin/customers?q=Maria%20da%20Silva')
+      .set('authorization', `Bearer ${aberta.body.token}`);
+
+    const linhas = await esperarTrilha('support.accessed');
+    const trilha = JSON.stringify(linhas.map((l) => l.after));
+    expect(trilha).not.toContain('Maria');
+    expect(trilha).not.toContain('?');
+  });
+
+  it('conta bloqueada recusa o suporte na porta, não depois', async () => {
+    // Sem esta recusa, o token sairia e nenhuma tela o aceitaria — a StaffGuard
+    // barra toda rota de barbearia bloqueada. E a trilha do dono ganharia uma
+    // linha dizendo que entraram na conta dele quando ninguém entrou.
+    const token = await comSegundoFator();
+
+    await http()
+      .post(`/v1/plataforma/barbearias/${VIZINHA}/bloqueio`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'inadimplente para o teste do suporte' })
+      .expect(201);
+
+    const recusada = await http()
+      .post(`/v1/plataforma/barbearias/${VIZINHA}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4474' })
+      .expect(409);
+    expect(recusada.body.error.code).toBe('tenant_blocked');
+
+    await http()
+      .delete(`/v1/plataforma/barbearias/${VIZINHA}/bloqueio`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  it('e a plataforma sabe quais sessões de suporte estão abertas', async () => {
+    const token = await comSegundoFator();
+    const lista = await http()
+      .get('/v1/plataforma/suporte')
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(lista.body.suportes.length).toBeGreaterThan(0);
+    expect(lista.body.suportes[0].barbearia).toBe('Domari Barber Club');
+    expect(lista.body.suportes[0].motivo).toContain('chamado');
+  });
+
+  it('a plataforma encerra o suporte antes da hora, e o token morre na hora', async () => {
+    // Sem esta rota, a única saída seria esperar os trinta minutos — e
+    // `encerrarSuporte` seria uma função que ninguém chama, que é o defeito que
+    // este projeto passou oito blocos com `blocks` para aprender.
+    const token = await comSegundoFator();
+    const aberta = await http()
+      .post(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'chamado 4476' })
+      .expect(201);
+
+    // Uma rota que a sessão de suporte de fato alcança — `/v1/admin/me` declara
+    // `@Exige()` vazio e é recusada de propósito.
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${aberta.body.token}`)
+      .expect(200);
+
+    await http()
+      .delete(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+
+    await http()
+      .get('/v1/admin/day?date=2030-01-07')
+      .set('authorization', `Bearer ${aberta.body.token}`)
+      .expect(401);
+
+    // E o encerramento fica na trilha do dono, como a abertura.
+    const fim = await esperarTrilha('support.ended');
+    expect(fim.length).toBeGreaterThan(0);
+
+    // Encerrar de novo não é silêncio.
+    await http()
+      .delete(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(409);
   });
 
   it('sair invalida o token da plataforma', async () => {

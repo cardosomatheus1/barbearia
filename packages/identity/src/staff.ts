@@ -385,6 +385,15 @@ export interface AuthenticatedStaff {
    * banco por requisição.
    */
   readonly mfaVerifiedAt: Date | null;
+  /**
+   * O Super Admin que abriu esta sessão, quando ela é de suporte (bloco 26).
+   *
+   * Nulo em sessão de gestor de verdade — que é o caso de todas, menos as
+   * trinta minutos de uma investigação. Fica **na sessão** porque a sessão é o
+   * que toda rota do painel já lê: uma consulta à parte seria uma que alguém
+   * acabaria pulando.
+   */
+  readonly impersonatedBy: string | null;
 }
 
 export async function resolveStaffSession(token: string): Promise<AuthenticatedStaff> {
@@ -406,9 +415,10 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         permissions: string[];
         mfa_enabled: boolean;
         mfa_verified_at: Date | null;
+        impersonated_by: string | null;
       }[]
     >`
-      SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role,
+      SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role, s.impersonated_by,
              u.must_change_password, u.professional_id,
              u.totp_confirmed_at IS NOT NULL AS mfa_enabled,
              s.mfa_verified_at,
@@ -425,7 +435,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         AND u.active
       GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role,
                u.must_change_password, u.professional_id,
-               u.totp_confirmed_at, s.mfa_verified_at
+               u.totp_confirmed_at, s.mfa_verified_at, s.impersonated_by
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -449,6 +459,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       professionalId: sessao.professional_id,
       mfaEnabled: sessao.mfa_enabled,
       mfaVerifiedAt: sessao.mfa_verified_at,
+      impersonatedBy: sessao.impersonated_by,
     };
   });
 }

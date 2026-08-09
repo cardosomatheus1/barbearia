@@ -139,6 +139,9 @@ importers:
       '@barbearia/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@barbearia/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

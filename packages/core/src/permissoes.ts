@@ -208,3 +208,56 @@ export function podeTudo(
   const tem = new Set(concedidas);
   return exigidas.every((permissao) => tem.has(permissao));
 }
+
+/**
+ * O que uma sessão de suporte da plataforma pode fazer (bloco 26).
+ *
+ * Impersonação é a capacidade mais grave do produto: um funcionário nosso
+ * dentro da conta de um cliente, vendo a base dele. A SPEC pede trilha
+ * obrigatória, e trilha é o que responde *depois*. Esta lista é o que limita
+ * *antes*.
+ *
+ * **Lista explícita, não um padrão de nome.** Um filtro por prefixo `view`
+ * pareceria mais elegante e erraria: deixaria `reports.operational` de fora
+ * (é leitura pura) e deixaria `customers.export` **dentro** se alguém um dia a
+ * renomeasse para `customers.view_export`. Exportar a base de clientes de uma
+ * barbearia é justamente o que uma sessão de suporte nunca deveria conseguir.
+ *
+ * ## O que ficou de fora, e por quê
+ *
+ * **Dinheiro.** `finance.view`, `cashier.*`, `commission.*` e `reports.finance`
+ * não estão aqui. A primeira versão desta lista incluía os dois primeiros, e
+ * eles teriam sido letra morta: a `PermissaoGuard` deriva a exigência de
+ * segundo fator dessas mesmas permissões, e a prova é por sessão — a sessão de
+ * suporte nasce sem ela, e o suporte não tem o autenticador do dono. Seriam
+ * entradas que nunca liberariam nada, o que é pior do que não existirem.
+ *
+ * A conclusão a que isso levou é a certa por mérito próprio: **suporte vê a
+ * operação, não o caixa.** Quem liga reclamando de horário que não aparece
+ * precisa que a gente veja a agenda; nada disso pede o faturamento dele.
+ *
+ * **Foto de cliente.** `customers.view_photos` exige consentimento específico
+ * (LGPD, `CLAUDE.md`), e o consentimento que a barbearia coletou não cobre um
+ * terceiro olhando.
+ */
+export const PERMISSOES_DO_SUPORTE: readonly Permissao[] = [
+  'appointments.view',
+  'appointments.view_all_professionals',
+  'customers.view',
+  'inventory.view',
+  'reports.operational',
+];
+
+const SUPORTE: ReadonlySet<string> = new Set(PERMISSOES_DO_SUPORTE);
+
+/**
+ * Esta ação é permitida dentro de uma sessão de suporte?
+ *
+ * A lista vazia é **não**, e essa é a parte que quase escapou. `@Exige()` sem
+ * argumento é a única fuga da guarda de permissão, e existe para as rotas que a
+ * conta usa **sobre si mesma** — trocar a própria senha, sair. Uma sessão de
+ * suporte não é a conta: `every` sobre lista vazia devolve verdadeiro, e sem
+ * esta cláusula o suporte trocaria a senha do dono da barbearia.
+ */
+export const suportePode = (exigidas: readonly Permissao[]): boolean =>
+  exigidas.length > 0 && exigidas.every((p) => SUPORTE.has(p));

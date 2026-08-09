@@ -17,7 +17,7 @@ import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
-import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
 import { importIdSchema, importacaoSchema, slugLegadoSchema } from './importacao.schemas.js';
 
 /**
@@ -76,6 +76,7 @@ export class ImportacaoController {
   }
 
   @Exige('customers.edit')
+  @Recurso('importacao')
   @Get('imports')
   async listar(@Staff() staff: AuthenticatedStaff) {
     return { imports: await listarImportacoes({ tenantId: staff.tenantId }) };
@@ -83,6 +84,7 @@ export class ImportacaoController {
 
   /** Uma importação e o que ela deixou para conferir, depois do redirecionamento. */
   @Exige('customers.edit')
+  @Recurso('importacao')
   @Get('imports/:id')
   async ler(
     @Staff() staff: AuthenticatedStaff,
@@ -103,6 +105,7 @@ export class ImportacaoController {
    * recurso que o passo seguinte aplica.
    */
   @Exige('customers.edit')
+  @Recurso('importacao')
   @Post('imports')
   async analisar(
     @Staff() staff: AuthenticatedStaff,
@@ -124,6 +127,7 @@ export class ImportacaoController {
   }
 
   @Exige('customers.edit')
+  @Recurso('importacao')
   @Post('imports/:id/apply')
   async aplicar(
     @Staff() staff: AuthenticatedStaff,
@@ -145,6 +149,7 @@ export class ImportacaoController {
   }
 
   @Exige('customers.edit')
+  @Recurso('importacao')
   @Post('imports/:id/revert')
   async reverter(
     @Staff() staff: AuthenticatedStaff,

@@ -3,11 +3,21 @@ import type { Metadata } from 'next';
 import {
   listarBarbearias,
   listarPlanos,
+  recursosDaBarbearia,
+  suportesAbertos,
   type BarbeariaNaPlataforma,
   type Plano,
+  type RecursoDaBarbearia,
 } from '@/lib/plataforma-api';
 import { lerSessaoDaPlataforma } from '@/lib/sessao-plataforma';
-import { acaoBloquear, acaoDesbloquear, acaoTrocarPlano } from './acoes';
+import {
+  acaoBloquear,
+  acaoDefinirRecurso,
+  acaoDesbloquear,
+  acaoEncerrarSuporte,
+  acaoEntrarNaConta,
+  acaoTrocarPlano,
+} from './acoes';
 
 /**
  * As barbearias da plataforma.
@@ -39,11 +49,18 @@ const FALHA: Record<string, string> = {
   unknown_tenant: 'Esta barbearia não existe mais.',
   inactive_plan: 'Este plano não é mais oferecido.',
   unauthorized: 'A sessão venceu. Entre de novo.',
+  mfa_required: 'Confirme o segundo fator antes de entrar numa conta.',
+  mfa_setup_required: 'Ative o segundo fator antes de entrar numa conta.',
+  no_owner: 'Esta barbearia não tem dono ativo para o suporte usar.',
+  no_support: 'Não há suporte aberto nesta conta.',
+  tenant_blocked: 'Reative a conta antes de entrar nela.',
   request_failed: 'Não deu para concluir. Tente de novo.',
 };
 
 const FEITO: Record<string, string> = {
   plano: 'Plano alterado.',
+  recurso: 'Recurso atualizado.',
+  suporte_encerrado: 'Suporte encerrado. As sessões abertas naquela conta caíram.',
   bloqueio: 'Conta bloqueada. A página pública saiu do ar.',
   desbloqueio: 'Conta reativada.',
 };
@@ -57,9 +74,13 @@ const dia = (iso: string): string =>
 function Linha({
   barbearia,
   planos,
+  recursos,
+  comSuporte,
 }: {
   readonly barbearia: BarbeariaNaPlataforma;
   readonly planos: readonly Plano[];
+  readonly recursos: readonly RecursoDaBarbearia[];
+  readonly comSuporte: boolean;
 }) {
   const oferecidos = planos.filter((p) => p.active || p.code === barbearia.plano?.code);
 
@@ -114,6 +135,30 @@ function Linha({
         </div>
       </form>
 
+      <div className="conta__recursos">
+        <p className="ui-field__label">Recursos</p>
+        <ul className="recursos">
+          {recursos.map((recurso) => (
+            <li className="recursos__item" key={recurso.code}>
+              <form action={acaoDefinirRecurso} className="recursos__forma">
+                <input name="tenantId" type="hidden" value={barbearia.tenantId} />
+                <input name="code" type="hidden" value={recurso.code} />
+                <input name="ligado" type="hidden" value={recurso.ligado ? '0' : '1'} />
+                <button
+                  aria-pressed={recurso.ligado}
+                  className={`recursos__botao ${recurso.ligado ? 'recursos__botao--ligado' : ''}`}
+                  title={recurso.descricao}
+                  type="submit"
+                >
+                  {recurso.nome}
+                  <span className="recursos__estado">{recurso.ligado ? 'ligado' : 'desligado'}</span>
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <div className="conta__acao">
         {barbearia.bloqueada ? (
           <form action={acaoDesbloquear}>
@@ -150,6 +195,46 @@ function Linha({
             </form>
           </details>
         )}
+
+        {comSuporte ? (
+          <form action={acaoEncerrarSuporte}>
+            <input name="tenantId" type="hidden" value={barbearia.tenantId} />
+            <button className="ui-button ui-button--danger" type="submit">
+              Encerrar suporte
+            </button>
+          </form>
+        ) : null}
+
+        {barbearia.bloqueada ? null : (
+          <details className="conta__bloquear">
+            <summary className="ui-button ui-button--ghost conta__bloquear-abrir">
+              Entrar na conta
+            </summary>
+            <form action={acaoEntrarNaConta} className="conta__bloquear-form">
+              <input name="tenantId" type="hidden" value={barbearia.tenantId} />
+              <label className="ui-field__label" htmlFor={`suporte-${barbearia.tenantId}`}>
+                Motivo
+              </label>
+              <input
+                className="ui-field__input"
+                id={`suporte-${barbearia.tenantId}`}
+                maxLength={500}
+                minLength={3}
+                name="motivo"
+                placeholder="chamado 4471: horário sumindo da grade"
+                required
+                type="text"
+              />
+              <p className="conta__aviso">
+                Sessão de trinta minutos, somente leitura, e o dono vê na trilha dele quem entrou e
+                o que foi acessado. Exige o segundo fator confirmado.
+              </p>
+              <button className="ui-button ui-button--secondary" type="submit">
+                Entrar como suporte
+              </button>
+            </form>
+          </details>
+        )}
       </div>
     </li>
   );
@@ -163,7 +248,11 @@ export default async function BarbeariasPage({ searchParams }: Props) {
   const erro = typeof query['erro'] === 'string' ? query['erro'] : undefined;
   const feito = typeof query['feito'] === 'string' ? query['feito'] : undefined;
 
-  const [lista, catalogo] = await Promise.all([listarBarbearias(token), listarPlanos(token)]);
+  const [lista, catalogo, suportes] = await Promise.all([
+    listarBarbearias(token),
+    listarPlanos(token),
+    suportesAbertos(token),
+  ]);
 
   if (!lista.ok) {
     if (lista.code === 'unauthorized') redirect('/plataforma/entrar');
@@ -180,6 +269,21 @@ export default async function BarbeariasPage({ searchParams }: Props) {
   const barbearias = lista.dados.barbearias;
   const planos = catalogo.ok ? catalogo.dados.planos : [];
   const bloqueadas = barbearias.filter((b) => b.bloqueada).length;
+
+  // Uma chamada por barbearia, **em paralelo**. A alternativa seria a API
+  // devolver os recursos junto da lista, e ela vai devolver no dia em que a
+  // base crescer o bastante para isto aparecer numa medição — hoje são três
+  // linhas por barbearia numa tela que a plataforma abre algumas vezes por dia.
+  const porBarbearia = await Promise.all(
+    barbearias.map(async (b) => {
+      const r = await recursosDaBarbearia(token, b.tenantId);
+      return [b.tenantId, r.ok ? r.dados.recursos : []] as const;
+    }),
+  );
+  const recursos = new Map(porBarbearia);
+  const comSuporte = new Set(
+    (suportes.ok ? suportes.dados.suportes : []).map((s) => s.tenantId),
+  );
 
   return (
     <main className="ui-container painel__conteudo plataforma__trabalho">
@@ -210,7 +314,13 @@ export default async function BarbeariasPage({ searchParams }: Props) {
       ) : (
         <ul className="contas">
           {barbearias.map((barbearia) => (
-            <Linha barbearia={barbearia} key={barbearia.tenantId} planos={planos} />
+            <Linha
+              barbearia={barbearia}
+              key={barbearia.tenantId}
+              planos={planos}
+              comSuporte={comSuporte.has(barbearia.tenantId)}
+              recursos={recursos.get(barbearia.tenantId) ?? []}
+            />
           ))}
         </ul>
       )}

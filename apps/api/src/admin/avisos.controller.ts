@@ -4,7 +4,7 @@ import type { AuthenticatedStaff } from '@barbearia/identity';
 import { notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
-import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
 import { preferenciasDeAvisoSchema } from './avisos.schemas.js';
 
 /**
@@ -19,6 +19,7 @@ import { preferenciasDeAvisoSchema } from './avisos.schemas.js';
  * de uma discussão sobre falta, não numa análise mensal.
  */
 @Controller('v1/admin/notifications')
+@Recurso('avisos')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class AvisosController {
   @Exige('settings.manage')

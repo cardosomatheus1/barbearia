@@ -39,3 +39,52 @@ export async function apagarSessaoDaPlataforma(): Promise<void> {
   const jar = await cookies();
   jar.set(NOME, '', { httpOnly: true, path: CAMINHO, maxAge: 0 });
 }
+
+/**
+ * O segredo do segundo fator e os códigos de recuperação, do servidor para a
+ * tela seguinte.
+ *
+ * Mesmo mecanismo e mesmo motivo do bloco 19, agravado: aqui a conta protegida
+ * é a que enxerga todas as barbearias. O segredo TOTP gera todos os códigos
+ * futuros e os de recuperação valem como segundo fator inteiro — nenhum dos
+ * dois pode ir na URL, que fica no histórico do navegador e em log de proxy.
+ */
+const SEGREDO = 'plataforma-mfa';
+const SEGUNDOS_NA_TELA = 120;
+
+export interface SegredoDaPlataforma {
+  readonly segredoBase32: string;
+  readonly uri: string;
+  readonly codigosDeRecuperacao: readonly string[];
+}
+
+export async function guardarSegredoDaPlataforma(dados: SegredoDaPlataforma): Promise<void> {
+  const jar = await cookies();
+  jar.set(SEGREDO, JSON.stringify(dados), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/plataforma/seguranca',
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+export async function lerSegredoDaPlataforma(): Promise<SegredoDaPlataforma | null> {
+  const bruto = (await cookies()).get(SEGREDO)?.value;
+  if (!bruto) return null;
+
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (
+      typeof lido === 'object' && lido !== null &&
+      'segredoBase32' in lido && typeof lido.segredoBase32 === 'string' &&
+      'uri' in lido && typeof lido.uri === 'string' &&
+      'codigosDeRecuperacao' in lido && Array.isArray(lido.codigosDeRecuperacao)
+    ) {
+      return lido as unknown as SegredoDaPlataforma;
+    }
+  } catch {
+    // Cookie corrompido não derruba a tela de segurança.
+  }
+  return null;
+}

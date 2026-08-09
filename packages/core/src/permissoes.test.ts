@@ -8,6 +8,7 @@ import {
   permissoesPadrao,
   pode,
   podeTudo,
+  suportePode,
   type Papel,
 } from './permissoes.js';
 
@@ -164,5 +165,50 @@ describe('a decisão', () => {
     // quem aplicar a guarda saiba que rota sem exigência nenhuma passa — a
     // exigência é obrigatória no decorador, não opcional.
     expect(podeTudo([], [])).toBe(true);
+  });
+});
+
+describe('o que a sessão de suporte alcança', () => {
+  it('lê a operação', () => {
+    expect(suportePode(['appointments.view'])).toBe(true);
+    expect(suportePode(['appointments.view', 'customers.view'])).toBe(true);
+  });
+
+  it('não escreve nada', () => {
+    // A regra que faz o suporte ser investigação e não intervenção.
+    expect(suportePode(['appointments.cancel'])).toBe(false);
+    expect(suportePode(['customers.edit'])).toBe(false);
+    expect(suportePode(['settings.manage'])).toBe(false);
+    expect(suportePode(['team.manage'])).toBe(false);
+  });
+
+  it('não vê o caixa nem a folha', () => {
+    // Suporte vê a operação, não o dinheiro. E mesmo que visse, a exigência de
+    // segundo fator derivada dessas permissões recusaria — a sessão de suporte
+    // nasce sem prova e o suporte não tem o autenticador do dono.
+    expect(suportePode(['finance.view'])).toBe(false);
+    expect(suportePode(['cashier.open'])).toBe(false);
+    expect(suportePode(['commission.view_all'])).toBe(false);
+    expect(suportePode(['reports.finance'])).toBe(false);
+  });
+
+  it('não exporta a base nem abre foto de cliente', () => {
+    // Os dois caminhos pelos quais dado pessoal sai da barbearia.
+    expect(suportePode(['customers.export'])).toBe(false);
+    expect(suportePode(['customers.view_photos'])).toBe(false);
+  });
+
+  it('rota sem permissão declarada é recusada — o suporte não é a conta', () => {
+    // `@Exige()` vazio é a fuga da guarda, e existe para o que a conta faz
+    // sobre si mesma: trocar a própria senha, sair. `every` sobre lista vazia
+    // é verdadeiro, e sem a cláusula explícita o suporte trocaria a senha do
+    // dono da barbearia em que entrou.
+    expect(suportePode([])).toBe(false);
+  });
+
+  it('uma permitida não carrega uma proibida junto', () => {
+    // A exigência de `@Exige` é conjuntiva; a autorização aqui também precisa
+    // ser. Bastaria um `some` no lugar do `every` para o contrário.
+    expect(suportePode(['appointments.view', 'appointments.cancel'])).toBe(false);
   });
 });

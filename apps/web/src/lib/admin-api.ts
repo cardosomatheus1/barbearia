@@ -85,7 +85,13 @@ export interface EstadoOnboarding {
   publishedAt: string | null;
   locationId: string;
   counts: { services: number; professionals: number; schedules: number };
-  staff: { name: string; role: string; permissions: string[]; professionalId: string | null };
+  staff: {
+    name: string;
+    role: string;
+    permissions: string[];
+    professionalId: string | null;
+    suporte?: boolean;
+  };
 }
 
 export const estadoDoPainel = (token: string) =>

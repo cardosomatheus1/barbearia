@@ -38,6 +38,14 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'import.applied': 'trouxe a base do sistema antigo',
   'import.reverted': 'desfez a importação da base',
   'slug.added': 'cadastrou um endereço antigo da barbearia',
+
+  // Suporte assistido (bloco 26). Estas três não descrevem o que **a equipe**
+  // fez: descrevem o que a plataforma fez dentro desta barbearia. É a metade da
+  // SPEC §1.2 que uma trilha só de plataforma não cumpre — "o tenant deve poder
+  // consultar esse log" —, e o verbo precisa deixar claro que o ator é de fora.
+  'support.started': 'entrou nesta conta para dar suporte',
+  'support.accessed': 'abriu uma tela durante o suporte',
+  'support.ended': 'encerrou o suporte',
 };
 
 /**

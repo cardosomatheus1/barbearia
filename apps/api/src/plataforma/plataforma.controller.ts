@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   Body,
   Controller,
@@ -12,7 +13,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  abrirSuporte,
   bloquearBarbearia,
+  confirmarCadastroDoSegundoFator,
+  definirRecurso,
+  encerrarSuporteDaBarbearia,
+  iniciarCadastroDoSegundoFator,
+  listarRecursos,
+  provarSegundoFator,
+  recursosDaBarbearia,
+  segundoFatorLigado,
+  suportesAbertos,
   desbloquearBarbearia,
   entrarNaPlataforma,
   listarBarbearias,
@@ -20,6 +31,7 @@ import {
   PlataformaError,
   resumoDaPlataforma,
   saudeDasBarbearias,
+  provaDaSessao,
   sairDaPlataforma,
   trilhaDaPlataforma,
   trocarPlano,
@@ -31,12 +43,18 @@ import { TenantService } from '../tenant/tenant.service.js';
 import { Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataforma.guard.js';
 import {
   bloqueioSchema,
+  codigoSchema,
   janelaSchema,
+  recursoSchema,
+  suporteSchema,
   loginDaPlataformaSchema,
   tenantIdSchema,
   trilhaQuerySchema,
   trocaDePlanoSchema,
   type Bloqueio,
+  type EntradaDeCodigo,
+  type EntradaDeRecurso,
+  type EntradaDeSuporte,
   type Janela,
   type TrilhaQuery,
   type TrocaDePlano,
@@ -55,6 +73,15 @@ const ultimoDiaFechado = (agora = new Date()): string =>
 
 const STATUS: Record<string, number> = {
   invalid_credentials: 401,
+  invalid_code: 401,
+  mfa_required: 403,
+  mfa_setup_required: 403,
+  mfa_already_on: 409,
+  mfa_not_started: 409,
+  unknown_admin: 404,
+  no_owner: 409,
+  tenant_blocked: 409,
+  no_support: 409,
   unknown_plan: 404,
   unknown_tenant: 404,
   inactive_plan: 409,
@@ -64,6 +91,19 @@ const STATUS: Record<string, number> = {
   email_taken: 409,
   weak_password: 400,
 };
+
+const tokenBruto = (requisicao: RequisicaoDaPlataforma): string | undefined =>
+  /^Bearer (.+)$/.exec(requisicao.headers.authorization ?? '')?.[1];
+
+/**
+ * O hash do token desta requisição.
+ *
+ * A prova do segundo fator é gravada **na sessão**, e a sessão é identificada
+ * pelo hash do token — que é o que o banco guarda. Passar o token em claro para
+ * a camada de domínio faria o segredo circular por mais um lugar sem necessidade.
+ */
+const hashDoToken = (requisicao: RequisicaoDaPlataforma): string =>
+  createHash('sha256').update(tokenBruto(requisicao) ?? '').digest('hex');
 
 function paraHttp(erro: unknown): never {
   if (erro instanceof PlataformaError) {
@@ -184,6 +224,143 @@ export class PlataformaController {
   async saude(@Query(new ZodValidationPipe(janelaSchema)) query: Janela) {
     const ate = query.ate ?? ultimoDiaFechado();
     return { ate, barbearias: await saudeDasBarbearias({ ate, dias: query.dias }) };
+  }
+
+  // -- segundo fator (bloco 26) ----------------------------------------------
+
+  @Get('mfa')
+  async mfa(@Req() requisicao: RequisicaoDaPlataforma, @Admin() admin: AdminDaPlataforma) {
+    return {
+      ligado: await segundoFatorLigado(admin.id),
+      provado: await provaDaSessao(hashDoToken(requisicao), new Date()),
+    };
+  }
+
+  @Post('mfa')
+  async cadastrarMfa(@Admin() admin: AdminDaPlataforma, @Body() corpo: { email?: unknown }) {
+    try {
+      // O e-mail entra só no rótulo do QR Code — o banco guarda o HMAC dele, e
+      // decifrar não é possível nem desejável.
+      const email = typeof corpo.email === 'string' ? corpo.email : admin.nome;
+      return await iniciarCadastroDoSegundoFator({ adminId: admin.id, email });
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  @Post('mfa/confirmar')
+  async confirmarMfa(
+    @Admin() admin: AdminDaPlataforma,
+    @Body(new ZodValidationPipe(codigoSchema)) corpo: EntradaDeCodigo,
+  ) {
+    try {
+      await confirmarCadastroDoSegundoFator({ adminId: admin.id, codigo: corpo.codigo });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  @Post('mfa/provar')
+  async provarMfa(
+    @Req() requisicao: RequisicaoDaPlataforma,
+    @Admin() admin: AdminDaPlataforma,
+    @Body(new ZodValidationPipe(codigoSchema)) corpo: EntradaDeCodigo,
+  ) {
+    try {
+      return await provarSegundoFator({
+        adminId: admin.id,
+        tokenHash: hashDoToken(requisicao),
+        codigo: corpo.codigo,
+      });
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  // -- recursos (bloco 26) ---------------------------------------------------
+
+  @Get('recursos')
+  async recursos() {
+    return { recursos: await listarRecursos() };
+  }
+
+  @Get('barbearias/:tenantId/recursos')
+  async recursosDa(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+  ) {
+    return { recursos: await recursosDaBarbearia(tenantId) };
+  }
+
+  @Put('barbearias/:tenantId/recursos')
+  async definirRecursoDa(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(recursoSchema)) corpo: EntradaDeRecurso,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await definirRecurso({ adminId: admin.id, tenantId, ...corpo });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  // -- suporte assistido (bloco 26) ------------------------------------------
+
+  @Get('suporte')
+  async suporte() {
+    const abertos = await suportesAbertos();
+    return {
+      suportes: abertos.map((s) => ({
+        ...s,
+        abertoEm: s.abertoEm.toISOString(),
+        expiraEm: s.expiraEm.toISOString(),
+      })),
+    };
+  }
+
+  @Post('barbearias/:tenantId/suporte')
+  async entrarNaConta(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(suporteSchema)) corpo: EntradaDeSuporte,
+    @Admin() admin: AdminDaPlataforma,
+    @Req() requisicao: RequisicaoDaPlataforma,
+  ) {
+    try {
+      const sessao = await abrirSuporte({
+        adminId: admin.id,
+        adminNome: admin.nome,
+        tokenDaPlataforma: tokenBruto(requisicao) ?? '',
+        tenantId,
+        motivo: corpo.motivo,
+      });
+      return {
+        token: sessao.token,
+        expiraEm: sessao.expiraEm.toISOString(),
+        barbearia: sessao.barbearia,
+        gestor: sessao.gestor,
+      };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  @Delete('barbearias/:tenantId/suporte')
+  async sairDaConta(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await encerrarSuporteDaBarbearia({
+        adminId: admin.id,
+        adminNome: admin.nome,
+        tenantId,
+      });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
   }
 
   @Get('trilha')

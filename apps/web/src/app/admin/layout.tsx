@@ -50,12 +50,33 @@ export default async function AdminLayout({ children }: { readonly children: Rea
     );
   }
 
+  const suporte = estado.dados.staff.suporte === true;
+
   return (
     <div className="painel" data-theme="dark">
+      {suporte ? (
+        /**
+         * A faixa de suporte.
+         *
+         * Não é decoração e não é opcional: esta tela é idêntica à do gestor —
+         * mesmo tema, mesmos componentes, mesmos números —, e quem está aqui é
+         * um funcionário nosso dentro da conta de um cliente. Sem a faixa, ler
+         * o faturamento da barbearia errada durante uma ligação é uma questão
+         * de tempo.
+         *
+         * Ela diz também que o dono está vendo, porque ele está: cada tela
+         * aberta vira uma linha na trilha dele.
+         */
+        <p className="faixa-suporte" role="status">
+          <strong>Modo suporte</strong> · você está dentro da conta de{' '}
+          {estado.dados.businessName}. Somente leitura, trinta minutos, e o dono vê na trilha
+          dele o que você abriu.
+        </p>
+      ) : null}
       <Casco
         barbearia={estado.dados.businessName}
         nome={estado.dados.staff.name}
-        papel={estado.dados.staff.role}
+        papel={suporte ? 'suporte' : estado.dados.staff.role}
       >
         {children}
       </Casco>

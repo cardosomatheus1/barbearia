@@ -52,3 +52,31 @@ export function destinoDoBalcao(bruto: string): string {
   );
   return aceito ? bruto : padrao;
 }
+
+/**
+ * Para onde voltar depois de confirmar o segundo fator da plataforma.
+ *
+ * Terceira vez que este parâmetro aparece, e a terceira vez que ele precisa de
+ * lista fechada. Aqui o alvo é o pior dos três: a `/security-review` do bloco 26
+ * descreveu o ataque inteiro — um link no **domínio verdadeiro**, apontando para
+ * uma tela legítima que pede o código TOTP, e um `destino` externo logo depois.
+ * O Super Admin tem todo motivo para digitar o código; ele acaba de digitá-lo, a
+ * sessão fica provada por trinta minutos, e o navegador cai numa cópia da tela
+ * de entrada dizendo "sessão expirada". O prêmio do phishing é a base inteira de
+ * clientes de todas as barbearias.
+ *
+ * A lista é fechada porque as telas que pedem o segundo fator são conhecidas: a
+ * de barbearias, que é de onde se entra numa conta, e a própria de segurança.
+ */
+const DESTINOS_DA_PLATAFORMA = ['/plataforma', '/plataforma/seguranca'] as const;
+
+export function destinoDaPlataforma(bruto: string | null | undefined): string {
+  const padrao = '/plataforma';
+  if (!bruto) return padrao;
+  if (bruto.startsWith('//')) return padrao;
+
+  const aceito = DESTINOS_DA_PLATAFORMA.some(
+    (destino) => bruto === destino || bruto.startsWith(`${destino}?`),
+  );
+  return aceito ? bruto : padrao;
+}

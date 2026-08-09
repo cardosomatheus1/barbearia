@@ -51,6 +51,9 @@ export default async function PlataformaLayout({ children }: { readonly children
             <a className="plataforma__link" href="/plataforma/trilha">
               Trilha
             </a>
+            <a className="plataforma__link" href="/plataforma/seguranca">
+              Segurança
+            </a>
           </nav>
 
           <form action={acaoSairDaPlataforma}>

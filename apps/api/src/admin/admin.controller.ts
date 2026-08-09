@@ -180,6 +180,15 @@ export class OnboardingController {
         // desviar até ela. O recorte por profissional continua sendo decidido
         // no servidor, a partir da sessão — isto aqui só decide para onde ir.
         professionalId: staff.professionalId,
+        /**
+         * Sessão de suporte da plataforma (bloco 26).
+         *
+         * A tela precisa saber para **avisar**. As duas se parecem — mesmo
+         * tema, mesmos componentes —, e um funcionário nosso que esquece em
+         * qual conta está lê o número de outra barbearia como se fosse o do
+         * cliente com quem está falando ao telefone.
+         */
+        suporte: staff.impersonatedBy !== null,
       },
     };
   }

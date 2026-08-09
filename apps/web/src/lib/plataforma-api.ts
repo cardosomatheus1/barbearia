@@ -153,3 +153,77 @@ export const saudeDasBarbearias = (token: string, dias = 30) =>
     undefined,
     token,
   );
+
+export interface RecursoDaBarbearia {
+  code: string;
+  nome: string;
+  descricao: string;
+  ligado: boolean;
+  proprio: boolean;
+}
+
+export interface SuporteAberto {
+  tenantId: string;
+  barbearia: string;
+  adminNome: string | null;
+  motivo: string;
+  abertoEm: string;
+  expiraEm: string;
+}
+
+export const estadoDoSegundoFator = (token: string) =>
+  chamar<{ ligado: boolean; provado: boolean }>('GET', '/v1/plataforma/mfa', undefined, token);
+
+export const cadastrarSegundoFator = (token: string, email: string) =>
+  chamar<{ segredoBase32: string; uri: string; codigosDeRecuperacao: string[] }>(
+    'POST',
+    '/v1/plataforma/mfa',
+    { email },
+    token,
+  );
+
+export const confirmarSegundoFator = (token: string, codigo: string) =>
+  chamar<{ ok: boolean }>('POST', '/v1/plataforma/mfa/confirmar', { codigo }, token);
+
+export const provarSegundoFator = (token: string, codigo: string) =>
+  chamar<{ usouRecuperacao: boolean }>('POST', '/v1/plataforma/mfa/provar', { codigo }, token);
+
+export const recursosDaBarbearia = (token: string, tenantId: string) =>
+  chamar<{ recursos: RecursoDaBarbearia[] }>(
+    'GET',
+    `/v1/plataforma/barbearias/${tenantId}/recursos`,
+    undefined,
+    token,
+  );
+
+export const definirRecurso = (
+  token: string,
+  tenantId: string,
+  code: string,
+  ligado: boolean,
+) =>
+  chamar<{ ok: boolean }>(
+    'PUT',
+    `/v1/plataforma/barbearias/${tenantId}/recursos`,
+    { code, ligado },
+    token,
+  );
+
+export const suportesAbertos = (token: string) =>
+  chamar<{ suportes: SuporteAberto[] }>('GET', '/v1/plataforma/suporte', undefined, token);
+
+export const entrarNaConta = (token: string, tenantId: string, motivo: string) =>
+  chamar<{ token: string; expiraEm: string; barbearia: string; gestor: string }>(
+    'POST',
+    `/v1/plataforma/barbearias/${tenantId}/suporte`,
+    { motivo },
+    token,
+  );
+
+export const encerrarSuporte = (token: string, tenantId: string) =>
+  chamar<{ ok: boolean }>(
+    'DELETE',
+    `/v1/plataforma/barbearias/${tenantId}/suporte`,
+    undefined,
+    token,
+  );

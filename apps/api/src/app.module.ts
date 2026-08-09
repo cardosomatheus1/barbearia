@@ -36,6 +36,7 @@ import { ConsoleMessagingProvider } from '@barbearia/identity';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { HealthController } from './common/health.controller.js';
 import { LogInterceptor } from './common/log.interceptor.js';
+import { SuporteInterceptor } from './admin/suporte.interceptor.js';
 import { TenantService } from './tenant/tenant.service.js';
 
 @Module({
@@ -79,6 +80,9 @@ import { TenantService } from './tenant/tenant.service.js';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: LogInterceptor },
+    // Depois do log, e obrigatório para todas as rotas: a trilha de suporte não
+    // pode depender de alguém lembrar de decorar o controller certo.
+    { provide: APP_INTERCEPTOR, useClass: SuporteInterceptor },
   ],
 })
 export class AppModule {}

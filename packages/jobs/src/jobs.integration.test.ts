@@ -62,6 +62,8 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
 describeIfDb('fila de trabalho', () => {
   let provider: FakeNotificationProvider;
   let contexto: Contexto;
+  /** Ligado por padrão, como o catálogo. Um teste abaixo desliga de propósito. */
+  let recursosLigados = true;
 
   beforeAll(async () => {
     if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
@@ -96,7 +98,7 @@ describeIfDb('fila de trabalho', () => {
     `);
 
     provider = new FakeNotificationProvider();
-    contexto = { provider, relogio: { agora: () => AGORA } };
+    contexto = { provider, relogio: { agora: () => AGORA }, recursoLigado: async () => recursosLigados };
   });
 
   const enfileirarNoTenant = (tarefa: Parameters<typeof enfileirar>[1]) =>
@@ -380,10 +382,39 @@ describeIfDb('fila de trabalho', () => {
     const resultado = await rodada({
       provider,
       relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
+      recursoLigado: async () => recursosLigados,
     });
 
     expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
     expect(provider.agendamentos).toHaveLength(1);
+  });
+
+  it('com o recurso de avisos desligado, a tarefa é concluída sem mandar nada', async () => {
+    // O interruptor do bloco 26. A checagem é **na hora de enviar** e não na de
+    // enfileirar, porque o que custa mensagem é o lembrete que já está na fila
+    // para amanhã — e é justamente ele que continuaria saindo.
+    //
+    // Concluída, e não devolvida à fila: a mensagem não vai sair depois, então
+    // deixá-la pendente encheria a fila de trabalho que nunca acontece.
+    await enfileirarNoTenant({
+      kind: 'notificacao.lembrete_24h',
+      payload: { appointmentId: AGENDAMENTO },
+      idempotencyKey: 'lembrete_24h:ap',
+    });
+
+    recursosLigados = false;
+    try {
+      const resultado = await rodada({
+        provider,
+        relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
+        recursoLigado: async () => recursosLigados,
+      });
+
+      expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+      expect(provider.agendamentos).toHaveLength(0);
+    } finally {
+      recursosLigados = true;
+    }
   });
 
   it('provedor fora do ar devolve a tarefa à fila', async () => {
@@ -397,6 +428,7 @@ describeIfDb('fila de trabalho', () => {
     const resultado = await rodada({
       provider,
       relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
+      recursoLigado: async () => recursosLigados,
     });
 
     expect(resultado).toMatchObject({ concluidas: 0, reagendadas: 1 });
@@ -560,7 +592,11 @@ describeIfDb('fila de trabalho', () => {
       idempotencyKey: `falta:${AGENDAMENTO}`,
     });
 
-    const resultado = await rodada({ provider, relogio: { agora: () => VENCEU } });
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => VENCEU },
+      recursoLigado: async () => true,
+    });
     expect(resultado.concluidas).toBe(1);
 
     const linhas = await admin.$queryRawUnsafe<{ status: string }[]>(

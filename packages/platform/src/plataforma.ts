@@ -158,7 +158,13 @@ export async function listarBarbearias(): Promise<readonly BarbeariaNaPlataforma
 // Plano e bloqueio
 // ---------------------------------------------------------------------------
 
-async function registrar(
+/**
+ * Exportada desde que ganhou o segundo usuário (`recursos.ts`).
+ *
+ * Continua recebendo `tx`: a trilha é gravada **dentro** da transação que muda
+ * o estado, e uma versão que abrisse a própria conexão perderia exatamente isso.
+ */
+export async function registrarNaTrilha(
   tx: TransactionClient,
   adminId: string,
   tenantId: string | null,
@@ -218,7 +224,7 @@ export async function trocarPlano(entrada: {
 
     // Dentro da mesma transação que muda o estado, como toda auditoria deste
     // produto: trilha gravada depois é trilha que some quando algo falha no meio.
-    await registrar(tx, entrada.adminId, entrada.tenantId, 'tenant.plan_changed', {
+    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.plan_changed', {
       de: anterior[0]?.code ?? null,
       para: entrada.planoCode,
     });
@@ -249,7 +255,7 @@ export async function bloquearBarbearia(entrada: {
     if (alteradas === 0) {
       throw new PlataformaError('not_blockable', 'Barbearia inexistente ou já bloqueada');
     }
-    await registrar(tx, entrada.adminId, entrada.tenantId, 'tenant.blocked', { motivo });
+    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.blocked', { motivo });
     await marcarCiclo(tx, entrada.tenantId, 'blocked');
   });
 }
@@ -267,7 +273,7 @@ export async function desbloquearBarbearia(entrada: {
     if (alteradas === 0) {
       throw new PlataformaError('not_blocked', 'Barbearia inexistente ou já ativa');
     }
-    await registrar(tx, entrada.adminId, entrada.tenantId, 'tenant.unblocked', {});
+    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.unblocked', {});
     await marcarCiclo(tx, entrada.tenantId, 'unblocked');
   });
 }
@@ -378,7 +384,7 @@ export async function entrarNaPlataforma(entrada: {
       INSERT INTO platform_sessions (token_hash, admin_id, expires_at)
       VALUES (${sha256(token)}, ${conta.id}::uuid, ${expiraEm})
     `;
-    await registrar(tx, conta.id, null, 'platform.login', {});
+    await registrarNaTrilha(tx, conta.id, null, 'platform.login', {});
   });
 
   return { token, admin: { id: conta.id, nome: conta.name }, expiraEm };

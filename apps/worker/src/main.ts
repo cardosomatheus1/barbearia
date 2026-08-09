@@ -5,6 +5,7 @@ import {
   rodarWorker,
   type ResultadoDaRodada,
 } from '@barbearia/jobs';
+import { recursoLigado } from '@barbearia/platform';
 
 /**
  * O segundo processo do produto.
@@ -47,7 +48,14 @@ async function main(): Promise<void> {
   console.log(`[worker] ouvindo a fila a cada ${INTERVALO_MS}ms`);
 
   await rodarWorker(
-    { provider: new ConsoleNotificationProvider(), relogio: RELOGIO_REAL },
+    {
+      provider: new ConsoleNotificationProvider(),
+      relogio: RELOGIO_REAL,
+      // É aqui que a plataforma se liga ao worker, e só aqui: `packages/jobs`
+      // não conhece a camada de cima, do mesmo jeito que não conhece o provedor
+      // de mensagem. Quem monta o processo é quem liga as duas pontas.
+      recursoLigado,
+    },
     {
       intervaloMs: INTERVALO_MS,
       parar: () => parando,

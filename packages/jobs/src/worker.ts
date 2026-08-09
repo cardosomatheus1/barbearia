@@ -48,6 +48,19 @@ export type Handler = (tarefa: Tarefa, contexto: Contexto) => Promise<void>;
 export interface Contexto {
   readonly provider: NotificationProvider;
   readonly relogio: Relogio;
+  /**
+   * O recurso está ligado para esta barbearia? (bloco 26)
+   *
+   * Entra **injetado**, e não importado, para não inverter a direção das
+   * dependências: a plataforma é a camada de cima, e `jobs` não deve saber que
+   * ela existe. É o mesmo padrão do `provider` — quem monta o processo
+   * (`apps/worker`) liga as duas pontas, e o teste liga uma versão de mentira.
+   *
+   * Obrigatório de propósito. Opcional, ele seria esquecido no primeiro handler
+   * novo, e o interruptor de mensagem — que é o que tem custo por disparo —
+   * pararia de valer sem nada ficar vermelho.
+   */
+  readonly recursoLigado: (tenantId: string, code: 'avisos') => Promise<boolean>;
 }
 
 const avisoDeAgendamento =
@@ -55,6 +68,10 @@ const avisoDeAgendamento =
   async (tarefa, contexto) => {
     const appointmentId = String(tarefa.payload['appointmentId'] ?? '');
     if (!appointmentId) throw new Error('tarefa de aviso sem agendamento');
+    // A checagem é **na hora de enviar**, não na de enfileirar. Desligar o
+    // recurso precisa parar também o lembrete que já está na fila para amanhã —
+    // e é justamente o que já está na fila que continuaria custando mensagem.
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
     await executarAvisoDeAgendamento({
       tenantId: tarefa.tenantId,
       appointmentId,
@@ -72,6 +89,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'notificacao.sua_vez': async (tarefa, contexto) => {
     const queueEntryId = String(tarefa.payload['queueEntryId'] ?? '');
     if (!queueEntryId) throw new Error('tarefa de fila sem entrada');
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
     await executarAvisoDeFila({
       tenantId: tarefa.tenantId,
       queueEntryId,
@@ -91,11 +109,16 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    */
   'notificacao.retorno': async (tarefa, contexto) => {
     const agora = contexto.relogio.agora();
-    await varrerRetornos({
+    // A varredura de retorno se reprograma sozinha, então o recurso desligado
+    // pula o envio **e** mantém a corrente viva: religar não pode exigir que
+    // alguém lembre de reenfileirar a primeira.
+    if (await contexto.recursoLigado(tarefa.tenantId, 'avisos')) {
+      await varrerRetornos({
       tenantId: tarefa.tenantId,
-      provider: contexto.provider,
-      agora,
-    });
+        provider: contexto.provider,
+        agora,
+      });
+    }
     await withTenant(tarefa.tenantId, (tx) =>
       agendarVarreduraDeRetorno(tx, {
         tenantId: tarefa.tenantId,

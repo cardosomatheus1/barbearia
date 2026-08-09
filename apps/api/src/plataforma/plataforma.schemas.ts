@@ -64,3 +64,30 @@ export const janelaSchema = z.object({
 });
 
 export type Janela = z.infer<typeof janelaSchema>;
+
+/** O recurso a ligar ou desligar. Fechado no tipo e conferido na borda. */
+export const recursoSchema = z.object({
+  code: z.enum(['fila', 'importacao', 'avisos']),
+  ligado: z.boolean(),
+});
+
+export const codigoSchema = z.object({
+  /** Seis dígitos do TOTP ou um código de recuperação. */
+  codigo: z.string().trim().min(6).max(20),
+});
+
+export const suporteSchema = z.object({
+  /**
+   * Por que precisa entrar na conta de um cliente.
+   *
+   * Obrigatório, como o motivo do bloqueio — e pelo mesmo motivo, agravado: aqui
+   * o que se acessa é a base de clientes de outra empresa, e "estava
+   * investigando" sem número de chamado não é resposta que se dê a um titular
+   * de dado perguntando por que olharam a ficha dele.
+   */
+  motivo: z.string().trim().min(3).max(500),
+});
+
+export type EntradaDeRecurso = z.infer<typeof recursoSchema>;
+export type EntradaDeCodigo = z.infer<typeof codigoSchema>;
+export type EntradaDeSuporte = z.infer<typeof suporteSchema>;

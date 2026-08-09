@@ -1,0 +1,177 @@
+import { semTenant } from '@barbearia/db';
+import { PlataformaError, registrarNaTrilha } from './plataforma.js';
+
+/**
+ * Recursos ligáveis por barbearia (bloco 26, SPEC Parte 1 §1.2).
+ *
+ * ## O que impede isto de virar um painel de interruptores que não ligam nada
+ *
+ * O catálogo é semeado por migração e o tipo abaixo é fechado. Não há tela que
+ * crie recurso, e não há como declarar um código que o código não conheça — que
+ * é exatamente como um sistema acaba com trinta flags das quais quatro fazem
+ * alguma coisa.
+ *
+ * Cada um dos três tem consumidor de verdade neste mesmo bloco: `fila` e
+ * `importacao` são cobrados na guarda de permissão da API, e `avisos` no worker,
+ * antes de gastar mensagem.
+ *
+ * ## Ausência é o padrão, não "desligado"
+ *
+ * `tenant_features` só guarda a **exceção**. Uma linha por barbearia por
+ * recurso desde o começo repetiria mil vezes o que `default_enabled` já diz — e
+ * mudar o padrão deixaria de mudar coisa alguma, porque todo mundo teria
+ * override.
+ */
+
+export const RECURSOS = ['fila', 'importacao', 'avisos'] as const;
+export type CodigoDeRecurso = (typeof RECURSOS)[number];
+
+export const ehRecurso = (valor: string): valor is CodigoDeRecurso =>
+  (RECURSOS as readonly string[]).includes(valor);
+
+export interface Recurso {
+  readonly code: CodigoDeRecurso;
+  readonly nome: string;
+  readonly descricao: string;
+  readonly padrao: boolean;
+  /** Quantas barbearias fugiram do padrão. É o que diz se o recurso é polêmico. */
+  readonly excecoes: number;
+}
+
+export interface RecursoDaBarbearia {
+  readonly code: CodigoDeRecurso;
+  readonly nome: string;
+  readonly descricao: string;
+  readonly ligado: boolean;
+  /** Falso quando o valor vem do catálogo, e não de uma decisão sobre esta conta. */
+  readonly proprio: boolean;
+}
+
+interface LinhaDeCatalogo {
+  code: string;
+  name: string;
+  description: string;
+  default_enabled: boolean;
+  excecoes: bigint;
+}
+
+export async function listarRecursos(): Promise<readonly Recurso[]> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<LinhaDeCatalogo[]>`
+      SELECT f.code, f.name, f.description, f.default_enabled,
+             count(tf.tenant_id) FILTER (WHERE tf.enabled <> f.default_enabled)::bigint AS excecoes
+      FROM feature_flags f
+      LEFT JOIN tenant_features tf ON tf.flag_code = f.code
+      GROUP BY f.code, f.name, f.description, f.default_enabled
+      ORDER BY f.name
+    `;
+    return linhas.filter((l) => ehRecurso(l.code)).map((l) => ({
+      code: l.code as CodigoDeRecurso,
+      nome: l.name,
+      descricao: l.description,
+      padrao: l.default_enabled,
+      excecoes: Number(l.excecoes),
+    }));
+  });
+}
+
+interface LinhaDeRecursoDoTenant {
+  code: string;
+  name: string;
+  description: string;
+  ligado: boolean;
+  proprio: boolean;
+}
+
+/**
+ * Os recursos de uma barbearia, com a origem de cada resposta.
+ *
+ * Uma consulta, com `LEFT JOIN` e `COALESCE`. Ler o catálogo e depois as
+ * exceções seriam duas idas ao banco numa pergunta feita a cada requisição do
+ * painel.
+ */
+export async function recursosDaBarbearia(
+  tenantId: string,
+): Promise<readonly RecursoDaBarbearia[]> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<LinhaDeRecursoDoTenant[]>`
+      SELECT f.code, f.name, f.description,
+             COALESCE(tf.enabled, f.default_enabled) AS ligado,
+             tf.tenant_id IS NOT NULL AS proprio
+      FROM feature_flags f
+      LEFT JOIN tenant_features tf
+        ON tf.flag_code = f.code AND tf.tenant_id = ${tenantId}::uuid
+      ORDER BY f.name
+    `;
+    return linhas.filter((l) => ehRecurso(l.code)).map((l) => ({
+      code: l.code as CodigoDeRecurso,
+      nome: l.name,
+      descricao: l.description,
+      ligado: l.ligado,
+      proprio: l.proprio,
+    }));
+  });
+}
+
+/**
+ * Está ligado?
+ *
+ * Mínima de propósito: roda em toda requisição de rota marcada e antes de todo
+ * aviso enviado. Devolver a lista inteira aqui seria trabalho jogado fora no
+ * caminho mais quente — a mesma decisão de `bloqueioDaBarbearia`.
+ *
+ * **Recurso desconhecido responde ligado.** É o único padrão seguro: um código
+ * digitado errado numa rota nova derrubaria a rota em produção sem nada
+ * vermelho no caminho. O tipo fechado já impede o engano em tempo de compilação.
+ */
+export async function recursoLigado(
+  tenantId: string,
+  code: CodigoDeRecurso,
+): Promise<boolean> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{ ligado: boolean }[]>`
+      SELECT COALESCE(tf.enabled, f.default_enabled) AS ligado
+      FROM feature_flags f
+      LEFT JOIN tenant_features tf
+        ON tf.flag_code = f.code AND tf.tenant_id = ${tenantId}::uuid
+      WHERE f.code = ${code}
+    `;
+    return linhas[0]?.ligado ?? true;
+  });
+}
+
+/**
+ * Liga ou desliga para uma barbearia.
+ *
+ * Grava a exceção mesmo quando o valor coincide com o padrão. Parece
+ * desperdício e não é: "esta barbearia foi analisada e ficou ligada" é
+ * diferente de "ninguém olhou", e mudar o padrão depois não pode reverter uma
+ * decisão que alguém tomou olhando para a conta.
+ */
+export async function definirRecurso(entrada: {
+  readonly adminId: string;
+  readonly tenantId: string;
+  readonly code: CodigoDeRecurso;
+  readonly ligado: boolean;
+}): Promise<void> {
+  await semTenant(async (tx) => {
+    const existe = await tx.$queryRaw<{ tenant_id: string }[]>`
+      SELECT tenant_id FROM tenant_platform WHERE tenant_id = ${entrada.tenantId}::uuid
+    `;
+    if (existe.length === 0) {
+      throw new PlataformaError('unknown_tenant', 'Barbearia não encontrada');
+    }
+
+    await tx.$executeRaw`
+      INSERT INTO tenant_features (tenant_id, flag_code, enabled, changed_at)
+      VALUES (${entrada.tenantId}::uuid, ${entrada.code}, ${entrada.ligado}, now())
+      ON CONFLICT (tenant_id, flag_code) DO UPDATE
+        SET enabled = EXCLUDED.enabled, changed_at = now()
+    `;
+
+    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.feature_changed', {
+      recurso: entrada.code,
+      ligado: entrada.ligado,
+    });
+  });
+}
