@@ -472,10 +472,20 @@ export class CaixaController {
   @Delete('orders/:id/charges/:chargeId')
   async cancelarCobranca(
     @Staff() staff: AuthenticatedStaff,
+    // A comanda da URL entra na consulta. Sem ela, o endereço não identificava o
+    // objeto que dizia identificar: um id de cobrança valia sob qualquer comanda.
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Param('chargeId', new ZodValidationPipe(uuidSchema)) chargeId: string,
   ) {
     try {
-      await cancelarCobrancaDaComanda({ tenantId: staff.tenantId, chargeId });
+      await cancelarCobrancaDaComanda({
+        tenantId: staff.tenantId,
+        orderId: id,
+        chargeId,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+        provider: adquirenteDaComanda(),
+      });
       return { ok: true };
     } catch (error) {
       return toHttp(error);

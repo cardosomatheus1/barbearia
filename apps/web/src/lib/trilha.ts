@@ -27,6 +27,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'order.closed': 'fechou a comanda',
   'order.discount': 'deu desconto na comanda',
   'debt.received': 'recebeu um fiado',
+  'order.charge_created': 'gerou uma cobrança online',
+  // "Cancelou" e não "encerrou": quem lê a trilha quer saber que alguém tomou a
+  // decisão, e o cliente pode estar com o código na mão nesse instante.
+  'order.charge_cancelled': 'cancelou uma cobrança online',
 
   'mfa.enabled': 'ligou o segundo fator de',
   'mfa.disabled': 'desligou o segundo fator de',

@@ -417,11 +417,17 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
     expect(comanda.body.pagamentos).toHaveLength(1);
   });
 
-  it('evento que não diz nada sobre estado é ignorado sem consumir a entrega', async () => {
+  it('`payment_intent.created` não mata a cobrança nem consome a entrega', async () => {
     /**
-     * `payment_intent.created` não é confirmação. Registrá-lo como evento
-     * consumido faria a reentrega do evento **de verdade** — que traz o mesmo
-     * id — encontrar tudo já gravado e não fazer nada.
+     * O achado nº 2 da revisão. A versão anterior derivava o desfecho do
+     * `status` do objeto, e `requires_payment_method` — o estado inicial normal
+     * de um intent de cartão — traduzia para `recusado`. O evento mais
+     * inofensivo do ciclo matava a cobrança segundos depois de ela nascer, e o
+     * `succeeded` seguinte encontrava tudo encerrado e virava silêncio.
+     *
+     * O status vai `requires_payment_method` de propósito: era o único que a
+     * versão antiga tratava errado, e o teste anterior mandava `requires_action`
+     * — justamente o que a fazia parecer certa.
      */
     const token = await abrirBarbearia();
     await com(token)(http().post('/v1/admin/cash/open').send({ openingCents: 20000 })).expect(201);
@@ -435,7 +441,7 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
       data: {
         object: {
           id: cobranca.body.pagamentoId,
-          status: 'requires_action',
+          status: 'requires_payment_method',
           metadata: { tenant_id: tenantId, order_id: orderId },
         },
       },
@@ -448,6 +454,10 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
         .send(a.cru);
 
     expect((await enviar(criado).expect(201)).body.desfecho).toBe('ignorado');
+
+    // A cobrança continua viva: o `created` não a encerrou.
+    const emCurso = await com(token)(http().get(`/v1/admin/orders/${orderId}/charges`)).expect(200);
+    expect(emCurso.body.cobrancas[0].estado).toBe('aguardando');
 
     // E o evento de verdade, com o **mesmo id**, ainda fecha a venda.
     const pago = comoAStripe(

@@ -189,6 +189,21 @@ export class StripePaymentProvider implements PaymentProvider {
     return estadoDoPagamento(intent.status);
   }
 
+  /**
+   * Mata a cobrança no adquirente.
+   *
+   * Recurso diferente por tipo, como em `consultar`: sessão de checkout
+   * **expira**, intent **cancela**. Chamar o verbo errado devolve 400 e o QR
+   * Code continua vivo — que é exatamente o defeito que este método existe
+   * para fechar.
+   */
+  async cancelar(pagamentoId: string): Promise<void> {
+    const caminho = pagamentoId.startsWith('cs_')
+      ? `/checkout/sessions/${noCaminho(pagamentoId)}/expire`
+      : `/payment_intents/${noCaminho(pagamentoId)}/cancel`;
+    await this.cliente.post(caminho, {}, { idempotencyKey: `cancelar:${pagamentoId}` });
+  }
+
   async estornar(
     pagamentoId: string,
     valorCents?: number,

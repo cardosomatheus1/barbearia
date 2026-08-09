@@ -34,6 +34,12 @@ export type AuditAction =
   | 'order.closed'
   | 'order.discount'
   | 'debt.received'
+  // Cobrança online (bloco 35). Emitir põe um QR Code pagável no mundo, e
+  // cancelar o tira de circulação com o cliente possivelmente já lendo o
+  // código. As duas movem dinheiro de terceiro, e a pergunta do dia seguinte —
+  // "quem matou a cobrança do meu cliente?" — não tinha resposta sem isto.
+  | 'order.charge_created'
+  | 'order.charge_cancelled'
   // Segundo fator: ligar e desligar mudam quem consegue chegar ao caixa.
   | 'mfa.enabled'
   | 'mfa.disabled'
@@ -97,6 +103,8 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'order.closed',
   'order.discount',
   'debt.received',
+  'order.charge_created',
+  'order.charge_cancelled',
   'commission.closed',
   'commission.rule_changed',
 ];

@@ -199,9 +199,27 @@ function estadoDaStripe(evento: EventoDaStripe): 'pago' | 'recusado' | 'expirado
   }
   if (evento.type === 'checkout.session.expired') return 'expirado';
 
-  if (!evento.type.startsWith('payment_intent.')) return null;
-  if (!objeto.status) return null;
+  /**
+   * Lista **escrita**, como a da fatura logo acima — e não um prefixo.
+   *
+   * O achado nº 2 da `/security-review`. A versão por prefixo derivava o
+   * desfecho do `status` do objeto, e `payment_intent.created` carrega
+   * `requires_payment_method` — que é o estado inicial normal de um intent de
+   * cartão, e que `estadoDoPagamento` traduz para `recusado`. O efeito: o
+   * evento mais inofensivo do ciclo matava a cobrança segundos depois de ela
+   * nascer, e o `succeeded` que viesse depois encontrava tudo encerrado e
+   * virava silêncio. Dinheiro capturado, venda nenhuma.
+   *
+   * O e2e escondia isso porque mandava `requires_action` no `created`, que é o
+   * único status em que a versão antiga parecia certa.
+   */
+  if (evento.type === 'payment_intent.succeeded') {
+    // O desfecho sai do **tipo do evento**, não do status do objeto: é o tipo
+    // que a Stripe garante ser terminal.
+    return 'pago';
+  }
+  if (evento.type === 'payment_intent.canceled') return 'expirado';
+  if (evento.type === 'payment_intent.payment_failed') return 'recusado';
 
-  const traduzido = estadoDoPagamento(objeto.status);
-  return traduzido === 'aguardando' ? null : traduzido;
+  return null;
 }

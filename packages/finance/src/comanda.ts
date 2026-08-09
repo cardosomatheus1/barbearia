@@ -371,14 +371,26 @@ async function recalcular(tx: TransactionClient, orderId: string): Promise<void>
  * cobrar de novo. É uma decisão do balcão, não um erro do sistema.
  */
 async function exigirSemCobrancaViva(tx: TransactionClient, orderId: string): Promise<void> {
-  const vivas = await tx.$queryRaw<{ id: string }[]>`
-    SELECT id FROM order_charges
-     WHERE order_id = ${orderId}::uuid AND status = 'aguardando'
+  /**
+   * `pago` entra na lista, e não só `aguardando`.
+   *
+   * Achado nº 4 da `/security-review`: uma cobrança confirmada com o caixa
+   * fechado fica `pago` com a comanda **aberta**, e nesse estado o total voltava
+   * a ser editável — podendo se afastar do dinheiro que já entrou. É a mesma
+   * divergência que a guarda existe para impedir, por um caminho que o próprio
+   * código criava.
+   */
+  const vivas = await tx.$queryRaw<{ status: string }[]>`
+    SELECT status::text FROM order_charges
+     WHERE order_id = ${orderId}::uuid AND status IN ('aguardando', 'pago')
   `;
-  if (vivas[0]) {
+  const viva = vivas[0];
+  if (viva) {
     throw new ComandaError(
       'cobranca_em_curso',
-      'Cancele o Pix em aberto antes de mudar a comanda.',
+      viva.status === 'pago'
+        ? 'Esta comanda já foi paga pelo adquirente. Abra o caixa para fechá-la.'
+        : 'Cancele o Pix em aberto antes de mudar a comanda.',
     );
   }
 }
@@ -651,6 +663,17 @@ export async function fecharComanda(params: {
     }
 
     const comanda = await exigirAberta(tx, params.orderId, true);
+    /**
+     * O fechamento manual também respeita a cobrança viva — achado HIGH.
+     *
+     * A tela oferecia "Receber" logo abaixo do QR Code, e fechar por ali com um
+     * Pix em aberto era o caminho para: a confirmação subir exceção, o webhook
+     * responder 500 pelo tempo que a Stripe reentregasse, e a varredura da
+     * barbearia inteira parar no meio do laço. Quando a própria confirmação
+     * chama daqui, a cobrança já está `pago` **e** a comanda ainda `open`, e é
+     * por isso que ela passa: a guarda só barra o que ainda não fechou.
+     */
+    if (!params.tx) await exigirSemCobrancaViva(tx, params.orderId);
 
     /**
      * O saldo do cliente é relido **sob trava**, e não aproveitado da leitura

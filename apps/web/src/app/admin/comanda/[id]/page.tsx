@@ -100,6 +100,13 @@ const NOME_DA_FORMA: Record<string, string> = {
  * precisa de contraste com área tranquila em volta. Um código desenhado direto
  * sobre o fundo do tema simplesmente não lê.
  *
+ * **Enquanto ele está na tela, o "Receber" some.** Não é economia de espaço: era
+ * o achado HIGH da revisão de segurança do bloco 35. Oferecer as duas coisas
+ * lado a lado convidava a fechar na mão com o QR Code vivo — e o pagamento que
+ * chegasse depois derrubava o webhook e parava a conferência da barbearia
+ * inteira. Quem quer receber de outro jeito cancela o Pix primeiro, que é uma
+ * decisão explícita.
+ *
  * **"Pago" não some com o bloco.** Ele só aparece com a comanda ainda aberta —
  * que é exatamente o caso em que o caixa estava fechado quando o dinheiro
  * entrou. Sem este aviso, a tela mostraria uma comanda aberta e nada dizendo
@@ -552,6 +559,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             </section>
           )}
 
+          {cobrancaDoMomento ? null : (
           <section className="cartao-balcao">
             <h2 className="cartao-balcao__titulo">Receber</h2>
 
@@ -625,6 +633,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
               </button>
             </form>
           </section>
+          )}
         </>
       )}
     </main>

@@ -6,6 +6,7 @@ import type {
   MeioDePagamento,
   PaymentProvider,
 } from '@barbearia/core';
+import { audit } from '@barbearia/identity';
 import { fecharComanda, type Comanda } from './comanda.js';
 
 /**
@@ -240,6 +241,19 @@ export async function criarCobrancaDaComanda(params: {
      * janela do Pix (`VIDA_DA_COBRANCA_MINUTOS`): antes disso o webhook é o
      * caminho, e perguntar ao adquirente a cada minuto seria pesquisa em laço.
      */
+    /**
+     * Emitir cobrança é ato de dinheiro, e a trilha é gravada **dentro** da
+     * transação que cria o fato — como todo o resto do módulo.
+     */
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'order.charge_created',
+      entity: 'order_charge',
+      entityId: criada.id,
+      after: { orderId: params.orderId, meio: params.meio, valorCents: comanda.total_cents },
+    });
+
     await enfileirarPara(tx, params.tenantId, {
       kind: 'cobranca.conciliar',
       /**
@@ -301,6 +315,14 @@ export async function criarCobrancaDaComanda(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    /**
+     * `AND status = 'aguardando'` como em toda escrita de estado deste arquivo.
+     *
+     * Sem ele, um cancelamento feito no balcão **durante** os segundos em que a
+     * chamada ao adquirente está no ar seria sobrescrito: a linha voltaria a
+     * apontar para um Pix vivo e a tela devolveria o QR Code de uma cobrança
+     * que o operador já tinha matado.
+     */
     const atualizadas = await tx.$queryRaw<Linha[]>`
       UPDATE order_charges SET
         psp_payment_id = ${resposta.pagamentoId},
@@ -308,13 +330,18 @@ export async function criarCobrancaDaComanda(params: {
         checkout_url = ${resposta.url ?? null},
         expires_at = ${resposta.expiraEm ?? null},
         updated_at = now()
-       WHERE id = ${preparo.chargeId}::uuid
+       WHERE id = ${preparo.chargeId}::uuid AND status = 'aguardando'
       RETURNING id, order_id, method::text, amount_cents, status::text, psp_payment_id,
              pix_payload, checkout_url, expires_at, paid_at, refused_reason,
              created_by_name, created_at
     `;
     const linha = atualizadas[0];
-    if (!linha) throw new CobrancaError('cobranca_nao_encontrada', 'Cobrança não encontrada.');
+    if (!linha) {
+      // Cancelada no meio do caminho. O que existe no adquirente precisa morrer
+      // lá também, senão o cliente paga um código que o produto já enterrou.
+      await params.provider.cancelar(resposta.pagamentoId).catch(() => undefined);
+      throw new CobrancaError('cobranca_encerrada', 'Esta cobrança foi cancelada.');
+    }
     return paraCobranca(linha);
   });
 }
@@ -337,7 +364,25 @@ export async function cobrancasDaComanda(
   });
 }
 
-export type DesfechoDaConfirmacao = 'pago' | 'pago_sem_caixa' | 'recusado' | 'expirado' | 'ignorado';
+export type DesfechoDaConfirmacao =
+  | 'pago'
+  | 'pago_sem_caixa'
+  /**
+   * O adquirente confirmou e a venda **não** dava mais para fechar.
+   *
+   * Comanda fechada na mão enquanto o Pix estava vivo, ou total que mudou por
+   * fora. É desfecho, não exceção, e a diferença custa caro: deixar a exceção
+   * subir devolvia 500 ao adquirente — que reentrega por dias — e derrubava a
+   * varredura da barbearia inteira no meio do laço. Agora o dinheiro fica
+   * registrado como recebido e a linha aparece como divergência para alguém
+   * resolver.
+   */
+  | 'pago_com_divergencia'
+  /** Pago **depois** de a cobrança ter sido encerrada. Ver `cancelarCobranca`. */
+  | 'pago_orfao'
+  | 'recusado'
+  | 'expirado'
+  | 'ignorado';
 
 export interface ResultadoDaConfirmacao {
   readonly desfecho: DesfechoDaConfirmacao;
@@ -393,8 +438,19 @@ export async function confirmarCobranca(params: {
     `;
     const cobranca = linhas[0];
     if (!cobranca || cobranca.status !== 'aguardando') {
-      await encerrarEvento(tx, params.eventoId, cobranca?.id ?? null, 'ignorado');
-      return { desfecho: 'ignorado' as const, comanda: null };
+      /**
+       * Pagamento que chega para cobrança já encerrada tem nome próprio.
+       *
+       * Reentrega de algo já aplicado é `ignorado` e é normal. Mas dinheiro
+       * confirmado sobre uma cobrança **cancelada ou vencida** é outra coisa:
+       * o cliente pagou um código que o balcão já tinha dado por morto, e isso
+       * precisa ser encontrável. Chamar os dois de `ignorado` é o jeito de a
+       * segunda nunca aparecer.
+       */
+      const orfao = cobranca !== undefined && cobranca.status !== 'pago' && params.estado === 'pago';
+      const desfecho = orfao ? ('pago_orfao' as const) : ('ignorado' as const);
+      await encerrarEvento(tx, params.eventoId, cobranca?.id ?? null, desfecho);
+      return { desfecho, comanda: null };
     }
 
     if (params.estado !== 'pago') {
@@ -441,7 +497,7 @@ export async function confirmarCobranca(params: {
      * gera a comissão. Reescrever isso aqui seria manter duas verdades sobre o
      * que é fechar uma venda.
      */
-    const comanda = await fecharComanda({
+    const comanda = await fecharComandaOuDivergencia(tx, {
       tenantId: params.tenantId,
       locationId: cobranca.location_id,
       orderId: cobranca.order_id,
@@ -460,9 +516,47 @@ export async function confirmarCobranca(params: {
       tx,
     });
 
+    if (comanda === null) {
+      await encerrarEvento(tx, params.eventoId, cobranca.id, 'pago_com_divergencia');
+      return { desfecho: 'pago_com_divergencia' as const, comanda: null };
+    }
+
     await encerrarEvento(tx, params.eventoId, cobranca.id, 'pago');
     return { desfecho: 'pago' as const, comanda };
   });
+}
+
+/**
+ * Fecha a venda, ou devolve `null` quando ela não fecha mais.
+ *
+ * O achado HIGH da `/security-review` do bloco 35. A comanda podia ser fechada
+ * na mão com o Pix ainda vivo — a tela oferecia as duas coisas lado a lado —, e
+ * então a confirmação subia `comanda_fechada` como exceção. O estrago era em
+ * três camadas: a transação inteira voltava atrás (o dinheiro ficava sem
+ * registro nenhum), o webhook respondia 500 e o adquirente reentregava por
+ * dias, e a varredura da barbearia **parava no meio do laço** — deixando todas
+ * as outras cobranças dela sem conferência.
+ *
+ * Agora "não dá para fechar" é desfecho: a cobrança continua `pago`, o evento é
+ * consumido, o adquirente recebe 2xx e a linha fica encontrável como
+ * divergência. Dinheiro recebido nunca deixa de ser registrado por causa de um
+ * conflito de estado da venda.
+ */
+async function fecharComandaOuDivergencia(
+  tx: TransactionClient,
+  params: Parameters<typeof fecharComanda>[0],
+): Promise<Comanda | null> {
+  const aberta = await tx.$queryRaw<{ status: string; total_cents: number }[]>`
+    SELECT status::text, total_cents FROM orders WHERE id = ${params.orderId}::uuid
+  `;
+  const comanda = aberta[0];
+  if (!comanda || comanda.status !== 'open') return null;
+  // O total mudou por fora depois da emissão: fechar com o valor da cobrança
+  // seria gravar uma venda que não bate com o que foi cobrado.
+  if (comanda.total_cents !== params.pagamentos.reduce((s, p) => s + p.valorCents, 0)) {
+    return null;
+  }
+  return fecharComanda(params);
 }
 
 async function encerrarEvento(
@@ -487,28 +581,74 @@ async function encerrarEvento(
  */
 export async function cancelarCobranca(params: {
   readonly tenantId: string;
+  /** A comanda da URL. Sem ela, um id de cobrança valeria em qualquer endereço. */
+  readonly orderId: string;
   readonly chargeId: string;
+  readonly staffId: string;
+  readonly staffName: string;
+  readonly provider: PaymentProvider;
 }): Promise<void> {
-  await withTenant(params.tenantId, async (tx) => {
-    const encerradas = await tx.$executeRaw`
+  const pagamentoId = await withTenant(params.tenantId, async (tx) => {
+    const encerradas = await tx.$queryRaw<{ psp_payment_id: string | null }[]>`
       UPDATE order_charges
          SET status = 'expirado', refused_reason = 'cancelada no balcão', updated_at = now()
-       WHERE id = ${params.chargeId}::uuid AND status = 'aguardando'
+       WHERE id = ${params.chargeId}::uuid
+         AND order_id = ${params.orderId}::uuid
+         AND status = 'aguardando'
+      RETURNING psp_payment_id
     `;
-    if (encerradas === 0) {
+    const encerrada = encerradas[0];
+    if (!encerrada) {
       throw new CobrancaError('cobranca_encerrada', 'Esta cobrança já foi encerrada.');
     }
+
+    /**
+     * Cancelar é ato de dinheiro, e a trilha é gravada **dentro** da transação.
+     *
+     * Sem ela, matar o QR Code de um colega não deixava rastro nenhum — e
+     * combinado com o cancelamento que não chegava ao adquirente, cada
+     * cancelamento virava um pagamento que o produto nunca registraria.
+     */
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'order.charge_cancelled',
+      entity: 'order_charge',
+      entityId: params.chargeId,
+      after: { orderId: params.orderId },
+    });
+
+    return encerrada.psp_payment_id;
   });
+
+  /**
+   * O adquirente precisa saber, e é o ponto do achado.
+   *
+   * Cancelar só do nosso lado deixava o QR Code **pagável**: o cliente que já
+   * tinha lido o código pagava, o webhook encontrava a cobrança fora de
+   * `aguardando` e devolvia "ignorado". Dinheiro capturado, nunca registrado,
+   * nunca devolvido, e sem aviso nenhum.
+   *
+   * Fora da transação, como toda ida ao adquirente. Se ele recusar, a cobrança
+   * já está encerrada aqui e a confirmação que chegar depois cai em
+   * `pago_orfao` — que é encontrável, ao contrário do silêncio anterior.
+   */
+  if (pagamentoId) await params.provider.cancelar(pagamentoId);
 }
 
 export interface ResultadoDaVarredura {
   readonly consultadas: number;
   readonly pagas: number;
   readonly encerradas: number;
+  /** Quantas concluíram uma venda que tinha ficado paga sem caixa aberto. */
+  readonly concluidas: number;
+  /** Quantas falharam. Uma cobrança ruim não pode parar a varredura inteira. */
+  readonly comFalha: number;
 }
 
 /**
- * A rede de segurança: pergunta ao adquirente o que houve com o que está vivo.
+ * A rede de segurança: pergunta ao adquirente o que houve com o que está vivo,
+ * e conclui o que ficou pago sem gaveta.
  *
  * O webhook é o caminho normal e chega em segundos; esperar por esta varredura
  * faria o balcão olhar "aguardando" com o cliente já tendo pago. Mas webhook se
@@ -518,6 +658,11 @@ export interface ResultadoDaVarredura {
  * O id do evento é `recon:<pagamento>:<estado>`, determinístico: se o webhook já
  * contou a mesma coisa, o `ON CONFLICT` engole, e duas voltas da varredura
  * sobre o mesmo estado também.
+ *
+ * **Uma falha não para o laço.** Era metade do estrago do achado HIGH da
+ * `/security-review`: a exceção subia do meio do `for` e todas as cobranças
+ * ordenadas depois daquela ficavam sem conferência, por tempo indeterminado,
+ * porque a volta seguinte esbarraria na mesma.
  */
 export async function conciliarCobrancas(params: {
   readonly tenantId: string;
@@ -525,6 +670,8 @@ export async function conciliarCobrancas(params: {
   readonly hojeNaUnidade: string;
   readonly agora: Date;
 }): Promise<ResultadoDaVarredura> {
+  const contagem = { consultadas: 0, pagas: 0, encerradas: 0, concluidas: 0, comFalha: 0 };
+
   const vivas = await withTenant(params.tenantId, async (tx) => {
     return tx.$queryRaw<{ id: string; psp_payment_id: string | null; expires_at: Date | null }[]>`
       SELECT id, psp_payment_id, expires_at FROM order_charges
@@ -533,52 +680,125 @@ export async function conciliarCobrancas(params: {
     `;
   });
 
-  const contagem = { consultadas: 0, pagas: 0, encerradas: 0 };
-
   for (const viva of vivas) {
-    /**
-     * Sem id do provedor não há o que perguntar.
-     *
-     * É a linha órfã: nasceu e o processo caiu antes de a resposta chegar.
-     * Vencido o prazo, ela vira `expirado` — do contrário travaria a comanda
-     * para sempre, porque só uma cobrança viva é permitida por vez.
-     */
-    if (!viva.psp_payment_id) {
-      if (viva.expires_at === null || viva.expires_at.getTime() <= params.agora.getTime()) {
-        await encerrarPorTempo(params.tenantId, viva.id, 'emissão sem resposta');
+    try {
+      /**
+       * Sem id do provedor não há o que perguntar.
+       *
+       * É a linha órfã: nasceu e o processo caiu antes de a resposta chegar.
+       * Vencido o prazo, ela vira `expirado` — do contrário travaria a comanda
+       * para sempre, porque só uma cobrança viva é permitida por vez.
+       */
+      if (!viva.psp_payment_id) {
+        if (viva.expires_at === null || viva.expires_at.getTime() <= params.agora.getTime()) {
+          await encerrarPorTempo(params.tenantId, viva.id, 'emissão sem resposta');
+          contagem.encerradas += 1;
+        }
+        continue;
+      }
+
+      // Fora de transação, como toda ida ao adquirente.
+      const estado = await params.provider.consultar(viva.psp_payment_id);
+      contagem.consultadas += 1;
+
+      if (estado === 'aguardando') {
+        if (viva.expires_at !== null && viva.expires_at.getTime() <= params.agora.getTime()) {
+          /**
+           * Vencido aqui **e** lá: cancelar só do nosso lado deixaria o código
+           * pagável, e o pagamento chegaria para uma cobrança que já morreu.
+           */
+          await params.provider.cancelar(viva.psp_payment_id).catch(() => undefined);
+          await encerrarPorTempo(params.tenantId, viva.id, 'prazo do Pix vencido');
+          contagem.encerradas += 1;
+        }
+        continue;
+      }
+
+      const resultado = await confirmarCobranca({
+        tenantId: params.tenantId,
+        eventoId: `recon:${viva.psp_payment_id}:${estado}`,
+        tipo: 'conciliacao',
+        pagamentoId: viva.psp_payment_id,
+        estado,
+        hojeNaUnidade: params.hojeNaUnidade,
+      });
+
+      if (resultado.desfecho === 'pago' || resultado.desfecho === 'pago_sem_caixa') {
+        contagem.pagas += 1;
+      }
+      if (resultado.desfecho === 'recusado' || resultado.desfecho === 'expirado') {
         contagem.encerradas += 1;
       }
-      continue;
-    }
-
-    // Fora de transação, como toda ida ao adquirente.
-    const estado = await params.provider.consultar(viva.psp_payment_id);
-    contagem.consultadas += 1;
-    if (estado === 'aguardando') {
-      if (viva.expires_at !== null && viva.expires_at.getTime() <= params.agora.getTime()) {
-        await encerrarPorTempo(params.tenantId, viva.id, 'prazo do Pix vencido');
-        contagem.encerradas += 1;
-      }
-      continue;
-    }
-
-    const resultado = await confirmarCobranca({
-      tenantId: params.tenantId,
-      eventoId: `recon:${viva.psp_payment_id}:${estado}`,
-      tipo: 'conciliacao',
-      pagamentoId: viva.psp_payment_id,
-      estado,
-      hojeNaUnidade: params.hojeNaUnidade,
-    });
-    if (resultado.desfecho === 'pago' || resultado.desfecho === 'pago_sem_caixa') {
-      contagem.pagas += 1;
-    }
-    if (resultado.desfecho === 'recusado' || resultado.desfecho === 'expirado') {
-      contagem.encerradas += 1;
+    } catch (erro) {
+      contagem.comFalha += 1;
+      // O id, nunca o copia-e-cola: log não é lugar de dado que cobra alguém.
+      console.error('[cobranca] conciliação falhou', { chargeId: viva.id, erro });
     }
   }
 
+  contagem.concluidas = await concluirPagasSemCaixa(params);
   return contagem;
+}
+
+/**
+ * Fecha a venda que ficou paga sem gaveta aberta.
+ *
+ * O achado nº 4 da revisão: `pago_sem_caixa` era estado terminal sem saída. A
+ * varredura só olhava `aguardando`, então a comanda ficava aberta para sempre
+ * com o dinheiro já recebido — e o único caminho que sobrava para o balcão era
+ * o "Receber" manual, que cobraria o cliente uma segunda vez.
+ *
+ * A chave de idempotência é a mesma do webhook (`cobranca:<id>`), então isto é
+ * naturalmente reentrante: se o fechamento já aconteceu, ele devolve a comanda
+ * paga em vez de fechá-la de novo.
+ */
+async function concluirPagasSemCaixa(params: {
+  readonly tenantId: string;
+  readonly hojeNaUnidade: string;
+}): Promise<number> {
+  const pendentes = await withTenant(params.tenantId, async (tx) => {
+    return tx.$queryRaw<
+      (Linha & { location_id: string; created_by: string | null })[]
+    >`
+      SELECT c.id, c.order_id, c.method::text, c.amount_cents, c.status::text, c.psp_payment_id,
+             c.pix_payload, c.checkout_url, c.expires_at, c.paid_at, c.refused_reason,
+             c.created_by_name, c.created_at, c.location_id, c.created_by
+        FROM order_charges c
+        JOIN orders o ON o.id = c.order_id
+        JOIN cash_sessions s
+          ON s.location_id = c.location_id AND s.status = 'open'
+       WHERE c.status = 'pago' AND o.status = 'open'
+       ORDER BY c.paid_at
+    `;
+  });
+
+  let concluidas = 0;
+  for (const cobranca of pendentes) {
+    try {
+      const fechada = await withTenant(params.tenantId, async (tx) =>
+        fecharComandaOuDivergencia(tx, {
+          tenantId: params.tenantId,
+          locationId: cobranca.location_id,
+          orderId: cobranca.order_id,
+          pagamentos: [
+            {
+              forma: FORMA_DO_PAGAMENTO[MEIO_NO_DOMINIO[cobranca.method] ?? 'pix'],
+              valorCents: cobranca.amount_cents,
+            },
+          ],
+          staffId: cobranca.created_by ?? '00000000-0000-0000-0000-000000000000',
+          staffName: cobranca.created_by_name,
+          hojeNaUnidade: params.hojeNaUnidade,
+          idempotencyKey: `cobranca:${cobranca.id}`,
+          tx,
+        }),
+      );
+      if (fechada) concluidas += 1;
+    } catch (erro) {
+      console.error('[cobranca] conclusão falhou', { chargeId: cobranca.id, erro });
+    }
+  }
+  return concluidas;
 }
 
 async function encerrarPorTempo(

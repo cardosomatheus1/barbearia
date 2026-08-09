@@ -107,6 +107,15 @@ export interface PaymentProvider {
   criarCobranca(pedido: PedidoDePagamento): Promise<CobrancaCriada>;
   /** Pergunta o estado. É a rede de segurança da conciliação, não o caminho. */
   consultar(pagamentoId: string): Promise<EstadoDoPagamento>;
+  /**
+   * Mata a cobrança **no adquirente**, não só aqui.
+   *
+   * Entrou depois da `/security-review` do bloco 35. Cancelar só do lado de cá
+   * deixava o QR Code pagável: quem já tinha lido o código pagava, o evento
+   * chegava para uma cobrança encerrada e virava silêncio. Dinheiro capturado,
+   * nunca registrado, nunca devolvido.
+   */
+  cancelar(pagamentoId: string): Promise<void>;
   /** Devolve o dinheiro. Total quando `valorCents` não vem. */
   estornar(pagamentoId: string, valorCents?: number): Promise<{ readonly estornoId: string }>;
 }
@@ -171,6 +180,12 @@ export class FakePaymentProvider implements PaymentProvider {
     return this.proximoEstado;
   }
 
+  readonly cancelados: string[] = [];
+
+  async cancelar(pagamentoId: string): Promise<void> {
+    this.cancelados.push(pagamentoId);
+  }
+
   async estornar(
     pagamentoId: string,
     valorCents?: number,
@@ -182,6 +197,7 @@ export class FakePaymentProvider implements PaymentProvider {
   clear(): void {
     this.cobrancas.length = 0;
     this.estornos.length = 0;
+    this.cancelados.length = 0;
     this.contador = 0;
     this.proximoEstado = 'aguardando';
     this.expiraEm = undefined;
