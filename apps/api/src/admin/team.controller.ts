@@ -38,6 +38,9 @@ const STATUS: Record<string, number> = {
   email_unavailable: 409,
   invalid_role: 400,
   unknown_permission: 400,
+  // 403 e não 400: o pedido está bem formado e quem pede tem `team.manage`. O
+  // que recusa é o alcance de quem pede — conceder o que não se tem.
+  cannot_grant: 403,
   invalid_phone: 400,
   staff_not_found: 404,
   professional_not_found: 404,

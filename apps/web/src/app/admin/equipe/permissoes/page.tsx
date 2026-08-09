@@ -143,6 +143,8 @@ const FALHA: Record<string, string> = {
   owner_protected: 'O dono tem todas as permissões por definição, e isso não se edita.',
   invalid_role: 'Papel desconhecido.',
   unknown_permission: 'Uma das permissões enviadas não existe.',
+  cannot_grant:
+    'Você só concede o que você mesmo tem. Peça ao dono para conceder a você primeiro.',
   forbidden: 'Sua conta não pode editar permissões.',
 };
 

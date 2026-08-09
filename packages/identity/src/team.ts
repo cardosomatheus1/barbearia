@@ -688,6 +688,22 @@ export async function permissionsByRole(
  *    cobra isso. Aqui a função assume que a autorização já passou, como todo o
  *    resto deste arquivo.
  *
+ * 4. **Ninguém concede o que não tem.** Hoje é inalcançável: só o dono tem
+ *    `team.manage`, e o dono já tem tudo. Mas a premissa deste bloco é que
+ *    `role_permissions` é editável — no dia em que o dono delegar `team.manage`
+ *    a um gerente, esse gerente se concederia `finance.view_profit` e
+ *    `customers.export` num clique, e a rota que existe para dividir poder
+ *    viraria a que o concentra.
+ *
+ *    É o mesmo raciocínio que já protege `resetStaffPassword`,
+ *    `changeStaffRole` e `setStaffActive` desde o bloco 21 — e que faltava
+ *    justamente na mais poderosa das quatro. A `/security-review` do bloco 30
+ *    apontou, julgou não explorável hoje, e estava certa sobre hoje.
+ *
+ *    O que o ator pode sai do **banco**, não do parâmetro: a sessão já carrega
+ *    a lista, mas confiar nela aqui faria a garantia depender de todo chamador
+ *    futuro passar a lista certa.
+ *
  * ## Substitui o conjunto, e é decisão
  *
  * A tela manda a lista inteira do papel, não um diff. Diff exigiria que cliente
@@ -722,6 +738,21 @@ export async function definirPermissoesDoPapel(request: {
   const novas = [...new Set(request.permissoes)].filter(ehPermissao).sort();
 
   return withTenant(request.tenantId, async (tx) => {
+    const doAtor = await tx.$queryRaw<{ permission: string }[]>`
+      SELECT rp.permission
+        FROM staff_users u
+        JOIN role_permissions rp ON rp.role = u.role
+       WHERE u.id = ${request.actor.id}::uuid AND u.active
+    `;
+    const tem = new Set(doAtor.map((l) => l.permission));
+    const excedente = novas.find((p) => !tem.has(p));
+    if (excedente !== undefined) {
+      throw new StaffError(
+        'cannot_grant',
+        `Você não tem "${excedente}", então não pode conceder essa permissão.`,
+      );
+    }
+
     const antes = await tx.$queryRaw<{ permission: string }[]>`
       SELECT permission FROM role_permissions
        WHERE role = ${request.papel}::staff_role

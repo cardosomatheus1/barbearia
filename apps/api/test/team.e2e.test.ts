@@ -393,6 +393,47 @@ describeIfDb('equipe e permissões pela HTTP', () => {
     ).expect(400);
   });
 
+  it('quem administra a equipe não concede pela rota o que não tem', async () => {
+    // O dono delega a gestão de equipe ao gerente — que é o cenário inteiro que
+    // este bloco cria — e o gerente tenta se conceder o que não alcança.
+    const dono = await entrarComoDono();
+    await com(dono)(
+      http()
+        .put('/v1/admin/team/permissoes/manager')
+        .send({ permissoes: ['appointments.view', 'customers.view', 'team.manage'] }),
+    ).expect(200);
+
+    const email = `gerente${Date.now()}@domari.com.br`;
+    const criado = await com(dono)(
+      http().post('/v1/admin/team').send({ name: 'Gerente', email, role: 'manager' }),
+    ).expect(201);
+
+    // A conta nova troca a senha antes de qualquer outra coisa — a guarda de
+    // primeiro acesso vem antes da de permissão, e é o certo.
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: criado.body.senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http().put('/v1/admin/me/password').send({
+        currentPassword: criado.body.senhaInicial,
+        newPassword: 'a-senha-dele-agora',
+      }),
+    ).expect(200);
+
+    const entrou = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: 'a-senha-dele-agora' })
+      .expect(201);
+
+    const resposta = await com(entrou.body.token)(
+      http()
+        .put('/v1/admin/team/permissoes/receptionist')
+        .send({ permissoes: ['customers.export'] }),
+    ).expect(403);
+    expect(resposta.body.error.code).toBe('cannot_grant');
+  });
+
   // -- o dono continua protegido ---------------------------------------------
 
   it('nem quem administra a equipe reemite a senha do dono', async () => {

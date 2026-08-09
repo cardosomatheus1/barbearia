@@ -435,6 +435,7 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Permissão numa rota | declarada com `@Exige(...)`; rota sem declaração é **recusada**, não liberada |
 | Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e **editável pela tela** desde o bloco 30 — nunca `if (role === 'owner')` |
 | Papel do dono | não se edita: é a única conta que não pode ficar trancada para fora do próprio negócio. A recusa é na borda (enum sem `owner`) **e** no domínio |
+| Conceder permissão | ninguém concede o que não tem, e o que o ator tem sai do **banco**, nunca do parâmetro. Sem isso, delegar `team.manage` é delegar tudo |
 | Escrita e leitura | permissões diferentes: `customers.view_notes` lê a anotação, `customers.edit_notes` escreve. Escrita guardada por permissão de leitura é defeito, não economia |
 | Desconto | `finance.discount` diz **quem**; `tenants.max_discount_bps` diz **quanto**. Sem o teto, conceder desconto é conceder estorno com outro nome |
 | Conta de barbeiro | uma cadeira, uma conta — índice único parcial em `staff_users(professional_id)`; o papel do convite é sempre `professional` e nunca vem do corpo |

@@ -32,6 +32,10 @@ export type StaffFailure =
   // Bloco 30: a tela manda a lista inteira do papel, e uma permissão fora do
   // catálogo é recusada aqui para virar mensagem em vez de violação de `CHECK`.
   | 'unknown_permission'
+  // Bloco 30: ninguém concede o que não tem. Hoje inalcançável — só o dono tem
+  // `team.manage` e o dono tem tudo —, e é justamente por `role_permissions`
+  // ser editável que a recusa precisa existir antes de alguém precisar dela.
+  | 'cannot_grant'
   | 'staff_not_found'
   | 'owner_protected'
   // Convite do barbeiro: a cadeira precisa existir nesta barbearia, e não pode

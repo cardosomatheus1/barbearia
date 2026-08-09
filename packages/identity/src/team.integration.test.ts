@@ -833,6 +833,90 @@ describeIfDb('equipe e permissões', () => {
     expect(mapa['receptionist']).toEqual([]);
   });
 
+  /**
+   * A quarta recusa, e a que só importa no futuro que este bloco cria.
+   *
+   * Hoje só o dono tem `team.manage`, e o dono já tem tudo — então nenhuma
+   * concessão dele excede o que ele possui. Mas a premissa do bloco é que
+   * `role_permissions` é **editável**: no dia em que o dono delegar
+   * `team.manage` a um gerente, esse gerente se concederia
+   * `finance.view_profit` e `customers.export` num clique.
+   *
+   * É o mesmo raciocínio que já protege `resetStaffPassword`,
+   * `changeStaffRole` e `setStaffActive` — escrito lá desde o bloco 21, e que
+   * faltava justamente na rota mais poderosa das quatro.
+   */
+  it('quem edita permissão não concede o que não tem', async () => {
+    const dono = await abrirBarbearia();
+
+    // O dono delega a gestão de equipe ao gerente. É o cenário inteiro.
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'manager',
+      permissoes: ['appointments.view', 'customers.view', 'team.manage'],
+      actor: ator(dono),
+    });
+
+    const { senhaInicial } = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Gerente',
+      email: `gerente${Date.now()}@teste.com`,
+      role: 'manager',
+    });
+    const membros = await listStaff(dono.tenantId);
+    const gerente = membros.find((m) => m.name === 'Gerente');
+    await staffLogin({ email: gerente!.email, password: senhaInicial });
+
+    const comoGerente = { id: gerente!.id, name: 'Gerente' };
+
+    // O que ele tem, ele passa adiante.
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'receptionist',
+      permissoes: ['appointments.view', 'customers.view'],
+      actor: comoGerente,
+    });
+
+    // O que ele não tem, não.
+    await expect(
+      definirPermissoesDoPapel({
+        tenantId: dono.tenantId,
+        papel: 'receptionist',
+        permissoes: ['appointments.view', 'finance.view_profit'],
+        actor: comoGerente,
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // E nem para si mesmo, que é o caminho direto da escalada.
+    await expect(
+      definirPermissoesDoPapel({
+        tenantId: dono.tenantId,
+        papel: 'manager',
+        permissoes: ['team.manage', 'customers.export'],
+        actor: comoGerente,
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // A recusa não gravou nada pelo caminho.
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect([...(mapa['receptionist'] ?? [])].sort()).toEqual(['appointments.view', 'customers.view']);
+    expect(mapa['manager']).toContain('team.manage');
+  });
+
+  it('o dono continua concedendo tudo, porque tudo é o que ele tem', async () => {
+    const dono = await abrirBarbearia();
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'manager',
+      permissoes: [...PERMISSOES],
+      actor: ator(dono),
+    });
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect([...(mapa['manager'] ?? [])].sort()).toEqual([...PERMISSOES].sort());
+  });
+
   it('a permissão de uma barbearia não alcança a outra', async () => {
     const primeira = await abrirBarbearia();
     const segunda = await signUpOwner({
