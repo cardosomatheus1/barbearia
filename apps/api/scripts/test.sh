@@ -43,4 +43,6 @@ export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-100000}"
 # Uma linha por requisição enterraria a mensagem do teste que falhou.
 export LOG_REQUISICOES=nao
 export STAFF_EMAIL_PEPPER="${STAFF_EMAIL_PEPPER:-pepper-de-teste}"
-exec vitest run
+# `"$@"`: rodar um arquivo só durante o laço interno. Sem isto, provar que um
+# teste fica vermelho custa a suíte inteira por quebra.
+exec vitest run "$@"

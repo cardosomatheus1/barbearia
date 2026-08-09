@@ -117,6 +117,7 @@ NOMES=(
   "@barbearia/finance:finance — comanda, caixa e fiado"
   "@barbearia/crm:crm — a ficha do cliente"
   "@barbearia/jobs:jobs — fila, avisos e falta automática"
+  "@barbearia/platform:platform — planos, bloqueio e a porta do Super Admin"
   "@barbearia/api:api — e2e"
 )
 

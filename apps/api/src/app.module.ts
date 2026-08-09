@@ -23,6 +23,11 @@ import { PainelController } from './admin/painel.controller.js';
 import { ImportacaoController } from './admin/importacao.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
+import {
+  PlataformaAuthController,
+  PlataformaController,
+} from './plataforma/plataforma.controller.js';
+import { PlataformaGuard } from './plataforma/plataforma.guard.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
 import { CustomerGuard } from './auth/customer.guard.js';
@@ -59,12 +64,15 @@ import { TenantService } from './tenant/tenant.service.js';
     MeController,
     GuestAppointmentsController,
     AppointmentsController,
+    PlataformaAuthController,
+    PlataformaController,
   ],
   providers: [
     TenantService,
     StaffGuard,
     PermissaoGuard,
     CustomerGuard,
+    PlataformaGuard,
     // Provedor real do WhatsApp entra no bloco 55. Até lá, o de console — que
     // nunca imprime o código.
     { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },

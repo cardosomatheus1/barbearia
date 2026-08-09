@@ -20,6 +20,7 @@
     "@barbearia/identity": "workspace:*",
     "@barbearia/jobs": "workspace:*",
     "@barbearia/onboarding": "workspace:*",
+    "@barbearia/platform": "workspace:*",
     "@barbearia/scheduling": "workspace:*",
     "@nestjs/common": "^11.1.6",
     "@nestjs/core": "^11.1.6",

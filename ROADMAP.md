@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 23 de 78 blocos.**
+**Status: 24 de 78 blocos.**
 
 ---
 
@@ -75,6 +75,10 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Canal por onde o alerta sai | as regras decidem, o coletor alimenta, e `alertasDaBarbearia` devolve a lista pronta com a frase em português | mandar isso para alguém: e-mail, WhatsApp do dono ou webhook | sem bloco definido: o produto tem canal para o **cliente** (bloco 20) e nenhum para o gestor. É a mesma dependência que segura a varredura diária do validador, e as duas devem entrar juntas — o primeiro aviso dirigido ao dono é decisão de produto (o que interrompe alguém às onze da noite?), não de infraestrutura |
 | Deploy contínuo e ambiente de staging | a esteira roda o portão inteiro, a medição de navegador e a carga a cada push; as sondas de vivo e pronto existem; o ensaio de restauração confere dado, RLS, trigger e versão do schema | o CD: um ambiente para onde publicar, e a publicação automática | sem bloco definido: **não há infraestrutura contratada**. Escrever um passo de deploy apontando para lugar nenhum seria configuração que ninguém executa. O que dependia de código está pronto — a sonda de pronto é o que a publicação vai consultar |
 | Tracing distribuído | log estruturado por requisição, com `x-request-id` aceito do proxy, devolvido na resposta e presente em toda linha — que é correlação ponta a ponta dentro do processo | spans com duração por camada, e propagação para fora | sem bloco definido: o produto é um monólito modular com um processo e um banco. Span entre camadas do mesmo processo responde o que o perfil de CPU responde melhor, e foi o perfil que achou o gargalo de fuso deste bloco. Entra quando houver um segundo serviço em jogo |
+| Segundo fator na conta da plataforma | a porta da plataforma tem senha em scrypt, sessão de 8h com token guardado só em hash, resposta e tempo iguais para e-mail inexistente e senha errada, e conta desligada derruba sessão aberta | o TOTP, que o produto já tem para a equipe da barbearia (bloco 19) | 26 (feature flags, impersonação auditada): a regra do `CLAUDE.md` exige segundo fator para quem move dinheiro, e quem bloqueia todas as barbearias faz mais que isso. Ele entra **junto com a impersonação**, que é a capacidade mais perigosa da plataforma, para que a prova de segundo fator seja pré-requisito dela e não um decorador separado a esquecer |
+| Teto de cadeiras do plano aplicado | `plans.max_chairs` existe, é editável, aparece em cada opção da lista e viaja na troca de plano auditada | recusar a cadeira número seis quando o plano permite cinco | 27 (billing: planos, trial, assinatura): o que fazer ao estourar o teto é **decisão de cobrança**, não de cadastro — recusar, cobrar o excedente ou oferecer o plano de cima são três produtos diferentes, e o terceiro é o que a SPEC quer. Aplicar "recusar" agora fixaria a resposta mais hostil antes de existir tela que ofereça a saída |
+| Avisar a barbearia de que foi bloqueada | o bloqueio é imediato, o motivo fica escrito e o dono o lê ao tentar entrar | mandar o aviso antes, por e-mail ou WhatsApp do dono | 28 (billing: inadimplência, régua de retentativa): bloqueio sem aviso prévio é a régua de cobrança faltando, não uma notificação faltando. E é a mesma dependência que segura o alerta operacional — o produto não tem canal dirigido ao gestor |
+| Papéis dentro da plataforma | uma conta de plataforma, com todas as capacidades | separar quem só consulta de quem bloqueia conta | 33 (segurança: hardening, auditoria de acesso): hoje há uma conta e ela é criada por quem tem acesso ao banco de produção. Inventar papéis antes de existir a segunda pessoa criaria permissão que nenhuma conta distingue — o mesmo erro que os blocos 18 e 21 declararam em vez de cometer |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -180,18 +184,18 @@ qualquer largura, `min-width` sempre, e conferência medida em 360 · 390 · 768
 Transversal. Nada aqui aparece para o cliente final, e sem nada aqui o produto
 não é vendável.
 
-| # | Bloco |
-|---|---|
-| 24 | Super Admin: tenants, planos, bloqueio de conta |
-| 25 | Super Admin: métricas globais, MRR, churn |
-| 26 | Super Admin: feature flags, impersonação auditada |
-| 27 | Billing: planos, trial, assinatura da barbearia |
-| 28 | Billing: upgrade/downgrade, inadimplência, régua de retentativa |
-| 29 | Billing: integração com PSP, conciliação |
-| 30 | RBAC: telas de gestão de papéis e permissões editáveis pelo dono |
-| 31 | LGPD: consentimentos, exportação de dados |
-| 32 | LGPD: anonimização, retenção, pipeline de exclusão |
-| 33 | Segurança: hardening, rate limit global, auditoria de acesso |
+| # | Bloco | Estado |
+|---|---|---|
+| 24 | Super Admin: tenants, planos, bloqueio de conta | ✅ |
+| 25 | Super Admin: métricas globais, MRR, churn | |
+| 26 | Super Admin: feature flags, impersonação auditada | |
+| 27 | Billing: planos, trial, assinatura da barbearia | |
+| 28 | Billing: upgrade/downgrade, inadimplência, régua de retentativa | |
+| 29 | Billing: integração com PSP, conciliação | |
+| 30 | RBAC: telas de gestão de papéis e permissões editáveis pelo dono | |
+| 31 | LGPD: consentimentos, exportação de dados | |
+| 32 | LGPD: anonimização, retenção, pipeline de exclusão | |
+| 33 | Segurança: hardening, rate limit global, auditoria de acesso | |
 
 ---
 

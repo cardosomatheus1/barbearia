@@ -87,6 +87,53 @@ async function baixarFoto(url) {
 
 const psql = (sql) => execFileSync('psql', [DB, '-tAc', sql], { encoding: 'utf8' }).trim();
 
+/**
+ * Prepara a conta da plataforma e uma barbearia bloqueada.
+ *
+ * A conta nasce pelo mesmo comando que a produção usa — não há rota HTTP para
+ * criá-la, de propósito. E uma das barbearias entra bloqueada porque o cartão
+ * bloqueado é o mais largo da lista: ele tem o selo, o motivo e a data, e é
+ * onde a linha estoura em 360px se estourar.
+ */
+async function prepararPlataforma() {
+  const email = `super${Date.now()}@plataforma.teste`;
+  const senha = 'senha-da-plataforma-medida';
+
+  try {
+    execFileSync('node', ['scripts/criar-super-admin.mjs', 'Super', email], {
+      env: { ...process.env, SUPER_ADMIN_PASSWORD: senha, DATABASE_URL: process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL },
+      stdio: 'pipe',
+    });
+  } catch (erro) {
+    console.warn(`  aviso: conta da plataforma não criada (${erro.message.split('\n')[0]})`);
+    return null;
+  }
+
+  const entrada = await fetch(`${API}/v1/plataforma/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, senha }),
+  });
+  if (!entrada.ok) {
+    console.warn('  aviso: login da plataforma falhou; telas da plataforma fora da medição');
+    return null;
+  }
+  const { token } = await entrada.json();
+
+  // Uma barbearia bloqueada de verdade, e não a `slug` que as outras telas
+  // usam: bloquear aquela derrubaria metade da medição.
+  const alvo = psql(
+    `INSERT INTO tenants (name) VALUES ('Barbearia com nome bem comprido de teste') RETURNING id`,
+  );
+  await fetch(`${API}/v1/plataforma/barbearias/${alvo}/bloqueio`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ motivo: 'inadimplente há 60 dias, sem retorno no telefone do cadastro' }),
+  });
+
+  return token;
+}
+
 /** Prepara uma barbearia publicada e uma sessão de gestor. */
 async function preparar() {
   const conta = {
@@ -629,6 +676,7 @@ async function main() {
   if (!caixa.ok) console.warn(`  aviso: caixa não preparado (${caixa.motivo})`);
   const importacao = await prepararImportacao(token);
   if (!importacao) console.warn('  aviso: importação não preparada; passo 2 fora da medição');
+  const tokenPlataforma = await prepararPlataforma();
 
   const telas = [
     // A porta do produto. Não pertence a barbearia nenhuma e não precisa de
@@ -640,6 +688,13 @@ async function main() {
     { nome: 'meus agendamentos', url: `/${slug}/meus-agendamentos`, cookie: { nome: `sessao_${slug}`, valor: tokenCliente, caminho: `/${slug}` } },
     { nome: 'criar conta', url: '/admin/criar-conta' },
     { nome: 'entrar (gestor)', url: '/admin/entrar' },
+    { nome: 'entrar (plataforma)', url: '/plataforma/entrar' },
+    ...(tokenPlataforma
+      ? [
+          { nome: 'plataforma — barbearias', url: '/plataforma', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          { nome: 'plataforma — trilha', url: '/plataforma/trilha', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+        ]
+      : []),
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

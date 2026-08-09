@@ -1,5 +1,6 @@
 import {
   createParamDecorator,
+  Inject,
   Injectable,
   type CanActivate,
   type ExecutionContext,
@@ -11,6 +12,7 @@ import {
   type AuthenticatedStaff,
 } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
+import { TenantService } from '../tenant/tenant.service.js';
 
 export interface StaffRequest extends Request {
   staff?: AuthenticatedStaff;
@@ -36,6 +38,8 @@ const unauthorized = (): DomainError => new DomainError('unauthorized', 401, 'Se
  */
 @Injectable()
 export class StaffGuard implements CanActivate {
+  constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<StaffRequest>();
 
@@ -53,9 +57,30 @@ export class StaffGuard implements CanActivate {
       throw error;
     }
 
+    // Aqui, e não só no login: a sessão dura horas, e bloquear a conta de uma
+    // barbearia que já tem gente logada não pode esperar o token vencer. É
+    // também o que torna o bloqueio uma decisão sobre a conta e não sobre a
+    // porta — toda rota administrativa passa por esta guarda.
+    const bloqueio = await this.tenants.bloqueio(request.staff.tenantId);
+    if (bloqueio.bloqueada) throw contaBloqueada(bloqueio.motivo);
+
     return true;
   }
 }
+
+/**
+ * 403 com o motivo escrito — o oposto do 404 mudo da página pública.
+ *
+ * Quem vê esta mensagem é o dono, e o motivo é o que ele precisa para saber a
+ * quem ligar. Esconder dele seria transformar um bloqueio administrativo em
+ * "o sistema parou".
+ */
+export const contaBloqueada = (motivo: string | null): DomainError =>
+  new DomainError(
+    'tenant_blocked',
+    403,
+    motivo ? `Conta bloqueada: ${motivo}` : 'Conta bloqueada',
+  );
 
 export const Staff = createParamDecorator(
   (_data: unknown, context: ExecutionContext): AuthenticatedStaff => {

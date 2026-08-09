@@ -24,7 +24,7 @@ import {
 import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
-import { Staff, StaffGuard } from './staff.guard.js';
+import { contaBloqueada, Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
   businessSchema,
@@ -124,11 +124,19 @@ export class StaffAuthController {
     @Req() request: Request,
   ) {
     try {
-      return await staffLogin({
+      const sessao = await staffLogin({
         ...body,
         ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
         ...(request.ip ? { ip: request.ip } : {}),
       });
+
+      // Depois de conferir a senha, e de propósito: recusar antes diria "esta
+      // barbearia está bloqueada" a quem só chutou um e-mail, o que entrega à
+      // internet a lista de quem está inadimplente na plataforma.
+      const bloqueio = await this.tenants.bloqueio(sessao.tenantId);
+      if (bloqueio.bloqueada) throw contaBloqueada(bloqueio.motivo);
+
+      return sessao;
     } catch (error) {
       return toHttp(error);
     }

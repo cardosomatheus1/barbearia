@@ -4358,3 +4358,201 @@ main { padding-bottom: var(--space-8); }
   background: none;
   padding-inline: var(--space-3) 0;
 }
+
+/* ============================================================================
+   Plataforma — o painel do Super Admin (bloco 24)
+
+   Tela nova, e a primeira do produto que **não** é de uma barbearia. O risco de
+   desenho aqui não é ficar feia: é ficar parecida demais com o painel do
+   gestor. Quem administra a plataforma quase sempre tem também uma conta de
+   teste em alguma barbearia, e as duas telas usam o mesmo tema escuro, a mesma
+   tipografia e os mesmos componentes. Confundir as duas é bloquear a conta
+   errada.
+
+   O que separa é a barra: ela é a única superfície do produto com o âmbar no
+   **fundo** em vez de no detalhe, e o selo "plataforma" fica ao lado da marca.
+   Nenhuma tela de barbearia tem isso, e nenhuma vai ter.
+   ============================================================================ */
+
+.plataforma__barra {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 22%, var(--color-surface-raised)),
+    var(--color-surface-raised)
+  );
+  border-bottom: 1px solid var(--color-border);
+}
+.plataforma__barra-interna {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+}
+.plataforma__marca {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.02em;
+}
+.plataforma__selo {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+.plataforma__nav {
+  display: flex;
+  gap: var(--space-1);
+  /* Empurra "Sair" para a ponta quando há espaço, e cai para a linha de baixo
+     no piso de 360px sem nada sumir. */
+  margin-inline-end: auto;
+}
+.plataforma__link,
+.plataforma__sair {
+  display: inline-flex;
+  align-items: center;
+  /* 44px em qualquer largura: mouse impreciso e limitação motora não são
+     exclusividade do celular. */
+  min-height: 2.75rem;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+.plataforma__link:hover { background: var(--color-surface-hover); }
+
+.plataforma__trabalho { padding-block: var(--space-5) var(--space-8); }
+
+/* ----------------------------------------------------------------------------
+   A lista de contas
+
+   Uma coluna no piso; a partir de 900px o plano e a ação sobem para a mesma
+   linha do nome. Não é "versão de desktop": é a mesma linha ganhando densidade
+   quando há espaço.
+   ---------------------------------------------------------------------------- */
+
+.contas { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+
+.conta {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+.conta--bloqueada {
+  border-color: var(--color-danger);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-danger) 10%, var(--color-surface-hover)),
+    var(--color-surface-raised)
+  );
+}
+.conta__quem { min-width: 0; }
+.conta__nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+}
+.conta__selo {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+.conta__meta {
+  margin: var(--space-1) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.conta__slug { letter-spacing: 0.01em; }
+.conta__slug--vazio { font-style: italic; }
+.conta__motivo {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-danger);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.conta__plano { min-width: 0; }
+.conta__plano-linha { display: flex; gap: var(--space-2); align-items: stretch; min-width: 0; }
+/* Sem isto o `<select>` cresce até o texto mais longo da lista — e o nome do
+   plano com "cadeiras ilimitadas" estoura o cartão no piso de 360px. */
+.conta__plano-linha .ui-field__input { min-width: 0; flex: 1 1 auto; }
+
+.conta__bloquear-abrir {
+  /* `<summary>` com aparência de botão precisa perder o triângulo, senão ele
+     aparece dentro da cápsula. */
+  list-style: none;
+  cursor: pointer;
+}
+.conta__bloquear-abrir::-webkit-details-marker { display: none; }
+.conta__bloquear-form {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.conta__aviso { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* ----------------------------------------------------------------------------
+   A trilha
+   ---------------------------------------------------------------------------- */
+
+.trilha-plataforma { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.evento-plataforma {
+  padding: var(--space-3);
+  border-inline-start: 2px solid var(--color-border);
+  background: var(--color-surface-raised);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  min-width: 0;
+}
+.evento-plataforma__linha { margin: 0; }
+.evento-plataforma__detalhe {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.evento-plataforma__quando {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 900px) {
+  .conta {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 20rem) auto;
+    align-items: start;
+    gap: var(--space-5);
+  }
+}
