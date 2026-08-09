@@ -136,14 +136,34 @@ async function encherAgenda(casa) {
   let marcados = 0;
   let recusados = 0;
   let primeiraRecusa = null;
+  /** Quantos horários a grade ofereceu em cada (dia, cadeira), antes de vender. */
+  const ofertaInicial = [];
 
-  const grade = async (data, proId) =>
-    json(
-      await fetch(
-        `${API}/v1/b/${casa.slug}/availability?locationId=${casa.locationId}` +
-          `&serviceIds=${servico.id}&dateFrom=${data}&professionalId=${proId}`,
-      ),
+  /**
+   * Lê a grade e **falha alto** se a resposta não for 200.
+   *
+   * Antes ela devolvia o corpo do erro como se fosse grade: `slots` vinha
+   * indefinido, `livres` virava vazio, o laço parava — e o relatório dizia
+   * "poucos horários, zero recusas", que é indistinguível de agenda cheia.
+   * Foi assim que o rate limit da esteira passou por grade vazia e custou uma
+   * volta inteira.
+   */
+  const grade = async (data, proId) => {
+    const r = await fetch(
+      `${API}/v1/b/${casa.slug}/availability?locationId=${casa.locationId}` +
+        `&serviceIds=${servico.id}&dateFrom=${data}&professionalId=${proId}`,
     );
+    if (!r.ok) {
+      const corpo = await r.text();
+      throw new Error(
+        `a grade respondeu ${r.status}: ${corpo.slice(0, 200)}` +
+          (r.status === 429
+            ? ' — suba RATE_LIMIT_SHORT e RATE_LIMIT_LONG: a carga não cabe no limite normal.'
+            : ''),
+      );
+    }
+    return json(r);
+  };
 
   for (let d = 0; d < ALVO.dias; d++) {
     const data = dia(d);
@@ -151,6 +171,13 @@ async function encherAgenda(casa) {
       const primeira = await grade(data, pro.id);
       const disponiveis = primeira.days?.[0]?.slots?.length ?? 0;
       const alvo = Math.floor(disponiveis * OCUPACAO);
+      ofertaInicial.push({
+        dia: data,
+        oferecidos: disponiveis,
+        ...(disponiveis === 0
+          ? { motivo: primeira.days?.[0]?.unavailableReason ?? 'sem dias na resposta' }
+          : {}),
+      });
 
       let feitos = 0;
       // Teto de voltas: sem ele, um motor que passa a recusar tudo faria o
@@ -198,7 +225,7 @@ async function encherAgenda(casa) {
     }
   }
 
-  return { marcados, recusados, primeiraRecusa };
+  return { marcados, recusados, primeiraRecusa, ofertaInicial };
 }
 
 /** Uma medição: a consulta que a meta descreve, com o relógio em volta. */
@@ -233,7 +260,7 @@ async function main() {
 
   console.log(`carga: montando ${ALVO.profissionais} cadeiras × ${ALVO.dias} dias...`);
   const casa = await montarBarbearia();
-  const { marcados, recusados, primeiraRecusa } = await encherAgenda(casa);
+  const { marcados, recusados, primeiraRecusa, ofertaInicial } = await encherAgenda(casa);
   console.log(`carga: ${marcados} horários vendidos (${recusados} recusados pelo motor)`);
 
   // Agenda vazia é o caso fácil: sem nada marcado, metade do trabalho do motor
@@ -245,6 +272,18 @@ async function main() {
         'A grade ficaria vazia e o P95 mediria o caso fácil.',
     );
     if (primeiraRecusa) console.error(`carga: primeira recusa — ${primeiraRecusa}`);
+
+    // Sem isto, "entraram poucos" não distingue **motor recusando** de **grade
+    // vazia**, que pedem correções opostas. Já custou uma volta de esteira.
+    const total = ofertaInicial.reduce((soma, o) => soma + o.oferecidos, 0);
+    const vazios = ofertaInicial.filter((o) => o.oferecidos === 0);
+    console.error(
+      `carga: a grade ofereceu ${total} horários em ${ofertaInicial.length} pares (dia × cadeira); ` +
+        `${vazios.length} vieram vazios.`,
+    );
+    for (const amostra of ofertaInicial.slice(0, 8)) {
+      console.error(`         ${amostra.dia}: ${amostra.oferecidos}${amostra.motivo ? ` (${amostra.motivo})` : ''}`);
+    }
     process.exit(2);
   }
 

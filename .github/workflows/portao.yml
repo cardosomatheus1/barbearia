@@ -116,6 +116,13 @@ jobs:
       API_URL: http://127.0.0.1:3000
       WEB_URL: http://127.0.0.1:3001
       STAFF_EMAIL_PEPPER: pepper-da-esteira
+      # A carga dispara milhares de requisições do mesmo IP, e o limite padrão é
+      # de 120 por minuto. Com ele ligado, a medição mede o rate limit — foi o
+      # que aconteceu: 19 horários vendidos e **nenhuma recusa**, porque o 429
+      # caía na leitura da grade e o laço parava antes de tentar marcar.
+      # O limite tem suíte própria (`rate-limit.e2e.test.ts`); aqui ele é ruído.
+      RATE_LIMIT_SHORT: '1000000'
+      RATE_LIMIT_LONG: '1000000'
 
     steps:
       - uses: actions/checkout@v4
