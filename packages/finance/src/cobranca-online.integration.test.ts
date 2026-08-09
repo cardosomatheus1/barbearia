@@ -1,0 +1,685 @@
+import { PrismaClient } from '@prisma/client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { FakePaymentProvider } from '@barbearia/core';
+import { withTenant } from '@barbearia/db';
+import { abrirCaixa, fecharCaixaDaUnidade } from './caixa.js';
+import { abrirComanda, adicionarItem, getComanda } from './comanda.js';
+import {
+  cancelarCobranca,
+  cobrancasDaComanda,
+  conciliarCobrancas,
+  confirmarCobranca,
+  criarCobrancaDaComanda,
+} from './cobranca-online.js';
+
+/**
+ * O Pix da comanda contra Postgres real (bloco 35).
+ *
+ * O que só o banco prova: que dois toques no "Cobrar" não geram dois QR Codes,
+ * que a confirmação repetida não fecha a venda duas vezes, e que a cadeia
+ * inteira da SPEC §3.3 — comanda, caixa, comissão — anda junto ou não anda.
+ * Nenhuma dessas garantias existe em memória: elas são índice único, chave
+ * primária e transação.
+ */
+
+const SEED_URL = process.env['SEED_DATABASE_URL'];
+const APP_URL = process.env['APP_DATABASE_URL'];
+const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
+
+const TENANT = '35353535-1111-1111-1111-111111111111';
+const LOCATION = '35353535-aaaa-0000-0000-000000000001';
+const RUAN = '35353535-bbbb-0000-0000-000000000001';
+const CABELO = '35353535-eeee-0000-0000-000000000001';
+const CARLOS = '35353535-cccc-0000-0000-000000000001';
+const STAFF = '35353535-ffff-0000-0000-000000000001';
+
+const HOJE = '2026-09-10';
+/** O relógio entra por parâmetro: nada aqui depende da hora em que a suíte roda. */
+const AGORA = new Date('2026-09-10T12:00:00Z');
+const operador = { staffId: STAFF, staffName: 'Maria Recepção' };
+
+let admin: PrismaClient;
+
+async function exec(sql: string): Promise<void> {
+  for (const parte of sql.split(';').map((p) => p.trim()).filter(Boolean)) {
+    await admin.$executeRawUnsafe(parte);
+  }
+}
+
+describeIfDb('a cobrança online da comanda', () => {
+  beforeAll(async () => {
+    if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
+    admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
+  });
+
+  afterAll(async () => {
+    await admin?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
+    await exec(`
+      INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
+
+      INSERT INTO locations (id, tenant_id, name, timezone)
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia');
+
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional');
+
+      INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
+      VALUES ('${CABELO}', '${TENANT}', 'Cabelo', 4900, 30);
+
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('${CARLOS}', '${TENANT}', 'Carlos Souza', '+5571988887777');
+
+      INSERT INTO staff_users (id, tenant_id, name, email, password_hash, role)
+      VALUES ('${STAFF}', '${TENANT}', 'Maria', 'maria@domari.com.br', 'x', 'receptionist');
+
+      -- Sem regra de comissão, item com profissional não gera lançamento — e o
+      -- teste da cadeia da SPEC §3.3 estaria provando menos do que diz.
+      INSERT INTO commission_rules (tenant_id, professional_id, mode, value)
+      VALUES ('${TENANT}', '${RUAN}', 'percent', 4000);
+    `);
+  });
+
+  const abrirGaveta = () =>
+    abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 20000, ...operador });
+
+  async function comandaDe4900(): Promise<string> {
+    const comanda = await abrirComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      customerId: CARLOS,
+      ...operador,
+    });
+    await adicionarItem({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId: comanda.id,
+      tipo: 'service',
+      serviceId: CABELO,
+      descricao: 'Corte',
+      quantidade: 1,
+      precoUnitarioCents: 4900,
+      professionalId: RUAN,
+    });
+    return comanda.id;
+  }
+
+  const cobrar = (orderId: string, provider: FakePaymentProvider, chave = 'toque-1') =>
+    criarCobrancaDaComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId,
+      meio: 'pix',
+      idempotencyKey: chave,
+      provider,
+      agora: AGORA,
+      ...operador,
+    });
+
+  // -- emissão ---------------------------------------------------------------
+
+  it('o QR Code sai com o valor da comanda e o copia-e-cola', async () => {
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+
+    const cobranca = await cobrar(orderId, provider);
+
+    expect(cobranca.estado).toBe('aguardando');
+    expect(cobranca.valorCents).toBe(4900);
+    // O **texto**, não a imagem: quem paga pelo mesmo celular que abriu a tela
+    // não consegue fotografar a própria tela.
+    expect(cobranca.pixCopiaECola).toContain('fake');
+    expect(cobranca.pagamentoId).toBeTruthy();
+  });
+
+  it('a chave que vai ao adquirente é o id da própria linha', async () => {
+    /**
+     * E não a chave do balcão. Se o processo cair entre gravar a linha e
+     * receber a resposta, a retentativa reencontra a **mesma** cobrança no
+     * adquirente em vez de emitir a segunda — que é o que o cliente veria como
+     * dois QR Codes para a mesma conta.
+     */
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+
+    const cobranca = await cobrar(orderId, provider);
+
+    expect(provider.cobrancas[0]?.idempotencyKey).toBe(cobranca.id);
+  });
+
+  it('dois toques no "Cobrar" devolvem a mesma cobrança', async () => {
+    // O duplo toque no celular do balcão é o caso comum, não a exceção.
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+
+    const primeira = await cobrar(orderId, provider);
+    const segunda = await cobrar(orderId, provider);
+
+    expect(segunda.id).toBe(primeira.id);
+    expect(provider.cobrancas).toHaveLength(1);
+    expect(await cobrancasDaComanda(TENANT, orderId)).toHaveLength(1);
+  });
+
+  it('duas chaves diferentes na mesma comanda: a segunda é recusada', async () => {
+    /**
+     * A trava é o índice único parcial, não uma consulta antes do `INSERT` —
+     * essa tem janela de corrida, e dois toques acontecem em milissegundos.
+     * Dois QR Codes vivos para a mesma conta é o cliente pagando duas vezes.
+     */
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+
+    await cobrar(orderId, provider, 'toque-1');
+    await expect(cobrar(orderId, provider, 'toque-2')).rejects.toMatchObject({
+      code: 'cobranca_em_curso',
+    });
+  });
+
+  it('comanda sem itens não gera cobrança', async () => {
+    // Cobrar zero produziria um QR Code que nenhum banco aceita, e o balcão
+    // ficaria olhando uma tela que nunca confirma.
+    const comanda = await abrirComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      customerId: CARLOS,
+      ...operador,
+    });
+
+    await expect(cobrar(comanda.id, new FakePaymentProvider())).rejects.toMatchObject({
+      code: 'comanda_sem_valor',
+    });
+  });
+
+  it('falha ao emitir destrava a comanda em vez de prendê-la', async () => {
+    /**
+     * A linha nasce antes da chamada — é o que impede um Pix existir no mundo
+     * sem o produto saber. O preço é a linha órfã quando o adquirente não
+     * responde, e deixá-la `aguardando` prenderia o balcão num QR Code que
+     * nunca existiu.
+     */
+    const orderId = await comandaDe4900();
+    const quebrado = new FakePaymentProvider();
+    quebrado.criarCobranca = async () => {
+      throw new Error('adquirente fora do ar');
+    };
+
+    await expect(cobrar(orderId, quebrado)).rejects.toThrow(/fora do ar/);
+
+    // E a comanda aceita uma cobrança nova em seguida.
+    const nova = await cobrar(orderId, new FakePaymentProvider(), 'toque-2');
+    expect(nova.estado).toBe('aguardando');
+  });
+
+  it('a conferência é enfileirada **junto** com a cobrança', async () => {
+    /**
+     * Dentro da mesma transação. Enfileirar depois do commit abriria a janela
+     * em que o QR Code existe e nada está marcado para conferi-lo — o processo
+     * cai e a comanda fica presa, porque só uma cobrança viva é permitida por
+     * vez.
+     *
+     * O payload vai **vazio**: `jobs` não tem RLS e é legível sem tenant, então
+     * o copia-e-cola do Pix não atravessa a fila.
+     */
+    const orderId = await comandaDe4900();
+    await cobrar(orderId, new FakePaymentProvider());
+
+    const tarefas = await withTenant(TENANT, (tx) => tx.$queryRaw<
+      { kind: string; payload: Record<string, unknown>; run_after: Date; tenant_id: string }[]
+    >`
+      SELECT kind, payload, run_after, tenant_id FROM jobs WHERE kind = 'cobranca.conciliar'
+    `);
+
+    expect(tarefas).toHaveLength(1);
+    expect(tarefas[0]?.payload).toEqual({});
+    expect(tarefas[0]?.tenant_id).toBe(TENANT);
+    // Depois da janela do Pix: antes disso o webhook é o caminho, e perguntar
+    // ao adquirente a cada minuto seria pesquisa em laço sobre o caso normal.
+    expect(tarefas[0]?.run_after.getTime()).toBe(AGORA.getTime() + 30 * 60_000);
+  });
+
+  it('a emissão que falha não deixa tarefa órfã na fila', async () => {
+    // A transação é a mesma: se a linha da cobrança some, a tarefa some junto.
+    const orderId = await comandaDe4900();
+    const quebrado = new FakePaymentProvider();
+    quebrado.criarCobranca = async () => {
+      throw new Error('adquirente fora do ar');
+    };
+
+    await expect(cobrar(orderId, quebrado)).rejects.toThrow(/fora do ar/);
+
+    // A linha da cobrança existe (nasce antes da chamada, de propósito) e a
+    // tarefa existe com ela — é ela que vai encerrar a órfã por tempo.
+    const tarefas = await withTenant(TENANT, (tx) => tx.$queryRaw<{ kind: string }[]>`
+      SELECT kind FROM jobs WHERE kind = 'cobranca.conciliar'
+    `);
+    expect(tarefas).toHaveLength(1);
+  });
+
+  it('a cobrança órfã, sem id do adquirente, é encerrada pela varredura', async () => {
+    /**
+     * Ela nasceu e o processo caiu antes de a resposta chegar. Sem tratamento
+     * ela travaria a comanda para sempre, porque só uma cobrança viva é
+     * permitida por vez — e ela nunca sairia de `aguardando` sozinha.
+     */
+    const orderId = await comandaDe4900();
+    const quebrado = new FakePaymentProvider();
+    quebrado.criarCobranca = async () => {
+      throw new Error('adquirente fora do ar');
+    };
+    await expect(cobrar(orderId, quebrado)).rejects.toThrow(/fora do ar/);
+
+    // A emissão já a marcou `expirado` no caminho do erro; forçar de volta a
+    // `aguardando` é o que reproduz o processo que **caiu** antes disso.
+    await withTenant(TENANT, (tx) => tx.$executeRaw`
+      UPDATE order_charges SET status = 'aguardando', psp_payment_id = NULL
+    `);
+
+    const varredura = await conciliarCobrancas({
+      tenantId: TENANT,
+      provider: new FakePaymentProvider(),
+      hojeNaUnidade: HOJE,
+      agora: AGORA,
+    });
+
+    // Nada a consultar — não há id para perguntar por.
+    expect(varredura).toMatchObject({ consultadas: 0, encerradas: 1 });
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('expirado');
+  });
+
+  // -- confirmação -----------------------------------------------------------
+
+  const confirmar = (pagamentoId: string, eventoId = 'evt_1') =>
+    confirmarCobranca({
+      tenantId: TENANT,
+      eventoId,
+      tipo: 'payment_intent.succeeded',
+      pagamentoId,
+      estado: 'pago',
+      hojeNaUnidade: HOJE,
+    });
+
+  it('a confirmação dispara a cadeia: fecha comanda, entra no caixa e gera comissão', async () => {
+    /**
+     * A cadeia da SPEC §3.3, e ela é **uma transação**. "Marca pago agora,
+     * fecha depois" abriria a janela em que o dinheiro está confirmado e a
+     * venda não existe — e ninguém sabe, olhando o banco, se o fechamento
+     * ainda vai acontecer ou se falhou.
+     */
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
+
+    const resultado = await confirmar(cobranca.pagamentoId ?? '');
+
+    expect(resultado.desfecho).toBe('pago');
+    expect(resultado.comanda?.status).toBe('paid');
+
+    const comanda = await getComanda(TENANT, orderId);
+    expect(comanda.status).toBe('paid');
+    expect(comanda.pagamentos[0]).toMatchObject({ forma: 'pix', valorCents: 4900 });
+
+    const [gaveta] = await withTenant(TENANT, (tx) => tx.$queryRaw<{ kind: string }[]>`
+      SELECT kind::text FROM cash_movements WHERE order_id = ${orderId}::uuid
+    `);
+    // Pix não entra na gaveta física — o dinheiro cai na conta. `entraNaGaveta`
+    // do bloco 18 já decidia isso, e a confirmação não muda a regra.
+    expect(gaveta).toBeUndefined();
+
+    const comissoes = await withTenant(TENANT, (tx) => tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM commission_entries WHERE order_id = ${orderId}::uuid
+    `);
+    expect(comissoes).toHaveLength(1);
+  });
+
+  it('a mesma confirmação chegando duas vezes fecha a venda uma vez', async () => {
+    /**
+     * Reentrega é o comportamento normal do adquirente, não a exceção. Duas
+     * camadas travam: a chave primária de `order_charge_events` para a entrega
+     * concorrente, e o `AND status = 'aguardando'` para a sequencial — a
+     * segunda não depende de ninguém ter lembrado de registrar o evento.
+     */
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+    const pagamentoId = cobranca.pagamentoId ?? '';
+
+    expect((await confirmar(pagamentoId, 'evt_1')).desfecho).toBe('pago');
+    // Mesmo evento: barrado pela chave primária.
+    expect((await confirmar(pagamentoId, 'evt_1')).desfecho).toBe('ignorado');
+    // Evento diferente sobre a mesma cobrança: barrado pelo estado.
+    expect((await confirmar(pagamentoId, 'evt_2')).desfecho).toBe('ignorado');
+
+    const pagamentos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM order_payments WHERE order_id = ${orderId}::uuid
+    `);
+    expect(pagamentos).toHaveLength(1);
+
+    const comissoes = await withTenant(TENANT, (tx) => tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM commission_entries WHERE order_id = ${orderId}::uuid
+    `);
+    expect(comissoes).toHaveLength(1);
+  });
+
+  it('sem caixa aberto o dinheiro é confirmado e a venda fica aberta', async () => {
+    /**
+     * Não é omissão. Desde o bloco 18 nenhuma venda entra sem gaveta aberta,
+     * porque a divergência do fechamento precisa ter dono. Forçar aqui
+     * inventaria uma gaveta; recusar o pagamento seria pior, porque o cliente
+     * já pagou. O que sobra é a verdade, e a tela diz o que fazer.
+     */
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+
+    const resultado = await confirmar(cobranca.pagamentoId ?? '');
+
+    expect(resultado.desfecho).toBe('pago_sem_caixa');
+    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('pago');
+
+    // E abrindo o caixa, a conciliação não refaz nada: a cobrança já saiu de
+    // `aguardando`, então ela não é mais varrida.
+    await abrirGaveta();
+    const varredura = await conciliarCobrancas({
+      tenantId: TENANT,
+      provider: new FakePaymentProvider(),
+      hojeNaUnidade: HOJE,
+      agora: AGORA,
+    });
+    expect(varredura.consultadas).toBe(0);
+  });
+
+  it('cobrança recusada libera a comanda para outra tentativa', async () => {
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
+
+    const resultado = await confirmarCobranca({
+      tenantId: TENANT,
+      eventoId: 'evt_falhou',
+      tipo: 'payment_intent.payment_failed',
+      pagamentoId: cobranca.pagamentoId ?? '',
+      estado: 'recusado',
+      motivo: 'card_declined',
+      hojeNaUnidade: HOJE,
+    });
+
+    expect(resultado.desfecho).toBe('recusado');
+    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    // E dá para cobrar de novo: o índice único só vale para `aguardando`.
+    const outra = await cobrar(orderId, provider, 'toque-2');
+    expect(outra.estado).toBe('aguardando');
+  });
+
+  it('evento sobre pagamento desconhecido é ignorado, não erro', async () => {
+    // O adquirente manda evento de coisas que não são nossas — e uma cobrança
+    // de outra barbearia é invisível aqui pela RLS, que é o ponto.
+    const resultado = await confirmar('pi_que_nao_existe', 'evt_estranho');
+    expect(resultado.desfecho).toBe('ignorado');
+  });
+
+  it('com Pix vivo, a comanda não aceita item novo', async () => {
+    /**
+     * O valor da cobrança é congelado na emissão, e o cliente já está com o
+     * código na mão. Acrescentar um item depois criaria uma comanda de R$ 69
+     * com um Pix de R$ 49: o cliente paga o que está no código, a confirmação
+     * tenta fechar a venda com o valor errado, e **nada** fecha — dinheiro
+     * recebido sem venda.
+     *
+     * O caminho para mudar a conta existe e é explícito: cancelar, mexer,
+     * cobrar de novo.
+     */
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+
+    await expect(
+      adicionarItem({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        orderId,
+        tipo: 'service',
+        descricao: 'Barba',
+        quantidade: 1,
+        precoUnitarioCents: 2000,
+      }),
+    ).rejects.toMatchObject({ code: 'cobranca_em_curso' });
+
+    // Cancelado o Pix, o balcão volta a mexer na conta.
+    await cancelarCobranca({ tenantId: TENANT, chargeId: cobranca.id });
+    const depois = await adicionarItem({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId,
+      tipo: 'service',
+      descricao: 'Barba',
+      quantidade: 1,
+      precoUnitarioCents: 2000,
+    });
+    expect(depois.totalCents).toBe(6900);
+  });
+
+  it('se o fechamento falha, **nada** é marcado como pago', async () => {
+    /**
+     * A prova de que a cadeia é uma transação só. A cobrança e o fechamento
+     * compartilham a transação: se `fecharComanda` recusa, a marcação de
+     * `pago` volta atrás junto, e a entrega seguinte do adquirente ainda tem o
+     * que fazer.
+     *
+     * Sem a transação compartilhada, o estado ficaria "cobrança paga, comanda
+     * aberta e evento consumido" — o pior dos três, porque a reentrega do
+     * webhook encontraria tudo já registrado e não faria nada.
+     *
+     * A divergência é forçada por SQL de propósito: o produto a impede pela
+     * porta da frente (`cobranca_em_curso`), e o que se quer provar aqui é o
+     * que acontece se ela existir mesmo assim.
+     *
+     * **O que este teste não prova**, e vale escrever: ele continua verde se
+     * `fecharComanda` for chamado sem a transação de fora, porque a exceção
+     * desfaz o `UPDATE` de qualquer jeito. A diferença que a transação
+     * compartilhada faz aparece só se algo falhar **depois** do fechamento —
+     * e não há ponto de falha ali para exercer. A transação fica porque o
+     * raciocínio é o mesmo do resto do módulo (cinco tabelas ou nenhuma), não
+     * porque este teste a defende.
+     */
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+
+    await withTenant(TENANT, (tx) => tx.$executeRaw`
+      INSERT INTO order_items
+        (tenant_id, order_id, kind, description, quantity, unit_price_cents)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        ${orderId}::uuid, 'service', 'Barba fora do fluxo', 1, 2000
+      )
+    `);
+
+    await expect(confirmar(cobranca.pagamentoId ?? '')).rejects.toMatchObject({
+      code: 'pagamento_invalido',
+    });
+
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('aguardando');
+    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+
+    const eventos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ event_id: string }[]>`
+      SELECT event_id FROM order_charge_events
+    `);
+    expect(eventos).toHaveLength(0);
+  });
+
+  it('o evento fica registrado uma vez, com o desfecho', async () => {
+    /**
+     * `order_charge_events` é a trilha do que o adquirente disse e quando — o
+     * que se abre numa divergência de valor. Ela **também** trava a entrega
+     * concorrente pela chave primária, mas isso não é o que estes testes
+     * provam: o pool serializa as duas transações neste ambiente e o caso não
+     * se reproduz. O que carrega a idempotência no caminho sequencial é o
+     * `AND status = 'aguardando'`, e é honesto escrever que são duas garantias
+     * diferentes, uma provada e outra não.
+     */
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+
+    await confirmar(cobranca.pagamentoId ?? '', 'evt_unico');
+    await confirmar(cobranca.pagamentoId ?? '', 'evt_unico');
+
+    const eventos = await withTenant(TENANT, (tx) => tx.$queryRaw<
+      { event_id: string; outcome: string }[]
+    >`SELECT event_id, outcome FROM order_charge_events`);
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]?.outcome).toBe('pago');
+  });
+
+  // -- conciliação e expiração ----------------------------------------------
+
+  it('a rede de segurança fecha o que o webhook perdeu', async () => {
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    await cobrar(orderId, provider);
+
+    // O cliente pagou e o webhook não chegou.
+    provider.proximoEstado = 'pago';
+    const varredura = await conciliarCobrancas({
+      tenantId: TENANT,
+      provider,
+      hojeNaUnidade: HOJE,
+      agora: AGORA,
+    });
+
+    expect(varredura).toMatchObject({ consultadas: 1, pagas: 1 });
+    expect((await getComanda(TENANT, orderId)).status).toBe('paid');
+  });
+
+  it('a conciliação não conta o pagamento de novo quando o webhook já contou', async () => {
+    /**
+     * As duas escrevem pelo mesmo caminho, e o id do evento sintético é
+     * determinístico (`recon:<pagamento>:<estado>`). Duas implementações
+     * divergiriam no primeiro ajuste, e a divergência aqui é "pagamento contado
+     * duas vezes".
+     */
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
+
+    await confirmar(cobranca.pagamentoId ?? '');
+    provider.proximoEstado = 'pago';
+    const varredura = await conciliarCobrancas({
+      tenantId: TENANT,
+      provider,
+      hojeNaUnidade: HOJE,
+      agora: AGORA,
+    });
+
+    expect(varredura.pagas).toBe(0);
+    const pagamentos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM order_payments WHERE order_id = ${orderId}::uuid
+    `);
+    expect(pagamentos).toHaveLength(1);
+  });
+
+  it('Pix vencido libera a comanda', async () => {
+    // SPEC §3.3: "Pix expirado libera a comanda". Sem isso a comanda ficaria
+    // presa a um QR Code que nenhum banco aceita mais.
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    provider.expiraEm = new Date('2026-09-10T11:00:00Z');
+    await cobrar(orderId, provider);
+
+    const varredura = await conciliarCobrancas({
+      tenantId: TENANT,
+      provider,
+      hojeNaUnidade: HOJE,
+      agora: AGORA,
+    });
+
+    expect(varredura.encerradas).toBe(1);
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('expirado');
+    // E a comanda volta a aceitar cobrança. O mesmo provedor de propósito: o
+    // fake numera do 1, e uma instância nova devolveria o id que já está
+    // gravado — o índice único de `psp_payment_id` recusaria, com razão.
+    expect((await cobrar(orderId, provider, 'toque-2')).estado).toBe('aguardando');
+  });
+
+  it('Pix ainda dentro do prazo não é encerrado por engano', async () => {
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    provider.expiraEm = new Date('2026-09-10T13:00:00Z');
+    await cobrar(orderId, provider);
+
+    const varredura = await conciliarCobrancas({
+      tenantId: TENANT,
+      provider,
+      hojeNaUnidade: HOJE,
+      agora: AGORA,
+    });
+
+    expect(varredura.encerradas).toBe(0);
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('aguardando');
+  });
+
+  it('o balcão cancela o Pix quando o cliente muda de ideia', async () => {
+    // "Desisti do Pix, vou pagar em dinheiro" é rotina. Sem isto a comanda
+    // ficaria travada até o QR Code vencer, com o cliente esperando na frente.
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+
+    await cancelarCobranca({ tenantId: TENANT, chargeId: cobranca.id });
+
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('expirado');
+    await expect(
+      cancelarCobranca({ tenantId: TENANT, chargeId: cobranca.id }),
+    ).rejects.toMatchObject({ code: 'cobranca_encerrada' });
+  });
+
+  it('cobrança de uma barbearia não é vista pela outra', async () => {
+    /**
+     * O caminho triste que a RLS existe para fechar. O webhook abre o tenant a
+     * partir do metadado do evento e procura a cobrança **dentro** dele — então
+     * um evento apontando para a barbearia errada não encontra nada, em vez de
+     * mexer no dinheiro de quem não é dele.
+     */
+    const VIZINHA = '35353535-2222-2222-2222-222222222222';
+    await exec(`INSERT INTO tenants (id, name) VALUES ('${VIZINHA}', 'Vizinha')`);
+
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+
+    const resultado = await confirmarCobranca({
+      tenantId: VIZINHA,
+      eventoId: 'evt_vizinha',
+      tipo: 'payment_intent.succeeded',
+      pagamentoId: cobranca.pagamentoId ?? '',
+      estado: 'pago',
+      hojeNaUnidade: HOJE,
+    });
+
+    expect(resultado.desfecho).toBe('ignorado');
+    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+  });
+
+  it('caixa fechado depois da emissão não perde o pagamento', async () => {
+    // O turno acabou antes de o cliente pagar. O dinheiro é real e não pode
+    // sumir só porque a gaveta virou.
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+    await fecharCaixaDaUnidade({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      countedCents: 20000,
+      ...operador,
+    });
+
+    const resultado = await confirmar(cobranca.pagamentoId ?? '');
+
+    expect(resultado.desfecho).toBe('pago_sem_caixa');
+    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('pago');
+  });
+});

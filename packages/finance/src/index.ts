@@ -3,3 +3,4 @@ export * from './comanda.js';
 export * from './comissao.js';
 export * from './desempenho.js';
 export * from './painel.js';
+export * from './cobranca-online.js';

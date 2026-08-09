@@ -187,6 +187,14 @@ bloqueada e ninguém soube. É o mesmo precedente de `finance → identity`, e a
 seta não volta: `jobs` continua sem saber que existe plataforma, e recebe o que
 precisa da camada de cima por injeção no `Contexto` do worker.
 
+`finance` depende de `jobs` pela mesma razão de `platform`: `enfileirarPara()`.
+A tarefa que vai conferir uma cobrança de Pix precisa nascer **dentro** da
+transação que a cria — enfileirar depois do commit abre a janela em que o QR
+Code existe e nada está marcado para vencê-lo, e a comanda fica presa para
+sempre, porque só uma cobrança viva é permitida por vez. A seta não volta:
+`jobs` continua sem saber que existe comanda, e recebe do `Contexto` do worker
+a função que sabe.
+
 `jobs` **não** depende de `crm`, e a varredura de retenção mora lá. O handler
 recebe `varrerRetencao` injetada no `Contexto`, como o `provider` de mensagem e
 a régua de cobrança: quem monta o processo (`apps/worker`) liga as duas pontas.
@@ -484,6 +492,15 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Permissão de destruir | `customers.anonymize`, própria e só do dono por padrão. É a única operação irreversível do produto, e não acompanha `settings.manage`: responder pedido de LGPD e apagar a base são tarefas diferentes |
 | Retenção | cinco anos sem **interação** — atendimento, comanda, fiado, fila —, nunca `updated_at`, que a importação de base mexe em mil e duzentos cadastros de uma vez. Aviso prévio de trinta dias, e uma visita nova cancela a saída: a pergunta "já voltou?" vem **antes** de "o prazo venceu?" |
 | Pedido do titular | prazo gravado na criação, nunca calculado na leitura; um aberto por pessoa e por tipo (índice único parcial), então pedir de novo devolve o mesmo pedido em vez de reiniciar a contagem; recusa exige motivo escrito, no domínio e por `CHECK` |
+| Adquirente ligado | uma variável (`PSP_MODO`) e **uma função** que a lê, para os dois processos. Valor desconhecido falha alto: lido com tolerância, ele viraria "sem adquirente" e a plataforma pararia de cobrar por um ciclo inteiro de faturamento sem ninguém perceber |
+| Chave de idempotência que vai ao adquirente | escopada **dentro** do provedor, nunca só na borda. O espaço de idempotência dele é o da conta, que é uma só para todas as barbearias — duas recepcionistas mandando `"1"` fariam a segunda receber o copia-e-cola da primeira |
+| Estorno | sai **de uma cobrança**, nunca "da conta": adquirente nenhum aceita a segunda coisa. Recusado antes de debitar o crédito quando não há qual; recusa definitiva (4xx) devolve o crédito, indisponibilidade (5xx) **não** — ela é ambígua, e devolver pagaria a barbearia duas vezes |
+| Id de cobrança vazio | nunca. `psp_charge_id` só é escrito enquanto é nulo, e string vazia não é nulo: ela amarraria a fatura a nada para sempre. Guarda no código e `CHECK` no banco |
+| Cobrança online da comanda | uma viva por comanda, por índice único parcial. A linha nasce **antes** da chamada ao adquirente — a ordem inversa perde a cobrança inteira se o processo cair — e a chave que vai para ele é o **id da linha**, para a retentativa reencontrar a mesma cobrança em vez de criar a segunda |
+| Comanda com cobrança viva | não aceita item novo, remoção nem desconto. O valor foi congelado na emissão e o cliente está com o código na mão: mudar a conta faria ele pagar R$ 49 numa comanda de R$ 69, e **nada** fecharia. O caminho é explícito — cancelar, mexer, cobrar de novo |
+| Webhook da Stripe | segredo **próprio** (`STRIPE_WEBHOOK_SECRET`), porque ela gera um por endereço. O metadado abre o tenant; quem confirma é o id do pagamento, procurado **dentro** dele — evento assinado apontando para a barbearia errada não encontra nada |
+| Evento do adquirente que não diz estado | ignorado **sem** consumir a entrega. Registrá-lo como consumido faria a reentrega do evento de verdade, que traz o mesmo id, encontrar tudo gravado e não fazer nada |
+| Pix confirmado sem caixa aberto | a cobrança fica `pago` e a comanda fica **aberta**. Desde o bloco 18 nenhuma venda entra sem gaveta, porque a divergência do fechamento precisa ter dono — e recusar o pagamento seria pior, porque o cliente já pagou |
 
 ---
 

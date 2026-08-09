@@ -115,6 +115,21 @@ export interface Contexto {
     alertas: readonly Alerta[],
     agora: Date,
   ) => Promise<void>;
+  /**
+   * A conferência das cobranças online de uma barbearia (bloco 35), injetada.
+   *
+   * Mesma razão de todas as outras: ela vive em `packages/finance` e precisa do
+   * adquirente e do fuso da unidade, e `jobs` não conhece nenhum dos dois. Quem
+   * liga as pontas é `apps/worker`.
+   *
+   * O webhook é o caminho e chega em segundos; isto é a rede de segurança para
+   * quando ele se perde — e é o que faz o Pix vencido liberar a comanda, sem o
+   * quê ela ficaria presa a um QR Code que nenhum banco aceita mais.
+   */
+  readonly conciliarCobrancas: (
+    tenantId: string,
+    agora: Date,
+  ) => Promise<{ readonly pagas: number; readonly encerradas: number }>;
 }
 
 const avisoDeAgendamento =
@@ -211,6 +226,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       assunto,
       agora: contexto.relogio.agora(),
     });
+  },
+
+  /**
+   * A conferência das cobranças online de uma barbearia (bloco 35).
+   *
+   * Nasce junto com a cobrança, dentro da mesma transação, e roda depois da
+   * janela do Pix. **Não** confere recurso ligado: isto não manda mensagem —
+   * fecha venda e libera comanda travada, que é o oposto de algo opcional.
+   */
+  'cobranca.conciliar': async (tarefa, contexto) => {
+    await contexto.conciliarCobrancas(tarefa.tenantId, contexto.relogio.agora());
   },
 
   /**

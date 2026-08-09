@@ -18,12 +18,12 @@ integridade do banco.
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | 137 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
-| `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 89 testes ✅ |
+| `packages/finance` | Comanda, checkout, caixa, fiado, comissão e a **cobrança online** (Pix pelo adquirente, com webhook e conciliação) — o dinheiro e os números do barbeiro, do banco para a tela | 114 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática, apuração diária, varredura de retenção e varredura de alerta — o que acontece sem ninguém esperando | 67 testes ✅ |
 | `packages/crm` | A ficha do cliente, a importação de base e os direitos do titular: consentimento com histórico, exportação, anonimização e retenção | 88 testes ✅ |
 | `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin, suporte assistido, papéis internos, o canal de alerta ao dono e o cliente Stripe das duas pontas | 149 testes ✅ |
 | `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública, do painel, **da plataforma** e o webhook do adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, direitos do titular e anonimização (LGPD) e o Super Admin | 364 testes ✅ |
+| `apps/api` | API pública, do painel, **da plataforma** e os **dois** webhooks de adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, cobrança por Pix, direitos do titular e anonimização (LGPD) e o Super Admin | 375 testes ✅ |
 | `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 81 testes ✅ |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos, marca a falta, apura as métricas do dia e varre a retenção de dado pessoal | — |
 
@@ -82,10 +82,15 @@ fraco em silêncio subiria o sistema funcionando com a proteção desligada.
 | `MFA_SECRET_KEY` | AES-256-GCM do segredo TOTP guardado em `staff_users` **e em `platform_admins`** | `openssl rand -base64 32` (32 bytes) |
 | `PSP_WEBHOOK_SECRET` | HMAC do webhook do adquirente, que é a única rota sem sessão com efeito sobre dinheiro | o provedor gera, no painel dele |
 | `STRIPE_SECRET_KEY` | falar com a Stripe. Só exigida quando `PSP_MODO=stripe` | o painel da Stripe |
+| `STRIPE_WEBHOOK_SECRET` | HMAC do webhook da Stripe, que é a **segunda** rota sem sessão com efeito sobre dinheiro | a Stripe gera um por endereço cadastrado |
 
-`PSP_WEBHOOK_SECRET` ausente **recusa** todo webhook — nunca libera. É o que
-separa "a rota está fechada" de "a rota está aberta e ninguém percebeu": um
-padrão vazio faria toda assinatura conferir.
+Os dois segredos de webhook ausentes **recusam** todo webhook — nunca liberam. É
+o que separa "a rota está fechada" de "a rota está aberta e ninguém percebeu":
+um padrão vazio faria toda assinatura conferir.
+
+E são **dois**, não um: a Stripe gera um segredo por endereço cadastrado, e
+reaproveitar o do bloco 29 faria a conferência falhar de um jeito que parece
+código quebrado.
 
 ### Qual adquirente está no ar: `PSP_MODO`
 

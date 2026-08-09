@@ -1,5 +1,8 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import { varrerRetencao } from '@barbearia/crm';
+import { conciliarCobrancas } from '@barbearia/finance';
+import { primaryLocation } from '@barbearia/scheduling';
+import { diaNaUnidade } from '@barbearia/core';
 import {
   avisarDaOperacao,
   CODIGO_DA_RETENCAO,
@@ -15,6 +18,7 @@ import {
   CobrancaManualProvider,
   ConsoleGestorProvider,
   PspCobrancaProvider,
+  adquirenteDaComanda,
   adquirenteDaPlataforma,
   aplicarRegua,
   conciliarPendentes,
@@ -177,6 +181,31 @@ async function main(): Promise<void> {
         if (resultado.enviados > 0) {
           console.log('[operacao] alerta', { tenantId, enviados: resultado.enviados });
         }
+      },
+      /**
+       * A conferência das cobranças online (bloco 35), ligada aqui pelo mesmo
+       * motivo de todas as outras: ela precisa do adquirente e do **fuso da
+       * unidade**, e `jobs` não conhece nenhum dos dois.
+       *
+       * O fuso importa mais aqui do que no balcão: a comissão é datada pelo dia
+       * da barbearia, e esta tarefa roda meia hora depois da emissão — às 22h de
+       * Salvador o UTC já virou, e ela cairia no mês seguinte do acerto do
+       * barbeiro (defeito D2, o mesmo que erra a grade).
+       */
+      conciliarCobrancas: async (tenantId, agora) => {
+        const local = await primaryLocation(tenantId);
+        // Barbearia sem unidade não tem comanda, então não há o que conferir.
+        if (!local) return { pagas: 0, encerradas: 0 };
+        const resultado = await conciliarCobrancas({
+          tenantId,
+          provider: adquirenteDaComanda(),
+          hojeNaUnidade: diaNaUnidade(null, local.timezone, agora).dia,
+          agora,
+        });
+        if (resultado.pagas > 0 || resultado.encerradas > 0) {
+          console.log('[cobranca] conciliação', { tenantId, ...resultado });
+        }
+        return resultado;
       },
       rodarRegua: async (agora) => {
         /**

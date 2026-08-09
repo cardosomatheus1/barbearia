@@ -58,6 +58,8 @@ import {
   adicionarNaComanda,
   removerDaComanda,
   ajustarAComanda,
+  cancelarCobrancaDaComanda,
+  cobrarComanda,
   fecharAComanda,
   receberDoFiado,
   comecarSegundoFator,
@@ -986,6 +988,44 @@ export async function acaoFecharComanda(form: FormData): Promise<void> {
   const resultado = await fecharAComanda(token, id, pagamentos, texto(form, 'idempotencyKey'));
   if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
   redirect(`/admin/comanda/${id}?pago=1`);
+}
+
+// -- Cobrança online (bloco 35) ----------------------------------------------
+
+/**
+ * Emite o Pix da comanda.
+ *
+ * A chave de idempotência vem do formulário, gerada quando a **tela** foi
+ * montada. Gerá-la aqui daria chave nova a cada envio, e o duplo toque no
+ * celular do balcão produziria dois QR Codes para a mesma conta — com o cliente
+ * na frente, escolhendo um deles ao acaso.
+ */
+export async function acaoCobrarComanda(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+  const meio = texto(form, 'meio');
+  if (meio !== 'pix' && meio !== 'cartao' && meio !== 'link') {
+    falhar(`/admin/comanda/${id}`, 'invalid_request');
+  }
+
+  const resultado = await cobrarComanda(
+    token,
+    id,
+    meio as 'pix' | 'cartao' | 'link',
+    texto(form, 'idempotencyKey'),
+  );
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}?cobrando=1`);
+}
+
+/** "Desisti do Pix, vou pagar em dinheiro" — rotina do balcão. */
+export async function acaoCancelarCobranca(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+
+  const resultado = await cancelarCobrancaDaComanda(token, id, texto(form, 'chargeId'));
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}?salvo=1`);
 }
 
 export async function acaoReceberFiado(form: FormData): Promise<void> {

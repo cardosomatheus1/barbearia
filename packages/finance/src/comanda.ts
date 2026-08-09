@@ -38,6 +38,7 @@ export type ComandaFailure =
   | 'pagamento_invalido'
   | 'caixa_fechado'
   | 'cliente_nao_encontrado'
+  | 'cobranca_em_curso'
   | 'servico_desconhecido';
 
 export class ComandaError extends Error {
@@ -358,6 +359,30 @@ async function recalcular(tx: TransactionClient, orderId: string): Promise<void>
  * Acrescentar item não trava: duas pessoas mexendo na mesma comanda ao mesmo
  * tempo é situação real de balcão, e as duas inserções são compatíveis.
  */
+/**
+ * Recusa mexer na conta enquanto houver um QR Code vivo (bloco 35).
+ *
+ * O valor da cobrança é congelado na emissão, e o cliente já está com o código
+ * na mão. Deixar acrescentar um item depois criaria uma comanda de R$ 69 com um
+ * Pix de R$ 49: o cliente paga o que está no código, a confirmação tenta fechar
+ * a venda com o valor errado e **nada** fecha — dinheiro recebido sem venda.
+ *
+ * O caminho para mudar a conta existe e é explícito: cancelar o Pix, mexer,
+ * cobrar de novo. É uma decisão do balcão, não um erro do sistema.
+ */
+async function exigirSemCobrancaViva(tx: TransactionClient, orderId: string): Promise<void> {
+  const vivas = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM order_charges
+     WHERE order_id = ${orderId}::uuid AND status = 'aguardando'
+  `;
+  if (vivas[0]) {
+    throw new ComandaError(
+      'cobranca_em_curso',
+      'Cancele o Pix em aberto antes de mudar a comanda.',
+    );
+  }
+}
+
 async function exigirAberta(
   tx: TransactionClient,
   orderId: string,
@@ -394,6 +419,7 @@ export async function adicionarItem(params: {
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     await exigirAberta(tx, params.orderId);
+    await exigirSemCobrancaViva(tx, params.orderId);
 
     const falha = validarItem({
       tipo: params.tipo,
@@ -449,6 +475,7 @@ export async function removerItem(params: {
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     await exigirAberta(tx, params.orderId);
+    await exigirSemCobrancaViva(tx, params.orderId);
     await tx.$executeRaw`
       DELETE FROM order_items
        WHERE id = ${params.itemId}::uuid AND order_id = ${params.orderId}::uuid
@@ -489,6 +516,7 @@ export async function ajustarComanda(params: {
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     const atual = await exigirAberta(tx, params.orderId);
+    await exigirSemCobrancaViva(tx, params.orderId);
 
     if (params.desconto) {
       const falha = validarDesconto(params.desconto);
@@ -590,8 +618,21 @@ export async function fecharComanda(params: {
    * do acerto do barbeiro (defeito D2, o mesmo que erra a grade).
    */
   readonly hojeNaUnidade: string;
+  /**
+   * A transação de fora, quando já existe uma.
+   *
+   * Existe por uma coisa só: o webhook do Pix (bloco 35). A SPEC §3.3 diz que a
+   * confirmação **dispara em cadeia** — fecha comanda, registra no caixa, gera
+   * comissão —, e essa cadeia tem que ser a mesma transação que marca a
+   * cobrança como paga. Fora dela existiria a janela em que o adquirente
+   * confirmou e a venda não fechou, e o dinheiro ficaria sem comanda.
+   *
+   * É o mesmo precedente de `anonimizarCliente` (bloco 32). Quem chama de uma
+   * requisição normal não passa nada e ganha a transação própria.
+   */
+  readonly tx?: TransactionClient;
 }): Promise<Comanda> {
-  return withTenant(params.tenantId, async (tx) => {
+  const dentro = async (tx: TransactionClient): Promise<Comanda> => {
     /**
      * Repetição do mesmo toque devolve a comanda paga, não um erro.
      *
@@ -736,7 +777,9 @@ export async function fecharComanda(params: {
     });
 
     return carregar(tx, params.orderId);
-  });
+  };
+
+  return params.tx ? dentro(params.tx) : withTenant(params.tenantId, dentro);
 }
 
 /**

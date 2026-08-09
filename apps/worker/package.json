@@ -13,8 +13,10 @@
     "@barbearia/core": "workspace:*",
     "@barbearia/crm": "workspace:*",
     "@barbearia/db": "workspace:*",
+    "@barbearia/finance": "workspace:*",
     "@barbearia/jobs": "workspace:*",
-    "@barbearia/platform": "workspace:*"
+    "@barbearia/platform": "workspace:*",
+    "@barbearia/scheduling": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

@@ -625,7 +625,41 @@ async function prepararCaixa(token, catalogo) {
     });
   }
 
-  return { ok: true, orderId };
+  /**
+   * Uma segunda comanda **com Pix vivo** (bloco 35).
+   *
+   * O QR Code é o elemento novo mais largo do produto, e ele só existe quando
+   * há cobrança em aberto. Medir só a comanda sem cobrança deixaria justamente
+   * a tela nova de fora — e é aos 360px que um código quadrado estoura.
+   */
+  let comPix = null;
+  const segunda = await fetch(`${API}/v1/admin/orders`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({}),
+  });
+  if (segunda.ok) {
+    const { id } = await segunda.json();
+    await fetch(`${API}/v1/admin/orders/${id}/items`, {
+      method: 'POST',
+      headers: cabecalho,
+      body: JSON.stringify({
+        tipo: 'service',
+        quantidade: 1,
+        professionalId: proNome?.id,
+        descricao: 'Corte degradê com máquina e tesoura',
+        precoUnitarioCents: 129000,
+      }),
+    });
+    const cobrada = await fetch(`${API}/v1/admin/orders/${id}/charges`, {
+      method: 'POST',
+      headers: { ...cabecalho, 'idempotency-key': 'medicao-pix' },
+      body: JSON.stringify({ meio: 'pix' }),
+    });
+    if (cobrada.ok) comPix = id;
+  }
+
+  return { ok: true, orderId, comPix };
 }
 
 /**
@@ -871,6 +905,9 @@ async function main() {
     { nome: 'cobrar', url: '/admin/comanda', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     ...(caixa.ok
       ? [{ nome: 'comanda', url: `/admin/comanda/${caixa.orderId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
+      : []),
+    ...(caixa.comPix
+      ? [{ nome: 'comanda — Pix em curso', url: `/admin/comanda/${caixa.comPix}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
     { nome: 'fiado', url: '/admin/fiado', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

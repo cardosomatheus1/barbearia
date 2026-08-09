@@ -5419,3 +5419,48 @@ main { padding-bottom: var(--space-8); }
 @media (min-width: 480px) {
   .sessoes__item { grid-template-columns: 1fr auto; align-items: center; }
 }
+
+/* ---------------------------------------------------------------------------
+   O Pix no balcão (bloco 35)
+
+   O QR Code é o conteúdo, não a decoração: ele precisa ser grande o bastante
+   para ler de um celular a um braço de distância, e pequeno o bastante para
+   caber inteiro numa tela de 360px sem rolagem. Daí `min()` com `100%` — o
+   limite superior é o desejo, o inferior é a regra.
+   --------------------------------------------------------------------------- */
+.cobranca__codigo {
+  width: min(16rem, 100%);
+  margin: 0 auto var(--space-4);
+  /* Fundo branco próprio: o painel é escuro, e leitor de QR Code precisa de
+     contraste com área tranquila em volta. Sobre o fundo do tema, não lê. */
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+.cobranca__codigo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Selecionável e legível: é o caminho de quem paga pelo mesmo aparelho que
+   abriu a tela, e o de quem não enxerga o código. */
+.cobranca__texto {
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+.cobranca__recebido {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+
+@media (min-width: 768px) {
+  /* Com espaço, o código cresce — no notebook do balcão o cliente lê de longe. */
+  .cobranca__codigo { width: min(20rem, 100%); }
+}

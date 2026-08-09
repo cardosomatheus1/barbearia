@@ -4,15 +4,20 @@ import type { Metadata } from 'next';
 import {
   catalogoDoBalcao,
   comandaAberta,
+  cobrancasDaComanda,
   type Comanda,
+  type CobrancaDaComandaNaTela,
   type ItemDaComandaNaTela,
 } from '@/lib/admin-api';
+import { qrCodeSvg } from '@/lib/qrcode';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import {
   acaoAdicionarItem,
   acaoAjustarComanda,
+  acaoCancelarCobranca,
+  acaoCobrarComanda,
   acaoFecharComanda,
   acaoRemoverItem,
   acaoSair,
@@ -61,6 +66,9 @@ const FALHA: Record<string, string> = {
   servico_desconhecido: 'Este serviço ou profissional não existe nesta barbearia.',
   sem_pagamento: 'Informe pelo menos uma forma de pagamento.',
   valor_invalido: 'Confira o valor: use só números, como 49,90.',
+  cobranca_em_curso: 'Já existe um Pix em aberto para esta comanda.',
+  cobranca_encerrada: 'Esta cobrança já foi encerrada.',
+  comanda_sem_valor: 'Acrescente o que foi feito antes de cobrar.',
   mfa_required: 'Confirme o código do segundo fator para continuar.',
   forbidden: 'Sua conta não fecha comanda.',
   request_failed: 'Não deu para salvar. Tente de novo.',
@@ -77,6 +85,99 @@ const NOME_DA_FORMA: Record<string, string> = {
   transfer: 'Transferência',
   fiado: 'Fiado',
 };
+
+/**
+ * O Pix na tela, quando existe um em curso.
+ *
+ * Três decisões desenham este bloco.
+ *
+ * **O copia-e-cola vale tanto quanto o QR Code.** Quem paga pelo mesmo celular
+ * que abriu a tela não consegue fotografar a própria tela — e é metade dos
+ * casos quando o cliente pega o aparelho do balcão. Os dois aparecem juntos, o
+ * texto selecionável.
+ *
+ * **O código tem fundo branco próprio.** O painel é escuro, e leitor de QR Code
+ * precisa de contraste com área tranquila em volta. Um código desenhado direto
+ * sobre o fundo do tema simplesmente não lê.
+ *
+ * **"Pago" não some com o bloco.** Ele só aparece com a comanda ainda aberta —
+ * que é exatamente o caso em que o caixa estava fechado quando o dinheiro
+ * entrou. Sem este aviso, a tela mostraria uma comanda aberta e nada dizendo
+ * que o cliente já pagou.
+ */
+function CobrancaEmCurso({
+  cobranca,
+  orderId,
+}: {
+  readonly cobranca: CobrancaDaComandaNaTela;
+  readonly orderId: string;
+}) {
+  const codigo = cobranca.pixCopiaECola ? qrCodeSvg(cobranca.pixCopiaECola) : null;
+
+  if (cobranca.estado === 'pago') {
+    return (
+      <section className="cartao-balcao cobranca">
+        <h2 className="cartao-balcao__titulo">Pix recebido</h2>
+        <p className="cobranca__recebido">{reais(cobranca.valorCents)}</p>
+        {/* Este bloco só aparece com a comanda **aberta**: paga, ela mostra
+            "Pago com". Então chegar aqui já significa que o caixa estava
+            fechado quando o dinheiro entrou, e é isso que a tela explica. */}
+        <p className="cartao-balcao__texto">
+          O dinheiro está confirmado. Abra o caixa para fechar a comanda — a venda precisa
+          saber em qual gaveta entrou.
+        </p>
+        <a className="ui-button ui-button--primary ui-button--block" href="/admin/caixa">
+          Abrir o caixa
+        </a>
+      </section>
+    );
+  }
+
+  return (
+    <section className="cartao-balcao cobranca">
+      <h2 className="cartao-balcao__titulo">Pix de {reais(cobranca.valorCents)}</h2>
+
+      {codigo ? (
+        <div
+          className="cobranca__codigo"
+          // O SVG é gerado aqui, no servidor, a partir do texto que o
+          // adquirente devolveu — não há entrada de usuário no caminho.
+          dangerouslySetInnerHTML={{ __html: codigo.svg }}
+        />
+      ) : null}
+
+      {cobranca.pixCopiaECola ? (
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="copia-e-cola">
+            Ou copie o código
+          </label>
+          <textarea
+            className="ui-field__input cobranca__texto"
+            id="copia-e-cola"
+            readOnly
+            rows={3}
+            value={cobranca.pixCopiaECola}
+          />
+          <p className="ui-field__hint">
+            Quem paga pelo mesmo celular que abriu esta tela usa o código, não a foto.
+          </p>
+        </div>
+      ) : null}
+
+      <p className="cartao-balcao__texto">
+        Assim que o banco confirmar, a comanda fecha sozinha. Recarregue para conferir.
+      </p>
+
+      <form action={acaoCancelarCobranca}>
+        <input name="orderId" type="hidden" value={orderId} />
+        <input name="chargeId" type="hidden" value={cobranca.id} />
+        <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+          Cancelar o Pix
+        </button>
+      </form>
+    </section>
+  );
+}
 
 function Item({
   item,
@@ -141,9 +242,10 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   const { id } = await params;
   const query = await searchParams;
 
-  const [comanda, catalogo] = await Promise.all([
+  const [comanda, catalogo, cobrancas] = await Promise.all([
     comandaAberta(token, id),
     catalogoDoBalcao(token),
+    cobrancasDaComanda(token, id),
   ]);
 
   const erro = first(query['erro']);
@@ -183,6 +285,16 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   // A mesma pergunta que a API faz: dar desconto é `finance.view`, que a
   // recepção não tem. Mostrar o formulário para ela só produziria um 403.
   const podeDarDesconto = podeNaTela(estado, 'finance.view');
+  /**
+   * A cobrança que a tela mostra: a viva, ou a paga que ainda não virou venda.
+   *
+   * As duas interessam ao balcão pelo mesmo motivo — são as únicas em que ainda
+   * há algo a fazer. Recusada e expirada viram histórico, e o botão de cobrar
+   * volta.
+   */
+  const cobrancaDoMomento = cobrancas.ok
+    ? cobrancas.dados.cobrancas.find((c) => c.estado === 'aguardando' || c.estado === 'pago')
+    : undefined;
   const servicos = catalogo.ok ? catalogo.dados.services : [];
   const profissionais = catalogo.ok ? catalogo.dados.professionals : [];
 
@@ -417,6 +529,28 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             </form>
           </details>
           ) : null}
+
+          {cobrancaDoMomento ? (
+            <CobrancaEmCurso cobranca={cobrancaDoMomento} orderId={conta.id} />
+          ) : (
+            <section className="cartao-balcao">
+              <h2 className="cartao-balcao__titulo">Cobrar pelo Pix</h2>
+              <p className="cartao-balcao__texto">
+                O QR Code aparece aqui e a comanda fecha sozinha quando o banco confirmar.
+              </p>
+              <form action={acaoCobrarComanda}>
+                <input name="orderId" type="hidden" value={conta.id} />
+                <input name="meio" type="hidden" value="pix" />
+                {/* Gerada quando a tela é montada, como no fechamento: gerá-la
+                    na ação daria chave nova a cada envio, e o duplo toque
+                    produziria dois QR Codes para a mesma conta. */}
+                <input name="idempotencyKey" type="hidden" value={randomUUID()} />
+                <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+                  Gerar Pix de {reais(conta.totalCents)}
+                </button>
+              </form>
+            </section>
+          )}
 
           <section className="cartao-balcao">
             <h2 className="cartao-balcao__titulo">Receber</h2>

@@ -926,6 +926,53 @@ export const fecharAComanda = (
   idempotencyKey: string,
 ) => chamar<Comanda>('POST', `/v1/admin/orders/${id}/close`, { pagamentos }, token, idempotencyKey);
 
+/** A cobrança online da comanda (blocos 35 e 36). */
+export interface CobrancaDaComandaNaTela {
+  id: string;
+  orderId: string;
+  meio: 'pix' | 'cartao' | 'link';
+  valorCents: number;
+  estado: 'aguardando' | 'pago' | 'recusado' | 'expirado';
+  pagamentoId: string | null;
+  pixCopiaECola: string | null;
+  url: string | null;
+  expiraEm: string | null;
+  pagaEm: string | null;
+  motivo: string | null;
+  criadaPor: string;
+  criadaEm: string;
+}
+
+export const cobrancasDaComanda = (token: string, orderId: string) =>
+  chamar<{ cobrancas: CobrancaDaComandaNaTela[] }>(
+    'GET',
+    `/v1/admin/orders/${orderId}/charges`,
+    undefined,
+    token,
+  );
+
+export const cobrarComanda = (
+  token: string,
+  orderId: string,
+  meio: 'pix' | 'cartao' | 'link',
+  idempotencyKey: string,
+) =>
+  chamar<CobrancaDaComandaNaTela>(
+    'POST',
+    `/v1/admin/orders/${orderId}/charges`,
+    { meio },
+    token,
+    idempotencyKey,
+  );
+
+export const cancelarCobrancaDaComanda = (token: string, orderId: string, chargeId: string) =>
+  chamar<{ ok: true }>(
+    'DELETE',
+    `/v1/admin/orders/${orderId}/charges/${chargeId}`,
+    undefined,
+    token,
+  );
+
 export interface Devedor {
   id: string;
   name: string;

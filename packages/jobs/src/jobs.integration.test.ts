@@ -74,6 +74,8 @@ let reguasRodadas = 0;
 const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
 /** Os alertas que o worker mandou o canal do gestor entregar. */
 const alertasEntregues: { tenantId: string; quantos: number }[] = [];
+/** As conferências de cobrança online que o worker mandou rodar (bloco 35). */
+const conciliacoesRodadas: { tenantId: string; agora: Date }[] = [];
 
 const ligacoesDaPlataforma = () => ({
   avisarDeCobranca: async (aviso: {
@@ -96,6 +98,10 @@ const ligacoesDaPlataforma = () => ({
   },
   avisarDaOperacao: async (tenantId: string, alertas: readonly unknown[]) => {
     alertasEntregues.push({ tenantId, quantos: alertas.length });
+  },
+  conciliarCobrancas: async (tenantId: string, agora: Date) => {
+    conciliacoesRodadas.push({ tenantId, agora });
+    return { pagas: 0, encerradas: 0 };
   },
 });
 
@@ -141,6 +147,7 @@ describeIfDb('fila de trabalho', () => {
     avisosDeCobranca.length = 0;
     retencoesRodadas.length = 0;
     alertasEntregues.length = 0;
+    conciliacoesRodadas.length = 0;
     contexto = {
       provider,
       relogio: { agora: () => AGORA },

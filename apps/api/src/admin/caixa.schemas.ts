@@ -148,3 +148,14 @@ export const configuracaoDeComissaoSchema = z.object({
   base: z.enum(BASES_DE_COMISSAO),
   tratamentoDoDesconto: z.enum(TRATAMENTOS_DO_DESCONTO),
 });
+
+/**
+ * O meio da cobrança online (blocos 35 e 36).
+ *
+ * Lista fechada e **sem padrão**: um padrão silencioso faria o balcão emitir
+ * Pix quando quis mandar link, e o erro só apareceria com o cliente esperando o
+ * QR Code que não é o dele. `cartao` e `link` entram no bloco 36.
+ */
+export const cobrancaSchema = z.object({
+  meio: z.enum(['pix', 'cartao', 'link']),
+});

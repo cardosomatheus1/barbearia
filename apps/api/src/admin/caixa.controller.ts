@@ -6,7 +6,11 @@ import {
   ajustarComanda,
   caixaAberto,
   CaixaError,
+  cancelarCobranca as cancelarCobrancaDaComanda,
+  CobrancaError,
+  cobrancasDaComanda,
   ComandaError,
+  criarCobrancaDaComanda,
   faturamentoDoDia,
   fecharCaixaDaUnidade,
   fecharComanda,
@@ -18,7 +22,14 @@ import {
   removerItem,
 } from '@barbearia/finance';
 import { primaryLocation } from '@barbearia/scheduling';
-import { diaNaUnidade, type DescontoDaComanda, type Pagamento, type TipoDeItem } from '@barbearia/core';
+import {
+  diaNaUnidade,
+  type DescontoDaComanda,
+  type MeioDePagamento,
+  type Pagamento,
+  type TipoDeItem,
+} from '@barbearia/core';
+import { adquirenteDaComanda } from '@barbearia/platform';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -30,6 +41,7 @@ import {
   ajusteSchema,
   diaSchema,
   fecharCaixaSchema,
+  cobrancaSchema,
   fecharComandaSchema,
   itemSchema,
   movimentoSchema,
@@ -51,10 +63,20 @@ const STATUS: Record<string, number> = {
   // barbearia. A mensagem carrega o teto em reais, porque "recusado" sem o
   // número manda a recepção adivinhar.
   desconto_acima_do_teto: 409,
+  // 409 e não 400: já existe um QR Code vivo para esta comanda, e é isso que
+  // impede o cliente de pagar duas vezes.
+  cobranca_em_curso: 409,
+  cobranca_encerrada: 409,
+  cobranca_nao_encontrada: 404,
+  comanda_sem_valor: 409,
 };
 
 function toHttp(error: unknown): never {
-  if (error instanceof CaixaError || error instanceof ComandaError) {
+  if (
+    error instanceof CaixaError ||
+    error instanceof ComandaError ||
+    error instanceof CobrancaError
+  ) {
     throw new DomainError(error.code, STATUS[error.code] ?? 400, error.message);
   }
   throw error;
@@ -386,6 +408,80 @@ export class CaixaController {
    * com celular de fuso torto veria o faturamento de ontem misturado ao de hoje
    * (defeito D2, o mesmo que erra a grade).
    */
+  // -- Cobrança online (blocos 35 e 36) --------------------------------------
+
+  /**
+   * O que a tela da comanda precisa saber sobre o Pix em curso.
+   *
+   * `cashier.open` como o resto do balcão: emitir e acompanhar cobrança é
+   * operar a venda da frente, não ver o dinheiro da casa.
+   */
+  @Exige('cashier.open')
+  @Get('orders/:id/charges')
+  async cobrancas(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+  ) {
+    return { cobrancas: await cobrancasDaComanda(staff.tenantId, id) };
+  }
+
+  /**
+   * Emite a cobrança e devolve o que mostrar na tela.
+   *
+   * `Idempotency-Key` é **obrigatória** aqui, e é a primeira rota do produto em
+   * que ela é. O motivo é o efeito: cada toque a mais seria um QR Code a mais
+   * para a mesma conta, e o cliente com dois códigos na frente paga um deles ao
+   * acaso. As outras rotas de dinheiro têm outra defesa — o `AND status =
+   * 'open'` do fechamento —, que aqui não existe porque emitir não muda a
+   * comanda.
+   */
+  @Exige('cashier.open')
+  @Post('orders/:id/charges')
+  async cobrar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(cobrancaSchema)) body: { meio: MeioDePagamento },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw badRequest('invalid_request', 'Idempotency-Key é obrigatória para cobrar');
+    }
+
+    const local = await this.unidade(staff.tenantId);
+    try {
+      return await criarCobrancaDaComanda({
+        tenantId: staff.tenantId,
+        locationId: local.id,
+        orderId: id,
+        meio: body.meio,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+        // Escopada por operador, como no fechamento: a chave vem do cliente e é
+        // livre, e duas recepcionistas mandando "1" trocariam de QR Code.
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
+        provider: adquirenteDaComanda(),
+        agora: new Date(),
+      });
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  /** "O cliente desistiu do Pix e vai pagar em dinheiro" — rotina do balcão. */
+  @Exige('cashier.open')
+  @Delete('orders/:id/charges/:chargeId')
+  async cancelarCobranca(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('chargeId', new ZodValidationPipe(uuidSchema)) chargeId: string,
+  ) {
+    try {
+      await cancelarCobrancaDaComanda({ tenantId: staff.tenantId, chargeId });
+      return { ok: true };
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
   @Exige('finance.view')
   @Get('revenue')
   async faturamento(

@@ -32,6 +32,7 @@ import {
   PlataformaController,
 } from './plataforma/plataforma.controller.js';
 import { WebhookDoPspController } from './plataforma/webhook.controller.js';
+import { StripeWebhookController } from './plataforma/stripe-webhook.controller.js';
 import { PlataformaGuard } from './plataforma/plataforma.guard.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
@@ -77,6 +78,7 @@ import { TenantService } from './tenant/tenant.service.js';
     PlataformaAuthController,
     PlataformaController,
     WebhookDoPspController,
+    StripeWebhookController,
   ],
   providers: [
     TenantService,
