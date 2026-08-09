@@ -124,12 +124,15 @@ function Linha({
             </option>
             {oferecidos.map((plano) => (
               <option key={plano.code} value={plano.code}>
-                {plano.name} — {reais(plano.priceCents)}
-                {plano.maxChairs === null ? ' · cadeiras ilimitadas' : ` · até ${plano.maxChairs}`}
+                {/* O teto de cadeiras entra só quando existe. "Cadeiras
+                    ilimitadas" é a informação mais longa da lista e a que menos
+                    muda uma decisão — era ela que estourava o campo. */}
+                {plano.name} · {reais(plano.priceCents)}
+                {plano.maxChairs === null ? '' : ` · ${plano.maxChairs} cadeiras`}
               </option>
             ))}
           </select>
-          <button className="ui-button ui-button--ghost" type="submit">
+          <button className="ui-button ui-button--secondary" type="submit">
             Salvar
           </button>
         </div>
@@ -169,7 +172,9 @@ function Linha({
           </form>
         ) : (
           <details className="conta__bloquear">
-            <summary className="ui-button ui-button--ghost conta__bloquear-abrir">Bloquear</summary>
+            <summary className="ui-button ui-button--secondary conta__bloquear-abrir">
+              Bloquear
+            </summary>
             <form action={acaoBloquear} className="conta__bloquear-form">
               <input name="tenantId" type="hidden" value={barbearia.tenantId} />
               <label className="ui-field__label" htmlFor={`motivo-${barbearia.tenantId}`}>
@@ -207,7 +212,7 @@ function Linha({
 
         {barbearia.bloqueada ? null : (
           <details className="conta__bloquear">
-            <summary className="ui-button ui-button--ghost conta__bloquear-abrir">
+            <summary className="ui-button ui-button--secondary conta__bloquear-abrir">
               Entrar na conta
             </summary>
             <form action={acaoEntrarNaConta} className="conta__bloquear-form">

@@ -126,7 +126,11 @@ function Cabecalho({ resumo, ate }: { readonly resumo: ResumoDaPlataforma; reado
       <Numero
         rotulo="Agendamentos"
         valor={resumo.agendamentos.toLocaleString('pt-BR')}
-        nota={`${resumo.barbeariasComMovimento} de ${resumo.barbeariasAtivas} com movimento`}
+        // Sobre o total de contas, não sobre as ativas: conta bloqueada tem
+        // histórico dentro da janela, e o denominador menor produzia "3 de 2".
+        nota={`${resumo.barbeariasComMovimento} de ${
+          resumo.barbeariasAtivas + resumo.barbeariasBloqueadas
+        } com movimento`}
       />
       <Numero
         rotulo="Marcado pelo cliente"

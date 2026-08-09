@@ -4501,11 +4501,21 @@ main { padding-bottom: var(--space-8); }
 }
 
 .conta__plano { min-width: 0; }
-.conta__plano-linha { display: flex; gap: var(--space-2); align-items: stretch; min-width: 0; }
-/* Sem isto o `<select>` cresce até o texto mais longo da lista — e o nome do
-   plano com "cadeiras ilimitadas" estoura o cartão no piso de 360px. */
-.conta__plano-linha .ui-field__input { min-width: 0; flex: 1 1 auto; }
+/* Campo em cima, botão embaixo — e não lado a lado.
 
+   Lado a lado, o `<select>` fica com a largura da coluna menos o botão, e
+   "Completo · R$ 199,00" é cortado no meio: a tela passa a mostrar preço pela
+   metade, que é pior do que não mostrar. Empilhado, ele usa a coluna inteira e
+   o mesmo desenho vale do piso de 360px ao 1440. */
+.conta__plano-linha { display: grid; gap: var(--space-2); min-width: 0; }
+.conta__plano-linha .ui-field__input { min-width: 0; }
+
+.conta__acao {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+}
 .conta__bloquear-abrir {
   /* `<summary>` com aparência de botão precisa perder o triângulo, senão ele
      aparece dentro da cápsula. */
@@ -4549,12 +4559,32 @@ main { padding-bottom: var(--space-8); }
   font-variant-numeric: tabular-nums;
 }
 
+/* Áreas nomeadas, e não três colunas contadas na mão.
+
+   A versão anterior declarava `grid-template-columns` com três faixas e o
+   cartão tinha três filhos. O bloco 26 acrescentou o quarto — os recursos — e
+   a colocação automática empurrou tudo uma célula para o lado: o nome da
+   barbearia ficou numa coluna de noventa pixels, quebrando uma palavra por
+   linha, com o rótulo "Plano" por cima dele.
+   
+   A medição não pegou, e não pegaria: ela confere rolagem horizontal,
+   transbordo e alvo de toque, e nenhum dos três acontece quando uma coluna
+   apenas encolhe. Quem pegou foi olhar a tela. Área nomeada é o que impede a
+   repetição — filho novo sem área declarada não entra em lugar nenhum, em vez
+   de entrar no lugar errado. */
 @media (min-width: 900px) {
   .conta {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 20rem) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 16rem) minmax(0, 12rem);
+    grid-template-areas:
+      'quem plano acao'
+      'recursos recursos acao';
     align-items: start;
-    gap: var(--space-5);
+    gap: var(--space-4) var(--space-5);
   }
+  .conta__quem { grid-area: quem; }
+  .conta__plano { grid-area: plano; }
+  .conta__recursos { grid-area: recursos; }
+  .conta__acao { grid-area: acao; }
 }
 
 /* ----------------------------------------------------------------------------
@@ -4647,7 +4677,11 @@ main { padding-bottom: var(--space-8); }
 }
 .saude th,
 .saude td {
-  padding: var(--space-3) var(--space-3);
+  /* Respiro menor na horizontal: oito colunas com o espaçamento de cartão
+     empurram a tabela para além do recipiente e ela chega ao 1440 cortada.
+     Rolar dentro do próprio quadro é a regra e continua valendo — mas a régua
+     que não precisa rolar no notebook é melhor do que a que precisa. */
+  padding: var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--color-border);
   text-align: start;
   white-space: nowrap;
@@ -4661,6 +4695,9 @@ main { padding-bottom: var(--space-8); }
 .saude__nome {
   white-space: normal;
   font-weight: var(--font-weight-semibold);
+  /* A coluna de nome é a única elástica: as outras sete são número curto, e
+     deixar o nome quebrar é o que faz a tabela caber sem encolher dado. */
+  min-width: 10rem;
 }
 .saude__num { text-align: end; }
 .saude__quando { color: var(--color-text-muted); }
@@ -4754,3 +4791,18 @@ main { padding-bottom: var(--space-8); }
   letter-spacing: 0.08em;
   text-align: center;
 }
+
+/* Um campo de e-mail com mil pixels de largura não fica mais fácil de
+   preencher — fica mais difícil de mirar, e denuncia que ninguém olhou a tela
+   depois de montá-la. A medida é a de leitura confortável, e ela vale a partir
+   do ponto em que sobra espaço; no piso de 360px o campo continua ocupando
+   tudo. */
+@media (min-width: 700px) {
+  .plataforma__trabalho .formulario,
+  .plataforma__trabalho .painel__grupo > .ui-field__ajuda {
+    max-width: 32rem;
+  }
+}
+
+/* O selo da barbearia bloqueada encostava no nome dela na tabela. */
+.saude__nome .conta__selo { margin-inline-start: var(--space-2); }
