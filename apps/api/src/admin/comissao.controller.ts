@@ -6,6 +6,8 @@ import {
   fechamentosDeComissao,
   regrasDeComissao,
   removerRegraDeComissao,
+  aliquotasDoAdquirente,
+  salvarAliquotaDoAdquirente,
   salvarConfiguracaoDeComissao,
   salvarRegraDeComissao,
 } from '@barbearia/finance';
@@ -15,6 +17,8 @@ import {
   type BaseDeComissao,
   type FaixaDeComissao,
   type ModoDeComissao,
+  type FormaDePagamento,
+  type TratamentoDaTaxa,
   type TratamentoDoDesconto,
 } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -23,6 +27,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
+  aliquotaDoAdquirenteSchema,
   configuracaoDeComissaoSchema,
   fecharComissaoSchema,
   periodoSchema,
@@ -229,15 +234,54 @@ export class ComissaoController {
   async configuracao(
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(configuracaoDeComissaoSchema))
-    body: { base: BaseDeComissao; tratamentoDoDesconto: TratamentoDoDesconto },
+    body: {
+      base: BaseDeComissao;
+      tratamentoDoDesconto: TratamentoDoDesconto;
+      tratamentoDaTaxa: TratamentoDaTaxa;
+    },
   ) {
     await salvarConfiguracaoDeComissao({
       tenantId: staff.tenantId,
       base: body.base,
       tratamentoDoDesconto: body.tratamentoDoDesconto,
+      tratamentoDaTaxa: body.tratamentoDaTaxa,
       staffId: staff.staffUserId,
       staffName: staff.name,
     });
     return { ok: true };
+  }
+
+  /**
+   * A alíquota que a barbearia paga ao adquirente (bloco 36).
+   *
+   * `commission.edit_rules` e não `finance.view`: mudar esta alíquota muda
+   * quanto o barbeiro recebe quando o rateio está ligado. É a mesma permissão
+   * da regra de comissão porque é a mesma consequência.
+   */
+  @Exige('commission.edit_rules')
+  @Get('fees')
+  async aliquotas(@Staff() staff: AuthenticatedStaff) {
+    return { aliquotas: await aliquotasDoAdquirente(staff.tenantId) };
+  }
+
+  @Exige('commission.edit_rules')
+  @Put('fees')
+  async salvarAliquota(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(aliquotaDoAdquirenteSchema))
+    body: { forma: FormaDePagamento; bps: number },
+  ) {
+    try {
+      await salvarAliquotaDoAdquirente({
+        tenantId: staff.tenantId,
+        forma: body.forma,
+        bps: body.bps,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+      });
+      return { ok: true };
+    } catch (error) {
+      return toHttp(error);
+    }
   }
 }

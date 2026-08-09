@@ -384,6 +384,87 @@ faixa de Booksy e Fresha, documentada em
 
 ---
 
+## 6. Regra de negócio e coerência do fluxo
+
+**Funcionar sem quebrar não é o mesmo que estar certo.** Esta seção existe
+porque o bloco 35 passou no portão inteiro — 123 testes, `pnpm verify` verde,
+medição verde, revisão de segurança feita — e ainda assim entregou uma tela em
+que nenhuma aba acendia, três telas listadas numa barra que elas não desenham,
+e um indicador que nunca sai de `—` porque a fila não fecha ninguém.
+
+Teste prova que o código faz o que ele diz. **Nada ali prova que o que ele diz
+faz sentido para quem opera o balcão.** Isso é obrigação separada, e é desta
+seção.
+
+### Ao fechar um bloco, percorra o fluxo inteiro como quem trabalha
+
+Não a função nova: o **caminho** de que ela faz parte, do começo ao fim, com a
+cabeça de quem faz aquilo trinta vezes por dia. As perguntas, em ordem:
+
+1. **Onde a pessoa entra e para onde ela vai depois?** Toda tela nova tem que
+   ter volta. Se a barra de navegação lista um destino, aquele destino desenha
+   a mesma barra — senão é caminho de ida sem volta, e no celular o trilho
+   lateral é justamente o que menos convida.
+2. **A mesma coisa tem o mesmo nome em todo lugar?** "Iniciar", "Começar" e
+   "Sentou" eram três botões para a mesma transição, em três telas do mesmo
+   produto. Quando a recepção diz "já iniciei o Ruan" e o barbeiro procura
+   "Começar", o treinamento vira folclore. Vocabulário de transição mora em
+   `packages/core`, não escrito na tela.
+3. **O estado tem saída?** Todo estado não-terminal precisa de pelo menos um
+   caminho para fora, e ele precisa existir **na tela**, não só no domínio.
+   `in_service` na fila era alcançável e não tinha botão para `done`: a entrada
+   sumia da tela e nunca fechava.
+4. **O dado que a tela precisa já está no banco?** Antes de dizer "falta
+   dado", confira. `appointments.started_at` existia desde a migração 0014, com
+   comentário dizendo "base da duração real", e era descartado antes de chegar
+   à tela — a linha de quem está sendo atendido era a única do painel sem
+   nenhuma frase de contexto.
+5. **O número que a tela promete chega a aparecer alguma vez?** Indicador que é
+   sempre `—` é pior que indicador ausente: ele ocupa espaço prometendo uma
+   resposta que nunca vem, e quem opera aprende a não olhar.
+6. **Duas telas que mostram o mesmo fato concordam?** Se o trilho diz "você
+   está em Comanda" e a barra abaixo não acende nada, uma das duas está
+   mentindo.
+
+### O que é defeito de negócio, e por que ele não aparece em teste
+
+| Defeito | Por que o teste não pega |
+|---|---|
+| Botão que leva a lugar nenhum | O teste exercita a rota, não o caminho até ela |
+| Nome diferente para a mesma ação | Cada tela é testada sozinha, e sozinha ela é coerente |
+| Estado sem saída na interface | O domínio aceita a transição; ninguém testou que existe botão |
+| Dado que existe e não é lido | Nada fica vermelho por um `SELECT` que não foi escrito |
+| Indicador que nunca preenche | O cálculo está certo; a entrada é que nunca chega |
+
+Todos os cinco estavam no produto ao mesmo tempo, e nenhum apareceu no portão.
+
+### O que vira teste, e o que vira leitura
+
+Parte disto é automatizável, e o que for **tem que virar teste** — senão volta:
+
+- toda `atual` passada a uma barra casa com um item dela;
+- toda tela listada numa barra renderiza aquela barra;
+- rótulo de ação e de estado sai de um mapa único, e a tela não escreve texto
+  de transição à mão;
+- toda seção registrada em `secoes.ts` tem regra de CSS que a acende — derivada
+  do registro, **nunca** de uma lista escrita à mão ao lado. Foi assim que
+  `lgpd` e `plano` ficaram sem acender com o teste verde.
+
+O resto é leitura, e leitura feita **de propósito**: percorrer o fluxo na tela,
+nas quatro larguras, fazendo as seis perguntas acima. Vinte minutos no fim do
+bloco. É o mesmo custo da medição de responsividade, e pega outra classe de
+defeito.
+
+### Quando o achado não couber no bloco
+
+Vale a mesma regra das lacunas: entra na tabela
+[Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), com o
+que existe, o que falta e em qual bloco entra. **Defeito de fluxo descoberto e
+não escrito é defeito que vai ser redescoberto** — e da segunda vez ele já terá
+sido usado por alguém.
+
+---
+
 ## Definition of Done
 
 Um bloco só está concluído quando **todos** os itens passam:
@@ -401,6 +482,9 @@ Um bloco só está concluído quando **todos** os itens passam:
 - [ ] README atualizado se alguma decisão de arquitetura mudou
 - [ ] Interface conferida em 360, 390, 768 e 1280 — sem rolagem horizontal
 - [ ] Estado vazio, carregando e erro desenhados
+- [ ] **Fluxo percorrido como quem opera** (§6): toda tela tem volta, a mesma ação
+      tem o mesmo nome em todo lugar, todo estado tem saída na interface, e nenhum
+      indicador da tela é sempre `—`
 - [ ] Lacuna conhecida declarada por escrito, **com dependência e bloco**, na tabela
       [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada)
 - [ ] **Nenhuma lacuna aponta para o bloco que está fechando.** Se aponta, ou ela
@@ -476,6 +560,8 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Cartão | só token do provedor, marca e os quatro últimos; não existe coluna para PAN nem CVV, e há invariante que reprova se alguém criar uma |
 | Cobrança pendente | Pix e boleto respondem depois: `pendente` ≠ recusa, e não gasta degrau da escada de retentativa |
 | Comissão | lançamento guarda **base + regra copiada**, nunca o valor; o valor é derivado, porque faixa depende do acumulado do período |
+| Taxa do adquirente | alíquota **por meio de pagamento** em pontos-base (319 = 3,19%), porque é assim que ele cobra — uma média não bate com extrato nenhum. Congelada na venda (`orders.fee_cents`): renegociar a maquininha em maio não muda comissão paga em abril. Linha ausente é zero, e `bruto` ignora taxa e desconto, senão "bruto" quer dizer "bruto menos uma coisa" |
+| Padrão de configuração que mexe em dinheiro | é sempre o comportamento **anterior**. `fee_treatment` nasce `absorvida` porque um padrão `rateada` faria toda barbearia já instalada ver a comissão de todo mundo cair no dia da migração, sem ninguém ter decidido nada |
 | Comissão fechada | imutável por trigger e `REVOKE`; estorno é lançamento novo com sinal negativo no período aberto, jamais `DELETE` |
 | Dia de uma venda | `orders.business_day`, o dia **da unidade** — `closed_at` responde "que instante", não "de que dia é este dinheiro" |
 | Alíquota | pontos-base inteiros (4000 = 40%), nunca fração |

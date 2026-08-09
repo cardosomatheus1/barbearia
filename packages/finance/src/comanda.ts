@@ -4,6 +4,7 @@ import {
   entraNaGaveta,
   resultadoDoPagamento,
   somarComanda,
+  taxaDaVenda,
   validarDesconto,
   tetoDoDesconto,
   validarItem,
@@ -713,9 +714,28 @@ export async function fecharComanda(params: {
     // `AND status = 'open'` mesmo com a trava acima: é a garantia que não
     // depende de ninguém ter lembrado de travar. Zero linhas significa que
     // outra transação fechou primeiro.
+    /**
+     * A taxa do adquirente, congelada aqui (bloco 36).
+     *
+     * Calculada no fechamento e gravada, como o preço do serviço e a regra de
+     * comissão: renegociar a maquininha em maio não pode mudar a comissão que
+     * já foi paga em abril. Alíquota ausente é zero, e a barbearia cadastra só
+     * o que paga.
+     */
+    const aliquotas = await tx.$queryRaw<{ method: string; bps: number }[]>`
+      SELECT method::text, bps FROM acquirer_fees
+    `;
+    const taxaCents = taxaDaVenda({
+      pagamentos: params.pagamentos,
+      aliquotasBps: new Map(aliquotas.map((a) => [a.method, a.bps])),
+      // O troco sai da base: cobrar tarifa sobre o que voltou para o bolso do
+      // cliente seria cobrar de dinheiro que nunca ficou com a barbearia.
+      trocoCents: conferido.trocoCents,
+    });
+
     const fechadas = await tx.$executeRaw`
       UPDATE orders SET
-        status = 'paid', closed_at = now(),
+        status = 'paid', closed_at = now(), fee_cents = ${taxaCents},
         session_id = ${sessao.id}::uuid,
         change_cents = ${conferido.trocoCents},
         business_day = ${params.hojeNaUnidade}::date,

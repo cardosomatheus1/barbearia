@@ -10,6 +10,9 @@ import {
   type ItemComissionavel,
   type LancamentoDeComissao,
   type RegraDeComissao,
+  taxaDaVenda,
+  ratearTaxa,
+  taxaSobreOsItens,
 } from './comissao.js';
 
 /**
@@ -458,5 +461,250 @@ describe('a conta do período', () => {
 
   it('período sem lançamento é lista vazia, não erro', () => {
     expect(comissaoDoPeriodo([])).toEqual([]);
+  });
+});
+
+/**
+ * A taxa do adquirente na comissão (bloco 36, SPEC §3.4).
+ *
+ * A terceira escolha que a SPEC exige que seja explícita, e a que ficou de fora
+ * por seis blocos — não por esquecimento, mas porque a alíquota do adquirente
+ * não existia em lugar nenhum do produto.
+ */
+describe('a taxa do adquirente', () => {
+  const aliquotas = new Map([
+    ['credit', 319],
+    ['debit', 199],
+    ['pix', 99],
+  ]);
+
+  it('cada meio paga a própria alíquota', () => {
+    // Crédito parcelado custa múltiplas vezes o que custa débito, e Pix quase
+    // nada. Uma alíquota média produziria um número que não bate com extrato
+    // nenhum — e o extrato é o documento que o dono abre quando desconfia.
+    expect(
+      taxaDaVenda({ pagamentos: [{ forma: 'credit', valorCents: 10_000 }], aliquotasBps: aliquotas }),
+    ).toBe(319);
+    expect(
+      taxaDaVenda({ pagamentos: [{ forma: 'debit', valorCents: 10_000 }], aliquotasBps: aliquotas }),
+    ).toBe(199);
+  });
+
+  it('meio sem alíquota cadastrada não custa nada', () => {
+    // A barbearia cadastra só o que paga. Obrigar a declarar `dinheiro = 0`
+    // seria pedir o óbvio para poder declarar o que importa.
+    expect(
+      taxaDaVenda({ pagamentos: [{ forma: 'cash', valorCents: 10_000 }], aliquotasBps: aliquotas }),
+    ).toBe(0);
+  });
+
+  it('arredonda por transação, não sobre o total', () => {
+    /**
+     * É assim que o adquirente cobra: uma tarifa por transação. Somar primeiro
+     * e aplicar a alíquota depois dá outro número — e a diferença aparece
+     * justamente na conciliação com o extrato, que é onde ela custa mais caro
+     * de explicar.
+     */
+    const partido = taxaDaVenda({
+      pagamentos: [
+        { forma: 'credit', valorCents: 3_333 },
+        { forma: 'credit', valorCents: 3_333 },
+      ],
+      aliquotasBps: aliquotas,
+    });
+    // 3333 × 3,19% = 106,32 → 106, duas vezes.
+    expect(partido).toBe(212);
+    // Contra 6666 × 3,19% = 212,64 → 213. Um centavo de diferença, e ele é do
+    // jeito que o adquirente faz.
+    expect(partido).not.toBe(213);
+  });
+
+  it('a conta mista soma cada parte pela alíquota dela', () => {
+    // "Cem no Pix e o resto no crédito" é rotina de balcão.
+    expect(
+      taxaDaVenda({
+        pagamentos: [
+          { forma: 'pix', valorCents: 10_000 },
+          { forma: 'credit', valorCents: 10_000 },
+        ],
+        aliquotasBps: aliquotas,
+      }),
+    ).toBe(99 + 319);
+  });
+});
+
+describe('a taxa na base da comissão', () => {
+  const item = { id: 'i1', professionalId: 'p1', serviceId: null, categoryId: null, totalCents: 10_000 };
+
+  it('absorvida não muda nada — é o que o produto sempre fez', () => {
+    // Padrão, e de propósito: um padrão `rateada` faria toda barbearia que já
+    // usa o sistema ver a comissão de todo mundo cair no dia da migração, sem
+    // ninguém ter decidido nada.
+    expect(
+      baseDoItem({
+        item,
+        descontoRateadoCents: 0,
+        base: 'liquido',
+        tratamentoDoDesconto: 'reduz_base',
+        taxaRateadaCents: 319,
+        tratamentoDaTaxa: 'absorvida',
+      }),
+    ).toBe(10_000);
+  });
+
+  it('rateada desce a taxa da base', () => {
+    expect(
+      baseDoItem({
+        item,
+        descontoRateadoCents: 0,
+        base: 'liquido',
+        tratamentoDoDesconto: 'reduz_base',
+        taxaRateadaCents: 319,
+        tratamentoDaTaxa: 'rateada',
+      }),
+    ).toBe(9_681);
+  });
+
+  it('desconto e taxa descem juntos, sem um comer o outro', () => {
+    // São deduções independentes: quem deu o desconto foi alguém, a taxa não é
+    // de ninguém. Tratar as duas como a mesma faria o barbeiro pagar uma vez o
+    // que deveria pagar duas — ou o contrário, dependendo da ordem.
+    expect(
+      baseDoItem({
+        item,
+        descontoRateadoCents: 1_000,
+        base: 'liquido',
+        tratamentoDoDesconto: 'reduz_base',
+        taxaRateadaCents: 319,
+        tratamentoDaTaxa: 'rateada',
+      }),
+    ).toBe(8_681);
+  });
+
+  it('bruto ignora as duas, e é o que a palavra significa', () => {
+    /**
+     * Deixar a taxa descer sobre a base bruta faria "bruto" querer dizer
+     * "bruto, menos uma coisa" — o tipo de definição que ninguém consegue
+     * explicar para o barbeiro no dia do acerto.
+     */
+    expect(
+      baseDoItem({
+        item,
+        descontoRateadoCents: 1_000,
+        base: 'bruto',
+        tratamentoDoDesconto: 'reduz_base',
+        taxaRateadaCents: 319,
+        tratamentoDaTaxa: 'rateada',
+      }),
+    ).toBe(10_000);
+  });
+
+  it('a base nunca fica negativa', () => {
+    // Taxa maior que o item é caso de erro de cadastro, e o resultado não pode
+    // ser comissão negativa aparecendo como desconto no acerto do barbeiro.
+    expect(
+      baseDoItem({
+        item: { ...item, totalCents: 100 },
+        descontoRateadoCents: 0,
+        base: 'liquido',
+        tratamentoDoDesconto: 'reduz_base',
+        taxaRateadaCents: 500,
+        tratamentoDaTaxa: 'rateada',
+      }),
+    ).toBe(0);
+  });
+
+  it('a taxa é rateada proporcionalmente, e a sobra não some', () => {
+    // Mesmo critério do desconto: a taxa é da venda inteira e a comissão é por
+    // item. Sem ratear, quem cortou o cabelo pagaria sozinho a maquininha da
+    // conta toda.
+    const itens = [
+      { id: 'a', professionalId: 'p1', serviceId: null, categoryId: null, totalCents: 3_333 },
+      { id: 'b', professionalId: 'p2', serviceId: null, categoryId: null, totalCents: 3_333 },
+      { id: 'c', professionalId: 'p3', serviceId: null, categoryId: null, totalCents: 3_334 },
+    ];
+    const rateio = ratearTaxa({ itens, taxaCents: 319 });
+
+    const soma = [...rateio.values()].reduce((s, v) => s + v, 0);
+    expect(soma).toBe(319);
+  });
+});
+
+/**
+ * A gorjeta e o troco fora da base da taxa (achados da revisão do bloco 36).
+ *
+ * Os dois pela mesma causa: a taxa era calculada sobre o que o balcão digitou,
+ * e não sobre o dinheiro que ficou com a barbearia.
+ */
+describe('a taxa não cobra o que não é receita', () => {
+  const aliquotas = new Map([
+    ['cash', 100],
+    ['credit', 319],
+  ]);
+
+  it('o troco sai da base — ele voltou para o bolso do cliente', () => {
+    // Conta de R$ 60, cliente entrega R$ 100. Cobrar tarifa sobre os R$ 40 de
+    // troco é cobrar de dinheiro que nunca ficou com a barbearia.
+    expect(
+      taxaDaVenda({
+        pagamentos: [{ forma: 'cash', valorCents: 10_000 }],
+        aliquotasBps: aliquotas,
+        trocoCents: 4_000,
+      }),
+    ).toBe(60);
+  });
+
+  it('sem troco, nada muda', () => {
+    expect(
+      taxaDaVenda({
+        pagamentos: [{ forma: 'cash', valorCents: 6_000 }],
+        aliquotasBps: aliquotas,
+      }),
+    ).toBe(60);
+  });
+
+  it('o troco sai só do dinheiro vivo, nunca do cartão', () => {
+    // Ele sempre sai da gaveta — é a mesma regra de `entraNaGaveta`. Abater do
+    // crédito faria a taxa do cartão encolher por um troco que não é dele.
+    expect(
+      taxaDaVenda({
+        pagamentos: [
+          { forma: 'credit', valorCents: 10_000 },
+          { forma: 'cash', valorCents: 5_000 },
+        ],
+        aliquotasBps: aliquotas,
+        trocoCents: 2_000,
+      }),
+    ).toBe(319 + 30);
+  });
+
+  it('a gorjeta não desce da base do barbeiro', () => {
+    /**
+     * O aparelho cobra sobre tudo que passa nele, gorjeta inclusive — mas a
+     * taxa é rateada só sobre os itens. Ratear o valor cheio faria o barbeiro
+     * pagar tarifa sobre a própria gorjeta, que "nunca entra na base".
+     */
+    // R$ 100 de item + R$ 20 de gorjeta, crédito: a taxa cheia é 383.
+    const cheia = taxaDaVenda({
+      pagamentos: [{ forma: 'credit', valorCents: 12_000 }],
+      aliquotasBps: aliquotas,
+    });
+    expect(cheia).toBe(383);
+
+    // O que desce da base é a parte dos R$ 100 vendidos.
+    expect(taxaSobreOsItens({ taxaCents: cheia, receitaCents: 10_000, cobradoCents: 12_000 })).toBe(
+      319,
+    );
+  });
+
+  it('sem gorjeta, a taxa inteira desce', () => {
+    expect(taxaSobreOsItens({ taxaCents: 319, receitaCents: 10_000, cobradoCents: 10_000 })).toBe(
+      319,
+    );
+  });
+
+  it('venda que é só gorjeta não desce nada da base', () => {
+    // Caso de borda real: cortesia com gorjeta. Sem receita não há o que ratear.
+    expect(taxaSobreOsItens({ taxaCents: 60, receitaCents: 0, cobradoCents: 2_000 })).toBe(0);
   });
 });

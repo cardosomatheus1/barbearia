@@ -4,6 +4,7 @@ import {
   FORMAS_DE_PAGAMENTO,
   MODOS_DE_COMISSAO,
   TIPOS_DE_ITEM,
+  TRATAMENTOS_DA_TAXA,
   TRATAMENTOS_DO_DESCONTO,
 } from '@barbearia/core';
 
@@ -147,6 +148,31 @@ export const regraDeComissaoSchema = z
 export const configuracaoDeComissaoSchema = z.object({
   base: z.enum(BASES_DE_COMISSAO),
   tratamentoDoDesconto: z.enum(TRATAMENTOS_DO_DESCONTO),
+  tratamentoDaTaxa: z.enum(TRATAMENTOS_DA_TAXA),
+});
+
+/**
+ * A alíquota do adquirente por meio de pagamento (bloco 36).
+ *
+ * Teto de 30% na borda e no banco: acima disso é erro de digitação — 3,19
+ * virando 319 —, e o estrago seria a comissão do mês inteiro de todo mundo.
+ */
+export const aliquotaDoAdquirenteSchema = z.object({
+  /**
+   * `fiado` fica de fora, e não é detalhe.
+   *
+   * Ele não é meio de pagamento — é dívida. Cobrar taxa de adquirente sobre um
+   * fiado seria cobrar a maquininha de um dinheiro que não passou por ela, e o
+   * barbeiro pagaria por uma transação que não existiu. A taxa do fiado nasce
+   * quando o cliente volta e paga de verdade, no meio que ele escolher.
+   *
+   * `cash` continua na lista: há adquirente que cobra tarifa por saque, e a
+   * barbearia que paga isso tem onde declarar.
+   */
+  forma: z.enum(FORMAS_DE_PAGAMENTO).refine((f) => f !== 'fiado', {
+    message: 'Fiado não é meio de pagamento: a taxa nasce quando o cliente paga.',
+  }),
+  bps: z.number().int().min(0).max(3000),
 });
 
 /**

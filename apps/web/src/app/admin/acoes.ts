@@ -68,6 +68,7 @@ import {
   type FormaDePagamento,
   salvarRegraDeComissao,
   removerRegraDeComissao,
+  salvarAliquotaDoAdquirente,
   salvarConfiguracaoDeComissao,
   fecharComissao,
   registrarConsentimentoNoBalcao,
@@ -1170,9 +1171,40 @@ export async function acaoConfiguracaoDeComissao(form: FormData): Promise<void> 
     falhar('/admin/comissao/regras', 'invalid_request');
   }
 
+  const taxa = texto(form, 'tratamentoDaTaxa');
+  if (taxa !== 'absorvida' && taxa !== 'rateada') {
+    falhar('/admin/comissao/regras', 'invalid_request');
+  }
+
   const resultado = await salvarConfiguracaoDeComissao(token, {
     base,
     tratamentoDoDesconto: tratamento,
+    tratamentoDaTaxa: taxa,
+  });
+  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  redirect('/admin/comissao/regras?salvo=1');
+}
+
+/**
+ * A alíquota do adquirente, digitada em porcento e guardada em pontos-base.
+ *
+ * `3,19` na tela vira `319` no banco. A conversão é aqui e não no domínio pelo
+ * mesmo motivo do preço: quem digita pensa em porcento, e dinheiro e alíquota
+ * são inteiros em todo o resto do sistema.
+ */
+export async function acaoAliquotaDoAdquirente(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const forma = texto(form, 'forma');
+  const bruto = texto(form, 'bps').trim().replace(',', '.');
+
+  const porcento = bruto === '' ? 0 : Number(bruto);
+  if (!Number.isFinite(porcento) || porcento < 0 || porcento > 30) {
+    falhar('/admin/comissao/regras', 'aliquota_invalida');
+  }
+
+  const resultado = await salvarAliquotaDoAdquirente(token, {
+    forma,
+    bps: Math.round(porcento * 100),
   });
   if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
   redirect('/admin/comissao/regras?salvo=1');

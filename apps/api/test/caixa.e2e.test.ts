@@ -660,6 +660,88 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     ).expect(400);
   });
 
+  /**
+   * A taxa do adquirente (bloco 36).
+   *
+   * Ela muda quanto o barbeiro recebe quando o rateio está ligado — então tem
+   * exatamente a mesma porta da regra de comissão, e não a de "ver dinheiro".
+   */
+  it('a alíquota do adquirente é rota de dinheiro: sem segundo fator, recusa', async () => {
+    const dono = await abrirBarbearia();
+    const recusa = await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 319 }),
+    ).expect(403);
+    expect(recusa.body.error.code).toBe('mfa_setup_required');
+  });
+
+  it('o barbeiro não vê nem muda a alíquota do adquirente', async () => {
+    const dono = await abrirBarbearia();
+    const { token } = await barbeiroComConta(dono);
+
+    await com(token)(http().get('/v1/admin/commission/fees')).expect(403);
+    await com(token)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 319 }),
+    ).expect(403);
+  });
+
+  it('alíquota absurda é recusada na borda, antes do banco', async () => {
+    // 3,19 virando 319 é o erro de digitação plausível, e o estrago seria a
+    // comissão do mês inteiro de todo mundo.
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 31900 }),
+    ).expect(400);
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: -1 }),
+    ).expect(400);
+    // Pontos-base inteiros, como toda alíquota do produto.
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 31.9 }),
+    ).expect(400);
+  });
+
+  it('meio de pagamento inventado não passa da borda', async () => {
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'boleto', bps: 319 }),
+    ).expect(400);
+  });
+
+  it('a alíquota salva volta na leitura, e some quando zerada', async () => {
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 319 }),
+    ).expect(200);
+    const lida = await com(dono)(http().get('/v1/admin/commission/fees')).expect(200);
+    expect(lida.body.aliquotas).toEqual([{ forma: 'credit', bps: 319 }]);
+
+    // Zero apaga a linha: guardar zero explícito e ausência como coisas
+    // diferentes criaria duas maneiras de dizer a mesma coisa.
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 0 }),
+    ).expect(200);
+    const vazia = await com(dono)(http().get('/v1/admin/commission/fees')).expect(200);
+    expect(vazia.body.aliquotas).toEqual([]);
+  });
+
+  it('a alíquota de uma barbearia não aparece na outra', async () => {
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+    await com(dono)(
+      http().put('/v1/admin/commission/fees').send({ forma: 'credit', bps: 319 }),
+    ).expect(200);
+
+    const rival = await abrirBarbearia(RIVAL);
+    await comSegundoFator(rival);
+    const dela = await com(rival)(http().get('/v1/admin/commission/fees')).expect(200);
+    expect(dela.body.aliquotas).toEqual([]);
+  });
+
   it('modo por faixas sem faixa nenhuma não passa da borda', async () => {
     const dono = await abrirBarbearia();
     await comSegundoFator(dono);

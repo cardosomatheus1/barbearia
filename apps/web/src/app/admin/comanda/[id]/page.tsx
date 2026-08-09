@@ -76,6 +76,21 @@ const FALHA: Record<string, string> = {
 
 const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
+/**
+ * Os meios que o adquirente sabe emitir, na ordem em que o balcão os usa.
+ *
+ * Pix primeiro e como ação primária: é o que a maioria dos clientes escolhe, é
+ * o mais barato para a barbearia, e é o único que confirma sem ninguém digitar
+ * nada. Cartão e link são o mesmo mecanismo com outra cara — o link existe para
+ * mandar por WhatsApp a quem **não** está no balcão, que é o caso do sinal e da
+ * conta que ficou para depois.
+ */
+const MEIOS = [
+  { valor: 'pix', rotulo: 'Pix' },
+  { valor: 'cartao', rotulo: 'Cartão' },
+  { valor: 'link', rotulo: 'Link para mandar' },
+] as const;
+
 const NOME_DA_FORMA: Record<string, string> = {
   cash: 'Dinheiro',
   pix: 'Pix',
@@ -120,11 +135,13 @@ function CobrancaEmCurso({
   readonly orderId: string;
 }) {
   const codigo = cobranca.pixCopiaECola ? qrCodeSvg(cobranca.pixCopiaECola) : null;
+  const titulo =
+    cobranca.meio === 'pix' ? 'Pix' : cobranca.meio === 'link' ? 'Link de pagamento' : 'Cartão';
 
   if (cobranca.estado === 'pago') {
     return (
       <section className="cartao-balcao cobranca">
-        <h2 className="cartao-balcao__titulo">Pix recebido</h2>
+        <h2 className="cartao-balcao__titulo">Pagamento recebido</h2>
         <p className="cobranca__recebido">{reais(cobranca.valorCents)}</p>
         {/* Este bloco só aparece com a comanda **aberta**: paga, ela mostra
             "Pago com". Então chegar aqui já significa que o caixa estava
@@ -142,7 +159,9 @@ function CobrancaEmCurso({
 
   return (
     <section className="cartao-balcao cobranca">
-      <h2 className="cartao-balcao__titulo">Pix de {reais(cobranca.valorCents)}</h2>
+      <h2 className="cartao-balcao__titulo">
+        {titulo} de {reais(cobranca.valorCents)}
+      </h2>
 
       {codigo ? (
         <div
@@ -151,6 +170,29 @@ function CobrancaEmCurso({
           // adquirente devolveu — não há entrada de usuário no caminho.
           dangerouslySetInnerHTML={{ __html: codigo.svg }}
         />
+      ) : null}
+
+      {/*
+        O endereço do link é o próprio produto quando o meio é link: ele existe
+        para ser mandado a quem **não** está no balcão, então o que a tela
+        precisa entregar é um texto copiável, não um botão que abre aqui.
+      */}
+      {cobranca.url ? (
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="endereco-do-link">
+            Mande este endereço ao cliente
+          </label>
+          <textarea
+            className="ui-field__input cobranca__texto"
+            id="endereco-do-link"
+            readOnly
+            rows={2}
+            value={cobranca.url}
+          />
+          <p className="ui-field__hint">
+            A página é hospedada pelo adquirente: os dados do cartão não passam por aqui.
+          </p>
+        </div>
       ) : null}
 
       {cobranca.pixCopiaECola ? (
@@ -172,14 +214,14 @@ function CobrancaEmCurso({
       ) : null}
 
       <p className="cartao-balcao__texto">
-        Assim que o banco confirmar, a comanda fecha sozinha. Recarregue para conferir.
+        Assim que o adquirente confirmar, a comanda fecha sozinha. Recarregue para conferir.
       </p>
 
       <form action={acaoCancelarCobranca}>
         <input name="orderId" type="hidden" value={orderId} />
         <input name="chargeId" type="hidden" value={cobranca.id} />
         <button className="ui-button ui-button--ghost ui-button--block" type="submit">
-          Cancelar o Pix
+          Cancelar a cobrança
         </button>
       </form>
     </section>
@@ -541,21 +583,34 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             <CobrancaEmCurso cobranca={cobrancaDoMomento} orderId={conta.id} />
           ) : (
             <section className="cartao-balcao">
-              <h2 className="cartao-balcao__titulo">Cobrar pelo Pix</h2>
+              <h2 className="cartao-balcao__titulo">Cobrar pelo aparelho</h2>
               <p className="cartao-balcao__texto">
-                O QR Code aparece aqui e a comanda fecha sozinha quando o banco confirmar.
+                A comanda fecha sozinha quando o adquirente confirmar.
               </p>
-              <form action={acaoCobrarComanda}>
-                <input name="orderId" type="hidden" value={conta.id} />
-                <input name="meio" type="hidden" value="pix" />
-                {/* Gerada quando a tela é montada, como no fechamento: gerá-la
-                    na ação daria chave nova a cada envio, e o duplo toque
-                    produziria dois QR Codes para a mesma conta. */}
-                <input name="idempotencyKey" type="hidden" value={randomUUID()} />
-                <button className="ui-button ui-button--ghost ui-button--block" type="submit">
-                  Gerar Pix de {reais(conta.totalCents)}
-                </button>
-              </form>
+              {/*
+                Três formas, três formulários, **um botão primário só** — o Pix.
+                A tela não pergunta "qual meio?" antes de mostrar o valor: no
+                balcão a pergunta é feita ao cliente em voz alta, e quem opera já
+                sabe a resposta quando chega aqui.
+              */}
+              {MEIOS.map((meio) => (
+                <form action={acaoCobrarComanda} key={meio.valor}>
+                  <input name="orderId" type="hidden" value={conta.id} />
+                  <input name="meio" type="hidden" value={meio.valor} />
+                  {/* Gerada quando a tela é montada, como no fechamento: gerá-la
+                      na ação daria chave nova a cada envio, e o duplo toque
+                      produziria duas cobranças para a mesma conta. */}
+                  <input name="idempotencyKey" type="hidden" value={randomUUID()} />
+                  <button
+                    className={`ui-button ui-button--block ${
+                      meio.valor === 'pix' ? 'ui-button--primary' : 'ui-button--ghost'
+                    } cobranca__meio`}
+                    type="submit"
+                  >
+                    {meio.rotulo} · {reais(conta.totalCents)}
+                  </button>
+                </form>
+              ))}
             </section>
           )}
 

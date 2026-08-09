@@ -5,12 +5,16 @@ import {
   comissaoDoPeriodo,
   escolherRegra,
   ratearDesconto,
+  ratearTaxa,
+  taxaSobreOsItens,
   validarRegra,
   type BaseDeComissao,
   type FaixaDeComissao,
   type LancamentoDeComissao,
   type ModoDeComissao,
   type RegraDeComissao,
+  type FormaDePagamento,
+  type TratamentoDaTaxa,
   type TratamentoDoDesconto,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
@@ -34,6 +38,7 @@ export type ComissaoFailure =
   | 'regra_nao_encontrada'
   | 'periodo_invalido'
   | 'periodo_ja_fechado'
+  | 'aliquota_invalida'
   | 'nada_a_fechar';
 
 export class ComissaoError extends Error {
@@ -50,20 +55,30 @@ export class ComissaoError extends Error {
 export interface ConfiguracaoDeComissao {
   readonly base: BaseDeComissao;
   readonly tratamentoDoDesconto: TratamentoDoDesconto;
+  readonly tratamentoDaTaxa: TratamentoDaTaxa;
 }
 
 const CONFIGURACAO_PADRAO: ConfiguracaoDeComissao = {
   base: 'liquido',
   tratamentoDoDesconto: 'reduz_base',
+  tratamentoDaTaxa: 'absorvida',
 };
 
 async function lerConfiguracao(tx: TransactionClient): Promise<ConfiguracaoDeComissao> {
   const linhas = await tx.$queryRaw<
-    { base: BaseDeComissao; discount_treatment: TratamentoDoDesconto }[]
-  >`SELECT base, discount_treatment FROM commission_settings`;
+    {
+      base: BaseDeComissao;
+      discount_treatment: TratamentoDoDesconto;
+      fee_treatment: TratamentoDaTaxa;
+    }[]
+  >`SELECT base, discount_treatment, fee_treatment FROM commission_settings`;
   const linha = linhas[0];
   if (!linha) return CONFIGURACAO_PADRAO;
-  return { base: linha.base, tratamentoDoDesconto: linha.discount_treatment };
+  return {
+    base: linha.base,
+    tratamentoDoDesconto: linha.discount_treatment,
+    tratamentoDaTaxa: linha.fee_treatment,
+  };
 }
 
 async function lerRegras(tx: TransactionClient): Promise<RegraDeComissao[]> {
@@ -132,10 +147,20 @@ export async function lancarComissaoDaComanda(
      ORDER BY i.position, i.created_at
   `;
 
-  const cabecas = await tx.$queryRaw<{ discount_cents: number }[]>`
-    SELECT discount_cents FROM orders WHERE id = ${params.orderId}::uuid
+  const cabecas = await tx.$queryRaw<
+    { discount_cents: number; tip_cents: number; fee_cents: number | null }[]
+  >`
+    SELECT discount_cents, tip_cents, fee_cents FROM orders WHERE id = ${params.orderId}::uuid
   `;
   const descontoCents = cabecas[0]?.discount_cents ?? 0;
+  /**
+   * Nulo é zero aqui, e é o comportamento de antes deste bloco.
+   *
+   * Toda venda fechada antes da migração 0038 não tem resposta para "quanto
+   * custou de adquirente", e inventar um número para elas mudaria comissão já
+   * paga.
+   */
+  const taxaCents = cabecas[0]?.fee_cents ?? 0;
 
   const comissionaveis = itens.map((item) => ({
     id: item.id,
@@ -148,6 +173,25 @@ export async function lancarComissaoDaComanda(
   // O desconto é da comanda inteira e a comissão é por item: sem ratear, quem
   // cortou o cabelo pagaria sozinho o desconto dado na conta toda.
   const rateio = ratearDesconto({ itens: comissionaveis, descontoCents });
+
+  /**
+   * A taxa é rateada só sobre os itens, e por isso ela primeiro encolhe.
+   *
+   * O aparelho cobrou sobre tudo que passou nele — inclusive a gorjeta. Ratear
+   * o valor cheio sobre os itens faria o barbeiro pagar tarifa sobre a própria
+   * gorjeta, que "nunca entra na base". Numerador e denominador têm que falar
+   * da mesma coisa.
+   */
+  const somaDosItens = comissionaveis.reduce((soma, item) => soma + item.totalCents, 0);
+  const receitaCents = Math.max(0, somaDosItens - descontoCents);
+  const rateioDaTaxa = ratearTaxa({
+    itens: comissionaveis,
+    taxaCents: taxaSobreOsItens({
+      taxaCents,
+      receitaCents,
+      cobradoCents: receitaCents + (cabecas[0]?.tip_cents ?? 0),
+    }),
+  });
 
   let lancados = 0;
 
@@ -166,6 +210,8 @@ export async function lancarComissaoDaComanda(
       descontoRateadoCents: rateio.get(item.id) ?? 0,
       base: config.base,
       tratamentoDoDesconto: config.tratamentoDoDesconto,
+      taxaRateadaCents: rateioDaTaxa.get(item.id) ?? 0,
+      tratamentoDaTaxa: config.tratamentoDaTaxa,
     });
 
     await tx.$executeRaw`
@@ -717,6 +763,7 @@ export async function salvarConfiguracaoDeComissao(params: {
   readonly tenantId: string;
   readonly base: BaseDeComissao;
   readonly tratamentoDoDesconto: TratamentoDoDesconto;
+  readonly tratamentoDaTaxa: TratamentoDaTaxa;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<void> {
@@ -724,15 +771,17 @@ export async function salvarConfiguracaoDeComissao(params: {
     const antes = await lerConfiguracao(tx);
 
     await tx.$executeRaw`
-      INSERT INTO commission_settings (tenant_id, base, discount_treatment)
+      INSERT INTO commission_settings (tenant_id, base, discount_treatment, fee_treatment)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${params.base}::commission_base,
-        ${params.tratamentoDoDesconto}::commission_discount_treatment
+        ${params.tratamentoDoDesconto}::commission_discount_treatment,
+        ${params.tratamentoDaTaxa}::commission_fee_treatment
       )
       ON CONFLICT (tenant_id) DO UPDATE
         SET base = EXCLUDED.base,
             discount_treatment = EXCLUDED.discount_treatment,
+            fee_treatment = EXCLUDED.fee_treatment,
             updated_at = now()
     `;
 
@@ -742,7 +791,19 @@ export async function salvarConfiguracaoDeComissao(params: {
       action: 'commission.rule_changed',
       entity: 'commission_settings',
       before: antes,
-      after: { base: params.base, tratamentoDoDesconto: params.tratamentoDoDesconto },
+      /**
+       * Montado a partir do mesmo formato do `before`, e não campo a campo.
+       *
+       * A simetria já foi quebrada uma vez por adição de campo: `tratamentoDaTaxa`
+       * entrou no `before` e não no `after`, e a trilha da única mudança que
+       * derruba a comissão de **todo mundo** de uma vez saía sem dizer o que
+       * mudou — pior que ausente, parecia removido.
+       */
+      after: {
+        base: params.base,
+        tratamentoDoDesconto: params.tratamentoDoDesconto,
+        tratamentoDaTaxa: params.tratamentoDaTaxa,
+      },
     });
   });
 }
@@ -776,3 +837,95 @@ async function exigirDoTenant(
 }
 
 export { aplicarFaixas };
+
+/**
+ * A alíquota que a barbearia paga por meio de pagamento (bloco 36).
+ *
+ * Linha ausente é zero, e é de propósito: ela cadastra só o que paga. Obrigar a
+ * declarar `dinheiro = 0` seria pedir o óbvio para poder declarar o que importa.
+ */
+export async function aliquotasDoAdquirente(
+  tenantId: string,
+): Promise<{ readonly forma: FormaDePagamento; readonly bps: number }[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ method: FormaDePagamento; bps: number }[]>`
+      SELECT method::text AS method, bps FROM acquirer_fees ORDER BY method
+    `;
+    return linhas.map((l) => ({ forma: l.method, bps: l.bps }));
+  });
+}
+
+export async function salvarAliquotaDoAdquirente(params: {
+  readonly tenantId: string;
+  readonly forma: FormaDePagamento;
+  readonly bps: number;
+  readonly staffId: string;
+  readonly staffName: string;
+}): Promise<void> {
+  /**
+   * Teto de 30% na borda **e** no banco.
+   *
+   * Acima disso é erro de digitação — 3,19 virando 319 —, e o estrago seria a
+   * comissão do mês inteiro de todo mundo. A recusa é nos dois lugares porque
+   * uma delas é a que fica quando alguém escrever um caminho novo.
+   */
+  if (!Number.isInteger(params.bps) || params.bps < 0 || params.bps > 3000) {
+    throw new ComissaoError('aliquota_invalida', 'A alíquota tem que estar entre 0% e 30%.');
+  }
+  /**
+   * Fiado não é meio de pagamento — é dívida.
+   *
+   * Cobrar taxa de adquirente sobre um fiado seria cobrar a maquininha de um
+   * dinheiro que não passou por ela, e o barbeiro pagaria por uma transação que
+   * não existiu. A recusa é aqui **e** na borda: a daqui é a que fica quando
+   * alguém escrever um caminho novo.
+   */
+  if (params.forma === 'fiado') {
+    throw new ComissaoError(
+      'aliquota_invalida',
+      'Fiado não é meio de pagamento: a taxa nasce quando o cliente paga.',
+    );
+  }
+
+  await withTenant(params.tenantId, async (tx) => {
+    const anteriores = await tx.$queryRaw<{ bps: number }[]>`
+      SELECT bps FROM acquirer_fees WHERE method = ${params.forma}::payment_method
+    `;
+
+    if (params.bps === 0) {
+      // Zero é "não pago taxa neste meio", e a linha some: guardar zero
+      // explícito e ausência como coisas diferentes criaria duas maneiras de
+      // dizer a mesma coisa.
+      await tx.$executeRaw`
+        DELETE FROM acquirer_fees WHERE method = ${params.forma}::payment_method
+      `;
+    } else {
+      await tx.$executeRaw`
+        INSERT INTO acquirer_fees (tenant_id, method, bps)
+        VALUES (
+          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+          ${params.forma}::payment_method, ${params.bps}
+        )
+        ON CONFLICT (tenant_id, method) DO UPDATE
+          SET bps = EXCLUDED.bps, updated_at = now()
+      `;
+    }
+
+    /**
+     * Mudar alíquota é mudar quanto o barbeiro recebe — quando o rateio está
+     * ligado. A trilha usa a mesma ação da regra de comissão porque a pergunta
+     * do dia seguinte é a mesma: "por que caiu minha comissão neste mês?".
+     */
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'commission.rule_changed',
+      entity: 'acquirer_fee',
+      // Sem `entityId`: a chave desta linha é (barbearia, meio), e `entity_id` é
+      // uuid. O meio vai no detalhe, que é onde ele é legível de qualquer jeito.
+      entityId: null,
+      before: { forma: params.forma, bps: anteriores[0]?.bps ?? 0 },
+      after: { forma: params.forma, bps: params.bps },
+    });
+  });
+}

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  aliquotasDoAdquirente,
   catalogoDeServicos,
   equipeDoCadastro,
   regrasDeComissao,
@@ -10,6 +11,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import {
+  acaoAliquotaDoAdquirente,
   acaoConfiguracaoDeComissao,
   acaoRemoverRegraDeComissao,
   acaoSair,
@@ -44,6 +46,25 @@ interface Props {
 
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
+
+/**
+ * Os meios que costumam custar taxa, na ordem do extrato do adquirente.
+ *
+ * `fiado` fica de fora: não é meio de pagamento, é dívida — a taxa vem depois,
+ * quando o cliente volta e paga de verdade. Incluí-lo cobraria a maquininha de
+ * um dinheiro que não passou por ela.
+ */
+const MEIOS_COM_TAXA = [
+  { valor: 'credit', rotulo: 'Crédito' },
+  { valor: 'debit', rotulo: 'Débito' },
+  { valor: 'pix', rotulo: 'Pix' },
+  { valor: 'link', rotulo: 'Link de pagamento' },
+  { valor: 'transfer', rotulo: 'Transferência' },
+] as const;
+
+/** Pontos-base para o que o dono digita: 319 → `3,19`. Vazio quando não há. */
+const porcentagem = (bps: number | undefined): string =>
+  bps === undefined ? '' : (bps / 100).toFixed(2).replace('.', ',');
 
 const FALHA: Record<string, string> = {
   aliquota_invalida: 'Confira a alíquota: use um número entre 0 e 100, como 40 ou 42,5.',
@@ -89,10 +110,11 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
   const query = await searchParams;
 
-  const [dados, equipe, catalogo] = await Promise.all([
+  const [dados, equipe, catalogo, taxas] = await Promise.all([
     regrasDeComissao(token),
     equipeDoCadastro(token),
     catalogoDeServicos(token),
+    aliquotasDoAdquirente(token),
   ]);
 
   const erro = first(query['erro']);
@@ -126,6 +148,9 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
   }
 
   const { regras, configuracao } = dados.dados;
+  const aliquotas = new Map(
+    taxas.ok ? taxas.dados.aliquotas.map((a) => [a.forma, a.bps] as const) : [],
+  );
   const profissionais = equipe.ok ? equipe.dados.professionals.filter((p) => p.active) : [];
   const servicos = catalogo.ok ? catalogo.dados.services.filter((s) => s.active) : [];
 
@@ -183,10 +208,63 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
             </p>
           </div>
 
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="tratamentoDaTaxa">
+              A taxa da maquininha
+            </label>
+            <select
+              className="ui-field__input"
+              defaultValue={configuracao.tratamentoDaTaxa}
+              id="tratamentoDaTaxa"
+              name="tratamentoDaTaxa"
+            >
+              <option value="absorvida">É custo da casa; a base não cai</option>
+              <option value="rateada">O barbeiro divide a taxa com a casa</option>
+            </select>
+            <p className="ui-field__hint">
+              Diferente do desconto num ponto que importa: o desconto é decisão de alguém, a taxa
+              não é de ninguém — quem escolheu crédito em três vezes foi o cliente. Só vale se
+              você cadastrar as alíquotas abaixo.
+            </p>
+          </div>
+
           <button className="ui-button ui-button--ghost ui-button--block" type="submit">
             Salvar
           </button>
         </form>
+      </section>
+
+      <section className="cartao-balcao">
+        <h2 className="cartao-balcao__titulo">O que cada meio de pagamento custa</h2>
+        <p className="cartao-balcao__texto">
+          O que o adquirente cobra da barbearia, por forma de pagamento. Cadastre só o que você
+          paga — o que ficar em branco não custa nada. A alíquota é congelada em cada venda:
+          renegociar a maquininha não muda comissão que já foi fechada.
+        </p>
+
+        <ul className="aliquotas">
+          {MEIOS_COM_TAXA.map((meio) => (
+            <li className="aliquotas__item" key={meio.valor}>
+              <form action={acaoAliquotaDoAdquirente} className="aliquotas__linha">
+                <input name="forma" type="hidden" value={meio.valor} />
+                <label className="ui-field__label aliquotas__nome" htmlFor={`bps-${meio.valor}`}>
+                  {meio.rotulo}
+                </label>
+                <input
+                  className="ui-field__input aliquotas__campo"
+                  defaultValue={porcentagem(aliquotas.get(meio.valor))}
+                  id={`bps-${meio.valor}`}
+                  inputMode="decimal"
+                  name="bps"
+                  placeholder="0,00"
+                />
+                <button className="ui-button ui-button--ghost aliquotas__botao" type="submit">
+                  Salvar
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="cartao-balcao">

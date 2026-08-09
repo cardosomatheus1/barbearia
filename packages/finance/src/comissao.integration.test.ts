@@ -8,6 +8,8 @@ import {
   fechamentosDeComissao,
   regrasDeComissao,
   removerRegraDeComissao,
+  aliquotasDoAdquirente,
+  salvarAliquotaDoAdquirente,
   salvarConfiguracaoDeComissao,
   salvarRegraDeComissao,
 } from './comissao.js';
@@ -96,6 +98,7 @@ describeIfDb('comissão', () => {
     readonly descontoCents?: number;
     readonly gorjetaCents?: number;
     readonly dia?: string;
+    readonly forma?: 'cash' | 'credit' | 'debit' | 'pix';
   }) {
     await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 0, ...operador })
       .catch(() => undefined);
@@ -128,7 +131,7 @@ describeIfDb('comissão', () => {
     const total = params.precoCents - (params.descontoCents ?? 0) + (params.gorjetaCents ?? 0);
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
-      pagamentos: [{ forma: 'cash', valorCents: total }],
+      pagamentos: [{ forma: params.forma ?? 'cash', valorCents: total }],
       hojeNaUnidade: params.dia ?? HOJE,
       ...operador,
     });
@@ -258,12 +261,149 @@ describeIfDb('comissão', () => {
 
   it('com "desconto é custo da casa" a base do barbeiro não cai', async () => {
     await salvarConfiguracaoDeComissao({
-      tenantId: TENANT, base: 'liquido', tratamentoDoDesconto: 'custo_da_casa', ...operador,
+      tenantId: TENANT,
+      base: 'liquido',
+      tratamentoDoDesconto: 'custo_da_casa',
+      tratamentoDaTaxa: 'absorvida',
+      ...operador,
     });
     await regraGeral(5000);
     await vender({ precoCents: 10_000, descontoCents: 2_000 });
 
     expect((await extrato()).linhas[0]?.baseCents).toBe(10_000);
+  });
+
+  /**
+   * A taxa do adquirente (bloco 36) — a lacuna declarada desde o 19.
+   *
+   * A comissão já escolhia entre líquido e bruto e já tratava o desconto; a
+   * terceira escolha da SPEC §3.4 faltava porque **a alíquota do adquirente não
+   * existia em lugar nenhum do produto**.
+   */
+  it('sem alíquota cadastrada, a taxa é zero e nada muda', async () => {
+    // Toda barbearia que já usa o sistema continua exatamente como estava.
+    await regraGeral(4000);
+    await vender({ precoCents: 10_000, forma: 'credit' });
+
+    expect((await extrato()).linhas[0]?.baseCents).toBe(10_000);
+  });
+
+  it('com a taxa absorvida, a base do barbeiro não cai', async () => {
+    // Padrão, e é o que o produto sempre fez por omissão: a casa paga a
+    // maquininha inteira.
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 319, ...operador });
+    await regraGeral(4000);
+    await vender({ precoCents: 10_000, forma: 'credit' });
+
+    expect((await extrato()).linhas[0]?.baseCents).toBe(10_000);
+  });
+
+  it('com a taxa rateada, ela desce da base', async () => {
+    await salvarConfiguracaoDeComissao({
+      tenantId: TENANT,
+      base: 'liquido',
+      tratamentoDoDesconto: 'reduz_base',
+      tratamentoDaTaxa: 'rateada',
+      ...operador,
+    });
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 319, ...operador });
+    await regraGeral(4000);
+    await vender({ precoCents: 10_000, forma: 'credit' });
+
+    // 10.000 − 319 = 9.681, e 40% disso.
+    expect((await extrato()).linhas[0]?.baseCents).toBe(9_681);
+    expect((await extrato()).linhas[0]?.comissaoCents).toBe(3_872);
+  });
+
+  it('cada meio de pagamento paga a própria alíquota', async () => {
+    // Crédito custa múltiplas vezes o que custa Pix. Uma alíquota média daria
+    // um número que não bate com nenhum extrato.
+    await salvarConfiguracaoDeComissao({
+      tenantId: TENANT,
+      base: 'liquido',
+      tratamentoDoDesconto: 'reduz_base',
+      tratamentoDaTaxa: 'rateada',
+      ...operador,
+    });
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 319, ...operador });
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'pix', bps: 99, ...operador });
+    await regraGeral(4000);
+    await vender({ precoCents: 10_000, forma: 'pix' });
+
+    expect((await extrato()).linhas[0]?.baseCents).toBe(10_000 - 99);
+  });
+
+  it('a alíquota é congelada na venda: mudar depois não mexe no que já foi', async () => {
+    /**
+     * Mesma decisão do preço do serviço (bloco 18) e da regra copiada no
+     * lançamento (bloco 19): renegociar a maquininha em maio não pode mudar a
+     * comissão que já foi paga em abril.
+     */
+    await salvarConfiguracaoDeComissao({
+      tenantId: TENANT,
+      base: 'liquido',
+      tratamentoDoDesconto: 'reduz_base',
+      tratamentoDaTaxa: 'rateada',
+      ...operador,
+    });
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 319, ...operador });
+    await regraGeral(4000);
+    await vender({ precoCents: 10_000, forma: 'credit' });
+
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 1000, ...operador });
+
+    expect((await extrato()).linhas[0]?.baseCents).toBe(9_681);
+  });
+
+  it('alíquota fora da faixa é recusada', async () => {
+    // 3,19 virando 319 é o erro de digitação plausível, e o estrago seria a
+    // comissão do mês inteiro de todo mundo.
+    await expect(
+      salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 31_900, ...operador }),
+    ).rejects.toMatchObject({ code: 'aliquota_invalida' });
+  });
+
+  it('a taxa da gorjeta não desce da base do barbeiro', async () => {
+    /**
+     * Achado da revisão do bloco 36. O aparelho cobra sobre tudo que passa nele,
+     * gorjeta inclusive — mas a taxa é rateada só sobre os itens. Ratear o valor
+     * cheio fazia o barbeiro pagar tarifa sobre a própria gorjeta, que a decisão
+     * nº 2 de `core` diz que "nunca entra na base".
+     */
+    await salvarConfiguracaoDeComissao({
+      tenantId: TENANT,
+      base: 'liquido',
+      tratamentoDoDesconto: 'reduz_base',
+      tratamentoDaTaxa: 'rateada',
+      ...operador,
+    });
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 319, ...operador });
+    await regraGeral(4000);
+    await vender({ precoCents: 10_000, gorjetaCents: 2_000, forma: 'credit' });
+
+    // A taxa cheia sobre R$ 120 é 383; o que desce da base é a parte dos R$ 100
+    // vendidos, que é 319.
+    expect((await extrato()).linhas[0]?.baseCents).toBe(10_000 - 319);
+  });
+
+  it('fiado não recebe alíquota — não é meio de pagamento', async () => {
+    /**
+     * É dívida. Cobrar taxa de adquirente sobre um fiado seria cobrar a
+     * maquininha de um dinheiro que não passou por ela, e o barbeiro pagaria
+     * por uma transação que não existiu.
+     */
+    await expect(
+      salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'fiado', bps: 319, ...operador }),
+    ).rejects.toMatchObject({ code: 'aliquota_invalida' });
+  });
+
+  it('zero apaga a linha em vez de guardar zero', async () => {
+    // Guardar zero explícito e ausência como coisas diferentes criaria duas
+    // maneiras de dizer a mesma coisa.
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 319, ...operador });
+    await salvarAliquotaDoAdquirente({ tenantId: TENANT, forma: 'credit', bps: 0, ...operador });
+
+    expect(await aliquotasDoAdquirente(TENANT)).toEqual([]);
   });
 
   it('a gorjeta nunca entra na base', async () => {

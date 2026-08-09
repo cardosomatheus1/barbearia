@@ -5464,3 +5464,46 @@ main { padding-bottom: var(--space-8); }
   /* Com espaço, o código cresce — no notebook do balcão o cliente lê de longe. */
   .cobranca__codigo { width: min(20rem, 100%); }
 }
+
+/* ---------------------------------------------------------------------------
+   As alíquotas do adquirente (bloco 36)
+
+   Uma linha por meio de pagamento, cada uma com o próprio formulário — salvar
+   uma não pode arrastar as outras junto, senão corrigir o crédito reenviaria um
+   débito que ninguém tocou.
+
+   Empilhado no piso de 360px e em linha quando há espaço: o campo é curto e o
+   rótulo é uma palavra, então a partir do tablet os três cabem lado a lado sem
+   apertar o alvo de toque.
+   --------------------------------------------------------------------------- */
+.aliquotas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.aliquotas__item + .aliquotas__item {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.aliquotas__linha {
+  display: grid;
+  gap: var(--space-2);
+}
+.aliquotas__nome {
+  margin: 0;
+}
+/* Numerais tabulares: a coluna não dança ao trocar 3,19 por 1,99. */
+.aliquotas__campo {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 768px) {
+  .aliquotas__linha {
+    grid-template-columns: 10rem 1fr auto;
+    align-items: center;
+  }
+  .aliquotas__nome {
+    align-self: center;
+  }
+}

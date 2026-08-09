@@ -51,6 +51,93 @@ export type BaseDeComissao = (typeof BASES_DE_COMISSAO)[number];
 export const TRATAMENTOS_DO_DESCONTO = ['reduz_base', 'custo_da_casa'] as const;
 export type TratamentoDoDesconto = (typeof TRATAMENTOS_DO_DESCONTO)[number];
 
+/**
+ * O que fazer com a taxa do adquirente (bloco 36).
+ *
+ * A terceira escolha que a SPEC §3.4 exige que seja explícita, e a que ficou
+ * de fora por seis blocos — não por esquecimento, mas porque **a alíquota do
+ * adquirente não existia em lugar nenhum do produto**. Oferecer "rateada" antes
+ * disso daria zero em toda comanda: campo que o motor aceita e ninguém
+ * preenche.
+ *
+ * `absorvida` é o padrão e é o que o produto sempre fez, por omissão: a casa
+ * paga a maquininha inteira. `rateada` é a outra prática real do setor — o
+ * barbeiro divide o custo do meio de pagamento que o cliente escolheu.
+ *
+ * Ela é diferente do desconto num ponto que importa: **o desconto é decisão de
+ * alguém, a taxa não é de ninguém.** Quem escolheu crédito em três vezes foi o
+ * cliente, e é por isso que ratear a taxa é defensável onde ratear o desconto
+ * costuma não ser.
+ */
+export const TRATAMENTOS_DA_TAXA = ['absorvida', 'rateada'] as const;
+export type TratamentoDaTaxa = (typeof TRATAMENTOS_DA_TAXA)[number];
+
+/**
+ * A taxa de uma venda, em centavos, a partir da alíquota de cada meio.
+ *
+ * Pontos-base inteiros como toda alíquota do produto (319 = 3,19%), e
+ * arredondamento por meio de pagamento e não sobre o total: é assim que o
+ * adquirente cobra, uma tarifa por transação. Somar primeiro e aplicar uma
+ * alíquota média daria um número que não bate com nenhum extrato.
+ */
+export function taxaDaVenda(params: {
+  readonly pagamentos: readonly { readonly forma: string; readonly valorCents: number }[];
+  readonly aliquotasBps: ReadonlyMap<string, number>;
+  /**
+   * O troco, que **sai** da base da taxa.
+   *
+   * Achado da revisão do bloco 36. O balcão digita o que o cliente entregou —
+   * R$ 100 numa conta de R$ 60 —, e cobrar taxa sobre os R$ 40 que voltaram
+   * para o bolso do cliente é cobrar tarifa de dinheiro que nunca ficou com a
+   * barbearia. Ele sempre sai do dinheiro vivo, como em `entraNaGaveta`.
+   */
+  readonly trocoCents?: number;
+}): number {
+  let troco = Math.max(0, params.trocoCents ?? 0);
+  let taxa = 0;
+
+  for (const pagamento of params.pagamentos) {
+    let valor = pagamento.valorCents;
+    if (pagamento.forma === 'cash' && troco > 0) {
+      const abatido = Math.min(troco, valor);
+      valor -= abatido;
+      troco -= abatido;
+    }
+
+    const bps = params.aliquotasBps.get(pagamento.forma) ?? 0;
+    if (bps <= 0 || valor <= 0) continue;
+    taxa += Math.round((valor * bps) / 10_000);
+  }
+
+  return taxa;
+}
+
+/**
+ * A parte da taxa que desce da base do barbeiro.
+ *
+ * Também achado da revisão. A taxa é cobrada sobre **tudo** que passou no
+ * aparelho — inclusive a gorjeta —, mas ela é rateada só sobre os itens, cuja
+ * soma é o subtotal. Numerador e denominador diferentes: o barbeiro pagava
+ * tarifa sobre a própria gorjeta, que a decisão nº 2 deste arquivo diz que
+ * "nunca entra na base" e que a tela chama de "dinheiro que nunca foi da casa".
+ *
+ * A regra que sobra é explicável em uma frase: **desce da sua base a taxa sobre
+ * o que você vendeu** — não sobre a gorjeta, que é sua, nem sobre o troco, que
+ * voltou para o cliente.
+ */
+export function taxaSobreOsItens(params: {
+  readonly taxaCents: number;
+  /** Receita comissionável: soma dos itens menos o desconto. */
+  readonly receitaCents: number;
+  /** O que foi de fato cobrado no aparelho: receita mais gorjeta. */
+  readonly cobradoCents: number;
+}): number {
+  if (params.taxaCents <= 0 || params.cobradoCents <= 0) return 0;
+  if (params.receitaCents <= 0) return 0;
+  if (params.receitaCents >= params.cobradoCents) return params.taxaCents;
+  return Math.round((params.taxaCents * params.receitaCents) / params.cobradoCents);
+}
+
 /** Uma faixa progressiva. `ateCents` nulo é "daí para cima". */
 export interface FaixaDeComissao {
   readonly ateCents: number | null;
@@ -140,6 +227,21 @@ export function validarRegra(regra: {
  * distribuído pelo método do maior resto, e o desempate é pelo maior valor —
  * determinístico, para que a mesma comanda dê sempre o mesmo resultado.
  */
+/**
+ * O mesmo rateio, para a taxa do adquirente (bloco 36).
+ *
+ * Delega em vez de repetir: é a mesma conta e o mesmo critério de sobra, e duas
+ * cópias divergiriam no primeiro ajuste — sempre na que ninguém está olhando.
+ * O nome próprio existe porque `ratearDesconto({descontoCents: taxa})` na linha
+ * de chamada é mentira sobre o que está sendo rateado.
+ */
+export function ratearTaxa(params: {
+  readonly itens: readonly ItemComissionavel[];
+  readonly taxaCents: number;
+}): ReadonlyMap<string, number> {
+  return ratearDesconto({ itens: params.itens, descontoCents: params.taxaCents });
+}
+
 export function ratearDesconto(params: {
   readonly itens: readonly ItemComissionavel[];
   readonly descontoCents: number;
@@ -227,11 +329,24 @@ export function baseDoItem(params: {
   readonly descontoRateadoCents: number;
   readonly base: BaseDeComissao;
   readonly tratamentoDoDesconto: TratamentoDoDesconto;
+  /** A parte da taxa do adquirente que cabe a este item (bloco 36). */
+  readonly taxaRateadaCents?: number;
+  readonly tratamentoDaTaxa?: TratamentoDaTaxa;
 }): number {
-  if (params.base === 'bruto' || params.tratamentoDoDesconto === 'custo_da_casa') {
-    return params.item.totalCents;
-  }
-  return Math.max(0, params.item.totalCents - params.descontoRateadoCents);
+  /**
+   * `bruto` ignora **as duas** deduções, e é o que a palavra significa.
+   *
+   * Deixar a taxa descer sobre a base bruta faria "bruto" querer dizer "bruto,
+   * menos uma coisa" — que é o tipo de definição que ninguém consegue explicar
+   * para o barbeiro no dia do acerto.
+   */
+  if (params.base === 'bruto') return params.item.totalCents;
+
+  const desconto =
+    params.tratamentoDoDesconto === 'custo_da_casa' ? 0 : params.descontoRateadoCents;
+  const taxa = params.tratamentoDaTaxa === 'rateada' ? (params.taxaRateadaCents ?? 0) : 0;
+
+  return Math.max(0, params.item.totalCents - desconto - taxa);
 }
 
 const porCento = (valorCents: number, pontosBase: number): number =>

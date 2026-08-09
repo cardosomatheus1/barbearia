@@ -1035,6 +1035,7 @@ export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
 export type ModoDeComissao = 'percent' | 'fixed' | 'tiers';
 export type BaseDeComissao = 'liquido' | 'bruto';
 export type TratamentoDoDesconto = 'reduz_base' | 'custo_da_casa';
+export type TratamentoDaTaxa = 'absorvida' | 'rateada';
 
 export interface FaixaDeComissao {
   ateCents: number | null;
@@ -1121,7 +1122,11 @@ export interface RegraDeComissao {
 export const regrasDeComissao = (token: string) =>
   chamar<{
     regras: RegraDeComissao[];
-    configuracao: { base: BaseDeComissao; tratamentoDoDesconto: TratamentoDoDesconto };
+    configuracao: {
+      base: BaseDeComissao;
+      tratamentoDoDesconto: TratamentoDoDesconto;
+      tratamentoDaTaxa: TratamentoDaTaxa;
+    };
   }>('GET', '/v1/admin/commission/rules', undefined, token);
 
 export const salvarRegraDeComissao = (
@@ -1139,9 +1144,27 @@ export const salvarRegraDeComissao = (
 export const removerRegraDeComissao = (token: string, id: string) =>
   chamar<{ ok: true }>('DELETE', `/v1/admin/commission/rules/${id}`, undefined, token);
 
+/** A alíquota do adquirente por meio de pagamento (bloco 36). */
+export const aliquotasDoAdquirente = (token: string) =>
+  chamar<{ aliquotas: { forma: string; bps: number }[] }>(
+    'GET',
+    '/v1/admin/commission/fees',
+    undefined,
+    token,
+  );
+
+export const salvarAliquotaDoAdquirente = (
+  token: string,
+  dados: { forma: string; bps: number },
+) => chamar<{ ok: true }>('PUT', '/v1/admin/commission/fees', dados, token);
+
 export const salvarConfiguracaoDeComissao = (
   token: string,
-  dados: { base: BaseDeComissao; tratamentoDoDesconto: TratamentoDoDesconto },
+  dados: {
+    base: BaseDeComissao;
+    tratamentoDoDesconto: TratamentoDoDesconto;
+    tratamentoDaTaxa: TratamentoDaTaxa;
+  },
 ) => chamar<{ ok: true }>('PUT', '/v1/admin/commission/settings', dados, token);
 
 // -- Avisos -------------------------------------------------------------------
