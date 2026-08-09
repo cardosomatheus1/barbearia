@@ -667,6 +667,108 @@ export async function permissionsByRole(
 }
 
 /**
+ * Redefine o conjunto de permissões de um papel (bloco 30).
+ *
+ * A SPEC §1.3 pede isto desde o começo — "papel é conjunto nomeado de
+ * permissões, editável pelo proprietário" — e `role_permissions` foi desenhada
+ * por barbearia no bloco 16 justamente para que hoje bastasse a tela. Bastou.
+ *
+ * ## As três recusas, e por que cada uma existe
+ *
+ * 1. **O papel `owner` não se edita.** É a única conta que não pode ser
+ *    trancada para fora do próprio negócio. Sem esta recusa, um clique tira
+ *    `team.manage` do dono e a barbearia fica sem ninguém capaz de devolvê-la —
+ *    um estado que só sai com acesso ao banco de produção.
+ *
+ * 2. **Permissão fora do catálogo é recusada aqui e no banco.** O `CHECK` de
+ *    `role_permissions` é a garantia; esta é a que transforma o erro em
+ *    mensagem em vez de violação de constraint na tela.
+ *
+ * 3. **Só quem tem `team.manage`**, o que hoje é o dono — e a guarda da rota
+ *    cobra isso. Aqui a função assume que a autorização já passou, como todo o
+ *    resto deste arquivo.
+ *
+ * ## Substitui o conjunto, e é decisão
+ *
+ * A tela manda a lista inteira do papel, não um diff. Diff exigiria que cliente
+ * e servidor concordassem sobre o estado anterior, e duas abas abertas
+ * produziriam uma concessão que ninguém pediu. Substituir é idempotente: mandar
+ * duas vezes a mesma lista dá o mesmo resultado.
+ */
+export async function definirPermissoesDoPapel(request: {
+  readonly tenantId: string;
+  readonly papel: Papel;
+  readonly permissoes: readonly string[];
+  readonly actor: { readonly id: string; readonly name: string };
+  readonly ip?: string | undefined;
+  readonly userAgent?: string | undefined;
+}): Promise<readonly Permissao[]> {
+  if (request.papel === 'owner') {
+    throw new StaffError(
+      'owner_protected',
+      'O dono tem todas as permissões por definição, e isso não se edita.',
+    );
+  }
+  if (!PAPEIS.includes(request.papel)) {
+    throw new StaffError('invalid_role', 'Papel desconhecido.');
+  }
+
+  const desconhecida = request.permissoes.find((p) => !ehPermissao(p));
+  if (desconhecida !== undefined) {
+    throw new StaffError('unknown_permission', `Permissão desconhecida: ${desconhecida}`);
+  }
+
+  // Sem duplicata: a chave primária recusaria, e a mensagem não diria nada útil.
+  const novas = [...new Set(request.permissoes)].filter(ehPermissao).sort();
+
+  return withTenant(request.tenantId, async (tx) => {
+    const antes = await tx.$queryRaw<{ permission: string }[]>`
+      SELECT permission FROM role_permissions
+       WHERE role = ${request.papel}::staff_role
+       ORDER BY permission
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM role_permissions WHERE role = ${request.papel}::staff_role
+    `;
+    for (const permissao of novas) {
+      await tx.$executeRaw`
+        INSERT INTO role_permissions (tenant_id, role, permission)
+        VALUES (
+          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+          ${request.papel}::staff_role,
+          ${permissao}
+        )
+      `;
+    }
+
+    /**
+     * Auditado com antes e depois, dentro da mesma transação.
+     *
+     * A SPEC §1.2 lista alteração de permissão entre os eventos de auditoria
+     * obrigatória, e é a que mais precisa: "quem deu acesso ao caixa para essa
+     * pessoa?" é a primeira pergunta depois de um incidente, e a resposta não
+     * pode ser o estado atual da tabela — ele já mudou.
+     */
+    await audit(tx, {
+      actorId: request.actor.id,
+      actorName: request.actor.name,
+      // O vocabulário já existia desde o bloco 16, esperando por esta tela.
+      action: 'permissions.changed',
+      entity: 'role_permissions',
+      // Sem `entityId`: a coluna é uuid e o papel é um enum. O papel entra no
+      // detalhe, que é onde ele responde "de quem foi a mudança".
+      before: { papel: request.papel, permissoes: antes.map((l) => l.permission) },
+      after: { papel: request.papel, permissoes: novas },
+      ...(request.ip === undefined ? {} : { ip: request.ip }),
+      ...(request.userAgent === undefined ? {} : { userAgent: request.userAgent }),
+    });
+
+    return novas;
+  });
+}
+
+/**
  * Troca a própria senha.
  *
  * É o que destranca uma conta recém-criada: enquanto `must_change_password`

@@ -47,6 +47,10 @@ const STATUS: Record<string, number> = {
   nenhum_aberto: 409,
   caixa_fechado: 409,
   comanda_fechada: 409,
+  // 409 e não 400: a entrada é válida, o que a recusa é a política da
+  // barbearia. A mensagem carrega o teto em reais, porque "recusado" sem o
+  // número manda a recepção adivinhar.
+  desconto_acima_do_teto: 409,
 };
 
 function toHttp(error: unknown): never {
@@ -278,12 +282,16 @@ export class CaixaController {
    * e a recepção não — então a separação que a SPEC quer sai de uma permissão
    * que já existe.
    *
-   * Uma permissão própria (`finance.discount`) seria mais honesta, mas
-   * inventá-la aqui criaria uma permissão que nenhum papel concede, e que
-   * portanto recusaria todo mundo. Está declarada como lacuna para o bloco 30,
-   * que é onde entra a tela de conceder permissão.
+   * **Corrigido no bloco 30**, que é onde a tela de conceder permissão entrou:
+   * agora é `finance.discount`, e o dono pode dá-la à recepção sem entregar o
+   * faturamento junto. A migração 0032 concedeu a permissão nova a todo papel
+   * que já tinha `finance.view`, para que ninguém perca capacidade numa
+   * segunda-feira.
+   *
+   * Permissão diz *quem*; `tenants.max_discount_bps` diz *quanto*. Sem o teto,
+   * conceder desconto continuaria sendo conceder estorno com outro nome.
    */
-  @Exige('finance.view')
+  @Exige('finance.discount')
   @Patch('orders/:id')
   async ajustar(
     @Staff() staff: AuthenticatedStaff,

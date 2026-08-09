@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PAPEIS } from '@barbearia/core';
+import { PAPEIS, PERMISSOES } from '@barbearia/core';
 
 /**
  * Entrada da gestão de equipe, validada na borda.
@@ -30,6 +30,25 @@ export const createStaffSchema = z.object({
 export const roleSchema = z.object({ role: papel });
 
 export const activeSchema = z.object({ active: z.boolean() });
+
+/**
+ * O conjunto de permissões de um papel (bloco 30).
+ *
+ * `PERMISSOES` fechado na borda, e não texto livre: uma permissão escrita
+ * errada seria aceita aqui, recusada pelo `CHECK` do banco e chegaria à tela
+ * como violação de constraint. O teto de itens é o próprio catálogo — mandar
+ * mais do que existe só pode ser repetição.
+ *
+ * O papel vem da URL e usa o mesmo enum sem `owner` do resto do arquivo: o dono
+ * tem tudo por definição, e a lista fechada barra antes do domínio.
+ */
+export const permissoesDoPapelSchema = z.object({
+  permissoes: z
+    .array(z.enum(PERMISSOES as unknown as [string, ...string[]]))
+    .max(PERMISSOES.length),
+});
+
+export const papelEditavelSchema = papel;
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),

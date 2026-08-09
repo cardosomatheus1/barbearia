@@ -15,6 +15,7 @@ import {
   publish,
   saveBusiness,
   saveChangeWindow,
+  getPolicies,
   savePayments,
   saveProfessionals,
   savePhotos,
@@ -329,6 +330,21 @@ export class OnboardingController {
     // A barbearia precisa saber que a URL foi recusada. Devolver o estado real
     // deixa a tela comparar com o que foi enviado sem inventar mensagem.
     return { ...resultado, photos: await getPhotoTargets(staff.tenantId) };
+  }
+
+  /**
+   * As políticas da casa, preenchidas.
+   *
+   * Existe porque o bloco 30 acrescentou o teto de desconto, e um campo que a
+   * tela não sabe ler começa vazio a cada visita — o dono muda para 30%, volta
+   * na semana seguinte e vê 20% escrito, sem ter mudado nada.
+   */
+  @Exige('settings.manage')
+  @Get('policies')
+  async policies(@Staff() staff: AuthenticatedStaff) {
+    const politicas = await getPolicies(staff.tenantId);
+    if (!politicas) throw notFound('unknown_tenant', 'Barbearia não encontrada');
+    return politicas;
   }
 
   @Exige('settings.manage')

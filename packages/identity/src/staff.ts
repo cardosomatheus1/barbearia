@@ -29,6 +29,9 @@ export type StaffFailure =
   | 'email_taken'
   | 'email_unavailable'
   | 'invalid_role'
+  // Bloco 30: a tela manda a lista inteira do papel, e uma permissão fora do
+  // catálogo é recusada aqui para virar mensagem em vez de violação de `CHECK`.
+  | 'unknown_permission'
   | 'staff_not_found'
   | 'owner_protected'
   // Convite do barbeiro: a cadeira precisa existir nesta barbearia, e não pode

@@ -122,8 +122,34 @@ export const salvarJanela = (
     rescheduleMinHours: number;
     maxReschedules: number;
     cancellationPolicy?: string;
+    maxDiscountBps?: number;
   },
 ) => chamar<{ saved: boolean }>('PUT', '/v1/admin/change-window', dados, token);
+
+export interface PoliticasDaCasa {
+  cancelMinHours: number;
+  rescheduleMinHours: number;
+  maxReschedules: number;
+  cancellationPolicy: string | null;
+  maxDiscountBps: number;
+}
+
+export const politicasDaCasa = (token: string) =>
+  chamar<PoliticasDaCasa>('GET', '/v1/admin/policies', undefined, token);
+
+/**
+ * Redefine o que um papel pode.
+ *
+ * Manda o conjunto inteiro, nunca um diff: com duas abas abertas, um diff
+ * produziria uma concessão que ninguém pediu.
+ */
+export const salvarPermissoesDoPapel = (token: string, papel: string, permissoes: string[]) =>
+  chamar<{ permissoes: string[] }>(
+    'PUT',
+    `/v1/admin/team/permissoes/${papel}`,
+    { permissoes },
+    token,
+  );
 
 // -- Balcão -------------------------------------------------------------------
 

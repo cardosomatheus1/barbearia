@@ -433,7 +433,10 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | E-mail em tabela sem RLS | HMAC com segredo de ambiente, nunca em claro |
 | Permissão exibida na tela | sai da mesma função que a API aplica — nunca recalculada na view |
 | Permissão numa rota | declarada com `@Exige(...)`; rota sem declaração é **recusada**, não liberada |
-| Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e editável — nunca `if (role === 'owner')` |
+| Papel | conjunto nomeado de permissões em `role_permissions`, por barbearia e **editável pela tela** desde o bloco 30 — nunca `if (role === 'owner')` |
+| Papel do dono | não se edita: é a única conta que não pode ficar trancada para fora do próprio negócio. A recusa é na borda (enum sem `owner`) **e** no domínio |
+| Escrita e leitura | permissões diferentes: `customers.view_notes` lê a anotação, `customers.edit_notes` escreve. Escrita guardada por permissão de leitura é defeito, não economia |
+| Desconto | `finance.discount` diz **quem**; `tenants.max_discount_bps` diz **quanto**. Sem o teto, conceder desconto é conceder estorno com outro nome |
 | Conta de barbeiro | uma cadeira, uma conta — índice único parcial em `staff_users(professional_id)`; o papel do convite é sempre `professional` e nunca vem do corpo |
 | Senha de primeiro acesso na tela | cookie `httpOnly` de dois minutos com caminho restrito (`guardarSenhaDeUmaVez`), **nunca** parâmetro de consulta — há teste que lê o código e reprova |
 | Meta do profissional | por mês, nunca acumulada na pessoa; sem renovação automática — a tela sugere a do mês anterior preenchida |

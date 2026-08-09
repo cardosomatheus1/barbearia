@@ -1193,9 +1193,9 @@ main { padding-bottom: var(--space-8); }
 }
 .papel:has(input:checked) { border-color: var(--color-accent); }
 .papel input { grid-row: 1 / span 3; }
-.papel__nome { font-weight: var(--font-weight-medium); }
-.papel__sobre { grid-column: 2; font-size: var(--font-size-sm); color: var(--color-text-muted); }
-.papel__contagem { grid-column: 2; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.permissao__nome { font-weight: var(--font-weight-medium); }
+.permissao__sobre { grid-column: 2; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.permissao__contagem { grid-column: 2; font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
 /* A senha aparece uma vez. Grande e espaçada porque vai ser copiada à mão. */
 .senha-nova__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
@@ -1224,7 +1224,7 @@ main { padding-bottom: var(--space-8); }
 @media (min-width: 768px) {
   .pessoa-equipe { grid-template-columns: 1fr auto; align-items: center; }
   .papel { grid-template-columns: auto 1fr auto; }
-  .papel__contagem { grid-column: 3; grid-row: 1 / span 2; text-align: right; }
+  .permissao__contagem { grid-column: 3; grid-row: 1 / span 2; text-align: right; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -5127,3 +5127,80 @@ main { padding-bottom: var(--space-8); }
   font-size: var(--font-size-sm);
 }
 .plano-cartao__sem { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+
+/* -- Permissões por papel (bloco 30) ----------------------------------------
+
+   `.permissao__*` e não `.papel__*`: `.papel` já era o cartão de escolha de
+   papel da tela de equipe, e um bloco novo herdaria a grade de três colunas
+   dele em silêncio. **Terceira vez** — `.marca` no bloco 21, `.achado` no 22 —,
+   e as três só apareceram ao olhar o print. */
+
+.permissoes-do-papel .painel__secao { margin-top: 0; }
+
+.permissao__grupo {
+  container-type: inline-size;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-4) 0 0;
+  min-width: 0;
+}
+.permissao__legenda {
+  padding: 0 var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.permissao__sobre {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.permissao__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* Duas colunas quando o recipiente comporta — e é o recipiente que decide, não
+   a janela: a mesma lista cabe numa barra lateral estreita do admin. */
+@container (min-width: 560px) {
+  .permissao__lista { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.permissao__item { min-width: 0; }
+
+/* O alvo é a linha inteira, não o quadradinho de 13px: 44px de altura vale em
+   qualquer largura, e mouse impreciso não é exclusividade do celular. */
+.permissao__opcao {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.permissao__opcao:hover { background: var(--color-surface-hover); }
+.permissao__opcao input { width: 20px; height: 20px; flex: none; }
+
+.permissao__texto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+.permissao__selo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+
+.permissao__salvar { margin-top: var(--space-4); }

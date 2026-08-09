@@ -8,6 +8,7 @@ import {
   podeFiar,
   resultadoDoPagamento,
   somarComanda,
+  tetoDoDesconto,
   validarDesconto,
   validarItem,
   type ItemDaComanda,
@@ -386,5 +387,35 @@ describe('fiado', () => {
     expect(resultado.naGavetaCents).toBe(7000);
     expect(resultado.receitaAgoraCents).toBe(7000);
     expect(resultado.aReceberCents).toBe(0);
+  });
+});
+
+describe('teto de desconto da barbearia', () => {
+  it('vinte por cento de R$ 100,00 são R$ 20,00', () => {
+    expect(tetoDoDesconto(10_000, 2000)).toBe(2000);
+  });
+
+  /**
+   * O arredondamento tem lado, como o do rateio do bloco 28.
+   *
+   * 20% de R$ 33,33 são 666,6 centavos. Para baixo: quem escreveu "vinte por
+   * cento" não autorizou o centavo que passa.
+   */
+  it('arredonda para baixo, nunca a favor de quem dá o desconto', () => {
+    expect(tetoDoDesconto(3333, 2000)).toBe(666);
+  });
+
+  it('zero desliga o desconto e cem por cento libera tudo', () => {
+    expect(tetoDoDesconto(10_000, 0)).toBe(0);
+    expect(tetoDoDesconto(10_000, 10_000)).toBe(10_000);
+  });
+
+  it('pontos-base fora da faixa são grampeados, não explodem', () => {
+    expect(tetoDoDesconto(10_000, -500)).toBe(0);
+    expect(tetoDoDesconto(10_000, 99_999)).toBe(10_000);
+  });
+
+  it('o teto é sobre o subtotal, então comanda vazia não libera nada', () => {
+    expect(tetoDoDesconto(0, 10_000)).toBe(0);
   });
 });

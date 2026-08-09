@@ -5,6 +5,7 @@ import {
   resultadoDoPagamento,
   somarComanda,
   validarDesconto,
+  tetoDoDesconto,
   validarItem,
   type DescontoDaComanda,
   type FormaDePagamento,
@@ -33,6 +34,7 @@ export type ComandaFailure =
   | 'comanda_fechada'
   | 'item_invalido'
   | 'desconto_invalido'
+  | 'desconto_acima_do_teto'
   | 'pagamento_invalido'
   | 'caixa_fechado'
   | 'cliente_nao_encontrado'
@@ -303,13 +305,43 @@ export async function abrirComanda(params: {
   });
 }
 
-/** Os totais gravados acompanham os itens; a fonte é sempre o domínio. */
+/**
+ * Os totais gravados acompanham os itens; a fonte é sempre o domínio.
+ *
+ * ## O desconto é reajustado aqui, e não é detalhe
+ *
+ * A `/security-review` do bloco 30 achou o furo: o teto era conferido **só no
+ * instante de gravar o desconto**, e esta função reescrevia subtotal e total
+ * deixando `discount_cents` intacto. Bastava inflar a comanda com uma linha
+ * qualquer, descontar o teto do total inflado e apagar a linha — o desconto
+ * efetivo subia até zerar a conta, com a trilha registrando os 20% de política.
+ *
+ * O `CHECK` do banco não pegava: ele exige `discount_cents <= subtotal_cents`,
+ * que é exatamente o caso de 100%.
+ *
+ * A correção é reafirmar o invariante **em toda escrita que muda o subtotal**,
+ * que é o que esta função é. Um `CHECK` não resolveria: o teto é por barbearia
+ * e mora em outra tabela.
+ */
 async function recalcular(tx: TransactionClient, orderId: string): Promise<void> {
   const comanda = await carregar(tx, orderId);
+
+  const teto = tetoDoDesconto(comanda.subtotalCents, await tetoDaBarbearia(tx));
+  const descontoCents = Math.min(comanda.descontoCents, teto);
+
+  // Recontar com o desconto já grampeado: `carregar` somou com o valor antigo,
+  // e gravar aquele total deixaria a conta do banco discordando das colunas.
+  const totais = somarComanda({
+    itens: comanda.itens,
+    desconto: descontoCents > 0 ? { tipo: 'amount', valor: descontoCents, motivo: null } : null,
+    gorjetaCents: comanda.gorjetaCents,
+  });
+
   await tx.$executeRaw`
     UPDATE orders SET
-      subtotal_cents = ${comanda.subtotalCents},
-      total_cents = ${comanda.totalCents}
+      subtotal_cents = ${totais.subtotalCents},
+      discount_cents = ${totais.descontoCents},
+      total_cents = ${totais.totalCents}
     WHERE id = ${orderId}::uuid
   `;
 }
@@ -426,6 +458,19 @@ export async function removerItem(params: {
   });
 }
 
+/** O teto de desconto configurado, em pontos-base. Dado, não constante. */
+async function tetoDaBarbearia(tx: TransactionClient): Promise<number> {
+  const linhas = await tx.$queryRaw<{ max_discount_bps: number }[]>`
+    SELECT max_discount_bps FROM tenants LIMIT 1
+  `;
+  // Sem linha não existe barbearia no contexto, e a RLS já teria recusado tudo
+  // antes; zero aqui é a resposta conservadora, não um padrão silencioso.
+  return linhas[0]?.max_discount_bps ?? 0;
+}
+
+const reais = (centavos: number): string =>
+  `R$ ${(centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
 /**
  * Desconto e gorjeta.
  *
@@ -455,6 +500,28 @@ export async function ajustarComanda(params: {
       desconto: params.desconto ?? null,
       gorjetaCents: params.gorjetaCents ?? atual.gorjetaCents,
     });
+
+    /**
+     * O teto da barbearia, conferido **depois** de converter para centavos.
+     *
+     * É o único jeito de a conta valer para os dois tipos de desconto: 100% e
+     * "R$ 500 numa conta de R$ 500" são a mesma coisa em centavos e coisas
+     * diferentes no que foi digitado. Comparar antes deixaria o segundo passar.
+     *
+     * O teto vem do banco, não de uma constante: configuração de negócio é
+     * dado. Uma barbearia que trabalha com pacote promocional muda o número na
+     * tela de configurações e ninguém faz deploy.
+     */
+    if (totais.descontoCents > 0) {
+      const teto = tetoDoDesconto(totais.subtotalCents, await tetoDaBarbearia(tx));
+      if (totais.descontoCents > teto) {
+        throw new ComandaError(
+          'desconto_acima_do_teto',
+          `O desconto máximo desta barbearia é ${reais(teto)}.`,
+          'desconto_acima_do_teto',
+        );
+      }
+    }
 
     await tx.$executeRaw`
       UPDATE orders SET

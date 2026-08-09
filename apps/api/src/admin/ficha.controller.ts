@@ -23,16 +23,17 @@ function toHttp(error: unknown): never {
 /**
  * A ficha do cliente — a tela que o barbeiro abre antes de atender.
  *
- * **`customers.view_notes` nas duas rotas, ler e escrever.** A permissão existe
- * desde o bloco 12 e é negada à recepção de propósito: quem atende no balcão
- * precisa achar o cliente, não ler o que anotaram sobre ele.
+ * **Ler é `customers.view_notes`; escrever é `customers.edit_notes`.** As duas
+ * são negadas à recepção por padrão: quem atende no balcão precisa achar o
+ * cliente, não ler o que anotaram sobre ele.
  *
- * Escrever exige a mesma permissão que ler, e é decisão, não descuido: quem lê
- * "não usar navalha" é exatamente quem escreveu — o barbeiro, com o cliente na
- * cadeira. Uma permissão separada de escrita não teria hoje nenhum papel que a
- * concedesse e outro que não, e inventar permissão que ninguém distingue foi o
- * erro que o bloco 18 declarou como lacuna em vez de cometer. Ela entra no
- * bloco 30, junto com a tela que permite conceder — e está escrito lá.
+ * Até o bloco 30 as duas rotas exigiam a permissão de leitura, e o argumento
+ * era razoável — quem lê "não usar navalha" costuma ser quem escreveu. Mas
+ * escrita guardada por permissão de leitura é o defeito que a
+ * `/security-review` do bloco 21 cobrou, e o motivo real de ele ter durado era
+ * outro: não havia tela que permitisse ao dono conceder uma sem a outra.
+ * Agora há, e a migração 0032 concedeu `edit_notes` a todo papel que já tinha
+ * `view_notes` — ninguém perde capacidade, e a partir de agora dá para separar.
  */
 @Controller('v1/admin/customers')
 @UseGuards(StaffGuard, PermissaoGuard)
@@ -50,7 +51,7 @@ export class FichaController {
     }
   }
 
-  @Exige('customers.view_notes')
+  @Exige('customers.edit_notes')
   @Put(':id/preferences')
   async salvar(
     @Staff() staff: AuthenticatedStaff,

@@ -98,6 +98,9 @@ export const changeWindowSchema = z.object({
   rescheduleMinHours: z.number().int().min(0).max(720),
   maxReschedules: z.number().int().min(0).max(50),
   cancellationPolicy: z.string().trim().max(300).optional(),
+  // Pontos-base inteiros, como toda alíquota do produto: 2000 é 20%. O teto do
+  // schema acompanha a CHECK do banco.
+  maxDiscountBps: z.number().int().min(0).max(10_000).optional(),
 });
 
 /**

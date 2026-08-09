@@ -102,6 +102,7 @@ export type FalhaDaComanda =
   | 'quantidade_invalida'
   | 'preco_invalido'
   | 'desconto_invalido'
+  | 'desconto_acima_do_teto'
   | 'gorjeta_invalida';
 
 /** Valida um item antes de entrar na comanda. */
@@ -121,6 +122,22 @@ export function validarItem(item: {
     return 'preco_invalido';
   }
   return null;
+}
+
+/**
+ * O teto de desconto da barbearia (bloco 30).
+ *
+ * Puro e em pontos-base inteiros, como toda alíquota do produto: 2000 é 20%. A
+ * conta é feita sobre o **subtotal**, que é o que o desconto de fato reduz — o
+ * total já traz gorjeta, que não é da casa e não pode inflar o teto.
+ *
+ * O arredondamento é para baixo. Com teto de 20% sobre R$ 33,33, o máximo é
+ * R$ 6,66 e não R$ 6,67: quem escreveu "vinte por cento" não autorizou o
+ * centavo que passa.
+ */
+export function tetoDoDesconto(subtotalCents: number, tetoBps: number): number {
+  const bps = Math.min(Math.max(0, Math.trunc(tetoBps)), 10_000);
+  return Math.floor((subtotalCents * bps) / 10_000);
 }
 
 export function validarDesconto(desconto: DescontoDaComanda): FalhaDaComanda | null {

@@ -436,6 +436,14 @@ export interface ChangeWindowInput {
   readonly rescheduleMinHours: number;
   readonly maxReschedules: number;
   readonly cancellationPolicy?: string;
+  /**
+   * Teto de desconto por comanda, em pontos-base (bloco 30).
+   *
+   * Vive na mesma tela que a janela de cancelamento porque é a mesma coisa: uma
+   * política da casa que a operação obedece. Opcional na entrada para que a tela
+   * de janela do bloco 9 continue funcionando sem mandá-lo.
+   */
+  readonly maxDiscountBps?: number;
 }
 
 /**
@@ -457,6 +465,53 @@ export async function saveChangeWindow(
         cancellation_policy = ${input.cancellationPolicy ?? null},
         updated_at = now()
     `;
+
+    // Só quando vem: `COALESCE` manteria o valor atual de qualquer jeito, mas
+    // o `UPDATE` separado deixa explícito que não mandar é "não mexa nisso", e
+    // não "volte ao padrão".
+    if (input.maxDiscountBps !== undefined) {
+      await tx.$executeRaw`
+        UPDATE tenants SET max_discount_bps = ${input.maxDiscountBps}, updated_at = now()
+         WHERE id = ${tenantId}::uuid
+      `;
+    }
+  });
+}
+
+/** O que a tela de políticas mostra preenchido. */
+export async function getPolicies(tenantId: string): Promise<{
+  readonly cancelMinHours: number;
+  readonly rescheduleMinHours: number;
+  readonly maxReschedules: number;
+  readonly cancellationPolicy: string | null;
+  readonly maxDiscountBps: number;
+} | null> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        cancel_min_hours: number;
+        reschedule_min_hours: number;
+        max_reschedules: number;
+        cancellation_policy: string | null;
+        max_discount_bps: number;
+      }[]
+    >`
+      SELECT l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules,
+             l.cancellation_policy, t.max_discount_bps
+        FROM locations l
+        JOIN tenants t ON t.id = l.tenant_id
+       ORDER BY l.created_at
+       LIMIT 1
+    `;
+    const linha = linhas[0];
+    if (!linha) return null;
+    return {
+      cancelMinHours: linha.cancel_min_hours,
+      rescheduleMinHours: linha.reschedule_min_hours,
+      maxReschedules: linha.max_reschedules,
+      cancellationPolicy: linha.cancellation_policy,
+      maxDiscountBps: linha.max_discount_bps,
+    };
   });
 }
 

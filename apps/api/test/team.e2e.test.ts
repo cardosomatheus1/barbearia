@@ -342,6 +342,57 @@ describeIfDb('equipe e permissões pela HTTP', () => {
     expect(JSON.stringify(dia.body.totals)).not.toContain('realizado');
   });
 
+  // -- permissões editáveis pela tela (bloco 30) ------------------------------
+
+  it('o dono tira uma permissão da recepção e ela deixa de alcançar a rota', async () => {
+    // É o bloco inteiro numa asserção: até aqui isto era um DELETE no banco de
+    // produção. E vale na **requisição seguinte**, sem novo login — a sessão
+    // carrega o que o papel pode, não uma cópia congelada no token.
+    const dono = await entrarComoDono();
+    const maria = await recepcionista(dono);
+
+    await com(maria.token)(http().get('/v1/admin/customers').query({ q: 'silva' })).expect(200);
+
+    await com(dono)(
+      http()
+        .put('/v1/admin/team/permissoes/receptionist')
+        .send({ permissoes: ['appointments.view'] }),
+    ).expect(200);
+
+    await com(maria.token)(http().get('/v1/admin/customers').query({ q: 'silva' })).expect(403);
+    await com(maria.token)(http().get('/v1/admin/day')).expect(200);
+  });
+
+  it('a recepção não edita permissão nenhuma', async () => {
+    // A rota é `team.manage`, que ela não tem. Sem isso, o primeiro clique dela
+    // seria conceder-se `finance.view`.
+    const dono = await entrarComoDono();
+    const maria = await recepcionista(dono);
+
+    await com(maria.token)(
+      http()
+        .put('/v1/admin/team/permissoes/receptionist')
+        .send({ permissoes: ['finance.view'] }),
+    ).expect(403);
+  });
+
+  it('o papel do dono é recusado na borda, antes do domínio', async () => {
+    const dono = await entrarComoDono();
+    const resposta = await com(dono)(
+      http().put('/v1/admin/team/permissoes/owner').send({ permissoes: [] }),
+    ).expect(400);
+    expect(resposta.body.error.code).toBe('invalid_request');
+  });
+
+  it('permissão inventada é recusada na borda', async () => {
+    const dono = await entrarComoDono();
+    await com(dono)(
+      http()
+        .put('/v1/admin/team/permissoes/manager')
+        .send({ permissoes: ['appointments.view', 'finance.tudo'] }),
+    ).expect(400);
+  });
+
   // -- o dono continua protegido ---------------------------------------------
 
   it('nem quem administra a equipe reemite a senha do dono', async () => {

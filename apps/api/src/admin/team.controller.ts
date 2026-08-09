@@ -6,6 +6,7 @@ import {
   convidarProfissional,
   createStaffUser,
   listStaff,
+  definirPermissoesDoPapel,
   permissionsByRole,
   resetStaffPassword,
   setStaffActive,
@@ -23,6 +24,8 @@ import {
   activeSchema,
   changePasswordSchema,
   createStaffSchema,
+  papelEditavelSchema,
+  permissoesDoPapelSchema,
   roleSchema,
   staffIdSchema,
 } from './team.schemas.js';
@@ -34,6 +37,7 @@ const STATUS: Record<string, number> = {
   // "já existe na plataforma" confirmaria que o endereço é de alguém.
   email_unavailable: 409,
   invalid_role: 400,
+  unknown_permission: 400,
   invalid_phone: 400,
   staff_not_found: 404,
   professional_not_found: 404,
@@ -88,6 +92,39 @@ export class TeamController {
       // que a API aplica (CLAUDE.md).
       permissionsByRole: await permissionsByRole(staff.tenantId),
     };
+  }
+
+  /**
+   * Redefine o que um papel pode (bloco 30).
+   *
+   * `team.manage`, que hoje só o dono tem — e é a permissão certa: quem edita
+   * papel decide o que todo mundo alcança, o que é mais poder do que qualquer
+   * permissão isolada da lista.
+   *
+   * A tela manda o conjunto inteiro, não um diff. Diff exigiria que cliente e
+   * servidor concordassem sobre o estado anterior, e duas abas abertas
+   * produziriam uma concessão que ninguém pediu.
+   */
+  @Exige('team.manage')
+  @Put('permissoes/:papel')
+  async permissoes(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('papel', new ZodValidationPipe(papelEditavelSchema)) papel: string,
+    @Body(new ZodValidationPipe(permissoesDoPapelSchema)) body: { permissoes: string[] },
+    @Req() request: Request,
+  ) {
+    try {
+      const permissoes = await definirPermissoesDoPapel({
+        tenantId: staff.tenantId,
+        papel: papel as Papel,
+        permissoes: body.permissoes,
+        actor: { id: staff.staffUserId, name: staff.name },
+        ...contexto(request),
+      });
+      return { permissoes };
+    } catch (error) {
+      return toHttp(error);
+    }
   }
 
   /**

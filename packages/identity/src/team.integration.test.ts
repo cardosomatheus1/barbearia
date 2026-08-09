@@ -7,6 +7,7 @@ import {
   changeStaffRole,
   createStaffUser,
   listStaff,
+  definirPermissoesDoPapel,
   permissionsByRole,
   convidarProfissional,
   resetStaffPassword,
@@ -706,5 +707,148 @@ describeIfDb('equipe e permissões', () => {
       (linha) => linha.action === 'staff.created' && linha.entityId === convidado.member.id,
     );
     expect(criacao?.actorName).toBe(DONO.name);
+  });
+
+  // -- editar as permissões de um papel (bloco 30) ---------------------------
+
+  it('o dono redefine o que a recepção pode, e vale na sessão seguinte', async () => {
+    const dono = await abrirBarbearia();
+    const { senhaInicial } = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Bianca',
+      email: `bianca${Date.now()}@teste.com`,
+      role: 'receptionist',
+    });
+    const membros = await listStaff(dono.tenantId);
+    const bianca = membros.find((m) => m.name === 'Bianca');
+
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'receptionist',
+      permissoes: ['appointments.view', 'customers.view'],
+      actor: ator(dono),
+    });
+
+    const sessao = await staffLogin({ email: bianca!.email, password: senhaInicial });
+    const resolvida = await resolveStaffSession(sessao.token);
+    expect([...resolvida.permissions].sort()).toEqual(['appointments.view', 'customers.view']);
+  });
+
+  it('mandar a mesma lista duas vezes dá o mesmo resultado', async () => {
+    // A tela manda o conjunto inteiro, não um diff — então repetir é o caso
+    // comum (duas abas, um duplo toque), não a exceção.
+    const dono = await abrirBarbearia();
+    const lista = ['appointments.view', 'appointments.create'];
+
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId, papel: 'professional', permissoes: lista, actor: ator(dono),
+    });
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId, papel: 'professional', permissoes: lista, actor: ator(dono),
+    });
+
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect([...(mapa['professional'] ?? [])].sort()).toEqual([...lista].sort());
+  });
+
+  it('lista repetida não vira permissão duplicada', async () => {
+    const dono = await abrirBarbearia();
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'manager',
+      permissoes: ['appointments.view', 'appointments.view', 'appointments.view'],
+      actor: ator(dono),
+    });
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect(mapa['manager']).toEqual(['appointments.view']);
+  });
+
+  /**
+   * A recusa que impede a barbearia de ficar sem dono.
+   *
+   * Sem ela, um clique tira `team.manage` de quem poderia devolvê-la — e o
+   * estado só sai com acesso ao banco de produção.
+   */
+  it('o papel do dono não se edita', async () => {
+    const dono = await abrirBarbearia();
+    await expect(
+      definirPermissoesDoPapel({
+        tenantId: dono.tenantId, papel: 'owner', permissoes: [], actor: ator(dono),
+      }),
+    ).rejects.toMatchObject({ code: 'owner_protected' });
+
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect([...(mapa['owner'] ?? [])].sort()).toEqual([...PERMISSOES].sort());
+  });
+
+  it('permissão fora do catálogo é recusada antes de chegar ao banco', async () => {
+    const dono = await abrirBarbearia();
+    await expect(
+      definirPermissoesDoPapel({
+        tenantId: dono.tenantId,
+        papel: 'manager',
+        permissoes: ['appointments.view', 'finance.tudo'],
+        actor: ator(dono),
+      }),
+    ).rejects.toMatchObject({ code: 'unknown_permission' });
+
+    // E nada foi gravado no caminho: a recusa vem antes de qualquer escrita.
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect([...(mapa['manager'] ?? [])].sort()).toEqual([...permissoesPadrao('manager')].sort());
+  });
+
+  it('a mudança fica na trilha, com antes e depois', async () => {
+    // "Quem deu acesso ao caixa para essa pessoa?" é a primeira pergunta depois
+    // de um incidente, e a resposta não pode ser o estado atual da tabela.
+    const dono = await abrirBarbearia();
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'receptionist',
+      permissoes: ['appointments.view', 'cashier.open', 'finance.view'],
+      actor: ator(dono),
+    });
+
+    const trilha = await withTenant(dono.tenantId, (tx) =>
+      tx.$queryRaw<{ action: string; actor_name: string; before: unknown; after: unknown }[]>`
+        SELECT action, actor_name, before, after FROM audit_log
+         WHERE action = 'permissions.changed'
+      `,
+    );
+    expect(trilha).toHaveLength(1);
+    expect(trilha[0]?.actor_name).toBe(dono.name);
+    expect((trilha[0]?.before as { permissoes: string[] }).permissoes).toContain('appointments.create');
+    expect((trilha[0]?.after as { permissoes: string[] }).permissoes).toContain('finance.view');
+  });
+
+  it('tirar tudo de um papel é permitido, e deixa a conta sem alcance', async () => {
+    // Recusar seria inventar uma regra que ninguém pediu. O que **não** se
+    // permite é fazer isso com o dono, e essa é a recusa que importa.
+    const dono = await abrirBarbearia();
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId, papel: 'receptionist', permissoes: [], actor: ator(dono),
+    });
+    const mapa = await permissionsByRole(dono.tenantId);
+    expect(mapa['receptionist']).toEqual([]);
+  });
+
+  it('a permissão de uma barbearia não alcança a outra', async () => {
+    const primeira = await abrirBarbearia();
+    const segunda = await signUpOwner({
+      ...DONO,
+      email: 'dono@vizinha.com.br',
+      businessName: 'Vizinha Barber',
+    });
+    if (!segunda.created) throw new Error('a vizinha deveria ter sido criada');
+
+    await definirPermissoesDoPapel({
+      tenantId: primeira.tenantId, papel: 'receptionist', permissoes: [], actor: ator(primeira),
+    });
+
+    const daSegunda = await permissionsByRole(segunda.session.tenantId);
+    expect([...(daSegunda['receptionist'] ?? [])].sort()).toEqual(
+      [...permissoesPadrao('receptionist')].sort(),
+    );
   });
 });

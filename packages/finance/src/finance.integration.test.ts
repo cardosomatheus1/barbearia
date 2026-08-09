@@ -12,6 +12,8 @@ import {
   ajustarComanda,
   faturamentoDoDia,
   fecharComanda,
+  getComanda,
+  removerItem,
   quemEstaDevendo,
   receberFiado,
 } from './comanda.js';
@@ -273,6 +275,103 @@ describeIfDb('comanda, caixa e fiado', () => {
     });
     // O desconto continua R$ 10, não vira R$ 15.
     expect(depois.descontoCents).toBe(1000);
+  });
+
+  /**
+   * O teto do desconto (bloco 30).
+   *
+   * Permissão diz *quem* pode descontar; o teto diz *quanto*. Sem ele,
+   * conceder `finance.discount` à recepção seria conceder estorno com outro
+   * nome — 100% de desconto zera a conta.
+   */
+  it('desconto acima do teto da barbearia é recusado, e o teto vem do banco', async () => {
+    const com = await comItem(10000);
+
+    // O padrão da migração 0032 é 20%: R$ 25 numa conta de R$ 100 não passa.
+    await expect(
+      ajustarComanda({
+        tenantId: TENANT, orderId: com.id,
+        desconto: { tipo: 'amount', valor: 2500, motivo: 'exagerado' },
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'desconto_acima_do_teto' });
+
+    // R$ 20 passa, e o desconto anterior continua zero: a recusa não gravou.
+    const dentro = await ajustarComanda({
+      tenantId: TENANT, orderId: com.id,
+      desconto: { tipo: 'amount', valor: 2000, motivo: 'no limite' },
+      ...operador,
+    });
+    expect(dentro.descontoCents).toBe(2000);
+  });
+
+  it('o teto vale para percentual também, porque a conta é em centavos', async () => {
+    // 100% e "R$ 100 numa conta de R$ 100" são a mesma coisa em centavos e
+    // coisas diferentes no que foi digitado. Comparar antes de converter
+    // deixaria o segundo passar.
+    const com = await comItem(10000);
+    await expect(
+      ajustarComanda({
+        tenantId: TENANT, orderId: com.id,
+        desconto: { tipo: 'percent', valor: 100, motivo: 'cortesia total' },
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'desconto_acima_do_teto' });
+  });
+
+  it('subir o teto na configuração libera o desconto maior', async () => {
+    // O teto é dado, não constante: a barbearia que trabalha com pacote
+    // promocional muda o número na tela e ninguém faz deploy.
+    await exec(admin, `UPDATE tenants SET max_discount_bps = 5000 WHERE id = '${TENANT}'`);
+    try {
+      const com = await comItem(10000);
+      const ajustada = await ajustarComanda({
+        tenantId: TENANT, orderId: com.id,
+        desconto: { tipo: 'percent', valor: 50, motivo: 'promoção de inverno' },
+        ...operador,
+      });
+      expect(ajustada.descontoCents).toBe(5000);
+    } finally {
+      await exec(admin, `UPDATE tenants SET max_discount_bps = 2000 WHERE id = '${TENANT}'`);
+    }
+  });
+
+  /**
+   * O furo que a `/security-review` do bloco 30 achou, e que o teto sozinho não
+   * fechava.
+   *
+   * O teto era conferido **só no instante de gravar o desconto**. Bastava
+   * inflar a comanda com uma linha qualquer, descontar 20% do total inflado e
+   * apagar a linha: `recalcular` reescrevia subtotal e total e deixava
+   * `discount_cents` intacto, e o desconto efetivo subia até zerar a conta — com
+   * a trilha registrando os 20% de política.
+   */
+  it('apagar item depois do desconto não faz o desconto passar do teto', async () => {
+    const com = await comItem(5000);
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: com.id,
+      tipo: 'product', descricao: 'Linha inflada', quantidade: 1, precoUnitarioCents: 20000,
+    });
+
+    // 20% de R$ 250,00 são R$ 50,00 — passa no teto, e é o serviço inteiro.
+    const descontada = await ajustarComanda({
+      tenantId: TENANT, orderId: com.id,
+      desconto: { tipo: 'amount', valor: 5000, motivo: 'no limite do inflado' },
+      ...operador,
+    });
+    expect(descontada.descontoCents).toBe(5000);
+
+    const inflada = await getComanda(TENANT, com.id);
+    const linha = inflada!.itens.find((i) => i.descricao === 'Linha inflada');
+    const depois = await removerItem({
+      tenantId: TENANT, orderId: com.id, itemId: linha!.id,
+    });
+
+    // Sobrou R$ 50,00 de subtotal: o teto agora é R$ 10,00, e é nele que o
+    // desconto tem que estar — não nos R$ 50,00 que zerariam a conta.
+    expect(depois.subtotalCents).toBe(5000);
+    expect(depois.descontoCents).toBe(1000);
+    expect(depois.totalCents).toBe(4000);
   });
 
   it('serviço de outra barbearia não entra na comanda desta', async () => {

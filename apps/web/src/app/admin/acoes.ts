@@ -39,6 +39,7 @@ import {
   type StatusNaFila,
   criarServico,
   trocarDePlano,
+  salvarPermissoesDoPapel,
   editarProfissional,
   editarServico,
   exigenciasDoServico,
@@ -298,6 +299,9 @@ export async function acaoJanela(form: FormData): Promise<void> {
     cancelMinHours: numero(form, 'cancelMinHours', 2),
     rescheduleMinHours: numero(form, 'rescheduleMinHours', 2),
     maxReschedules: numero(form, 'maxReschedules', 2),
+    // Por cento na tela, pontos-base no banco. A conversão fica aqui, num lugar
+    // só — espalhá-la faria dois pontos do código discordarem sobre 12,5%.
+    maxDiscountBps: Math.min(100, Math.max(0, numero(form, 'maxDiscountPercent', 20))) * 100,
     ...(texto(form, 'cancellationPolicy')
       ? { cancellationPolicy: texto(form, 'cancellationPolicy') }
       : {}),
@@ -1356,4 +1360,23 @@ export async function acaoTrocarDePlano(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/plano', resultado.code);
   redirect('/admin/plano?trocado=1');
+}
+
+// -- Permissões ---------------------------------------------------------------
+
+/**
+ * Redefine o que um papel pode (bloco 30).
+ *
+ * A tela é um formulário de caixas de seleção por papel, e o navegador só manda
+ * as marcadas — o que é exatamente o conjunto inteiro. Nada de diff: com duas
+ * abas abertas, um diff produziria uma concessão que ninguém pediu.
+ */
+export async function acaoPermissoesDoPapel(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const papel = texto(form, 'papel');
+  const permissoes = form.getAll('permissoes').map((v) => String(v)).filter(Boolean);
+
+  const resultado = await salvarPermissoesDoPapel(token, papel, permissoes);
+  if (!resultado.ok) falhar('/admin/equipe/permissoes', resultado.code);
+  redirect('/admin/equipe/permissoes?salvo=1');
 }

@@ -114,6 +114,7 @@ describe('permissões de dinheiro', () => {
       'cashier.withdraw',
       'commission.edit_rules',
       'commission.view_all',
+      'finance.discount',
       'finance.export',
       'finance.view',
       'finance.view_profit',

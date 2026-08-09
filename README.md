@@ -13,12 +13,12 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão, permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 542 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 181 invariantes + 10 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão, permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 547 testes ✅ |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 186 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
-| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, segundo fator (TOTP), convite do barbeiro e auditoria | 125 testes ✅ |
+| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | 137 testes ✅ |
 | `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
-| `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 74 testes ✅ |
+| `packages/finance` | Comanda, checkout, caixa, fiado e comissão — o dinheiro e os números do barbeiro, do banco para a tela | 89 testes ✅ |
 | `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática e apuração diária — o que acontece sem ninguém esperando | 63 testes ✅ |
 | `packages/crm` | A ficha do cliente: como ele gosta de ser atendido e como vem sendo atendido | 15 testes ✅ |
 | `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin e suporte assistido | 98 testes ✅ |

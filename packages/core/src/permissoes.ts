@@ -44,6 +44,19 @@ export const PERMISSOES = [
   'finance.view',
   'finance.view_profit',
   'finance.export',
+  /**
+   * Dar desconto na comanda.
+   *
+   * Nasceu como lacuna no bloco 21: descontar exigia `finance.view`, que é
+   * *ver dinheiro*. O efeito era o oposto do pretendido — para deixar a
+   * recepção dar 10%, era preciso entregar o faturamento junto.
+   *
+   * Fica no grupo de dinheiro por herdar o prefixo, e está certo: quem pode
+   * zerar uma conta é exatamente quem o segundo fator existe para proteger. O
+   * teto por barbearia (`tenants.max_discount_bps`) é a outra metade — permissão
+   * diz *quem*, teto diz *quanto*.
+   */
+  'finance.discount',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -52,6 +65,15 @@ export const PERMISSOES = [
   'customers.export',
   'customers.view_photos',
   'customers.view_notes',
+  /**
+   * Escrever a anotação, que é diferente de lê-la.
+   *
+   * A rota de gravar a ficha exigia `customers.view_notes` — escrita guardada
+   * por permissão de leitura, que é o defeito que a `/security-review` do bloco
+   * 21 cobrou e que ficou declarado até aqui. O barbeiro que lê "não gosta de
+   * conversa" não é necessariamente quem deve reescrever isso.
+   */
+  'customers.edit_notes',
   'reports.finance',
   'reports.operational',
   'inventory.view',
@@ -142,10 +164,12 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'cashier.withdraw',
     // Faturamento sim, margem não.
     'finance.view',
+    'finance.discount',
     'commission.view_all',
     'customers.view',
     'customers.edit',
     'customers.view_notes',
+    'customers.edit_notes',
     'reports.operational',
     'inventory.view',
     'inventory.adjust',
@@ -176,6 +200,13 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'commission.view_own',
     'customers.view',
     'customers.view_notes',
+    /**
+     * O barbeiro escreve a anotação, e é o desenho certo: quem descobre que o
+     * cliente não gosta de conversa é quem atende, não a recepção. A separação
+     * que este bloco cria é para o dono poder **tirar** — não para começar
+     * tirando de quem já fazia.
+     */
+    'customers.edit_notes',
   ],
 };
 
