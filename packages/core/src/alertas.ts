@@ -24,8 +24,20 @@
  * apurar.
  *
  * **Alerta diz o que fazer, ou não serve.** Cada regra devolve uma frase em
- * português com o número, a referência e para onde olhar. "Conversão caiu" às
- * três da manhã não ajuda ninguém.
+ * português com o número, a referência e para onde olhar. "Caiu" às três da
+ * manhã não ajuda ninguém.
+ *
+ * ## Duas regras, não quatro
+ *
+ * A SPEC cita quatro sinais. Só entraram os dois que têm **origem de dado
+ * hoje** — volume por barbearia e fila de trabalho —, e `packages/jobs` entrega
+ * o coletor dos dois no mesmo bloco.
+ *
+ * Conversão da página exige contar visita; proporção de erro exige ler log
+ * agregado de volta. Escrever as duas regras agora deixaria o produto com
+ * função que ninguém chama, que é o mesmo defeito de `blocks` — aceito por oito
+ * blocos e sempre vazio. As duas estão na tabela de lacunas com o bloco em que
+ * a origem chega.
  */
 
 /**
@@ -103,50 +115,6 @@ export function volumeDeAgendamentoCaiu(entrada: {
 }
 
 /**
- * Conversão da página pública: quem abriu contra quem marcou.
- *
- * É o número que a SPEC cita primeiro, e o motivo é que ele cai **antes** de
- * qualquer métrica de infraestrutura acusar qualquer coisa. Um botão que parou
- * de responder mantém CPU, memória e latência exatamente onde estavam.
- */
-export function conversaoDespencou(entrada: {
-  readonly visitas: number;
-  readonly agendamentos: number;
-  /** A taxa que a barbearia costuma ter, medida em janela longa. */
-  readonly taxaHabitual: number;
-  readonly minimoDeVisitas?: number;
-  readonly quedaCritica?: number;
-  readonly quedaDeAviso?: number;
-}): VeredictoDeAlerta {
-  const {
-    visitas,
-    agendamentos,
-    taxaHabitual,
-    minimoDeVisitas = 50,
-    quedaCritica = 0.5,
-    quedaDeAviso = 0.3,
-  } = entrada;
-
-  // Vinte visitas e nenhuma marcação é terça-feira, não incidente.
-  if (visitas < minimoDeVisitas) return null;
-  if (taxaHabitual <= 0) return null;
-
-  const taxa = agendamentos / visitas;
-  const queda = (taxaHabitual - taxa) / taxaHabitual;
-  if (queda < quedaDeAviso) return null;
-
-  return {
-    regra: 'conversao.despencou',
-    severidade: queda >= quedaCritica ? 'critico' : 'aviso',
-    frase:
-      `Conversão em ${pct(taxa)} contra ${pct(taxaHabitual)} de costume ` +
-      `(${agendamentos} de ${visitas} visitas). Abra o fluxo de agendamento e vá até o fim.`,
-    valor: taxa,
-    referencia: taxaHabitual,
-  };
-}
-
-/**
  * Fila de trabalho travada.
  *
  * O que trava aqui não é abstrato: é o lembrete de 24h que não sai, e a falta
@@ -184,46 +152,6 @@ export function filaTravada(entrada: {
 }
 
 /**
- * Erro de gravação de agendamento.
- *
- * Diferente das outras três: não compara com nada. Recusa por horário ocupado é
- * comportamento correto e frequente; **falha** de gravação não deveria existir.
- * Uma proporção pequena já é sinal, e por isso o piso aqui é de amostra, não de
- * variação.
- */
-export function agendamentoFalhando(entrada: {
-  readonly tentativas: number;
-  /** Só erro interno. Recusa por regra de negócio não entra. */
-  readonly falhas: number;
-  readonly minimoDeTentativas?: number;
-  readonly proporcaoDeAviso?: number;
-  readonly proporcaoCritica?: number;
-}): VeredictoDeAlerta {
-  const {
-    tentativas,
-    falhas,
-    minimoDeTentativas = 20,
-    proporcaoDeAviso = 0.02,
-    proporcaoCritica = 0.1,
-  } = entrada;
-
-  if (tentativas < minimoDeTentativas) return null;
-
-  const proporcao = falhas / tentativas;
-  if (proporcao < proporcaoDeAviso) return null;
-
-  return {
-    regra: 'agendamento.falhando',
-    severidade: proporcao >= proporcaoCritica ? 'critico' : 'aviso',
-    frase:
-      `${falhas} de ${tentativas} tentativas de agendamento falharam (${pct(proporcao)}). ` +
-      'Recusa por horário ocupado não conta aqui — isto é erro nosso.',
-    valor: proporcao,
-    referencia: proporcaoDeAviso,
-  };
-}
-
-/**
  * O que o coletor entrega para ser avaliado de uma vez.
  *
  * Cada campo é opcional porque nem toda medida existe em toda janela: uma
@@ -232,9 +160,7 @@ export function agendamentoFalhando(entrada: {
  */
 export interface Medidas {
   readonly volume?: Parameters<typeof volumeDeAgendamentoCaiu>[0];
-  readonly conversao?: Parameters<typeof conversaoDespencou>[0];
   readonly fila?: Parameters<typeof filaTravada>[0];
-  readonly agendamento?: Parameters<typeof agendamentoFalhando>[0];
 }
 
 /**
@@ -251,9 +177,7 @@ export function avaliar(medidas: Medidas): readonly Alerta[] {
   };
 
   if (medidas.volume) talvez(volumeDeAgendamentoCaiu(medidas.volume));
-  if (medidas.conversao) talvez(conversaoDespencou(medidas.conversao));
   if (medidas.fila) talvez(filaTravada(medidas.fila));
-  if (medidas.agendamento) talvez(agendamentoFalhando(medidas.agendamento));
 
   return disparados.sort((a, b) => {
     if (a.severidade === b.severidade) return a.regra.localeCompare(b.regra);

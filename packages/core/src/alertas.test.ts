@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  agendamentoFalhando,
-  avaliar,
-  conversaoDespencou,
-  filaTravada,
-  volumeDeAgendamentoCaiu,
-} from './alertas.js';
+import { avaliar, filaTravada, volumeDeAgendamentoCaiu } from './alertas.js';
 
 /**
  * O que estes testes provam não é que a conta bate — é que o alerta **não
@@ -47,30 +41,6 @@ describe('volume de agendamento', () => {
   });
 });
 
-describe('conversão', () => {
-  it('metade da taxa habitual é crítico', () => {
-    const alerta = conversaoDespencou({ visitas: 200, agendamentos: 8, taxaHabitual: 0.1 });
-
-    expect(alerta?.severidade).toBe('critico');
-    expect(alerta?.frase).toContain('4%');
-    expect(alerta?.frase).toContain('vá até o fim');
-  });
-
-  it('vinte visitas e nenhuma marcação é terça-feira, não incidente', () => {
-    expect(conversaoDespencou({ visitas: 20, agendamentos: 0, taxaHabitual: 0.1 })).toBeNull();
-  });
-
-  it('sem taxa habitual não há com que comparar', () => {
-    expect(conversaoDespencou({ visitas: 500, agendamentos: 0, taxaHabitual: 0 })).toBeNull();
-  });
-
-  it('conversão acima do costume não alerta', () => {
-    expect(
-      conversaoDespencou({ visitas: 200, agendamentos: 40, taxaHabitual: 0.1 }),
-    ).toBeNull();
-  });
-});
-
 describe('fila de trabalho', () => {
   it('o sinal é a idade da tarefa, não o tamanho da fila', () => {
     // As quatro combinações, e é por serem as quatro que este teste prova
@@ -104,30 +74,11 @@ describe('fila de trabalho', () => {
   });
 });
 
-describe('erro de gravação de agendamento', () => {
-  it('proporção pequena já é sinal — erro nosso não deveria existir', () => {
-    const alerta = agendamentoFalhando({ tentativas: 100, falhas: 3 });
-
-    expect(alerta?.severidade).toBe('aviso');
-    expect(alerta?.frase).toContain('horário ocupado não conta');
-  });
-
-  it('uma falha em cinco tentativas não é amostra', () => {
-    // 20% parece gravíssimo e não é: cinco tentativas não dizem nada.
-    expect(agendamentoFalhando({ tentativas: 5, falhas: 1 })).toBeNull();
-  });
-
-  it('um décimo das tentativas falhando é crítico', () => {
-    expect(agendamentoFalhando({ tentativas: 200, falhas: 30 })?.severidade).toBe('critico');
-  });
-});
-
 describe('avaliar', () => {
   it('devolve só o que disparou, crítico na frente', () => {
     const alertas = avaliar({
       volume: { hoje: 13, mesmoDiaSemanaPassada: 20 }, // aviso
       fila: { pendentes: 2, idadeDaMaisAntigaMinutos: 90 }, // crítico
-      conversao: { visitas: 10, agendamentos: 0, taxaHabitual: 0.1 }, // silêncio
     });
 
     expect(alertas.map((a) => a.regra)).toEqual(['fila.travada', 'agendamento.volume_caiu']);
@@ -145,9 +96,7 @@ describe('avaliar', () => {
     // coletor monta o objeto.
     const alertas = avaliar({
       volume: { hoje: 0, mesmoDiaSemanaPassada: 0 },
-      conversao: { visitas: 0, agendamentos: 0, taxaHabitual: 0 },
       fila: { pendentes: 0, idadeDaMaisAntigaMinutos: 0 },
-      agendamento: { tentativas: 0, falhas: 0 },
     });
 
     expect(alertas).toEqual([]);

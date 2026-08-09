@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 22 de 78 blocos.**
+**Status: 23 de 78 blocos.**
 
 ---
 
@@ -71,6 +71,11 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Importar agendamentos futuros e histórico | a base de clientes entra inteira, com deduplicação por telefone, preview, reversão e idempotência | as duas outras linhas do escopo mínimo da SPEC §5.8: a agenda futura e o histórico de atendimento | sem bloco definido: as duas dependem de **casar nome de profissional e de serviço** entre dois cadastros que não se conhecem, e de decidir o que fazer quando o horário importado bate com um existente — a constraint de exclusão recusa, e recusar em silêncio perderia o agendamento que a SPEC diz que não pode se perder. É outro importador, com outras telas de conferência. Enquanto isso vale a mitigação que a própria SPEC §5.8 prescreve: **operação paralela por uma ou duas semanas**, com a agenda velha em leitura — são umas trinta marcações a redigitar, não mil e duzentas |
 | Importar fiado em aberto | o fiado existe no produto desde o bloco 18, com razão append-only, limite por cliente e trilha | trazer o saldo em aberto do sistema antigo | 51 (financeiro: contas a pagar/receber): saldo é dinheiro, e escrever em `customer_ledger` exige permissão do grupo de dinheiro e segundo fator. Pendurar isso na rota de importação faria `customers.edit` mover saldo — a permissão declarada deixaria de descrever a rota, que é o defeito que a `/security-review` cobrou no bloco 21. Saldo de pacote e assinatura, que a SPEC cita junto, esperam existir (blocos 42 e 45) |
 | Resolver o conflito de telefone pela tela | o conflito é detectado, mostrado com o número da linha e os dois nomes, e a linha fica de fora em vez de escolher sozinha | escolher na tela qual nome fica, sem editar o arquivo | sem bloco: resolver linha a linha exige estado por linha no navegador, e portanto o **primeiro componente de cliente do produto** — a mesma decisão que segura o arraste na agenda e a atualização automática do balcão, e as três devem entrar juntas com medição de pacote. O caminho de hoje não é becos sem saída: corrigir no arquivo e reenviar cria uma importação nova, porque a idempotência é pelo conteúdo |
+| Conversão da página e proporção de erro como alerta | duas das quatro regras da SPEC §5.12 entregues **com coletor**: queda de volume por barbearia e fila de trabalho travada, com teste puro da decisão e teste de integração da coleta | as outras duas: conversão da página pública e proporção de erro na gravação | sem bloco definido: as regras seriam triviais de escrever e **não têm origem de dado**. Conversão exige contar visita — que é rastreamento de visitante anônimo, com implicação de LGPD que merece decisão própria, não carona. Proporção de erro exige ler o log agregado de volta para dentro do produto, e não há agregador. Escrevê-las agora deixaria duas funções que ninguém chama, que é o defeito de `blocks` — aceito por oito blocos e sempre vazio |
+| Canal por onde o alerta sai | as regras decidem, o coletor alimenta, e `alertasDaBarbearia` devolve a lista pronta com a frase em português | mandar isso para alguém: e-mail, WhatsApp do dono ou webhook | sem bloco definido: o produto tem canal para o **cliente** (bloco 20) e nenhum para o gestor. É a mesma dependência que segura a varredura diária do validador, e as duas devem entrar juntas — o primeiro aviso dirigido ao dono é decisão de produto (o que interrompe alguém às onze da noite?), não de infraestrutura |
+| Deploy contínuo e ambiente de staging | a esteira roda o portão inteiro, a medição de navegador e a carga a cada push; as sondas de vivo e pronto existem; o ensaio de restauração confere dado, RLS, trigger e versão do schema | o CD: um ambiente para onde publicar, e a publicação automática | sem bloco definido: **não há infraestrutura contratada**. Escrever um passo de deploy apontando para lugar nenhum seria configuração que ninguém executa. O que dependia de código está pronto — a sonda de pronto é o que a publicação vai consultar |
+| Tracing distribuído | log estruturado por requisição, com `x-request-id` aceito do proxy, devolvido na resposta e presente em toda linha — que é correlação ponta a ponta dentro do processo | spans com duração por camada, e propagação para fora | sem bloco definido: o produto é um monólito modular com um processo e um banco. Span entre camadas do mesmo processo responde o que o perfil de CPU responde melhor, e foi o perfil que achou o gargalo de fuso deste bloco. Entra quando houver um segundo serviço em jogo |
+| Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
 deliberada e o que é só tela — está em
@@ -112,7 +117,7 @@ atual sem perder nenhuma capacidade que usava.
 | 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | ✅ |
 | 21 | Dashboard básico + validador de catálogo | ✅ |
 | 22 | Importador de base + deduplicação por telefone | ✅ |
-| 23 | CI/CD, staging, observabilidade, e2e, carga em `/availability` | |
+| 23 | CI/CD, staging, observabilidade, e2e, carga em `/availability` | ✅ |
 
 ---
 

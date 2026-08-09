@@ -25,6 +25,7 @@ import {
 } from './preferencias.js';
 import { varrerRetornos } from './notificacoes.js';
 import { rodada, type Contexto } from './worker.js';
+import { alertasDaBarbearia } from './alertas.js';
 
 /**
  * A fila contra Postgres real.
@@ -764,5 +765,102 @@ describeIfDb('fila de trabalho', () => {
       await withTenant(tenant, (tx) => agendarVarreduraDeRetorno(tx, { tenantId: tenant, quando: AGORA }));
     }
     expect(await quantasNaFila()).toBe(2);
+  });
+});
+
+describeIfDb('alertas de negócio, com os números vindos do banco', () => {
+  /**
+   * As regras já têm teste puro em `packages/core`. O que se prova aqui é a
+   * **coleta**: se a consulta pega o dia errado, conta o tenant errado ou soma
+   * tarefa agendada como atrasada, a regra continua correta e o alerta sai
+   * errado — e ninguém percebe, porque o teste puro continua verde.
+   */
+  const AGORA_ALERTA = new Date('2026-09-10T13:00:00Z');
+
+  /**
+   * O horário do corte é irrelevante para esta conta — o que se mede é
+   * `created_at` —, mas ele não pode se repetir: a constraint anti-overbooking
+   * recusa dois cortes no mesmo profissional na mesma faixa, e é ela que este
+   * produto inteiro existe para ter. O contador espalha os horários em anos
+   * futuros para nunca colidirem.
+   */
+  let proximoHorario = 0;
+  const LONGE = Date.UTC(2030, 0, 1);
+
+  const marcarEm = (quando: Date, quantos: number, tenant = TENANT) =>
+    exec(
+      admin,
+      Array.from({ length: quantos }, () => {
+        const desloca = LONGE + proximoHorario++ * 3_600_000;
+        const inicio = new Date(desloca).toISOString();
+        const fim = new Date(desloca + 1_800_000).toISOString();
+        return `INSERT INTO appointments
+          (tenant_id, location_id, customer_id, professional_id,
+           starts_at, ends_at, service_starts_at, service_ends_at,
+           status, source, price_cents, created_at)
+         VALUES ('${tenant}', '${LOCATION}', '${CARLOS}', '${RUAN}',
+           '${inicio}', '${fim}', '${inicio}', '${fim}',
+           'pending', 'website', 4900, '${quando.toISOString()}')`;
+      }).join(';'),
+    );
+
+  beforeEach(async () => {
+    await admin.$executeRawUnsafe(`DELETE FROM appointments WHERE tenant_id = '${TENANT}'`);
+  });
+
+  it('compara com o mesmo dia da semana passada, não com ontem', async () => {
+    // Vinte na semana passada, seis hoje: queda de 70%.
+    await marcarEm(new Date('2026-09-03T12:00:00Z'), 20);
+    await marcarEm(new Date('2026-09-10T09:00:00Z'), 6);
+    // Ontem teve trinta. Se a coleta comparasse com ontem, o número seria outro
+    // — e num sábado contra domingo ela inventaria queda toda semana.
+    await marcarEm(new Date('2026-09-09T12:00:00Z'), 30);
+
+    const alertas = await alertasDaBarbearia(TENANT, AGORA_ALERTA);
+    const volume = alertas.find((a) => a.regra === 'agendamento.volume_caiu');
+
+    expect(volume?.severidade).toBe('critico');
+    expect(volume?.valor).toBe(6);
+    expect(volume?.referencia).toBe(20);
+  });
+
+  it('o movimento da barbearia vizinha não entra na conta', async () => {
+    await marcarEm(new Date('2026-09-03T12:00:00Z'), 20);
+    // A rival teve o mesmo movimento hoje. Sem o recorte por tenant, ele
+    // encobriria a queda desta — e o alerta que mais importa some.
+    await marcarEm(new Date('2026-09-10T09:00:00Z'), 20, RIVAL);
+
+    const alertas = await alertasDaBarbearia(TENANT, AGORA_ALERTA);
+
+    expect(alertas.find((a) => a.regra === 'agendamento.volume_caiu')?.valor).toBe(0);
+  });
+
+  it('tarefa agendada para amanhã não é fila travada', async () => {
+    await admin.$executeRawUnsafe('TRUNCATE jobs');
+    await exec(
+      admin,
+      `INSERT INTO jobs (tenant_id, kind, payload, run_after)
+       VALUES ('${TENANT}', 'aviso', '{}'::jsonb, '2026-09-11T12:00:00Z')`,
+    );
+
+    // Pendente e no futuro: é o lembrete de amanhã, não worker morto. Contá-lo
+    // faria toda barbearia com aviso ligado parecer travada.
+    const alertas = await alertasDaBarbearia(TENANT, AGORA_ALERTA);
+    expect(alertas.find((a) => a.regra === 'fila.travada')).toBeUndefined();
+  });
+
+  it('tarefa vencida há uma hora é fila travada', async () => {
+    await admin.$executeRawUnsafe('TRUNCATE jobs');
+    await exec(
+      admin,
+      `INSERT INTO jobs (tenant_id, kind, payload, run_after)
+       VALUES ('${TENANT}', 'aviso', '{}'::jsonb, '2026-09-10T11:30:00Z')`,
+    );
+
+    const alertas = await alertasDaBarbearia(TENANT, AGORA_ALERTA);
+    const fila = alertas.find((a) => a.regra === 'fila.travada');
+
+    expect(fila?.severidade).toBe('critico');
+    expect(fila?.valor).toBe(90);
   });
 });
