@@ -4806,3 +4806,69 @@ main { padding-bottom: var(--space-8); }
 
 /* O selo da barbearia bloqueada encostava no nome dela na tabela. */
 .saude__nome .conta__selo { margin-inline-start: var(--space-2); }
+
+/* ----------------------------------------------------------------------------
+   Plano da barbearia (bloco 27)
+   ---------------------------------------------------------------------------- */
+
+.plano__publico {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+.plano__cadeiras {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-variant-numeric: tabular-nums;
+}
+.plano__aviso {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-accent);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano__recursos {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.plano__recurso {
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+/* Fora do plano some do foco sem sumir da tela: esconder seria decidir que o
+   dono não precisa saber o que existe um degrau acima. */
+.plano__recurso--fora { opacity: 0.65; }
+.plano__recurso-nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.plano__recurso-sobre {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano__selo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+.plano__selo--fora { color: var(--color-text-muted); border-color: var(--color-border); }

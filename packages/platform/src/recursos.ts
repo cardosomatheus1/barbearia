@@ -15,12 +15,18 @@ import { PlataformaError, registrarNaTrilha } from './plataforma.js';
  * `importacao` são cobrados na guarda de permissão da API, e `avisos` no worker,
  * antes de gastar mensagem.
  *
- * ## Ausência é o padrão, não "desligado"
+ * ## Três níveis, e o mais específico ganha (bloco 27)
+ *
+ * - `feature_flags.default_enabled` — o recurso vale para quem o plano não
+ *   menciona? É o padrão de fábrica.
+ * - `plan_features` — o plano contratado inclui? É o que dá conteúdo à tabela
+ *   de preços: sem isto, Starter e Business custam diferente e entregam igual.
+ * - `tenant_features` — decidimos algo para **esta** conta? Vence os dois, e é
+ *   como o suporte concede cortesia sem mexer no plano de ninguém.
  *
  * `tenant_features` só guarda a **exceção**. Uma linha por barbearia por
- * recurso desde o começo repetiria mil vezes o que `default_enabled` já diz — e
- * mudar o padrão deixaria de mudar coisa alguma, porque todo mundo teria
- * override.
+ * recurso desde o começo repetiria mil vezes o que os dois níveis acima já
+ * dizem — e mudar o padrão deixaria de mudar coisa alguma.
  */
 
 export const RECURSOS = ['fila', 'importacao', 'avisos'] as const;
@@ -45,6 +51,9 @@ export interface RecursoDaBarbearia {
   readonly ligado: boolean;
   /** Falso quando o valor vem do catálogo, e não de uma decisão sobre esta conta. */
   readonly proprio: boolean;
+  /** O plano contratado inclui este recurso? É o que a tela precisa para dizer
+   *  "cortesia" em vez de deixar parecer que o cliente está pagando por ele. */
+  readonly noPlano: boolean;
 }
 
 interface LinhaDeCatalogo {
@@ -81,6 +90,7 @@ interface LinhaDeRecursoDoTenant {
   description: string;
   ligado: boolean;
   proprio: boolean;
+  no_plano: boolean;
 }
 
 /**
@@ -96,9 +106,12 @@ export async function recursosDaBarbearia(
   return semTenant(async (tx) => {
     const linhas = await tx.$queryRaw<LinhaDeRecursoDoTenant[]>`
       SELECT f.code, f.name, f.description,
-             COALESCE(tf.enabled, f.default_enabled) AS ligado,
-             tf.tenant_id IS NOT NULL AS proprio
+             COALESCE(tf.enabled, pf.plan_code IS NOT NULL OR f.default_enabled) AS ligado,
+             tf.tenant_id IS NOT NULL AS proprio,
+             pf.plan_code IS NOT NULL AS no_plano
       FROM feature_flags f
+      LEFT JOIN subscriptions s ON s.tenant_id = ${tenantId}::uuid
+      LEFT JOIN plan_features pf ON pf.flag_code = f.code AND pf.plan_code = s.plan_code
       LEFT JOIN tenant_features tf
         ON tf.flag_code = f.code AND tf.tenant_id = ${tenantId}::uuid
       ORDER BY f.name
@@ -109,6 +122,7 @@ export async function recursosDaBarbearia(
       descricao: l.description,
       ligado: l.ligado,
       proprio: l.proprio,
+      noPlano: l.no_plano,
     }));
   });
 }
@@ -130,8 +144,13 @@ export async function recursoLigado(
 ): Promise<boolean> {
   return semTenant(async (tx) => {
     const linhas = await tx.$queryRaw<{ ligado: boolean }[]>`
-      SELECT COALESCE(tf.enabled, f.default_enabled) AS ligado
+      SELECT COALESCE(
+               tf.enabled,
+               pf.plan_code IS NOT NULL OR f.default_enabled
+             ) AS ligado
       FROM feature_flags f
+      LEFT JOIN subscriptions s ON s.tenant_id = ${tenantId}::uuid
+      LEFT JOIN plan_features pf ON pf.flag_code = f.code AND pf.plan_code = s.plan_code
       LEFT JOIN tenant_features tf
         ON tf.flag_code = f.code AND tf.tenant_id = ${tenantId}::uuid
       WHERE f.code = ${code}

@@ -19,21 +19,54 @@ INSERT INTO platform_admins (id, email_key, name, password_hash)
 VALUES ('a8282828-0000-0000-0000-000000000001', 'chave-de-teste-28', 'Super', 'hash');
 
 -- ----------------------------------------------------------------------------
--- 1 — ausência é o padrão do catálogo, não "desligado"
+-- 1 — a resolução tem três níveis, e o mais específico ganha
+--
+-- Este teste nasceu com dois níveis no bloco 26 — catálogo e exceção da conta —
+-- e o bloco 27 acrescentou o do meio, que é o plano. Ele mudou junto porque a
+-- **regra** mudou: a partir do 27 o padrão de fábrica dos três recursos é
+-- desligado, e quem os liga é o plano contratado. Deixar o teste na versão
+-- antiga seria manter verde a descrição de um sistema que não existe mais.
+--
+-- A barbearia nova entra no plano padrão (Pro), que inclui os três.
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE ligados int;
 BEGIN
   SELECT count(*) INTO ligados
     FROM feature_flags f
+    JOIN subscriptions s ON s.tenant_id = '28282828-0000-0000-0000-000000000001'
+    LEFT JOIN plan_features pf ON pf.flag_code = f.code AND pf.plan_code = s.plan_code
     LEFT JOIN tenant_features tf
       ON tf.flag_code = f.code AND tf.tenant_id = '28282828-0000-0000-0000-000000000001'
-   WHERE COALESCE(tf.enabled, f.default_enabled);
+   WHERE COALESCE(tf.enabled, pf.plan_code IS NOT NULL OR f.default_enabled);
 
   IF ligados <> 3 THEN
-    RAISE EXCEPTION 'barbearia nova nasceu com % de 3 recursos ligados', ligados;
+    RAISE EXCEPTION 'barbearia nova no plano padrão ficou com % de 3 recursos', ligados;
   END IF;
-  RAISE NOTICE 'OK 1 — sem exceção gravada, vale o padrão do catálogo';
+  RAISE NOTICE 'OK 1 — o plano padrão liga os três recursos que ele inclui';
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 1b — e o plano de baixo entrega menos, que é o ponto de haver plano de cima
+-- ----------------------------------------------------------------------------
+UPDATE subscriptions SET plan_code = 'starter'
+ WHERE tenant_id = '28282828-0000-0000-0000-000000000002';
+
+DO $$
+DECLARE ligados int;
+BEGIN
+  SELECT count(*) INTO ligados
+    FROM feature_flags f
+    JOIN subscriptions s ON s.tenant_id = '28282828-0000-0000-0000-000000000002'
+    LEFT JOIN plan_features pf ON pf.flag_code = f.code AND pf.plan_code = s.plan_code
+    LEFT JOIN tenant_features tf
+      ON tf.flag_code = f.code AND tf.tenant_id = '28282828-0000-0000-0000-000000000002'
+   WHERE COALESCE(tf.enabled, pf.plan_code IS NOT NULL OR f.default_enabled);
+
+  IF ligados <> 0 THEN
+    RAISE EXCEPTION 'o Starter entregou % recursos que ele não inclui', ligados;
+  END IF;
+  RAISE NOTICE 'OK 1b — o Starter não inclui os três, e por isso eles ficam desligados';
 END $$;
 
 -- ----------------------------------------------------------------------------
@@ -42,23 +75,33 @@ END $$;
 INSERT INTO tenant_features (tenant_id, flag_code, enabled)
 VALUES ('28282828-0000-0000-0000-000000000001', 'fila', false);
 
+-- A Rival volta ao plano padrão: o que este teste isola é a exceção por conta,
+-- não a diferença de plano.
+UPDATE subscriptions SET plan_code = 'pro' WHERE tenant_id = '28282828-0000-0000-0000-000000000002';
+
 DO $$
 DECLARE domari boolean; rival boolean;
 BEGIN
-  SELECT COALESCE(tf.enabled, f.default_enabled) INTO domari
-    FROM feature_flags f LEFT JOIN tenant_features tf
+  SELECT COALESCE(tf.enabled, pf.plan_code IS NOT NULL OR f.default_enabled) INTO domari
+    FROM feature_flags f
+    JOIN subscriptions s ON s.tenant_id = '28282828-0000-0000-0000-000000000001'
+    LEFT JOIN plan_features pf ON pf.flag_code = f.code AND pf.plan_code = s.plan_code
+    LEFT JOIN tenant_features tf
       ON tf.flag_code = f.code AND tf.tenant_id = '28282828-0000-0000-0000-000000000001'
    WHERE f.code = 'fila';
 
-  SELECT COALESCE(tf.enabled, f.default_enabled) INTO rival
-    FROM feature_flags f LEFT JOIN tenant_features tf
+  SELECT COALESCE(tf.enabled, pf.plan_code IS NOT NULL OR f.default_enabled) INTO rival
+    FROM feature_flags f
+    JOIN subscriptions s ON s.tenant_id = '28282828-0000-0000-0000-000000000002'
+    LEFT JOIN plan_features pf ON pf.flag_code = f.code AND pf.plan_code = s.plan_code
+    LEFT JOIN tenant_features tf
       ON tf.flag_code = f.code AND tf.tenant_id = '28282828-0000-0000-0000-000000000002'
    WHERE f.code = 'fila';
 
   IF domari OR NOT rival THEN
     RAISE EXCEPTION 'desligar na Domari (%) mexeu na Rival (%)', domari, rival;
   END IF;
-  RAISE NOTICE 'OK 2 — recurso desligado numa barbearia não desliga na outra';
+  RAISE NOTICE 'OK 2 — a exceção de uma barbearia não vale para a outra, no mesmo plano';
 END $$;
 
 -- ----------------------------------------------------------------------------

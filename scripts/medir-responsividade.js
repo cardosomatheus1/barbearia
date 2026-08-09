@@ -734,6 +734,7 @@ async function main() {
       cookie: { nome: 'gestor', valor: token, caminho: '/admin' },
     },
     { nome: 'segurança (MFA)', url: '/admin/seguranca', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'plano da barbearia', url: '/admin/plano', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'caixa', url: '/admin/caixa', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'cobrar', url: '/admin/comanda', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     ...(caixa.ok

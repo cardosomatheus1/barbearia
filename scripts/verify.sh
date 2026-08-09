@@ -33,6 +33,12 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# O cluster deste ambiente já caiu três vezes no meio de uma sessão, sem erro no
+# log — parado de fora, não por falha. O sintoma engana: meia dúzia de suítes
+# reprovando junto, cada uma por "Connection refused", como se uma mudança
+# tivesse quebrado seis pacotes ao mesmo tempo. Conferir antes custa nada.
+scripts/pg-de-pe.sh
+
 RAPIDO=""
 [ "${1:-}" = "--rapido" ] && RAPIDO=1
 

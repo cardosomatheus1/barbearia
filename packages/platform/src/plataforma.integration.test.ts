@@ -39,8 +39,8 @@ import {
   resolverSessaoDaPlataforma,
   sairDaPlataforma,
   trilhaDaPlataforma,
-  trocarPlano,
 } from './plataforma.js';
+import { mudarPlanoDaAssinatura } from './assinatura.js';
 
 /**
  * A camada de plataforma contra Postgres real.
@@ -124,44 +124,49 @@ describeIfDb('camada de plataforma', () => {
 
   // -- planos -----------------------------------------------------------------
 
-  it('os três planos do dia um estão lá, e o preço é em centavos', async () => {
+  it('as quatro faixas da SPEC estão no catálogo, com preço em centavos', async () => {
+    // Os três planos inventados do bloco 24 saíram de oferta no 27, quando as
+    // faixas de verdade (SPEC §9) chegaram. Eles continuam existindo para quem
+    // estivesse neles — o que a lista devolve é a **oferta**.
     const planos = await listarPlanos();
 
-    expect(planos.map((p) => p.code)).toEqual(['cortesia', 'essencial', 'completo']);
-    expect(planos.find((p) => p.code === 'essencial')?.priceCents).toBe(9900);
+    expect(planos.map((p) => p.code)).toEqual(['enterprise', 'starter', 'pro', 'business']);
+    // A âncora do §2.4: o Pro disputa a barbearia de duas cadeiras na faixa
+    // R$ 79–110.
+    expect(planos.find((p) => p.code === 'pro')?.priceCents).toBe(9900);
     // `null` é ilimitado, e é diferente de zero — que seria um plano onde
     // ninguém pode trabalhar.
-    expect(planos.find((p) => p.code === 'completo')?.maxChairs).toBeNull();
+    expect(planos.find((p) => p.code === 'enterprise')?.maxChairs).toBeNull();
   });
 
   it('trocar de plano deixa rastro com o de onde e o para onde', async () => {
     const { id: adminId } = await comAdmin();
-    await trocarPlano({ adminId, tenantId: DOMARI, planoCode: 'essencial' });
-    await trocarPlano({ adminId, tenantId: DOMARI, planoCode: 'completo' });
+    await mudarPlanoDaAssinatura({ adminId, tenantId: DOMARI, planoCode: 'starter' });
+    await mudarPlanoDaAssinatura({ adminId, tenantId: DOMARI, planoCode: 'business' });
 
     const trilha = await trilhaDaPlataforma();
     const trocas = trilha.filter((e) => e.acao === 'tenant.plan_changed');
 
     expect(trocas).toHaveLength(2);
     // A mais recente primeiro: a trilha é lida de cima para baixo.
-    expect(trocas[0]?.detalhe).toEqual({ de: 'essencial', para: 'completo' });
-    expect(trocas[1]?.detalhe).toEqual({ de: null, para: 'essencial' });
+    expect(trocas[0]?.detalhe).toMatchObject({ de: 'starter', para: 'business' });
+    expect(trocas[1]?.detalhe).toMatchObject({ de: 'pro', para: 'starter' });
   });
 
   it('plano que não é mais oferecido não recebe barbearia nova', async () => {
     const { id: adminId } = await comAdmin();
-    await admin.$executeRawUnsafe(`UPDATE plans SET active = false WHERE code = 'cortesia'`);
 
-    await expect(trocarPlano({ adminId, tenantId: DOMARI, planoCode: 'cortesia' })).rejects.toThrow(
-      PlataformaError,
-    );
+    // Os do bloco 24 são o caso real disto: desativados, não apagados.
+    await expect(
+      mudarPlanoDaAssinatura({ adminId, tenantId: DOMARI, planoCode: 'cortesia' }),
+    ).rejects.toThrow(PlataformaError);
   });
 
   it('plano inexistente é recusado com código próprio', async () => {
     const { id: adminId } = await comAdmin();
 
     await expect(
-      trocarPlano({ adminId, tenantId: DOMARI, planoCode: 'inventado' }),
+      mudarPlanoDaAssinatura({ adminId, tenantId: DOMARI, planoCode: 'inventado' }),
     ).rejects.toMatchObject({ code: 'unknown_plan' });
   });
 

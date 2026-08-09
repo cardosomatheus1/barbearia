@@ -3,3 +3,4 @@ export * from './metricas.js';
 export * from './recursos.js';
 export * from './mfa.js';
 export * from './suporte.js';
+export * from './assinatura.js';

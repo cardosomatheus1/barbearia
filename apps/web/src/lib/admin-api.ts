@@ -1386,3 +1386,15 @@ export const lerImportacao = (token: string, id: string) =>
     undefined,
     token,
   );
+
+export interface PlanoDaBarbearia {
+  plano: { code: string; nome: string; publico: string; precoCents: number };
+  estado: 'trialing' | 'active' | 'past_due' | 'canceled';
+  testeAte: string | null;
+  periodoAte: string;
+  cadeiras: { emUso: number; teto: number | null };
+  recursos: { code: string; nome: string; descricao: string; ligado: boolean; noPlano: boolean }[];
+}
+
+export const planoDaBarbearia = (token: string) =>
+  chamar<PlanoDaBarbearia>('GET', '/v1/admin/plano', undefined, token);

@@ -195,41 +195,18 @@ async function marcarCiclo(
   `;
 }
 
-export async function trocarPlano(entrada: {
-  readonly adminId: string;
-  readonly tenantId: string;
-  readonly planoCode: string;
-}): Promise<void> {
-  await semTenant(async (tx) => {
-    const planos = await tx.$queryRaw<{ id: string; active: boolean }[]>`
-      SELECT id, active FROM plans WHERE code = ${entrada.planoCode}
-    `;
-    const plano = planos[0];
-    if (!plano) throw new PlataformaError('unknown_plan', 'Plano não encontrado');
-    // Plano inativo continua valendo para quem já está nele, mas não é destino
-    // de mudança: seria colocar alguém numa oferta que não existe mais.
-    if (!plano.active) throw new PlataformaError('inactive_plan', 'Este plano não é mais oferecido');
-
-    const anterior = await tx.$queryRaw<{ code: string | null }[]>`
-      SELECT p.code FROM tenant_platform tp
-      LEFT JOIN plans p ON p.id = tp.plan_id
-      WHERE tp.tenant_id = ${entrada.tenantId}::uuid
-    `;
-    if (anterior.length === 0) throw new PlataformaError('unknown_tenant', 'Barbearia não encontrada');
-
-    await tx.$executeRaw`
-      UPDATE tenant_platform SET plan_id = ${plano.id}::uuid, updated_at = now()
-      WHERE tenant_id = ${entrada.tenantId}::uuid
-    `;
-
-    // Dentro da mesma transação que muda o estado, como toda auditoria deste
-    // produto: trilha gravada depois é trilha que some quando algo falha no meio.
-    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.plan_changed', {
-      de: anterior[0]?.code ?? null,
-      para: entrada.planoCode,
-    });
-  });
-}
+/**
+ * A troca de plano vivia aqui, e mudou de lugar no bloco 27.
+ *
+ * Ela escrevia `tenant_platform.plan_id` — uma coluna que existia antes de
+ * haver assinatura e que não sabia dizer preço contratado, prazo nem estado.
+ * Com `subscriptions`, manter as duas seria manter duas respostas para "em que
+ * plano esta barbearia está", e a divergência entre elas é a discussão que
+ * ninguém consegue encerrar.
+ *
+ * O que existe agora é `mudarPlanoDaAssinatura` (`assinatura.ts`), que muda a
+ * assinatura **e** acerta o espelho na mesma transação.
+ */
 
 export async function bloquearBarbearia(entrada: {
   readonly adminId: string;

@@ -91,3 +91,9 @@ export const suporteSchema = z.object({
 export type EntradaDeRecurso = z.infer<typeof recursoSchema>;
 export type EntradaDeCodigo = z.infer<typeof codigoSchema>;
 export type EntradaDeSuporte = z.infer<typeof suporteSchema>;
+
+export const cancelamentoSchema = z.object({
+  motivo: z.string().trim().min(3).max(500),
+});
+
+export type EntradaDeCancelamento = z.infer<typeof cancelamentoSchema>;

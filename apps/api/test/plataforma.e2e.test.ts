@@ -20,6 +20,7 @@ import { FilaPublicaController } from '../src/booking/fila-publica.controller.js
 import { SuporteInterceptor } from '../src/admin/suporte.interceptor.js';
 import { StaffAuthController } from '../src/admin/admin.controller.js';
 import { MeController } from '../src/admin/team.controller.js';
+import { PlanoController } from '../src/admin/plano.controller.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import {
@@ -212,6 +213,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         BookingController,
         StaffAuthController,
         MeController,
+        PlanoController,
         BoardController,
         FilaController,
         FilaPublicaController,
@@ -400,7 +402,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
     await http()
       .put(`/v1/plataforma/barbearias/${DOMARI}/plano`)
       .set('authorization', `Bearer ${token}`)
-      .send({ planoCode: 'essencial' })
+      .send({ planoCode: 'starter' })
       .expect(200);
 
     const trilha = await http()
@@ -413,11 +415,31 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
     );
     expect(troca.tenantId).toBe(DOMARI);
     expect(troca.adminNome).toBe('Super');
-    expect(troca.detalhe).toEqual({ de: null, para: 'essencial' });
+    expect(troca.detalhe).toMatchObject({ de: 'pro', para: 'starter' });
 
     const acoes = trilha.body.eventos.map((e: { acao: string }) => e.acao);
     expect(acoes).toContain('tenant.blocked');
     expect(acoes).toContain('tenant.unblocked');
+
+    // Devolve a barbearia ao plano padrão antes de sair. A partir do bloco 27 o
+    // plano decide quais recursos existem, então um teste que baixa o plano e
+    // não o restaura desliga a fila para todos os que vierem depois — e eles
+    // falhariam por um motivo que não tem nada a ver com o que testam.
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/plano`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ planoCode: 'pro' })
+      .expect(200);
+
+    // Devolve ao plano padrão: a partir do bloco 27 o plano decide quais
+    // recursos a barbearia tem, e um teste que muda plano e não volta apaga a
+    // fila para todos os testes seguintes deste arquivo. Estado compartilhado
+    // entre casos é o que faz uma suíte falhar por ordem de execução.
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/plano`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ planoCode: 'pro' })
+      .expect(200);
   });
 
   it('plano inexistente é 404 e não muda nada', async () => {
@@ -456,7 +478,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
     await http()
       .put(`/v1/plataforma/barbearias/${VIZINHA}/plano`)
       .set('authorization', `Bearer ${token}`)
-      .send({ planoCode: 'completo' })
+      .send({ planoCode: 'business' })
       .expect(200);
 
     const metricas = await http()
@@ -464,9 +486,9 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .set('authorization', `Bearer ${token}`)
       .expect(200);
 
-    // A Domari ficou no 'essencial' (9900) num teste anterior; a vizinha acabou
-    // de entrar no 'completo' (19900).
-    expect(metricas.body.resumo.mrrCents).toBe(29800);
+    // A Domari está no 'pro' (9900); a vizinha acabou de entrar no 'business'
+    // (24900).
+    expect(metricas.body.resumo.mrrCents).toBe(34800);
 
     const saude = await http()
       .get('/v1/plataforma/saude')
@@ -776,6 +798,86 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .delete(`/v1/plataforma/barbearias/${DOMARI}/suporte`)
       .set('authorization', `Bearer ${token}`)
       .expect(409);
+  });
+
+  // -- assinatura (bloco 27) -------------------------------------------------
+
+  it('a barbearia nasce em teste, e o dono consegue ver o próprio plano', async () => {
+    // A assinatura nasce no painel da plataforma. Ficar só lá seria o dado que
+    // é cobrado e que a pessoa de quem se cobra não consegue conferir.
+    const daPlataforma = await tokenDaPlataforma();
+    const assinatura = await http()
+      .get(`/v1/plataforma/barbearias/${DOMARI}/assinatura`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .expect(200);
+
+    expect(assinatura.body).toMatchObject({ planoCode: 'pro', estado: 'trialing' });
+    expect(assinatura.body.testeAte).toEqual(expect.any(String));
+
+    const doDono = await tokenDoDono();
+    const plano = await http()
+      .get('/v1/admin/plano')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+
+    expect(plano.body.plano).toMatchObject({ code: 'pro', precoCents: 9900 });
+    expect(plano.body.cadeiras).toEqual({ emUso: 0, teto: 5 });
+    // A tela precisa distinguir o que vem no plano do que é cortesia.
+    expect(plano.body.recursos.every((r: { noPlano: boolean }) => r.noPlano)).toBe(true);
+  });
+
+  it('cancelar a assinatura não tira a barbearia do ar', async () => {
+    // Cortar no dia do pedido é cobrar por um mês e entregar meio.
+    const token = await tokenDaPlataforma();
+    await http()
+      .post(`/v1/plataforma/barbearias/${VIZINHA}/cancelamento`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ motivo: 'fechou as portas' })
+      .expect(201);
+
+    await http().get('/v1/b/vizinha24').expect(200);
+
+    const depois = await http()
+      .get(`/v1/plataforma/barbearias/${VIZINHA}/assinatura`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(depois.body.estado).toBe('canceled');
+
+    await http()
+      .delete(`/v1/plataforma/barbearias/${VIZINHA}/cancelamento`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(200);
+  });
+
+  it('descer para um plano menor que a equipe é recusado com o que fazer', async () => {
+    const token = await tokenDaPlataforma();
+    const recusada = await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/plano`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ planoCode: 'starter' })
+      .expect(200);
+    expect(recusada.body.ok).toBe(true);
+
+    // Sobe para business, ocupa seis cadeiras e tenta voltar ao pro.
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/plano`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ planoCode: 'business' })
+      .expect(200);
+
+    await exec(admin, `
+      INSERT INTO professionals (tenant_id, location_id, name, kind)
+      SELECT '${DOMARI}', '${LOCAL}', 'Cadeira ' || n, 'professional'
+      FROM generate_series(1, 6) AS n
+    `);
+
+    const erro = await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/plano`)
+      .set('authorization', `Bearer ${token}`)
+      .send({ planoCode: 'pro' })
+      .expect(409);
+    expect(erro.body.error.code).toBe('chairs_exceed_plan');
+    expect(erro.body.error.message).toMatch(/desligue/i);
   });
 
   it('sair invalida o token da plataforma', async () => {

@@ -34,7 +34,11 @@ import {
   provaDaSessao,
   sairDaPlataforma,
   trilhaDaPlataforma,
-  trocarPlano,
+  mudarPlanoDaAssinatura,
+  assinaturaDaBarbearia,
+  assinaturas,
+  cancelarAssinatura,
+  reativarAssinatura,
   type AdminDaPlataforma,
 } from '@barbearia/platform';
 import { DomainError } from '../common/errors.js';
@@ -43,6 +47,7 @@ import { TenantService } from '../tenant/tenant.service.js';
 import { Admin, PlataformaGuard, type RequisicaoDaPlataforma } from './plataforma.guard.js';
 import {
   bloqueioSchema,
+  cancelamentoSchema,
   codigoSchema,
   janelaSchema,
   recursoSchema,
@@ -52,6 +57,7 @@ import {
   trilhaQuerySchema,
   trocaDePlanoSchema,
   type Bloqueio,
+  type EntradaDeCancelamento,
   type EntradaDeCodigo,
   type EntradaDeRecurso,
   type EntradaDeSuporte,
@@ -82,6 +88,9 @@ const STATUS: Record<string, number> = {
   no_owner: 409,
   tenant_blocked: 409,
   no_support: 409,
+  chairs_exceed_plan: 409,
+  not_cancelable: 409,
+  not_canceled: 409,
   unknown_plan: 404,
   unknown_tenant: 404,
   inactive_plan: 409,
@@ -104,6 +113,17 @@ const tokenBruto = (requisicao: RequisicaoDaPlataforma): string | undefined =>
  */
 const hashDoToken = (requisicao: RequisicaoDaPlataforma): string =>
   createHash('sha256').update(tokenBruto(requisicao) ?? '').digest('hex');
+
+/** Datas viram texto na borda: o cliente HTTP não recebe `Date`. */
+const paraJson = (a: Awaited<ReturnType<typeof assinaturaDaBarbearia>>) =>
+  a === null
+    ? null
+    : {
+        ...a,
+        testeAte: a.testeAte?.toISOString() ?? null,
+        periodoAte: a.periodoAte.toISOString(),
+        canceladaEm: a.canceladaEm?.toISOString() ?? null,
+      };
 
 function paraHttp(erro: unknown): never {
   if (erro instanceof PlataformaError) {
@@ -176,7 +196,51 @@ export class PlataformaController {
     @Admin() admin: AdminDaPlataforma,
   ) {
     try {
-      await trocarPlano({ adminId: admin.id, tenantId, planoCode: corpo.planoCode });
+      await mudarPlanoDaAssinatura({ adminId: admin.id, tenantId, planoCode: corpo.planoCode });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  // -- assinatura (bloco 27) -------------------------------------------------
+
+  @Get('assinaturas')
+  async listaDeAssinaturas() {
+    const lista = await assinaturas();
+    return { assinaturas: lista.map(paraJson) };
+  }
+
+  @Get('barbearias/:tenantId/assinatura')
+  async assinatura(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+  ) {
+    const assinatura = await assinaturaDaBarbearia(tenantId);
+    if (!assinatura) throw new DomainError('unknown_tenant', 404, 'Barbearia não encontrada');
+    return paraJson(assinatura);
+  }
+
+  @Post('barbearias/:tenantId/cancelamento')
+  async cancelar(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(cancelamentoSchema)) corpo: EntradaDeCancelamento,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await cancelarAssinatura({ adminId: admin.id, tenantId, motivo: corpo.motivo });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  @Delete('barbearias/:tenantId/cancelamento')
+  async reativar(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await reativarAssinatura({ adminId: admin.id, tenantId });
       return { ok: true };
     } catch (erro) {
       return paraHttp(erro);
