@@ -32,16 +32,42 @@ dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica
 
 ## Rodando o produto
 
-Um comando, do zero:
+### Windows
+
+Clique duas vezes em **`RODAR-NO-WINDOWS.cmd`**. Ele exige só o
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado — e
+diz isso, com o endereço, se não achar.
+
+Não há como rodar por clique duplo sem Docker: `.sh` não é executável no
+Windows, o PowerShell não tem `bash`, e o caminho manual seria instalar Node 22,
+pnpm e PostgreSQL 16 com três extensões.
+
+### Com Docker, em qualquer sistema
+
+```bash
+scripts/docker.sh        # Linux e macOS; no Windows, o .cmd acima
+```
+
+Sobe PostgreSQL, API, worker e web, aplica as migrações e semeia a barbearia de
+demonstração. Nada é instalado na máquina além do Docker. Depois:
+**<http://localhost:3001>**.
+
+Para recomeçar do zero: `scripts/docker.sh --zerar`.
+
+Os segredos são sorteados no primeiro uso e guardados em `.env`, fora do Git —
+o compose **recusa subir** sem eles, com a mensagem do que fazer, em vez de
+usar um valor fixo que estaria publicado no repositório.
+
+### Sem Docker, com as ferramentas na máquina
 
 ```bash
 scripts/rodar-local.sh
 ```
 
-Ele confere Node, pnpm e Postgres, instala as dependências, cria o banco e o
-role restrito, aplica as migrações, sorteia os segredos que a aplicação exige
-(e recusa default para), constrói tudo, semeia uma barbearia de demonstração
-com o dia já acontecendo e sobe API, worker e web. Ctrl+C derruba os três.
+Confere Node, pnpm e Postgres, instala as dependências, cria o banco e o role
+restrito, aplica as migrações, sorteia os segredos que a aplicação exige (e
+recusa default para), constrói tudo, semeia a barbearia de demonstração e sobe
+API, worker e web. Ctrl+C derruba os três.
 
 No fim ele imprime os endereços e as credenciais:
 

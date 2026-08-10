@@ -1,0 +1,12 @@
+# Fim de linha por arquivo, e não por máquina de quem clonou.
+#
+# `.cmd` precisa de CRLF: o interpretador de lote do Windows lê `goto` e rótulo
+# linha a linha, e com LF ele já falhou de formas que parecem defeito do
+# programa — pular um rótulo, ou "o sistema não pode encontrar o rótulo".
+# Como o arquivo existe justamente para quem está no Windows e não tem
+# terminal, um erro assim não teria como ser diagnosticado por quem o recebe.
+*.cmd text eol=crlf
+
+# `.sh` precisa de LF pelo motivo simétrico: com CRLF o shell lê `#!/bin/bash\r`
+# e responde "bad interpreter", que também não diz o que fazer.
+*.sh text eol=lf

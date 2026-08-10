@@ -1,0 +1,120 @@
+# O produto inteiro, com um comando:
+#
+#   docker compose up
+#
+# Sobe PostgreSQL, aplica as migrações, semeia a barbearia de demonstração e
+# deixa API, worker e web rodando. Nada é instalado na máquina além do Docker.
+#
+# Para recomeçar do zero:  docker compose down -v && docker compose up
+
+name: barbearia
+
+x-ambiente: &ambiente
+  # Os segredos vêm do arquivo `.env`, gerado no primeiro uso — nunca do
+  # repositório. Não é formalidade: um valor fixo aqui estaria publicado no
+  # Git, e o dia em que alguém subisse este compose num servidor a chave que
+  # cifra os segundos fatores seria pública.
+  #
+  # `:?` faz o compose **parar** com a mensagem quando a variável falta, em vez
+  # de subir com string vazia — a mesma regra que a aplicação já segue no
+  # código: sem segredo, falha alto.
+  APP_DB_PASSWORD: ${APP_DB_PASSWORD:?rode RODAR-NO-WINDOWS.cmd (Windows) ou scripts/docker.sh (Linux/macOS) para gerar o .env}
+  STAFF_EMAIL_PEPPER: ${STAFF_EMAIL_PEPPER:?falta no .env}
+  MFA_SECRET_KEY: ${MFA_SECRET_KEY:?falta no .env}
+  DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
+  ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?falta no .env}@db:5432/postgres
+  API_URL: http://api:3000
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta no .env}
+      POSTGRES_DB: postgres
+    # A sonda é `pg_isready`, não um `sleep`: o Postgres aceita conexão antes de
+    # estar pronto para consulta, e um número mágico esconderia isso atrás de
+    # uma falha intermitente na primeira migração.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    # Sem `ports`: o banco só precisa ser visto pelos outros contêineres, e
+    # abrir 5432 no host colidiria com um Postgres já instalado na máquina.
+
+  # Prepara o banco e sai. Os três serviços seguintes esperam por ela.
+  #
+  # Serviço próprio e não um passo dentro da API: migração que roda junto com a
+  # aplicação roda **uma vez por réplica**, e duas réplicas subindo juntas
+  # disputam o mesmo `CREATE TABLE`.
+  preparar:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *ambiente
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      bash -c '
+        set -e
+        psql "$$ADMIN_DATABASE_URL" -q -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'barbearia'"'"'" | grep -q 1 \
+          || psql "$$ADMIN_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE barbearia"
+        scripts/bootstrap-role.sh > /dev/null
+        if ! psql "$$DATABASE_URL" -q -tAc "SELECT to_regclass('"'"'public.tenants'"'"')" | grep -q tenants; then
+          for m in packages/db/migrations/*.sql; do
+            psql "postgres://postgres:$$POSTGRES_PASSWORD@db:5432/barbearia" -q -v ON_ERROR_STOP=1 -f "$$m"
+          done
+          echo "migrações aplicadas"
+        else
+          echo "banco já migrado"
+        fi
+      '
+
+  api:
+    build: .
+    depends_on:
+      preparar:
+        condition: service_completed_successfully
+    environment: *ambiente
+    ports: ['3000:3000']
+    command: node apps/api/dist/main.js
+    healthcheck:
+      # A sonda de pronto da própria API: ela só responde ok com o banco
+      # respondendo e a conexão sem BYPASSRLS.
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/health/pronto | grep -q ok']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  worker:
+    build: .
+    depends_on:
+      preparar:
+        condition: service_completed_successfully
+    environment: *ambiente
+    command: node apps/worker/dist/main.js
+
+  web:
+    build: .
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *ambiente
+      # De servidor para servidor, dentro da rede do compose — não passa pelo
+      # navegador de quem abre.
+      API_URL: http://api:3000
+    ports: ['3001:3001']
+    command: pnpm --filter @barbearia/web exec next start -p 3001 -H 0.0.0.0
+
+  # Semeia e sai. Idempotente: rodar de novo não cria a segunda barbearia.
+  semear:
+    build: .
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *ambiente
+      WEB_URL: http://localhost:3001
+    command: node scripts/semear-demo.mjs

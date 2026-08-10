@@ -1,0 +1,22 @@
+# O que nunca entra na imagem.
+#
+# `node_modules` é o item que mais importa: mandá-lo para o Docker custa
+# centenas de megabytes de contexto a cada build, e ele seria descartado de
+# qualquer jeito — a instalação lá dentro é para o Linux do contêiner, não para
+# o sistema de quem constrói.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+.git
+coverage
+**/coverage
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Segredo local nunca entra na imagem: o compose passa o dele por ambiente.
+.env
+.env.*
+!.env.example
