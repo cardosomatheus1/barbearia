@@ -28,7 +28,7 @@ cat <<'FIM'
 
   Pronto. Para subir o sistema, no terminal:
 
-      scripts/rodar-local.sh --sem-install
+      scripts/rodar-local.sh
 
   Quando aparecer "web pronto", o Codespaces abre a porta 3001 sozinho
   (aba PORTS, se não abrir). Entrar no painel: teste@teste.com / testeteste

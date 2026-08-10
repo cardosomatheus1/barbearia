@@ -54,7 +54,7 @@ nuvem com editor no navegador:
    abre embaixo, rode:
 
    ```bash
-   scripts/rodar-local.sh --sem-install
+   scripts/rodar-local.sh
    ```
 
 4. Quando aparecer `web pronto`, o Codespaces abre a porta **3001** sozinho —

@@ -210,9 +210,29 @@ export APP_DB_PASSWORD STAFF_EMAIL_PEPPER MFA_SECRET_KEY
 # 4. Dependências
 # ---------------------------------------------------------------------------
 
+# `--sem-install` é um atalho, não uma ordem de pular o indispensável.
+#
+# Sem esta conferência, pedi-lo com `node_modules` ausente levava o script
+# direto ao build, que falhava com `sh: 1: tsc: not found` — uma mensagem que
+# não diz nada sobre a causa e manda quem a recebeu procurar o TypeScript.
+# Aconteceu no primeiro Codespaces, porque a preparação do ambiente não tinha
+# rodado, e o atalho que existe para poupar trinta segundos custou a sessão
+# inteira.
+#
+# A marca conferida é o `.bin` do pnpm: `node_modules` existe e fica pela
+# metade quando uma instalação é interrompida, e é o `.bin` que carrega os
+# executáveis que o build chama.
+if [ -n "$SEM_INSTALL" ] && [ ! -d node_modules/.bin ]; then
+  aviso "--sem-install ignorado: as dependências ainda não estão instaladas"
+  SEM_INSTALL=""
+fi
+
 if [ -z "$SEM_INSTALL" ]; then
   titulo "instalando dependências"
-  pnpm install --frozen-lockfile
+  # `CI=true` porque o script também roda sem terminal interativo (Codespaces,
+  # esteira): sem ele, o pnpm que precisa descartar um `node_modules` de outra
+  # plataforma para e pede uma confirmação que ninguém pode dar.
+  CI=true pnpm install --frozen-lockfile
   ok "ok"
 fi
 
