@@ -409,6 +409,20 @@ export interface AuthenticatedStaff {
   /** O segundo fator está confirmado nesta conta. */
   readonly mfaEnabled: boolean;
   /**
+   * Esta barbearia exige o segundo fator de quem mexe em dinheiro.
+   *
+   * Vem no mesmo `SELECT` da sessão, e não de uma consulta própria na guarda,
+   * porque a pergunta é feita em **toda** rota de caixa, comanda e comissão —
+   * uma segunda ida ao banco ali seria N+1 no caminho mais quente do balcão.
+   * `tenants` é isolada pela própria chave primária, então o `JOIN` de dentro
+   * do `withTenant` já lê a linha certa e nenhuma outra.
+   *
+   * Lida a cada requisição, e não guardada no token: desligar a política é uma
+   * decisão que precisa valer no instante seguinte, não quando a sessão do
+   * balcão vencer — e o mesmo vale, com mais força, para ligar.
+   */
+  readonly mfaRequired: boolean;
+  /**
    * Quando **esta sessão** provou o segundo fator, se provou.
    *
    * Vem junto da sessão pelo mesmo motivo das permissões: a guarda do dinheiro
@@ -445,6 +459,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         professional_id: string | null;
         permissions: string[];
         mfa_enabled: boolean;
+        mfa_required: boolean;
         mfa_verified_at: Date | null;
         impersonated_by: string | null;
       }[]
@@ -452,6 +467,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role, s.impersonated_by,
              u.must_change_password, u.professional_id,
              u.totp_confirmed_at IS NOT NULL AS mfa_enabled,
+             t.mfa_required,
              s.mfa_verified_at,
              COALESCE(
                array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
@@ -459,6 +475,9 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
              ) AS permissions
       FROM staff_sessions s
       JOIN staff_users u ON u.id = s.staff_user_id
+      -- Sem condição de junção: a RLS de tenants isola pela própria chave, então
+      -- dentro do withTenant a tabela tem exatamente uma linha, a desta barbearia.
+      CROSS JOIN tenants t
       LEFT JOIN role_permissions rp ON rp.role = u.role
       WHERE s.token_hash = ${partes.hash}
         AND s.revoked_at IS NULL
@@ -466,7 +485,8 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         AND u.active
       GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role,
                u.must_change_password, u.professional_id,
-               u.totp_confirmed_at, s.mfa_verified_at, s.impersonated_by
+               u.totp_confirmed_at, t.mfa_required, s.mfa_verified_at,
+               s.impersonated_by
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -489,6 +509,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       mustChangePassword: sessao.must_change_password,
       professionalId: sessao.professional_id,
       mfaEnabled: sessao.mfa_enabled,
+      mfaRequired: sessao.mfa_required,
       mfaVerifiedAt: sessao.mfa_verified_at,
       impersonatedBy: sessao.impersonated_by,
     };

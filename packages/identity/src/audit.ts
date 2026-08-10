@@ -44,6 +44,16 @@ export type AuditAction =
   | 'mfa.enabled'
   | 'mfa.disabled'
   | 'mfa.recovery_used'
+  /**
+   * A política da barbearia inteira, que é de outra ordem.
+   *
+   * `mfa.disabled` é uma conta desligando o próprio autenticador. Esta aqui
+   * decide se **alguém** precisa dele para abrir a gaveta, e é a única ação do
+   * produto que reduz a proteção de todo mundo de uma vez. A pergunta do dia
+   * seguinte a um caixa que não fecha é "desde quando isto estava desligado, e
+   * quem desligou" — sem esta linha, a resposta é um booleano sem história.
+   */
+  | 'mfa.policy_changed'
   // Comissão: fechar um período paga gente, e mudar a regra muda quanto.
   | 'commission.closed'
   | 'commission.rule_changed'
@@ -127,6 +137,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'mfa.enabled',
   'mfa.disabled',
   'mfa.recovery_used',
+  'mfa.policy_changed',
   'import.applied',
   'import.reverted',
   'slug.added',

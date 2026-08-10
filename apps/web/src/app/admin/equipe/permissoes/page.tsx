@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { PERMISSOES, type Papel, type Permissao } from '@barbearia/core';
+import {
+  PERMISSOES,
+  PERMISSOES_DE_DINHEIRO,
+  type Papel,
+  type Permissao,
+} from '@barbearia/core';
 import { equipeDaBarbearia } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -97,6 +102,11 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'marketing.send': 'Disparar campanha de marketing',
   'settings.manage': 'Mudar configurações da barbearia',
   'team.manage': 'Criar contas e mudar permissões',
+  // Diz o efeito, não o nome técnico: quem marca esta caixa entrega o poder de
+  // tirar o código de seis dígitos da frente da gaveta. E usa o mesmo nome da
+  // tela que faz isso — "segundo fator", não "código de segurança", que seria
+  // um terceiro nome para a mesma coisa.
+  'security.mfa_policy': 'Ligar e desligar a exigência do segundo fator',
 };
 
 const GRUPOS: readonly Grupo[] = [
@@ -107,9 +117,15 @@ const GRUPOS: readonly Grupo[] = [
   },
   {
     titulo: 'Dinheiro',
-    sobre: 'Caixa, faturamento e comissão. Tudo aqui pede segundo fator.',
+    sobre: 'Caixa, faturamento e comissão. Tudo aqui pede segundo fator, quando a barbearia exige.',
     permissoes: PERMISSOES.filter(
-      (p) => p.startsWith('cashier.') || p.startsWith('finance.') || p.startsWith('commission.'),
+      (p) =>
+        p.startsWith('cashier.') ||
+        p.startsWith('finance.') ||
+        p.startsWith('commission.') ||
+        // Fica no grupo do dinheiro apesar do prefixo: quem decide se o código
+        // é pedido está a um passo de abrir a gaveta sem ele.
+        p === 'security.mfa_policy',
     ),
   },
   {
@@ -134,13 +150,13 @@ const GRUPOS: readonly Grupo[] = [
 /**
  * As que cobram o segundo fator, derivadas da mesma regra que a guarda aplica.
  *
- * Repetir a lista aqui faria a tela prometer uma coisa e a API cobrar outra na
- * primeira vez que alguém acrescentasse uma permissão de dinheiro.
+ * O comentário anterior dizia exatamente o que aconteceu: repetir a lista aqui
+ * faz a tela prometer uma coisa e a API cobrar outra "na primeira vez que
+ * alguém acrescentasse uma permissão de dinheiro". Foi `security.mfa_policy`, e
+ * a cópia — três prefixos escritos à mão — não soube dela. Agora é o grupo de
+ * `core`, o mesmo objeto que a `PermissaoGuard` percorre.
  */
-const exigeSegundoFator = (p: Permissao): boolean =>
-  (p.startsWith('finance.') || p.startsWith('cashier.') || p === 'commission.view_all' ||
-    p === 'commission.edit_rules') &&
-  p !== 'commission.view_own';
+const exigeSegundoFator = (p: Permissao): boolean => PERMISSOES_DE_DINHEIRO.includes(p);
 
 const FALHA: Record<string, string> = {
   owner_protected: 'O dono tem todas as permissões por definição, e isso não se edita.',

@@ -158,11 +158,25 @@ export class PermissaoGuard implements CanActivate {
  * Mora dentro da `PermissaoGuard`, e não numa guarda separada, pela mesma
  * razão: esta aqui é obrigatória em toda rota do painel (a ausência de `@Exige`
  * é recusa), então não existe caminho que passe ao lado dela.
+ *
+ * ## O interruptor da barbearia
+ *
+ * `staff.mfaRequired` é a única coisa que veio de fora desta derivação, e a
+ * ordem importa: ele é perguntado **antes**, e a derivação continua intacta
+ * atrás dele. Uma rota de dinheiro escrita daqui a dez blocos nasce coberta
+ * como sempre; o que a barbearia escolhe é se a cobrança vale para ela, e não
+ * de que rotas ela vale — essa segunda pergunta é a que produziria a tela de
+ * configuração em que alguém desmarca o caixa por engano.
+ *
+ * Vem da sessão, que o `StaffGuard` já leu do banco nesta requisição: uma
+ * consulta própria aqui seria uma ida a mais ao banco em toda rota do balcão.
  */
 function exigirSegundoFator(
   staff: NonNullable<StaffRequest['staff']>,
   exigidas: readonly Permissao[],
 ): void {
+  if (!staff.mfaRequired) return;
+
   const mexeEmDinheiro = exigidas.some((p) => PERMISSOES_DE_DINHEIRO.includes(p));
   if (!mexeEmDinheiro) return;
 

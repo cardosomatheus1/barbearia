@@ -4,6 +4,7 @@ import { signUpOwner, resolveStaffSession, staffLogin, type StaffSession } from 
 import { codigoDoPasso, passoAgora, MfaError } from './mfa.js';
 import {
   confirmarCadastroMfa,
+  definirPoliticaDeSegundoFator,
   desligarMfa,
   estadoDoMfa,
   iniciarCadastroMfa,
@@ -253,7 +254,7 @@ describeIfDb('segundo fator do gestor', () => {
     ).rejects.toMatchObject({ code: 'not_enabled' });
   });
 
-  it('quem tem permissão de dinheiro não desliga o segundo fator', async () => {
+  it('quem tem permissão de dinheiro não desliga onde a barbearia exige', async () => {
     const agora = new Date();
     const ligado = await ligar(agora);
     const depois = new Date(agora.getTime() + 60_000);
@@ -265,12 +266,35 @@ describeIfDb('segundo fator do gestor', () => {
         staffName: CONTA.name,
         sessionId: await sessionId(),
         permissoes: ['finance.view'],
+        obrigatorioNaBarbearia: true,
         codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(depois)),
         now: depois,
       }),
     ).rejects.toMatchObject({ code: 'already_enabled' });
 
     expect((await estadoDoMfa(sessao.tenantId, sessao.staffUserId)).ativo).toBe(true);
+  });
+
+  it('e desliga onde ela não exige — senão experimentar é ficar preso', async () => {
+    // O outro lado da mesma regra. Sem isto, o dono que ligou o segundo fator
+    // para experimentar não teria como sair dele nunca mais, e a única saída
+    // real seria mexer no banco.
+    const agora = new Date();
+    const ligado = await ligar(agora);
+    const depois = new Date(agora.getTime() + 60_000);
+
+    await desligarMfa({
+      tenantId: sessao.tenantId,
+      staffUserId: sessao.staffUserId,
+      staffName: CONTA.name,
+      sessionId: await sessionId(),
+      permissoes: ['finance.view', 'cashier.open'],
+      obrigatorioNaBarbearia: false,
+      codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(depois)),
+      now: depois,
+    });
+
+    expect((await estadoDoMfa(sessao.tenantId, sessao.staffUserId)).ativo).toBe(false);
   });
 
   it('quem não mexe em dinheiro desliga, provando o código', async () => {
@@ -284,6 +308,7 @@ describeIfDb('segundo fator do gestor', () => {
       staffName: CONTA.name,
       sessionId: await sessionId(),
       permissoes: ['appointments.create'],
+        obrigatorioNaBarbearia: true,
       codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(depois)),
       now: depois,
     });
@@ -304,6 +329,7 @@ describeIfDb('segundo fator do gestor', () => {
         staffName: CONTA.name,
         sessionId: await sessionId(),
         permissoes: ['appointments.create'],
+        obrigatorioNaBarbearia: true,
         codigo: '000000',
         now: new Date(),
       }),
@@ -405,6 +431,7 @@ describeIfDb('segundo fator do gestor', () => {
       staffName: CONTA.name,
       sessionId: await sessionId(),
       permissoes: ['appointments.create'],
+        obrigatorioNaBarbearia: true,
       codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(maisTarde)),
       now: maisTarde,
     });
@@ -435,5 +462,78 @@ describeIfDb('segundo fator do gestor', () => {
 
     // Nunca provado é sempre inválido — falha fechada.
     expect(segundoFatorValido(null, agora)).toBe(false);
+  });
+
+  // -- o interruptor da barbearia --------------------------------------------
+
+  it('barbearia nova nasce sem exigir o segundo fator', async () => {
+    // A decisão do produto, e o que a migração 0039 faz com quem já existia é
+    // o contrário — por isso este teste olha uma conta criada agora.
+    expect((await resolveStaffSession(sessao.token)).mfaRequired).toBe(false);
+  });
+
+  it('ligar a política vale na requisição seguinte, sem deslogar ninguém', async () => {
+    // A política é lida do banco a cada requisição, junto da sessão. Guardada
+    // no token, ela só valeria quando a sessão do balcão vencesse — que é a
+    // noite inteira depois de alguém decidir apertar a segurança.
+    const outra = await staffLogin({ email: CONTA.email, password: CONTA.password });
+
+    await definirPoliticaDeSegundoFator({
+      tenantId: sessao.tenantId,
+      staffUserId: sessao.staffUserId,
+      staffName: CONTA.name,
+      obrigatorio: true,
+    });
+
+    expect((await resolveStaffSession(sessao.token)).mfaRequired).toBe(true);
+    expect((await resolveStaffSession(outra.token)).mfaRequired).toBe(true);
+  });
+
+  it('desligar a política também vale na seguinte, e as duas ficam na trilha', async () => {
+    await definirPoliticaDeSegundoFator({
+      tenantId: sessao.tenantId,
+      staffUserId: sessao.staffUserId,
+      staffName: CONTA.name,
+      obrigatorio: true,
+    });
+    await definirPoliticaDeSegundoFator({
+      tenantId: sessao.tenantId,
+      staffUserId: sessao.staffUserId,
+      staffName: CONTA.name,
+      obrigatorio: false,
+    });
+
+    expect((await resolveStaffSession(sessao.token)).mfaRequired).toBe(false);
+
+    const eventos = await admin.$queryRawUnsafe<{ action: string; before: unknown; after: unknown }[]>(
+      `SELECT action, before, after FROM audit_log
+        WHERE action = 'mfa.policy_changed' ORDER BY created_at`,
+    );
+    expect(eventos).toHaveLength(2);
+    // O par antes/depois é o que responde "desde quando estava desligado":
+    // saber que mudou sem saber para quê não fecha investigação nenhuma.
+    expect(eventos[0]).toMatchObject({ before: { obrigatorio: false }, after: { obrigatorio: true } });
+    expect(eventos[1]).toMatchObject({ before: { obrigatorio: true }, after: { obrigatorio: false } });
+  });
+
+  it('a política de uma barbearia não mexe na da outra', async () => {
+    const outra = await signUpOwner({
+      ...CONTA,
+      email: 'outro@rival.com.br',
+      businessName: 'Rival',
+    });
+    if (!outra.created) throw new Error('segunda conta não foi criada');
+
+    await definirPoliticaDeSegundoFator({
+      tenantId: sessao.tenantId,
+      staffUserId: sessao.staffUserId,
+      staffName: CONTA.name,
+      obrigatorio: true,
+    });
+
+    // O `UPDATE` não tem `WHERE`: quem recorta é a política de RLS. Se um dia
+    // ela sumir, é esta linha que fica vermelha — e não a produção.
+    expect((await resolveStaffSession(outra.session.token)).mfaRequired).toBe(false);
+    expect((await resolveStaffSession(sessao.token)).mfaRequired).toBe(true);
   });
 });

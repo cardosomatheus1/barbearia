@@ -111,13 +111,28 @@ describeIfDb('caixa e comanda pela HTTP', () => {
   const http = () => request(app.getHttpServer());
   const com = (token: string) => (req: request.Test) => req.set('Authorization', `Bearer ${token}`);
 
-  async function abrirBarbearia(conta = DONO): Promise<string> {
+  /**
+   * A barbearia pronta para operar.
+   *
+   * `exigirSegundoFator` é o parâmetro que a migração 0039 obrigou a existir: a
+   * conta nasce **sem** a exigência, e esta suíte descreve quase toda uma que
+   * exige. Ligar aqui é o que o dono faria em `/admin/seguranca`, e não pede
+   * código — com a política desligada a guarda não cobra nada, inclusive desta
+   * rota. Os casos que olham o estado de nascença passam `false`.
+   */
+  async function abrirBarbearia(conta = DONO, exigirSegundoFator = true): Promise<string> {
     await http().post('/v1/admin/signup').send(conta).expect(202);
     const entrou = await http()
       .post('/v1/admin/login')
       .send({ email: conta.email, password: conta.password })
       .expect(201);
     const token: string = entrou.body.token;
+
+    if (exigirSegundoFator) {
+      await com(token)(
+        http().put('/v1/admin/mfa/policy').send({ obrigatorio: true }),
+      ).expect(200);
+    }
 
     await com(token)(
       http()
@@ -233,6 +248,98 @@ describeIfDb('caixa e comanda pela HTTP', () => {
 
     return id;
   }
+
+  // -- o interruptor da barbearia ---------------------------------------------
+
+  /**
+   * A política do segundo fator, contra Postgres real.
+   *
+   * A guarda tem teste de unidade que percorre o grupo inteiro de permissões de
+   * dinheiro. O que só aparece aqui é o caminho de ponta a ponta: a barbearia
+   * recém-criada, a rota que grava, e a decisão valendo na requisição seguinte
+   * sem ninguém deslogar.
+   *
+   * A barbearia é montada inteira, como no resto da suíte — o que muda é só
+   * que ninguém ligou a exigência. Fosse uma conta pela metade, o 201 do caixa
+   * poderia estar vindo de outra recusa que não chegou a acontecer.
+   */
+  const contaNova = () => abrirBarbearia(DONO, false);
+
+  it('barbearia nova abre o caixa sem código: a exigência nasce desligada', async () => {
+    const token = await contaNova();
+    await abrirCaixa(token).expect(201);
+  });
+
+  it('ligada a exigência, o mesmo caixa passa a pedir o cadastro — sem deslogar', async () => {
+    const token = await contaNova();
+    await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: true }),
+    ).expect(200);
+
+    // A mesma sessão, o mesmo token. A política é lida do banco a cada
+    // requisição; guardada no token, ela só valeria amanhã de manhã.
+    const recusa = await abrirCaixa(token).expect(403);
+    expect(recusa.body.error.code).toBe('mfa_setup_required');
+  });
+
+  it('desligar a política pede o mesmo código que ela passou a exigir', async () => {
+    /**
+     * A propriedade que sustenta o interruptor inteiro, e que este teste existe
+     * para não deixar ninguém "consertar" depois.
+     *
+     * `security.mfa_policy` está no grupo de dinheiro, então a guarda cobra o
+     * segundo fator dela como de qualquer outra — **quando a política está
+     * ligada**. Sem isso, uma sessão esquecida no balcão desligaria a exigência
+     * num toque e abriria a gaveta no seguinte: a proteção que se remove sem
+     * prova não protege de nada.
+     *
+     * O preço é um degrau real, e ele é aceito de propósito: quem liga a
+     * exigência sem ter autenticador precisa cadastrar um para poder desligar.
+     * Não é beco sem saída — o cadastro é a mesma tela, e as rotas dele pedem
+     * `@Exige()` vazio justamente para nunca ficarem atrás da própria trava.
+     */
+    const token = await contaNova();
+    await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: true }),
+    ).expect(200);
+
+    const semAutenticador = await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: false }),
+    ).expect(403);
+    expect(semAutenticador.body.error.code).toBe('mfa_setup_required');
+
+    // A saída, na mesma sessão: cadastrar e provar. Depois disso a política sai.
+    await comSegundoFator(token);
+    await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: false }),
+    ).expect(200);
+
+    // E o caixa volta a abrir sem código, inclusive para quem nunca cadastrou.
+    const outroDono = await abrirBarbearia(RIVAL, false);
+    await abrirCaixa(outroDono).expect(201);
+  });
+
+  it('a recepção não mexe na política, nem para ligar', async () => {
+    // `security.mfa_policy` nasce só para o dono. Fosse `settings.manage`, quem
+    // edita horário de funcionamento decidiria sobre a trava da gaveta.
+    const dono = await abrirBarbearia();
+    const maria = await recepcionista(dono);
+
+    const recusa = await com(maria)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: false }),
+    ).expect(403);
+    expect(recusa.body.error.code).toBe('forbidden');
+  });
+
+  it('corpo sem o campo é 400, e não "desligue"', async () => {
+    // Um padrão implícito aqui faria um formulário quebrado desligar a proteção
+    // do caixa em silêncio, que é o pior desfecho possível para um erro de tela.
+    const token = await contaNova();
+    await com(token)(http().put('/v1/admin/mfa/policy').send({})).expect(400);
+    await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: 'sim' }),
+    ).expect(400);
+  });
 
   // -- a porta ----------------------------------------------------------------
 

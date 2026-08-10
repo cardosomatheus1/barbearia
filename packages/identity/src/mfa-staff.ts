@@ -56,9 +56,73 @@ export interface EstadoDoMfa {
   readonly pendente: boolean;
 }
 
-/** Quem tem permissão de dinheiro é obrigado ao segundo fator. */
-export const exigeSegundoFator = (permissoes: readonly string[]): boolean =>
-  PERMISSOES_DE_DINHEIRO.some((p: Permissao) => permissoes.includes(p));
+/**
+ * Quem tem permissão de dinheiro é obrigado ao segundo fator — **onde a
+ * barbearia exige**.
+ *
+ * As duas metades da regra moram em lugares diferentes de propósito. *Quais*
+ * permissões cobram o código é decisão do produto e sai do catálogo em `core`,
+ * derivada da rota, sem decorador a esquecer. *Se* a barbearia cobra é decisão
+ * dela, e sai de `tenants.mfa_required`.
+ *
+ * O interruptor é uma pergunta **antes** da derivação, nunca no lugar dela: uma
+ * rota de dinheiro escrita daqui a dez blocos continua nascendo coberta, e o
+ * que o dono liga ou desliga é a política inteira — não uma rota por vez.
+ */
+export const exigeSegundoFator = (
+  permissoes: readonly string[],
+  obrigatorioNaBarbearia: boolean,
+): boolean =>
+  obrigatorioNaBarbearia && PERMISSOES_DE_DINHEIRO.some((p: Permissao) => permissoes.includes(p));
+
+/**
+ * Liga ou desliga a exigência para a barbearia inteira.
+ *
+ * Guardada por `security.mfa_policy`, que só o dono tem por padrão — a guarda
+ * cobra a permissão, e este módulo não a reconfere: seria a segunda cópia da
+ * mesma decisão, e a que envelhece.
+ *
+ * **Grava mesmo quando o valor não muda**, pela razão de `definirRecurso`: "o
+ * dono olhou e manteve ligado" é diferente de "ninguém nunca olhou", e a trilha
+ * é onde essa diferença fica. O `before`/`after` diz qual dos dois foi.
+ */
+export async function definirPoliticaDeSegundoFator(params: {
+  readonly tenantId: string;
+  readonly staffUserId: string;
+  readonly staffName: string;
+  readonly obrigatorio: boolean;
+}): Promise<{ readonly obrigatorio: boolean }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ mfa_required: boolean }[]>`
+      SELECT mfa_required FROM tenants FOR UPDATE
+    `;
+    const antes = linhas[0];
+    if (!antes) throw new MfaError('not_enabled', 'Barbearia não encontrada.');
+
+    await tx.$executeRaw`
+      UPDATE tenants SET mfa_required = ${params.obrigatorio}, updated_at = now()
+    `;
+
+    /**
+     * Dentro da transação que muda o estado, como toda trilha deste produto.
+     *
+     * Registrar depois do commit abriria a janela em que a proteção do caixa
+     * está desligada e nada no sistema diz quem desligou — que é exatamente a
+     * janela que alguém escolheria para usar.
+     */
+    await audit(tx, {
+      actorId: params.staffUserId,
+      actorName: params.staffName,
+      action: 'mfa.policy_changed',
+      entity: 'tenant',
+      entityId: params.tenantId,
+      before: { obrigatorio: antes.mfa_required },
+      after: { obrigatorio: params.obrigatorio },
+    });
+
+    return { obrigatorio: params.obrigatorio };
+  });
+}
 
 export async function estadoDoMfa(
   tenantId: string,
@@ -284,8 +348,13 @@ export async function verificarSegundoFator(params: {
  *
  * Pede o código atual — desligar a partir de uma sessão roubada seria o caminho
  * mais curto para anular a proteção inteira. E **quem tem permissão de dinheiro
- * não desliga**: a regra do `CLAUDE.md` é sobre o papel, não sobre a vontade de
- * quem o ocupa. Para essa pessoa, o caminho é perder a permissão primeiro.
+ * não desliga onde a barbearia exige**: ali a regra é sobre o papel, não sobre
+ * a vontade de quem o ocupa, e o caminho é perder a permissão primeiro.
+ *
+ * Onde a barbearia **não** exige, desligar é legítimo e precisa ser possível.
+ * Recusar assim mesmo transformaria "experimentei o segundo fator uma vez" em
+ * "fiquei preso a ele para sempre" — e quem paga isso é o dono que trocou de
+ * celular sem transferir o autenticador.
  */
 export async function desligarMfa(params: {
   readonly tenantId: string;
@@ -293,10 +362,11 @@ export async function desligarMfa(params: {
   readonly staffName: string;
   readonly sessionId: string;
   readonly permissoes: readonly string[];
+  readonly obrigatorioNaBarbearia: boolean;
   readonly codigo: string;
   readonly now: Date;
 }): Promise<void> {
-  if (exigeSegundoFator(params.permissoes)) {
+  if (exigeSegundoFator(params.permissoes, params.obrigatorioNaBarbearia)) {
     throw new MfaError(
       'already_enabled',
       'Contas com acesso ao financeiro não podem desligar o segundo fator.',

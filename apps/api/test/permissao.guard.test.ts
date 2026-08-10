@@ -83,9 +83,18 @@ function guardaCom(
   return new PermissaoGuard(reflector);
 }
 
+/**
+ * O dono de uma barbearia que **exige** o segundo fator.
+ *
+ * `mfaRequired` fica explícito em todo caso deste arquivo, e não num padrão
+ * implícito, porque ele é a primeira pergunta da derivação: um `undefined`
+ * silencioso faria toda a bateria de dinheiro abaixo passar por não cobrar
+ * nada, exatamente como se a regra tivesse sido apagada.
+ */
 const DONO = {
   permissions: [...PERMISSOES],
   mustChangePassword: false,
+  mfaRequired: true,
 };
 
 /**
@@ -278,6 +287,46 @@ describe('as rotas do painel', () => {
     const vencido = new Date(agora - (VALIDADE_DO_SEGUNDO_FATOR_MINUTOS + 1) * 60_000);
     await expect(
       guardaCom(['finance.view']).canActivate(contexto(dono(vencido))),
+    ).rejects.toThrowError(/confirme o código/i);
+  });
+
+  it('barbearia que não exige o segundo fator não é cobrada por nenhuma rota de dinheiro', async () => {
+    /**
+     * O interruptor da barbearia, do lado permissivo — e é o teste que precisa
+     * ser o mais amplo dos dois, porque ele é o que prova que desligar desliga
+     * **tudo**. Uma implementação que esquecesse uma rota deixaria o dono com
+     * uma tela que ele não abre e nenhuma explicação de por quê.
+     */
+    const semExigencia: string[] = [];
+
+    for (const permissao of PERMISSOES_DE_DINHEIRO) {
+      const dono = { ...DONO, mfaRequired: false, mfaEnabled: false, mfaVerifiedAt: null };
+      await expect(
+        guardaCom([permissao]).canActivate(contexto(dono)),
+        `${permissao} continuou cobrando o segundo fator com a política desligada`,
+      ).resolves.toBe(true);
+      semExigencia.push(permissao);
+    }
+
+    expect(semExigencia.length).toBe(PERMISSOES_DE_DINHEIRO.length);
+  });
+
+  it('e a permissão que liga a política de volta não fica presa atrás dela', async () => {
+    // O laço que este desenho precisa não ter: com a política desligada e sem
+    // autenticador cadastrado, ligar a exigência tem que ser possível — senão o
+    // caminho para apertar a segurança passaria por dentro da segurança.
+    await expect(
+      guardaCom(['security.mfa_policy']).canActivate(
+        contexto({ ...DONO, mfaRequired: false, mfaEnabled: false, mfaVerifiedAt: null }),
+      ),
+    ).resolves.toBe(true);
+
+    // Ligada, ela é cobrada como qualquer outra do grupo: quem consegue
+    // desligar a política abre a gaveta no passo seguinte.
+    await expect(
+      guardaCom(['security.mfa_policy']).canActivate(
+        contexto({ ...DONO, mfaEnabled: true, mfaVerifiedAt: null }),
+      ),
     ).rejects.toThrowError(/confirme o código/i);
   });
 

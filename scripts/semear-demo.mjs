@@ -362,16 +362,28 @@ async function encherAFila(token, catalogo) {
 /**
  * O segundo fator, e por que ele aparece numa semeadura.
  *
- * Toda rota de dinheiro exige prova de segundo fator na sessão — a
- * `PermissaoGuard` **deriva** a exigência da permissão declarada, então não há
- * como uma tela de caixa existir sem ela. Semear o caixa sem passar por aqui
- * simplesmente não funciona, e um `.catch` que engolisse o erro deixaria a
- * demonstração dizendo "caixa aberto" com a gaveta fechada.
+ * Toda rota de dinheiro exige prova de segundo fator na sessão quando a
+ * barbearia liga a exigência — a `PermissaoGuard` **deriva** a exigência da
+ * permissão declarada, então não há como uma tela de caixa escapar dela. Semear
+ * o caixa sem passar por aqui não funcionaria, e um `.catch` que engolisse o
+ * erro deixaria a demonstração dizendo "caixa aberto" com a gaveta fechada.
+ *
+ * A conta nasce **sem** a exigência desde a migração 0039, e a semeadura a liga
+ * de propósito: a demonstração é de uma barbearia em operação, não do primeiro
+ * dia. Mostrar o produto no estado desprotegido esconderia justamente o
+ * mecanismo que ele tem — e a ordem importa, porque desligar pede o código e
+ * ligar não.
  */
 async function ligarSegundoFator(token) {
   const { codigoDoPasso, passoAgora } = await import(
     new URL('../packages/identity/dist/mfa.js', import.meta.url)
   );
+
+  await chamar('/v1/admin/mfa/policy', {
+    metodo: 'PUT',
+    token,
+    corpo: { obrigatorio: true },
+  });
 
   const { segredoBase32 } = await chamar('/v1/admin/mfa/setup', { metodo: 'POST', token });
   // O passo confirmado é queimado, então a verificação usa o seguinte — que já

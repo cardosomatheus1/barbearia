@@ -108,6 +108,12 @@ describe('permissões de dinheiro', () => {
     //
     // `cashier.` entrou no bloco 18, com a gaveta: segundo fator para *ver* o
     // faturamento e nenhum para *levar* a sangria seria o inverso do risco.
+    //
+    // `security.mfa_policy` entrou quando a exigência virou interruptor da
+    // barbearia, e é a única do grupo que não move nem revela dinheiro: ela
+    // decide quem move. Fora daqui, uma sessão esquecida no balcão desligaria a
+    // política num toque e abriria a gaveta no seguinte — o grupo é por risco,
+    // não por vocabulário.
     expect([...PERMISSOES_DE_DINHEIRO].sort()).toEqual([
       'cashier.close',
       'cashier.open',
@@ -118,6 +124,7 @@ describe('permissões de dinheiro', () => {
       'finance.export',
       'finance.view',
       'finance.view_profit',
+      'security.mfa_policy',
     ]);
   });
 

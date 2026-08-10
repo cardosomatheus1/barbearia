@@ -1012,6 +1012,10 @@ export interface EstadoDoSegundoFator {
   ativo: boolean;
   pendente: boolean;
   obrigatorio: boolean;
+  /** A barbearia exige o código de quem mexe em dinheiro. */
+  obrigatorioNaBarbearia: boolean;
+  /** Quem está olhando pode mexer nesse interruptor (`security.mfa_policy`). */
+  podeMudarPolitica: boolean;
   verificadoNestaSessao: boolean;
 }
 
@@ -1031,6 +1035,9 @@ export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
     { codigo },
     token,
   );
+
+export const definirPoliticaDeSegundoFator = (token: string, obrigatorio: boolean) =>
+  chamar<{ obrigatorio: boolean }>('PUT', '/v1/admin/mfa/policy', { obrigatorio }, token);
 
 // -- Comissão -------------------------------------------------------------------
 

@@ -64,6 +64,7 @@ import {
   receberDoFiado,
   comecarSegundoFator,
   confirmarSegundoFator,
+  definirPoliticaDeSegundoFator,
   verificarSegundoFatorAgora,
   type FormaDePagamento,
   salvarRegraDeComissao,
@@ -1087,6 +1088,24 @@ export async function acaoVerificarSegundoFator(form: FormData): Promise<void> {
     comanda: '/admin/comanda',
   };
   redirect(destinos[texto(form, 'voltarPara')] ?? '/admin/caixa');
+}
+
+/**
+ * Liga e desliga a exigência para a barbearia inteira.
+ *
+ * O valor vem de um campo escondido com o estado desejado, e **não** de uma
+ * caixa de marcar: caixa desmarcada não é enviada pelo navegador, e a ausência
+ * viraria "desligue" em todo formulário que chegasse pela metade. Aqui a
+ * ausência é entrada inválida, e a API recusa com 400.
+ */
+export async function acaoPoliticaDeSegundoFator(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const desejado = texto(form, 'obrigatorio');
+  if (desejado !== 'sim' && desejado !== 'nao') falhar('/admin/seguranca', 'invalid_request');
+
+  const resultado = await definirPoliticaDeSegundoFator(token, desejado === 'sim');
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  redirect(`/admin/seguranca?politica=${desejado === 'sim' ? 'ligada' : 'desligada'}`);
 }
 
 // -- Comissão -----------------------------------------------------------------

@@ -99,6 +99,20 @@ export const PERMISSOES = [
   'marketing.send',
   'settings.manage',
   'team.manage',
+  /**
+   * Decidir se esta barbearia exige o segundo fator de quem mexe em dinheiro.
+   *
+   * Permissão própria, e não `settings.manage`, pelo mesmo motivo de
+   * `customers.anonymize`: mudar o horário de funcionamento e desligar a trava
+   * do caixa parecem "configuração" e não são a mesma tarefa. Quem delegou a
+   * configuração à recepção não delegou o poder de abrir a gaveta sem código —
+   * e é justamente da recepção que o segundo fator protege o dinheiro do dono.
+   *
+   * Só o dono tem por padrão. Não é `if (role === 'owner')`, que este projeto
+   * recusa: é permissão, então o dono **pode** entregá-la ao gerente pela tela
+   * — a diferença é que aí terá sido uma decisão, e não um efeito colateral.
+   */
+  'security.mfa_policy',
 ] as const;
 
 export type Permissao = (typeof PERMISSOES)[number];
@@ -122,6 +136,13 @@ export function ehPermissao(valor: string): valor is Permissao {
  * literalmente tirar dinheiro da gaveta. Deixar de fora significaria segundo
  * fator para *ver* o faturamento e nenhum para *levar* a sangria, que é o
  * inverso do risco.
+ *
+ * **`security.mfa_policy` entrou quando a exigência virou interruptor da
+ * barbearia**, e é a única do grupo que não move nem revela dinheiro: ela
+ * decide quem move. Uma sessão esquecida aberta no balcão que consiga desligar
+ * a política primeiro abre a gaveta depois, sem código nenhum — o grupo é por
+ * risco, não por vocabulário. Ligar a política não fica preso por isso: com ela
+ * desligada, a guarda não cobra segundo fator de nada, inclusive desta.
  */
 export const PERMISSOES_DE_DINHEIRO: readonly Permissao[] = PERMISSOES.filter(
   (p): p is Permissao =>
@@ -130,7 +151,8 @@ export const PERMISSOES_DE_DINHEIRO: readonly Permissao[] = PERMISSOES.filter(
     // Ver a comissão de todo mundo é ver a folha; mudar a regra é mudar quanto
     // cada um recebe. As duas revelam ou movem dinheiro.
     p === 'commission.view_all' ||
-    p === 'commission.edit_rules',
+    p === 'commission.edit_rules' ||
+    p === 'security.mfa_policy',
 );
 
 /**

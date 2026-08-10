@@ -118,6 +118,16 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
       .expect(201);
     const token: string = entrou.body.token;
 
+    /**
+     * A barbearia nasce **sem** exigir o segundo fator desde a migração 0039.
+     * Esta suíte descreve uma que exige — então ela liga a política, que é o
+     * que o dono faria em `/admin/seguranca`. Ligar não pede código: com a
+     * política desligada a guarda não cobra nada, inclusive esta rota.
+     */
+    await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: true }),
+    ).expect(200);
+
     await com(token)(
       http()
         .put('/v1/admin/business')
@@ -229,6 +239,9 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
       .post('/v1/admin/login')
       .send({ email: DONO.email, password: DONO.password })
       .expect(201);
+    await com(entrou.body.token)(
+      http().put('/v1/admin/mfa/policy').send({ obrigatorio: true }),
+    ).expect(200);
 
     const recusa = await com(entrou.body.token)(
       http()

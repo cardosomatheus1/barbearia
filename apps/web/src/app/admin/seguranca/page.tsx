@@ -19,6 +19,7 @@ import {
   acaoConfirmarSegundoFator,
   acaoEncerrarSessao,
   acaoExpulsarSuporte,
+  acaoPoliticaDeSegundoFator,
   acaoPreferenciasDeAlerta,
   acaoSair,
   acaoVerificarSegundoFator,
@@ -67,6 +68,15 @@ const FALHA: Record<string, string> = {
   mfa_key_missing: 'Não foi possível concluir agora. Avise quem cuida do sistema.',
   invalid_request: 'Confira o código e tente de novo.',
   request_failed: 'Não deu para salvar. Tente de novo.',
+  /*
+    Os dois códigos que a política devolve quando ela está ligada.
+
+    Sem eles a mensagem cairia no "não deu para salvar" genérico, que manda
+    tentar de novo — e tentar de novo dá exatamente o mesmo erro, para sempre.
+    O texto tem que dizer o passo que falta, porque ele está nesta mesma tela.
+  */
+  mfa_setup_required: 'Para desligar a exigência é preciso um autenticador cadastrado. Gere a chave aqui embaixo e volte.',
+  mfa_required: 'Confirme o código do seu aplicativo aqui embaixo antes de mudar a exigência.',
 };
 
 /** Em grupos de quatro: ninguém digita trinta e dois caracteres seguidos sem errar. */
@@ -125,7 +135,15 @@ export default async function SegurancaPage({ searchParams }: Props) {
     );
   }
 
-  const { ativo, pendente, obrigatorio, verificadoNestaSessao } = mfa.dados;
+  const {
+    ativo,
+    pendente,
+    obrigatorio,
+    obrigatorioNaBarbearia,
+    podeMudarPolitica,
+    verificadoNestaSessao,
+  } = mfa.dados;
+  const politica = first(query['politica']);
 
   return (
     <main className="ui-container painel__conteudo" {...secao('seguranca')}>
@@ -133,8 +151,9 @@ export default async function SegurancaPage({ searchParams }: Props) {
 
       <h1 className="painel__titulo">Segundo fator</h1>
       <p className="painel__sub">
-        Um código de seis dígitos, do aplicativo do seu celular, para quem mexe em dinheiro. O
-        balcão fica logado o dia inteiro — o código é o que separa a gaveta de quem passa por perto.
+        {obrigatorioNaBarbearia
+          ? 'Um código de seis dígitos, do aplicativo do seu celular, para quem mexe em dinheiro. O balcão fica logado o dia inteiro — o código é o que separa a gaveta de quem passa por perto.'
+          : 'Um código de seis dígitos, do aplicativo do seu celular. Esta barbearia não o exige hoje: quem tem acesso ao caixa entra sem ele.'}
       </p>
 
       {erro ? (
@@ -263,7 +282,9 @@ export default async function SegurancaPage({ searchParams }: Props) {
           <p className="cartao-seguranca__texto">
             {obrigatorio
               ? 'Sua conta tem acesso ao financeiro, então o segundo fator é obrigatório: sem ele o caixa não abre.'
-              : 'Sua conta ainda não mexe em dinheiro, mas ligar o segundo fator protege o cadastro e a equipe.'}
+              : obrigatorioNaBarbearia
+                ? 'Sua conta ainda não mexe em dinheiro, mas ligar o segundo fator protege o cadastro e a equipe.'
+                : 'Esta barbearia não exige o código. Ligar mesmo assim protege a sua conta — e já deixa você pronto para o dia em que a exigência for ligada.'}
           </p>
           <form action={acaoComecarSegundoFator}>
             <button className="ui-button ui-button--primary ui-button--block" type="submit">
@@ -272,6 +293,12 @@ export default async function SegurancaPage({ searchParams }: Props) {
           </form>
         </section>
       )}
+
+      <PoliticaDaBarbearia
+        ligada={obrigatorioNaBarbearia}
+        podeMudar={podeMudarPolitica}
+        acabouDeMudar={politica === 'ligada' ? true : politica === 'desligada' ? false : null}
+      />
 
       {/*
         Quem está na minha conta, e o que me interrompe (bloco 33).
@@ -290,6 +317,87 @@ export default async function SegurancaPage({ searchParams }: Props) {
         preferencias={preferencias.ok ? preferencias.dados : null}
       />
     </main>
+  );
+}
+
+/**
+ * O interruptor da barbearia — a decisão que vale para todo mundo.
+ *
+ * Fica **abaixo** do cadastro do próprio aparelho de propósito. Quem abre esta
+ * tela quase sempre veio digitar o código para destravar o caixa, trinta vezes
+ * por mês; mudar a política da casa acontece uma vez na vida do negócio. Pôr a
+ * decisão rara no topo empurraria a ação diária para baixo da dobra no celular.
+ *
+ * Quem não tem `security.mfa_policy` não vê o cartão. Mostrá-lo desabilitado
+ * explicaria à recepção exatamente onde fica a trava que ela não pode mexer —
+ * e ainda seria uma promessa que o servidor recusa.
+ */
+function PoliticaDaBarbearia({
+  ligada,
+  podeMudar,
+  acabouDeMudar,
+}: {
+  readonly ligada: boolean;
+  readonly podeMudar: boolean;
+  readonly acabouDeMudar: boolean | null;
+}) {
+  if (!podeMudar) return null;
+
+  return (
+    <section className="cartao-seguranca">
+      <h2 className="cartao-seguranca__titulo">O código é exigido nesta barbearia?</h2>
+
+      {acabouDeMudar !== null ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          {acabouDeMudar
+            ? 'Pronto. Quem mexe em dinheiro passa a precisar do código.'
+            : 'Pronto. O caixa abre sem código até você ligar de novo.'}
+        </div>
+      ) : null}
+
+      <p className={ligada ? 'estado estado--aberto' : 'estado'}>
+        <span className="estado__ponto" />
+        {ligada ? 'Exigido no caixa, na comanda e na comissão' : 'Não é exigido de ninguém'}
+      </p>
+
+      <p className="cartao-seguranca__texto">
+        {ligada
+          ? 'Quem tem acesso ao dinheiro digita o código uma vez a cada 30 minutos. Desligar significa que qualquer pessoa que sente no notebook aberto da recepção abre caixa, comanda, fiado e comissão — e esse notebook fica virado para o salão.'
+          : 'Hoje a senha é a única porta do dinheiro. Ligar passa a pedir um código de seis dígitos de quem abre caixa, fecha comanda ou vê comissão — inclusive de você.'}
+      </p>
+
+      {ligada ? null : (
+        /*
+          O degrau, dito antes e não depois.
+
+          Desligar a exigência é rota de dinheiro como qualquer outra — senão
+          uma sessão esquecida no balcão a removeria num toque. Quem liga sem
+          autenticador precisa cadastrar um para poder voltar atrás, e descobrir
+          isso só na hora de voltar é o que transforma uma decisão em armadilha.
+        */
+        <p className="cartao-seguranca__texto">
+          <strong>Para desligar depois</strong>, você vai precisar do código — é o que impede
+          alguém de tirar a trava a partir de um computador aberto. Se ainda não tem autenticador,
+          cadastre o seu aqui em cima antes de ligar.
+        </p>
+      )}
+
+      <form action={acaoPoliticaDeSegundoFator}>
+        {/*
+          O estado desejado vai escrito no campo, e não uma caixa de marcar:
+          caixa desmarcada não é enviada pelo navegador, e a ausência viraria
+          "desligue a proteção" em qualquer envio que chegasse pela metade.
+        */}
+        <input name="obrigatorio" type="hidden" value={ligada ? 'nao' : 'sim'} />
+        <button className="ui-button ui-button--secondary ui-button--block" type="submit">
+          {ligada ? 'Deixar de exigir o código' : 'Passar a exigir o código'}
+        </button>
+      </form>
+
+      <p className="ui-field__hint">
+        Ligar e desligar ficam na trilha, com quem fez e quando.
+      </p>
+    </section>
   );
 }
 

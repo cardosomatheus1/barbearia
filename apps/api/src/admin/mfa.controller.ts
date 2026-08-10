@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
 import {
   confirmarCadastroMfa,
+  definirPoliticaDeSegundoFator,
   desligarMfa,
   estadoDoMfa,
   exigeSegundoFator,
@@ -10,12 +11,13 @@ import {
   verificarSegundoFator,
   type AuthenticatedStaff,
 } from '@barbearia/identity';
+import { pode } from '@barbearia/core';
 import { tenantName } from '@barbearia/scheduling';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
-import { codigoMfaSchema } from './caixa.schemas.js';
+import { codigoMfaSchema, politicaDeMfaSchema } from './caixa.schemas.js';
 
 const STATUS: Record<string, number> = {
   invalid_code: 400,
@@ -40,13 +42,20 @@ function toHttp(error: unknown): never {
 /**
  * O segundo fator, do lado de quem o cadastra.
  *
- * **Nenhuma rota daqui exige `finance.*`**, e não é descuido: exigir seria o
- * laço fechado — quem precisa do segundo fator para chegar ao caixa não
- * conseguiria cadastrar o segundo fator. Elas pedem `[]`, a mesma fuga que a
- * troca de senha de primeiro acesso usa.
+ * **Nenhuma rota de cadastro daqui exige `finance.*`**, e não é descuido:
+ * exigir seria o laço fechado — quem precisa do segundo fator para chegar ao
+ * caixa não conseguiria cadastrar o segundo fator. Elas pedem `[]`, a mesma
+ * fuga que a troca de senha de primeiro acesso usa.
  *
  * O que as protege é a sessão: quem chega aqui já provou a senha, e cada
  * operação sensível pede o código atual.
+ *
+ * A exceção é `PUT policy`, e ela é a única que **precisa** ser cobrada: quem
+ * consegue desligar a política primeiro abre a gaveta depois. Ela não fecha
+ * laço nenhum porque a cobrança só existe quando a política está ligada — para
+ * **ligar**, a guarda não pede nada, que é o estado de quem ainda não tem
+ * autenticador. E para desligar sem ter um, o caminho está na mesma tela: o
+ * cadastro, que continua aberto.
  */
 @Controller('v1/admin/mfa')
 @UseGuards(StaffGuard, PermissaoGuard)
@@ -57,9 +66,14 @@ export class MfaController {
     return {
       ...(await estadoDoMfa(staff.tenantId, staff.staffUserId)),
       // A tela precisa saber se pode oferecer "desligar": para quem mexe em
-      // dinheiro, a resposta é não, e mostrar o botão só para recusar depois é
-      // prometer o que não se cumpre.
-      obrigatorio: exigeSegundoFator(staff.permissions),
+      // dinheiro numa barbearia que exige, a resposta é não, e mostrar o botão
+      // só para recusar depois é prometer o que não se cumpre.
+      obrigatorio: exigeSegundoFator(staff.permissions, staff.mfaRequired),
+      /** O interruptor da barbearia, e quem pode mexer nele. */
+      obrigatorioNaBarbearia: staff.mfaRequired,
+      // Da mesma função que a guarda aplica, nunca recalculada na view: é assim
+      // que a tela deixa de oferecer o botão que o servidor recusa.
+      podeMudarPolitica: pode(staff.permissions, 'security.mfa_policy'),
       // A mesma função que a guarda aplica, não uma segunda leitura do mesmo
       // campo: a tela precisa oferecer o campo do código de novo assim que a
       // janela vence, senão o caixa recusa e manda para uma tela que não tem
@@ -142,10 +156,37 @@ export class MfaController {
         staffName: staff.name,
         sessionId: staff.sessionId,
         permissoes: staff.permissions,
+        obrigatorioNaBarbearia: staff.mfaRequired,
         codigo: body.codigo,
         now: new Date(),
       });
       return { ok: true };
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  /**
+   * O interruptor da barbearia.
+   *
+   * `PUT` e não `POST`: o corpo diz o estado desejado, não uma transição, então
+   * mandar duas vezes o mesmo valor termina no mesmo lugar. Não leva
+   * `Idempotency-Key` porque não cria agendamento nem move dinheiro — a regra
+   * do `CLAUDE.md` é sobre efeito que se duplica, e este não tem.
+   */
+  @Exige('security.mfa_policy')
+  @Put('policy')
+  async politica(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(politicaDeMfaSchema)) body: { obrigatorio: boolean },
+  ) {
+    try {
+      return await definirPoliticaDeSegundoFator({
+        tenantId: staff.tenantId,
+        staffUserId: staff.staffUserId,
+        staffName: staff.name,
+        obrigatorio: body.obrigatorio,
+      });
     } catch (error) {
       return toHttp(error);
     }

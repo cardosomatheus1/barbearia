@@ -59,6 +59,31 @@ de tela — porque cada tela, sozinha, era coerente:
 | A página pública desenha um botão de ligar desde o bloco 4, e o número era **sempre nulo**: `locations.phone_e164` existia, a API aceitava `phone`/`whatsapp` e nenhuma tela os preenchia. Achado ao escrever `scripts/rodar-local.sh` — o semeador foi o primeiro cliente a mandar o campo | os dois campos entraram na etapa 2 do onboarding. E o valor passa a ser normalizado **na borda**: `(71) 3333-4444` batia na `CHECK` de E.164 e virava **500 "Erro interno"** — entrada externa inválida é 400 com motivo. Fixo é aceito aqui e recusado no cadastro do cliente, porque o do cliente recebe o código de acesso |
 | A tela de comissão dizia **"Comissão"** para os dois lados do mesmo dinheiro. O dono abre para saber quanto **paga**, o barbeiro para saber quanto **recebe**, e quem tem as duas contas não tinha como saber qual estava na tela | "Comissão da equipe" e "Minha comissão", com o subtítulo dizendo o que o número é. Os dados sempre estiveram certos — a API já recorta pelo `commission.view_all` |
 
+## Decisão de produto (entre o 36 e o 37): o segundo fator vira escolha da barbearia
+
+Não é bloco nem conserto: é uma regra que mudou, e ela estava escrita no
+`CLAUDE.md` como incondicional.
+
+Até aqui, quem tinha `finance.*` ou `cashier.*` digitava um código de seis
+dígitos ou não abria o caixa — sem exceção e sem interruptor. O mecanismo
+continua igual, e continua **derivado da permissão declarada na rota**, que é o
+que impede uma tela de dinheiro nova de nascer sem proteção. O que mudou é que a
+barbearia decide se ele vale para ela (`tenants.mfa_required`, migração 0039), e
+**a exigência nasce desligada**.
+
+| Decisão | Por quê |
+|---|---|
+| Nasce desligada | A barbearia que abriu ontem tem uma conta e um dono que ainda não configurou autenticador. Pedir um antes da primeira comanda é o atrito que faz a pessoa voltar para o caderno — e um sistema que ela abandona não protege dinheiro nenhum |
+| Quem já existia nasce ligada | Padrão de configuração que mexe em dinheiro é o **comportamento anterior** (`CLAUDE.md`, precedente do `fee_treatment`). Um `DEFAULT false` sem o `UPDATE` da migração tiraria a proteção de toda barbearia instalada no dia do deploy, sem ninguém ter decidido |
+| Permissão própria (`security.mfa_policy`), só do dono por padrão | O raciocínio de `customers.anonymize`: mudar horário de funcionamento e desligar a trava do caixa não são a mesma tarefa. Sob `settings.manage`, delegar a configuração à recepção delegaria junto o poder de abrir a gaveta sem código |
+| Desligar pede o código | A permissão está no grupo de dinheiro, então a guarda a cobra como qualquer outra. Proteção que se remove sem prova não protege: uma sessão esquecida no balcão a tiraria num toque e abriria o caixa no seguinte. Ligar nunca fica preso por isso — com a política desligada a guarda não cobra nada |
+| Lida do banco a cada requisição | Junto da sessão, no mesmo `SELECT`. Guardada no token, ligar a exigência só valeria quando o balcão deslogasse — que é a noite inteira depois de alguém decidir apertar a segurança |
+
+O degrau que sobra é conhecido e está escrito na própria tela: quem liga a
+exigência sem ter autenticador precisa cadastrar um para poder desligá-la. Não é
+beco sem saída — o cadastro é a mesma tela, e as rotas dele declaram `@Exige()`
+vazio justamente para nunca ficarem atrás da própria trava.
+
 ## Lacunas com dependência declarada
 
 Quando um bloco fecha deixando algo de fora, o motivo entra aqui — com **o que
@@ -98,6 +123,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Papel novo criado pelo dono | os quatro papéis têm o conjunto de permissões editável pela tela, por barbearia, com trilha de antes e depois | criar um **quinto** papel — "caixa", "gerente de unidade" — em vez de só reconfigurar os quatro | sem bloco definido: `staff_role` é um enum do Postgres, e papel criado por barbearia teria que virar tabela com chave própria, migrando `staff_users.role`, `role_permissions.role` e a semente. É trabalho real e o ganho é pequeno enquanto os quatro cobrem o que a SPEC §1.3 descreve — quatro conjuntos editáveis já respondem "a recepção pode dar desconto?" |
 | Teto de desconto por pessoa | o teto é por barbearia, em pontos-base, e vale para todo mundo que tem `finance.discount` | um teto diferente por papel — a recepção até 10%, o gerente até 30% | sem bloco definido: exigiria o teto migrar de `tenants` para `role_permissions`, que hoje é um par (papel, permissão) sem valor associado. Vale quando alguém pedir; hoje a separação que importa — quem pode e quem não pode — já existe |
 | `Idempotency-Key` obrigatório na troca de plano | o POST aceita a chave e a honra; o reenvio sequencial esbarra em `same_plan`, e a chave é escopada por operador | torná-la obrigatória, para fechar também o envio **concorrente** — dois cliques ao mesmo tempo emitiriam dois acertos de rateio | sem bloco definido: seria a primeira rota do produto a exigir a chave, e as de dinheiro do balcão (comanda, caixa) a aceitam opcional. Mudar uma só cria duas convenções; mudar todas é decisão de contrato de API, com cliente a atualizar. Fica escrito porque a `/security-review` do bloco 28 apontou e a resposta foi consciente, não esquecimento |
+| Aviso ao dono quando a exigência do segundo fator cai | o interruptor é por barbearia, exige `security.mfa_policy`, pede o código para ser desligado e grava `mfa.policy_changed` na trilha com o par antes/depois | **empurrar** o aviso: hoje o dono descobre olhando a trilha, e quem desliga a proteção não costuma avisar | sem bloco definido: a régua de aviso ao dono existe desde o 33 (`crítico` ligado por padrão, um por regra por dia, nada entre 21h e 8h da unidade), e a tentação é pendurar este evento nela hoje. Ela nasceu para sinal **operacional** — fila travada, queda de agendamento —, e aviso de segurança tem a mesma pergunta de desenho que a retenção teve: interruptor próprio, porque "não quero ser incomodado com a operação" não é "não quero saber que tiraram a trava do meu caixa". Um terceiro tipo na régua é decisão de canal, não linha de código, e ela merece o bloco em que houver mais eventos de segurança para avisar — hoje há exatamente um |
 | Segundo fator na troca de plano pelo dono | a rota é `settings.manage`, e o segundo fator é derivado da permissão declarada — então ela emite cobrança sem exigir o autenticador | decidir se a emissão de cobrança pelo próprio dono merece `finance.*` | sem bloco definido: exigir finanças obrigaria o dono que ainda não cadastrou autenticador a não conseguir **ler** o próprio plano, que é a tela onde ele descobre que a conta vai vencer. O risco é o próprio dono gastando o próprio dinheiro, com fatura e trilha. A troca vira decisão no dia em que houver mais de uma conta com `settings.manage` numa barbearia |
 | Série histórica e gráfico nas métricas da plataforma | MRR, churn, adoção, ocupação e falta apurados dia a dia por barbearia, com janela de 7, 30 ou 90 dias | a linha do tempo: MRR mês a mês, safra de entrada, curva de retenção | 62 (churn score com explicação): a série **existe** no banco desde este bloco — o que falta é histórico acumulado nela. Desenhar tendência sobre o primeiro mês de dados é inventar inclinação, e é a mesma decisão que já segura o gráfico no painel do dono |
 | CAC e payback | GMV, MRR e churn saem de dado que o produto tem | as duas métricas da SPEC §8 que dependem de **custo de aquisição** | sem bloco definido: não existe origem de dado. Quanto se gastou para trazer uma barbearia mora em ferramenta de marketing, não aqui, e inventar um campo "custo" que ninguém preenche é o defeito de `blocks` outra vez |

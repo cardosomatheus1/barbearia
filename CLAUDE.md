@@ -77,10 +77,26 @@ externa.** Na prática: quase todos.
   telefone existente e inexistente.
 - OTP: 6 dígitos, TTL 5 min, máximo 5 tentativas, invalidação no acerto,
   cooldown progressivo no reenvio.
-- MFA obrigatório para papéis com permissão `finance.*` — e para `cashier.*`,
-  que move dinheiro de verdade. A `PermissaoGuard` **deriva** a exigência da
-  permissão declarada na rota: não há decorador separado a esquecer. A prova é
-  por sessão e vence em 30 minutos, porque o balcão fica logado o dia inteiro.
+- MFA para papéis com permissão `finance.*` — e para `cashier.*`, que move
+  dinheiro de verdade. A `PermissaoGuard` **deriva** a exigência da permissão
+  declarada na rota: não há decorador separado a esquecer. A prova é por sessão
+  e vence em 30 minutos, porque o balcão fica logado o dia inteiro.
+
+  **Quem decide se a exigência vale é a barbearia** (`tenants.mfa_required`,
+  desde a 0039), e ela **nasce desligada**: uma barbearia de um dono só, no
+  primeiro dia, não tem autenticador configurado, e pedir um antes da primeira
+  comanda é o atrito que faz a pessoa voltar para o caderno. O interruptor é uma
+  pergunta **antes** da derivação, nunca no lugar dela — rota de dinheiro nova
+  continua nascendo coberta, e o que se liga ou desliga é a política inteira,
+  jamais rota por rota.
+
+  Duas guardas, e as duas importam. O interruptor exige `security.mfa_policy`,
+  que só o dono tem por padrão — se fosse `settings.manage`, quem edita horário
+  de funcionamento decidiria sobre a trava da gaveta. E ele está no grupo de
+  dinheiro, então **desligar pede o código que a política exige**: proteção que
+  se remove sem prova não protege de nada, e uma sessão esquecida no balcão a
+  tiraria num toque. Ligar nunca fica preso por isso — com a política desligada
+  a guarda não cobra nada.
 
 ### Dinheiro e efeitos colaterais
 
@@ -569,6 +585,7 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Papel na plataforma | `viewer` lê, `operator` age sobre a conta de uma barbearia. Conta nova nasce `viewer`. A polaridade do `@AgeNaConta` é o **inverso** do `@Exige`: aqui a ausência libera a leitura, porque toda conta de plataforma já lê tudo — o que se separa é o que se **faz**. Há teste que percorre o controller e cobra o decorador em todo `@Post`, `@Put` e `@Delete` sobre `barbearias/` e `faturas/` |
 | Aviso ao dono | crítico e retenção ligados, aviso desligado; um por regra por dia; nada entre 21h e 8h **da unidade**. Alerta que dispara à toa é alerta que se aprende a ignorar, e um canal ignorado é pior que canal nenhum. A retenção tem interruptor próprio porque é obrigação legal, não sinal operacional |
 | Prova do segundo fator | por **sessão** (`staff_sessions.mfa_verified_at`), com validade de 30 min — nunca só no login |
+| Exigência do segundo fator | por barbearia (`tenants.mfa_required`), **nasce desligada** e é lida do banco a cada requisição, junto da sessão — guardada no token, ligar só valeria quando o balcão deslogasse. Quem já operava com ela foi mantido ligado pela migração: padrão de configuração que mexe em dinheiro é o comportamento anterior. Desligar exige `security.mfa_policy` **e** o código, porque a permissão está no grupo de dinheiro |
 | Consentimento | histórico append-only em `customer_consents`: revogar é **inserir** a revogação, nunca apagar a concessão. `customers.accepts_marketing` é espelho derivado por gatilho, e só avança se a decisão for a mais recente — importação fora de ordem não ressuscita aceite revogado |
 | Versão do texto aceito | obrigatória e **sem padrão**, uma por finalidade, saindo de `politica.ts` e nunca do formulário. Aceite sem dizer o que a pessoa leu não é prova; um `'v1'` silencioso é pior, porque tem cara de prova |
 | Permissão de rota que agrega | declara **todas** as permissões do que ela devolve, e não a mais próxima do nome. A exportação do titular exige `customers.export` + `finance.view` + `customers.view_notes`, porque o arquivo contém o razão do fiado e a anotação privada — com uma só, ela virava o caminho mais curto para as outras duas, e o segundo fator derivado deixava de ser cobrado. Achado da `/security-review` do bloco 31 |

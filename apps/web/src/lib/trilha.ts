@@ -35,6 +35,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'mfa.enabled': 'ligou o segundo fator de',
   'mfa.disabled': 'desligou o segundo fator de',
   'mfa.recovery_used': 'usou um código de recuperação',
+  // "Da barbearia" e não "de", como as três acima: aquelas falam de uma conta,
+  // esta vale para todo mundo. Quem lê a trilha procurando por que o caixa
+  // parou de pedir código precisa ver a diferença numa linha só.
+  'mfa.policy_changed': 'mudou a exigência do segundo fator da barbearia',
 
   'commission.closed': 'fechou a comissão do período',
   'commission.rule_changed': 'mudou a regra de comissão de',

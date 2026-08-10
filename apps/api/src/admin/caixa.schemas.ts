@@ -102,6 +102,18 @@ export const codigoMfaSchema = z.object({
   codigo: z.string().trim().min(6).max(20),
 });
 
+/**
+ * O interruptor da barbearia.
+ *
+ * Booleano obrigatório e sem padrão: um `.default(false)` faria um corpo vazio
+ * — ou um campo escrito errado pelo cliente — **desligar** a proteção do caixa
+ * em silêncio, que é o pior desfecho possível para um formulário mal montado.
+ * Ausente é 400, e o 400 aparece em teste.
+ */
+export const politicaDeMfaSchema = z.object({
+  obrigatorio: z.boolean(),
+});
+
 // -- Comissão -------------------------------------------------------------------
 
 const diaISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
