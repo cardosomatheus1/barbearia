@@ -377,7 +377,7 @@ async function ligarSegundoFator(token) {
   // O passo confirmado é queimado, então a verificação usa o seguinte — que já
   // é aceito agora, dentro da tolerância de ±1. Dormir 30s não traria nada.
   const agora = passoAgora(new Date());
-  await chamar('/v1/admin/mfa/confirm', {
+  const { codigosDeRecuperacao } = await chamar('/v1/admin/mfa/confirm', {
     metodo: 'POST',
     token,
     corpo: { codigo: codigoDoPasso(segredoBase32, agora) },
@@ -388,7 +388,11 @@ async function ligarSegundoFator(token) {
     corpo: { codigo: codigoDoPasso(segredoBase32, agora + 1) },
   });
   passo('segundo fator ligado (as telas de dinheiro exigem)');
-  return segredoBase32;
+  // Os códigos de recuperação são a saída que a própria tela promete — "perdeu
+  // o celular? digite um código que você anotou". Descartá-los aqui deixaria a
+  // promessa sem lastro para quem perder o segredo, e a única saída seria
+  // recomeçar tudo com --zerar.
+  return { segredoBase32, codigosDeRecuperacao };
 }
 
 /**
@@ -587,16 +591,16 @@ async function main() {
   await marcarExcecoes(token, catalogo, today);
   await encherAFila(token, catalogo);
 
-  const segredo = await ligarSegundoFator(token);
+  const { segredoBase32: segredo, codigosDeRecuperacao: recuperacao } = await ligarSegundoFator(token);
   await moverDinheiro(token, catalogo);
 
   const barbeiro = await convidarBarbeiro(token, catalogo, today);
   await encherUmaFicha(token);
 
-  contar({ slug, segredo, barbeiro });
+  contar({ slug, segredo, barbeiro, recuperacao });
 }
 
-function contar({ slug, segredo, barbeiro }) {
+function contar({ slug, segredo, barbeiro, recuperacao }) {
   const linha = (rotulo, valor) => console.log(`      ${rotulo.padEnd(7)}${valor}`);
 
   console.log('');
@@ -621,8 +625,23 @@ function contar({ slug, segredo, barbeiro }) {
     console.log('');
     console.log(`    ${verde('segundo fator')}  ${segredo}`);
     console.log(cinza('      As telas de dinheiro — caixa, comanda, fiado, comissão — exigem prova'));
-    console.log(cinza('      de segundo fator, e a prova vence em 30 min. Cadastre este segredo em'));
-    console.log(cinza('      qualquer aplicativo autenticador (chave manual, base32).'));
+    console.log(cinza('      de segundo fator, e a prova vence em 30 min.'));
+    console.log(cinza(''));
+    console.log(cinza('      Cadastre em qualquer aplicativo autenticador (chave manual, base32) —'));
+    console.log(cinza('      ou, em máquina onde não dá para instalar aplicativo, peça o código aqui:'));
+    console.log(cinza(''));
+    console.log(`      node scripts/codigo-2fa.mjs ${segredo}`);
+    console.log(cinza(''));
+    console.log(cinza('      Se o código for recusado logo depois desta mensagem, espere 30s: a'));
+    console.log(cinza('      semeadura consome dois passos, e o passo usado não vale duas vezes.'));
+    console.log(cinza(''));
+    console.log(cinza('      \u26a0  Anote este segredo. Ele é impresso uma vez só — depois fica'));
+    console.log(cinza('         cifrado no banco, e recuperá-lo exige recomeçar com --zerar.'));
+    if (recuperacao?.length) {
+      console.log(cinza(''));
+      console.log(`      códigos de recuperação: ${recuperacao.join('  ')}`);
+      console.log(cinza('      Cada um serve uma vez, no lugar do código de seis dígitos.'));
+    }
   }
 
   console.log('');

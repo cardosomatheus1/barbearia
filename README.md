@@ -103,8 +103,18 @@ e-mail tem formato de e-mail porque o login valida isso na borda — a
 demonstração não é motivo para afrouxar nenhum dos dois.
 
 As telas de dinheiro exigem segundo fator, que o script liga e cujo segredo ele
-imprime: cadastre num aplicativo autenticador para abrir caixa, comanda, fiado
-e comissão.
+imprime **uma vez**. Cadastre num aplicativo autenticador — ou, onde não dá
+para instalar aplicativo (máquina corporativa, Codespaces), peça o código de
+seis dígitos na linha de comando:
+
+```bash
+node scripts/codigo-2fa.mjs SEUSEGREDOBASE32
+```
+
+Ele é uma calculadora de TOTP: recebe o segredo que já foi impresso e faz a
+conta que o celular faria. Não lê o banco nem decifra nada — um script que
+fosse buscar o segredo cifrado seria ferramenta de extração com nome amigável.
+Perdeu o segredo? `scripts/rodar-local.sh --zerar` recomeça e imprime outro.
 
 Rodar de novo reaproveita o banco; `--zerar` recomeça limpo.
 

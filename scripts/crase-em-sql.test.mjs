@@ -131,7 +131,27 @@ describe('crase dentro de consulta SQL', () => {
       0,
     );
     expect(total, 'nenhuma consulta encontrada — a varredura perdeu o alvo').toBeGreaterThan(80);
-  });
+    /**
+     * Teto folgado de propósito, e o motivo tem uma ressalva escrita.
+     *
+     * Ele apareceu numa execução em que havia um daemon do Docker rodando por
+     * fora: este teste leva 0,2s sozinho, levou 8,4s ali e estourou o padrão de
+     * 5s do vitest. Com a máquina livre o portão inteiro voltou a passar — ou
+     * seja, **o gatilho foi contenção, não lentidão do teste**, e a mesma
+     * execução derrubou um teste de banco que também não tinha defeito nenhum.
+     *
+     * O teto fica assim mesmo, e a diferença é qual garantia cada teste carrega.
+     * Aqui o tempo não prova nada: a garantia é a **contagem** de consultas
+     * varridas, e ela não muda com a carga da máquina — então limitar em 5s uma
+     * leitura de quatrocentos arquivos é um limite arbitrário que só produz
+     * vermelho falso em máquina ocupada ou em esteira lenta. Guarda que fica
+     * vermelho à toa treina todo mundo a ignorar vermelho.
+     *
+     * Nos testes de banco a decisão foi a **oposta**: lá a duração carrega
+     * sinal — uma consulta que ficou lenta é defeito de verdade —, e afrouxar o
+     * teto esconderia regressão. Aquele ficou como estava.
+     */
+  }, 60_000);
 
   it('toda consulta fecha numa linha que só tem a crase', () => {
     const problemas = [];
@@ -158,5 +178,6 @@ describe('crase dentro de consulta SQL', () => {
       problemas,
       'crase dentro da consulta fecha o template; use comentário -- sem crase',
     ).toEqual([]);
-  });
+    // Mesmo teto, e pelo mesmo motivo: os dois testes leem os mesmos arquivos.
+  }, 60_000);
 });
