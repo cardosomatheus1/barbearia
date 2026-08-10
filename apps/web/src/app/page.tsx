@@ -10,10 +10,11 @@ import type { Metadata } from 'next';
  * insatisfeito. Ele não quer ler "solução completa de gestão": quer saber se
  * isto resolve o problema que ele tem hoje.
  *
- * Daí a tese: **a seção mais importante é a dos defeitos encontrados em campo.**
- * Cada linha dela é um achado documentado na análise do sistema que a barbearia
- * usava (`SPEC.md` §2.2), com o efeito que ele tem no dia. É o oposto de uma
- * parede de depoimentos — e é verificável, o que depoimento não é.
+ * Daí a tese: **a seção mais importante é a do que costuma quebrar.** Cada linha
+ * dela é um problema concreto da operação, com o efeito que ele tem no dia — o
+ * oposto de uma parede de depoimentos. Ela fala do problema, nunca de um
+ * concorrente com nome: o leitor está ali para reconhecer o próprio dia, não
+ * para assistir alguém ser julgado.
  *
  * ## Zero JavaScript de cliente
  *
@@ -138,47 +139,61 @@ const MODULOS = [
 ] as const;
 
 /**
- * Os defeitos encontrados em campo.
+ * O que costuma quebrar numa barbearia, e o que fazemos diferente.
  *
- * Recorte de `SPEC.md` §2.2 — os que um dono reconhece sem precisar de explicação
- * técnica. O código (D1, D4…) fica visível de propósito: ele diz que existe uma
- * lista, e que ela foi levantada, não inventada.
+ * ## Por que sem sobrenome
+ *
+ * A versão anterior contava que o sistema de uma barbearia identificável tinha
+ * sido auditado, listava os achados com o código do dossiê e dizia quanto cada
+ * um custava a ela. Era verdade e era verificável — e expunha a barbearia e o
+ * fornecedor dela numa página de vendas. O leitor não estava aprendendo sobre o
+ * problema dele; estava assistindo alguém ser julgado.
+ *
+ * O conteúdo continua sendo o mesmo, porque ele **é** de categoria: grade fixa,
+ * fuso do aparelho, combo com duração errada e página sem endereço aparecem em
+ * software de barbearia inteiro, não num só. O que saiu foi o dedo apontado.
+ *
+ * ## O que não pode sair junto
+ *
+ * A concretude. "Serviço de 20 min começava 09:15 e deixava buraco" é o que faz
+ * um dono reconhecer o próprio dia; trocar por "otimize sua agenda" transforma
+ * a seção na parede de marketing que ela existe para não ser.
  */
 const ACHADOS = [
   {
-    codigo: 'D4',
-    problema: '"Cabelo + Barba" cadastrado com 30 min, quando as partes somam 40.',
-    efeito: 'Dez minutos de atraso por atendimento, acumulando o dia inteiro.',
-    resposta: 'Um validador confere o cardápio e mostra a diferença entre a duração cadastrada e a real, medida.',
-  },
-  {
-    codigo: 'D2',
-    problema: 'O fuso horário vinha do aparelho do cliente.',
-    efeito: 'Celular com relógio torto via a grade deslocada e marcava no horário errado.',
-    resposta: 'O fuso é da unidade, sempre. O aparelho não opina sobre que horas são na barbearia.',
-  },
-  {
-    codigo: 'D1',
-    problema: 'Grade fixa de 15 minutos, independente do serviço.',
-    efeito: 'Serviço de 20 min começava 09:15 e deixava um buraco que ninguém preenchia.',
+    area: 'Agenda',
+    problema: 'A grade é fixa de 15 em 15, independente do serviço.',
+    efeito: 'Um corte de 20 min começa 09:15 e deixa cinco minutos que ninguém preenche.',
     resposta: 'A grade sai da duração de cada serviço. Sobrou janela, ela é oferecida.',
   },
   {
-    codigo: 'D7',
-    problema: 'Era preciso escolher o profissional antes de ver qualquer horário.',
-    efeito: 'Quem só queria o mais cedo possível abria um barbeiro de cada vez.',
+    area: 'Cardápio',
+    problema: '"Cabelo + Barba" cadastrado com 30 min, quando as partes somam 40.',
+    efeito: 'Dez minutos de atraso por atendimento, acumulando o dia inteiro.',
+    resposta: 'Um validador confere o cardápio e mostra a diferença entre a duração cadastrada e a real.',
+  },
+  {
+    area: 'Fuso',
+    problema: 'O horário mostrado vem do relógio do aparelho de quem acessa.',
+    efeito: 'Celular com relógio torto vê a grade deslocada e marca no horário errado.',
+    resposta: 'O fuso é o da unidade, sempre. O aparelho não opina sobre que horas são na barbearia.',
+  },
+  {
+    area: 'Escolha',
+    problema: 'É preciso escolher o profissional antes de ver qualquer horário.',
+    efeito: 'Quem só quer o mais cedo possível abre um barbeiro de cada vez para comparar.',
     resposta: '"Qualquer profissional" é a primeira opção, e mostra o horário mais cedo de todos.',
   },
   {
-    codigo: 'D8',
-    problema: 'A página não tinha endereço, mapa, telefone nem horário de funcionamento.',
+    area: 'Página',
+    problema: 'A página de agendamento não traz endereço, mapa, telefone nem horário.',
     efeito: 'Metade de quem entra quer saber onde fica e se está aberto — não agendar.',
     resposta: 'A página pública responde as três coisas antes de pedir qualquer toque.',
   },
   {
-    codigo: 'D12',
-    problema: 'Dois dos quatro "profissionais" eram contas de balcão, com jornada 08:00–23:00.',
-    efeito: 'Ocupação e comissão saíam poluídas por agenda que não é de ninguém.',
+    area: 'Cadastro',
+    problema: 'Conta de balcão entra no sistema como se fosse mais um barbeiro.',
+    efeito: 'Ocupação e comissão saem poluídas por uma agenda que não é de ninguém.',
     resposta: 'Cadeira tem tipo. Conta de balcão não vira barbeiro no relatório.',
   },
 ] as const;
@@ -251,7 +266,7 @@ export default function LandingPage() {
           <nav aria-label="Seções" className="lp-nav__links ui-scroll-x">
             <a href="#telas">Telas</a>
             <a href="#recursos">Recursos</a>
-            <a href="#campo">Em campo</a>
+            <a href="#campo">O que quebra</a>
             <a href="#superficies">Quem usa</a>
           </nav>
         </div>
@@ -283,7 +298,7 @@ export default function LandingPage() {
                   Abrir minha barbearia
                 </a>
                 <a className="lp-link" href="#campo">
-                  Ver o que encontramos em campo
+                  Ver o que costuma quebrar
                   <span aria-hidden="true">→</span>
                 </a>
               </div>
@@ -390,7 +405,7 @@ export default function LandingPage() {
                 <dd className="tabular">22</dd>
               </div>
               <div className="lp-placar__item">
-                <dt>Defeitos medidos em campo</dt>
+                <dt>Problemas levantados em operação real</dt>
                 <dd className="tabular">12</dd>
               </div>
               <div className="lp-placar__item">
@@ -481,20 +496,21 @@ export default function LandingPage() {
 
         <section className="lp-secao" id="campo">
           <div className="lp-container">
-            <p className="lp-sobrancelha">Em campo</p>
+            <p className="lp-sobrancelha">O que costuma quebrar</p>
             <h2 className="lp-titulo">
-              Doze defeitos que a gente <em>mediu</em>, não imaginou
+              Seis coisas que a gente <em>mediu</em>, não imaginou
             </h2>
             <p className="lp-intro">
-              Antes da primeira linha de código, o sistema que uma barbearia de Salvador usava foi
-              analisado por inteiro. Seis dos achados estão abaixo, com o que cada um custava no dia
-              e o que fazemos diferente.
+              Antes da primeira linha de código, doze problemas foram levantados dentro de uma
+              barbearia em funcionamento — com cronômetro, não com suposição. Eles não são de um
+              software: são o que se repete na categoria. Seis estão abaixo, com o que cada um
+              custa no dia e o que fazemos diferente.
             </p>
 
             <ul className="lp-achados">
               {ACHADOS.map((achado) => (
-                <li className="lp-achado" key={achado.codigo}>
-                  <p className="lp-achado__codigo tabular">{achado.codigo}</p>
+                <li className="lp-achado" key={achado.area}>
+                  <p className="lp-achado__codigo">{achado.area}</p>
                   <div className="lp-achado__corpo">
                     <p className="lp-achado__problema">{achado.problema}</p>
                     <p className="lp-achado__efeito">{achado.efeito}</p>
