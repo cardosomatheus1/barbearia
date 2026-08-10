@@ -12,6 +12,8 @@
     }
   },
   "scripts": {
+    "//postinstall": "O cliente do Prisma é gerado, nunca versionado (packages/db/prisma/generated fica no .gitignore). Sem isto, um clone novo falha no primeiro build com \"Module '@prisma/client' has no exported member 'PrismaClient'\" — erro que parece dependência quebrada e é geração que faltou. Achado ao testar o zip numa pasta limpa.",
+    "postinstall": "prisma generate --schema prisma/schema.prisma",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "db:pull": "prisma db pull --schema prisma/schema.prisma",
