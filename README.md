@@ -43,8 +43,22 @@ role restrito, aplica as migrações, sorteia os segredos que a aplicação exig
 (e recusa default para), constrói tudo, semeia uma barbearia de demonstração
 com o dia já acontecendo e sobe API, worker e web. Ctrl+C derruba os três.
 
-No fim ele imprime o endereço da página do cliente, o do painel e as
-credenciais. Rodar de novo reaproveita o banco; `--zerar` recomeça limpo.
+No fim ele imprime os endereços e as credenciais:
+
+| Entrar como | E-mail | Senha |
+|---|---|---|
+| dono | `teste@teste.com` | `testeteste` |
+| barbeiro (tela própria, `/admin/meu-dia`) | `barbeiro@teste.com` | `testeteste` |
+
+A senha tem dez caracteres porque `MIN_PASSWORD` são dez no domínio, e o
+e-mail tem formato de e-mail porque o login valida isso na borda — a
+demonstração não é motivo para afrouxar nenhum dos dois.
+
+As telas de dinheiro exigem segundo fator, que o script liga e cujo segredo ele
+imprime: cadastre num aplicativo autenticador para abrir caixa, comanda, fiado
+e comissão.
+
+Rodar de novo reaproveita o banco; `--zerar` recomeça limpo.
 
 | Precisa de | Onde conseguir |
 |---|---|
