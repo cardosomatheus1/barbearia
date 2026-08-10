@@ -170,6 +170,34 @@ export default async function OnboardingPage({ searchParams }: Props) {
               </p>
             </div>
           </div>
+          {/**
+            * Telefone e WhatsApp, que faltavam desde o bloco 4.
+            *
+            * A página pública desenha um botão de ligar desde então, e o número
+            * saía sempre nulo: `locations.phone_e164` existia, a API aceitava o
+            * campo e **nenhuma tela o preenchia**. Botão de ligar sem número é
+            * pior que botão nenhum — o cliente aperta e não acontece nada.
+            *
+            * Fixo é aceito aqui e recusado no cadastro do cliente, e é de
+            * propósito: o do cliente recebe o código de acesso.
+            */}
+          <div className="campos-lado">
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="phone">
+                Telefone <span className="ui-field__opcional">(opcional)</span>
+              </label>
+              <input className="ui-field__input" id="phone" inputMode="tel" maxLength={24}
+                     name="phone" placeholder="(71) 3333-4444" type="tel" />
+              <p className="ui-field__hint">Aparece na página como botão de ligar. Fixo serve.</p>
+            </div>
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="whatsapp">
+                WhatsApp <span className="ui-field__opcional">(opcional)</span>
+              </label>
+              <input className="ui-field__input" id="whatsapp" inputMode="tel" maxLength={24}
+                     name="whatsapp" placeholder="(71) 99999-0000" type="tel" />
+            </div>
+          </div>
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="instagram">Instagram</label>
             <input className="ui-field__input" id="instagram" name="instagram" maxLength={80}

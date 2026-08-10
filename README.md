@@ -30,7 +30,36 @@ integridade do banco.
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der
 dependência ao core, importar algo externo nele ou usar `Date.now()` na lógica.
 
-## Rodando
+## Rodando o produto
+
+Um comando, do zero:
+
+```bash
+scripts/rodar-local.sh
+```
+
+Ele confere Node, pnpm e Postgres, instala as dependências, cria o banco e o
+role restrito, aplica as migrações, sorteia os segredos que a aplicação exige
+(e recusa default para), constrói tudo, semeia uma barbearia de demonstração
+com o dia já acontecendo e sobe API, worker e web. Ctrl+C derruba os três.
+
+No fim ele imprime o endereço da página do cliente, o do painel e as
+credenciais. Rodar de novo reaproveita o banco; `--zerar` recomeça limpo.
+
+| Precisa de | Onde conseguir |
+|---|---|
+| Node 22+ | <https://nodejs.org> |
+| pnpm | `corepack enable` |
+| PostgreSQL 16+, com `pgcrypto`, `citext` e `btree_gist` | `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16` |
+
+Sem Postgres de pé o script explica como subir um e para — em vez de falhar
+adiante com "Connection refused", que não diz o que fazer.
+
+Os segredos vão para `.env.local`, fora do Git. **Apagar esse arquivo obriga a
+recriar o banco**: o índice de login é um HMAC com o `STAFF_EMAIL_PEPPER`, e
+trocá-lo invalida as contas existentes.
+
+### Rodando os testes
 
 ```bash
 pnpm install

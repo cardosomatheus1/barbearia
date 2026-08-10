@@ -103,6 +103,55 @@ function normalizeBrazil(digits: string): string {
   return `+55${areaCode.toString().padStart(2, '0')}${subscriber}`;
 }
 
+/**
+ * O telefone **da barbearia**, que pode ser fixo.
+ *
+ * `normalizePhone` recusa fixo de propósito: ele valida o telefone do
+ * **cliente**, que é a identidade dele no produto — recebe o código de acesso e
+ * é a chave de deduplicação. Fixo não recebe SMS nem WhatsApp, e aceitá-lo ali
+ * criaria cadastro que nunca consegue entrar.
+ *
+ * O da barbearia é outra coisa: é o número que a página pública publica para o
+ * cliente ligar, e metade das barbearias tem fixo. Recusá-lo obrigaria o dono a
+ * publicar o celular pessoal ou a não publicar nada.
+ *
+ * Duas funções e não um parâmetro booleano: quem chama a errada em cima do
+ * cliente cria o defeito silencioso: um `true` esquecido não se lê na chamada,
+ * e o nome se lê.
+ */
+export function normalizeBusinessPhone(input: string, defaultCountry = '55'): string {
+  const tentativa = tryNormalizePhone(input, defaultCountry);
+  if (tentativa.ok) return tentativa.phone;
+  if (tentativa.code !== 'invalid_br_subscriber') throw new InvalidPhoneError(tentativa.code);
+
+  // Só o que foi recusado por não ser celular volta a ser examinado. Erro de
+  // DDD, de tamanho e de caractere continuam sendo erro.
+  const digits = input.trim().replace(/\D/g, '').replace(/^0+/, '');
+  const nacional = digits.startsWith('55') ? digits.slice(2) : digits;
+  const areaCode = Number(nacional.slice(0, 2));
+  const assinante = nacional.slice(2);
+
+  // Fixo no Brasil: oito dígitos começando em 2, 3, 4 ou 5. O 5 é raro e
+  // legítimo, e deixá-lo de fora recusaria número de verdade.
+  if (!BR_AREA_CODES.has(areaCode) || assinante.length !== 8 || !'2345'.includes(assinante[0] ?? '')) {
+    throw new InvalidPhoneError('invalid_br_subscriber');
+  }
+  return `+55${areaCode.toString().padStart(2, '0')}${assinante}`;
+}
+
+/** Versão que não lança — para validação em formulário. */
+export function tryNormalizeBusinessPhone(
+  input: string,
+  defaultCountry = '55',
+): { ok: true; phone: string } | { ok: false; code: PhoneError } {
+  try {
+    return { ok: true, phone: normalizeBusinessPhone(input, defaultCountry) };
+  } catch (error) {
+    if (error instanceof InvalidPhoneError) return { ok: false, code: error.code };
+    throw error;
+  }
+}
+
 /** Versão que não lança — para validação em formulário. */
 export function tryNormalizePhone(
   input: string,

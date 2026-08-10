@@ -43,7 +43,7 @@ seção [Escopo recomendado](#escopo-recomendado) antes de tratá-lo como plano.
 
 Não é bloco: é conserto do que o portão inteiro deixou passar, e a razão de o
 `CLAUDE.md` ter ganhado a [§6](CLAUDE.md#6-regra-de-negócio-e-coerência-do-fluxo).
-Nove defeitos, todos com teste verde antes e todos invisíveis a qualquer teste
+Dez defeitos, todos com teste verde antes e todos invisíveis a qualquer teste
 de tela — porque cada tela, sozinha, era coerente:
 
 | O que estava errado | O conserto |
@@ -56,6 +56,7 @@ de tela — porque cada tela, sozinha, era coerente:
 | Abrir a comanda do mesmo atendimento duas vezes esbarrava em `orders_uma_aberta_por_agendamento` e virava **500**: a tela dizia "tente de novo" e tentar de novo dava o mesmo erro para sempre. A comanda existia e não havia caminho até ela | `abrirComanda` devolve a que já está aberta. O índice dizia desde o bloco 18 que é uma só; faltava a outra metade da regra. A corrida também: a violação de unicidade vira leitura numa transação nova |
 | Encerrado o corte, o cartão do dia ficava **sem saída** — receber exigia ir a Dinheiro → Cobrar e procurar a mesma pessoa numa segunda lista, montada pela **mesma** consulta e pelos **mesmos** dois estados | "Cobrar" no cartão, escondido de quem não tem `cashier.open`. E a definição de "cobrável" saiu das duas telas para `ESTADOS_COBRAVEIS`, em `core`: escrita nas duas, bastava mexer numa para elas discordarem sem nada ficar vermelho |
 | A agenda mostrava estado de operação ("Na cadeira", "Atendido") e não oferecia nada além de "Mover" | link "Ver no dia" no cartão. Link, e não os botões de atendimento: a máquina de estados fica em uma tela só — duplicá-la é como as transições ganharam três nomes |
+| A página pública desenha um botão de ligar desde o bloco 4, e o número era **sempre nulo**: `locations.phone_e164` existia, a API aceitava `phone`/`whatsapp` e nenhuma tela os preenchia. Achado ao escrever `scripts/rodar-local.sh` — o semeador foi o primeiro cliente a mandar o campo | os dois campos entraram na etapa 2 do onboarding. E o valor passa a ser normalizado **na borda**: `(71) 3333-4444` batia na `CHECK` de E.164 e virava **500 "Erro interno"** — entrada externa inválida é 400 com motivo. Fixo é aceito aqui e recusado no cadastro do cliente, porque o do cliente recebe o código de acesso |
 | A tela de comissão dizia **"Comissão"** para os dois lados do mesmo dinheiro. O dono abre para saber quanto **paga**, o barbeiro para saber quanto **recebe**, e quem tem as duas contas não tinha como saber qual estava na tela | "Comissão da equipe" e "Minha comissão", com o subtítulo dizendo o que o número é. Os dados sempre estiveram certos — a API já recorta pelo `commission.view_all` |
 
 ## Lacunas com dependência declarada

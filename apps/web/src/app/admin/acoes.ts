@@ -191,6 +191,8 @@ export async function acaoEmpresa(form: FormData): Promise<void> {
     ...(texto(form, 'district') ? { district: texto(form, 'district') } : {}),
     ...(texto(form, 'city') ? { city: texto(form, 'city') } : {}),
     ...(texto(form, 'state') ? { state: texto(form, 'state').toUpperCase() } : {}),
+    ...(texto(form, 'phone') ? { phone: texto(form, 'phone') } : {}),
+    ...(texto(form, 'whatsapp') ? { whatsapp: texto(form, 'whatsapp') } : {}),
     ...(texto(form, 'instagram') ? { instagram: texto(form, 'instagram') } : {}),
     ...(texto(form, 'about') ? { about: texto(form, 'about') } : {}),
     // O fuso vem da unidade, nunca do aparelho de quem visita — é aqui, e só

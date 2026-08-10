@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tryNormalizeBusinessPhone } from '@barbearia/core';
 import { AMENITIES, PAYMENT_METHODS } from '@barbearia/onboarding';
 
 /**
@@ -10,6 +11,27 @@ import { AMENITIES, PAYMENT_METHODS } from '@barbearia/onboarding';
  */
 
 const minutos = z.number().int().min(0).max(1440);
+
+/**
+ * Telefone de contato da barbearia: entra como a pessoa escreve, sai em E.164.
+ *
+ * Vazio vira `undefined` em vez de erro — apagar o número é uma edição
+ * legítima, e um campo em branco no formulário não é entrada inválida.
+ */
+const contatoDaBarbearia = z
+  .string()
+  .trim()
+  .max(24)
+  .optional()
+  .transform((valor, ctx) => {
+    if (!valor) return undefined;
+    const normalizado = tryNormalizeBusinessPhone(valor);
+    if (!normalizado.ok) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `telefone inválido: ${normalizado.code}` });
+      return z.NEVER;
+    }
+    return normalizado.phone;
+  });
 
 export const signUpSchema = z.object({
   name: z.string().trim().min(3).max(80),
@@ -34,8 +56,20 @@ export const businessSchema = z.object({
   postalCode: z.string().trim().max(12).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
-  phone: z.string().trim().max(20).optional(),
-  whatsapp: z.string().trim().max(20).optional(),
+  /**
+   * O contato da barbearia, normalizado **aqui** e não no banco.
+   *
+   * `locations.phone_e164` tem `CHECK` de formato E.164, e o que chegava era o
+   * que o cliente mandasse: `(71) 3333-4444` — a forma como todo mundo escreve
+   * — passava pelo `max(20)`, batia na constraint e virava **500 "Erro
+   * interno"**. Entrada externa inválida tem que ser recusada na borda, com o
+   * motivo; deixar o banco recusar transforma erro do usuário em erro do
+   * servidor, e some do log como se fosse defeito nosso.
+   *
+   * `normalizeBusinessPhone` e não `normalizePhone`: aqui o fixo é legítimo.
+   */
+  phone: contatoDaBarbearia,
+  whatsapp: contatoDaBarbearia,
   instagram: z.string().trim().max(80).optional(),
   about: z.string().trim().max(600).optional(),
   // O fuso vem da unidade, nunca do dispositivo (CLAUDE.md §2). Aqui ele é

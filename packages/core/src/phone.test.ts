@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidPhoneError, maskPhone, normalizePhone, tryNormalizePhone } from './phone.js';
+import {
+  InvalidPhoneError,
+  maskPhone,
+  normalizeBusinessPhone,
+  normalizePhone,
+  tryNormalizeBusinessPhone,
+  tryNormalizePhone,
+} from './phone.js';
 
 describe('normalizePhone — Brasil', () => {
   it('normaliza as formas que o cliente digita', () => {
@@ -78,6 +85,67 @@ describe('normalizePhone — entrada hostil', () => {
   it('é idempotente', () => {
     const once = normalizePhone('(71) 98888-7777');
     expect(normalizePhone(once)).toBe(once);
+  });
+});
+
+describe('normalizeBusinessPhone — o telefone da barbearia', () => {
+  it('aceita fixo, que é o que metade das barbearias tem', () => {
+    /**
+     * O motivo é concreto: a página pública desenha um botão de ligar, e
+     * recusar fixo obrigaria o dono a publicar o celular pessoal ou a não
+     * publicar número nenhum.
+     */
+    expect(normalizeBusinessPhone('(71) 3333-4444')).toBe('+557133334444');
+    expect(normalizeBusinessPhone('71 2555 1000')).toBe('+557125551000');
+    expect(normalizeBusinessPhone('+55 11 4004-0001')).toBe('+551140040001');
+    // 5 é faixa rara e legítima; deixá-la de fora recusaria número de verdade.
+    expect(normalizeBusinessPhone('(11) 5555-1234')).toBe('+551155551234');
+  });
+
+  it('continua aceitando celular, com e sem o nono dígito', () => {
+    expect(normalizeBusinessPhone('(71) 98888-7777')).toBe('+5571988887777');
+    expect(normalizeBusinessPhone('71 8888-7777')).toBe('+5571988887777');
+  });
+
+  it('o telefone do cliente continua recusando fixo', () => {
+    // São duas funções e não um parâmetro porque a diferença é de propósito: o
+    // do cliente recebe o código de acesso, e fixo não recebe.
+    expect(tryNormalizePhone('(71) 3333-4444')).toEqual({
+      ok: false,
+      code: 'invalid_br_subscriber',
+    });
+  });
+
+  it('erro que não é "não é celular" continua sendo erro', () => {
+    // A segunda passada só reexamina o que foi recusado por não ser celular.
+    // Sem isso, DDD inexistente entraria pela porta do fixo.
+    expect(tryNormalizeBusinessPhone('(23) 3333-4444')).toEqual({
+      ok: false,
+      code: 'invalid_br_area_code',
+    });
+    expect(tryNormalizeBusinessPhone('713333')).toEqual({ ok: false, code: 'too_short' });
+    expect(tryNormalizeBusinessPhone('abc')).toEqual({ ok: false, code: 'invalid_characters' });
+    expect(tryNormalizeBusinessPhone('')).toEqual({ ok: false, code: 'empty' });
+  });
+
+  it('recusa o que não é nem fixo nem celular', () => {
+    // Oito dígitos com DDD válido, começando em 1: não é faixa de celular
+    // (6789) nem de fixo (2345). Tem o tamanho certo e não existe.
+    expect(tryNormalizeBusinessPhone('(71) 1234-5678')).toEqual({
+      ok: false,
+      code: 'invalid_br_subscriber',
+    });
+  });
+
+  it('o que sai daqui cabe no CHECK do banco', () => {
+    // `locations_phone_format` é `^\\+[1-9][0-9]{7,14}$`. Foi ele que devolveu
+    // 500 quando a borda não normalizava — o teste existe para que a borda e a
+    // constraint não voltem a discordar.
+    const doBanco = /^\+[1-9][0-9]{7,14}$/;
+    for (const entrada of ['(71) 3333-4444', '(71) 98888-7777', '+1 415 555 2671']) {
+      const saida = normalizeBusinessPhone(entrada);
+      expect(doBanco.test(saida), `${entrada} -> ${saida}`).toBe(true);
+    }
   });
 });
 

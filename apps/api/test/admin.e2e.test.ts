@@ -100,6 +100,49 @@ describeIfDb('painel do gestor', () => {
     return { token: entrou.body.token, slug: entrou.body.slug };
   }
 
+  it('telefone como a pessoa escreve entra normalizado, e o inválido é 400', async () => {
+    /**
+     * `locations_phone_format` exige E.164, e a borda deixava passar o que
+     * viesse: `(71) 3333-4444` — a forma como todo mundo escreve — batia na
+     * constraint e virava **500 "Erro interno"**. Entrada externa inválida é
+     * 400 com motivo; 500 diz que o defeito é nosso e some do log como tal.
+     */
+    const { token } = await criarConta();
+    // Publica antes: `percorrer` grava a empresa de novo, e o campo ausente
+    // apaga o telefone — é `phone_e164 = input.phone ?? null`.
+    const slug = await percorrer(token);
+
+    await http()
+      .put('/v1/admin/business')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Domari Barber Club',
+        timezone: 'America/Bahia',
+        phone: '(71) 3333-4444',
+        whatsapp: '71 98888-7777',
+      })
+      .expect(200);
+
+    const perfil = await http().get(`/v1/b/${slug}`).expect(200);
+    expect(perfil.body.location.phone).toBe('+557133334444');
+    expect(perfil.body.location.whatsapp).toBe('+5571988887777');
+
+    // O caminho triste, e é ele que era 500.
+    const recusado = await http()
+      .put('/v1/admin/business')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Domari Barber Club', phone: '(23) 0000-0000' })
+      .expect(400);
+    expect(recusado.body.error.code).toBe('invalid_request');
+
+    // Apagar o número é edição legítima, não entrada inválida.
+    await http()
+      .put('/v1/admin/business')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Domari Barber Club', phone: '' })
+      .expect(200);
+  });
+
   /** Percorre as seis etapas e devolve o slug publicado. */
   async function percorrer(token: string): Promise<string> {
     await http()
