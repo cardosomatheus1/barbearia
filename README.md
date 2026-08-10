@@ -64,6 +64,22 @@ O `.devcontainer/` já traz Node 22, pnpm, o cliente do Postgres e um
 PostgreSQL 16 ao lado. A conta gratuita do GitHub inclui horas de Codespaces
 por mês.
 
+Os formulários funcionam pelo endereço encaminhado sem ajuste nenhum, e isso
+não é de graça: o Next recusa Server Action cujo `origin` não bate com o `host`
+da requisição — é a conferência dele contra CSRF —, e atrás de encaminhamento
+de porta os dois **nunca** batem. Sem tratamento, as páginas abrem e o produto
+inteiro para no primeiro botão, com "Application error: a server-side exception
+has occurred". Quem trata é `apps/web/src/middleware.ts`, alinhando os dois
+cabeçalhos **só** para os endereços declarados na construção — o deste
+Codespaces sai das variáveis que o próprio ambiente exporta.
+
+Para outro proxy — um túnel, um domínio próprio, um Nginx na frente —, declare
+o endereço **antes de construir**, porque a lista é congelada no build:
+
+```bash
+WEB_ORIGENS_PERMITIDAS="https://meu.dominio" scripts/rodar-local.sh
+```
+
 ### Com Docker, em qualquer sistema
 
 ```bash

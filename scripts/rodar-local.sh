@@ -57,7 +57,11 @@ erro()   { printf '\n\033[31m%s\033[0m\n' "$1" >&2; }
 BANCO="${BARBEARIA_DB:-barbearia_local}"
 ENV_LOCAL=".env.local"
 PORTA_API="${PORT:-3000}"
-PORTA_WEB="${PORTA_WEB:-3001}"
+# Exportada, e não só usada aqui: o `next.config.mjs` compõe com ela o endereço
+# encaminhado do Codespaces, para liberar as Server Actions daquele host. Sem o
+# export, subir numa porta diferente devolveria o erro que a configuração existe
+# para evitar.
+export PORTA_WEB="${PORTA_WEB:-3001}"
 
 # ---------------------------------------------------------------------------
 # 1. Pré-requisitos
