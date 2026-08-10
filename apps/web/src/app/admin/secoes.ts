@@ -111,6 +111,16 @@ const MODULO_DA_SECAO = new Map<string, Modulo>(
  * `/admin/meu-dia` mostrava a lista errada com nenhum módulo aceso. Cinco telas
  * estavam assim, por dois blocos, sem ninguém notar.
  */
+/**
+ * A qual módulo uma seção pertence.
+ *
+ * O casco já a usa por CSS; esta porta existe para o teste que confere se cada
+ * módulo tem destino, sem reimplementar o mapa.
+ */
+export function moduloDaSecao(nome: Secao): Modulo | undefined {
+  return MODULO_DA_SECAO.get(nome);
+}
+
 export function secao(nome: Secao): {
   readonly 'data-secao': string;
   readonly 'data-modulo-atual': Modulo;

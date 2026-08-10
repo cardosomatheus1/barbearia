@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { ROTULO_DO_ESTADO } from '@barbearia/core';
 import type { Metadata } from 'next';
 import {
   agendaDoAdmin,
@@ -73,13 +74,15 @@ const NOME_DO_TIPO: Record<TipoDeExcecao, string> = {
   custom_hours: 'Horário diferente',
 };
 
-const ESTADO: Record<string, string> = {
-  pending: 'a confirmar',
-  confirmed: 'confirmado',
-  checked_in: 'chegou',
-  waiting: 'esperando',
-  in_progress: 'atendendo',
-};
+/**
+ * O mesmo rótulo do balcão, vindo de `packages/core`.
+ *
+ * Esta tela escrevia "chegou / esperando / atendendo" em minúscula, enquanto o
+ * balcão dizia "Chegou / Aguardando / Em atendimento" — três palavras
+ * diferentes para os mesmos três estados, na mesma barbearia, muitas vezes na
+ * mesma hora.
+ */
+const ESTADO = ROTULO_DO_ESTADO;
 
 function Excecao({
   excecao,

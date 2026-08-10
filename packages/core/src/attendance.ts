@@ -10,28 +10,41 @@
  * morria `pending`.
  */
 
-export type AppointmentStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'checked_in'
-  | 'waiting'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled_customer'
-  | 'cancelled_business'
-  | 'no_show'
-  | 'rescheduled';
+/**
+ * Lista fechada, e não só um tipo.
+ *
+ * Estado novo precisa ganhar rótulo em `vocabulario.ts`, e o teste que cobra
+ * isso precisa de algo para percorrer. Um tipo sozinho some em tempo de
+ * execução, e o rótulo faltando viraria `undefined` na tela.
+ */
+export const STATUSES = [
+  'pending',
+  'confirmed',
+  'checked_in',
+  'waiting',
+  'in_progress',
+  'completed',
+  'cancelled_customer',
+  'cancelled_business',
+  'no_show',
+  'rescheduled',
+] as const;
 
-/** O que o balcão pode fazer com um atendimento. */
-export type AttendanceAction =
-  | 'confirm'
-  | 'check_in'
-  | 'wait'
-  | 'start'
-  | 'complete'
-  | 'no_show'
-  | 'undo_no_show'
-  | 'cancel';
+export type AppointmentStatus = (typeof STATUSES)[number];
+
+/** O que o balcão pode fazer com um atendimento. Fechada, pelo mesmo motivo. */
+export const ACOES = [
+  'confirm',
+  'check_in',
+  'wait',
+  'start',
+  'complete',
+  'no_show',
+  'undo_no_show',
+  'cancel',
+] as const;
+
+export type AttendanceAction = (typeof ACOES)[number];
 
 /**
  * Transições permitidas, por estado de origem.

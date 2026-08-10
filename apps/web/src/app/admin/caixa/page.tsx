@@ -5,7 +5,6 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirCaixa, acaoFecharCaixa, acaoMovimentarCaixa, acaoSair } from '../acoes';
-import { BalcaoNav } from '../balcao-nav';
 import { secao } from '../secoes';
 
 /**
@@ -166,7 +165,6 @@ export default async function CaixaPage({ searchParams }: Props) {
   return (
     <main className="ui-container painel__conteudo" {...secao('caixa')}>
       {topo}
-      <BalcaoNav atual="/admin/caixa" />
 
       <h1 className="painel__titulo">Caixa</h1>
 

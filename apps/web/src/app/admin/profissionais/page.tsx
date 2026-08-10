@@ -26,7 +26,6 @@ import {
   acaoSalvarJornada,
   acaoSalvarProfissional,
 } from '../acoes';
-import { CadastroNav } from '../cadastro-nav';
 import { secao } from '../secoes';
 
 /**
@@ -558,8 +557,6 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
           </button>
         </form>
       </header>
-
-      <CadastroNav atual="/admin/profissionais" />
 
       <h1 className="painel__titulo">Equipe e jornadas</h1>
       <p className="painel__sub">

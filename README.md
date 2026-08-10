@@ -13,7 +13,7 @@ integridade do banco.
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão (com a taxa do adquirente), permissões e a régua de cobrança — lógica pura, sem banco e sem relógio | 583 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão (com a taxa do adquirente), permissões, o vocabulário das transições e a régua de cobrança — lógica pura, sem banco e sem relógio | 596 testes ✅ |
 | `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 186 invariantes + 10 testes ✅ |
 | `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
 | `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | 137 testes ✅ |

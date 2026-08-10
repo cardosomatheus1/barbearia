@@ -5,7 +5,6 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoReceberFiado, acaoSair } from '../acoes';
-import { BalcaoNav } from '../balcao-nav';
 import { secao } from '../secoes';
 
 /**
@@ -147,7 +146,6 @@ export default async function FiadoPage({ searchParams }: Props) {
   return (
     <main className="ui-container painel__conteudo" {...secao('fiado')}>
       {topo}
-      <BalcaoNav atual="/admin/fiado" />
 
       <h1 className="painel__titulo">Fiado</h1>
 

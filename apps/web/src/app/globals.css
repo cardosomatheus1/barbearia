@@ -3678,7 +3678,12 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
 .casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
 .casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca'],
-.casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes'] {
+.casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes'],
+/* `lgpd` e `plano` entraram no registro e ficaram fora desta lista: duas telas
+   em que o gestor não sabia onde estava, com o teste verde porque ele também
+   tinha uma lista escrita à mão. O teste agora deriva do registro. */
+.casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
+.casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
@@ -5506,4 +5511,54 @@ main { padding-bottom: var(--space-8); }
   .aliquotas__nome {
     align-self: center;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Nas cadeiras agora (correção de fluxo, depois do bloco 36)
+
+   A pergunta que a recepção faz o dia inteiro, e a única que o painel não
+   respondia. Faixa no topo, antes do resumo: quem está sendo atendido não pode
+   estar espalhado na ordem do relógio, porque quem procura essa informação
+   procura **agora**, não às 14h37.
+
+   Rola na horizontal dentro de si — cinco cadeiras não cabem em 360px, e a
+   página nunca rola junto.
+   --------------------------------------------------------------------------- */
+.cadeiras-agora {
+  margin-top: var(--space-4);
+}
+.cadeiras-agora__hora {
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.cadeiras-agora__lista {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  /* Item de grade que rola precisa poder encolher: sem isto ele adota a largura
+     do conteúdo e leva a página junto — o defeito que o piso do projeto proíbe. */
+  min-width: 0;
+}
+.cadeiras-agora__item {
+  display: grid;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  min-width: 11rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.cadeiras-agora__quem {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.cadeiras-agora__barbeiro,
+.cadeiras-agora__tempo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }

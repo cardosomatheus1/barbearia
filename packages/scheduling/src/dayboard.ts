@@ -59,6 +59,8 @@ export interface BoardEntry {
   readonly priceCents: number;
   /** Quanto o atendimento levou de fato. Nulo enquanto não terminou. */
   readonly realDurationMinutes: number | null;
+  /** Há quantos minutos está na cadeira. Só para `in_progress`. */
+  readonly elapsedMinutes: number | null;
   /** Há quanto tempo esta pessoa está esperando, em minutos. */
   readonly waitingMinutes: number | null;
   readonly punctuality: Punctuality | null;
@@ -204,6 +206,25 @@ export async function getDayBoard(params: {
         services: linha.services,
         priceCents: linha.price_cents,
         realDurationMinutes: realDuration(linha.started_at, linha.completed_at),
+        /**
+         * Há quanto tempo esta pessoa está na cadeira (correção de fluxo, depois do bloco 36).
+         *
+         * `started_at` existe no schema desde a migração 0014, com o comentário
+         * "base da duração real" — e era **descartado antes de chegar à tela**:
+         * `realDuration` devolve nulo enquanto o atendimento não termina, e nada
+         * mais lia a coluna. O resultado é que a linha de quem estava sendo
+         * atendido era a única do painel sem nenhuma frase de contexto: o balcão
+         * via "Na cadeira" e não sabia se tinha começado há cinco ou há
+         * cinquenta minutos.
+         *
+         * É um instantâneo do momento da carga, e a tela diz isso — sem
+         * componente de cliente o número não anda sozinho. Fingir um cronômetro
+         * seria pior que não ter nenhum.
+         */
+        elapsedMinutes:
+          linha.status === 'in_progress' && linha.started_at
+            ? Math.max(0, Math.floor((now.getTime() - linha.started_at.getTime()) / 60000))
+            : null,
         waitingMinutes:
           aguardando && linha.checked_in_at
             ? Math.floor((now.getTime() - linha.checked_in_at.getTime()) / 60000)
@@ -330,6 +351,33 @@ export async function applyAttendance(params: {
         );
       }
       throw error;
+    }
+
+    /**
+     * O atendimento que termina **fecha a entrada da fila** (correção de fluxo, depois do bloco 36).
+     *
+     * Elas já nasciam ligadas: `seatQueueEntry` cria o atendimento e grava
+     * `queue_entries.appointment_id`. O que faltava era o outro lado — nada no
+     * produto escrevia `done`, então a entrada sumia da tela ao virar
+     * `in_service` e ficava viva para sempre.
+     *
+     * O preço disso não era teórico: "espera média" só conta entradas
+     * concluídas, então o número que a tela da fila promete **nunca aparecia**.
+     * Indicador que é sempre `—` é pior que indicador ausente — ele ocupa
+     * espaço prometendo uma resposta que não vem, e quem opera aprende a não
+     * olhar.
+     *
+     * Na mesma transação porque é o mesmo fato: se a venda terminou, a pessoa
+     * saiu da cadeira. Duas transações deixariam a fila contando alguém que já
+     * foi embora.
+     */
+    if (destino === 'completed' || destino === 'cancelled_business') {
+      await tx.$executeRaw`
+        UPDATE queue_entries
+           SET status = 'done', finished_at = ${now}, updated_at = now()
+         WHERE appointment_id = ${params.appointmentId}::uuid
+           AND status = 'in_service'
+      `;
     }
 
     return { status: destino };

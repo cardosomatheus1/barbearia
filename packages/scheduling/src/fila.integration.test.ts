@@ -8,6 +8,7 @@ import {
   queuePositionByToken,
   seatQueueEntry,
 } from './fila.js';
+import { applyAttendance } from './dayboard.js';
 
 /**
  * Fila presencial, contra Postgres real.
@@ -331,6 +332,89 @@ describeIfDb('fila presencial', () => {
     // A chegada é a hora em que entrou na fila, não a em que sentou: é o que
     // permite medir quanto a barbearia faz as pessoas esperarem.
     expect(linhas[0]?.checked_in_at?.toISOString()).toBe(AGORA.toISOString());
+  });
+
+  it('encerrar o atendimento fecha a entrada da fila', async () => {
+    /**
+     * As duas já nasciam ligadas — `seatQueueEntry` grava
+     * `queue_entries.appointment_id` —, mas nada no produto escrevia `done`. A
+     * entrada sumia da tela ao virar `in_service` e ficava viva para sempre.
+     */
+    const entrada = await entrar(CARLOS, RUAN);
+    const sentado = await seatQueueEntry({
+      tenantId: TENANT,
+      queueEntryId: entrada.id,
+      professionalId: RUAN,
+      now: AGORA,
+    });
+
+    await applyAttendance({
+      tenantId: TENANT,
+      appointmentId: sentado.appointmentId,
+      action: 'complete',
+      now: new Date(AGORA.getTime() + 30 * 60_000),
+    });
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string; finished_at: Date | null }[]>(
+      `SELECT status, finished_at FROM queue_entries WHERE id = '${entrada.id}'`,
+    );
+    expect(linhas[0]?.status).toBe('done');
+    expect(linhas[0]?.finished_at).not.toBeNull();
+  });
+
+  it('a espera média deixa de ser sempre "—"', async () => {
+    /**
+     * Ela só conta entradas concluídas. Sem nada escrevendo `done`, o número
+     * que a tela da fila promete **nunca aparecia** — indicador sempre vazio é
+     * pior que indicador ausente: ocupa espaço prometendo uma resposta que não
+     * vem, e quem opera aprende a não olhar.
+     */
+    const entrada = await entrar(CARLOS, RUAN);
+    const antes = await fila();
+    expect(antes.totals.esperaMediaMinutos).toBeNull();
+
+    const sentado = await seatQueueEntry({
+      tenantId: TENANT,
+      queueEntryId: entrada.id,
+      professionalId: RUAN,
+      // Vinte minutos depois de entrar na fila: é essa a espera medida.
+      now: new Date(AGORA.getTime() + 20 * 60_000),
+    });
+    await applyAttendance({
+      tenantId: TENANT,
+      appointmentId: sentado.appointmentId,
+      action: 'complete',
+      now: new Date(AGORA.getTime() + 50 * 60_000),
+    });
+
+    const depois = await fila();
+    expect(depois.totals.esperaMediaMinutos).toBe(20);
+    // E ela sai da contagem de quem está na cadeira.
+    expect(depois.totals.atendendo).toBe(0);
+  });
+
+  it('cancelar o atendimento também libera a cadeira na fila', async () => {
+    // O cliente que senta e desiste no meio existe. Sem isto, a cadeira ficaria
+    // ocupada no cálculo da fila por alguém que já foi embora.
+    const entrada = await entrar(CARLOS, RUAN);
+    const sentado = await seatQueueEntry({
+      tenantId: TENANT,
+      queueEntryId: entrada.id,
+      professionalId: RUAN,
+      now: AGORA,
+    });
+
+    await applyAttendance({
+      tenantId: TENANT,
+      appointmentId: sentado.appointmentId,
+      action: 'cancel',
+      now: new Date(AGORA.getTime() + 5 * 60_000),
+    });
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status FROM queue_entries WHERE id = '${entrada.id}'`,
+    );
+    expect(linhas[0]?.status).toBe('done');
   });
 
   it('sentar em cima de quem marcou é recusado pelo banco, não por um if', async () => {

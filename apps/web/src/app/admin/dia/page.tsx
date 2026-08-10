@@ -1,4 +1,11 @@
 import { redirect } from 'next/navigation';
+import {
+  ACAO_PRINCIPAL,
+  ACOES_PESADAS,
+  ROTULO_DO_ESTADO,
+  VERBO_DA_ACAO,
+} from '@barbearia/core';
+
 import type { Metadata } from 'next';
 import {
   painelDoDia,
@@ -44,55 +51,18 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-/** O que cada estado significa para quem está no balcão. */
-const RÓTULO: Record<LinhaDoDia['status'], string> = {
-  pending: 'Marcado',
-  confirmed: 'Confirmado',
-  checked_in: 'Chegou',
-  waiting: 'Aguardando',
-  in_progress: 'Em atendimento',
-  completed: 'Concluído',
-  cancelled_customer: 'Cancelado pelo cliente',
-  cancelled_business: 'Cancelado pela casa',
-  no_show: 'Faltou',
-  rescheduled: 'Remarcado',
-};
-
 /**
- * O texto do botão é o que vai acontecer, não o nome do estado.
+ * O vocabulário vem de `packages/core`, e não daqui.
  *
- * "Chegou" e não "check-in": quem opera descreve o cliente, não o sistema.
+ * Ele era escrito em cada tela, e o resultado é que a mesma transição tinha três
+ * nomes no mesmo produto: **Iniciar** aqui, **Começar** na tela do barbeiro e
+ * **Sentou** na fila. Quando a recepção diz "já iniciei o Ruan" e o barbeiro
+ * procura "Começar", o treinamento vira folclore.
  */
-const AÇÃO: Record<AcaoAtendimento, string> = {
-  confirm: 'Confirmar',
-  check_in: 'Chegou',
-  wait: 'Mandar esperar',
-  start: 'Iniciar',
-  complete: 'Concluir',
-  no_show: 'Faltou',
-  undo_no_show: 'Não faltou',
-  cancel: 'Cancelar',
-};
-
-/**
- * A ação em destaque de cada estado.
- *
- * Uma só, e sempre a que a recepção mais aperta naquele momento. `no_show` e
- * `cancel` nunca são primárias: são decisões que tiram dinheiro da casa e não
- * devem ser o botão mais fácil de acertar sem querer.
- */
-const PRINCIPAL: Partial<Record<LinhaDoDia['status'], AcaoAtendimento>> = {
-  pending: 'check_in',
-  confirmed: 'check_in',
-  checked_in: 'start',
-  waiting: 'start',
-  in_progress: 'complete',
-  // `no_show` fica sem ação em destaque de propósito: a linha já saiu do dia, e
-  // desfazer é conserto de engano, não o próximo passo de ninguém.
-};
-
-/** Ações que tiram dinheiro da casa. Nunca em destaque, sempre distinguíveis. */
-const PESADA: ReadonlySet<AcaoAtendimento> = new Set(['no_show', 'cancel']);
+const RÓTULO = ROTULO_DO_ESTADO;
+const AÇÃO = VERBO_DA_ACAO;
+const PRINCIPAL = ACAO_PRINCIPAL;
+const PESADA = ACOES_PESADAS;
 
 const FALHA: Record<string, string> = {
   transition_not_allowed:
@@ -110,6 +80,22 @@ function situacao(linha: LinhaDoDia, toleranciaMinutos: number): string | null {
       : `Esperando há ${linha.waitingMinutes} min`;
   }
   if (linha.realDurationMinutes !== null) return `Levou ${linha.realDurationMinutes} min`;
+  /**
+   * Há quanto tempo está na cadeira.
+   *
+   * Era a única linha do painel sem frase de contexto: o balcão via "Na
+   * cadeira" e não sabia se tinha começado há cinco ou há cinquenta minutos —
+   * que é a pergunta que ele faz o dia inteiro para responder "cabe um
+   * encaixe?".
+   *
+   * O dado estava no banco desde a migração 0014 e era descartado antes de
+   * chegar aqui.
+   */
+  if (linha.elapsedMinutes !== null) {
+    return linha.elapsedMinutes < 1
+      ? 'Começou agora'
+      : `Na cadeira há ${linha.elapsedMinutes} min`;
+  }
 
   const p = linha.punctuality;
   if (!p) return null;
@@ -165,6 +151,51 @@ function tom(linha: LinhaDoDia): string {
 }
 
 /**
+ * Quem está na cadeira agora, e há quanto tempo.
+ *
+ * A pergunta que a recepção faz o dia inteiro — "cabe um encaixe?" — e a única
+ * que o painel não respondia. As linhas `in_progress` ficavam misturadas na
+ * ordem do relógio, então um walk-in que sentou às 14h37 aparecia no meio da
+ * manhã, e nenhuma delas dizia há quanto tempo.
+ *
+ * **O número não anda.** Sem componente de cliente ele é o instantâneo da
+ * carga, e a faixa diz isso em vez de fingir um cronômetro — um contador que
+ * parece contar e não conta é pior que nenhum. Um que conta de verdade é o
+ * primeiro JavaScript do admin, e essa decisão tem bloco próprio.
+ */
+function NasCadeiras({
+  linhas,
+  hora,
+}: {
+  readonly linhas: readonly LinhaDoDia[];
+  readonly hora: string;
+}) {
+  const naCadeira = linhas.filter((l) => l.status === 'in_progress');
+  if (naCadeira.length === 0) return null;
+
+  return (
+    <section className="cadeiras-agora" aria-labelledby="cadeiras-agora">
+      <h2 className="rotulo" id="cadeiras-agora">
+        Nas cadeiras agora <span className="cadeiras-agora__hora">· visto às {hora}</span>
+      </h2>
+      <ul className="cadeiras-agora__lista ui-scroll-x">
+        {naCadeira.map((linha) => (
+          <li className="cadeiras-agora__item" key={linha.id}>
+            <span className="cadeiras-agora__quem">{linha.customerName ?? 'Sem cadastro'}</span>
+            <span className="cadeiras-agora__barbeiro">{linha.professionalName}</span>
+            <span className="cadeiras-agora__tempo tabular">
+              {linha.elapsedMinutes === null || linha.elapsedMinutes < 1
+                ? 'começou agora'
+                : `há ${linha.elapsedMinutes} min`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
  * O resumo do dia — contagem, nunca dinheiro.
  *
  * Havia aqui um sexto número, "realizado", que mostrava **R$ NaN** desde o
@@ -177,11 +208,18 @@ function tom(linha: LinhaDoDia): string {
  * dia está em `/admin/painel`, para quem pode vê-lo.
  */
 function Totais({ totals }: { readonly totals: PainelDoDia['totals'] }) {
+  /**
+   * Os nomes dos contadores repetem os selos das linhas, de propósito.
+   *
+   * "atendendo" no resumo e "Em atendimento" no selo eram a mesma coisa com dois
+   * nomes na **mesma tela** — quem procura os três da cadeira olhava o número e
+   * não achava a palavra embaixo dele.
+   */
   const numeros: readonly [string, number | string][] = [
     ['esperados', totals.esperados],
-    ['chegaram', totals.chegaram],
-    ['atendendo', totals.atendendo],
-    ['concluídos', totals.concluidos],
+    ['na espera', totals.chegaram],
+    ['na cadeira', totals.atendendo],
+    ['atendidos', totals.concluidos],
     ['faltaram', totals.faltaram],
   ];
 
@@ -380,6 +418,8 @@ export default async function DiaPage({ searchParams }: Props) {
           {FALHA[erro] ?? FALHA['request_failed']}
         </div>
       ) : null}
+
+      <NasCadeiras hora={agora} linhas={dia.entries} />
 
       <Totais totals={dia.totals} />
 

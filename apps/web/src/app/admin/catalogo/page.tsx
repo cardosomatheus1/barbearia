@@ -5,7 +5,6 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoLigarServico, acaoSair, acaoSalvarServico } from '../acoes';
-import { CadastroNav } from '../cadastro-nav';
 import { secao } from '../secoes';
 
 /**
@@ -314,8 +313,6 @@ export default async function CatalogoPage({ searchParams }: Props) {
           </button>
         </form>
       </header>
-
-      <CadastroNav atual="/admin/catalogo" />
 
       <h1 className="painel__titulo">Serviços</h1>
       <p className="painel__sub">

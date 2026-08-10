@@ -39,6 +39,21 @@ seção [Escopo recomendado](#escopo-recomendado) antes de tratá-lo como plano.
 
 ---
 
+## Correção de fluxo (entre o 36 e o 37)
+
+Não é bloco: é conserto do que o portão inteiro deixou passar, e a razão de o
+`CLAUDE.md` ter ganhado a [§6](CLAUDE.md#6-regra-de-negócio-e-coerência-do-fluxo).
+Quatro defeitos, todos com teste verde antes e todos invisíveis a qualquer teste
+de tela — porque cada tela, sozinha, era coerente:
+
+| O que estava errado | O conserto |
+|---|---|
+| Duas barras escritas à mão (`BalcaoNav`, `CadastroNav`) discordavam do registro: a primeira misturava dois módulos, **não** tinha Comanda, e não existia em Dia, Agenda e Fila — as três telas que ela oferecia | as duas foram **apagadas**. O contexto do casco já lista as telas do módulo aberto, derivadas de `MODULOS`, em qualquer largura. As barras eram o mesmo link duas vezes no DOM |
+| `lgpd` e `plano` nunca acendiam no trilho — e o teste passava, porque ele também tinha lista escrita à mão | as regras entraram, e a guarda passou a derivar de `MODULOS` |
+| A mesma transição tinha três nomes: **Iniciar · Começar · Sentou**, em três telas do mesmo produto | vocabulário único em `packages/core/src/vocabulario.ts`, com teste que reprova tela definindo o próprio dicionário |
+| A fila nunca fechava ninguém: nada escrevia `done`, e por isso a **espera média era sempre `—`** | encerrar o atendimento fecha a entrada, na mesma transação |
+| Ninguém via quem estava na cadeira nem há quanto tempo — `appointments.started_at` existia desde a migração 0014, com o comentário "base da duração real", e era descartado antes de chegar à tela | faixa "Nas cadeiras agora" no topo do dia, com o tempo decorrido. **O número não anda**: é o instantâneo da carga, e a tela diz isso |
+
 ## Lacunas com dependência declarada
 
 Quando um bloco fecha deixando algo de fora, o motivo entra aqui — com **o que

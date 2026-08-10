@@ -4,7 +4,6 @@ import { diagnosticoDoCatalogo, type AchadoDoCatalogo } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSair } from '../../acoes';
-import { CadastroNav } from '../../cadastro-nav';
 import { secao } from '../../secoes';
 
 /**
@@ -96,7 +95,6 @@ export default async function DiagnosticoPage() {
   return (
     <main className="ui-container painel__conteudo" {...secao('cadastro')}>
       {topo}
-      <CadastroNav atual="/admin/catalogo/diagnostico" />
 
       <h1 className="painel__titulo">Diagnóstico do catálogo</h1>
       <p className="painel__sub">

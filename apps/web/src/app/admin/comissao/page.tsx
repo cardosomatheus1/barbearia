@@ -10,7 +10,6 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoFecharComissao, acaoSair } from '../acoes';
-import { BalcaoNav } from '../balcao-nav';
 import { secao } from '../secoes';
 
 /**
@@ -149,7 +148,6 @@ export default async function ComissaoPage({ searchParams }: Props) {
   return (
     <main className="ui-container painel__conteudo" {...secao('comissao')}>
       {topo}
-      <BalcaoNav atual="/admin/comissao" />
 
       <h1 className="painel__titulo">Comissão</h1>
       <p className="painel__sub">

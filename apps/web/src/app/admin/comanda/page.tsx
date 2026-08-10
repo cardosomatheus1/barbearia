@@ -6,7 +6,6 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirComanda, acaoSair } from '../acoes';
-import { BalcaoNav } from '../balcao-nav';
 import { secao } from '../secoes';
 
 /**
@@ -97,7 +96,6 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
   return (
     <main className="ui-container painel__conteudo" {...secao('comanda')}>
       {topo}
-      <BalcaoNav atual="/admin/comanda" />
 
       <h1 className="painel__titulo">Cobrar</h1>
 

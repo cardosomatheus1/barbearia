@@ -185,6 +185,8 @@ export interface LinhaDoDia {
   services: string[];
   priceCents: number;
   realDurationMinutes: number | null;
+  /** Há quantos minutos está na cadeira. Instantâneo da carga, não cronômetro. */
+  elapsedMinutes: number | null;
   waitingMinutes: number | null;
   punctuality: Pontualidade | null;
   actions: AcaoAtendimento[];

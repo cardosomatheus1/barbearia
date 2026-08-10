@@ -17,7 +17,6 @@ import {
   acaoReverterImportacao,
   acaoSair,
 } from '../acoes';
-import { CadastroNav } from '../cadastro-nav';
 import { secao } from '../secoes';
 
 /**
@@ -224,7 +223,6 @@ export default async function ImportarPage({ searchParams }: Props) {
           cadastro da casa (`settings.manage`). Mostrar-lhe as outras abas seria
           oferecer quatro links que respondem 403 — botão que só serve para dar
           erro é pior que botão ausente. */}
-      {podeEndereco ? <CadastroNav atual="/admin/importar" /> : null}
 
       <h1 className="painel__titulo">Trazer minha base</h1>
 

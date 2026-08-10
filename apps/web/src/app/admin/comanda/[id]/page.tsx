@@ -22,7 +22,6 @@ import {
   acaoRemoverItem,
   acaoSair,
 } from '../../acoes';
-import { BalcaoNav } from '../../balcao-nav';
 import { secao } from '../../secoes';
 
 /**
@@ -350,7 +349,6 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   return (
     <main className="ui-container painel__conteudo" {...secao('comanda')}>
       {topo}
-      <BalcaoNav atual="/admin/comanda" />
 
       <h1 className="painel__titulo">{conta.customerName ?? 'Comanda avulsa'}</h1>
 

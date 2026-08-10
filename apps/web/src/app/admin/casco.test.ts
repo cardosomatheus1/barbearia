@@ -3,7 +3,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { SECOES_POR_MODULO, secao, type Secao } from './secoes';
+import { MODULOS, SECOES_POR_MODULO, moduloDaSecao, secao, type Secao } from './secoes';
 
 /**
  * O casco é padrão, e padrão sem guarda é convenção — dura até a próxima tela.
@@ -101,11 +101,19 @@ describe('o CSS acompanha o casco', () => {
       .flat()
       .filter((s) => !css.includes(`.casco:has([data-secao='${s}']) .contexto__link[data-para='${s}']`));
 
-    // Só as telas listadas viram link; as de dentro (ficha do cliente, comanda
-    // aberta) não aparecem na barra, então não têm link para acender.
-    const listadas = new Set(['dia', 'agenda', 'fila', 'avisos', 'caixa', 'comanda', 'fiado',
-      'comissao', 'painel', 'cadastro', 'equipe', 'importar', 'trilha', 'seguranca',
-      'configuracoes']);
+    /**
+     * A lista de quem precisa de regra vem do **registro**, não escrita aqui.
+     *
+     * Ela era escrita à mão, com quinze nomes, e foi assim que `lgpd` e `plano`
+     * entraram em `MODULOS`, ficaram sem regra de CSS e o teste continuou verde
+     * — duas telas em que o gestor não sabia onde estava, guardadas por uma
+     * guarda desligada em silêncio. É o mesmo defeito que `secoes.ts` conta ter
+     * corrigido no CSS, reaparecido um nível acima, no teste.
+     *
+     * Só as telas **listadas** viram link; as de `dentro` (ficha do cliente,
+     * comanda aberta) não aparecem na barra e não têm link para acender.
+     */
+    const listadas = new Set<string>(MODULOS.flatMap((m) => m.telas.map((t) => t.secao)));
 
     expect(semRegra.filter((s) => listadas.has(s))).toEqual([]);
   });
@@ -136,5 +144,66 @@ describe('secao()', () => {
     // O tipo já barra em tempo de compilação; a exceção existe para quem
     // alargar `Secao` à mão sem registrar a seção num módulo.
     expect(() => secao('inventada' as Secao)).toThrow(/fora do casco/);
+  });
+});
+
+/**
+ * A navegação é o contexto do casco, e só ele (correção de fluxo, depois do bloco 36).
+ *
+ * Existiam duas barras escritas à mão — `BalcaoNav` e `CadastroNav` — e as duas
+ * discordavam do registro:
+ *
+ * - a `BalcaoNav` listava **Dia · Agenda · Fila · Caixa · Fiado · Comissão**,
+ *   misturando dois módulos, e **não** tinha Comanda. As telas de comanda a
+ *   desenhavam mesmo assim, com `atual="/admin/comanda"`, que não casava com
+ *   nada — nenhuma aba acendia;
+ * - e Dia, Agenda e Fila **não a desenhavam**. Ela oferecia atalho para três
+ *   telas que, abertas, não tinham barra nenhuma.
+ *
+ * A correção não foi uma terceira barra: foi apagar as duas. O contexto do
+ * casco já lista exatamente as telas do módulo aberto, derivadas de `MODULOS`,
+ * **em qualquer largura** — é um bloco `display: flex` que rola na horizontal,
+ * condicional por seção e não por tamanho de tela. As barras eram o mesmo link
+ * duas vezes no DOM, que é justamente o que o casco documenta ter removido.
+ */
+describe('a navegação não é reescrita à mão', () => {
+  const arquivos = paginasDoPainel();
+
+  it('nenhuma tela desenha barra própria de navegação', () => {
+    // Uma terceira lista volta a divergir na primeira tela nova — foi assim que
+    // as duas primeiras divergiram.
+    const proprias: string[] = [];
+    for (const arquivo of arquivos) {
+      const conteudo = readFileSync(arquivo, 'utf8');
+      for (const barra of ['<BalcaoNav', '<CadastroNav', '<ModuloNav']) {
+        if (conteudo.includes(barra)) proprias.push(`${relative(AQUI, arquivo)}: ${barra}`);
+      }
+    }
+    expect(proprias).toEqual([]);
+  });
+
+  it('todo módulo tem pelo menos um destino no contexto', () => {
+    // Módulo sem tela é um ícone no trilho que abre uma lista vazia: a pessoa
+    // toca e não acontece nada.
+    for (const modulo of MODULOS) {
+      expect(modulo.telas.length, modulo.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('toda seção de tela pertence a um módulo', () => {
+    /**
+     * `moduloDaSecao` é o que decide qual bloco do contexto aparece. Seção órfã
+     * significaria uma tela onde nenhum módulo acende — e o casco tinha um
+     * desvio que caía em "Operação" para esse caso, justamente o que foi
+     * removido por mentir sobre onde a pessoa estava.
+     */
+    for (const modulo of MODULOS) {
+      for (const tela of modulo.telas) {
+        expect(moduloDaSecao(tela.secao), tela.secao).toBe(modulo.id);
+      }
+      for (const dentro of modulo.dentro) {
+        expect(moduloDaSecao(dentro), dentro).toBe(modulo.id);
+      }
+    }
   });
 });

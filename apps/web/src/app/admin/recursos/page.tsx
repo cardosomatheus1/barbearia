@@ -9,7 +9,6 @@ import {
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoExigenciasDoServico, acaoSair, acaoSalvarRecursos } from '../acoes';
-import { CadastroNav } from '../cadastro-nav';
 import { secao } from '../secoes';
 
 /**
@@ -186,8 +185,6 @@ export default async function RecursosPage({ searchParams }: Props) {
           </button>
         </form>
       </header>
-
-      <CadastroNav atual="/admin/recursos" />
 
       <h1 className="painel__titulo">Recursos</h1>
       <p className="painel__sub">

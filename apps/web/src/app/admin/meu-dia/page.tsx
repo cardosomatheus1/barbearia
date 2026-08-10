@@ -1,4 +1,10 @@
 import { redirect } from 'next/navigation';
+import {
+  ACAO_PRINCIPAL,
+  ROTULO_DO_ESTADO,
+  VERBO_CURTO,
+  type AttendanceAction as AcaoAtendimento,
+} from '@barbearia/core';
 import type { Metadata } from 'next';
 import { recortarMeuDia, fraseDoIntervalo } from '@barbearia/core';
 import { painelDoDia, type LinhaDoDia } from '@/lib/admin-api';
@@ -52,38 +58,42 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para carregar. Tente de novo.',
 };
 
-const RÓTULO: Partial<Record<LinhaDoDia['status'], string>> = {
-  pending: 'Marcado',
-  confirmed: 'Confirmado',
-  checked_in: 'Chegou',
-  waiting: 'Aguardando',
-  in_progress: 'Na cadeira',
-};
+/**
+ * O mesmo vocabulário do balcão, vindo de `packages/core`.
+ *
+ * Esta tela dizia **Começar** e **Terminei** para o que o balcão chamava de
+ * **Iniciar** e **Concluir** — e as duas pessoas trabalham no mesmo salão,
+ * falando uma com a outra em voz alta. O verbo curto é o que cabe no cartão de
+ * 360px; o nome é o mesmo dos dois lados.
+ */
+const RÓTULO = ROTULO_DO_ESTADO;
+const VERBO = VERBO_CURTO;
 
-/** O verbo do botão, na ordem da máquina de estados. */
-const VERBO: Partial<Record<string, string>> = {
-  check_in: 'Chegou',
-  start: 'Começar',
-  complete: 'Terminei',
-  no_show: 'Não veio',
-};
-
-/** A ação que o barbeiro faz nesta linha — uma só, a próxima. */
-function acaoPrincipal(linha: LinhaDoDia): string | null {
-  for (const candidata of ['start', 'complete', 'check_in'] as const) {
-    if (linha.actions.includes(candidata)) return candidata;
-  }
-  return null;
+/**
+ * A ação que o barbeiro faz nesta linha — uma só, a próxima.
+ *
+ * `ACAO_PRINCIPAL` é a mesma tabela que o balcão usa: o que muda entre as duas
+ * telas é quantas ações aparecem, não qual é a próxima.
+ */
+function acaoPrincipal(linha: LinhaDoDia): AcaoAtendimento | null {
+  const candidata = ACAO_PRINCIPAL[linha.status];
+  return candidata && linha.actions.includes(candidata) ? candidata : null;
 }
 
-function Botao({ linha, acao }: { readonly linha: LinhaDoDia; readonly acao: string }) {
+function Botao({
+  linha,
+  acao,
+}: {
+  readonly linha: LinhaDoDia;
+  readonly acao: AcaoAtendimento;
+}) {
   return (
     <form action={acaoAtendimento}>
       <input name="id" type="hidden" value={linha.id} />
       <input name="action" type="hidden" value={acao} />
       <input name="voltar" type="hidden" value="/admin/meu-dia" />
       <button className="ui-button ui-button--primary ui-button--lg ui-button--block" type="submit">
-        {VERBO[acao] ?? acao}
+        {VERBO[acao]}
       </button>
     </form>
   );
