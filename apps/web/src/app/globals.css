@@ -3007,6 +3007,94 @@ main { padding-bottom: var(--space-8); }
 }
 @keyframes lp-correr { to { transform: translateX(-50%); } }
 
+/* -- telas do sistema -------------------------------------------------------- */
+
+.lp-telas__atalhos {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-bottom: var(--space-2);
+  /* Sem isto o recipiente se recusa a encolher dentro da grade e estoura a
+     página em vez de rolar dentro de si. */
+  min-width: 0;
+}
+.lp-telas__atalho {
+  display: inline-flex;
+  align-items: center;
+  /* Alvo autônomo: 44px em qualquer largura, não só no celular. */
+  min-height: var(--size-touch);
+  padding-inline: var(--space-4);
+  border: 1px solid var(--lp-linha);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.lp-telas__atalho:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+
+/* A tira. Rola dentro de si e nunca leva a página junto; o `scroll-snap` faz a
+   foto parar alinhada, que é o que uma aba faria com JavaScript. */
+.lp-telas {
+  list-style: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(88vw, 46rem);
+  gap: var(--space-4);
+  margin: var(--space-5) 0 0;
+  padding: 0 var(--space-4) var(--space-4);
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--space-4);
+  min-width: 0;
+}
+.lp-telas__item { scroll-snap-align: start; min-width: 0; }
+.lp-telas__figura {
+  margin: 0;
+  border: 1px solid var(--lp-linha);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface-raised);
+}
+.lp-telas__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  /* Casa com o `width`/`height` do elemento: o espaço fica reservado antes de
+     a imagem chegar, e o texto abaixo não pula. */
+  aspect-ratio: 1200 / 750;
+  object-fit: cover;
+  object-position: top left;
+  border-bottom: 1px solid var(--lp-linha);
+}
+.lp-telas__legenda {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.lp-telas__ordem {
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  flex: none;
+}
+.lp-telas__nome {
+  display: block;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-primary);
+}
+.lp-telas__nota {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 /* -- placar ----------------------------------------------------------------- */
 
 .lp-secao--placar { padding-block: var(--space-7); }
@@ -3323,6 +3411,7 @@ main { padding-bottom: var(--space-8); }
   .lp-marca__selo { width: 3.25rem; height: 3.25rem; }
   .lp-heroi { padding-block: var(--space-9) var(--space-10); }
   .lp-placar { grid-template-columns: repeat(4, 1fr); }
+  .lp-telas { padding-inline: var(--space-6); scroll-padding-inline: var(--space-6); }
   .lp-provas { grid-auto-flow: column; justify-content: start; gap: var(--space-6); }
   .lp-bento { grid-template-columns: repeat(6, 1fr); }
   .lp-bento__item--grande { grid-column: span 4; }

@@ -36,6 +36,69 @@ export const metadata: Metadata = {
     'Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar, comanda, caixa, fiado e comissão. Feito a partir do que quebra numa barbearia de verdade.',
 };
 
+/**
+ * As telas do produto, fotografadas.
+ *
+ * ## Por que existe
+ *
+ * A página falava do sistema sem mostrá-lo. Quem chega aqui é dono de
+ * barbearia insatisfeito com o que usa hoje, e a primeira pergunta dele é
+ * visual: "com o que eu vou trabalhar?". Texto responde por último.
+ *
+ * ## Por que são fotos e não desenho
+ *
+ * Cada uma é um print do produto rodando, com a barbearia de demonstração que
+ * `scripts/semear-demo.mjs` cria — os números na tela são os que o motor
+ * calculou, não valores digitados num mock. Numa página cuja tese é "medimos,
+ * não imaginamos", ilustrar com maquete seria contradizê-la na própria dobra.
+ *
+ * Refazer: suba o sistema, rode `node tirar-prints.cjs <segredo-do-2fa>` e
+ * converta para 1200px de largura.
+ *
+ * ## Sem JavaScript, como o resto da landing
+ *
+ * A tira rola com `scroll-snap` e os atalhos são âncoras — o navegador já sabe
+ * fazer as duas coisas. Abas de verdade exigiriam estado no cliente, e o
+ * produto inteiro é renderizado no servidor.
+ */
+const TELAS = [
+  {
+    id: 'tela-dashboard',
+    nome: 'Painel',
+    arquivo: 'dashboard',
+    alto: 'Painel do dono: faturamento do período, meta, ocupação e o que merece ação hoje',
+    nota: 'Faturamento, meta e ocupação por período — com o que merece ação agora.',
+  },
+  {
+    id: 'tela-dia',
+    nome: 'O dia',
+    arquivo: 'dia',
+    alto: 'Painel do balcão com quem chegou, quem está na cadeira e quem faltou',
+    nota: 'Quem chegou, quem está na cadeira e há quanto tempo. A linha do agora separa o que passou.',
+  },
+  {
+    id: 'tela-marcar',
+    nome: 'Marcar',
+    arquivo: 'marcar',
+    alto: 'Tela de marcação pelo balcão, com a grade de horários que cabem',
+    nota: 'A grade sai da duração real do serviço — não de blocos fixos de quinze minutos.',
+  },
+  {
+    id: 'tela-cliente',
+    nome: 'Pelo cliente',
+    arquivo: 'cliente-agendar',
+    alto: 'Página pública da barbearia, com foto, endereço, serviços e preços',
+    nota: 'Endereço, telefone, foto e preço. O cliente agenda sem instalar nada.',
+  },
+  {
+    id: 'tela-comanda',
+    nome: 'Comanda',
+    arquivo: 'comanda',
+    alto: 'Comanda aberta com itens do atendimento e as formas de pagamento',
+    nota: 'Nasce preenchida com o que foi marcado, no preço combinado na reserva.',
+  },
+] as const;
+
 const MODULOS = [
   {
     kicker: 'Agenda',
@@ -186,6 +249,7 @@ export default function LandingPage() {
               somem. Esconder no aparelho pequeno seria decidir que não
               importavam; se não importam, saem de todas as larguras. */}
           <nav aria-label="Seções" className="lp-nav__links ui-scroll-x">
+            <a href="#telas">Telas</a>
             <a href="#recursos">Recursos</a>
             <a href="#campo">Em campo</a>
             <a href="#superficies">Quem usa</a>
@@ -339,6 +403,57 @@ export default function LandingPage() {
               </div>
             </dl>
           </div>
+        </section>
+
+        <section className="lp-secao" id="telas">
+          <div className="lp-container">
+            <p className="lp-sobrancelha">Por dentro do sistema</p>
+            <h2 className="lp-titulo">Veja o Barber Dock funcionando</h2>
+            <p className="lp-intro">
+              Fotos do produto rodando, com a barbearia de demonstração que acompanha o código —
+              os números são os que o motor calculou. Deslize para o lado, ou use os atalhos.
+            </p>
+
+            {/* Âncoras, não abas: o navegador rola até o alvo sem uma linha de
+                JavaScript. Cada uma é um alvo de 44px, como qualquer outro. */}
+            <nav aria-label="Telas do sistema" className="lp-telas__atalhos ui-scroll-x">
+              {TELAS.map((tela) => (
+                <a className="lp-telas__atalho" href={`#${tela.id}`} key={tela.id}>
+                  {tela.nome}
+                </a>
+              ))}
+            </nav>
+          </div>
+
+          {/* Rola dentro de si, nunca leva a página junto (CLAUDE.md §5). */}
+          <ul className="lp-telas ui-scroll-x">
+            {TELAS.map((tela, indice) => (
+              <li className="lp-telas__item" id={tela.id} key={tela.id}>
+                <figure className="lp-telas__figura">
+                  {/* `width`/`height` no elemento **e** `aspect-ratio` no CSS: sem os
+                      dois o navegador não reserva o espaço e a foto empurra o
+                      conteúdo ao carregar. */}
+                  <img
+                    alt={tela.alto}
+                    className="lp-telas__foto"
+                    height={750}
+                    loading="lazy"
+                    src={`/screens/${tela.arquivo}.jpg`}
+                    width={1200}
+                  />
+                  <figcaption className="lp-telas__legenda">
+                    <span className="lp-telas__ordem tabular">
+                      {String(indice + 1).padStart(2, '0')}
+                    </span>
+                    <span>
+                      <strong className="lp-telas__nome">{tela.nome}</strong>
+                      <span className="lp-telas__nota">{tela.nota}</span>
+                    </span>
+                  </figcaption>
+                </figure>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="lp-secao" id="recursos">
