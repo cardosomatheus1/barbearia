@@ -655,6 +655,17 @@ repositório, nesta máquina.
   prosa, que é caro de ler. Rode o guarda logo depois de escrever a consulta.
 - **Deixar a revisão de segurança para o último passo.** É o item mais caro do
   fechamento e o único que pode obrigar a refazer desenho.
+- **Rodar qualquer outra coisa durante `scripts/medicao.sh`.** A parte de carga
+  mede P95 de `/availability` com oito requisições simultâneas: ela disputa CPU
+  com o que estiver rodando junto. Uma suíte de `vitest` por cima derrubou a
+  vazão de 39,8 para 4,1 req/s e produziu P95 de 3367 ms, com sete requisições
+  estourando o teto de 10s da transação do Prisma — falha que não existia. A
+  repetição com a máquina livre deu 261 ms sobre a mesma carga.
+
+  **Número de carga medido sob contenção é pior que número nenhum, porque tem
+  cara de dado.** Se a medição acusar carga fora da meta, a primeira pergunta é
+  o que mais estava rodando — e a resposta certa é repetir com a máquina livre,
+  não anotar "provavelmente foi contenção" e seguir.
 
 O portão está em ~90s (era ~208s). Como se chegou lá, e o que a medição
 desmentiu, está no cabeçalho de `scripts/verify.sh` — vale ler antes de tentar

@@ -3,6 +3,7 @@ import { ACOES, STATUSES, allowedActions } from './attendance.js';
 import {
   ACAO_PRINCIPAL,
   ACOES_PESADAS,
+  ESTADOS_COBRAVEIS,
   ROTULO_DO_ESTADO,
   VERBO_CURTO,
   VERBO_DA_ACAO,
@@ -76,6 +77,34 @@ describe('o destaque não oferece o que a máquina de estados recusa', () => {
       if (leves.length === 0) continue;
       if (estado === 'no_show') continue;
       expect(ACAO_PRINCIPAL[estado], `destaque de ${estado}`).toBeTruthy();
+    }
+  });
+});
+
+describe('de quem se cobra', () => {
+  it('ninguém é cobrável antes de sentar na cadeira', () => {
+    // Comanda aberta em quem ainda pode faltar é comanda esquecida aberta — e
+    // ela bloqueia a marcação seguinte do mesmo atendimento.
+    for (const estado of ['pending', 'confirmed', 'checked_in', 'waiting'] as const) {
+      expect(ESTADOS_COBRAVEIS.has(estado), estado).toBe(false);
+    }
+  });
+
+  it('quem foi atendido continua cobrável depois de encerrado', () => {
+    /**
+     * O momento em que se cobra é justamente depois de encerrar: o cartão do
+     * `completed` não tem ação de atendimento nenhuma, e sem isto ele fica sem
+     * saída na tela exatamente quando ainda falta receber.
+     */
+    expect(ESTADOS_COBRAVEIS.has('completed')).toBe(true);
+    expect(allowedActions('completed')).toEqual([]);
+  });
+
+  it('nenhum estado de saída é cobrável', () => {
+    // Falta e cancelamento não geraram serviço. Cobrar quem não foi atendido é
+    // o defeito, não a funcionalidade.
+    for (const estado of ['no_show', 'cancelled_customer', 'cancelled_business'] as const) {
+      expect(ESTADOS_COBRAVEIS.has(estado), estado).toBe(false);
     }
   });
 });

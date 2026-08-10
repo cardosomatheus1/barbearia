@@ -103,6 +103,31 @@ describe('o vocabulário mora em um lugar só', () => {
     }
   });
 
+  it('as duas telas que cobram leem a mesma definição de cobrável', () => {
+    /**
+     * O cartão do dia e a lista de "Cobrar" respondem à mesma pergunta sobre a
+     * mesma consulta. Cada uma tinha o próprio `new Set([...])`, e bastava
+     * acrescentar um estado num lugar para o balcão ver a pessoa cobrável numa
+     * tela e não na outra — sem nada ficar vermelho, porque as duas continuam
+     * corretas sozinhas.
+     */
+    for (const tela of ['dia/page.tsx', 'comanda/page.tsx']) {
+      const conteudo = semComentarios(readFileSync(join(RAIZ, tela), 'utf8'));
+      expect(conteudo, tela).toContain('ESTADOS_COBRAVEIS');
+      expect(conteudo, `${tela} não redefine a lista`).not.toMatch(/new Set\(\[\s*'in_progress'/);
+    }
+  });
+
+  it('o painel do dia oferece cobrança a quem já sentou', () => {
+    // Encerrar o corte e ter que procurar a mesma pessoa numa segunda lista era
+    // o passo mais frequente do balcão custando cinco toques.
+    const dia = semComentarios(readFileSync(join(RAIZ, 'dia/page.tsx'), 'utf8'));
+    expect(dia).toContain('acaoAbrirComanda');
+    // Escondido de quem a API recusaria: botão que só dá erro é pior que
+    // botão ausente para quem opera.
+    expect(dia).toContain("podeNaTela(estado, 'cashier.open')");
+  });
+
   it('o mapa que as telas usam é o do domínio, e está completo', () => {
     // Um mapa parcial devolveria `undefined` no botão de um estado raro — e o
     // caminho raro é justamente o que ninguém exercita antes de produção.

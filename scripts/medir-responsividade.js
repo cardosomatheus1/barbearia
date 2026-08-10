@@ -318,9 +318,28 @@ async function prepararBalcao(token) {
   const hoje = await (await fetch(`${API}/v1/admin/day`, { headers: cabecalho })).json();
 
   const servico = catalogo.services.reduce((maior, s) => (s.name.length > maior.name.length ? s : maior));
+  /**
+   * Quatro pessoas, quatro estados — e é o número mínimo, não folga.
+   *
+   * O painel do dia desenha um cartão diferente por estado, e o mais largo é o
+   * de quem está na cadeira: ação primária, "Cobrar" e as pesadas na mesma
+   * linha. Com só duas pessoas em `pending`/`checked_in`, a medição dizia
+   * "todas as telas passam" sem que o cartão mais apertado da tela mais usada
+   * do produto tivesse chegado a existir.
+   */
   const pessoas = [
     { name: 'Maria Aparecida do Nascimento', phone: '(71) 98111-2233' },
     { name: 'Zé', phone: '(71) 98111-2244' },
+    { name: 'João Pedro de Albuquerque Filho', phone: '(71) 98111-2255' },
+    { name: 'Antônio Carlos', phone: '(71) 98111-2266' },
+  ];
+
+  /** O caminho até cada estado, na ordem que a máquina de estados exige. */
+  const ATE_O_ESTADO = [
+    ['check_in'],
+    [],
+    ['check_in', 'start'],
+    ['check_in', 'start', 'complete'],
   ];
 
   // O dia medido é **amanhã**, não hoje: rodar a medição às onze da noite
@@ -354,13 +373,14 @@ async function prepararBalcao(token) {
       })
     ).json();
 
-    // Um deles já chegou: a linha com "esperando há X min" e a com o relógio da
-    // falta têm alturas diferentes, e é a mistura que estoura layout.
-    if (i === 0 && criado.id) {
+    // As linhas têm alturas diferentes por estado — "esperando há X min", "na
+    // cadeira há X min", o relógio da falta —, e é a mistura que estoura
+    // layout. Em ordem, porque a máquina de estados recusa pular etapa.
+    for (const acao of criado.id ? (ATE_O_ESTADO[i] ?? []) : []) {
       await fetch(`${API}/v1/admin/appointments/${criado.id}/attendance`, {
         method: 'POST',
         headers: cabecalho,
-        body: JSON.stringify({ action: 'check_in' }),
+        body: JSON.stringify({ action: acao }),
       });
     }
   }
@@ -373,6 +393,27 @@ async function prepararBalcao(token) {
       { headers: cabecalho },
     )
   ).json();
+
+  /**
+   * Conferir que os estados de fato pegaram, e parar se não pegaram.
+   *
+   * Sem isto, uma transição recusada — a máquina de estados muda, a rota muda,
+   * a antecedência mínima passa a valer — deixaria a medição rodando sobre
+   * quatro cartões `pending` e imprimindo "todas as telas passam". Medição que
+   * mede a tela errada em silêncio é pior que medição nenhuma, porque tem cara
+   * de prova.
+   */
+  const doDia = await (
+    await fetch(`${API}/v1/admin/day?date=${dataLivre}`, { headers: cabecalho })
+  ).json();
+  const estados = new Set((doDia.entries ?? []).map((e) => e.status));
+  for (const exigido of ['pending', 'checked_in', 'in_progress', 'completed']) {
+    if (!estados.has(exigido)) {
+      throw new Error(
+        `painel do dia sem nenhuma linha em "${exigido}" — a medição estaria olhando outra tela. Estados presentes: ${[...estados].join(', ') || 'nenhum'}`,
+      );
+    }
+  }
 
   // A ficha precisa de um cliente com histórico: anotação preenchida e
   // atendimento concluído. Ficha em branco mede o estado vazio, que também

@@ -216,6 +216,103 @@ describeIfDb('comanda, caixa e fiado', () => {
     expect(aberta.totalCents).toBe(4900);
   });
 
+  it('abrir a comanda do mesmo atendimento duas vezes devolve a mesma comanda', async () => {
+    /**
+     * O balcão abre a comanda quando o corte começa, atende o telefone e volta
+     * pela lista de "Cobrar" — que mostra a mesma pessoa com o mesmo botão.
+     *
+     * Antes desta regra o segundo pedido esbarrava em
+     * `orders_uma_aberta_por_agendamento` e virava 500: a tela dizia "tente de
+     * novo" e tentar de novo dava o mesmo erro para sempre. A comanda existia e
+     * não havia caminho até ela.
+     *
+     * Chaves de idempotência **diferentes** de propósito: é o que acontece de
+     * verdade, porque cada tela gera a sua. Quem identifica a comanda aqui é o
+     * atendimento.
+     */
+    await exec(admin, `
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at, price_cents)
+      VALUES ('dddddddd-0000-0000-0000-000000000003', '${TENANT}', '${LOCATION}',
+              '${CARLOS}', '${RUAN}',
+              '2026-08-15T12:00:00Z', '2026-08-15T12:30:00Z',
+              '2026-08-15T12:00:00Z', '2026-08-15T12:30:00Z', 4900);
+
+      INSERT INTO appointment_services
+        (appointment_id, service_id, tenant_id, position, price_cents, duration_minutes)
+      VALUES ('dddddddd-0000-0000-0000-000000000003', '${CABELO}', '${TENANT}', 0, 4900, 30);
+    `);
+
+    const pedir = (chave: string) =>
+      abrirComanda({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        appointmentId: 'dddddddd-0000-0000-0000-000000000003',
+        staffId: STAFF,
+        idempotencyKey: chave,
+      });
+
+    const primeira = await pedir('maria:1');
+    const item = await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: primeira.id,
+      tipo: 'product', descricao: 'Pomada', quantidade: 1,
+      precoUnitarioCents: 4500, professionalId: RUAN,
+    });
+    expect(item.subtotalCents).toBe(4900 + 4500);
+
+    const segunda = await pedir('joao:1');
+
+    expect(segunda.id).toBe(primeira.id);
+    // Devolve o **estado atual**, não uma cópia do que foi aberto: a pomada
+    // lançada no meio tem que aparecer, senão a segunda tela cobra menos.
+    expect(segunda.subtotalCents).toBe(4900 + 4500);
+    expect(segunda.itens).toHaveLength(2);
+
+    const quantas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM orders
+        WHERE appointment_id = 'dddddddd-0000-0000-0000-000000000003'`,
+    );
+    expect(Number(quantas[0]?.n)).toBe(1);
+  });
+
+  it('duas aberturas simultâneas do mesmo atendimento não viram erro', async () => {
+    // Caminho triste de concorrência: as duas passam juntas pela consulta e a
+    // segunda esbarra no índice. A transação morre no Postgres, então a leitura
+    // de recuperação precisa ser numa transação nova — e é isso que se prova.
+    await exec(admin, `
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at, price_cents)
+      VALUES ('dddddddd-0000-0000-0000-000000000004', '${TENANT}', '${LOCATION}',
+              '${CARLOS}', '${RUAN}',
+              '2026-08-16T12:00:00Z', '2026-08-16T12:30:00Z',
+              '2026-08-16T12:00:00Z', '2026-08-16T12:30:00Z', 4900);
+
+      INSERT INTO appointment_services
+        (appointment_id, service_id, tenant_id, position, price_cents, duration_minutes)
+      VALUES ('dddddddd-0000-0000-0000-000000000004', '${CABELO}', '${TENANT}', 0, 4900, 30);
+    `);
+
+    const pedir = (chave: string) =>
+      abrirComanda({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        appointmentId: 'dddddddd-0000-0000-0000-000000000004',
+        staffId: STAFF,
+        idempotencyKey: chave,
+      });
+
+    const [a, b] = await Promise.all([pedir('maria:2'), pedir('joao:2')]);
+
+    expect(a.id).toBe(b.id);
+    const quantas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM orders
+        WHERE appointment_id = 'dddddddd-0000-0000-0000-000000000004'`,
+    );
+    expect(Number(quantas[0]?.n)).toBe(1);
+  });
+
   it('o preço vem do que foi combinado na reserva, não do catálogo de hoje', async () => {
     await exec(admin, `
       INSERT INTO appointments

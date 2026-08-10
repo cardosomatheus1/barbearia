@@ -206,8 +206,82 @@ async function saldoTravado(
  * O preço vem de `appointment_services`, que guardou o valor **praticado na
  * reserva** — não do catálogo de hoje. Reajuste de tabela não muda o que foi
  * combinado com quem já estava marcado.
+ *
+ * ## Abrir duas vezes devolve a mesma comanda, e isso é a regra
+ *
+ * `orders_uma_aberta_por_agendamento` diz desde o bloco 18 que um atendimento
+ * tem **uma** comanda aberta. O que faltava era a outra metade: quem pedisse a
+ * segunda recebia violação de unicidade — um 500 genérico, e a tela do balcão
+ * respondia "não deu para abrir, tente de novo" para sempre, porque tentar de
+ * novo dava exatamente o mesmo erro. A comanda existia e não havia caminho até
+ * ela pela tela.
+ *
+ * Não é caso raro: o balcão abre a comanda quando o corte começa, some para
+ * atender o telefone e volta pela lista de "Cobrar" — que mostra a mesma pessoa
+ * com o mesmo botão. Duas recepcionistas no mesmo notebook fazem isso o dia
+ * inteiro.
+ *
+ * A chave de idempotência **não** cobre isto: ela é por operador e por
+ * requisição, então dois cliques em telas diferentes trazem chaves diferentes.
+ * O que identifica a comanda aqui é o atendimento, e é ele que o índice já
+ * declarava.
  */
 export async function abrirComanda(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly appointmentId?: string | null;
+  readonly customerId?: string | null;
+  readonly staffId: string;
+  readonly idempotencyKey?: string;
+}): Promise<Comanda> {
+  try {
+    return await inserirComanda(params);
+  } catch (erro) {
+    // Corrida: duas requisições passaram juntas pela consulta e a segunda
+    // esbarrou no índice. A transação já morreu no Postgres, então a leitura
+    // tem que ser numa nova — e se não achar nada, o erro não era este.
+    if (!params.appointmentId || pgCode(erro) !== UNIQUE_VIOLATION) throw erro;
+    const existente = await withTenant(params.tenantId, (tx) =>
+      comandaAbertaDoAtendimento(tx, params.appointmentId as string),
+    );
+    if (!existente) throw erro;
+    return existente;
+  }
+}
+
+const UNIQUE_VIOLATION = '23505';
+
+/**
+ * O SQLSTATE do Postgres dentro do erro do Prisma.
+ *
+ * Consulta crua falha como `PrismaClientKnownRequestError` com `code: 'P2010'`
+ * — o código do Prisma, não o do banco. O SQLSTATE real fica em `meta.code`, e
+ * como último recurso no texto da mensagem.
+ */
+function pgCode(erro: unknown): string | null {
+  const meta = (erro as { meta?: { code?: unknown } })?.meta;
+  if (typeof meta?.code === 'string') return meta.code;
+
+  const code = (erro as { code?: unknown })?.code;
+  if (typeof code === 'string' && !/^P\d+$/.test(code)) return code;
+
+  return /Code: `(\w+)`/.exec(erro instanceof Error ? erro.message : '')?.[1] ?? null;
+}
+
+async function comandaAbertaDoAtendimento(
+  tx: TransactionClient,
+  appointmentId: string,
+): Promise<Comanda | null> {
+  const abertas = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM orders
+     WHERE appointment_id = ${appointmentId}::uuid
+       AND status = 'open'
+  `;
+  const aberta = abertas[0];
+  return aberta ? carregar(tx, aberta.id) : null;
+}
+
+async function inserirComanda(params: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly appointmentId?: string | null;
@@ -250,6 +324,13 @@ export async function abrirComanda(params: {
       if (!agendamento) {
         throw new ComandaError('comanda_nao_encontrada', 'Agendamento não encontrado.');
       }
+
+      // Depois de conferir o atendimento sob RLS, nunca antes: id inexistente
+      // ou de outra barbearia continua respondendo "não encontrado", em vez de
+      // virar uma consulta que não acha nada e segue para o INSERT.
+      const jaAberta = await comandaAbertaDoAtendimento(tx, params.appointmentId);
+      if (jaAberta) return jaAberta;
+
       customerId = customerId ?? agendamento.customer_id;
 
       const doAgendamento = await tx.$queryRaw<

@@ -99,6 +99,22 @@ export const ROTULO_DO_ESTADO: Readonly<Record<AppointmentStatus, string>> = {
 export const ACOES_PESADAS: ReadonlySet<AttendanceAction> = new Set(['no_show', 'cancel']);
 
 /**
+ * De quem se cobra: quem sentou na cadeira, e quem já saiu dela.
+ *
+ * Mora aqui porque **duas telas respondem a mesma pergunta** — a lista de
+ * "Cobrar" e o cartão do dia — e elas precisam concordar. Escrita nas duas,
+ * bastava alguém acrescentar um estado num lugar para o balcão ver a mesma
+ * pessoa cobrável numa tela e não na outra, sem nada ficar vermelho.
+ *
+ * Antes de sentar não há o que cobrar: o corte não começou, e comanda aberta em
+ * quem ainda pode faltar é comanda que alguém esquece aberta.
+ */
+export const ESTADOS_COBRAVEIS: ReadonlySet<AppointmentStatus> = new Set([
+  'in_progress',
+  'completed',
+]);
+
+/**
  * A ação em destaque de cada estado — uma só, em qualquer tela.
  *
  * Sempre a que quem opera mais aperta naquele momento. `no_show` e `cancel`

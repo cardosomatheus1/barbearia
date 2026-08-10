@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { ESTADOS_COBRAVEIS } from '@barbearia/core';
 import { painelDoDia, type LinhaDoDia } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -41,9 +42,6 @@ const FALHA: Record<string, string> = {
 };
 
 const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
-
-/** Quem já foi atendido ou está sendo: é de quem se cobra. */
-const COBRAVEL: ReadonlySet<string> = new Set(['in_progress', 'completed']);
 
 function Atendimento({ linha }: { readonly linha: LinhaDoDia }) {
   return (
@@ -91,7 +89,7 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
     </header>
   );
 
-  const aCobrar = dia.ok ? dia.dados.entries.filter((linha) => COBRAVEL.has(linha.status)) : [];
+  const aCobrar = dia.ok ? dia.dados.entries.filter((linha) => ESTADOS_COBRAVEIS.has(linha.status)) : [];
 
   return (
     <main className="ui-container painel__conteudo" {...secao('comanda')}>

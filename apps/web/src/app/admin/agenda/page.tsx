@@ -151,7 +151,25 @@ function Cartao({
       <div className="compromisso__quem">
         <p className="compromisso__nome">{entrada.customerName ?? 'sem cliente'}</p>
         <p className="compromisso__servico">{entrada.services.join(' + ')}</p>
-        <p className="compromisso__estado">{ESTADO[entrada.status] ?? entrada.status}</p>
+        <p className="compromisso__estado">
+          {ESTADO[entrada.status] ?? entrada.status}
+          {/**
+           * Saída para onde se **age**.
+           *
+           * O cartão mostrava "Na cadeira" e "Atendido" e não oferecia nada
+           * além de "Mover": um estado de operação sem saída na tela. A
+           * separação é de propósito — a agenda planeja, o dia opera —, mas
+           * quem lê o estado aqui e precisa agir estava sozinho, procurando a
+           * data certa no trilho.
+           *
+           * Link, e não os botões de atendimento: a máquina de estados vive em
+           * uma tela só. Duplicá-la é como a mesma transição ganha nomes
+           * diferentes, que é o defeito que acabou de ser consertado.
+           */}
+          <a className="compromisso__ir" href={`/admin/dia?d=${data}`}>
+            Ver no dia
+          </a>
+        </p>
       </div>
 
       <details className="dobra compromisso__mover">

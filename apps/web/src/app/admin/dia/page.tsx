@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import {
   ACAO_PRINCIPAL,
   ACOES_PESADAS,
+  ESTADOS_COBRAVEIS,
   ROTULO_DO_ESTADO,
   VERBO_DA_ACAO,
 } from '@barbearia/core';
@@ -16,7 +18,7 @@ import {
 import { addDays, localTime, weekdayShort } from '@/lib/date';
 import { painelDoBalcaoOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoAtendimento, acaoSair } from '../acoes';
+import { acaoAbrirComanda, acaoAtendimento, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -240,14 +242,32 @@ function Atendimento({
   linha,
   tolerancia,
   voltarPara,
+  podeCobrar,
 }: {
   readonly linha: LinhaDoDia;
   readonly tolerancia: number;
   readonly voltarPara: string;
+  readonly podeCobrar: boolean;
 }) {
   const principal = PRINCIPAL[linha.status];
   const secundarias = linha.actions.filter((a) => a !== principal);
   const frase = situacao(linha, tolerancia);
+  /**
+   * O dinheiro fica onde o atendimento termina.
+   *
+   * Encerrar um corte aqui e ter que ir a Dinheiro → Cobrar procurar a mesma
+   * pessoa numa segunda lista eram cinco toques para a operação mais frequente
+   * do balcão — e a lista de lá é a **mesma** consulta desta tela, filtrada
+   * pelos mesmos dois estados. Duas telas para um passo só.
+   *
+   * `completed` não tem ação de atendimento nenhuma: sem isto o cartão fica sem
+   * saída, que é justamente o momento em que ainda falta receber.
+   *
+   * Abrir a comanda duas vezes devolve a mesma — quem garante é `abrirComanda`,
+   * e é o que permite este botão conviver com o de lá sem virar cobrança
+   * dobrada.
+   */
+  const cobrar = podeCobrar && ESTADOS_COBRAVEIS.has(linha.status);
 
   return (
     <article className={`atendimento ${tom(linha)}`}>
@@ -274,7 +294,7 @@ function Atendimento({
         </p>
       </div>
 
-      {linha.actions.length > 0 ? (
+      {linha.actions.length > 0 || cobrar ? (
         <div className="atendimento__acoes">
           {principal ? (
             <form action={acaoAtendimento}>
@@ -283,6 +303,22 @@ function Atendimento({
               <input type="hidden" name="voltar" value={voltarPara} />
               <button className="ui-button ui-button--primary atendimento__botao" type="submit">
                 {AÇÃO[principal]}
+              </button>
+            </form>
+          ) : null}
+
+          {cobrar ? (
+            <form action={acaoAbrirComanda}>
+              <input name="appointmentId" type="hidden" value={linha.id} />
+              {/* Chave por render: dois toques no mesmo botão são um pedido só. */}
+              <input name="idempotencyKey" type="hidden" value={randomUUID()} />
+              <button
+                className={`ui-button atendimento__botao ${
+                  principal ? 'ui-button--secondary' : 'ui-button--primary'
+                }`}
+                type="submit"
+              >
+                Cobrar
               </button>
             </form>
           ) : null}
@@ -319,6 +355,9 @@ export default async function DiaPage({ searchParams }: Props) {
   // O barbeiro tem `appointments.view` e esta tela funcionaria para ele.
   // Funcionar não é servir: a dele é `/admin/meu-dia`.
   const estado = await painelDoBalcaoOuDesvio(token);
+  // A tela esconde o que a guarda recusaria: o barbeiro que abre esta página
+  // por engano não vê um botão que só dá erro. A recusa de verdade é na API.
+  const podeCobrar = podeNaTela(estado, 'cashier.open');
 
   const query = await searchParams;
   const dataPedida = first(query['d']);
@@ -462,7 +501,12 @@ export default async function DiaPage({ searchParams }: Props) {
                   <span className="agora__nome">agora</span>
                 </p>
               ) : null}
-              <Atendimento linha={linha} tolerancia={dia.noShowAfterMinutes} voltarPara={voltarPara} />
+              <Atendimento
+                linha={linha}
+                podeCobrar={podeCobrar}
+                tolerancia={dia.noShowAfterMinutes}
+                voltarPara={voltarPara}
+              />
             </li>
           ))}
           {éHoje && marcaAgora === -1 ? (

@@ -43,7 +43,7 @@ seção [Escopo recomendado](#escopo-recomendado) antes de tratá-lo como plano.
 
 Não é bloco: é conserto do que o portão inteiro deixou passar, e a razão de o
 `CLAUDE.md` ter ganhado a [§6](CLAUDE.md#6-regra-de-negócio-e-coerência-do-fluxo).
-Quatro defeitos, todos com teste verde antes e todos invisíveis a qualquer teste
+Nove defeitos, todos com teste verde antes e todos invisíveis a qualquer teste
 de tela — porque cada tela, sozinha, era coerente:
 
 | O que estava errado | O conserto |
@@ -53,6 +53,10 @@ de tela — porque cada tela, sozinha, era coerente:
 | A mesma transição tinha três nomes: **Iniciar · Começar · Sentou**, em três telas do mesmo produto | vocabulário único em `packages/core/src/vocabulario.ts`, com teste que reprova tela definindo o próprio dicionário |
 | A fila nunca fechava ninguém: nada escrevia `done`, e por isso a **espera média era sempre `—`** | encerrar o atendimento fecha a entrada, na mesma transação |
 | Ninguém via quem estava na cadeira nem há quanto tempo — `appointments.started_at` existia desde a migração 0014, com o comentário "base da duração real", e era descartado antes de chegar à tela | faixa "Nas cadeiras agora" no topo do dia, com o tempo decorrido. **O número não anda**: é o instantâneo da carga, e a tela diz isso |
+| Abrir a comanda do mesmo atendimento duas vezes esbarrava em `orders_uma_aberta_por_agendamento` e virava **500**: a tela dizia "tente de novo" e tentar de novo dava o mesmo erro para sempre. A comanda existia e não havia caminho até ela | `abrirComanda` devolve a que já está aberta. O índice dizia desde o bloco 18 que é uma só; faltava a outra metade da regra. A corrida também: a violação de unicidade vira leitura numa transação nova |
+| Encerrado o corte, o cartão do dia ficava **sem saída** — receber exigia ir a Dinheiro → Cobrar e procurar a mesma pessoa numa segunda lista, montada pela **mesma** consulta e pelos **mesmos** dois estados | "Cobrar" no cartão, escondido de quem não tem `cashier.open`. E a definição de "cobrável" saiu das duas telas para `ESTADOS_COBRAVEIS`, em `core`: escrita nas duas, bastava mexer numa para elas discordarem sem nada ficar vermelho |
+| A agenda mostrava estado de operação ("Na cadeira", "Atendido") e não oferecia nada além de "Mover" | link "Ver no dia" no cartão. Link, e não os botões de atendimento: a máquina de estados fica em uma tela só — duplicá-la é como as transições ganharam três nomes |
+| A tela de comissão dizia **"Comissão"** para os dois lados do mesmo dinheiro. O dono abre para saber quanto **paga**, o barbeiro para saber quanto **recebe**, e quem tem as duas contas não tinha como saber qual estava na tela | "Comissão da equipe" e "Minha comissão", com o subtítulo dizendo o que o número é. Os dados sempre estiveram certos — a API já recorta pelo `commission.view_all` |
 
 ## Lacunas com dependência declarada
 

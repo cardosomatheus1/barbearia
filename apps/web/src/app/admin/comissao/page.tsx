@@ -149,10 +149,20 @@ export default async function ComissaoPage({ searchParams }: Props) {
     <main className="ui-container painel__conteudo" {...secao('comissao')}>
       {topo}
 
-      <h1 className="painel__titulo">Comissão</h1>
+      {/**
+       * O título diz de quem é o dinheiro, porque a tela serve aos dois lados
+       * dele.
+       *
+       * "Comissão" para os dois era a mesma palavra respondendo a duas
+       * perguntas opostas: o dono abre para saber **quanto vai pagar**, o
+       * barbeiro para saber **quanto vai receber**. Quem tinha as duas contas
+       * — o dono que também corta — não tinha como saber qual das duas estava
+       * na tela, e o único sinal era um " · a sua" no fim da linha da data.
+       */}
+      <h1 className="painel__titulo">{veTodos ? 'Comissão da equipe' : 'Minha comissão'}</h1>
       <p className="painel__sub">
-        {porExtenso(conta.de)} a {porExtenso(conta.ate)}
-        {veTodos ? '' : ' · a sua'}
+        {porExtenso(conta.de)} a {porExtenso(conta.ate)} ·{' '}
+        {veTodos ? 'o que a casa tem a pagar' : 'o que você tem a receber'}
       </p>
 
       {erro ? (
@@ -169,7 +179,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
       ) : null}
 
       <section className="gaveta">
-        <p className="gaveta__rotulo">{veTodos ? 'Total do período' : 'Você tem a receber'}</p>
+        <p className="gaveta__rotulo">{veTodos ? 'A casa tem a pagar' : 'Você tem a receber'}</p>
         <p className="gaveta__valor">{reais(conta.totalComissaoCents)}</p>
         <p className="gaveta__quem">sobre {reais(conta.totalBaseCents)} de serviço</p>
       </section>
