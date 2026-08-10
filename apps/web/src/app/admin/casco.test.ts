@@ -72,6 +72,19 @@ describe('toda tela do painel declara onde está', () => {
     expect(naMao.map((c) => relative(AQUI, c))).toEqual([]);
   });
 
+  it('o mapa por módulo tem exatamente os módulos do registro', () => {
+    /**
+     * A rede da asserção de tipo em `SECOES_POR_MODULO`.
+     *
+     * Ele é derivado de `MODULOS` com `Object.fromEntries`, que devolve
+     * assinatura de índice — o TypeScript não prova que toda chave de `Modulo`
+     * está ali, e a guarda do CSS logo abaixo varre justamente os **valores**
+     * deste mapa. Um módulo ausente sumiria das duas conferências de uma vez,
+     * que é exatamente como `lgpd` e `plano` ficaram sem acender.
+     */
+    expect(Object.keys(SECOES_POR_MODULO).sort()).toEqual(MODULOS.map((m) => m.id).sort());
+  });
+
   it('toda seção usada pelas telas é conhecida pelo casco', () => {
     const conhecidas = new Set(Object.values(SECOES_POR_MODULO).flat());
     const usadas = new Set<string>();
@@ -136,8 +149,8 @@ describe('o CSS acompanha o casco', () => {
 
 describe('secao()', () => {
   it('devolve a seção e o módulo dono dela', () => {
-    expect(secao('caixa')).toEqual({ 'data-secao': 'caixa', 'data-modulo-atual': 'dinheiro' });
-    expect(secao('cliente')).toEqual({ 'data-secao': 'cliente', 'data-modulo-atual': 'operacao' });
+    expect(secao('caixa')).toEqual({ 'data-secao': 'caixa', 'data-modulo-atual': 'financeiro' });
+    expect(secao('cliente')).toEqual({ 'data-secao': 'cliente', 'data-modulo-atual': 'atendimento' });
   });
 
   it('recusa seção fora do casco', () => {

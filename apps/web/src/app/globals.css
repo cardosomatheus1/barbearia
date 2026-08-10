@@ -3498,7 +3498,7 @@ main { padding-bottom: var(--space-8); }
    O casco do painel — a moldura de três colunas do mock interno
    ============================================================================
 
-   Trilho de **módulos** (três ícones), coluna de contexto com as telas de dentro
+   Trilho de **módulos** (cinco áreas), coluna de contexto com as telas de dentro
    do módulo aberto, e a área de trabalho. Um link mora num lugar só: o trilho
    não repete o que o contexto lista.
 
@@ -3519,7 +3519,15 @@ main { padding-bottom: var(--space-8); }
 
 .trilho {
   display: grid;
-  grid-template-columns: auto 1fr 1fr 1fr;
+  /* Cada botão com a largura do próprio nome, e a barra rolando dentro de si.
+     Com `repeat(5, minmax(4.75rem, 1fr))` os cinco módulos dividiam os 360px em
+     colunas de 76px, e o `text-overflow` do rótulo entregava "VI…", "AT…",
+     "FI…" — cortar até duas letras é esconder conteúdo, não refluir (§5). Eram
+     três módulos com nomes curtos quando aquela regra foi escrita. */
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  overflow-x: auto;
+  scrollbar-width: thin;
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-2);
@@ -3575,9 +3583,11 @@ main { padding-bottom: var(--space-8); }
 
 /* O módulo aberto: fundo em degradê e o filete creme→vermelho. É o estado ativo
    do mock, e a única peça da moldura que usa as duas cores da marca juntas. */
-.casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao'],
-.casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro'],
-.casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa'] {
+.casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio'],
+.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'],
+.casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'],
+.casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros'],
+.casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao'] {
   color: var(--color-accent);
   background: linear-gradient(
     180deg,
@@ -3586,12 +3596,16 @@ main { padding-bottom: var(--space-8); }
   );
   border-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
-.casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao'] svg,
-.casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro'] svg,
-.casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa'] svg { opacity: 1; }
-.casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao']::after,
-.casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro']::after,
-.casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa']::after {
+.casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio'] svg,
+.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'] svg,
+.casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'] svg,
+.casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros'] svg,
+.casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao'] svg { opacity: 1; }
+.casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio']::after,
+.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
+.casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
+.casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros']::after,
+.casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao']::after {
   content: '';
   position: absolute;
   left: var(--space-3);
@@ -3636,9 +3650,11 @@ main { padding-bottom: var(--space-8); }
 /* Só o bloco do módulo aberto aparece. Condicional por seção, não por largura:
    a mesma regra vale em 360px e em 1440px. */
 .contexto__bloco { display: none; }
-.casco:has([data-modulo-atual='operacao']) .contexto__bloco[data-modulo='operacao'],
-.casco:has([data-modulo-atual='dinheiro']) .contexto__bloco[data-modulo='dinheiro'],
-.casco:has([data-modulo-atual='casa']) .contexto__bloco[data-modulo='casa'] {
+.casco:has([data-modulo-atual='inicio']) .contexto__bloco[data-modulo='inicio'],
+.casco:has([data-modulo-atual='atendimento']) .contexto__bloco[data-modulo='atendimento'],
+.casco:has([data-modulo-atual='financeiro']) .contexto__bloco[data-modulo='financeiro'],
+.casco:has([data-modulo-atual='cadastros']) .contexto__bloco[data-modulo='cadastros'],
+.casco:has([data-modulo-atual='administracao']) .contexto__bloco[data-modulo='administracao'] {
   display: flex;
   flex-direction: row;
   gap: var(--space-2);
@@ -3691,7 +3707,10 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
 .casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
 .casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
-.casco:has([data-secao='cadastro']) .contexto__link[data-para='cadastro'],
+.casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
+.casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais'],
+.casco:has([data-secao='recursos']) .contexto__link[data-para='recursos'],
+.casco:has([data-secao='fotos']) .contexto__link[data-para='fotos'],
 .casco:has([data-secao='equipe']) .contexto__link[data-para='equipe'],
 .casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
 .casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
@@ -3785,6 +3804,9 @@ main { padding-bottom: var(--space-8); }
 
   .trilho {
     grid-template-columns: none;
+    /* Volta a empilhar: aqui o trilho é a coluna da esquerda, não a barra. */
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
     grid-auto-rows: max-content;
     justify-items: center;
     align-content: start;
@@ -3809,9 +3831,11 @@ main { padding-bottom: var(--space-8); }
     overflow: hidden;
     clip-path: inset(50%);
   }
-  .casco:has([data-modulo-atual='operacao']) .trilho__botao[data-modulo='operacao']::after,
-  .casco:has([data-modulo-atual='dinheiro']) .trilho__botao[data-modulo='dinheiro']::after,
-  .casco:has([data-modulo-atual='casa']) .trilho__botao[data-modulo='casa']::after {
+  .casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio']::after,
+  .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
+  .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
+  .casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros']::after,
+  .casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao']::after {
     left: calc(var(--space-3) * -1);
     right: auto;
     top: 50%;
@@ -3836,9 +3860,11 @@ main { padding-bottom: var(--space-8); }
     border-bottom: 1px solid var(--color-border);
   }
   .contexto__lista { padding: var(--space-2); overflow-y: auto; }
-  .casco:has([data-modulo-atual='operacao']) .contexto__bloco[data-modulo='operacao'],
-  .casco:has([data-modulo-atual='dinheiro']) .contexto__bloco[data-modulo='dinheiro'],
-  .casco:has([data-modulo-atual='casa']) .contexto__bloco[data-modulo='casa'] {
+  .casco:has([data-modulo-atual='inicio']) .contexto__bloco[data-modulo='inicio'],
+  .casco:has([data-modulo-atual='atendimento']) .contexto__bloco[data-modulo='atendimento'],
+  .casco:has([data-modulo-atual='financeiro']) .contexto__bloco[data-modulo='financeiro'],
+  .casco:has([data-modulo-atual='cadastros']) .contexto__bloco[data-modulo='cadastros'],
+  .casco:has([data-modulo-atual='administracao']) .contexto__bloco[data-modulo='administracao'] {
     flex-direction: column;
     gap: 2px;
     overflow: visible;
@@ -5579,4 +5605,130 @@ main { padding-bottom: var(--space-8); }
 .cadeiras-agora__tempo {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+/* ============================================================================
+   Painel do negócio — usa a linguagem interna existente do Barber Dock.
+
+   Aqui só existe CSS de composição. Superfícies, tipografia, filtros, números,
+   barras e estados vêm de `.quadro`, `.numero`, `.filtro`, `.totalzinho`,
+   `.meta`, `.defeito` e `.selo`, que já são o design system real do admin.
+   ============================================================================ */
+
+.painel-negocio { max-width: 68rem !important; padding-bottom: var(--space-8); }
+
+/* A régua de período é a mesma usada no balcão. No celular ela rola dentro de
+   si; a página nunca ganha scroll horizontal. */
+.painel-periodos {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin-top: calc(var(--space-3) * -1);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-1);
+}
+.painel-periodos .filtro { background: color-mix(in srgb, var(--color-surface-raised) 70%, transparent); }
+.painel-periodos .filtro--ativo {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 10%, transparent),
+    color-mix(in srgb, var(--color-danger) 5%, transparent)
+  );
+}
+
+.painel-resumo { display: grid; gap: var(--space-3); }
+.painel-faturamento__valor {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 8vw, 3.25rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.painel-faturamento__valor--protegido { color: var(--color-text-muted); font-size: var(--font-size-2xl); }
+.painel-meta { margin-top: var(--space-4); max-width: 34rem; }
+.painel-kpis { margin: 0; }
+
+.painel-secao__cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+}
+.painel-secao__cabeca .avisos__titulo { margin: 0 0 var(--space-3); }
+
+/* Totalzinho já é a assinatura da operação. Aqui só deixamos os quatro caberem
+   e crescerem igualmente quando houver espaço. */
+.painel-hoje {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+.painel-hoje .totalzinho { min-width: 0; }
+
+.painel-alertas { margin: 0; gap: var(--space-2); }
+.painel-alerta { padding: 0; overflow: hidden; }
+.painel-alerta--grave { --severidade: var(--color-danger); }
+.painel-alerta--aviso { --severidade: var(--color-warning); }
+.painel-alerta--ok { --severidade: var(--color-success); }
+.painel-alerta__link {
+  display: block;
+  min-height: var(--size-touch);
+  padding: var(--space-3) var(--space-4);
+  color: inherit;
+  text-decoration: none;
+}
+.painel-alerta__link:hover .defeito__link { text-decoration: underline; }
+
+.painel-desempenho { display: grid; gap: var(--space-3); }
+.dashboard-grafico {
+  position: relative;
+  height: 10rem;
+  border-bottom: 1px solid var(--color-border);
+  background-image: linear-gradient(to bottom,
+    transparent 24%, var(--color-border) 25%, transparent 26%,
+    transparent 49%, var(--color-border) 50%, transparent 51%,
+    transparent 74%, var(--color-border) 75%, transparent 76%);
+}
+.dashboard-grafico svg { width: 100%; height: 100%; padding: .5rem .125rem .125rem; }
+.dashboard-grafico path { fill: none; vector-effect: non-scaling-stroke; }
+.dashboard-grafico__real { stroke: var(--color-accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.dashboard-grafico__meta { stroke: var(--color-warning); stroke-width: 1.5; stroke-dasharray: 5 6; opacity: .75; }
+.dashboard-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.painel-equipe { display: grid; gap: var(--space-4); }
+.painel-equipe__linha { min-width: 0; }
+.painel-equipe__nome {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+.painel-equipe__nome strong { font-family: var(--font-display); font-size: var(--font-size-lg); }
+.painel-equipe .meta__barra { margin-top: 0; }
+.painel-negocio__mfa { margin-top: var(--space-6); }
+
+@media (min-width: 640px) {
+  .painel-hoje { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (min-width: 720px) {
+  .painel-resumo { grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .85fr); }
+  .painel-kpis { grid-template-columns: 1fr 1fr; align-content: stretch; }
+  .painel-kpis .numero { display: flex; flex-direction: column; justify-content: center; }
+}
+
+@media (min-width: 900px) {
+  .painel-desempenho { grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .85fr); }
 }

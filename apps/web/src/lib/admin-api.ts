@@ -1326,38 +1326,61 @@ export interface Comparado {
   variacao: number | null;
 }
 
+export type PeriodoPainel = 'dia' | '7d' | 'mes';
+
 export interface PainelOperacional {
   dia: string;
+  periodo?: PeriodoPainel;
+  inicio?: string;
+  fim?: string;
   comparadoCom: string;
   agendamentos: Comparado;
   atendidos: Comparado;
   ocupacao: Comparado;
   noShow: Comparado;
   novosClientes: Comparado;
+  equipe?: { professionalId: string; professionalName: string; ocupacao: number }[];
 }
 
 export interface PainelDeDinheiro {
   dia: string;
+  periodo?: PeriodoPainel;
+  inicio?: string;
+  fim?: string;
   comparadoCom: string;
   faturamentoCents: Comparado;
   ticketMedioCents: Comparado;
+  metaCents?: number;
+  percentualMeta?: number;
+  projecaoCents?: number;
+  serie?: { dia: string; faturamentoCents: number }[];
 }
 
-export const painelOperacional = (token: string, dia?: string) =>
-  chamar<PainelOperacional>(
+export const painelOperacional = (token: string, dia?: string, periodo?: PeriodoPainel) => {
+  const busca = new URLSearchParams();
+  if (dia) busca.set('dia', dia);
+  if (periodo) busca.set('periodo', periodo);
+  const query = busca.toString();
+  return chamar<PainelOperacional>(
     'GET',
-    `/v1/admin/dashboard${dia ? `?dia=${dia}` : ''}`,
+    `/v1/admin/dashboard${query ? `?${query}` : ''}`,
     undefined,
     token,
   );
+};
 
-export const painelDeDinheiro = (token: string, dia?: string) =>
-  chamar<PainelDeDinheiro>(
+export const painelDeDinheiro = (token: string, dia?: string, periodo?: PeriodoPainel) => {
+  const busca = new URLSearchParams();
+  if (dia) busca.set('dia', dia);
+  if (periodo) busca.set('periodo', periodo);
+  const query = busca.toString();
+  return chamar<PainelDeDinheiro>(
     'GET',
-    `/v1/admin/dashboard/revenue${dia ? `?dia=${dia}` : ''}`,
+    `/v1/admin/dashboard/revenue${query ? `?${query}` : ''}`,
     undefined,
     token,
   );
+};
 
 // -- O validador de catálogo --------------------------------------------------
 

@@ -29,7 +29,7 @@ import {
 import { secao } from '../secoes';
 
 /**
- * Equipe e jornadas.
+ * Profissionais e jornadas.
  *
  * Duas coisas que o onboarding cadastrava juntas e nunca mais deixava mexer: o
  * **quem** e o **quando**. Sem esta tela, o barbeiro que passou a folgar na
@@ -42,7 +42,7 @@ import { secao } from '../secoes';
  */
 
 export const metadata: Metadata = {
-  title: 'Equipe e jornadas',
+  title: 'Profissionais e jornadas',
   robots: { index: false, follow: false },
 };
 
@@ -379,7 +379,7 @@ function Convite({
   if (pessoa.hasAccount) {
     return (
       <p className="convite__ja">
-        Já tem conta. Se perdeu o acesso, reemita a senha em <a href="/admin/equipe">Equipe</a>.
+        Já tem conta. Se perdeu o acesso, reemita a senha em <a href="/admin/equipe">Usuários e acessos</a>.
       </p>
     );
   }
@@ -521,7 +521,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
   if (!equipe.ok || !catalogo.ok) {
     const code = equipe.ok ? (catalogo.ok ? 'request_failed' : catalogo.code) : equipe.code;
     return (
-      <main className="ui-container painel__conteudo" {...secao('cadastro')}>
+      <main className="ui-container painel__conteudo" {...secao('profissionais')}>
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -546,7 +546,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
     : linhasDaJornada(jornada?.ok ? jornada.dados.faixas : []);
 
   return (
-    <main className="ui-container painel__conteudo" {...secao('cadastro')}>
+    <main className="ui-container painel__conteudo" {...secao('profissionais')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}
@@ -558,7 +558,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
         </form>
       </header>
 
-      <h1 className="painel__titulo">Equipe e jornadas</h1>
+      <h1 className="painel__titulo">Profissionais e jornadas</h1>
       <p className="painel__sub">
         Quem atende, o que cada um faz e em que horários. A jornada é de cada pessoa — quem folga
         na segunda some da grade da segunda, e só dela.
@@ -706,7 +706,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
 
       <p className="painel__nota">
         Recepção e gerência têm conta sem cadeira, e ficam em{' '}
-        <a href="/admin/equipe">Equipe</a>. Aqui é o contrário: a cadeira que ganha uma conta, para
+        <a href="/admin/equipe">Usuários e acessos</a>. Aqui é o contrário: a cadeira que ganha uma conta, para
         o barbeiro ver a agenda dele — uma cadeira, uma conta.
       </p>
     </main>

@@ -30,7 +30,7 @@ import { secao } from '../secoes';
  */
 
 export const metadata: Metadata = {
-  title: 'Equipe',
+  title: 'Usuários e acessos',
   robots: { index: false, follow: false },
 };
 
@@ -191,7 +191,7 @@ export default async function EquipePage({ searchParams }: Props) {
         </form>
       </header>
 
-      <h1 className="painel__titulo">Equipe</h1>
+      <h1 className="painel__titulo">Usuários e acessos</h1>
       <p className="painel__sub">
         Cada pessoa com a própria conta e só o acesso de que precisa. Enquanto a recepção usa a
         sua senha, ela também tem o seu faturamento.

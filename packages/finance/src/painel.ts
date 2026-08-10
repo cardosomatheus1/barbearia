@@ -35,8 +35,19 @@ export interface Comparado {
   readonly variacao: number | null;
 }
 
+export type PeriodoPainel = 'dia' | '7d' | 'mes';
+
+export interface OcupacaoProfissional {
+  readonly professionalId: string;
+  readonly professionalName: string;
+  readonly ocupacao: number;
+}
+
 export interface PainelOperacional {
   readonly dia: string;
+  readonly periodo?: PeriodoPainel;
+  readonly inicio?: string;
+  readonly fim?: string;
   /** O dia com que se compara: o mesmo dia da semana anterior. */
   readonly comparadoCom: string;
   readonly agendamentos: Comparado;
@@ -46,13 +57,26 @@ export interface PainelOperacional {
   /** Faltas sobre esperados, em pontos inteiros. */
   readonly noShow: Comparado;
   readonly novosClientes: Comparado;
+  readonly equipe?: readonly OcupacaoProfissional[];
+}
+
+export interface PontoFaturamento {
+  readonly dia: string;
+  readonly faturamentoCents: number;
 }
 
 export interface PainelDeDinheiro {
   readonly dia: string;
+  readonly periodo?: PeriodoPainel;
+  readonly inicio?: string;
+  readonly fim?: string;
   readonly comparadoCom: string;
   readonly faturamentoCents: Comparado;
   readonly ticketMedioCents: Comparado;
+  readonly metaCents?: number;
+  readonly percentualMeta?: number;
+  readonly projecaoCents?: number;
+  readonly serie?: readonly PontoFaturamento[];
 }
 
 const comparar = (valor: number, anterior: number): Comparado => ({
@@ -250,6 +274,278 @@ export async function painelDeDinheiro(params: {
         Number(passado.faturamento_cents),
       ),
       ticketMedioCents: comparar(ticketHoje, ticketAntes),
+    };
+  });
+}
+
+
+// -- Painel por período -------------------------------------------------------
+
+interface JanelaPainel {
+  readonly inicio: string;
+  readonly fim: string;
+  readonly inicioAnterior: string;
+  readonly fimAnterior: string;
+}
+
+const iso = (data: Date): string => data.toISOString().slice(0, 10);
+
+function utc(dia: string): Date {
+  const [ano, mes, d] = dia.split('-').map(Number);
+  return new Date(Date.UTC(ano ?? 1970, (mes ?? 1) - 1, d ?? 1));
+}
+
+function somarDias(dia: string, delta: number): string {
+  const data = utc(dia);
+  data.setUTCDate(data.getUTCDate() + delta);
+  return iso(data);
+}
+
+function primeiroDoMes(dia: string): string {
+  return `${dia.slice(0, 7)}-01`;
+}
+
+function mesAnteriorAte(dia: string): { inicio: string; fim: string } {
+  const atual = utc(dia);
+  const numeroDoDia = atual.getUTCDate();
+  const inicioAnterior = new Date(Date.UTC(atual.getUTCFullYear(), atual.getUTCMonth() - 1, 1));
+  const ultimoAnterior = new Date(Date.UTC(atual.getUTCFullYear(), atual.getUTCMonth(), 0)).getUTCDate();
+  const fimAnterior = new Date(Date.UTC(
+    inicioAnterior.getUTCFullYear(),
+    inicioAnterior.getUTCMonth(),
+    Math.min(numeroDoDia, ultimoAnterior),
+  ));
+  return { inicio: iso(inicioAnterior), fim: iso(fimAnterior) };
+}
+
+function janelaPainel(dia: string, periodo: PeriodoPainel): JanelaPainel {
+  if (periodo === 'dia') {
+    const anterior = semanaPassada(dia);
+    return { inicio: dia, fim: dia, inicioAnterior: anterior, fimAnterior: anterior };
+  }
+  if (periodo === '7d') {
+    return {
+      inicio: somarDias(dia, -6),
+      fim: dia,
+      inicioAnterior: somarDias(dia, -13),
+      fimAnterior: somarDias(dia, -7),
+    };
+  }
+  const anterior = mesAnteriorAte(dia);
+  return { inicio: primeiroDoMes(dia), fim: dia, inicioAnterior: anterior.inicio, fimAnterior: anterior.fim };
+}
+
+async function operacionalDoPeriodo(
+  tx: TransactionClient,
+  locationId: string,
+  inicio: string,
+  fim: string,
+): Promise<LinhaOperacional> {
+  const linhas = await tx.$queryRaw<LinhaOperacional[]>`
+    SELECT
+      (SELECT count(*) FROM appointments a
+        WHERE a.location_id = ${locationId}::uuid
+          AND a.service_starts_at >= ${inicio}::date
+          AND a.service_starts_at < (${fim}::date + 1)
+          AND a.status NOT IN ('rescheduled'))::bigint AS agendamentos,
+      (SELECT count(*) FROM appointments a
+        WHERE a.location_id = ${locationId}::uuid
+          AND a.service_starts_at >= ${inicio}::date
+          AND a.service_starts_at < (${fim}::date + 1)
+          AND a.status = 'completed')::bigint AS atendidos,
+      (SELECT count(*) FROM appointments a
+        WHERE a.location_id = ${locationId}::uuid
+          AND a.service_starts_at >= ${inicio}::date
+          AND a.service_starts_at < (${fim}::date + 1)
+          AND a.status = 'no_show')::bigint AS faltaram,
+      (SELECT coalesce(sum(EXTRACT(EPOCH FROM (a.service_ends_at - a.service_starts_at)) / 60), 0)::bigint
+         FROM appointments a
+        WHERE a.location_id = ${locationId}::uuid
+          AND a.service_starts_at >= ${inicio}::date
+          AND a.service_starts_at < (${fim}::date + 1)
+          AND a.status IN ('completed', 'in_progress', 'checked_in', 'waiting', 'confirmed', 'pending'))::bigint
+          AS minutos_vendidos,
+      (SELECT count(*) FROM customers c
+        WHERE (SELECT min(a.service_starts_at) FROM appointments a
+                WHERE a.customer_id = c.id AND a.location_id = ${locationId}::uuid AND a.status = 'completed') >= ${inicio}::date
+          AND (SELECT min(a.service_starts_at) FROM appointments a
+                WHERE a.customer_id = c.id AND a.location_id = ${locationId}::uuid AND a.status = 'completed') < (${fim}::date + 1))::bigint
+          AS novos_clientes
+  `;
+  return linhas[0] ?? {
+    agendamentos: 0n, atendidos: 0n, faltaram: 0n, minutos_vendidos: 0n, novos_clientes: 0n,
+  };
+}
+
+async function capacidadeDoPeriodo(
+  tx: TransactionClient,
+  locationId: string,
+  inicio: string,
+  fim: string,
+): Promise<number> {
+  const linhas = await tx.$queryRaw<{ minutos: bigint }[]>`
+    SELECT coalesce(sum(ws.end_minute - ws.start_minute), 0)::bigint AS minutos
+      FROM generate_series(${inicio}::date, ${fim}::date, interval '1 day') AS d(dia)
+      JOIN work_schedules ws ON ws.weekday = EXTRACT(DOW FROM d.dia)
+      JOIN professionals p ON p.id = ws.professional_id
+     WHERE p.active AND p.kind = 'professional'
+       AND p.location_id = ${locationId}::uuid
+  `;
+  return Number(linhas[0]?.minutos ?? 0);
+}
+
+async function ocupacaoDaEquipe(
+  tx: TransactionClient,
+  locationId: string,
+  inicio: string,
+  fim: string,
+): Promise<readonly OcupacaoProfissional[]> {
+  const linhas = await tx.$queryRaw<{
+    id: string; name: string; vendidos: bigint; capacidade: bigint;
+  }[]>`
+    SELECT p.id, p.name,
+      coalesce((SELECT sum(EXTRACT(EPOCH FROM (a.service_ends_at - a.service_starts_at)) / 60)
+        FROM appointments a
+       WHERE a.professional_id = p.id
+         AND a.service_starts_at >= ${inicio}::date
+         AND a.service_starts_at < (${fim}::date + 1)
+         AND a.status IN ('completed', 'in_progress', 'checked_in', 'waiting', 'confirmed', 'pending')), 0)::bigint AS vendidos,
+      coalesce((SELECT sum(ws.end_minute - ws.start_minute)
+        FROM generate_series(${inicio}::date, ${fim}::date, interval '1 day') AS d(dia)
+        JOIN work_schedules ws ON ws.professional_id = p.id
+                              AND ws.weekday = EXTRACT(DOW FROM d.dia)), 0)::bigint AS capacidade
+      FROM professionals p
+     WHERE p.active AND p.kind = 'professional' AND p.location_id = ${locationId}::uuid
+     ORDER BY p.name
+  `;
+  return linhas.map((linha) => ({
+    professionalId: linha.id,
+    professionalName: linha.name,
+    ocupacao: emPontos(Number(linha.vendidos), Number(linha.capacidade)),
+  }));
+}
+
+export async function painelOperacionalDoPeriodo(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly dia: string;
+  readonly periodo: PeriodoPainel;
+}): Promise<PainelOperacional> {
+  const janela = janelaPainel(params.dia, params.periodo);
+  return withTenant(params.tenantId, async (tx) => {
+    const [atual, anterior, capacidade, capacidadeAnterior, equipe] = await Promise.all([
+      operacionalDoPeriodo(tx, params.locationId, janela.inicio, janela.fim),
+      operacionalDoPeriodo(tx, params.locationId, janela.inicioAnterior, janela.fimAnterior),
+      capacidadeDoPeriodo(tx, params.locationId, janela.inicio, janela.fim),
+      capacidadeDoPeriodo(tx, params.locationId, janela.inicioAnterior, janela.fimAnterior),
+      ocupacaoDaEquipe(tx, params.locationId, janela.inicio, janela.fim),
+    ]);
+    const esperados = Number(atual.atendidos) + Number(atual.faltaram);
+    const esperadosAntes = Number(anterior.atendidos) + Number(anterior.faltaram);
+    return {
+      dia: params.dia,
+      periodo: params.periodo,
+      inicio: janela.inicio,
+      fim: janela.fim,
+      comparadoCom: janela.inicioAnterior,
+      agendamentos: comparar(Number(atual.agendamentos), Number(anterior.agendamentos)),
+      atendidos: comparar(Number(atual.atendidos), Number(anterior.atendidos)),
+      ocupacao: comparar(
+        emPontos(Number(atual.minutos_vendidos), capacidade),
+        emPontos(Number(anterior.minutos_vendidos), capacidadeAnterior),
+      ),
+      noShow: comparar(emPontos(Number(atual.faltaram), esperados), emPontos(Number(anterior.faltaram), esperadosAntes)),
+      novosClientes: comparar(Number(atual.novos_clientes), Number(anterior.novos_clientes)),
+      equipe,
+    };
+  });
+}
+
+async function dinheiroDoPeriodo(
+  tx: TransactionClient,
+  locationId: string,
+  inicio: string,
+  fim: string,
+): Promise<LinhaDeDinheiro> {
+  const linhas = await tx.$queryRaw<LinhaDeDinheiro[]>`
+    SELECT coalesce(sum(o.total_cents), 0)::bigint AS faturamento_cents,
+           count(*)::bigint AS comandas
+      FROM orders o
+     WHERE o.location_id = ${locationId}::uuid
+       AND o.status = 'paid'
+       AND o.business_day >= ${inicio}::date
+       AND o.business_day <= ${fim}::date
+  `;
+  return linhas[0] ?? { faturamento_cents: 0n, comandas: 0n };
+}
+
+async function serieDeFaturamento(
+  tx: TransactionClient,
+  locationId: string,
+  inicio: string,
+  fim: string,
+): Promise<readonly PontoFaturamento[]> {
+  const linhas = await tx.$queryRaw<{ dia: string; faturamento_cents: bigint }[]>`
+    SELECT to_char(d.dia::date, 'YYYY-MM-DD') AS dia, coalesce(sum(o.total_cents), 0)::bigint AS faturamento_cents
+      FROM generate_series(${inicio}::date, ${fim}::date, interval '1 day') AS d(dia)
+      LEFT JOIN orders o ON o.location_id = ${locationId}::uuid
+                        AND o.status = 'paid'
+                        AND o.business_day = d.dia::date
+     GROUP BY d.dia
+     ORDER BY d.dia
+  `;
+  return linhas.map((linha) => ({ dia: linha.dia, faturamentoCents: Number(linha.faturamento_cents) }));
+}
+
+async function metaDaCasa(tx: TransactionClient, locationId: string, dia: string): Promise<number> {
+  const mes = primeiroDoMes(dia);
+  const linhas = await tx.$queryRaw<{ total: bigint }[]>`
+    SELECT coalesce(sum(g.revenue_cents), 0)::bigint AS total
+      FROM professional_goals g
+      JOIN professionals p ON p.id = g.professional_id
+     WHERE g.month = ${mes}::date
+       AND p.location_id = ${locationId}::uuid
+       AND p.active AND p.kind = 'professional'
+  `;
+  return Number(linhas[0]?.total ?? 0);
+}
+
+export async function painelDeDinheiroDoPeriodo(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly dia: string;
+  readonly periodo: PeriodoPainel;
+}): Promise<PainelDeDinheiro> {
+  const janela = janelaPainel(params.dia, params.periodo);
+  return withTenant(params.tenantId, async (tx) => {
+    const [atual, anterior, serie, metaCents] = await Promise.all([
+      dinheiroDoPeriodo(tx, params.locationId, janela.inicio, janela.fim),
+      dinheiroDoPeriodo(tx, params.locationId, janela.inicioAnterior, janela.fimAnterior),
+      serieDeFaturamento(tx, params.locationId, janela.inicio, janela.fim),
+      metaDaCasa(tx, params.locationId, params.dia),
+    ]);
+    const faturamento = Number(atual.faturamento_cents);
+    const faturamentoAnterior = Number(anterior.faturamento_cents);
+    const ticketAtual = ticketMedio({ faturamentoCents: faturamento, atendimentos: Number(atual.comandas), saiuComHorario: 0 });
+    const ticketAnterior = ticketMedio({ faturamentoCents: faturamentoAnterior, atendimentos: Number(anterior.comandas), saiuComHorario: 0 });
+    const diaDoMes = Number(params.dia.slice(8, 10));
+    const data = utc(params.dia);
+    const diasNoMes = new Date(Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + 1, 0)).getUTCDate();
+    const projecaoCents = params.periodo === 'mes' && diaDoMes > 0
+      ? Math.round((faturamento / diaDoMes) * diasNoMes)
+      : faturamento;
+    return {
+      dia: params.dia,
+      periodo: params.periodo,
+      inicio: janela.inicio,
+      fim: janela.fim,
+      comparadoCom: janela.inicioAnterior,
+      faturamentoCents: comparar(faturamento, faturamentoAnterior),
+      ticketMedioCents: comparar(ticketAtual, ticketAnterior),
+      metaCents,
+      percentualMeta: metaCents > 0 ? Math.round((faturamento / metaCents) * 100) : 0,
+      projecaoCents,
+      serie,
     };
   });
 }

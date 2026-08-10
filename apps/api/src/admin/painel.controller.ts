@@ -1,5 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { painelDeDinheiro, painelOperacional } from '@barbearia/finance';
+import {
+  painelDeDinheiro,
+  painelDeDinheiroDoPeriodo,
+  painelOperacional,
+  painelOperacionalDoPeriodo,
+  type PeriodoPainel,
+} from '@barbearia/finance';
 import { diagnosticarCatalogo } from '@barbearia/catalog';
 import {
   ACOES_DE_DINHEIRO,
@@ -71,10 +77,12 @@ export class PainelController {
   @Get('dashboard')
   async operacional(
     @Staff() staff: AuthenticatedStaff,
-    @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string },
+    @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string; periodo?: PeriodoPainel },
   ) {
     const { dia, locationId } = await this.diaDaCasa(staff.tenantId, query.dia);
-    return painelOperacional({ tenantId: staff.tenantId, locationId, dia });
+    return query.periodo
+      ? painelOperacionalDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo: query.periodo })
+      : painelOperacional({ tenantId: staff.tenantId, locationId, dia });
   }
 
   /** O dinheiro do dia. `finance.view` está no grupo que exige segundo fator. */
@@ -82,10 +90,12 @@ export class PainelController {
   @Get('dashboard/revenue')
   async dinheiro(
     @Staff() staff: AuthenticatedStaff,
-    @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string },
+    @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string; periodo?: PeriodoPainel },
   ) {
     const { dia, locationId } = await this.diaDaCasa(staff.tenantId, query.dia);
-    return painelDeDinheiro({ tenantId: staff.tenantId, locationId, dia });
+    return query.periodo
+      ? painelDeDinheiroDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo: query.periodo })
+      : painelDeDinheiro({ tenantId: staff.tenantId, locationId, dia });
   }
 
   @Exige('settings.manage')

@@ -285,7 +285,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
 
   if (!resposta.ok) {
     return (
-      <main className="ui-container painel__conteudo" {...secao('cadastro')}>
+      <main className="ui-container painel__conteudo" {...secao('servicos')}>
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">
             ← {estado.businessName}
@@ -302,7 +302,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
   const ativos = servicos.filter((servico) => servico.active);
 
   return (
-    <main className="ui-container painel__conteudo" {...secao('cadastro')}>
+    <main className="ui-container painel__conteudo" {...secao('servicos')}>
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">
           ← {estado.businessName}
@@ -365,7 +365,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
 
       <p className="painel__nota">
         Para dizer quem executa cada serviço, vá em{' '}
-        <a href="/admin/profissionais">Equipe e jornadas</a>. Para cadeira, lavatório e sala,{' '}
+        <a href="/admin/profissionais">Profissionais e jornadas</a>. Para cadeira, lavatório e sala,{' '}
         <a href="/admin/recursos">Recursos</a>.
       </p>
     </main>

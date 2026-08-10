@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 /**
  * O casco: a moldura fixa do painel.
  *
- * Três colunas, como no mock interno do Barber Dock — trilho de módulos,
+ * Três colunas — trilho de módulos,
  * navegação de contexto e a área de trabalho. Antes disso cada tela do admin era
  * uma coluna solta no meio da página: funcionava, e parecia um formulário, não
  * um sistema.
@@ -47,9 +47,11 @@ const traco = (d: string, tamanho = 20) => (
 
 /** O desenho de cada módulo. O registro é dado; o ícone é desenho, e mora aqui. */
 const ICONE: Readonly<Record<Modulo, ReactNode>> = {
-  operacao: traco('M4 7h16M4 12h16M4 17h10'),
-  dinheiro: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
-  casa: traco('M4 11l8-6 8 6v9H4zM10 20v-5h4v5'),
+  inicio: traco('M4 4h6v7H4zM14 4h6v4h-6zM4 15h6v5H4zM14 12h6v8h-6z'),
+  atendimento: traco('M5 4v3M19 4v3M4 9h16M5 6h14v14H5z'),
+  financeiro: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
+  cadastros: traco('M4 5h16v14H4zM8 9h8M8 13h8M8 17h5'),
+  administracao: traco('M4 7h10M18 7h2M4 12h2M10 12h10M4 17h8M16 17h4'),
 };
 
 const MODULOS = REGISTRO;
