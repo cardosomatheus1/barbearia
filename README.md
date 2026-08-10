@@ -42,6 +42,28 @@ Não há como rodar por clique duplo sem Docker: `.sh` não é executável no
 Windows, o PowerShell não tem `bash`, e o caminho manual seria instalar Node 22,
 pnpm e PostgreSQL 16 com três extensões.
 
+### Sem instalar nada: no navegador, pelo GitHub
+
+Se a máquina é corporativa e o administrador bloqueia instalação — Docker
+inclusive —, o projeto roda no **GitHub Codespaces**, que é um computador na
+nuvem com editor no navegador:
+
+1. Abra o repositório no GitHub.
+2. Botão verde **Code** → aba **Codespaces** → **Create codespace on ...**
+3. Espere a preparação (uns três minutos na primeira vez) e, no terminal que
+   abre embaixo, rode:
+
+   ```bash
+   scripts/rodar-local.sh --sem-install
+   ```
+
+4. Quando aparecer `web pronto`, o Codespaces abre a porta **3001** sozinho —
+   ou clique nela na aba **PORTS**.
+
+O `.devcontainer/` já traz Node 22, pnpm, o cliente do Postgres e um
+PostgreSQL 16 ao lado. A conta gratuita do GitHub inclui horas de Codespaces
+por mês.
+
 ### Com Docker, em qualquer sistema
 
 ```bash

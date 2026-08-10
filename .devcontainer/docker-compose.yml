@@ -1,0 +1,27 @@
+# O ambiente do Codespaces: a máquina de trabalho e o banco, lado a lado.
+#
+# É separado do `docker-compose.yml` da raiz de propósito. Aquele **roda o
+# produto** — API, worker e web como serviços prontos. Este entrega um lugar
+# onde se trabalha: um contêiner com o repositório montado e um Postgres ao
+# lado, para que `scripts/rodar-local.sh` funcione lá dentro sem mudança
+# nenhuma. Juntar os dois faria um arquivo servir a dois propósitos e sair de
+# sincronia com os dois.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/javascript-node:22-bookworm
+    volumes:
+      - ..:/workspaces/barbearia:cached
+    # Sem isto o contêiner sobe, não tem o que fazer e morre — levando o
+    # ambiente junto antes de alguém abrir o terminal.
+    command: sleep infinity
+
+  db:
+    image: postgres:16
+    environment:
+      # Banco descartável dentro do próprio Codespaces, sem porta para fora.
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 3s
+      retries: 30

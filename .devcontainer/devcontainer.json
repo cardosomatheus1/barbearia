@@ -1,0 +1,24 @@
+{
+  "name": "Barbearia",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/barbearia",
+
+  "postCreateCommand": "bash .devcontainer/preparar.sh",
+
+  "forwardPorts": [3001, 3000],
+  "portsAttributes": {
+    "3001": { "label": "site da barbearia", "onAutoForward": "openPreview" },
+    "3000": { "label": "API", "onAutoForward": "silent" }
+  },
+
+  "remoteEnv": {
+    "ADMIN_DATABASE_URL": "postgres://postgres:postgres@db:5432/postgres"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
+}

@@ -11,3 +11,8 @@ coverage/
 packages/db/prisma/generated/
 .next/
 next-env.d.ts
+
+# O pnpm cai para uma loja dentro do projeto quando o HOME do processo não é
+# gravável — acontece em contêiner com usuário trocado, e são centenas de
+# megabytes que ninguém quer commitar sem perceber.
+.pnpm-store/
