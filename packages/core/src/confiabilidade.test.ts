@@ -6,6 +6,7 @@ import {
   type AgendamentoNoHistorico,
   type DesfechoDoAgendamento,
 } from './confiabilidade.js';
+import { LIMIAR_PADRAO_DE_SINAL, SCORE_QUE_DISPENSA_SINAL } from './sinal.js';
 
 const AGORA = new Date('2026-08-11T12:00:00Z');
 
@@ -59,27 +60,40 @@ describe('a falta pesa muito mais que o cancelamento avisado', () => {
     expect(pontuacaoDeConfianca(varios(5, 'compareceu'), AGORA).score).toBe(100);
   });
 
-  it('uma falta em quatro tira 25 pontos da taxa, não 25 pontos do score', () => {
-    // 100 − 25 × (1/4) = 93,75 → 94. A fórmula é sobre **taxa**: uma falta em
-    // quatro dói menos que uma falta em quatro... vezes menos histórico.
-    const historico = [em(1, 'faltou'), ...varios(3, 'compareceu', 2)];
-    expect(pontuacaoDeConfianca(historico, AGORA).score).toBe(94);
+  it('a falta é medida por taxa, não por ocorrência', () => {
+    // 100 − 100 × (1/4) = 75. A mesma falta em vinte agendamentos custa cinco
+    // pontos: quem vem sempre não é punido como quem veio quatro vezes.
+    const emQuatro = [em(1, 'faltou'), ...varios(3, 'compareceu', 2)];
+    const emVinte = [em(1, 'faltou'), ...varios(19, 'compareceu', 2)];
+    expect(pontuacaoDeConfianca(emQuatro, AGORA).score).toBe(75);
+    expect(pontuacaoDeConfianca(emVinte, AGORA).score).toBe(95);
   });
 
-  it('faltar sempre derruba o score a 75', () => {
-    expect(pontuacaoDeConfianca(varios(4, 'faltou'), AGORA).score).toBe(75);
+  it('faltar em todos os agendamentos zera o score', () => {
+    /**
+     * É a âncora da escala, e ela é o que faz os cortes da SPEC significarem
+     * alguma coisa. Com os pesos literais do texto — 25 para a falta — o pior
+     * cliente possível sairia com 75, e `score < 60` nunca dispararia: o sinal
+     * por histórico seria código morto e ninguém veria vermelho.
+     *
+     * Se este teste começar a devolver 75, é porque os pesos voltaram ao
+     * literal, e o bloco 37 inteiro deixou de funcionar em silêncio.
+     */
+    expect(pontuacaoDeConfianca(varios(4, 'faltou'), AGORA).score).toBe(0);
   });
 
-  it('cancelar avisando custa doze vezes menos que faltar', () => {
+  it('cancelar avisando custa doze vezes e meia menos que faltar', () => {
     /**
      * É a decisão central do score, e ela é de produto: um cancelamento avisado
      * devolve a vaga para a grade e a fila preenche; uma falta é cadeira parada.
      * Punir quem avisa ensina a não avisar — e quem não avisa vira falta.
+     *
+     * A **proporção** é a da SPEC; o que mudou foi a escala dos dois, junta.
      */
     const faltou = pontuacaoDeConfianca(varios(4, 'faltou'), AGORA).score;
     const cancelou = pontuacaoDeConfianca(varios(4, 'cancelou_cedo'), AGORA).score;
-    expect(100 - faltou).toBe(25);
-    expect(100 - cancelou).toBe(2);
+    expect(100 - faltou).toBe(100);
+    expect(100 - cancelou).toBe(8);
   });
 
   it('cancelar em cima da hora custa mais que cancelar cedo, e menos que faltar', () => {
@@ -127,7 +141,8 @@ describe('atraso', () => {
     const pontual = [...varios(3, 'compareceu'), { ...em(4, 'compareceu'), atrasoMinutos: 9 }];
     const atrasado = [...varios(3, 'compareceu'), { ...em(4, 'compareceu'), atrasoMinutos: 11 }];
     expect(pontuacaoDeConfianca(pontual, AGORA).score).toBe(100);
-    expect(pontuacaoDeConfianca(atrasado, AGORA).score).toBe(99);
+    // 100 − 20 × (1/4) = 95.
+    expect(pontuacaoDeConfianca(atrasado, AGORA).score).toBe(95);
   });
 
   it('quem não teve chegada registrada não é contado como atrasado', () => {
@@ -180,6 +195,47 @@ describe('a janela de doze meses', () => {
   });
 });
 
+describe('os três cortes da SPEC alcançam alguém', () => {
+  /**
+   * Este bloco é o que impede o score de virar um número decorativo.
+   *
+   * A SPEC §2.13 define três cortes de uso — 60, 40 e 85 — e com os pesos
+   * literais do texto os dois primeiros são inalcançáveis: o pior cliente
+   * possível fica em 75. O sinal por histórico existiria no código, teria
+   * teste verde, e **nunca seria cobrado de ninguém**.
+   *
+   * Cada `it` daqui prende um dos cortes a uma pessoa concreta. Se alguém mexer
+   * nos pesos, é aqui que fica vermelho — e a mensagem diz qual regra do produto
+   * parou de valer, não qual constante mudou.
+   */
+  const faltasEm10 = (quantas: number): AgendamentoNoHistorico[] => [
+    ...varios(quantas, 'faltou', 1),
+    ...varios(10 - quantas, 'compareceu', quantas + 1),
+  ];
+
+  const scoreCom = (quantas: number) => pontuacaoDeConfianca(faltasEm10(quantas), AGORA).score;
+
+  it('duas faltas em dez já custam a dispensa do sinal', () => {
+    // A dispensa é promessa ao cliente fiel. Quem falta uma vez em cinco não é
+    // esse cliente.
+    expect(scoreCom(1)).toBeGreaterThanOrEqual(SCORE_QUE_DISPENSA_SINAL);
+    expect(scoreCom(2)).toBeLessThan(SCORE_QUE_DISPENSA_SINAL);
+  });
+
+  it('faltar metade das vezes passa a exigir sinal', () => {
+    expect(scoreCom(4)).toBeGreaterThanOrEqual(LIMIAR_PADRAO_DE_SINAL);
+    expect(scoreCom(5)).toBeLessThan(LIMIAR_PADRAO_DE_SINAL);
+  });
+
+  it('faltar sete em dez tira o agendamento online', () => {
+    // O terceiro corte da SPEC (`score < 40`). A tela dele é lacuna declarada;
+    // o número que a alimenta tem que ser alcançável desde já, senão a tela
+    // nasce morta.
+    expect(scoreCom(6)).toBeGreaterThanOrEqual(40);
+    expect(scoreCom(7)).toBeLessThan(40);
+  });
+});
+
 describe('o score é determinístico', () => {
   it('a ordem do histórico não muda o resultado', () => {
     const historico = [
@@ -195,12 +251,16 @@ describe('o score é determinístico', () => {
   });
 
   it('nunca sai de 0 a 100', () => {
+    // Metade falta, metade chega uma hora e meia atrasada: 100 − 50 − 10 = 40.
     const pessimo = [
       ...varios(20, 'faltou', 1),
       ...Array.from({ length: 20 }, (_, i) => em(30 + i, 'compareceu', 90)),
     ];
-    const resultado = pontuacaoDeConfianca(pessimo, AGORA);
-    expect(resultado.score).toBeGreaterThanOrEqual(0);
-    expect(resultado.score).toBeLessThanOrEqual(100);
+    expect(pontuacaoDeConfianca(pessimo, AGORA).score).toBe(40);
+
+    // O bônus somaria 110 em quem já está em 100. O teto é o que impede o score
+    // de virar crédito acumulado — dez comparecimentos não compram nada além do
+    // topo da escala.
+    expect(pontuacaoDeConfianca(varios(12, 'compareceu'), AGORA).score).toBe(100);
   });
 });

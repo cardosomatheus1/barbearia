@@ -66,6 +66,50 @@ export const COMPARECIMENTOS_PARA_BONUS = 10;
 /** A janela móvel. Quem faltou há mais de um ano e voltou recupera tudo. */
 export const MESES_DA_JANELA = 12;
 
+/**
+ * Os pesos, e por que não são os números literais da SPEC.
+ *
+ * A SPEC §2.13 escreve `100 − 25 × taxa_no_show − 10 × taxa_cancelamento_tardio
+ * − 2 × taxa_cancelamento_antecipado − 5 × taxa_atraso`. Taxa é fração de 0 a 1,
+ * então o pior cliente possível — o que faltou em **todos** os agendamentos —
+ * sai com 75. O score chamado "de 0 a 100" nunca sai da última quarta parte da
+ * escala.
+ *
+ * Isso não é um detalhe de arredondamento: ele apaga a própria seção de uso da
+ * SPEC, três linhas abaixo, na mesma página.
+ *
+ *     score < 60  → sinal obrigatório          ← inalcançável
+ *     score < 40  → sem agendamento online     ← inalcançável
+ *     score ≥ 85  → dispensa de sinal          ← alcançável com 60% de falta
+ *
+ * Lidos ao pé da letra, os dois primeiros são código morto e o terceiro dispensa
+ * do sinal alguém que falta seis vezes em dez. O sinal seletivo — o produto
+ * inteiro deste bloco — nunca seria cobrado de ninguém por histórico.
+ *
+ * ## O que foi mudado, e o que foi preservado
+ *
+ * Os pesos são multiplicados por quatro, e a âncora é o que dá nome ao número:
+ * **faltar em todos os agendamentos vale zero**. Daí saem 100, 40, 8 e 20 — as
+ * proporções da SPEC ficam intactas, e elas são a decisão de produto de
+ * verdade: a falta pesa 12,5 vezes o cancelamento avisado, e o cancelamento em
+ * cima da hora fica no meio.
+ *
+ * Com isto os três cortes passam a significar o que dizem: 40% de falta pede
+ * sinal, 60% tira o agendamento online, e 15% já perde a dispensa.
+ *
+ * O bônus **não** é multiplicado. Ele não é taxa: são dez pontos somados ao
+ * fim, e quadruplicá-lo deixaria dez comparecimentos seguidos apagando três
+ * faltas — a fidelidade compraria o direito de faltar.
+ *
+ * Está escrito aqui porque é desvio deliberado do texto da SPEC, e porque a
+ * próxima pessoa que comparar código e contrato vai encontrar a diferença.
+ */
+export const PESO_DA_FALTA = 100;
+export const PESO_DO_CANCELAMENTO_TARDIO = 40;
+export const PESO_DO_CANCELAMENTO_ANTECIPADO = 8;
+export const PESO_DO_ATRASO = 20;
+export const BONUS_DE_FIDELIDADE = 10;
+
 export interface Confiabilidade {
   /** 0 a 100. Sempre 100 para quem não tem histórico suficiente. */
   readonly score: number;
@@ -165,11 +209,13 @@ export function pontuacaoDeConfianca(
 
   const bruto =
     100 -
-    25 * taxa(quantos('faltou')) -
-    10 * taxa(quantos('cancelou_em_cima')) -
-    2 * taxa(quantos('cancelou_cedo')) -
-    5 * taxa(atrasados) +
-    (comparecimentosSeguidos(contam) >= COMPARECIMENTOS_PARA_BONUS ? 10 : 0);
+    PESO_DA_FALTA * taxa(quantos('faltou')) -
+    PESO_DO_CANCELAMENTO_TARDIO * taxa(quantos('cancelou_em_cima')) -
+    PESO_DO_CANCELAMENTO_ANTECIPADO * taxa(quantos('cancelou_cedo')) -
+    PESO_DO_ATRASO * taxa(atrasados) +
+    (comparecimentosSeguidos(contam) >= COMPARECIMENTOS_PARA_BONUS
+      ? BONUS_DE_FIDELIDADE
+      : 0);
 
   return {
     // Arredonda no fim, uma vez: arredondar cada termo faria a soma depender da
