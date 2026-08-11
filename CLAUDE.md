@@ -496,18 +496,9 @@ Um bloco só está concluído quando **todos** os itens passam:
 
 ## Comandos
 
-```bash
-pnpm verify            # tudo: typecheck, testes (com banco), build
-pnpm -r typecheck
-pnpm -r build
-
-pnpm --filter @barbearia/core test          # puro, sem banco
-pnpm --filter @barbearia/db test            # invariantes do schema
-pnpm --filter @barbearia/scheduling test    # pipeline banco -> motor
-pnpm --filter @barbearia/finance test       # comanda, caixa e fiado
-pnpm --filter @barbearia/jobs test          # fila, avisos e falta automática
-pnpm --filter @barbearia/crm test           # a ficha do cliente
-```
+`pnpm verify` fecha o bloco; `pnpm -r typecheck` e `pnpm -r build` estão no
+`package.json`, e cada pacote roda sozinho com `pnpm --filter @barbearia/<nome>
+test`. O que não se adivinha é o ambiente:
 
 Testes de banco exigem Postgres 16+ com `pgcrypto`, `citext` e `btree_gist`.
 Cada script cria e destrói o próprio banco descartável.
