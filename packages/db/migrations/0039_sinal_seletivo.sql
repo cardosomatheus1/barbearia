@@ -167,3 +167,146 @@ ALTER TABLE customers
 CREATE INDEX appointments_historico_do_cliente_idx
   ON appointments (customer_id, service_starts_at DESC)
   WHERE customer_id IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- A anonimização volta a apagar tudo que identifica
+--
+-- Achado da `/security-review` deste bloco. `reliability_override_reason` é
+-- texto livre **obrigatório**, escrito por um gerente sobre uma pessoa
+-- específica, e a CHECK acima exige dez caracteres justamente para que ele
+-- explique alguma coisa. Os dois exemplos que este repositório usa são "faltou
+-- por internação, comprovada na recepção" e "sumiu com a chave da barbearia":
+-- dado de saúde (LGPD art. 5 II) e imputação de crime.
+--
+-- `anonimizar_cliente` limpa uma **lista escrita** de colunas de `customers`, e
+-- é o desenho certo — mas uma lista escrita só continua certa se quem
+-- acrescenta coluna a atualiza. Este bloco acrescentou três e não atualizou:
+-- a pessoa que pediu exclusão sairia do cadastro com o nome apagado e a
+-- narrativa intacta, carimbada com a hora.
+--
+-- A função é recriada inteira porque plpgsql não se remenda pela metade. O que
+-- mudou são as três linhas marcadas.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION anonimizar_cliente(p_customer uuid, p_motivo text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_tenant uuid := NULLIF(current_setting('app.tenant_id', true), '')::uuid;
+  v_apelido text;
+  v_telefone text;
+BEGIN
+  /**
+   * Sem tenant no contexto a função não roda.
+   *
+   * É a diferença entre "anonimize este cliente da barbearia X" e "anonimize
+   * este uuid, onde quer que ele esteja". A segunda seria uma porta para apagar
+   * cadastro alheio conhecendo só o id — e `SECURITY DEFINER` a abriria de par
+   * em par, porque aqui dentro a RLS pode não estar valendo.
+   */
+  IF v_tenant IS NULL THEN
+    RAISE EXCEPTION 'anonimizar_cliente exige app.tenant_id no contexto';
+  END IF;
+
+  IF length(btrim(coalesce(p_motivo, ''))) < 3 THEN
+    RAISE EXCEPTION 'anonimizar_cliente exige motivo escrito';
+  END IF;
+
+  -- O `FOR UPDATE` fecha a corrida entre a varredura de retenção e alguém
+  -- atendendo o pedido de exclusão pela tela no mesmo instante: a segunda
+  -- transação espera, relê `anonymized_at` preenchido e devolve `false`.
+  -- O telefone é lido **antes** de ser apagado: ele é a chave de
+  -- `otp_challenges`, e sem guardá-lo aqui não haveria como limpar aquela linha
+  -- depois.
+  SELECT phone_e164 INTO v_telefone
+    FROM public.customers
+   WHERE id = p_customer AND tenant_id = v_tenant AND anonymized_at IS NULL
+   FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  v_apelido := 'cliente_anonimizado_' || substring(replace(p_customer::text, '-', '') from 1 for 4);
+
+  UPDATE public.customers
+     SET name = v_apelido,
+         phone_e164 = NULL,
+         birth_date = NULL,
+         accepts_marketing = false,
+         marketing_consent_ip = NULL,
+         -- O par do IP, e ele ficava para trás. A invariante de catálogo que
+         -- este bloco criou foi quem o encontrou: `accepts_marketing` já virava
+         -- `false`, então o carimbo dizia "esta pessoa consentiu às 14h22" sobre
+         -- um consentimento que não vale mais. A prova de verdade é o histórico
+         -- append-only de `customer_consents`, que continua intacto — isto aqui
+         -- é espelho derivado, e espelho de dado apagado é dado apagado.
+         marketing_consent_at = NULL,
+         marketing_consent_version = NULL,
+         -- Bloco 37. O motivo do override é texto livre escrito por um gerente
+         -- **sobre uma pessoa**, e os exemplos deste repositório são "faltou
+         -- por internação" e "sumiu com a chave da barbearia": dado de saúde e
+         -- imputação de crime. Sobreviver à anonimização faria a função apagar
+         -- o nome e guardar a narrativa — com carimbo de hora, que sozinho já
+         -- reidentifica. Achado da `/security-review` do bloco 37, e é o mesmo
+         -- defeito que `otp_challenges` teve no bloco 32.
+         reliability_override = NULL,
+         reliability_override_reason = NULL,
+         reliability_override_at = NULL,
+         anonymized_at = now(),
+         updated_at = now()
+   WHERE id = p_customer AND tenant_id = v_tenant;
+
+  UPDATE public.customer_consents
+     SET ip = NULL
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  UPDATE public.customer_ledger
+     SET note = NULL
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  UPDATE public.customer_preferences
+     SET maquina_laterais = NULL, tipo_degrade = NULL, topo = NULL,
+         barba_estilo = NULL, produtos_evitar = NULL, observacoes = NULL,
+         updated_at = now()
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  UPDATE public.queue_entries
+     SET notes = NULL
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  UPDATE public.appointments
+     SET notes = NULL
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  UPDATE public.notifications
+     SET phone_masked = NULL
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  /**
+   * A sessão do navegador é credencial viva, não histórico.
+   *
+   * Apagada e não revogada: revogar deixaria `ip` e `user_agent` na tabela, que
+   * são dado pessoal, e a linha não serve para nada depois disso — a trilha do
+   * que essa pessoa fez está em `appointments` e `orders`.
+   */
+  DELETE FROM public.customer_sessions
+   WHERE customer_id = p_customer AND tenant_id = v_tenant;
+
+  /**
+   * O desafio de OTP daquele número, inteiro.
+   *
+   * A tabela guarda o telefone em claro e o nome pendente, e `verifyOtp`
+   * reaproveita o nome ao criar o cadastro. Deixá-la faria a pessoa entrar de
+   * novo com o número antigo e reaparecer com o **nome verdadeiro**.
+   */
+  IF v_telefone IS NOT NULL THEN
+    DELETE FROM public.otp_challenges
+     WHERE tenant_id = v_tenant AND phone_e164 = v_telefone;
+  END IF;
+
+  RETURN true;
+END $$;

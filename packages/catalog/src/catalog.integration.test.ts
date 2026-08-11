@@ -100,6 +100,29 @@ describeIfDb('CRUD do catálogo', () => {
     expect(services[0]?.name).toBe('Corte na tesoura');
   });
 
+  it('editar um serviço não apaga a exigência de sinal em silêncio', async () => {
+    /**
+     * O campo é opcional na borda e a tela de cardápio anterior não o manda.
+     * Escrevendo `false` quando ele falta, corrigir uma descrição apagaria a
+     * exigência de sinal da coloração — o serviço em que a falta custa a tarde
+     * inteira, e o único que a barbearia marcou de propósito.
+     *
+     * Achado da `/security-review` do bloco 37: fail-open num controle de
+     * receita, sem ninguém ficar sabendo.
+     */
+    const { id } = await createService(TENANT, { ...corte, alwaysRequireDeposit: true });
+
+    await updateService(TENANT, id, { ...corte, description: 'Agora com toalha quente' });
+
+    const depois = (await listServices(TENANT)).services.find((s) => s.id === id);
+    expect(depois?.alwaysRequireDeposit).toBe(true);
+
+    // E desligar continua sendo possível — o que muda é que precisa ser dito.
+    await updateService(TENANT, id, { ...corte, alwaysRequireDeposit: false });
+    const desligado = (await listServices(TENANT)).services.find((s) => s.id === id);
+    expect(desligado?.alwaysRequireDeposit).toBe(false);
+  });
+
   it('mudar o preço não reescreve o que já foi vendido', async () => {
     // `appointment_services` guarda o praticado no momento da reserva. A prova
     // de que o passado sobrevive é o id continuar o mesmo.

@@ -235,6 +235,36 @@ describeIfDb('o sinal recebido', () => {
     });
   });
 
+  it('o horário remarcado deixa de existir para o sinal', async () => {
+    /**
+     * Um sinal pago é um só, e ele segue o agendamento. Enquanto a linha antiga
+     * carregava o valor, o id do primeiro e-mail de confirmação e o id do
+     * horário atual devolviam **o mesmo dinheiro duas vezes** — cada uma com
+     * sua entrada na trilha, e nada que as distinguisse de dois reembolsos
+     * legítimos. Achado da `/security-review` do bloco 37.
+     *
+     * Aqui o estado é forjado direto no banco em vez de remarcar de verdade: o
+     * que se prova é a leitura, e `rescheduleAppointment` mora em `scheduling`,
+     * onde o outro lado da mesma regra tem o seu teste.
+     */
+    await exec(agendamento({ exigidoCents: 2000 }));
+    await registrar(2000);
+    await exec(`UPDATE appointments SET status = 'rescheduled', deposit_paid_cents = 0
+                 WHERE id = '${AGENDAMENTO}'`);
+
+    await expect(sinalDoAgendamento(TENANT, AGENDAMENTO)).rejects.toMatchObject({
+      code: 'agendamento_nao_encontrado',
+    });
+    await expect(
+      devolverSinal({
+        tenantId: TENANT,
+        appointmentId: AGENDAMENTO,
+        valorCents: 0,
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'agendamento_nao_encontrado' });
+  });
+
   describe('devolver', () => {
     it('zera o pago, mantém o exigido e audita', async () => {
       /**

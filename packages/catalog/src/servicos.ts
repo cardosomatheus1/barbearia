@@ -424,7 +424,18 @@ export async function updateService(
         buffer_before_minutes = ${input.bufferBeforeMinutes},
         buffer_after_minutes = ${input.bufferAfterMinutes},
         bookable_online = ${input.bookableOnline},
-        always_require_deposit = ${input.alwaysRequireDeposit ?? false},
+        -- Ausente significa "não mexa", não "desligue".
+        --
+        -- O campo é opcional na borda e a tela de cardápio anterior não o
+        -- manda. Escrevendo falso quando ele falta, qualquer edição sem relação
+        -- — corrigir uma descrição, ajustar um preço — apagaria em silêncio a
+        -- exigência de sinal da coloração, que é justamente o serviço em que a
+        -- falta custa a tarde inteira. É o mesmo desenho de saveChangeWindow,
+        -- que só escreve o que o formulário traz. Achado da revisão de
+        -- segurança deste bloco.
+        always_require_deposit = COALESCE(
+          ${input.alwaysRequireDeposit ?? null}::boolean, always_require_deposit
+        ),
         updated_at = now()
       WHERE id = ${serviceId}::uuid
     `;

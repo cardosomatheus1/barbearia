@@ -83,6 +83,12 @@ async function carregar(
       FROM appointments a
       JOIN locations l ON l.id = a.location_id
      WHERE a.id = ${appointmentId}::uuid
+       -- O remarcado não é um agendamento: ele virou outro, e o sinal foi
+       -- junto. Aceitar o id antigo faria a recepção registrar um Pix contra
+       -- uma linha morta — ou devolver de novo um dinheiro já devolvido, com o
+       -- id que está no primeiro e-mail de confirmação. Achado da revisão de
+       -- segurança deste bloco.
+       AND a.status <> 'rescheduled'
   `;
   const linha = linhas[0];
   if (!linha) {

@@ -469,6 +469,45 @@ describeIfDb('reserva', () => {
     expect(atual?.rescheduled_from).toBe(original.id);
   });
 
+  it('o sinal pago fica numa linha só depois de remarcar', async () => {
+    /**
+     * Um sinal pago é um só, e ele segue o agendamento. Copiado para a linha
+     * nova sem sair da antiga, ele ficaria positivo nas duas — e em três, depois
+     * de duas remarcações. `devolverSinal` exige apenas `deposit_paid_cents > 0`
+     * e recebe um id: com a linha velha ainda carregando o valor, o id do
+     * primeiro e-mail de confirmação e o id do horário atual devolveriam o mesmo
+     * dinheiro duas vezes, cada uma com sua entrada na trilha.
+     *
+     * Achado da `/security-review` do bloco 37.
+     */
+    const original = await createAppointment(base);
+    await admin.$executeRawUnsafe(
+      `UPDATE appointments
+          SET deposit_required_cents = 2000, deposit_reason = 'score',
+              deposit_paid_cents = 2000
+        WHERE id = '${original.id}'`,
+    );
+
+    const novo = await rescheduleAppointment({
+      tenantId: TENANT, appointmentId: original.id, date: TERCA, start: '14:00', now: AGORA,
+    });
+
+    const linhas = await admin.$queryRawUnsafe<
+      { id: string; deposit_paid_cents: number; deposit_required_cents: number }[]
+    >(`SELECT id, deposit_paid_cents, deposit_required_cents FROM appointments`);
+
+    const antigo = linhas.find((l) => l.id === original.id);
+    const atual = linhas.find((l) => l.id === novo.id);
+
+    expect(antigo?.deposit_paid_cents).toBe(0);
+    expect(atual?.deposit_paid_cents).toBe(2000);
+    // O exigido atravessa junto: remarcar não é marcar de novo, e quem escapasse
+    // da cobrança bastando remarcar seria justamente quem mais remarca.
+    expect(atual?.deposit_required_cents).toBe(2000);
+    expect(novo.depositRequiredCents).toBe(2000);
+    expect(novo.depositReason).toBe('score');
+  });
+
   it('permite mover para horário que se sobrepõe ao próprio', async () => {
     // 09:00 -> 09:20 sobrepõe a janela que está saindo. O agendamento não pode
     // bloquear a si mesmo.

@@ -133,6 +133,107 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         </div>
 
         {/*
+          O sinal seletivo (bloco 37).
+
+          Fica ao lado da janela de cancelamento porque é a outra metade da
+          mesma regra: uma diz se o cliente **pode** desmarcar, a outra se ele
+          leva o dinheiro de volta. Em telas separadas, as duas metades se
+          contradiriam em silêncio.
+
+          Nasce em "não cobrar", que é o comportamento de sempre — nenhuma
+          barbearia já instalada passa a pedir sinal por causa de um deploy.
+        */}
+        <fieldset className="painel__grupo">
+          <legend className="ui-field__label">Sinal para garantir o horário</legend>
+          <p className="ui-field__hint">
+            Cobrar de todo mundo espanta cliente novo; não cobrar de ninguém deixa a agenda
+            exposta a quem já faltou. Aqui você escolhe de quem cobrar.
+          </p>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="depositMode">Como cobrar</label>
+            <select className="ui-field__input" defaultValue={politicas?.deposit.mode ?? 'nenhum'}
+                    id="depositMode" name="depositMode">
+              <option value="nenhum">Não cobrar sinal</option>
+              <option value="fixo">Valor fixo</option>
+              <option value="percentual">Percentual do serviço</option>
+              <option value="total">O serviço inteiro adiantado</option>
+            </select>
+          </div>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="depositFixed">
+              Valor fixo, em reais
+            </label>
+            <input className="ui-field__input tabular" id="depositFixed" name="depositFixed"
+                   type="number" min={0} max={10000} step={1}
+                   defaultValue={Math.round((politicas?.deposit.fixedCents ?? 2000) / 100)} />
+            <p className="ui-field__hint">Vale quando você escolhe &ldquo;valor fixo&rdquo;.</p>
+          </div>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="depositPercent">
+              Percentual do serviço
+            </label>
+            <input className="ui-field__input tabular" id="depositPercent" name="depositPercent"
+                   type="number" min={0} max={100}
+                   defaultValue={Math.round((politicas?.deposit.percentBps ?? 3000) / 100)} />
+            <p className="ui-field__hint">Vale quando você escolhe &ldquo;percentual&rdquo;.</p>
+          </div>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="depositThreshold">
+              Cobrar de quem faltou quantas vezes em dez
+            </label>
+            <input className="ui-field__input tabular" id="depositThreshold" name="depositThreshold"
+                   type="number" min={0} max={10}
+                   defaultValue={faltasEmDez(politicas?.deposit.scoreThreshold ?? 60)} />
+            {/*
+              O número na tela é falta em dez, não "score".
+
+              O score é interno e nunca sai para o cliente (SPEC §2.13, regra 5);
+              expor a escala aqui faria o dono discutir um número que ele não
+              consegue explicar para quem está no balcão. "Faltou 4 vezes em 10"
+              é a mesma regra dita em português.
+            */}
+            <p className="ui-field__hint">
+              Quem falta pouco não paga. Deixe em 10 para nunca cobrar por histórico.
+            </p>
+          </div>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="depositTicketOver">
+              Cobrar de qualquer um acima de, em reais
+            </label>
+            <input className="ui-field__input tabular" id="depositTicketOver"
+                   name="depositTicketOver" type="number" min={0} max={100000}
+                   defaultValue={Math.round((politicas?.deposit.ticketOverCents ?? 0) / 100)} />
+            <p className="ui-field__hint">
+              Para a reserva grande — quatro serviços num sábado. Zero desliga. Aqui o risco
+              não é a pessoa, é o tamanho da reserva.
+            </p>
+          </div>
+
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="depositRefundHours">
+              Devolver o sinal se cancelar com quantas horas
+            </label>
+            <input className="ui-field__input tabular" id="depositRefundHours"
+                   name="depositRefundHours" type="number" min={0} max={720}
+                   defaultValue={politicas?.deposit.refundHours ?? 24} />
+            <p className="ui-field__hint">
+              É diferente do prazo de cancelamento acima: um diz se dá para desmarcar, este diz
+              se o dinheiro volta.
+            </p>
+          </div>
+
+          <p className="painel__nota">
+            O serviço que sempre pede sinal — a coloração de três horas — marca-se no{' '}
+            <a href="/admin/catalogo">Cardápio</a>. E quem nunca falta nunca paga, nem nele.
+          </p>
+        </fieldset>
+
+        {/*
           O encarregado de dados (bloco 31).
 
           A LGPD art. 41 §1 manda **divulgar publicamente** quem é e como

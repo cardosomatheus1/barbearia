@@ -20,12 +20,18 @@ INSERT INTO locations (id, tenant_id, name, timezone) VALUES
    'Matriz', 'America/Bahia');
 
 INSERT INTO customers (id, tenant_id, name, phone_e164, birth_date,
-                       accepts_marketing, marketing_consent_ip, balance_cents)
+                       accepts_marketing, marketing_consent_ip, balance_cents,
+                       reliability_override, reliability_override_reason,
+                       reliability_override_at)
 VALUES
   ('c4343434-0000-0000-0000-000000000001', '34343434-0000-0000-0000-000000000001',
-   'Carlos Souza', '+5571988887777', '1990-04-12', true, '203.0.113.9', -8000),
+   'Carlos Souza', '+5571988887777', '1990-04-12', true, '203.0.113.9', -8000,
+   -- O motivo do override é o pior texto livre do cadastro: obrigatório, escrito
+   -- por um gerente sobre uma pessoa, e com dado de saúde nos exemplos reais.
+   100, 'faltou por internação, comprovada na recepção', now()),
   ('c4343434-0000-0000-0000-000000000002', '34343434-0000-0000-0000-000000000002',
-   'Cliente da Vizinha', '+5571977776666', '1985-01-01', false, NULL, 0);
+   'Cliente da Vizinha', '+5571977776666', '1985-01-01', false, NULL, 0,
+   NULL, NULL, NULL);
 
 INSERT INTO customer_consents (customer_id, tenant_id, purpose, granted, text_version, ip)
 VALUES ('c4343434-0000-0000-0000-000000000001', '34343434-0000-0000-0000-000000000001',
@@ -184,6 +190,7 @@ BEGIN
   RAISE NOTICE 'OK 5b — nome, telefone, nascimento e IP saíram; o saldo ficou';
 END $$;
 
+
 DO $$
 DECLARE n int; valor int;
 BEGIN
@@ -217,7 +224,63 @@ BEGIN
    WHERE customer_id = 'c4343434-0000-0000-0000-000000000001';
   IF n <> 0 THEN RAISE EXCEPTION 'a sessão do navegador continua aberta'; END IF;
 
-  RAISE NOTICE 'OK 5c — ficha, notas, IP e sessão saíram; os centavos ficaram';
+  RAISE NOTICE 'OK 5d — ficha, notas, IP e sessão saíram; os centavos ficaram';
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 5e — nenhuma coluna de `customers` sobrevive sem estar na lista
+--
+-- `anonimizar_cliente` limpa uma **lista escrita** de colunas, e é o desenho
+-- certo. Mas lista escrita só continua certa se quem acrescenta coluna a
+-- atualiza — e o bloco 37 acrescentou três e não atualizou. A pessoa que pediu
+-- exclusão sairia com o nome apagado e "faltou por internação" intacto.
+--
+-- Aqui a varredura de catálogo é a ferramenta certa, ao contrário da exportação
+-- do titular: o que se quer pegar é justamente a coluna que **ninguém pensou**.
+-- Toda coluna nova de `customers` cai aqui vermelha até ser decidida — apagada
+-- pela função, ou escrita nesta lista com o motivo de poder ficar.
+-- ----------------------------------------------------------------------------
+DO $$
+DECLARE
+  sobrevivente text;
+  valor text;
+  -- O que pode continuar preenchido, e por quê:
+  --   id, tenant_id            — a linha precisa existir; é o registro fiscal
+  --   name                     — vira apelido, não some
+  --   balance_cents            — o dinheiro é o que a lei manda guardar
+  --   created_at, updated_at   — quando a relação existiu, sem quem era
+  --   anonymized_at            — o carimbo da própria anonimização
+  --   accepts_marketing        — vira `false`, e `false` não identifica ninguém
+  --   retention_warned_at      — o aviso de retenção, que não diz nada da pessoa
+  --   import_id                — de qual importação a linha veio
+  --   notes_updated_at         — quando a ficha mudou, sem o conteúdo
+  --   credit_limit_cents       — teto de fiado; é controle de dinheiro, e um
+  --                              número em centavos não identifica ninguém
+  permitidas text[] := ARRAY[
+    'id', 'tenant_id', 'name', 'balance_cents', 'credit_limit_cents',
+    'created_at', 'updated_at', 'anonymized_at', 'accepts_marketing',
+    'retention_warned_at', 'import_id', 'notes_updated_at'
+  ];
+BEGIN
+  FOR sobrevivente IN
+    SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'customers'
+       AND NOT (column_name = ANY(permitidas))
+     ORDER BY column_name
+  LOOP
+    EXECUTE format(
+      'SELECT %I::text FROM customers WHERE id = $1', sobrevivente
+    ) INTO valor USING 'c4343434-0000-0000-0000-000000000001'::uuid;
+
+    IF valor IS NOT NULL THEN
+      RAISE EXCEPTION
+        'a coluna customers.% sobreviveu à anonimização com o valor %. '
+        'Ou ela entra em anonimizar_cliente, ou entra na lista de permitidas '
+        'com o motivo escrito.', sobrevivente, valor;
+    END IF;
+  END LOOP;
+
+  RAISE NOTICE 'OK 5e — nenhuma coluna de customers sobreviveu fora da lista';
 END $$;
 
 -- ----------------------------------------------------------------------------

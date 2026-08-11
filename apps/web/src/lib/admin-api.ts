@@ -125,8 +125,66 @@ export const salvarJanela = (
     maxDiscountBps?: number;
     dpoName?: string;
     dpoEmail?: string;
+    deposit?: PoliticaDeSinal;
   },
 ) => chamar<{ saved: boolean }>('PUT', '/v1/admin/change-window', dados, token);
+
+// -- O sinal do horário (bloco 37) --------------------------------------------
+
+export interface SinalDoHorario {
+  appointmentId: string;
+  exigidoCents: number;
+  pagoCents: number;
+  motivo: 'servico' | 'score' | 'ticket' | null;
+  reembolso: 'devolver' | 'reter' | null;
+  porqueDoReembolso: string | null;
+}
+
+export const sinalDoHorario = (token: string, id: string) =>
+  chamar<SinalDoHorario>('GET', `/v1/admin/appointments/${id}/deposit`, undefined, token);
+
+export const registrarSinal = (token: string, id: string, valorCents: number) =>
+  chamar<SinalDoHorario>('POST', `/v1/admin/appointments/${id}/deposit`, { valorCents }, token);
+
+export const devolverSinalDoHorario = (token: string, id: string) =>
+  chamar<SinalDoHorario>('DELETE', `/v1/admin/appointments/${id}/deposit`, undefined, token);
+
+export interface ConfiancaDoCliente {
+  score: number;
+  considerados: number;
+  temEfeito: boolean;
+  ajustadoAMao: boolean;
+}
+
+export const confiancaDoCliente = (token: string, customerId: string) =>
+  chamar<ConfiancaDoCliente>(
+    'GET',
+    `/v1/admin/customers/${customerId}/reliability`,
+    undefined,
+    token,
+  );
+
+export const ajustarConfianca = (
+  token: string,
+  customerId: string,
+  dados: { score: number | null; motivo: string },
+) =>
+  chamar<{ score: number | null; motivo: string | null; quando: string | null }>(
+    'PUT',
+    `/v1/admin/customers/${customerId}/reliability`,
+    dados,
+    token,
+  );
+
+/** A política de sinal, do jeito que a API a devolve e a recebe (bloco 37). */
+export interface PoliticaDeSinal {
+  mode: 'nenhum' | 'fixo' | 'percentual' | 'total';
+  fixedCents: number;
+  percentBps: number;
+  scoreThreshold: number;
+  ticketOverCents: number;
+  refundHours: number;
+}
 
 export interface PoliticasDaCasa {
   cancelMinHours: number;
@@ -136,6 +194,7 @@ export interface PoliticasDaCasa {
   maxDiscountBps: number;
   dpoName: string | null;
   dpoEmail: string | null;
+  deposit: PoliticaDeSinal;
 }
 
 export const politicasDaCasa = (token: string) =>

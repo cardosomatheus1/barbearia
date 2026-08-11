@@ -847,9 +847,23 @@ export async function rescheduleAppointment(
     // novo agendamento programa os seus logo abaixo, em `insertAppointment`.
     await cancelarTarefasDoAgendamento(tx, request.appointmentId);
 
+    /**
+     * O sinal **sai** da linha antiga na mesma instrução que a encerra.
+     *
+     * Um sinal pago é um só, e ele segue o agendamento. Copiá-lo para a linha
+     * nova sem zerar aqui o deixaria positivo nas duas — e em três, depois de
+     * duas remarcações. `devolverSinal` só exige `deposit_paid_cents > 0` e
+     * recebe um id: com a linha velha ainda carregando o valor, o id do
+     * primeiro e-mail de confirmação e o id do horário atual devolveriam **o
+     * mesmo dinheiro duas vezes**, cada uma com sua entrada na trilha e nada
+     * que as distinguisse de dois reembolsos legítimos.
+     *
+     * Achado da `/security-review` deste bloco.
+     */
     await tx.$executeRaw`
-      UPDATE appointments SET status = 'rescheduled', updated_at = now()
-      WHERE id = ${request.appointmentId}::uuid
+      UPDATE appointments
+         SET status = 'rescheduled', deposit_paid_cents = 0, updated_at = now()
+       WHERE id = ${request.appointmentId}::uuid
     `;
 
     /**
