@@ -27,7 +27,16 @@ echo "==> invariantes do schema"
 for prova in test/*.test.sql; do
   saida=$(mktemp)
   if psql "$BASE/$DB_NAME" -v ON_ERROR_STOP=1 -f "$prova" >"$saida" 2>&1; then
-    grep -E "NOTICE:  (OK|---|FALHOU)" "$saida" | sed 's/^NOTICE:  //'
+    # Um arquivo que roda inteiro e não anuncia nada é indistinguível de um que
+    # não foi escrito — e antes desta guarda ele derrubava a suíte sem dizer o
+    # nome, porque o `grep` vazio saía 1 sob `set -e`. Foi o que aconteceu com a
+    # prova do bloco 37, que escrevia "ok" em vez de "OK".
+    if ! grep -E "NOTICE:  (OK|---|FALHOU)" "$saida" | sed 's/^NOTICE:  //'; then
+      echo "FALHOU: $prova não anunciou nenhuma invariante."
+      echo "    Cada prova precisa de RAISE NOTICE 'OK n — ...' (maiúsculo)."
+      rm -f "$saida"
+      exit 1
+    fi
   else
     echo "FALHOU: $prova"
     tail -20 "$saida" | sed 's/^/    /'

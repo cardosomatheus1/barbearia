@@ -59,6 +59,30 @@ ALTER TABLE appointments
     CHECK (cancelled_at IS NULL OR status IN ('cancelled_customer', 'cancelled_business'));
 
 -- ---------------------------------------------------------------------------
+-- Por que o sinal foi exigido
+-- ---------------------------------------------------------------------------
+
+-- `deposit_required_cents` diz quanto; esta coluna diz o porquê, e ela existe
+-- para o balcão. "Por que eu preciso pagar adiantado?" é a primeira pergunta do
+-- cliente, e a recepção precisa da resposta na tela — recalculá-la na leitura
+-- daria a resposta de hoje para uma decisão de anteontem.
+--
+-- Texto e não enum de propósito: o motivo é escrito por `packages/core`, que
+-- não conhece banco, e um enum novo obrigaria migração a cada motivo — sendo
+-- que o terceiro termo da SPEC (horário de pico) ainda vai entrar.
+ALTER TABLE appointments
+  ADD COLUMN deposit_reason text,
+
+  ADD CONSTRAINT appointments_deposit_reason_conhecido
+    CHECK (deposit_reason IS NULL OR deposit_reason IN ('servico', 'score', 'ticket')),
+
+  -- Sinal com valor e sem motivo é uma cobrança que ninguém sabe defender; e
+  -- motivo sem valor é uma explicação para uma cobrança que não existe. Os dois
+  -- andam juntos ou nenhum existe.
+  ADD CONSTRAINT appointments_deposit_motivo_com_valor
+    CHECK ((deposit_required_cents = 0) = (deposit_reason IS NULL));
+
+-- ---------------------------------------------------------------------------
 -- A política da unidade
 -- ---------------------------------------------------------------------------
 

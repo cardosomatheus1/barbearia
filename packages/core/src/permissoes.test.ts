@@ -114,6 +114,10 @@ describe('permissões de dinheiro', () => {
       'cashier.withdraw',
       'commission.edit_rules',
       'commission.view_all',
+      // `finance.deposit` entrou no bloco 37 e cai aqui pelo prefixo, que é o
+      // que se quer: dizer "recebi o sinal" é mover dinheiro que ninguém mais
+      // viu entrar.
+      'finance.deposit',
       'finance.discount',
       'finance.export',
       'finance.view',

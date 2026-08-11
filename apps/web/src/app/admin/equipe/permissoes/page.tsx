@@ -78,6 +78,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'finance.view_profit': 'Ver margem e lucro',
   'finance.export': 'Exportar relatório financeiro',
   'finance.discount': 'Dar desconto na comanda',
+  'finance.deposit': 'Registrar e devolver o sinal do horário',
   'commission.view_own': 'Ver a própria comissão',
   'commission.view_all': 'Ver a comissão de todo mundo',
   'commission.edit_rules': 'Mudar as regras de comissão',
@@ -90,6 +91,8 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   // O rótulo diz o que acontece, não o nome técnico: quem marca esta caixa
   // precisa entender que está entregando a única ação sem volta do sistema.
   'customers.anonymize': 'Apagar os dados de um cliente (não tem volta)',
+  // "Score" não diz nada para quem opera o balcão. O que ele decide, sim.
+  'customers.reliability_override': 'Ajustar à mão se um cliente paga sinal',
   'reports.finance': 'Relatórios financeiros',
   'reports.operational': 'Relatórios de operação',
   'inventory.view': 'Ver o estoque',

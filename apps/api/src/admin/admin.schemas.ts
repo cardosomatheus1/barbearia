@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { tryNormalizeBusinessPhone } from '@barbearia/core';
+import { MODALIDADES_DE_SINAL, tryNormalizeBusinessPhone } from '@barbearia/core';
 import { AMENITIES, PAYMENT_METHODS } from '@barbearia/onboarding';
 
 /**
@@ -149,6 +149,34 @@ export const changeWindowSchema = z.object({
     .max(160)
     .refine((v) => v.length === 0 || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), {
       message: 'E-mail inválido',
+    })
+    .optional(),
+
+  /**
+   * A política de sinal da unidade (bloco 37).
+   *
+   * Os tetos acompanham a CHECK do banco, e as duas exigências cruzadas
+   * (`fixo` precisa de valor, `percentual` precisa de alíquota) são conferidas
+   * aqui **e** lá. Aqui para a tela dizer o que faltou; lá porque a CHECK vale
+   * para quem entrar por outro caminho.
+   */
+  deposit: z
+    .object({
+      mode: z.enum(MODALIDADES_DE_SINAL),
+      fixedCents: z.number().int().min(0).max(1_000_000),
+      percentBps: z.number().int().min(0).max(10_000),
+      scoreThreshold: z.number().int().min(0).max(100),
+      ticketOverCents: z.number().int().min(0).max(10_000_000),
+      // 720 horas são 30 dias, como na janela de cancelamento.
+      refundHours: z.number().int().min(0).max(720),
+    })
+    .refine((d) => d.mode !== 'fixo' || d.fixedCents > 0, {
+      message: 'Informe o valor do sinal fixo.',
+      path: ['fixedCents'],
+    })
+    .refine((d) => d.mode !== 'percentual' || d.percentBps > 0, {
+      message: 'Informe o percentual do sinal.',
+      path: ['percentBps'],
     })
     .optional(),
 });

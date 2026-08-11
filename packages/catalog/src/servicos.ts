@@ -49,6 +49,14 @@ export interface Servico {
   readonly bookableOnline: boolean;
   readonly active: boolean;
   readonly photoUrl: string | null;
+  /**
+   * Este serviço sempre pede sinal, qualquer que seja o histórico do cliente.
+   *
+   * O quarto termo da SPEC §2.12, e ele existe para o serviço caro e demorado —
+   * a coloração de três horas — em que a falta custa a tarde inteira,
+   * independentemente de quem faltou.
+   */
+  readonly alwaysRequireDeposit: boolean;
   /** Componentes, quando este serviço é vendido como combo. */
   readonly componentIds: readonly string[];
   /** Ganho declarado por fazer os componentes na sequência, em minutos. */
@@ -76,6 +84,7 @@ interface ServicoRow {
   bookable_online: boolean;
   active: boolean;
   photo_url: string | null;
+  always_require_deposit: boolean;
   component_ids: string[] | null;
   combo_tolerance_minutes: number | null;
   future_appointments: bigint;
@@ -95,6 +104,7 @@ function toServico(row: ServicoRow): Servico {
     bookableOnline: row.bookable_online,
     active: row.active,
     photoUrl: row.photo_url,
+    alwaysRequireDeposit: row.always_require_deposit,
     componentIds: row.component_ids ?? [],
     comboToleranceMinutes: row.combo_tolerance_minutes ?? 0,
     futureAppointments: Number(row.future_appointments),
@@ -121,7 +131,7 @@ export async function listServices(
       SELECT s.id, s.name, s.description, s.category_id, c.name AS category_name,
              s.price_cents, s.duration_minutes,
              s.buffer_before_minutes, s.buffer_after_minutes,
-             s.bookable_online, s.active, s.photo_url,
+             s.bookable_online, s.active, s.photo_url, s.always_require_deposit,
              (SELECT array_agg(scc.service_id::text)
                 FROM service_combos sc
                 JOIN service_combo_components scc ON scc.combo_id = sc.id
@@ -159,6 +169,14 @@ export interface ServiceInput {
   readonly bufferBeforeMinutes: number;
   readonly bufferAfterMinutes: number;
   readonly bookableOnline: boolean;
+  /**
+   * Sempre exigir sinal deste serviço (bloco 37).
+   *
+   * Opcional para que as telas que ainda não o mandam continuem funcionando, e
+   * o padrão é `false` — que é o comportamento anterior, como manda a regra de
+   * configuração que mexe em dinheiro.
+   */
+  readonly alwaysRequireDeposit?: boolean;
   /** Ids de serviços que este combina. Vazio significa serviço simples. */
   readonly componentIds?: readonly string[];
   /**
@@ -337,13 +355,14 @@ export async function createService(
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO services
         (tenant_id, category_id, name, description, price_cents, duration_minutes,
-         buffer_before_minutes, buffer_after_minutes, bookable_online, active)
+         buffer_before_minutes, buffer_after_minutes, bookable_online, active,
+         always_require_deposit)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${categoria}::uuid, ${input.name}, ${input.description ?? null},
         ${input.priceCents}, ${input.durationMinutes},
         ${input.bufferBeforeMinutes}, ${input.bufferAfterMinutes},
-        ${input.bookableOnline}, true
+        ${input.bookableOnline}, true, ${input.alwaysRequireDeposit ?? false}
       )
       RETURNING id
     `;
@@ -405,6 +424,7 @@ export async function updateService(
         buffer_before_minutes = ${input.bufferBeforeMinutes},
         buffer_after_minutes = ${input.bufferAfterMinutes},
         bookable_online = ${input.bookableOnline},
+        always_require_deposit = ${input.alwaysRequireDeposit ?? false},
         updated_at = now()
       WHERE id = ${serviceId}::uuid
     `;

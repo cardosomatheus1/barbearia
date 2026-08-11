@@ -45,7 +45,7 @@ BEGIN
   IF limiar <> 60 THEN
     RAISE EXCEPTION 'limiar padrão deveria ser 60 (SPEC §2.13), veio %', limiar;
   END IF;
-  RAISE NOTICE 'ok 1 — o padrão é não cobrar sinal';
+  RAISE NOTICE 'OK 1 — o padrão é não cobrar sinal';
 END $$;
 
 -- ----------------------------------------------------------------------------
@@ -61,7 +61,7 @@ BEGIN
      WHERE id = '39393939-1111-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou sinal fixo sem valor';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 2a — fixo sem valor recusado';
+    RAISE NOTICE 'OK 2a — fixo sem valor recusado';
   END;
 
   BEGIN
@@ -69,7 +69,7 @@ BEGIN
      WHERE id = '39393939-1111-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou percentual sem alíquota';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 2b — percentual sem alíquota recusado';
+    RAISE NOTICE 'OK 2b — percentual sem alíquota recusado';
   END;
 END $$;
 
@@ -89,7 +89,7 @@ BEGIN
      WHERE id = '39393939-1111-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou percentual acima de 100%%';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 3a — percentual acima de 100%% recusado';
+    RAISE NOTICE 'OK 3a — percentual acima de 100%% recusado';
   END;
 
   BEGIN
@@ -97,7 +97,7 @@ BEGIN
      WHERE id = '39393939-1111-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou limiar fora de 0..100';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 3b — limiar fora da escala recusado';
+    RAISE NOTICE 'OK 3b — limiar fora da escala recusado';
   END;
 END $$;
 
@@ -129,13 +129,60 @@ BEGIN
      WHERE id = '39393939-3333-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou carimbo de cancelamento em agendamento vivo';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 4a — carimbo recusado em agendamento não cancelado';
+    RAISE NOTICE 'OK 4a — carimbo recusado em agendamento não cancelado';
   END;
 
   UPDATE appointments
      SET status = 'cancelled_customer', cancelled_at = now()
    WHERE id = '39393939-3333-0000-0000-000000000001';
-  RAISE NOTICE 'ok 4b — cancelado com carimbo aceito';
+  RAISE NOTICE 'OK 4b — cancelado com carimbo aceito';
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- 4c — sinal com valor e sem motivo é recusado, e vice-versa
+--
+-- Valor sem motivo é uma cobrança que ninguém sabe defender no balcão; motivo
+-- sem valor é a explicação de uma cobrança que não existe. Os dois andam juntos
+-- ou nenhum existe.
+-- ----------------------------------------------------------------------------
+INSERT INTO appointments
+  (id, tenant_id, location_id, professional_id,
+   starts_at, ends_at, service_starts_at, service_ends_at)
+VALUES ('39393939-3333-0000-0000-000000000002',
+        '39393939-0000-0000-0000-000000000001',
+        '39393939-1111-0000-0000-000000000001',
+        '39393939-2222-0000-0000-000000000001',
+        now(), now() + interval '30 min', now(), now() + interval '30 min');
+
+DO $$
+BEGIN
+  BEGIN
+    UPDATE appointments SET deposit_required_cents = 2000
+     WHERE id = '39393939-3333-0000-0000-000000000002';
+    RAISE EXCEPTION 'aceitou sinal sem motivo';
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE 'OK 4c — sinal sem motivo recusado';
+  END;
+
+  BEGIN
+    UPDATE appointments SET deposit_reason = 'score'
+     WHERE id = '39393939-3333-0000-0000-000000000002';
+    RAISE EXCEPTION 'aceitou motivo sem sinal';
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE 'OK 4d — motivo sem sinal recusado';
+  END;
+
+  BEGIN
+    UPDATE appointments SET deposit_required_cents = 2000, deposit_reason = 'porque sim'
+     WHERE id = '39393939-3333-0000-0000-000000000002';
+    RAISE EXCEPTION 'aceitou motivo fora do vocabulário';
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE 'OK 4e — motivo desconhecido recusado';
+  END;
+
+  UPDATE appointments SET deposit_required_cents = 2000, deposit_reason = 'score'
+   WHERE id = '39393939-3333-0000-0000-000000000002';
+  RAISE NOTICE 'OK 4f — sinal com motivo conhecido aceito';
 END $$;
 
 -- ----------------------------------------------------------------------------
@@ -156,7 +203,7 @@ BEGIN
      WHERE id = '39393939-4444-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou override sem motivo';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 5a — override sem motivo recusado';
+    RAISE NOTICE 'OK 5a — override sem motivo recusado';
   END;
 
   BEGIN
@@ -166,7 +213,7 @@ BEGIN
      WHERE id = '39393939-4444-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou motivo de duas letras';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 5b — motivo curto demais recusado';
+    RAISE NOTICE 'OK 5b — motivo curto demais recusado';
   END;
 
   BEGIN
@@ -176,7 +223,7 @@ BEGIN
      WHERE id = '39393939-4444-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou score fora de 0..100';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'ok 5c — override fora da escala recusado';
+    RAISE NOTICE 'OK 5c — override fora da escala recusado';
   END;
 
   UPDATE customers
@@ -184,7 +231,7 @@ BEGIN
          reliability_override_reason = 'faltou por internação, comprovada na recepção',
          reliability_override_at = now()
    WHERE id = '39393939-4444-0000-0000-000000000001';
-  RAISE NOTICE 'ok 5d — override com motivo escrito aceito';
+  RAISE NOTICE 'OK 5d — override com motivo escrito aceito';
 END $$;
 
 -- ----------------------------------------------------------------------------
@@ -203,7 +250,7 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'falta o índice do histórico do cliente';
   END IF;
-  RAISE NOTICE 'ok 6 — índice do histórico presente';
+  RAISE NOTICE 'OK 6 — índice do histórico presente';
 END $$;
 
 ROLLBACK;

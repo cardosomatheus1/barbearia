@@ -219,34 +219,48 @@ export interface SinalDoAgendamento extends DecisaoDeSinal {
 export async function avaliarSinal(
   pedido: PedidoDeAvaliacaoDeSinal,
 ): Promise<SinalDoAgendamento> {
-  return withTenant(pedido.tenantId, async (tx) => {
-    const politica = await politicaDeSinal(tx, pedido.locationId);
+  return withTenant(pedido.tenantId, (tx) => avaliarSinalEm(tx, pedido));
+}
 
-    const semCliente: ConfiancaDoCliente = {
-      score: 100,
-      considerados: 0,
-      temEfeito: false,
-      ajustadoAMao: false,
-    };
+/**
+ * A mesma avaliação, dentro de uma transação que já está aberta.
+ *
+ * É esta que a reserva usa. O sinal precisa ser decidido e gravado **na mesma
+ * transação** que cria o agendamento: decidir antes deixaria a política mudar
+ * entre a decisão e o INSERT, e decidir depois criaria a janela em que o
+ * horário existe sem o sinal que ele exigia — e é justamente nessa janela que
+ * o cliente fecha a tela.
+ */
+export async function avaliarSinalEm(
+  tx: TransactionClient,
+  pedido: PedidoDeAvaliacaoDeSinal,
+): Promise<SinalDoAgendamento> {
+  const politica = await politicaDeSinal(tx, pedido.locationId);
 
-    if (!pedido.customerId || politica.modalidade === 'nenhum') {
-      return { exigido: false, motivo: null, valorCents: 0, confianca: semCliente };
-    }
+  const semCliente: ConfiancaDoCliente = {
+    score: 100,
+    considerados: 0,
+    temEfeito: false,
+    ajustadoAMao: false,
+  };
 
-    const [confianca, sempreExige] = await Promise.all([
-      confiancaDoCliente(tx, pedido.customerId, pedido.now),
-      algumServicoSempreExige(tx, pedido.serviceIds),
-    ]);
+  if (!pedido.customerId || politica.modalidade === 'nenhum') {
+    return { exigido: false, motivo: null, valorCents: 0, confianca: semCliente };
+  }
 
-    const decisao = decidirSinal({
-      politica,
-      confianca,
-      ticketCents: pedido.ticketCents,
-      servicoSempreExige: sempreExige,
-    });
+  const [confianca, sempreExige] = await Promise.all([
+    confiancaDoCliente(tx, pedido.customerId, pedido.now),
+    algumServicoSempreExige(tx, pedido.serviceIds),
+  ]);
 
-    return { ...decisao, confianca };
+  const decisao = decidirSinal({
+    politica,
+    confianca,
+    ticketCents: pedido.ticketCents,
+    servicoSempreExige: sempreExige,
   });
+
+  return { ...decisao, confianca };
 }
 
 /** Um `IN` só, não uma consulta por serviço. */

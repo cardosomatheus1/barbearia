@@ -25,6 +25,7 @@ import { SessoesController } from './admin/sessoes.controller.js';
 import { AlertasController } from './admin/alertas.controller.js';
 import { LgpdController } from './admin/lgpd.controller.js';
 import { ImportacaoController } from './admin/importacao.controller.js';
+import { SinalController } from './admin/sinal.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import {
@@ -70,6 +71,7 @@ import { TenantService } from './tenant/tenant.service.js';
     SessoesController,
     AlertasController,
     ImportacaoController,
+    SinalController,
     FilaPublicaController,
     TeamController,
     MeController,

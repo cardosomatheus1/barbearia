@@ -454,6 +454,26 @@ export interface ChangeWindowInput {
    */
   readonly dpoName?: string | null;
   readonly dpoEmail?: string | null;
+
+  /**
+   * A política de sinal da unidade (bloco 37).
+   *
+   * Mora nesta tela e não numa própria pelo mesmo critério do teto de desconto:
+   * é uma decisão da casa que a operação obedece, e ela é irmã da janela de
+   * cancelamento — uma diz se o cliente **pode** desmarcar, a outra se ele leva
+   * o dinheiro de volta. Separá-las faria o gerente configurar metade da regra
+   * numa tela e metade noutra, e as duas metades se contradizerem em silêncio.
+   */
+  readonly deposit?: DepositPolicyInput;
+}
+
+export interface DepositPolicyInput {
+  readonly mode: 'nenhum' | 'fixo' | 'percentual' | 'total';
+  readonly fixedCents: number;
+  readonly percentBps: number;
+  readonly scoreThreshold: number;
+  readonly ticketOverCents: number;
+  readonly refundHours: number;
 }
 
 /**
@@ -486,6 +506,31 @@ export async function saveChangeWindow(
       `;
     }
 
+    /**
+     * O sinal, e por que os valores são zerados quando a modalidade sai.
+     *
+     * O banco recusa `fixo` sem valor e `percentual` sem alíquota, mas aceita
+     * valor guardado com a modalidade `nenhum` — e é aí que mora a armadilha:
+     * a barbearia desliga o sinal, o R$ 50 fica na coluna, e meses depois
+     * alguém religa "só para testar" e o cliente vê uma cobrança de cinquenta
+     * reais que ninguém decidiu hoje. Desligar apaga o número junto.
+     */
+    if (input.deposit) {
+      const d = input.deposit;
+      const fixo = d.mode === 'fixo' ? d.fixedCents : 0;
+      const percentual = d.mode === 'percentual' ? d.percentBps : 0;
+      await tx.$executeRaw`
+        UPDATE locations SET
+          deposit_mode = ${d.mode}::deposit_mode,
+          deposit_fixed_cents = ${fixo},
+          deposit_percent_bps = ${percentual},
+          deposit_score_threshold = ${d.scoreThreshold},
+          deposit_ticket_over_cents = ${d.ticketOverCents},
+          deposit_refund_hours = ${d.refundHours},
+          updated_at = now()
+      `;
+    }
+
     // Os dois juntos, e não um campo por vez: encarregado é nome **e** contato,
     // e salvar metade deixaria o e-mail do antecessor apontando para o nome do
     // sucessor. Vazio vira nulo — a CHECK do banco recusa `''` como e-mail.
@@ -511,6 +556,7 @@ export async function getPolicies(tenantId: string): Promise<{
   readonly maxDiscountBps: number;
   readonly dpoName: string | null;
   readonly dpoEmail: string | null;
+  readonly deposit: DepositPolicyInput;
 } | null> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
@@ -522,10 +568,19 @@ export async function getPolicies(tenantId: string): Promise<{
         max_discount_bps: number;
         dpo_name: string | null;
         dpo_email: string | null;
+        deposit_mode: DepositPolicyInput['mode'];
+        deposit_fixed_cents: number;
+        deposit_percent_bps: number;
+        deposit_score_threshold: number;
+        deposit_ticket_over_cents: number;
+        deposit_refund_hours: number;
       }[]
     >`
       SELECT l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules,
-             l.cancellation_policy, t.max_discount_bps, t.dpo_name, t.dpo_email
+             l.cancellation_policy, t.max_discount_bps, t.dpo_name, t.dpo_email,
+             l.deposit_mode, l.deposit_fixed_cents, l.deposit_percent_bps,
+             l.deposit_score_threshold, l.deposit_ticket_over_cents,
+             l.deposit_refund_hours
         FROM locations l
         JOIN tenants t ON t.id = l.tenant_id
        ORDER BY l.created_at
@@ -541,6 +596,14 @@ export async function getPolicies(tenantId: string): Promise<{
       maxDiscountBps: linha.max_discount_bps,
       dpoName: linha.dpo_name,
       dpoEmail: linha.dpo_email,
+      deposit: {
+        mode: linha.deposit_mode,
+        fixedCents: linha.deposit_fixed_cents,
+        percentBps: linha.deposit_percent_bps,
+        scoreThreshold: linha.deposit_score_threshold,
+        ticketOverCents: linha.deposit_ticket_over_cents,
+        refundHours: linha.deposit_refund_hours,
+      },
     };
   });
 }

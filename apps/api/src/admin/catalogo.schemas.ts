@@ -35,6 +35,15 @@ export const serviceSchema = z.object({
   bufferAfterMinutes: buffer,
   bookableOnline: z.boolean(),
   /**
+   * Sempre exigir sinal deste serviço (bloco 37, SPEC §2.12).
+   *
+   * Opcional na borda para que a tela de catálogo anterior continue salvando —
+   * e a ausência vale `false`, que é o comportamento de sempre. Um padrão
+   * `true` faria toda coloração já cadastrada passar a pedir pagamento
+   * adiantado no dia do deploy, sem ninguém ter decidido nada.
+   */
+  alwaysRequireDeposit: z.boolean().optional(),
+  /**
    * Um combo tem ao menos duas partes. Uma parte só não é combo — é o mesmo
    * serviço com outro nome, e vira exatamente o tipo de catálogo duplicado que
    * o defeito D4 descreve.

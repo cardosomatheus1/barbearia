@@ -57,6 +57,20 @@ export const PERMISSOES = [
    * diz *quem*, teto diz *quanto*.
    */
   'finance.discount',
+  /**
+   * Registrar e estornar o sinal recebido de um agendamento (bloco 37).
+   *
+   * É dinheiro que entra fora da comanda — o Pix que o cliente manda para
+   * garantir o sábado, dias antes de existir qualquer atendimento. Guardá-la sob
+   * `cashier.open` seria errado nos dois sentidos: o sinal entra sem gaveta
+   * aberta, e quem abre a gaveta não é necessariamente quem confere o
+   * comprovante.
+   *
+   * Fica no grupo de dinheiro pelo prefixo, e é o que se quer: quem pode dizer
+   * "recebi" sobre um valor que ninguém mais viu é exatamente quem o segundo
+   * fator existe para proteger.
+   */
+  'finance.deposit',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -92,6 +106,18 @@ export const PERMISSOES = [
    * uma é o vetor de roubo da base, a outra é o de destruição dela.
    */
   'customers.anonymize',
+  /**
+   * Substituir à mão o score de confiabilidade de um cliente (bloco 37).
+   *
+   * A SPEC §2.13 pede o override "pelo gerente, com justificativa auditada", e
+   * a palavra gerente é a especificação: `customers.edit` é de toda a recepção,
+   * e com ela o override viraria o caminho mais curto para dispensar o sinal de
+   * um conhecido — sem passar por dinheiro nenhum, portanto sem segundo fator.
+   *
+   * Permissão própria pelo mesmo motivo de `customers.anonymize`: parece a
+   * mesma tarefa de editar um cadastro e não é.
+   */
+  'customers.reliability_override',
   'reports.finance',
   'reports.operational',
   'inventory.view',
@@ -183,11 +209,14 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     // Faturamento sim, margem não.
     'finance.view',
     'finance.discount',
+    'finance.deposit',
     'commission.view_all',
     'customers.view',
     'customers.edit',
     'customers.view_notes',
     'customers.edit_notes',
+    // O override do score é do gerente por definição da SPEC §2.13.
+    'customers.reliability_override',
     'reports.operational',
     'inventory.view',
     'inventory.adjust',

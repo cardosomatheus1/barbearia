@@ -40,6 +40,27 @@ export type AuditAction =
   // "quem matou a cobrança do meu cliente?" — não tinha resposta sem isto.
   | 'order.charge_created'
   | 'order.charge_cancelled'
+  /**
+   * O sinal do agendamento (bloco 37).
+   *
+   * Dinheiro que entra fora da comanda e sem gaveta aberta: o Pix que o cliente
+   * manda dias antes para garantir o sábado. Quem digita "recebi R$ 20" é a
+   * única testemunha da entrada, e a pergunta do dia seguinte — "o cliente
+   * jurou que pagou, quem registrou?" — não teria resposta sem isto.
+   *
+   * A devolução é auditada pela razão espelhada: ela tira da barbearia dinheiro
+   * que já estava com ela.
+   */
+  | 'deposit.received'
+  | 'deposit.refunded'
+  /**
+   * O override do score de confiabilidade (bloco 37).
+   *
+   * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
+   * fica na coluna, quem escreveu fica aqui. Sem isso, dispensar do sinal um
+   * conhecido seria uma edição de cadastro como outra qualquer.
+   */
+  | 'customer.reliability_override'
   // Segundo fator: ligar e desligar mudam quem consegue chegar ao caixa.
   | 'mfa.enabled'
   | 'mfa.disabled'
@@ -105,6 +126,8 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'debt.received',
   'order.charge_created',
   'order.charge_cancelled',
+  'deposit.received',
+  'deposit.refunded',
   'commission.closed',
   'commission.rule_changed',
 ];
@@ -130,6 +153,10 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'import.applied',
   'import.reverted',
   'slug.added',
+  // O override não carrega centavo: guarda o score de antes, o de depois e o
+  // motivo. A pergunta que responde — "quem dispensou este cliente do sinal?" —
+  // é de quem administra a casa.
+  'customer.reliability_override',
   // Nenhuma carrega centavo, e a pergunta que respondem — "quem entrou na minha
   // conta?" — é de quem administra a casa. Fica do lado da gestão.
   'support.started',

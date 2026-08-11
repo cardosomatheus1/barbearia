@@ -336,6 +336,12 @@ export async function applyAttendance(params: {
                                  ELSE started_at END,
             completed_at  = CASE WHEN ${carimbo === 'completed_at'} THEN ${now}
                                  ELSE completed_at END,
+            -- O painel também cancela, e o carimbo tem que sair daqui igual ao
+            -- da tela do cliente. Sem esta linha o cancelamento feito pelo
+            -- balcão nasceria sem antecedência conhecida — e "não sei" devolve
+            -- o sinal, então a barbearia perderia o dinheiro pela própria porta.
+            cancelled_at  = CASE WHEN ${destino === 'cancelled_business'} THEN ${now}
+                                 ELSE cancelled_at END,
             updated_at = now()
         WHERE id = ${params.appointmentId}::uuid
       `;

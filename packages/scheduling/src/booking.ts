@@ -6,16 +6,22 @@ import {
   cancelarTarefasDoAgendamento,
 } from '@barbearia/jobs';
 import {
+  POLITICA_SEM_SINAL,
   canCancel,
   canReschedule,
+  decidirReembolso,
   localToInstant,
   minutesBetween,
   parseHHMM,
   type ChangeDecision,
   type ChangeRefusal,
+  type DecisaoDeReembolso,
+  type DecisaoDeSinal,
+  type MotivoDoSinal,
 } from '@barbearia/core';
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
+import { avaliarSinalEm } from './confianca.js';
 
 /**
  * Operações de reserva.
@@ -90,6 +96,16 @@ export interface AppointmentRef {
   readonly professionalId: string;
   readonly status: string;
   readonly priceCents: number;
+  /**
+   * Sinal exigido na criação, em centavos. Zero quando não foi exigido.
+   *
+   * Congelado aqui e não recalculado na leitura: a política da unidade e o
+   * histórico do cliente mudam, e o que ele combinou de pagar não muda com
+   * eles. Ler de novo faria a recepção cobrar um valor e a tela mostrar outro.
+   */
+  readonly depositRequiredCents: number;
+  /** Por que o sinal foi exigido. Nulo quando não foi. */
+  readonly depositReason: MotivoDoSinal | null;
   /** Verdadeiro quando a chave de idempotência devolveu um registro já existente. */
   readonly deduplicated: boolean;
 }
@@ -242,10 +258,13 @@ async function findByIdempotencyKey(
       professional_id: string;
       status: string;
       price_cents: number;
+      deposit_required_cents: number;
+      deposit_reason: string | null;
     }[]
   >`
     SELECT id, starts_at, ends_at, service_starts_at, service_ends_at,
-           professional_id, status, price_cents
+           professional_id, status, price_cents,
+           deposit_required_cents, deposit_reason
     FROM appointments WHERE idempotency_key = ${key} LIMIT 1
   `;
   const row = rows[0];
@@ -260,6 +279,11 @@ async function findByIdempotencyKey(
     professionalId: row.professional_id,
     status: row.status,
     priceCents: row.price_cents,
+    // O sinal vem gravado, não recalculado. A repetição da mesma chave é o
+    // mesmo agendamento, e ele não pode passar a exigir outro valor porque o
+    // histórico do cliente mudou entre os dois toques.
+    depositRequiredCents: row.deposit_required_cents,
+    depositReason: (row.deposit_reason as MotivoDoSinal | null) ?? null,
     deduplicated: true,
   };
 }
@@ -326,12 +350,14 @@ async function insertAppointment(
   tx: TransactionClient,
   request: CreateAppointmentRequest,
   slot: ResolvedSlot,
+  sinal: DecisaoDeSinal,
 ): Promise<string> {
   const rows = await tx.$queryRaw<{ id: string }[]>`
     INSERT INTO appointments (
       tenant_id, location_id, customer_id, professional_id,
       starts_at, ends_at, service_starts_at, service_ends_at,
-      status, source, notes, price_cents, idempotency_key
+      status, source, notes, price_cents, idempotency_key,
+      deposit_required_cents, deposit_reason
     ) VALUES (
       ${request.tenantId}::uuid,
       ${request.locationId}::uuid,
@@ -343,7 +369,8 @@ async function insertAppointment(
       ${request.source ?? 'website'}::appointment_source,
       ${request.notes ?? null},
       ${slot.priceCents},
-      ${request.idempotencyKey ?? null}
+      ${request.idempotencyKey ?? null},
+      ${sinal.valorCents}, ${sinal.motivo}
     )
     RETURNING id
   `;
@@ -397,12 +424,26 @@ export async function createAppointment(
 
     const slot = await resolveSlot(tx, request);
 
+    // O sinal é decidido com o ticket que acabou de ser resolvido, e não com o
+    // que o cliente mandou: preço vem do catálogo, como duração e buffer.
+    // Aceitar o valor da requisição deixaria o cliente escolher o próprio
+    // limiar de ticket e escapar do sinal informando R$ 1.
+    const sinal = await avaliarSinalEm(tx, {
+      tenantId: request.tenantId,
+      locationId: request.locationId,
+      customerId: request.customerId ?? null,
+      serviceIds: request.serviceIds,
+      ticketCents: slot.priceCents,
+      now: request.now ?? new Date(),
+    });
+
     let id: string;
     try {
       id = await insertAppointment(
         tx,
         { ...request, ...(storedKey ? { idempotencyKey: storedKey } : {}) },
         slot,
+        sinal,
       );
     } catch (error) {
       const code = pgCode(error);
@@ -433,6 +474,8 @@ export async function createAppointment(
       professionalId: request.professionalId,
       status: 'pending',
       priceCents: slot.priceCents,
+      depositRequiredCents: sinal.valorCents,
+      depositReason: sinal.motivo,
       deduplicated: false,
     };
   });
@@ -585,8 +628,25 @@ function refuse(decision: ChangeDecision, verbo: 'cancelar' | 'remarcar'): void 
   throw new BookingError('too_late', `É preciso ${verbo} com pelo menos ${horas} de antecedência.`);
 }
 
-export async function cancelAppointment(request: CancelRequest): Promise<void> {
-  await withTenant(request.tenantId, async (tx) => {
+/**
+ * O que fazer com o sinal deste cancelamento.
+ *
+ * Devolvido pelo cancelamento porque é ali que a informação é útil: a recepção
+ * precisa dizer ao cliente, na hora, se o dinheiro volta. Perguntar depois seria
+ * uma segunda tela e uma segunda decisão, e as duas discordariam no dia em que
+ * a barbearia mudasse o prazo entre uma e outra.
+ *
+ * Nulo quando não há sinal pago — que é o caso da esmagadora maioria dos
+ * cancelamentos, e não merece uma frase na tela.
+ */
+export interface DesfechoDoSinalNoCancelamento extends DecisaoDeReembolso {
+  readonly valorCents: number;
+}
+
+export async function cancelAppointment(
+  request: CancelRequest,
+): Promise<DesfechoDoSinalNoCancelamento | null> {
+  return withTenant(request.tenantId, async (tx) => {
     const status = request.by === 'customer' ? 'cancelled_customer' : 'cancelled_business';
     // Quem desmarcou não pode receber "não esqueça do seu horário". Esta é a
     // primeira defesa; o handler reconfere o estado na hora de enviar, que é o
@@ -604,10 +664,17 @@ export async function cancelAppointment(request: CancelRequest): Promise<void> {
       }
     }
 
+    // O carimbo é o que separa quem avisou de quem avisou em cima da hora — no
+    // score e no reembolso do sinal. `updated_at` não serve: qualquer edição
+    // posterior o move, e o cliente que cancelou com dois dias viraria
+    // cancelamento em cima da hora porque alguém corrigiu uma anotação.
+    const agora = request.now ?? new Date();
+
     const affected = await tx.$executeRaw`
       UPDATE appointments
       SET status = ${status}::appointment_status,
           notes = COALESCE(${request.reason ?? null}, notes),
+          cancelled_at = ${agora},
           updated_at = now()
       WHERE id = ${request.appointmentId}::uuid
         AND status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
@@ -623,7 +690,43 @@ export async function cancelAppointment(request: CancelRequest): Promise<void> {
         'Agendamento não encontrado ou já encerrado',
       );
     }
+
+    return decidirDestinoDoSinal(tx, request.appointmentId, request.by, agora);
   });
+}
+
+/**
+ * Lê o sinal pago e aplica a política de reembolso da unidade.
+ *
+ * Roda **depois** do UPDATE e na mesma transação, de propósito: antes, o
+ * agendamento ainda não tem `cancelled_at`, e a antecedência sairia de um
+ * carimbo que este mesmo cancelamento acabou de escrever.
+ */
+async function decidirDestinoDoSinal(
+  tx: TransactionClient,
+  appointmentId: string,
+  by: 'customer' | 'business',
+  agora: Date,
+): Promise<DesfechoDoSinalNoCancelamento | null> {
+  const linhas = await tx.$queryRaw<
+    { deposit_paid_cents: number; service_starts_at: Date; deposit_refund_hours: number }[]
+  >`
+    SELECT a.deposit_paid_cents, a.service_starts_at, l.deposit_refund_hours
+      FROM appointments a
+      JOIN locations l ON l.id = a.location_id
+     WHERE a.id = ${appointmentId}::uuid
+  `;
+  const linha = linhas[0];
+  if (!linha || linha.deposit_paid_cents <= 0) return null;
+
+  const horas = (linha.service_starts_at.getTime() - agora.getTime()) / 3_600_000;
+  const decisao = decidirReembolso({
+    politica: { ...POLITICA_SEM_SINAL, horasParaReembolso: linha.deposit_refund_hours },
+    quem: by === 'business' ? 'casa' : 'cliente',
+    horasDeAntecedencia: horas,
+  });
+
+  return { ...decisao, valorCents: linha.deposit_paid_cents };
 }
 
 export interface RescheduleRequest {
@@ -671,9 +774,13 @@ export async function rescheduleAppointment(
         status: string;
         source: AppointmentSource;
         service_ids: string[];
+        deposit_required_cents: number;
+        deposit_paid_cents: number;
+        deposit_reason: string | null;
       }[]
     >`
       SELECT a.id, a.location_id, a.customer_id, a.professional_id, a.status, a.source,
+             a.deposit_required_cents, a.deposit_paid_cents, a.deposit_reason,
              array_agg(s.service_id::text ORDER BY s.position) AS service_ids
       FROM appointments a
       JOIN appointment_services s ON s.appointment_id = a.id
@@ -745,9 +852,26 @@ export async function rescheduleAppointment(
       WHERE id = ${request.appointmentId}::uuid
     `;
 
+    /**
+     * O sinal atravessa a remarcação inteiro, e **não** é recalculado.
+     *
+     * Recalcular seria errado nos dois sentidos. Se já foi pago, o novo
+     * agendamento nasceria sem sinal e o dinheiro do cliente sumiria do
+     * registro. Se ainda não foi, o cliente que remarca escaparia da cobrança
+     * bastando remarcar uma vez — e quem mais remarca é justamente quem o sinal
+     * existe para conter.
+     *
+     * Remarcar não é marcar de novo: é o mesmo compromisso em outro horário.
+     */
+    const sinal: DecisaoDeSinal = {
+      exigido: appointment.deposit_required_cents > 0,
+      motivo: (appointment.deposit_reason as MotivoDoSinal | null) ?? null,
+      valorCents: appointment.deposit_required_cents,
+    };
+
     let id: string;
     try {
-      id = await insertAppointment(tx, target, slot);
+      id = await insertAppointment(tx, target, slot, sinal);
     } catch (error) {
       if (pgCode(error) === EXCLUSION_VIOLATION) {
         // Rollback devolve o agendamento original ao estado ativo.
@@ -760,8 +884,10 @@ export async function rescheduleAppointment(
     }
 
     await tx.$executeRaw`
-      UPDATE appointments SET rescheduled_from = ${request.appointmentId}::uuid
-      WHERE id = ${id}::uuid
+      UPDATE appointments
+         SET rescheduled_from = ${request.appointmentId}::uuid,
+             deposit_paid_cents = ${appointment.deposit_paid_cents}
+       WHERE id = ${id}::uuid
     `;
 
     return {
@@ -773,6 +899,8 @@ export async function rescheduleAppointment(
       professionalId,
       status: 'pending',
       priceCents: slot.priceCents,
+      depositRequiredCents: sinal.valorCents,
+      depositReason: sinal.motivo,
       deduplicated: false,
     };
   });
