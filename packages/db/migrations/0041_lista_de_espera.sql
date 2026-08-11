@@ -72,6 +72,19 @@ CREATE TABLE waitlist_entries (
   updated_at        timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT waitlist_periodo_coerente CHECK (wanted_to >= wanted_from),
+  /**
+   * A faixa tem teto, e é o banco quem garante.
+   *
+   * Achado da revisão de segurança: o domínio conferia só o começo, e `ate`
+   * ficava livre. Uma entrada até 2099 nunca expira — a varredura só fecha o
+   * que já passou —, e três delas cobrindo o dia de trabalho fazem uma pessoa
+   * ser candidata permanente a toda vaga da barbearia.
+   *
+   * A CHECK existe além da regra do domínio porque ela vale para quem entrar
+   * por outro caminho: um importador, uma correção manual, um chamador novo.
+   * Sessenta dias é `DIAS_MAXIMOS_DE_ESPERA` de `packages/core`.
+   */
+  CONSTRAINT waitlist_periodo_com_teto CHECK (wanted_to - wanted_from <= 60),
   CONSTRAINT waitlist_janela_coerente CHECK (
     window_start_minute >= 0
     AND window_end_minute <= 1440

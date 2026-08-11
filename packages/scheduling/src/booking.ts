@@ -22,7 +22,12 @@ import {
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
 import { avaliarSinalEm } from './confianca.js';
-import { candidatosDaVaga, vagaDoCancelamento, type CandidatoDaVaga } from './espera.js';
+import {
+  fecharEsperasAtendidas,
+  quemQuerAVagaLiberada,
+  vagaDoCancelamento,
+  type CandidatoDaVaga,
+} from './espera.js';
 
 /**
  * Operações de reserva.
@@ -222,6 +227,17 @@ async function resolveSlot(
     prices,
     resources: [...resources].map(([resourceType, quantity]) => ({ resourceType, quantity })),
   };
+}
+
+/** O fuso da unidade, para converter a janela ocupada em dia e minutos locais. */
+async function fusoDaUnidade(
+  tx: TransactionClient,
+  locationId: string,
+): Promise<string | null> {
+  const linhas = await tx.$queryRaw<{ timezone: string }[]>`
+    SELECT timezone FROM locations WHERE id = ${locationId}::uuid
+  `;
+  return linhas[0]?.timezone ?? null;
 }
 
 /**
@@ -466,6 +482,31 @@ export async function createAppointment(
       await tx.$executeRaw`DELETE FROM slot_holds WHERE id = ${request.holdId}::uuid`;
     }
 
+    /**
+     * Quem conseguiu marcar sai da lista de espera (bloco 38, SPEC §2.9).
+     *
+     * Na mesma transação: se o horário entra, a espera fecha. Sem isto,
+     * `booked` seria um estado que nada escreve — a pessoa marcaria o sábado
+     * pelo site, continuaria na lista do sábado, e seria chamada para uma vaga
+     * que já não quer.
+     *
+     * Fecha só o que **este** horário satisfaz: quem esperava a manhã e marcou
+     * a tarde continua esperando a manhã.
+     */
+    if (request.customerId) {
+      await fecharEsperasAtendidas(tx, {
+        customerId: request.customerId,
+        locationId: request.locationId,
+        appointmentId: id,
+        vaga: vagaDoCancelamento({
+          timezone: (await fusoDaUnidade(tx, request.locationId)) ?? 'UTC',
+          inicio: slot.occupiedStart,
+          fim: slot.occupiedEnd,
+          professionalId: request.professionalId,
+        }),
+      });
+    }
+
     return {
       id,
       startsAt: slot.occupiedStart.toISOString(),
@@ -706,56 +747,11 @@ export async function cancelAppointment(
     }
 
     const sinal = await decidirDestinoDoSinal(tx, request.appointmentId, request.by, agora);
-    const esperando = await quemQuerEstaVaga(tx, request.appointmentId);
+    const esperando = await quemQuerAVagaLiberada(tx, request.appointmentId);
     return { sinal, esperando };
   });
 }
 
-/**
- * A lista de espera, perguntada **dentro da transação do cancelamento**
- * (bloco 38).
- *
- * Perguntar depois do commit criaria a janela em que o horário está livre e
- * ninguém sabe — e é justamente a janela em que outro cliente marca pelo site,
- * deixando a lista sem função no único momento em que ela serviria.
- *
- * Erro aqui **não derruba o cancelamento**: desmarcar é a operação que o
- * cliente pediu, e ela não pode falhar porque uma consulta auxiliar falhou. A
- * lista vazia é indistinguível de "ninguém quer", e é o pior que acontece.
- */
-async function quemQuerEstaVaga(
-  tx: TransactionClient,
-  appointmentId: string,
-): Promise<readonly CandidatoDaVaga[]> {
-  const linhas = await tx.$queryRaw<
-    {
-      location_id: string;
-      professional_id: string;
-      starts_at: Date;
-      ends_at: Date;
-      timezone: string;
-    }[]
-  >`
-    SELECT a.location_id, a.professional_id, a.starts_at, a.ends_at, l.timezone
-      FROM appointments a
-      JOIN locations l ON l.id = a.location_id
-     WHERE a.id = ${appointmentId}::uuid
-  `;
-  const linha = linhas[0];
-  if (!linha) return [];
-
-  return candidatosDaVaga(tx, {
-    locationId: linha.location_id,
-    // A janela **ocupada**, com buffers: é o buraco de verdade na grade, e é o
-    // que outro atendimento poderia preencher.
-    vaga: vagaDoCancelamento({
-      timezone: linha.timezone,
-      inicio: linha.starts_at,
-      fim: linha.ends_at,
-      professionalId: linha.professional_id,
-    }),
-  });
-}
 
 /**
  * Lê o sinal pago e aplica a política de reembolso da unidade.

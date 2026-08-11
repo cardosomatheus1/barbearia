@@ -8,6 +8,7 @@ import {
   encerrarSessao,
   pedirMeusDados,
   remarcarAgendamento,
+  sairDaEsperaNaApi,
 } from '@/lib/api';
 import { VERSAO_DO_CONSENTIMENTO } from '@/lib/politica';
 import { apagarSessao, lerSessao } from '@/lib/sessao';
@@ -121,6 +122,27 @@ export async function pedirDados(form: FormData): Promise<void> {
   redirect(
     resultado.ok
       ? `/${slug}/meus-agendamentos?feito=${tipo === 'deletion' ? 'pediu_exclusao' : 'pediu'}`
+      : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
+  );
+}
+
+/**
+ * Sai da lista de espera (bloco 38).
+ *
+ * Todo estado precisa de saída **na tela**, não só no domínio (CLAUDE.md §6).
+ * Sem este botão, entrar na lista seria um caminho de ida: a pessoa gastaria
+ * uma das três vagas e não teria como devolvê-la — e a lista da barbearia
+ * encheria de gente que já resolveu por outro lado.
+ */
+export async function sairDaEspera(form: FormData): Promise<void> {
+  const slug = String(form.get('slug') ?? '');
+  const token = await lerSessao(slug);
+  if (!token) redirect(`/${slug}/entrar`);
+
+  const resultado = await sairDaEsperaNaApi(slug, token, String(form.get('id') ?? ''));
+  redirect(
+    resultado.ok
+      ? `/${slug}/meus-agendamentos?feito=espera`
       : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
   );
 }

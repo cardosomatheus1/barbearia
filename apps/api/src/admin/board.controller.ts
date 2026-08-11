@@ -152,6 +152,16 @@ export class BoardController {
         tenantId: staff.tenantId,
         appointmentId: id,
         action: body.action,
+        /**
+         * Cancelar devolve quem espera pela vaga, com nome e telefone — e
+         * identidade de cliente é `customers.view` nesta casa.
+         *
+         * Conferida com a mesma função que a guarda aplica, e **não** declarada
+         * na rota: `@Exige` é conjuntivo, então somá-la aqui tiraria de quem só
+         * atende o direito de marcar presença. Quem não a tem recebe a
+         * contagem; quem a tem, os nomes.
+         */
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
         // Sem isto, quem enxerga só a própria agenda ainda marcava falta no
         // cliente do colega: bastava ter o id, e a lista de ontem já o dava.
         onlyProfessionalId: this.recorte(staff),

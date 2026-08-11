@@ -7,6 +7,7 @@ import {
   entrarNaEspera,
   esperasDoCliente,
   expirarEsperas,
+  quemEstaEsperando,
   sairDaEspera,
 } from './espera.js';
 
@@ -30,6 +31,8 @@ const GLEIDSON = '38383838-bbbb-0000-0000-000000000002';
 const CABELO = '38383838-eeee-0000-0000-000000000001';
 const CARLOS = '38383838-cccc-0000-0000-000000000001';
 const BRUNO = '38383838-cccc-0000-0000-000000000002';
+/** Sem espera nenhuma: é quem marca o horário que depois será cancelado. */
+const DANIEL = '38383838-cccc-0000-0000-000000000003';
 
 /** Terça. O fuso da unidade é America/Bahia, UTC-3. */
 const TERCA = '2026-09-08';
@@ -79,7 +82,8 @@ describeIfDb('lista de espera', () => {
 
       INSERT INTO customers (id, tenant_id, name, phone_e164) VALUES
         ('${CARLOS}', '${TENANT}', 'Carlos Souza', '+5571988887777'),
-        ('${BRUNO}', '${TENANT}', 'Bruno Lima', '+5571977776666');
+        ('${BRUNO}', '${TENANT}', 'Bruno Lima', '+5571977776666'),
+        ('${DANIEL}', '${TENANT}', 'Daniel Rocha', '+5571966665555');
     `);
   });
 
@@ -188,6 +192,95 @@ describeIfDb('lista de espera', () => {
     });
   });
 
+  // -- o que a revisão de segurança cobrou -------------------------------------
+
+  describe('a fronteira entre barbearias, que a chave estrangeira não segura', () => {
+    /**
+     * A checagem de integridade referencial do Postgres **ignora row security**:
+     * a chave estrangeira aceitaria de bom grado um serviço ou um profissional
+     * de outra barbearia. Os dois achados são da revisão deste bloco.
+     */
+    const RIVAL = '38383838-9999-9999-9999-999999999999';
+    const RUAN_RIVAL = '38383838-bbbb-9999-0000-000000000001';
+    const CABELO_RIVAL = '38383838-eeee-9999-0000-000000000001';
+
+    beforeEach(async () => {
+      await exec(`
+        INSERT INTO tenants (id, name) VALUES ('${RIVAL}', 'Vizinha');
+
+        INSERT INTO locations (id, tenant_id, name, timezone)
+        VALUES ('38383838-aaaa-9999-0000-000000000001', '${RIVAL}', 'Outra', 'America/Bahia');
+
+        INSERT INTO professionals (id, tenant_id, location_id, name)
+        VALUES ('${RUAN_RIVAL}', '${RIVAL}', '38383838-aaaa-9999-0000-000000000001', 'Outro');
+
+        INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
+        VALUES ('${CABELO_RIVAL}', '${RIVAL}', 'Cabelo da vizinha', 4900, 30);
+      `);
+    });
+
+    it('serviço de outra barbearia é recusado, mesmo misturado com um legítimo', async () => {
+      // Só a **soma** não pega isto: um pedido com um serviço legítimo e um
+      // alheio dá duração positiva, passa, e grava a referência estrangeira.
+      await expect(esperar({ serviceIds: [CABELO_RIVAL] })).rejects.toMatchObject({
+        code: 'servico_desconhecido',
+      });
+      await expect(esperar({ serviceIds: [CABELO, CABELO_RIVAL] })).rejects.toMatchObject({
+        code: 'servico_desconhecido',
+      });
+    });
+
+    it('profissional de outra barbearia é recusado', async () => {
+      /**
+       * A consequência aqui era pior que uma linha estranha. A chave tem
+       * `ON DELETE SET NULL`: quando a outra barbearia apagasse aquele
+       * profissional, a entrada plantada viraria em silêncio um "qualquer
+       * barbeiro" — e passaria a casar com toda vaga que abrisse.
+       */
+      await expect(esperar({ professionalId: RUAN_RIVAL })).rejects.toMatchObject({
+        code: 'profissional_desconhecido',
+      });
+    });
+
+    it('profissional de outra unidade da mesma barbearia também é recusado', async () => {
+      // A conferência é por unidade, não só por barbearia: a entrada é da
+      // unidade, e um profissional que não atende ali nunca abriria a vaga.
+      await exec(`
+        INSERT INTO locations (id, tenant_id, name, timezone)
+        VALUES ('38383838-aaaa-0000-0000-000000000002', '${TENANT}', 'Filial', 'America/Bahia');
+
+        INSERT INTO professionals (id, tenant_id, location_id, name)
+        VALUES ('38383838-bbbb-0000-0000-000000000009', '${TENANT}',
+                '38383838-aaaa-0000-0000-000000000002', 'Da filial')
+      `);
+
+      await expect(
+        esperar({ professionalId: '38383838-bbbb-0000-0000-000000000009' }),
+      ).rejects.toMatchObject({ code: 'profissional_desconhecido' });
+    });
+  });
+
+  describe('o recorte por profissional na lista do balcão', () => {
+    /**
+     * Achado da revisão. Sem o recorte, o barbeiro que enxerga só a própria
+     * agenda lia a lista da barbearia inteira por esta porta — inclusive as
+     * entradas que nomeiam um colega.
+     */
+    it('quem vê só a própria agenda vê as entradas dele e as sem dono', async () => {
+      await esperar({ professionalId: RUAN, de: '2026-09-08', ate: '2026-09-08' });
+      await esperar({ professionalId: GLEIDSON, de: '2026-09-09', ate: '2026-09-09' });
+      await esperar({ de: '2026-09-10', ate: '2026-09-10' });
+
+      const doRuan = await quemEstaEsperando(TENANT, LOCATION, RUAN);
+      // A sem profissional aparece: qualquer um pode atendê-la, e escondê-la
+      // seria esconder do barbeiro justamente o cliente que ele consegue pegar.
+      expect(doRuan.map((e) => e.profissionalId)).toEqual([RUAN, null]);
+
+      // Sem recorte, a barbearia inteira.
+      expect(await quemEstaEsperando(TENANT, LOCATION)).toHaveLength(3);
+    });
+  });
+
   // -- expiração ---------------------------------------------------------------
 
   it('expira quando o último dia pedido passa, no fuso da unidade', async () => {
@@ -210,7 +303,14 @@ describeIfDb('lista de espera', () => {
 
   // -- o gatilho ---------------------------------------------------------------
 
-  const marcar = (start: string, customerId = BRUNO) =>
+  /**
+   * Marca para o Daniel por padrão, e ele **não está em lista nenhuma**.
+   *
+   * Desde que marcar fecha a espera que o horário satisfaz, usar quem espera
+   * como quem marca faria o cancelamento seguinte encontrar a lista já vazia —
+   * e o teste provaria o contrário do que diz.
+   */
+  const marcar = (start: string, customerId = DANIEL) =>
     createAppointment({
       tenantId: TENANT,
       locationId: LOCATION,
@@ -245,6 +345,46 @@ describeIfDb('lista de espera', () => {
       customerNome: 'Carlos Souza',
       // Só os quatro últimos: a tela do balcão fica virada para o salão.
       customerTelefoneFinal: '7777',
+    });
+  });
+
+  describe('quem consegue marcar sai da lista', () => {
+    /**
+     * A SPEC §2.9 pede: "cliente sai da fila **automaticamente** ao conseguir
+     * agendar". Sem isto, `booked` seria um estado que nada escreve — a pessoa
+     * marcaria o sábado pelo site, continuaria na lista do sábado, e seria
+     * chamada para uma vaga que já não quer. Achado na leitura de fluxo (§6),
+     * com o portão inteiro verde.
+     */
+    it('marcar dentro do que se esperava fecha a espera e liga o agendamento', async () => {
+      const naLista = await esperar();
+      const marcado = await marcar('09:00', CARLOS);
+
+      expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(0);
+
+      const linhas = await withTenant(TENANT, (tx) =>
+        tx.$queryRaw<{ status: string; appointment_id: string | null }[]>`
+          SELECT status::text AS status, appointment_id
+            FROM waitlist_entries WHERE id = ${naLista.id}::uuid
+        `,
+      );
+      expect(linhas[0]).toMatchObject({ status: 'booked', appointment_id: marcado.id });
+    });
+
+    it('marcar fora do que se esperava não fecha nada', async () => {
+      // Quem esperava a manhã e conseguiu a tarde continua esperando a manhã:
+      // era o que ela pediu, e desistir por ela seria decidir no lugar dela.
+      await esperar({ inicioMinuto: 8 * 60, fimMinuto: 12 * 60 });
+      await marcar('14:00', CARLOS);
+      expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(1);
+    });
+
+    it('a espera de outro cliente não fecha quando este marca', async () => {
+      // O filtro por `customer_id` é o que segura isto — a RLS separa
+      // barbearias, não clientes dentro de uma.
+      await esperar({ customerId: CARLOS });
+      await marcar('09:00', BRUNO);
+      expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(1);
     });
   });
 
@@ -308,7 +448,9 @@ describeIfDb('lista de espera', () => {
       now: AGORA,
     });
 
-    const marcado = await marcar('09:00', CARLOS);
+    // Quem marca é o Daniel, que não espera nada: se fosse um dos dois, marcar
+    // fecharia a espera dele e o teste provaria o contrário do que diz.
+    const marcado = await marcar('09:00');
     const desfecho = await cancelAppointment({
       tenantId: TENANT,
       appointmentId: marcado.id,

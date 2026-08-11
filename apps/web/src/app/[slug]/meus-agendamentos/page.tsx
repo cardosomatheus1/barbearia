@@ -4,12 +4,14 @@ import {
   getProfile,
   lerConsentimento,
   listarAgendamentos,
+  listarEsperas,
   type AgendamentoDoCliente,
+  type EsperaDoCliente,
 } from '@/lib/api';
 import { humanInstant } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
 import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
-import { cancelar, decidirMarketing, pedirDados, sair } from './acoes';
+import { cancelar, decidirMarketing, pedirDados, sair, sairDaEspera } from './acoes';
 
 /**
  * Meus agendamentos.
@@ -53,7 +55,31 @@ const FEITO: Record<string, string> = {
     'Pedido de exclusão registrado. A barbearia tem 15 dias para responder — ela confere antes '
     + 'se alguma obrigação legal a impede de apagar tudo.',
   recusou: 'Pronto — você não recebe mais promoção. O aviso do seu horário continua.',
+  espera: 'Você saiu da lista de espera.',
 };
+
+/**
+ * "15 de agosto" e "15/08".
+ *
+ * `YYYY-MM-DD` é data local da unidade, não instante: convertê-la com `Date` e
+ * formatá-la no fuso do processo devolveria o dia anterior a oeste de
+ * Greenwich, que é o Brasil inteiro. O recorte da string é o que mantém sábado
+ * sendo sábado.
+ */
+const MESES = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
+
+function diaLongo(iso: string): string {
+  const [, mes = '01', dia = '01'] = iso.split('-');
+  return `${Number(dia)} de ${MESES[Number(mes) - 1] ?? ''}`;
+}
+
+function diaCurto(iso: string): string {
+  const [, mes = '01', dia = '01'] = iso.split('-');
+  return `${dia}/${mes}`;
+}
 
 /**
  * A decisão sobre promoção, do lado de quem decide (bloco 31).
@@ -141,6 +167,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
   // Lido junto e não numa segunda volta: são duas rotas independentes e a tela
   // precisa das duas para montar. Em série, o cliente espera as duas somadas.
   const consentimento = await lerConsentimento(slug, token);
+  const esperas = await listarEsperas(slug, token);
 
   const proximos = agendamentos.filter((a) => a.state === 'active');
   const anteriores = agendamentos.filter((a) => a.state !== 'active');
@@ -175,7 +202,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
         </div>
       ) : null}
 
-      {proximos.length === 0 && anteriores.length === 0 ? (
+      {proximos.length === 0 && anteriores.length === 0 && esperas.length === 0 ? (
         <div className="vazio">
           <p className="vazio__titulo">Você ainda não tem agendamento aqui</p>
           <p className="vazio__saida">Escolha um serviço e um horário — leva menos de um minuto.</p>
@@ -228,9 +255,63 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
         </div>
       ) : null}
 
+      {/*
+        A lista de espera, e a saída dela (bloco 38).
+
+        Fica **depois** dos agendamentos e antes das preferências: quem espera
+        uma vaga costuma ter um horário marcado também — a espera é o "quero
+        antecipar", não o "não tenho nada". Pô-la no topo diria o contrário.
+      */}
+      {esperas.length > 0 ? (
+        <section aria-labelledby="esperando">
+          <h2 className="rotulo" id="esperando">
+            Esperando uma vaga
+          </h2>
+          <ul className="cartoes">
+            {esperas.map((espera) => (
+              <li key={espera.id}>
+                <Espera espera={espera} slug={slug} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {consentimento ? <Promocao aceita={consentimento.marketing} slug={slug} /> : null}
       <MeusDados encarregado={profile.encarregado} nome={profile.name} slug={slug} />
     </main>
+  );
+}
+
+/**
+ * Uma espera, com a saída dela.
+ *
+ * O período vem em duas frases porque "de 15/08 a 15/08" é o caso comum e
+ * lê-se pior que "15 de agosto". Quem pediu uma faixa vê a faixa.
+ */
+function Espera({ espera, slug }: { espera: EsperaDoCliente; slug: string }) {
+  const umDia = espera.de === espera.ate;
+
+  return (
+    <article className="cartao">
+      <p className="cartao__quando tabular">
+        {umDia ? diaLongo(espera.de) : `${diaCurto(espera.de)} a ${diaCurto(espera.ate)}`}
+      </p>
+      <p className="cartao__servico">
+        {espera.servicos.join(' + ')} · das {espera.inicio} às {espera.fim}
+      </p>
+      <p className="cartao__quem">
+        {espera.profissionalNome ?? 'Com qualquer barbeiro'}
+      </p>
+
+      <form action={sairDaEspera}>
+        <input name="slug" type="hidden" value={slug} />
+        <input name="id" type="hidden" value={espera.id} />
+        <button className="ui-button ui-button--ghost cartao__acao" type="submit">
+          Sair da lista
+        </button>
+      </form>
+    </article>
   );
 }
 

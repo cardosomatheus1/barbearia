@@ -7,6 +7,7 @@ import {
   getAgenda,
   MAX_DIAS_DA_AGENDA,
   primaryLocation,
+  quemEstaEsperando,
   rescheduleAppointment,
 } from '@barbearia/scheduling';
 import { MOTIVO_DA_FALHA, pode, type FalhaDaExcecao, type TipoDeExcecao } from '@barbearia/core';
@@ -102,6 +103,41 @@ export class AgendaController {
     const local = await primaryLocation(tenantId);
     if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
     return local;
+  }
+
+  /**
+   * Quem está esperando uma vaga (bloco 38).
+   *
+   * ## As duas permissões, e por que não é só a da agenda
+   *
+   * A rota devolve **nome e telefone** de quem espera, e nesta casa identidade
+   * de cliente é `customers.view` — é a mesma forma que a busca do balcão
+   * devolve, e ela declara essa permissão. Achado da revisão de segurança
+   * deste bloco, e é o mesmo defeito que a revisão do bloco 31 cobrou na
+   * exportação do titular: rota que agrega declara **todas** as permissões do
+   * que ela devolve, não a mais próxima do nome.
+   *
+   * Sem isso, um dono que tirasse `customers.view` de um papel para proteger a
+   * base entregaria a base inteira por esta porta — sem paginação e sem teto.
+   *
+   * ## O recorte por profissional
+   *
+   * Vale aqui como vale na agenda: quem não tem `appointments.view_all_
+   * professionals` enxerga a própria cadeira. A entrada **sem profissional**
+   * aparece para todos, porque qualquer um pode atendê-la; a que nomeia um
+   * colega, não. Sem o recorte, o barbeiro lia a lista da barbearia inteira
+   * justamente pela rota que a agenda protege.
+   */
+  @Exige('appointments.view', 'customers.view')
+  @Get('espera')
+  async espera(@Staff() staff: AuthenticatedStaff) {
+    const local = await this.unidade(staff.tenantId);
+    const esperando = await quemEstaEsperando(
+      staff.tenantId,
+      local.id,
+      this.recorte(staff),
+    );
+    return { esperando };
   }
 
   @Exige('appointments.view')

@@ -27,6 +27,10 @@ import { LgpdController } from './admin/lgpd.controller.js';
 import { ImportacaoController } from './admin/importacao.controller.js';
 import { SinalController } from './admin/sinal.controller.js';
 import { FilaPublicaController } from './booking/fila-publica.controller.js';
+import {
+  EsperaDoClienteController,
+  EsperaPublicaController,
+} from './booking/espera.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import {
   PlataformaAuthController,
@@ -72,6 +76,8 @@ import { TenantService } from './tenant/tenant.service.js';
     AlertasController,
     ImportacaoController,
     SinalController,
+    EsperaPublicaController,
+    EsperaDoClienteController,
     FilaPublicaController,
     TeamController,
     MeController,

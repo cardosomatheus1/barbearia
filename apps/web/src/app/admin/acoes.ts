@@ -391,6 +391,23 @@ export async function acaoAtendimento(form: FormData): Promise<void> {
   const resultado = await moverAtendimento(token, id, acao as AcaoAtendimento);
   if (!resultado.ok) falhar(voltar, resultado.code);
 
+  /**
+   * Cancelar abre uma vaga, e quem a quer aparece agora (bloco 38).
+   *
+   * A contagem viaja pela URL porque a ação redireciona — e ela precisa
+   * atravessar. Sem isto, a lista de espera existiria no domínio e o balcão
+   * nunca saberia dela no único instante em que ela serve: o cliente liga, a
+   * recepção desmarca, e o horário fica livre para quem marcar primeiro pelo
+   * site.
+   *
+   * Só a contagem, nunca os nomes: nome de cliente em barra de endereço fica no
+   * histórico do navegador do balcão e no log do servidor.
+   */
+  const esperando = resultado.dados.esperando.length;
+  if (esperando > 0) {
+    redirect(`${voltar}${voltar.includes('?') ? '&' : '?'}esperando=${esperando}`);
+  }
+
   redirect(voltar);
 }
 

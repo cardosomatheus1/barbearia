@@ -72,6 +72,7 @@ const avisosDeCobranca: { tenantId: string; faturaId: string; assunto: string }[
 let reguasRodadas = 0;
 /** As varreduras de retenção que o worker mandou rodar, por barbearia. */
 const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
+const esperasExpiradas: { tenantId: string; agora: Date }[] = [];
 /** Os alertas que o worker mandou o canal do gestor entregar. */
 const alertasEntregues: { tenantId: string; quantos: number }[] = [];
 /** As conferências de cobrança online que o worker mandou rodar (bloco 35). */
@@ -95,6 +96,10 @@ const ligacoesDaPlataforma = () => ({
   varrerRetencao: async (tenantId: string, agora: Date) => {
     retencoesRodadas.push({ tenantId, agora });
     return { avisados: 0, anonimizados: 0 };
+  },
+  expirarEsperas: async (tenantId: string, agora: Date) => {
+    esperasExpiradas.push({ tenantId, agora });
+    return 0;
   },
   avisarDaOperacao: async (tenantId: string, alertas: readonly unknown[]) => {
     alertasEntregues.push({ tenantId, quantos: alertas.length });
@@ -146,6 +151,7 @@ describeIfDb('fila de trabalho', () => {
     provider = new FakeNotificationProvider();
     avisosDeCobranca.length = 0;
     retencoesRodadas.length = 0;
+    esperasExpiradas.length = 0;
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
     contexto = {
@@ -678,6 +684,30 @@ describeIfDb('fila de trabalho', () => {
 
     expect(resultado.concluidas).toBe(0);
     expect(avisosDeCobranca).toHaveLength(0);
+  });
+
+  it('a varredura diária expira a lista de espera na mesma volta', async () => {
+    /**
+     * `expired` seria um estado que ninguém escreve se isto não acontecesse: a
+     * entrada continuaria ocupando uma das três vagas do cliente para sempre, e
+     * a lista dele mostraria um sábado que já passou.
+     *
+     * Junto da retenção e não numa tarefa própria porque é a mesma natureza —
+     * varredura diária, uma por barbearia, escrevendo de madrugada — e uma
+     * segunda cadeia de agendamento seria mais peça para manter do que trabalho
+     * para fazer.
+     */
+    await enfileirarAvulso(TENANT, {
+      kind: 'lgpd.retencao',
+      payload: {},
+      idempotencyKey: 'retencao:teste:hoje',
+    });
+
+    const resultado = await rodada(contexto);
+
+    expect(resultado.concluidas).toBe(1);
+    expect(retencoesRodadas).toHaveLength(1);
+    expect(esperasExpiradas.map((e) => e.tenantId)).toEqual([TENANT]);
   });
 
   it('a falta entra na fila como tarefa da própria barbearia', async () => {

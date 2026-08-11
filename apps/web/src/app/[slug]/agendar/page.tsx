@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { getProfile, getAvailability, type PublicProfile, type PublicService } from '@/lib/api';
 import { localDate, addDays, weekdayShort, dayNumber } from '@/lib/date';
 import { applyBundle, suggestBundle, imagemPublica, PROPORCAO } from '@barbearia/core';
-import { criarAgendamento } from './acoes';
+import { acaoEntrarNaEspera, criarAgendamento } from './acoes';
 
 /**
  * Fluxo de agendamento.
@@ -50,6 +50,24 @@ const FALHA: Record<string, string> = {
   invalid_request: 'Confira os dados e tente de novo.',
   unknown_location: 'Esta unidade não está mais disponível.',
   otp_required: 'Esta barbearia pede validação do número. Entre com seu celular primeiro.',
+};
+
+/**
+ * Por que a entrada na lista foi recusada, em português.
+ *
+ * Vale a mesma regra do `MOTIVO` abaixo: o código do domínio não vai para a
+ * tela. "limite_atingido" não diz à pessoa que ela precisa sair de uma lista
+ * para entrar em outra — e é exatamente isso que ela precisa saber.
+ */
+const FALHA_DA_ESPERA: Record<string, string> = {
+  limite_atingido:
+    'Você já está em três listas de espera. Saia de uma em "Meus agendamentos" para entrar nesta.',
+  periodo_invertido: 'A data final precisa ser depois da inicial.',
+  janela_invalida: 'O horário final precisa ser depois do inicial.',
+  dia_no_passado: 'Escolha um dia que ainda não passou.',
+  periodo_longo_demais: 'A lista de espera vai até 60 dias à frente.',
+  invalid_request: 'Confira o nome e o celular.',
+  otp_required: 'Esta barbearia pede confirmação do número. Entre com o seu celular primeiro.',
 };
 
 const MOTIVO: Record<string, string> = {
@@ -173,6 +191,8 @@ export default async function AgendarPage({ params, searchParams }: Props) {
             profissional={profissional!}
             dia={dia}
             href={href}
+            naEspera={first(query['espera']) === '1'}
+            erroDaEspera={first(query['erroEspera'])}
           />
         ) : null}
 
@@ -403,6 +423,8 @@ async function PassoHorario({
   profissional,
   dia,
   href,
+  naEspera,
+  erroDaEspera,
 }: {
   slug: string;
   profile: PublicProfile;
@@ -410,6 +432,8 @@ async function PassoHorario({
   profissional: string;
   dia: string;
   href: (m: Record<string, string | null>) => string;
+  naEspera: boolean;
+  erroDaEspera: string | undefined;
 }) {
   const hoje = localDate(profile.location.timezone);
   const dias = Array.from({ length: 14 }, (_, i) => addDays(hoje, i));
@@ -461,18 +485,155 @@ async function PassoHorario({
           ))}
         </ul>
       ) : (
-        /* Tela vazia é direção, não fim de linha: diz o motivo e o que fazer. */
+        /*
+          Tela vazia é direção, não fim de linha: diz o motivo e o que fazer.
+
+          E desde o bloco 38 ela tem uma segunda saída, que é a que importa: a
+          lista de espera. "Tente outro dia" manda embora quem só pode neste
+          dia — que é exatamente quem tem menos alternativa e mais chance de
+          procurar outra barbearia.
+        */
         <div className="vazio">
           <p className="vazio__titulo">Nenhum horário neste dia</p>
           <p className="vazio__saida">
             {MOTIVO[doDia?.unavailableReason ?? ''] ?? 'Tente outro dia.'}
           </p>
-          <a className="ui-button ui-button--secondary" href={href({ d: addDays(dia, 1), h: null, e: 'h' })}>
+
+          {naEspera ? (
+            /*
+              Estado desenhado, não improvisado: sem esta frase a pessoa
+              recarregaria a mesma tela vazia e não saberia se o pedido foi
+              registrado — e entraria de novo, gastando outra das três vagas.
+            */
+            <div className="ui-alert ui-alert--success" role="status">
+              Pronto. A barbearia procura você se alguém desmarcar neste período. Para sair da
+              lista, entre em <a href={`/${slug}/meus-agendamentos`}>Meus agendamentos</a>.
+            </div>
+          ) : (
+            <Espera
+              dia={dia}
+              erro={erroDaEspera}
+              escolhidos={escolhidos}
+              locationId={profile.location.id}
+              profissional={profissional}
+              slug={slug}
+            />
+          )}
+
+          <a className="ui-button ui-button--ghost" href={href({ d: addDays(dia, 1), h: null, e: 'h' })}>
             Ver o dia seguinte
           </a>
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * "Avise-me se surgir uma vaga" (bloco 38, SPEC §2.9).
+ *
+ * ## Por que ela mora dentro do estado vazio
+ *
+ * Porque é o único momento em que ela faz sentido. Uma entrada de menu "lista
+ * de espera" seria um lugar onde ninguém entra: a pessoa não acorda querendo
+ * esperar, ela quer marcar — e só aceita esperar depois de descobrir que não dá.
+ *
+ * ## Por que os campos de faixa vêm preenchidos
+ *
+ * O dia é o que ela estava olhando e o período é o dia inteiro da barbearia.
+ * Um formulário em branco com quatro campos aqui perde a pessoa: ela veio
+ * marcar um corte, não configurar um alerta. Quem quiser estreitar, estreita.
+ */
+function Espera({
+  dia,
+  erro,
+  escolhidos,
+  locationId,
+  profissional,
+  slug,
+}: {
+  dia: string;
+  erro: string | undefined;
+  escolhidos: string[];
+  locationId: string;
+  profissional: string;
+  slug: string;
+}) {
+  return (
+    <details className="espera" open={Boolean(erro)}>
+      <summary className="espera__abrir">Avise-me se surgir uma vaga</summary>
+
+      <p className="espera__sobre">
+        A barbearia procura você quando alguém desmarcar neste período. Você pode sair da lista
+        quando quiser.
+      </p>
+
+      {/*
+        A recusa precisa dizer o que fazer. "Não deu" manda a pessoa conferir
+        seis campos; cada código nomeia o campo que o servidor recusou.
+      */}
+      {erro ? (
+        <div className="ui-alert ui-alert--danger" role="alert">
+          {FALHA_DA_ESPERA[erro] ?? 'Não deu para entrar na lista. Tente de novo.'}
+        </div>
+      ) : null}
+
+      <form action={acaoEntrarNaEspera} className="formulario">
+        <input name="slug" type="hidden" value={slug} />
+        <input name="locationId" type="hidden" value={locationId} />
+        {escolhidos.map((id) => (
+          <input key={id} name="serviceIds" type="hidden" value={id} />
+        ))}
+        {/* "any" vira ausência no corpo: o domínio lê nulo como "qualquer um". */}
+        <input name="professionalId" type="hidden" value={profissional} />
+
+        <div className="espera__faixa">
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="espera-de">Do dia</label>
+            <input className="ui-field__input tabular" defaultValue={dia} id="espera-de"
+                   name="de" required type="date" />
+          </div>
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="espera-ate">Até o dia</label>
+            <input className="ui-field__input tabular" defaultValue={dia} id="espera-ate"
+                   name="ate" required type="date" />
+          </div>
+        </div>
+
+        <div className="espera__faixa">
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="espera-inicio">A partir das</label>
+            <input className="ui-field__input tabular" defaultValue="08:00" id="espera-inicio"
+                   name="inicio" required type="time" />
+          </div>
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="espera-fim">Até as</label>
+            <input className="ui-field__input tabular" defaultValue="20:00" id="espera-fim"
+                   name="fim" required type="time" />
+          </div>
+        </div>
+
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="espera-nome">Seu nome</label>
+          <input autoComplete="name" className="ui-field__input" id="espera-nome"
+                 maxLength={80} name="name" required type="text" />
+        </div>
+
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="espera-fone">Seu celular</label>
+          <input autoComplete="tel" className="ui-field__input tabular" id="espera-fone"
+                 inputMode="tel" maxLength={24} name="phone" required type="tel"
+                 placeholder="(71) 98888-7777" />
+          <p className="ui-field__hint">
+            É por onde a barbearia avisa. Só para isso — nada de propaganda.
+          </p>
+        </div>
+
+        <button className="ui-button ui-button--primary ui-button--block" type="submit">
+          Entrar na lista de espera
+        </button>
+      </form>
+    </details>
   );
 }
 

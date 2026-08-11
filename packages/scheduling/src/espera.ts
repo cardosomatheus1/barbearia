@@ -29,6 +29,8 @@ import {
 export type EsperaFailure =
   | 'espera_nao_encontrada'
   | 'unidade_desconhecida'
+  | 'servico_desconhecido'
+  | 'profissional_desconhecido'
   | RecusaDeEspera;
 
 export class EsperaError extends Error {
@@ -143,14 +145,47 @@ export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDe
       if (anterior) return anterior;
     }
 
-    // Duração e existência dos serviços numa consulta. Serviço de outra
-    // barbearia não aparece — a RLS já recortou —, e a soma dá zero, que a
-    // CHECK do banco recusa.
-    const duracoes = await tx.$queryRaw<{ total: number | null }[]>`
-      SELECT sum(duration_minutes + buffer_before_minutes + buffer_after_minutes)::int AS total
+    /**
+     * Duração **e contagem** dos serviços, numa consulta.
+     *
+     * A contagem é o que importa aqui, e foi achado da revisão de segurança: a
+     * checagem de integridade referencial do Postgres **ignora row security**,
+     * então a chave estrangeira aceitaria de bom grado um `service_id` de outra
+     * barbearia. Somente a soma não pega isso — um pedido misturando um serviço
+     * legítimo com dois alheios dá soma positiva, passa, e grava as referências
+     * estrangeiras.
+     *
+     * É o mesmo cuidado que `salvarPreferencias` documenta desde o bloco 21.
+     */
+    const servicos = await tx.$queryRaw<{ total: number | null; quantos: bigint }[]>`
+      SELECT sum(duration_minutes + buffer_before_minutes + buffer_after_minutes)::int AS total,
+             count(*) AS quantos
         FROM services WHERE id = ANY(${[...pedido.serviceIds]}::uuid[]) AND active
     `;
-    const duracaoMinutos = duracoes[0]?.total ?? 0;
+    const duracaoMinutos = servicos[0]?.total ?? 0;
+    if (Number(servicos[0]?.quantos ?? 0) !== pedido.serviceIds.length) {
+      throw new EsperaError('servico_desconhecido', 'Serviço não encontrado.');
+    }
+
+    /**
+     * O profissional, conferido sob RLS e **na unidade pedida**.
+     *
+     * Pelo mesmo motivo dos serviços. E a consequência aqui era pior: a chave
+     * estrangeira tem `ON DELETE SET NULL`, então quando a outra barbearia
+     * apagasse aquele profissional, a entrada plantada aqui viraria em silêncio
+     * um "qualquer barbeiro" — passando a casar com toda vaga que abrisse.
+     */
+    if (pedido.professionalId) {
+      const existe = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM professionals
+         WHERE id = ${pedido.professionalId}::uuid
+           AND location_id = ${pedido.locationId}::uuid
+           AND active
+      `;
+      if (!existe[0]) {
+        throw new EsperaError('profissional_desconhecido', 'Profissional não encontrado.');
+      }
+    }
 
     const ativas = await tx.$queryRaw<{ n: bigint }[]>`
       SELECT count(*) AS n FROM waitlist_entries
@@ -393,6 +428,112 @@ export async function candidatosDaVaga(
 }
 
 /**
+ * Fecha as esperas que este agendamento acabou de satisfazer.
+ *
+ * A SPEC §2.9 pede: "cliente sai da fila **automaticamente** ao conseguir
+ * agendar". Sem isto, `booked` seria um estado que nada escreve — a pessoa
+ * marcaria o sábado pelo site, continuaria na lista de espera do sábado, e
+ * seria chamada para uma vaga que ela já não quer. Pior: a entrada seguiria
+ * ocupando uma das três vagas dela.
+ *
+ * Fecha **só o que o agendamento de fato satisfaz**, pela mesma regra que casa
+ * vaga com pedido. Quem esperava sábado de manhã e conseguiu marcar sábado à
+ * tarde continua esperando a manhã — era o que ela pediu, e desistir por ela
+ * seria decidir no lugar dela.
+ *
+ * Na mesma transação da reserva: se o horário entra, a espera fecha; se a
+ * transação volta atrás, a espera continua viva.
+ */
+export async function fecharEsperasAtendidas(
+  tx: TransactionClient,
+  params: {
+    readonly customerId: string;
+    readonly locationId: string;
+    readonly appointmentId: string;
+    readonly vaga: VagaAberta;
+  },
+): Promise<number> {
+  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
+    `${SELECT_DA_ESPERA}
+      WHERE e.customer_id = $1::uuid
+        AND e.location_id = $2::uuid
+        AND e.status = 'waiting'
+        AND e.wanted_from <= $3::date
+        AND e.wanted_to >= $3::date
+      GROUP BY e.id, p.name`,
+    params.customerId,
+    params.locationId,
+    params.vaga.dia,
+  );
+
+  const atendidas = linhas.filter((linha) =>
+    vagaServe(
+      {
+        de: diaDe(linha.wanted_from),
+        ate: diaDe(linha.wanted_to),
+        janela: { start: linha.window_start_minute, end: linha.window_end_minute },
+        profissionalId: linha.professional_id,
+        duracaoMinutos: linha.duration_minutes,
+      },
+      params.vaga,
+    ),
+  );
+  if (atendidas.length === 0) return 0;
+
+  return tx.$executeRaw`
+    UPDATE waitlist_entries
+       SET status = 'booked', closed_at = now(),
+           appointment_id = ${params.appointmentId}::uuid, updated_at = now()
+     WHERE id = ANY(${atendidas.map((a) => a.id)}::uuid[])
+       AND status = 'waiting'
+  `;
+}
+
+/**
+ * Quem quer a vaga que este cancelamento acabou de abrir.
+ *
+ * Chamada dos **dois** caminhos de cancelamento — a tela do cliente e o painel
+ * do balcão —, e sempre dentro da transação que abriu a vaga. Uma cópia em cada
+ * um deixaria os dois divergirem no primeiro ajuste da regra, e o balcão é
+ * justamente onde a maioria dos cancelamentos acontece.
+ *
+ * Erro aqui **não derruba o cancelamento**: desmarcar é a operação que a pessoa
+ * pediu, e ela não pode falhar porque uma consulta auxiliar falhou. Lista vazia
+ * é indistinguível de "ninguém quer", e é o pior que acontece.
+ */
+export async function quemQuerAVagaLiberada(
+  tx: TransactionClient,
+  appointmentId: string,
+): Promise<readonly CandidatoDaVaga[]> {
+  const linhas = await tx.$queryRaw<
+    {
+      location_id: string;
+      professional_id: string;
+      starts_at: Date;
+      ends_at: Date;
+      timezone: string;
+    }[]
+  >`
+    SELECT a.location_id, a.professional_id, a.starts_at, a.ends_at, l.timezone
+      FROM appointments a
+      JOIN locations l ON l.id = a.location_id
+     WHERE a.id = ${appointmentId}::uuid
+  `;
+  const linha = linhas[0];
+  if (!linha) return [];
+
+  return candidatosDaVaga(tx, {
+    locationId: linha.location_id,
+    vaga: vagaDoCancelamento({
+      timezone: linha.timezone,
+      inicio: linha.starts_at,
+      fim: linha.ends_at,
+      professionalId: linha.professional_id,
+    }),
+  });
+}
+
+/**
  * A vaga que este cancelamento abriu, no fuso da unidade.
  *
  * A janela é a **ocupada**, com buffers — é o buraco de verdade na grade, e é o
@@ -412,6 +553,68 @@ export function vagaDoCancelamento(params: {
     janela: { start: de.minutes, end: ate.minutes },
     profissionalId: params.professionalId,
   };
+}
+
+/**
+ * Quem está esperando, para o balcão.
+ *
+ * Ordenada por dia pedido e depois por entrada na fila: a barbearia lê "quem
+ * quer o sábado" antes de "quem entrou primeiro", porque a primeira pergunta é
+ * a que ela consegue responder com a agenda na frente.
+ *
+ * Numa consulta, com nome e serviços agregados. Uma ida ao banco por entrada
+ * seria N+1 numa tela que o dono abre para decidir se vale abrir mais um
+ * horário no sábado.
+ */
+export async function quemEstaEsperando(
+  tenantId: string,
+  locationId: string,
+  /**
+   * Restringe a uma agenda só, como `getDayBoard` e `getAgenda`.
+   *
+   * A entrada **sem profissional** aparece de qualquer jeito: qualquer um pode
+   * atendê-la, e escondê-la do barbeiro seria esconder justamente o cliente que
+   * ele consegue pegar. A que nomeia um colega, não — sem o recorte, quem
+   * enxerga só a própria agenda lia a lista da barbearia inteira por esta
+   * porta. Achado da revisão de segurança deste bloco.
+   */
+  onlyProfessionalId: string | null = null,
+): Promise<readonly CandidatoDaVaga[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRawUnsafe<
+      (LinhaDaEspera & {
+        customer_id: string;
+        customer_name: string;
+        customer_phone: string | null;
+      })[]
+    >(
+      `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+              e.window_start_minute, e.window_end_minute, e.duration_minutes,
+              e.professional_id, p.name AS professional_name, e.joined_at,
+              e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
+              array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+         FROM waitlist_entries e
+         JOIN customers c ON c.id = e.customer_id
+         LEFT JOIN professionals p ON p.id = e.professional_id
+         LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+         LEFT JOIN services s ON s.id = es.service_id
+        WHERE e.location_id = $1::uuid AND e.status = 'waiting'
+          AND ($2::uuid IS NULL
+               OR e.professional_id IS NULL
+               OR e.professional_id = $2::uuid)
+        GROUP BY e.id, p.name, c.name, c.phone_e164
+        ORDER BY e.wanted_from, e.window_start_minute, e.joined_at`,
+      locationId,
+      onlyProfessionalId,
+    );
+
+    return linhas.map((linha) => ({
+      ...daLinha(linha),
+      customerId: linha.customer_id,
+      customerNome: linha.customer_name,
+      customerTelefoneFinal: linha.customer_phone ? linha.customer_phone.slice(-4) : null,
+    }));
+  });
 }
 
 /**

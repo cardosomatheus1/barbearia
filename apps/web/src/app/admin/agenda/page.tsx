@@ -3,9 +3,11 @@ import { ROTULO_DO_ESTADO } from '@barbearia/core';
 import type { Metadata } from 'next';
 import {
   agendaDoAdmin,
+  quemEsperaVaga,
   type DiaDaAgenda,
   type EntradaDaAgenda,
   type ExcecaoDaAgenda,
+  type QuemEspera,
   type TipoDeExcecao,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
@@ -317,6 +319,17 @@ export default async function AgendaPage({ searchParams }: Props) {
   });
 
   const conflito = await lerConflitoDaAgenda();
+  /**
+   * Quem espera uma vaga (bloco 38).
+   *
+   * Lida junto e não numa segunda volta: são duas rotas independentes e a tela
+   * precisa das duas para montar. Em série, o gestor espera as duas somadas.
+   *
+   * A lista mora nesta tela porque é a agenda vista pelo outro lado — quem quer
+   * entrar nela. Uma tela própria no menu seria um lugar onde ninguém entra:
+   * a pergunta "quem está esperando?" só nasce com a agenda na frente.
+   */
+  const espera = await quemEsperaVaga(token);
   const erro = first(query['erro']);
   const salvo = first(query['salvo']) === '1';
 
@@ -642,6 +655,76 @@ export default async function AgendaPage({ searchParams }: Props) {
         recusado. Quem já estava marcado continua marcado — o sistema avisa antes e não cancela
         ninguém por conta própria.
       </p>
+
+      <Esperando esperando={espera.ok ? espera.dados.esperando : []} />
     </main>
   );
+}
+
+/**
+ * Quem pediu para ser avisado de uma vaga (bloco 38, SPEC §2.9).
+ *
+ * ## O que esta lista responde
+ *
+ * Duas perguntas do dono, e as duas valem dinheiro: "vale abrir mais um horário
+ * no sábado?" e "acabei de desmarcar às 15h — quem eu chamo?". A segunda vem
+ * com link direto do balcão, e é por isso que a âncora `#esperando` existe.
+ *
+ * ## Por que só os quatro últimos do telefone
+ *
+ * A tela do balcão fica virada para o salão. O número inteiro conferiria
+ * identidade e exporia o cadastro a quem passa na frente do notebook — os
+ * quatro últimos fazem a primeira coisa sem fazer a segunda, como no resto do
+ * produto.
+ *
+ * O aviso automático, com ordem por score e janela exclusiva de dez minutos, é
+ * o bloco 39. Aqui a barbearia liga.
+ */
+function Esperando({ esperando }: { esperando: readonly QuemEspera[] }) {
+  return (
+    <section aria-labelledby="esperando" className="secao" id="esperando">
+      <h2 className="rotulo" id="esperando-titulo">
+        Esperando uma vaga
+      </h2>
+
+      {esperando.length === 0 ? (
+        /* Estado vazio desenhado: diz o que é e o que faz aparecer alguém. */
+        <div className="vazio">
+          <p className="vazio__titulo">Ninguém na lista de espera</p>
+          <p className="vazio__saida">
+            Quem não encontra horário na sua página pode pedir para ser avisado. Os pedidos
+            aparecem aqui.
+          </p>
+        </div>
+      ) : (
+        <ul className="esperando">
+          {esperando.map((quem) => (
+            <li className="esperando__item" key={quem.id}>
+              <span className="esperando__quem">
+                {quem.customerNome}
+                {quem.customerTelefoneFinal ? (
+                  <span className="esperando__fone tabular"> ···{quem.customerTelefoneFinal}</span>
+                ) : null}
+              </span>
+              <span className="esperando__quando tabular">
+                {quem.de === quem.ate ? diaCurto(quem.de) : `${diaCurto(quem.de)}–${diaCurto(quem.ate)}`}
+                {' · '}
+                {quem.inicio}–{quem.fim}
+              </span>
+              <span className="esperando__quando">
+                {quem.servicos.join(' + ')}
+                {quem.profissionalNome ? ` · com ${quem.profissionalNome}` : ' · qualquer barbeiro'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** `2026-08-15` vira `15/08`, sem trazer fuso para uma data local. */
+function diaCurto(iso: string): string {
+  const [, mes = '01', dia = '01'] = iso.split('-');
+  return `${dia}/${mes}`;
 }

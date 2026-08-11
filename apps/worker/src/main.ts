@@ -1,7 +1,7 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import { varrerRetencao } from '@barbearia/crm';
 import { conciliarCobrancas } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
+import { expirarEsperas, primaryLocation } from '@barbearia/scheduling';
 import { diaNaUnidade } from '@barbearia/core';
 import {
   avisarDaOperacao,
@@ -165,6 +165,18 @@ async function main(): Promise<void> {
         }
 
         return { avisados: resultado.avisados.length, anonimizados: resultado.anonimizados };
+      },
+      /**
+       * A expiração da lista de espera (bloco 38), ligada aqui pelo mesmo
+       * motivo da retenção: ela mora em `packages/scheduling`, e `jobs` não
+       * conhece a camada de cima.
+       */
+      expirarEsperas: async (tenantId, agora) => {
+        const quantas = await expirarEsperas(tenantId, agora);
+        // Só a contagem: quem estava esperando é dado de cliente, e log não é
+        // lugar dele.
+        if (quantas > 0) console.log('[espera] expiradas', { tenantId, quantas });
+        return quantas;
       },
       /**
        * O alerta operacional (bloco 33), ligado aqui pelo mesmo motivo dos

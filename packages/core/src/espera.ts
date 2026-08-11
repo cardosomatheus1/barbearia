@@ -142,7 +142,18 @@ export function podeEsperar(params: {
   // Passado é o **último** dia: pedir "de ontem até sábado" é legítimo e vira
   // "de hoje até sábado" na prática, porque nenhuma vaga de ontem vai abrir.
   if (pedido.ate < params.hojeNaUnidade) return nega('dia_no_passado');
+  /**
+   * **As duas pontas** da faixa, e a segunda foi um achado da revisão.
+   *
+   * Conferir só o começo deixava `ate` livre: uma entrada de hoje até
+   * 2099-12-31 passava, e nunca expirava — `expirarEsperas` só fecha o que já
+   * passou. Três dessas, cobrindo o dia de trabalho, faziam uma pessoa ser
+   * candidata permanente a toda vaga que abrisse na barbearia. É exatamente o
+   * que o teto de três e o horizonte existem para impedir, e ficava pior no
+   * bloco 39, em que o topo da fila ganha janela exclusiva.
+   */
   if (pedido.de > params.ultimoDiaAceito) return nega('periodo_longo_demais');
+  if (pedido.ate > params.ultimoDiaAceito) return nega('periodo_longo_demais');
   if (params.ativasDoCliente >= LIMITE_DE_ESPERAS_ATIVAS) return nega('limite_atingido');
 
   return aceita;

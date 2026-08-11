@@ -351,7 +351,7 @@ describeIfDb('fila presencial', () => {
     await applyAttendance({
       tenantId: TENANT,
       appointmentId: sentado.appointmentId,
-      action: 'complete',
+      action: 'complete', podeVerCliente: true,
       now: new Date(AGORA.getTime() + 30 * 60_000),
     });
 
@@ -383,7 +383,7 @@ describeIfDb('fila presencial', () => {
     await applyAttendance({
       tenantId: TENANT,
       appointmentId: sentado.appointmentId,
-      action: 'complete',
+      action: 'complete', podeVerCliente: true,
       now: new Date(AGORA.getTime() + 50 * 60_000),
     });
 
@@ -407,7 +407,7 @@ describeIfDb('fila presencial', () => {
     await applyAttendance({
       tenantId: TENANT,
       appointmentId: sentado.appointmentId,
-      action: 'cancel',
+      action: 'cancel', podeVerCliente: true,
       now: new Date(AGORA.getTime() + 5 * 60_000),
     });
 

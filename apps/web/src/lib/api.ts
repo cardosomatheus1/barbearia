@@ -189,6 +189,120 @@ export async function criarAgendamentoNaApi(
   return { ok: true, id: criado.id };
 }
 
+// -- Lista de espera (bloco 38) -----------------------------------------------
+
+export interface EntrarNaEspera {
+  locationId: string;
+  serviceIds: string[];
+  /** `'any'` vira ausência no corpo: o domínio lê nulo como "qualquer um". */
+  professionalId: string;
+  de: string;
+  ate: string;
+  inicio: string;
+  fim: string;
+  name: string;
+  phone: string;
+}
+
+export interface EsperaDoCliente {
+  id: string;
+  status: 'waiting' | 'booked' | 'left' | 'expired';
+  de: string;
+  ate: string;
+  inicio: string;
+  fim: string;
+  duracaoMinutos: number;
+  profissionalId: string | null;
+  profissionalNome: string | null;
+  servicos: string[];
+  entrouEm: string;
+}
+
+/**
+ * Entra na lista.
+ *
+ * Sem id na resposta de propósito: a API não o devolve a quem não tem sessão —
+ * `resolveGuestCustomer` reencontra o cliente pelo telefone, e devolver a
+ * entrada transformaria a rota num oráculo sobre o cadastro de terceiro. Quem
+ * quer ver a própria lista entra em "Meus agendamentos", que pede sessão.
+ */
+export async function entrarNaEsperaNaApi(
+  slug: string,
+  dados: EntrarNaEspera,
+): Promise<{ ok: true } | { ok: false; code: string }> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      /**
+       * Derivada da escolha, não do relógio.
+       *
+       * Reenvio do mesmo formulário — o duplo toque clássico em rede lenta —
+       * devolve a mesma entrada em vez de criar a segunda. Mesma construção da
+       * criação de agendamento, e pelo mesmo motivo: a chave precisa ser
+       * estável para o **mesmo pedido**, e diferente para pedidos diferentes.
+       */
+      'idempotency-key': `${dados.phone}|${dados.de}|${dados.ate}|${dados.inicio}|${dados.fim}|${dados.professionalId}`,
+    },
+    body: JSON.stringify({
+      locationId: dados.locationId,
+      serviceIds: dados.serviceIds,
+      ...(dados.professionalId && dados.professionalId !== 'any'
+        ? { professionalId: dados.professionalId }
+        : {}),
+      de: dados.de,
+      ate: dados.ate,
+      inicio: dados.inicio,
+      fim: dados.fim,
+      name: dados.name,
+      phone: dados.phone,
+    }),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const corpo = (await response.json().catch(() => null)) as
+      | { error?: { code?: string } }
+      | null;
+    return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
+  }
+
+  return { ok: true };
+}
+
+export async function listarEsperas(
+  slug: string,
+  token: string,
+): Promise<EsperaDoCliente[]> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  // Lista vazia e não `null`: ao contrário dos agendamentos, uma falha aqui não
+  // pode mandar o cliente para a tela de entrar — ele já está autenticado, e a
+  // espera é o menos importante da página.
+  if (!response.ok) return [];
+  const corpo = (await response.json()) as { esperas: EsperaDoCliente[] };
+  return corpo.esperas;
+}
+
+export async function sairDaEsperaNaApi(
+  slug: string,
+  token: string,
+  entryId: string,
+): Promise<{ ok: boolean; code?: string }> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist/${entryId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (response.ok) return { ok: true };
+  const corpo = (await response.json().catch(() => null)) as
+    | { error?: { code?: string } }
+    | null;
+  return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
+}
+
 /** Resposta de POST/GET autenticado: sucesso tipado ou código de falha. */
 export type Resultado<T> = { ok: true; dados: T } | { ok: false; code: string };
 

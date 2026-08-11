@@ -297,13 +297,31 @@ export const painelDoDia = (token: string, filtros: { date?: string; professiona
   return chamar<PainelDoDia>('GET', `/v1/admin/day${query ? `?${query}` : ''}`, undefined, token);
 };
 
+/** Quem espera uma vaga (bloco 38). O balcão vê nome e os quatro últimos. */
+export interface QuemEspera {
+  id: string;
+  customerId: string;
+  customerNome: string;
+  customerTelefoneFinal: string | null;
+  de: string;
+  ate: string;
+  inicio: string;
+  fim: string;
+  servicos: string[];
+  profissionalNome: string | null;
+  entrouEm: string;
+}
+
 export const moverAtendimento = (token: string, id: string, action: AcaoAtendimento) =>
-  chamar<{ status: StatusAtendimento }>(
+  chamar<{ status: StatusAtendimento; esperando: QuemEspera[] }>(
     'POST',
     `/v1/admin/appointments/${id}/attendance`,
     { action },
     token,
   );
+
+export const quemEsperaVaga = (token: string) =>
+  chamar<{ esperando: QuemEspera[] }>('GET', '/v1/admin/agenda/espera', undefined, token);
 
 export interface ClienteEncontrado {
   id: string;

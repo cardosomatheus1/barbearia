@@ -81,6 +81,27 @@ BEGIN
   EXCEPTION WHEN check_violation THEN
     RAISE NOTICE 'OK 1c — duração zero recusada';
   END;
+
+  /**
+   * A faixa aberta, achado da revisão de segurança.
+   *
+   * "De hoje até 2099" passava no domínio, que conferia só o começo — e nunca
+   * expirava, porque a varredura só fecha o que já passou. Três dessas,
+   * cobrindo o dia de trabalho, faziam uma pessoa ser candidata permanente a
+   * toda vaga da barbearia. A CHECK vale para quem entrar por outro caminho.
+   */
+  BEGIN
+    INSERT INTO waitlist_entries
+      (tenant_id, location_id, customer_id, wanted_from, wanted_to,
+       window_start_minute, window_end_minute, duration_minutes)
+    VALUES ('41414141-0000-0000-0000-000000000001',
+            '41414141-1111-0000-0000-000000000001',
+            '41414141-3333-0000-0000-000000000001',
+            '2026-08-15', '2099-12-31', 480, 720, 30);
+    RAISE EXCEPTION 'aceitou faixa sem fim';
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE 'OK 1d — faixa acima de 60 dias recusada';
+  END;
 END $$;
 
 -- ----------------------------------------------------------------------------

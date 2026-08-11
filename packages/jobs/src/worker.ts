@@ -102,6 +102,17 @@ export interface Contexto {
     agora: Date,
   ) => Promise<{ readonly avisados: number; readonly anonimizados: number }>;
   /**
+   * A expiração da lista de espera (bloco 38), injetada.
+   *
+   * Mesma razão da varredura de retenção: ela vive em `packages/scheduling`,
+   * que é camada de cima, e `jobs` não pode conhecê-la sem inverter a seta.
+   *
+   * **Obrigatória no tipo**, não opcional. Opcional, ela seria esquecida no
+   * primeiro worker novo e a lista pararia de expirar sem nada ficar vermelho —
+   * é o mesmo critério de `varrerRetencao`.
+   */
+  readonly expirarEsperas: (tenantId: string, agora: Date) => Promise<number>;
+  /**
    * O alerta operacional saindo pelo canal do gestor (bloco 33), injetado.
    *
    * Era lacuna declarada desde o bloco 22: as regras decidiam, o coletor
@@ -252,6 +263,20 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    */
   'lgpd.retencao': async (tarefa, contexto) => {
     await contexto.varrerRetencao(tarefa.tenantId, contexto.relogio.agora());
+
+    /**
+     * A lista de espera vencida sai na mesma volta (bloco 38).
+     *
+     * Junto da retenção e não numa tarefa própria porque é a mesma natureza —
+     * varredura diária, uma por barbearia, escrevendo de madrugada — e porque
+     * uma segunda cadeia de agendamento seria mais peça para manter do que
+     * trabalho para fazer.
+     *
+     * Sem ela, `expired` seria um estado que ninguém escreve: a entrada
+     * continuaria ocupando uma das três vagas do cliente para sempre, e a lista
+     * dele mostraria um sábado que já passou.
+     */
+    await contexto.expirarEsperas(tarefa.tenantId, contexto.relogio.agora());
   },
 
   /**

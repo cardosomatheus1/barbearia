@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { criarAgendamentoNaApi } from '@/lib/api';
+import { criarAgendamentoNaApi, entrarNaEsperaNaApi } from '@/lib/api';
 
 /**
  * Confirma o agendamento.
@@ -48,4 +48,40 @@ export async function criarAgendamento(form: FormData): Promise<void> {
   // Só o id: a tela de confirmação lê o agendamento da API. Data e hora na URL
   // seriam uma segunda fonte, e ela mentiria se o horário mudasse.
   redirect(`/${slug}/agendado/${resultado.id}`);
+}
+
+/**
+ * Entra na lista de espera (bloco 38).
+ *
+ * Volta para a **mesma tela vazia** de onde saiu, com o resultado na URL: a
+ * pessoa acabou de descobrir que não há horário, e mandá-la para outro lugar
+ * depois de pedir o aviso a faria perder o contexto do que acabou de fazer.
+ */
+export async function acaoEntrarNaEspera(form: FormData): Promise<void> {
+  const slug = String(form.get('slug') ?? '');
+  const serviceIds = form.getAll('serviceIds').map(String).filter(Boolean);
+  const professionalId = String(form.get('professionalId') ?? 'any');
+  const de = String(form.get('de') ?? '');
+
+  const retorno = new URLSearchParams({
+    s: serviceIds.join(','),
+    p: professionalId,
+    d: de,
+    e: 'h',
+  });
+
+  const resultado = await entrarNaEsperaNaApi(slug, {
+    locationId: String(form.get('locationId') ?? ''),
+    serviceIds,
+    professionalId,
+    de,
+    ate: String(form.get('ate') ?? ''),
+    inicio: String(form.get('inicio') ?? ''),
+    fim: String(form.get('fim') ?? ''),
+    name: String(form.get('name') ?? '').trim(),
+    phone: String(form.get('phone') ?? '').trim(),
+  });
+
+  retorno.set(resultado.ok ? 'espera' : 'erroEspera', resultado.ok ? '1' : resultado.code);
+  redirect(`/${slug}/agendar?${retorno.toString()}`);
 }

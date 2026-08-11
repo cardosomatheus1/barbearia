@@ -1,4 +1,4 @@
-import { withTenant } from '@barbearia/db';
+import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   POLITICA_SEM_SINAL,
   allowedActions,
@@ -15,6 +15,7 @@ import {
   type MotivoDoSinal,
   type Punctuality,
 } from '@barbearia/core';
+import { quemQuerAVagaLiberada, type CandidatoDaVaga } from './espera.js';
 
 /**
  * O dia da barbearia, do ponto de vista de quem está no balcão.
@@ -385,8 +386,27 @@ export async function applyAttendance(params: {
    * no cliente do colega — bastava ter o id, e a lista de ontem já o dava.
    */
   readonly onlyProfessionalId?: string | null;
+  /**
+   * Quem chama pode ver nome e telefone de cliente (`customers.view`).
+   *
+   * Obrigatório no tipo, e não opcional: opcional, ele seria esquecido no
+   * primeiro chamador novo e a lista sairia com identidade de cliente para
+   * quem a barbearia decidiu não dar. Achado da revisão de segurança do bloco
+   * 38 — a rota da agenda tinha o mesmo defeito.
+   */
+  readonly podeVerCliente: boolean;
   readonly now?: Date;
-}): Promise<{ readonly status: AppointmentStatus }> {
+}): Promise<{
+  readonly status: AppointmentStatus;
+  /**
+   * Quem quer o horário que este cancelamento acabou de abrir (bloco 38).
+   *
+   * Vazio em toda ação que não seja cancelar — e vazio também quando ninguém
+   * espera, que é o caso comum. A tela distingue os dois pelo que faz: sem
+   * candidato, não desenha nada.
+   */
+  readonly esperando: readonly CandidatoDaVaga[];
+}> {
   const now = params.now ?? new Date();
 
   return withTenant(params.tenantId, async (tx) => {
@@ -472,9 +492,42 @@ export async function applyAttendance(params: {
       `;
     }
 
-    return { status: destino };
+    /**
+     * A lista de espera, perguntada **dentro da transação** (bloco 38).
+     *
+     * O balcão é onde a maioria dos cancelamentos acontece — o cliente liga e
+     * a recepção desmarca —, então é aqui que a lista precisa aparecer. Sem
+     * isto, ela existiria só no caminho que o próprio cliente usa, que é o
+     * menos frequente dos dois.
+     *
+     * Perguntar depois do commit criaria a janela em que o horário está livre e
+     * ninguém sabe.
+     */
+    const encontrados =
+      destino === 'cancelled_business'
+        ? await quemQuerAVagaLiberada(tx, params.appointmentId)
+        : [];
+
+    /**
+     * Quem não pode ver cliente recebe a **contagem**, não os nomes.
+     *
+     * A lista vazia seria mentira — "ninguém espera" quando alguém espera —, e
+     * a lista inteira entregaria a base a quem a barbearia decidiu não dar.
+     * Sem nome e sem telefone, a linha ainda diz o que a recepção precisa:
+     * existe gente para este horário, procure quem pode ligar.
+     */
+    const esperando = params.podeVerCliente
+      ? encontrados
+      : encontrados.map((quem) => ({
+          ...quem,
+          customerNome: '',
+          customerTelefoneFinal: null,
+        }));
+
+    return { status: destino, esperando };
   });
 }
+
 
 /**
  * A unidade da barbearia e o dia que é **nela** agora.

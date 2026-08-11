@@ -26,6 +26,31 @@ export const createAppointmentSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+/**
+ * Entrar na lista de espera (bloco 38, SPEC §2.9).
+ *
+ * Aceita nome e celular como a criação de agendamento: quem não tem horário
+ * disponível é justamente quem ainda não tem sessão — obrigá-la a fazer login
+ * para dizer "me avise" perderia a pessoa no passo em que ela já foi frustrada
+ * uma vez.
+ *
+ * A janela vem em `HH:mm` e não em minutos: é o que a tela mostra, e converter
+ * na borda é um lugar só. Minutos crus no corpo seriam um número que ninguém
+ * consegue conferir lendo o log.
+ */
+export const entrarNaEsperaSchema = z.object({
+  name: z.string().trim().min(3).max(80).optional(),
+  phone: z.string().min(8).max(24).optional(),
+  locationId: z.string().uuid(),
+  serviceIds: z.array(z.string().uuid()).min(1).max(10),
+  // Ausente é "qualquer profissional", que é o caso comum de quem espera vaga.
+  professionalId: z.string().uuid().optional(),
+  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  inicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  fim: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+});
+
 export const rescheduleSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),

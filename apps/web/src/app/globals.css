@@ -5821,3 +5821,66 @@ main { padding-bottom: var(--space-8); }
 @media (min-width: 900px) {
   .painel-desempenho { grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .85fr); }
 }
+
+/* -- Lista de espera (bloco 38) --------------------------------------------- */
+
+/**
+ * Mora dentro do estado vazio da grade, e é a segunda saída dele.
+ *
+ * Fechada por padrão: quem chegou aqui ainda quer marcar, e um formulário de
+ * seis campos aberto empurraria para baixo o "ver o dia seguinte", que é a
+ * saída mais provável. Abre sozinha quando houve erro — senão a mensagem
+ * ficaria escondida atrás de um resumo fechado.
+ */
+.espera {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+.espera__abrir {
+  /* Alvo de toque: 44px em qualquer largura, e o resumo é um alvo autônomo. */
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.espera__sobre {
+  margin: var(--space-3) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/**
+ * Uma coluna no piso de 360px.
+ *
+ * Dois campos de data lado a lado cabem em 390 e estouram em 360 com o seletor
+ * nativo do Android, que é largo. `min-width` a partir de 400 é o que mantém a
+ * regra de nunca desfazer para tela pequena.
+ */
+.espera__faixa { display: grid; gap: var(--space-3); }
+
+@media (min-width: 400px) {
+  .espera__faixa { grid-template-columns: 1fr 1fr; }
+}
+
+/* -- Quem está esperando, no balcão ----------------------------------------- */
+
+.esperando { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.esperando__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.esperando__quem { font-weight: var(--font-weight-semibold); }
+.esperando__quando { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.esperando__fone { color: var(--color-text-muted); font-size: var(--font-size-sm); }

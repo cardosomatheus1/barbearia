@@ -136,6 +136,17 @@ describe('quem pode entrar na lista', () => {
     expect(pedir({ pedido: atravessando }).aceito).toBe(true);
   });
 
+  it('a faixa aberta é recusada pelo fim, não só pelo começo', () => {
+    /**
+     * Achado da revisão de segurança. Conferir só o começo deixava `ate` livre:
+     * "de hoje até 2099" passava, e nunca expirava — a varredura só fecha o que
+     * já passou. Três dessas, cobrindo o dia de trabalho, fariam uma pessoa ser
+     * candidata permanente a toda vaga que abrisse.
+     */
+    const semFim = { ...PEDIDO, de: '2026-08-12', ate: '2099-12-31' };
+    expect(pedir({ pedido: semFim }).recusa).toBe('periodo_longo_demais');
+  });
+
   it('pedido longe demais é recusado', () => {
     /**
      * Uma entrada para daqui a oito meses vai expirar sem nunca ter sido útil,

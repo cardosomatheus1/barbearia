@@ -195,9 +195,9 @@ describeIfDb('painel do dia', () => {
   it('percorre chegada, início e fim, carimbando a hora de cada um', async () => {
     const criado = await marcar('09:00');
 
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', now: new Date('2026-08-11T12:03:00Z') });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', now: new Date('2026-08-11T12:10:00Z') });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete', now: new Date('2026-08-11T12:38:00Z') });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true, now: new Date('2026-08-11T12:03:00Z') });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', podeVerCliente: true, now: new Date('2026-08-11T12:10:00Z') });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete', podeVerCliente: true, now: new Date('2026-08-11T12:38:00Z') });
 
     const board = await painel(new Date('2026-08-11T13:00:00Z'));
     const item = board.entries[0];
@@ -212,7 +212,7 @@ describeIfDb('painel do dia', () => {
   it('recusa começar quem não chegou', async () => {
     const criado = await marcar('09:00');
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start' }),
+      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'transition_not_allowed' });
   });
 
@@ -220,16 +220,16 @@ describeIfDb('painel do dia', () => {
     // Dois no balcão, o mesmo atendimento. A segunda ação não pode desfazer a
     // primeira em silêncio.
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true });
 
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in' }),
+      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'transition_not_allowed' });
   });
 
   it('marca falta e devolve o horário para a grade', async () => {
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
 
     const board = await painel();
     expect(board.totals.faltaram).toBe(1);
@@ -244,27 +244,27 @@ describeIfDb('painel do dia', () => {
     // toque: a recepção marca falta, a vaga é reocupada, e alguém tenta
     // desfazer.
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
     await marcar('09:00');
 
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'undo_no_show' }),
+      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'undo_no_show', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'slot_taken' });
   });
 
   it('desfazer a falta funciona quando a vaga continua livre', async () => {
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
 
     const voltou = await applyAttendance({
-      tenantId: TENANT, appointmentId: criado.id, action: 'undo_no_show',
+      tenantId: TENANT, appointmentId: criado.id, action: 'undo_no_show', podeVerCliente: true,
     });
     expect(voltou.status).toBe('checked_in');
   });
 
   it('cancelar pelo balcão não pune o cliente', async () => {
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'cancel' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'cancel', podeVerCliente: true });
 
     const linhas = await admin.$queryRawUnsafe<{ status: string }[]>(
       `SELECT status FROM appointments WHERE id = '${criado.id}'`,
@@ -290,7 +290,7 @@ describeIfDb('painel do dia', () => {
   it('quem já chegou deixa de ser cobrado de atraso e passa a contar espera', async () => {
     const criado = await marcar('09:00');
     await applyAttendance({
-      tenantId: TENANT, appointmentId: criado.id, action: 'check_in',
+      tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true,
       now: new Date('2026-08-11T12:03:00Z'),
     });
 
@@ -329,7 +329,7 @@ describeIfDb('painel do dia', () => {
     await exec(admin, `INSERT INTO tenants (id, name) VALUES ('${rival}', 'Rival')`);
 
     await expect(
-      applyAttendance({ tenantId: rival, appointmentId: criado.id, action: 'check_in' }),
+      applyAttendance({ tenantId: rival, appointmentId: criado.id, action: 'check_in', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
   });
 });
@@ -430,14 +430,14 @@ describeIfDb('painel do dia — só a minha agenda', () => {
       applyAttendance({
         tenantId: TENANT,
         appointmentId: doColega.id,
-        action: 'check_in',
+        action: 'check_in', podeVerCliente: true,
         onlyProfessionalId: RUAN,
       }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
 
     // E o dono, sem recorte, move normalmente.
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: doColega.id, action: 'check_in' }),
+      applyAttendance({ tenantId: TENANT, appointmentId: doColega.id, action: 'check_in', podeVerCliente: true }),
     ).resolves.toMatchObject({ status: 'checked_in' });
   });
 
@@ -446,9 +446,9 @@ describeIfDb('painel do dia — só a minha agenda', () => {
     // `appointments.view` daria a receita do dia a todo mundo com acesso ao
     // balcão. Ele volta no bloco 18, com o caixa e com MFA.
     const criado = await marcarCom(RUAN, '09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in' });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start' });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete' });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete', podeVerCliente: true });
 
     const board = await casaInteira();
     expect(JSON.stringify(board.totals)).not.toContain('realizado');
