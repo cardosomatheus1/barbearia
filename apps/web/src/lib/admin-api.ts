@@ -1098,8 +1098,17 @@ export const comecarSegundoFator = (token: string) =>
 export const confirmarSegundoFator = (token: string, codigo: string) =>
   chamar<{ codigosDeRecuperacao: string[] }>('POST', '/v1/admin/mfa/confirm', { codigo }, token);
 
-export const definirPoliticaDeSegundoFator = (token: string, exigir: boolean) =>
-  chamar<{ exigir: boolean }>('PUT', '/v1/admin/mfa/policy', { exigir }, token);
+export const definirPoliticaDeSegundoFator = (
+  token: string,
+  exigir: boolean,
+  codigo?: string,
+) =>
+  chamar<{ exigir: boolean }>(
+    'PUT',
+    '/v1/admin/mfa/policy',
+    { exigir, ...(codigo ? { codigo } : {}) },
+    token,
+  );
 
 export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
   chamar<{ usouRecuperacao: boolean; restantes: number }>(

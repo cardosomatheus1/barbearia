@@ -86,18 +86,47 @@ export const exigeSegundoFator = (
  * decisão da mesma natureza que conceder permissão — não de quem administra o
  * dia a dia. A permissão é declarada na rota; aqui fica a trilha.
  *
+ * ## Desligar pede o código; ligar, não
+ *
+ * A assimetria é o ponto, e ela veio de um achado da revisão de segurança
+ * deste bloco: como `team.manage` não é permissão de dinheiro, a guarda não
+ * derivava segundo fator nenhum para esta rota — e o interruptor virava o
+ * caminho mais curto para anular a proteção inteira. Uma sessão esquecida
+ * aberta no balcão desligava a exigência com um toque e entrava no caixa em
+ * seguida, sem digitar código nenhum, com a trilha registrando o nome do dono.
+ *
+ * É exatamente o raciocínio que `desligarMfa` já aplicava para **uma conta**:
+ * "desligar a partir de uma sessão roubada seria o caminho mais curto para
+ * anular a proteção inteira". Este interruptor é estritamente mais poderoso que
+ * aquele, e estava desguardado.
+ *
+ * **Ligar continua livre**, e não é descuido: cobrar o código para *aumentar* a
+ * proteção recriaria o laço fechado que a controller documenta — quem ainda não
+ * cadastrou o segundo fator não conseguiria exigi-lo. E a direção segura não
+ * precisa de guarda.
+ *
+ * A exceção escrita: quem **não tem** segundo fator cadastrado desliga sem
+ * prova. Sem ela, o dono que ligou a exigência antes de cadastrar o próprio
+ * TOTP ficaria trancado dos dois lados — sem chegar ao caixa e sem conseguir
+ * voltar atrás.
+ *
  * ## Auditado nos dois sentidos
  *
  * Ligar e desligar mudam quem consegue chegar ao caixa, e é exatamente a
- * pergunta que a trilha responde. Desligar é o que mais importa registrar, e
- * por isso o motivo não é opcional: seis meses depois, "quem tirou o segundo
- * fator do financeiro?" precisa de resposta com nome e data.
+ * pergunta que a trilha responde. Desligar é o que mais importa registrar:
+ * seis meses depois, "quem tirou o segundo fator do financeiro?" precisa de
+ * resposta com nome e data.
  */
 export async function definirExigenciaDeSegundoFator(params: {
   readonly tenantId: string;
   readonly staffUserId: string;
   readonly staffName: string;
   readonly exigir: boolean;
+  /** O ator tem TOTP cadastrado e confirmado. Vem da sessão. */
+  readonly atorTemSegundoFator: boolean;
+  /** Quando esta sessão provou o segundo fator. Nulo se nunca provou. */
+  readonly provaDaSessao: Date | null;
+  readonly now: Date;
   readonly ip?: string;
   readonly userAgent?: string;
 }): Promise<{ readonly exigir: boolean }> {
@@ -106,6 +135,18 @@ export async function definirExigenciaDeSegundoFator(params: {
       SELECT require_mfa_for_money FROM tenants WHERE id = ${params.tenantId}::uuid
     `;
     const anterior = antes[0]?.require_mfa_for_money ?? false;
+
+    // Só quando de fato **afrouxa**: religar o que já está ligado, ou desligar
+    // o que já está desligado, não muda nada e não merece atrito.
+    const afrouxa = anterior && !params.exigir;
+    if (afrouxa && params.atorTemSegundoFator) {
+      if (!segundoFatorValido(params.provaDaSessao, params.now)) {
+        throw new MfaError(
+          'invalid_code',
+          'Confirme o código do segundo fator para desligar esta exigência.',
+        );
+      }
+    }
 
     await tx.$executeRaw`
       UPDATE tenants

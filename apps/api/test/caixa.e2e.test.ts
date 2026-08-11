@@ -322,6 +322,52 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     await abrirCaixa(token).expect(201);
   });
 
+  it('desligar a exigência pede o código de quem tem segundo fator', async () => {
+    /**
+     * Achado da revisão de segurança. `team.manage` não é permissão de
+     * dinheiro, então a guarda não deriva segundo fator para o interruptor — e
+     * ele virava o caminho mais curto para anular a proteção inteira: uma
+     * sessão esquecida aberta no balcão desligava a exigência com um toque e
+     * abria o caixa em seguida, com a trilha registrando o nome do dono.
+     *
+     * O cadastro aqui é feito à mão, e não com `comSegundoFator`, por um motivo
+     * de teste: aquele helper **queima dois passos** (o da confirmação e o da
+     * prova), e um passo consumido não vale de novo. Confirmando só o primeiro,
+     * sobra o seguinte — que ainda está dentro da tolerância de ±1 — para provar
+     * junto com o desligamento.
+     */
+    const token = await abrirBarbearia();
+
+    const inicio = await com(token)(http().post('/v1/admin/mfa/setup')).expect(201);
+    const segredo: string = inicio.body.segredoBase32;
+    const passo = passoAgora(new Date());
+    await com(token)(
+      http().post('/v1/admin/mfa/confirm').send({ codigo: codigoDoPasso(segredo, passo) }),
+    ).expect(201);
+
+    // Cadastrar não é provar: a sessão ainda não digitou nenhum código.
+    const recusa = await com(token)(
+      http().put('/v1/admin/mfa/policy').send({ exigir: false }),
+    ).expect(400);
+    expect(recusa.body.error.code).toBe('invalid_code');
+
+    // E a recusa não tem efeito colateral: a exigência continua de pé.
+    const aindaRecusa = await abrirCaixa(token).expect(403);
+    expect(aindaRecusa.body.error.code).toBe('mfa_required');
+
+    // Ligar continua livre — a direção segura não precisa de guarda, e cobrar
+    // código para aumentar a proteção recriaria o laço fechado.
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+
+    // Com o código no corpo, a mesma sessão prova e decide num toque.
+    await com(token)(
+      http()
+        .put('/v1/admin/mfa/policy')
+        .send({ exigir: false, codigo: codigoDoPasso(segredo, passo + 1) }),
+    ).expect(200);
+    await abrirCaixa(token).expect(201);
+  });
+
   it('quem não administra a equipe não muda a exigência', async () => {
     /**
      * `team.manage` e não `settings.manage`: desligar afrouxa o acesso ao caixa

@@ -177,6 +177,35 @@ export default async function SegurancaPage({ searchParams }: Props) {
         {podeMudarAExigencia ? (
           <form action={acaoPoliticaDeSegundoFator}>
             <input name="exigir" type="hidden" value={exigidoNaBarbearia ? '0' : '1'} />
+
+            {/*
+              Desligar pede o código; ligar, não.
+
+              A assimetria veio de um achado da revisão de segurança: como
+              `team.manage` não é permissão de dinheiro, a API não cobrava
+              segundo fator nenhum aqui — e uma sessão esquecida aberta no
+              balcão desligava a proteção com um toque. Cobrar para **aumentar**
+              a proteção seria o laço fechado ao contrário.
+
+              O campo só aparece para quem tem o segundo fator cadastrado e
+              ainda não provou nesta sessão: quem acabou de abrir o caixa não
+              digita de novo, e quem nunca cadastrou não tem o que digitar.
+            */}
+            {exigidoNaBarbearia && ativo && !verificadoNestaSessao ? (
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="codigoPolitica">
+                  Código do segundo fator
+                </label>
+                <input autoComplete="one-time-code" className="ui-field__input tabular"
+                       id="codigoPolitica" inputMode="numeric" maxLength={6} minLength={6}
+                       name="codigo" pattern="[0-9]{6}" required type="text" />
+                <p className="ui-field__hint">
+                  Desligar a proteção do caixa pede o código — do mesmo jeito que desligar o
+                  segundo fator de uma conta pede.
+                </p>
+              </div>
+            ) : null}
+
             <button
               className={`ui-button ui-button--block ${
                 exigidoNaBarbearia ? 'ui-button--ghost' : 'ui-button--primary'

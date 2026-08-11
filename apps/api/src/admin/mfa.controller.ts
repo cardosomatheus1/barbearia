@@ -155,24 +155,63 @@ export class MfaController {
    * Não declara permissão de dinheiro de propósito. Declarar seria o laço
    * fechado ao contrário: quem desligou o segundo fator e ficou sem código não
    * conseguiria religá-lo depois.
+   *
+   * ## Desligar pede o código
+   *
+   * Achado da revisão de segurança deste bloco. Como `team.manage` não é
+   * permissão de dinheiro, a guarda não deriva segundo fator para esta rota — e
+   * o interruptor virava o caminho mais curto para anular a proteção inteira:
+   * uma sessão esquecida aberta no balcão desligava a exigência com um toque e
+   * entrava no caixa em seguida, com a trilha registrando o nome do dono.
+   *
+   * O `codigo` é opcional porque a sessão pode já ter provado nos últimos trinta
+   * minutos — quem acabou de abrir o caixa não digita de novo. Quem não provou
+   * manda o código aqui e prova junto; a alternativa seria devolver um erro que
+   * manda a pessoa a outra tela e voltar, para uma decisão de um toque.
    */
   @Exige('team.manage')
   @Put('policy')
   async politica(
     @Staff() staff: AuthenticatedStaff,
-    @Body(new ZodValidationPipe(politicaDeMfaSchema)) body: { exigir: boolean },
+    @Body(new ZodValidationPipe(politicaDeMfaSchema))
+    body: { exigir: boolean; codigo?: string },
     @Req() req: Request,
   ) {
     const ip = req.ip;
     const agent = req.get('user-agent');
-    return definirExigenciaDeSegundoFator({
-      tenantId: staff.tenantId,
-      staffUserId: staff.staffUserId,
-      staffName: staff.name,
-      exigir: body.exigir,
-      ...(ip ? { ip } : {}),
-      ...(agent ? { userAgent: agent } : {}),
-    });
+    const agora = new Date();
+
+    try {
+      // A prova entra **antes** da decisão: verificada depois, a exigência já
+      // teria sido desligada quando o código errado fosse recusado.
+      if (body.codigo) {
+        await verificarSegundoFator({
+          tenantId: staff.tenantId,
+          staffUserId: staff.staffUserId,
+          staffName: staff.name,
+          sessionId: staff.sessionId,
+          codigo: body.codigo,
+          now: agora,
+        });
+      }
+
+      return await definirExigenciaDeSegundoFator({
+        tenantId: staff.tenantId,
+        staffUserId: staff.staffUserId,
+        staffName: staff.name,
+        exigir: body.exigir,
+        atorTemSegundoFator: staff.mfaEnabled,
+        // Relido da sessão quando o código acabou de ser provado: `staff` foi
+        // montado no início da requisição e não sabe da prova que aconteceu
+        // duas linhas acima.
+        provaDaSessao: body.codigo ? agora : staff.mfaVerifiedAt,
+        now: agora,
+        ...(ip ? { ip } : {}),
+        ...(agent ? { userAgent: agent } : {}),
+      });
+    } catch (error) {
+      return toHttp(error);
+    }
   }
 
   @Exige()

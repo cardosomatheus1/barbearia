@@ -444,12 +444,28 @@ describeIfDb('segundo fator do gestor', () => {
   });
 
   describe('a exigência é decisão da barbearia (bloco 37)', () => {
+    /** Com TOTP cadastrado, a prova da sessão decide. */
+    const exigirComProva = (exigir: boolean, prova: Date | null, now: Date) =>
+      definirExigenciaDeSegundoFator({
+        tenantId: sessao.tenantId,
+        staffUserId: sessao.staffUserId,
+        staffName: CONTA.name,
+        exigir,
+        atorTemSegundoFator: true,
+        provaDaSessao: prova,
+        now,
+      });
+
+    /** Sem TOTP cadastrado: é o caso que não precisa de prova para desligar. */
     const exigirNaCasa = (exigir: boolean) =>
       definirExigenciaDeSegundoFator({
         tenantId: sessao.tenantId,
         staffUserId: sessao.staffUserId,
         staffName: CONTA.name,
         exigir,
+        atorTemSegundoFator: false,
+        provaDaSessao: null,
+        now: new Date(),
       });
 
     it('nasce desligada', async () => {
@@ -505,8 +521,80 @@ describeIfDb('segundo fator do gestor', () => {
         staffUserId: outra.session.staffUserId,
         staffName: 'Dona Vizinha',
         exigir: true,
+        atorTemSegundoFator: false,
+        provaDaSessao: null,
+        now: new Date(),
       });
 
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(false);
+    });
+
+    it('desligar a exigência pede o segundo fator de quem o tem', async () => {
+      /**
+       * Achado da revisão de segurança do bloco 37, e é o mais importante desta
+       * seção. `team.manage` não é permissão de dinheiro, então a guarda não
+       * derivava segundo fator nenhum para o interruptor — que virava o caminho
+       * mais curto para anular a proteção inteira: uma sessão esquecida aberta
+       * no balcão desligava a exigência com um toque e entrava no caixa em
+       * seguida, com a trilha registrando o nome do dono.
+       *
+       * É o mesmo raciocínio que `desligarMfa` já aplicava para uma conta. Este
+       * interruptor é estritamente mais poderoso, e estava desguardado.
+       */
+      const agora = new Date();
+      await ligar(agora);
+      await exigirComProva(true, null, agora);
+
+      const semProva = definirExigenciaDeSegundoFator({
+        tenantId: sessao.tenantId,
+        staffUserId: sessao.staffUserId,
+        staffName: CONTA.name,
+        exigir: false,
+        atorTemSegundoFator: true,
+        provaDaSessao: null,
+        now: agora,
+      });
+      await expect(semProva).rejects.toMatchObject({ code: 'invalid_code' });
+
+      // E não teve efeito colateral: a exigência continua de pé.
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(true);
+    });
+
+    it('prova vencida não desliga; prova fresca desliga', async () => {
+      // A janela de trinta minutos vale aqui pela mesma razão que vale no caixa:
+      // o aparelho do balcão fica logado o dia inteiro.
+      const agora = new Date();
+      await ligar(agora);
+      await exigirComProva(true, null, agora);
+
+      const vencida = new Date(agora.getTime() - (VALIDADE_DO_SEGUNDO_FATOR_MINUTOS + 1) * 60_000);
+      await expect(exigirComProva(false, vencida, agora)).rejects.toMatchObject({
+        code: 'invalid_code',
+      });
+
+      await exigirComProva(false, agora, agora);
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(false);
+    });
+
+    it('ligar continua livre, mesmo sem prova nenhuma', async () => {
+      /**
+       * A assimetria é de propósito. Cobrar o código para **aumentar** a
+       * proteção recriaria o laço fechado: quem ainda não cadastrou o segundo
+       * fator não conseguiria exigi-lo. A direção segura não precisa de guarda.
+       */
+      const agora = new Date();
+      await ligar(agora);
+
+      await exigirComProva(true, null, agora);
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(true);
+    });
+
+    it('quem não tem segundo fator cadastrado desliga sem prova', async () => {
+      // A exceção escrita: sem ela, o dono que ligou a exigência antes de
+      // cadastrar o próprio TOTP ficaria trancado dos dois lados — sem chegar ao
+      // caixa e sem conseguir voltar atrás.
+      await exigirNaCasa(true);
+      await exigirNaCasa(false);
       expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(false);
     });
 

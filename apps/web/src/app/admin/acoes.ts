@@ -1169,7 +1169,15 @@ export async function acaoPoliticaDeSegundoFator(form: FormData): Promise<void> 
   const token = await exigirSessao();
   const exigir = texto(form, 'exigir') === '1';
 
-  const resultado = await definirPoliticaDeSegundoFator(token, exigir);
+  // O código só vai quando desliga, e só quando a pessoa o digitou: mandar
+  // string vazia faria a API tentar verificar "" e recusar por código inválido,
+  // escondendo o motivo verdadeiro de quem só queria ligar a exigência.
+  const codigo = texto(form, 'codigo');
+  const resultado = await definirPoliticaDeSegundoFator(
+    token,
+    exigir,
+    codigo.length > 0 ? codigo : undefined,
+  );
   if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
   redirect(`/admin/seguranca?politica=${exigir ? 'ligada' : 'desligada'}`);
 }

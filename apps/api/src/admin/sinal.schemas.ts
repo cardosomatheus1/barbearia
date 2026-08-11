@@ -39,4 +39,13 @@ export const confiancaSchema = z.object({
  */
 export const politicaDeMfaSchema = z.object({
   exigir: z.boolean(),
+  /**
+   * O código do segundo fator, quando desligar a exigência.
+   *
+   * Opcional porque a sessão pode já ter provado nos últimos trinta minutos —
+   * quem acabou de abrir o caixa não digita de novo. Quem é obrigado e não
+   * manda é recusado pelo domínio, não aqui: a regra de **quando** o código é
+   * exigido depende do estado atual da barbearia, que o schema não conhece.
+   */
+  codigo: z.string().trim().regex(/^\d{6}$|^[A-Za-z0-9-]{8,32}$/).optional(),
 });
