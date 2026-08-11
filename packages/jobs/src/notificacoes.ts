@@ -43,6 +43,27 @@ export interface MensagemDeFila {
 }
 
 /**
+ * O convite de vaga da lista de espera (bloco 39, SPEC §2.9).
+ *
+ * Transacional, não promocional: é resposta a um pedido explícito da pessoa —
+ * "me avise se surgir uma vaga". Por isso não olha o consentimento de
+ * marketing, exatamente como o lembrete de horário.
+ *
+ * O `link` carrega o token em claro, e é a única vez que ele existe fora da
+ * cabeça de quem o gerou. Ele **não** é gravado: `notifications` guarda que a
+ * mensagem saiu, nunca o conteúdo dela.
+ */
+export interface MensagemDeVaga {
+  readonly phoneE164: string;
+  readonly clienteNome: string;
+  readonly barbearia: string;
+  readonly profissional: string;
+  readonly quandoTexto: string;
+  readonly minutosParaResponder: number;
+  readonly link: string;
+}
+
+/**
  * O provedor, estendido para além do OTP.
  *
  * Continua abstração pelo mesmo motivo do bloco 4: o WhatsApp oficial exige
@@ -57,11 +78,13 @@ export interface MensagemDeFila {
 export interface NotificationProvider {
   enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void>;
   enviarDeFila(mensagem: MensagemDeFila): Promise<void>;
+  enviarDeVaga(mensagem: MensagemDeVaga): Promise<void>;
 }
 
 export class FakeNotificationProvider implements NotificationProvider {
   readonly agendamentos: MensagemDeAgendamento[] = [];
   readonly filas: MensagemDeFila[] = [];
+  readonly vagas: MensagemDeVaga[] = [];
   /** Para provar o caminho de falha sem depender de rede fora do ar. */
   falharProxima = false;
 
@@ -75,6 +98,11 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.filas.push(mensagem);
   }
 
+  async enviarDeVaga(mensagem: MensagemDeVaga): Promise<void> {
+    this.derrubarSePedido();
+    this.vagas.push(mensagem);
+  }
+
   private derrubarSePedido(): void {
     if (this.falharProxima) {
       this.falharProxima = false;
@@ -85,6 +113,7 @@ export class FakeNotificationProvider implements NotificationProvider {
   clear(): void {
     this.agendamentos.length = 0;
     this.filas.length = 0;
+    this.vagas.length = 0;
   }
 }
 
@@ -109,6 +138,22 @@ export class ConsoleNotificationProvider implements NotificationProvider {
     this.log(
       `[aviso] sua_vez para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}, posição ${mensagem.posicao})`,
+    );
+  }
+
+  /**
+   * O link **inteiro** vai para o log, e só aqui.
+   *
+   * Este provedor é de desenvolvimento: sem o link, não há como abrir a tela de
+   * aceite numa máquina local, e o caminho inteiro do bloco 39 ficaria sem
+   * jeito de exercitar. O provedor de verdade não escreve token em log nenhum —
+   * ele o entrega na mensagem e esquece.
+   */
+  async enviarDeVaga(mensagem: MensagemDeVaga): Promise<void> {
+    this.log(
+      `[aviso] vaga_liberada para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia}, ${mensagem.quandoTexto}, ` +
+        `${mensagem.minutosParaResponder} min) ${mensagem.link}`,
     );
   }
 }

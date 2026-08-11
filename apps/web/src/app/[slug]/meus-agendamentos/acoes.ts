@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
+  aceitarConviteDaEspera,
   cancelarAgendamento,
   decidirConsentimento,
   encerrarSessao,
@@ -143,6 +144,27 @@ export async function sairDaEspera(form: FormData): Promise<void> {
   redirect(
     resultado.ok
       ? `/${slug}/meus-agendamentos?feito=espera`
+      : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
+  );
+}
+
+/**
+ * Aceita o convite de vaga pela própria tela (bloco 39).
+ *
+ * O caminho normal é o link da mensagem. Este existe porque a mensagem pode não
+ * chegar, e sem ele a pessoa lê "um horário abriu para você" sem ter como
+ * pegá-lo — que é estado sem saída na interface.
+ */
+export async function aceitarVaga(form: FormData): Promise<void> {
+  const slug = String(form.get('slug') ?? '');
+  const token = await lerSessao(slug);
+  if (!token) redirect(`/${slug}/entrar`);
+
+  const resultado = await aceitarConviteDaEspera(slug, token, String(form.get('id') ?? ''));
+  revalidatePath(`/${slug}/meus-agendamentos`);
+  redirect(
+    resultado.ok
+      ? `/${slug}/meus-agendamentos?feito=vaga`
       : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
   );
 }

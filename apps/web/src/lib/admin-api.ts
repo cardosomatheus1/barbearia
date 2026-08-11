@@ -298,6 +298,13 @@ export const painelDoDia = (token: string, filtros: { date?: string; professiona
 };
 
 /** Quem espera uma vaga (bloco 38). O balcão vê nome e os quatro últimos. */
+/** O convite que esta pessoa tem na mão agora (bloco 39). */
+export interface ConviteVivo {
+  dia: string;
+  hora: string;
+  minutosRestantes: number;
+}
+
 export interface QuemEspera {
   id: string;
   customerId: string;
@@ -310,6 +317,7 @@ export interface QuemEspera {
   servicos: string[];
   profissionalNome: string | null;
   entrouEm: string;
+  convite: ConviteVivo | null;
 }
 
 export const moverAtendimento = (token: string, id: string, action: AcaoAtendimento) =>
@@ -778,6 +786,35 @@ export const minhaPosicaoNaFila = (slug: string, token: string) =>
   chamar<MinhaPosicao>(
     'GET',
     `/v1/b/${encodeURIComponent(slug)}/queue/${encodeURIComponent(token)}`,
+  );
+
+// -- O convite de vaga (bloco 39) ---------------------------------------------
+
+export type EstadoDoConvite = 'aberta' | 'aceitando' | 'aceita' | 'vencida' | 'cancelada';
+
+export interface ConviteDeVaga {
+  id: string;
+  estado: EstadoDoConvite;
+  venceEm: string;
+  dia: string;
+  hora: string;
+  profissionalNome: string;
+  servicos: string[];
+  barbearia: string;
+  minutosRestantes: number;
+}
+
+/** O convite pelo link da mensagem. Sem sessão: o token é a credencial. */
+export const convitePorToken = (slug: string, token: string) =>
+  chamar<ConviteDeVaga>(
+    'GET',
+    `/v1/b/${encodeURIComponent(slug)}/offer/${encodeURIComponent(token)}`,
+  );
+
+export const aceitarConvite = (slug: string, token: string) =>
+  chamar<{ agendamentoId: string }>(
+    'POST',
+    `/v1/b/${encodeURIComponent(slug)}/offer/${encodeURIComponent(token)}/accept`,
   );
 
 // -- Agenda do admin -----------------------------------------------------------

@@ -9,3 +9,4 @@ export * from './fila.js';
 export * from './agenda.js';
 export * from './confianca.js';
 export * from './espera.js';
+export * from './oferta.js';

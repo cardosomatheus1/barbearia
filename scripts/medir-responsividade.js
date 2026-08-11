@@ -87,6 +87,7 @@ async function baixarFoto(url) {
 }
 
 const psql = (sql) => execFileSync('psql', [DB, '-tAc', sql], { encoding: 'utf8' }).trim();
+const primeiraLinha = (saida) => saida.split('\n')[0].trim();
 
 /** Pasta dos prints, se alguém pediu. Vazio é o padrão: medir não é fotografar. */
 const PRINTS = process.env.MEDICAO_PRINTS ?? '';
@@ -513,6 +514,69 @@ async function prepararFila(token) {
 }
 
 /**
+ * Prepara um convite de vaga aberto, para medir a tela do bloco 39.
+ *
+ * Pelo banco, e não pela HTTP: o convite nasce no worker, e subir um worker só
+ * para medir uma tela sairia caro. O que a medição precisa é do **estado** —
+ * convite aberto, com nome de serviço longo e o relógio correndo.
+ *
+ * O recurso `avisos` entra ligado junto: conta nova nasce sem ele, e a rota
+ * recusa o convite de quem o desligou.
+ */
+async function prepararConvite(slug) {
+  const { createHash, randomBytes } = require('node:crypto');
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
+  const profissional = psql(
+    `select id from professionals where tenant_id = '${tenant}' and active order by name limit 1`,
+  );
+  // O serviço de nome mais longo: é ele que estoura a linha, não o mais barato.
+  const servico = psql(
+    `select id from services where tenant_id = '${tenant}' and active order by length(name) desc limit 1`,
+  );
+  // O **mesmo** cliente que tem sessão na medição: o convite precisa aparecer no
+  // cartão de "Meus agendamentos", que é a segunda porta dele. Um cliente
+  // qualquer mediria a tela do convite e deixaria o cartão fora.
+  const cliente = psql(
+    `select id from customers where tenant_id = '${tenant}' and phone_e164 = '+5571988887777' limit 1`,
+  );
+  if (!tenant || !local || !profissional || !servico || !cliente) return { link: null };
+
+  psql(
+    `INSERT INTO tenant_features (tenant_id, flag_code, enabled) VALUES ('${tenant}', 'avisos', true)
+       ON CONFLICT (tenant_id, flag_code) DO UPDATE SET enabled = true`,
+  );
+
+  const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  // A primeira linha: `psql -tAc` com RETURNING imprime o id **e** o `INSERT 0 1`
+  // do comando, e o segundo vira parte do uuid na consulta seguinte.
+  const entrada = primeiraLinha(psql(
+    `INSERT INTO waitlist_entries
+       (tenant_id, location_id, customer_id, wanted_from, wanted_to,
+        window_start_minute, window_end_minute, duration_minutes)
+     VALUES ('${tenant}', '${local}', '${cliente}', '${amanha}', '${amanha}', 480, 720, 30)
+     RETURNING id`,
+  ));
+  psql(
+    `INSERT INTO waitlist_entry_services (entry_id, service_id, tenant_id, position)
+     VALUES ('${entrada}', '${servico}', '${tenant}', 0)`,
+  );
+
+  const token = randomBytes(32).toString('base64url');
+  const hash = createHash('sha256').update(token).digest('hex');
+  psql(
+    `INSERT INTO waitlist_offers
+       (tenant_id, entry_id, professional_id, starts_at, ends_at, service_starts_at,
+        expires_at, token_hash)
+     VALUES ('${tenant}', '${entrada}', '${profissional}',
+             '${amanha}T12:00:00Z', '${amanha}T12:30:00Z', '${amanha}T12:00:00Z',
+             now() + interval '10 min', '${hash}')`,
+  );
+
+  return { link: token };
+}
+
+/**
  * Bloqueia uma hora e fecha um dia, para medir a agenda com conteúdo.
  *
  * Agenda vazia não prova nada sobre agenda cheia: o que estoura layout é a
@@ -873,6 +937,7 @@ async function main() {
   const balcao = await prepararBalcao(token);
   await prepararRecursos(token);
   const filaPreparada = await prepararFila(token);
+  const convitePreparado = await prepararConvite(slug);
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },
@@ -930,6 +995,14 @@ async function main() {
     { nome: 'fila (balcão)', url: '/admin/fila', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     ...(filaPreparada.link
       ? [{ nome: 'fila (cliente)', url: `/${slug}/fila/${filaPreparada.link}` }]
+      : []),
+    ...(convitePreparado.link
+      ? [
+          { nome: 'convite de vaga', url: `/${slug}/vaga/${convitePreparado.link}` },
+          // O caminho triste tem layout próprio, e é o que mais gente vê: quem
+          // abre o link dez minutos depois.
+          { nome: 'convite vencido', url: `/${slug}/vaga/${'x'.repeat(43)}` },
+        ]
       : []),
     { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

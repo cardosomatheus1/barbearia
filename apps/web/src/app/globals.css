@@ -642,6 +642,16 @@ main { padding-bottom: var(--space-8); }
 }
 /* O que já passou não compete com o próximo horário. */
 .cartao--cancelled, .cartao--done, .cartao--rescheduled { opacity: 0.72; }
+/* O convite tem prazo, e por isso é o único cartão que pede atenção sozinho. */
+.cartao--convite { border-color: var(--color-accent); }
+.cartao__selo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
 
 .cartao__quando {
   margin: 0 0 var(--space-1);
@@ -1495,6 +1505,60 @@ main { padding-bottom: var(--space-8); }
 .fila-cliente__dados dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .fila-cliente__dados dd { margin: 0; font-weight: var(--font-weight-medium); }
 .fila-cliente__nota { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* O convite de vaga (bloco 39): o horário, o prazo e um botão. Nada mais — a
+   escolha já foi feita quando a pessoa entrou na lista de espera. */
+.convite {
+  padding: var(--space-7) var(--space-4) var(--space-8);
+  max-width: 30rem;
+  text-align: center;
+}
+.convite__casa {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.convite__rotulo { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.convite__hora {
+  margin: 0;
+  font-size: 4rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--color-accent);
+}
+.convite__dia { margin: var(--space-2) 0 var(--space-6); font-size: var(--font-size-lg); }
+.convite__titulo { margin: 0 0 var(--space-3); font-size: var(--font-size-xl); }
+.convite__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); }
+.convite__dados {
+  margin: 0 0 var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.convite__dados > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.convite__dados dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.convite__dados dd { margin: 0; font-weight: var(--font-weight-medium); }
+.convite__prazo { margin: 0 0 var(--space-5); font-size: var(--font-size-sm); }
+.convite__erro {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  text-align: left;
+}
+.convite__acao { margin: 0 0 var(--space-5); }
+.convite__nota { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+/* Alvo de toque de 44px também no caminho triste: quem chega com o convite
+   vencido continua precisando alcançar a saída. */
+.convite__alternativa { min-height: 44px; }
 
 @media (min-width: 768px) {
   .cadeiras { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
@@ -5884,3 +5948,10 @@ main { padding-bottom: var(--space-8); }
 .esperando__quem { font-weight: var(--font-weight-semibold); }
 .esperando__quando { color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .esperando__fone { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+/* Quem já foi chamada: destaque discreto, porque é informação de contexto e não
+   ação. O balcão precisa saber que o horário tem dono antes de oferecê-lo. */
+.esperando__convite {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-accent);
+}

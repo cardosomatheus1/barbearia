@@ -677,8 +677,9 @@ export default async function AgendaPage({ searchParams }: Props) {
  * quatro últimos fazem a primeira coisa sem fazer a segunda, como no resto do
  * produto.
  *
- * O aviso automático, com ordem por score e janela exclusiva de dez minutos, é
- * o bloco 39. Aqui a barbearia liga.
+ * Desde o bloco 39 o aviso sai sozinho, na ordem do score e com dez minutos de
+ * exclusividade. Quem já foi chamada aparece marcada: é o que impede o balcão de
+ * oferecer à mão o horário que o produto está segurando.
  */
 function Esperando({ esperando }: { esperando: readonly QuemEspera[] }) {
   return (
@@ -715,6 +716,15 @@ function Esperando({ esperando }: { esperando: readonly QuemEspera[] }) {
                 {quem.servicos.join(' + ')}
                 {quem.profissionalNome ? ` · com ${quem.profissionalNome}` : ' · qualquer barbeiro'}
               </span>
+              {/* O convite vivo aparece aqui porque sem ele o balcão liga para
+                  oferecer o mesmo horário que o produto já está segurando — e o
+                  horário some da grade sem ninguém saber por quê. */}
+              {quem.convite ? (
+                <span className="esperando__convite">
+                  Convidada para {quem.convite.hora} · responde em{' '}
+                  <span className="tabular">{quem.convite.minutosRestantes}</span> min
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>

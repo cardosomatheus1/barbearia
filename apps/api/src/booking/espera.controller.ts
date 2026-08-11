@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import {
   EsperaError,
   bookingPolicy,
+  aceitarOferta,
   entrarNaEspera,
   esperasDoCliente,
   sairDaEspera,
@@ -27,6 +28,7 @@ import { TenantService } from '../tenant/tenant.service.js';
 import { Customer, CustomerGuard, TenantId } from '../auth/customer.guard.js';
 import { entrarNaEsperaSchema } from '../auth/auth.schemas.js';
 import { appointmentIdSchema, slugSchema } from './booking.schemas.js';
+import { conviteParaHttp, marcarDoConvite } from './oferta.controller.js';
 
 /**
  * A lista de espera, do lado do cliente (bloco 38, SPEC §2.9).
@@ -249,6 +251,36 @@ export class EsperaDoClienteController {
   ) {
     const esperas = await esperasDoCliente(tenantId, customer.customerId);
     return { esperas };
+  }
+
+  /**
+   * Aceita o convite pela própria tela (bloco 39).
+   *
+   * O caminho normal é o link da mensagem, e o token é a credencial dele. Esta
+   * porta existe porque a mensagem pode não chegar — janela de silêncio,
+   * provedor fora do ar, ou o provedor de console, que é o que roda até o
+   * WhatsApp oficial entrar. Sem ela, a pessoa vê "um horário abriu para você" e
+   * não tem como aceitá-lo: estado sem saída na interface.
+   *
+   * Quem autoriza é a sessão **somada** ao `customerId`, que segue para o
+   * domínio: a RLS separa barbearias e não separa clientes dentro de uma.
+   */
+  @Post(':id/accept')
+  async aceitarConvite(
+    @TenantId() tenantId: string,
+    @Customer() customer: AuthenticatedCustomer,
+    @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
+  ) {
+    try {
+      const { appointmentId } = await aceitarOferta({
+        tenantId,
+        convite: { entryId: id, customerId: customer.customerId },
+        marcar: marcarDoConvite(tenantId),
+      });
+      return { agendamentoId: appointmentId };
+    } catch (erro) {
+      return conviteParaHttp(erro);
+    }
   }
 
   @Delete(':id')

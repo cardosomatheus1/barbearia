@@ -11,7 +11,14 @@ import {
 import { humanInstant } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
 import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
-import { cancelar, decidirMarketing, pedirDados, sair, sairDaEspera } from './acoes';
+import {
+  aceitarVaga,
+  cancelar,
+  decidirMarketing,
+  pedirDados,
+  sair,
+  sairDaEspera,
+} from './acoes';
 
 /**
  * Meus agendamentos.
@@ -56,6 +63,7 @@ const FEITO: Record<string, string> = {
     + 'se alguma obrigação legal a impede de apagar tudo.',
   recusou: 'Pronto — você não recebe mais promoção. O aviso do seu horário continua.',
   espera: 'Você saiu da lista de espera.',
+  vaga: 'Horário confirmado. Ele já está aqui em cima, nos seus agendamentos.',
 };
 
 /**
@@ -291,6 +299,44 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
  */
 function Espera({ espera, slug }: { espera: EsperaDoCliente; slug: string }) {
   const umDia = espera.de === espera.ate;
+
+  /**
+   * O convite abre o cartão, e é a única coisa que a pessoa precisa ver.
+   *
+   * Ele chega por mensagem, mas a mensagem pode não chegar — e o horário está
+   * guardado com o relógio correndo. Sem esta saída na tela, "um horário abriu
+   * para você" seria uma informação sem ação (CLAUDE.md §6).
+   */
+  if (espera.convite) {
+    return (
+      <article className="cartao cartao--convite">
+        <p className="cartao__selo">Abriu um horário para você</p>
+        <p className="cartao__quando tabular">
+          {diaLongo(espera.convite.dia)} às {espera.convite.hora}
+        </p>
+        <p className="cartao__servico">
+          {espera.servicos.join(' + ')}
+          {espera.profissionalNome ? ` · com ${espera.profissionalNome}` : ''}
+        </p>
+        <p className="cartao__quem">
+          Guardado para você por mais{' '}
+          <strong>
+            {espera.convite.minutosRestantes}{' '}
+            {espera.convite.minutosRestantes === 1 ? 'minuto' : 'minutos'}
+          </strong>
+          .
+        </p>
+
+        <form action={aceitarVaga}>
+          <input name="slug" type="hidden" value={slug} />
+          <input name="id" type="hidden" value={espera.id} />
+          <button className="ui-button ui-button--primary cartao__acao" type="submit">
+            Quero este horário
+          </button>
+        </form>
+      </article>
+    );
+  }
 
   return (
     <article className="cartao">

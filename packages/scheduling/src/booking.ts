@@ -3,6 +3,7 @@ import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   agendarAvisosDoAgendamento,
   agendarFalta,
+  agendarOfertaDaVaga,
   cancelarTarefasDoAgendamento,
 } from '@barbearia/jobs';
 import {
@@ -748,10 +749,62 @@ export async function cancelAppointment(
 
     const sinal = await decidirDestinoDoSinal(tx, request.appointmentId, request.by, agora);
     const esperando = await quemQuerAVagaLiberada(tx, request.appointmentId);
+
+    /**
+     * A vaga vai à fila por prioridade (bloco 39).
+     *
+     * A **tarefa** entra na transação; a oferta sai fora dela. Oferecer manda
+     * mensagem, e segurar a transação que desmarca o horário enquanto se espera
+     * o provedor travaria a tela de quem cancelou.
+     *
+     * Só quando há alguém: uma tarefa por cancelamento numa barbearia sem lista
+     * de espera seria trabalho para descobrir que não há trabalho.
+     */
+    if (esperando.length > 0) await agendarOfertaDestaVaga(tx, request.appointmentId, agora);
+
     return { sinal, esperando };
   });
 }
 
+
+/**
+ * Enfileira a oferta da vaga que este cancelamento abriu.
+ *
+ * Dentro da transação, como todo trabalho fora de requisição neste produto: se
+ * o cancelamento volta atrás, a oferta não acontece. A janela de silêncio é
+ * aplicada por `agendarOfertaDaVaga`, no fuso da unidade.
+ */
+async function agendarOfertaDestaVaga(
+  tx: TransactionClient,
+  appointmentId: string,
+  agora: Date,
+): Promise<void> {
+  const linhas = await tx.$queryRaw<
+    {
+      location_id: string;
+      professional_id: string;
+      starts_at: Date;
+      ends_at: Date;
+      timezone: string;
+    }[]
+  >`
+    SELECT a.location_id, a.professional_id, a.starts_at, a.ends_at, l.timezone
+      FROM appointments a
+      JOIN locations l ON l.id = a.location_id
+     WHERE a.id = ${appointmentId}::uuid
+  `;
+  const linha = linhas[0];
+  if (!linha) return;
+
+  await agendarOfertaDaVaga(tx, {
+    locationId: linha.location_id,
+    professionalId: linha.professional_id,
+    inicio: linha.starts_at,
+    fim: linha.ends_at,
+    timezone: linha.timezone,
+    agora,
+  });
+}
 
 /**
  * Lê o sinal pago e aplica a política de reembolso da unidade.

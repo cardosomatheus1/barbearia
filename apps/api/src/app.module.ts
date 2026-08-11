@@ -31,6 +31,7 @@ import {
   EsperaDoClienteController,
   EsperaPublicaController,
 } from './booking/espera.controller.js';
+import { OfertaPublicaController } from './booking/oferta.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import {
   PlataformaAuthController,
@@ -78,6 +79,7 @@ import { TenantService } from './tenant/tenant.service.js';
     SinalController,
     EsperaPublicaController,
     EsperaDoClienteController,
+    OfertaPublicaController,
     FilaPublicaController,
     TeamController,
     MeController,

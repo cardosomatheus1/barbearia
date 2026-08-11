@@ -1,8 +1,13 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import { varrerRetencao } from '@barbearia/crm';
 import { conciliarCobrancas } from '@barbearia/finance';
-import { expirarEsperas, primaryLocation } from '@barbearia/scheduling';
-import { diaNaUnidade } from '@barbearia/core';
+import {
+  expirarEsperas,
+  oferecerProximaVaga,
+  primaryLocation,
+  vencerOfertas as vencerOfertasDaEspera,
+} from '@barbearia/scheduling';
+import { MINUTOS_DE_JANELA_EXCLUSIVA, diaNaUnidade } from '@barbearia/core';
 import {
   avisarDaOperacao,
   CODIGO_DA_RETENCAO,
@@ -48,6 +53,15 @@ import {
 const INTERVALO_MS = Number(process.env['WORKER_INTERVALO_MS'] ?? 5_000);
 
 /**
+ * Onde a página do cliente mora, para montar o link do convite de vaga.
+ *
+ * Variável de ambiente porque o endereço muda por instalação, e um valor fixo
+ * aqui mandaria o cliente de produção para `localhost`. O padrão serve ao
+ * desenvolvimento, que é onde o provedor de console roda.
+ */
+const WEB_URL = process.env['WEB_URL'] ?? 'http://localhost:3001';
+
+/**
  * O adquirente, quando há um configurado.
  *
  * Quem escolhe é `adquirenteDaPlataforma` (bloco 34), e é de propósito que a
@@ -70,6 +84,17 @@ function ligarAdquirente(): { psp: PspProvider | null; cobranca: CobrancaProvide
 }
 
 const { psp, cobranca } = ligarAdquirente();
+
+/**
+ * O provedor de mensagem do processo, **um só**.
+ *
+ * Instanciar `ConsoleNotificationProvider` dentro de um caminho específico faz
+ * daquele caminho o único que não troca junto: no dia em que o WhatsApp de
+ * verdade for ligado na linha de baixo, o convite de vaga continuaria sendo
+ * impresso no log — e ele carrega o token em claro, que é credencial. Achado da
+ * revisão de segurança do bloco 39.
+ */
+const provider = new ConsoleNotificationProvider();
 
 async function main(): Promise<void> {
   // Mesma guarda da API: se a conexão ignora RLS, o isolamento entre barbearias
@@ -95,7 +120,7 @@ async function main(): Promise<void> {
 
   await rodarWorker(
     {
-      provider: new ConsoleNotificationProvider(),
+      provider,
       relogio: RELOGIO_REAL,
       // É aqui que a plataforma se liga ao worker, e só aqui: `packages/jobs`
       // não conhece a camada de cima, do mesmo jeito que não conhece o provedor
@@ -171,6 +196,75 @@ async function main(): Promise<void> {
        * motivo da retenção: ela mora em `packages/scheduling`, e `jobs` não
        * conhece a camada de cima.
        */
+      /**
+       * A oferta de vaga da lista de espera (bloco 39), ligada aqui.
+       *
+       * Duas pontas que `jobs` não conhece: `scheduling`, que decide a quem
+       * oferecer, e o provedor de mensagem, que entrega. É o mesmo desenho da
+       * retenção e da régua de cobrança.
+       *
+       * O link carrega o token em claro — é a única vez que ele existe fora de
+       * quem o gerou. `notifications` guarda que a mensagem saiu, nunca o
+       * conteúdo dela.
+       */
+      oferecerVagaDaEspera: async (tenantId, vaga, agora) => {
+        const oferta = await oferecerProximaVaga({
+          tenantId,
+          locationId: vaga.locationId,
+          professionalId: vaga.professionalId,
+          inicio: vaga.inicio,
+          fim: vaga.fim,
+          agora,
+        });
+        if (!oferta || !oferta.telefone) return false;
+
+        await provider.enviarDeVaga({
+          phoneE164: oferta.telefone,
+          clienteNome: oferta.customerNome,
+          barbearia: oferta.barbearia,
+          profissional: oferta.profissionalNome,
+          quandoTexto: `${oferta.dia} às ${oferta.hora}`,
+          minutosParaResponder: MINUTOS_DE_JANELA_EXCLUSIVA,
+          link: `${WEB_URL}/vaga/${oferta.token}`,
+        });
+        return true;
+      },
+
+      /**
+       * A janela venceu: passa ao próximo (bloco 39).
+       *
+       * Reenfileira a oferta em vez de oferecer aqui, e é de propósito: assim a
+       * segunda oferta passa pela mesma janela de silêncio e pelo mesmo
+       * interruptor de avisos que a primeira. Oferecer direto duplicaria as duas
+       * regras neste arquivo.
+       */
+      vencerOfertasDaEspera: async (tenantId, agora) => {
+        const vagas = await vencerOfertasDaEspera(tenantId, agora);
+        for (const vaga of vagas) {
+          await oferecerProximaVaga({
+            tenantId,
+            locationId: vaga.locationId,
+            professionalId: vaga.professionalId,
+            inicio: vaga.inicio,
+            fim: vaga.fim,
+            agora,
+            exceto: vaga.exceto,
+          }).then(async (oferta) => {
+            if (!oferta || !oferta.telefone) return;
+            await provider.enviarDeVaga({
+              phoneE164: oferta.telefone,
+              clienteNome: oferta.customerNome,
+              barbearia: oferta.barbearia,
+              profissional: oferta.profissionalNome,
+              quandoTexto: `${oferta.dia} às ${oferta.hora}`,
+              minutosParaResponder: MINUTOS_DE_JANELA_EXCLUSIVA,
+              link: `${WEB_URL}/vaga/${oferta.token}`,
+            });
+          });
+        }
+        return vagas.length;
+      },
+
       expirarEsperas: async (tenantId, agora) => {
         const quantas = await expirarEsperas(tenantId, agora);
         // Só a contagem: quem estava esperando é dado de cliente, e log não é

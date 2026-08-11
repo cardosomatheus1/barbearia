@@ -216,6 +216,8 @@ export interface EsperaDoCliente {
   profissionalNome: string | null;
   servicos: string[];
   entrouEm: string;
+  /** O convite aberto, quando existe. Nulo é o caso comum. */
+  convite: { dia: string; hora: string; minutosRestantes: number } | null;
 }
 
 /**
@@ -284,6 +286,29 @@ export async function listarEsperas(
   if (!response.ok) return [];
   const corpo = (await response.json()) as { esperas: EsperaDoCliente[] };
   return corpo.esperas;
+}
+
+/**
+ * Aceita o convite pela própria tela.
+ *
+ * Sem token: quem autoriza é a sessão. O caminho do link continua existindo e é
+ * o normal — este é o que sobra quando a mensagem não chega.
+ */
+export async function aceitarConviteDaEspera(
+  slug: string,
+  token: string,
+  entryId: string,
+): Promise<{ ok: boolean; code?: string }> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist/${entryId}/accept`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (response.ok) return { ok: true };
+  const corpo = (await response.json().catch(() => null)) as
+    | { error?: { code?: string } }
+    | null;
+  return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
 }
 
 export async function sairDaEsperaNaApi(

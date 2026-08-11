@@ -15,6 +15,7 @@ import {
   type MotivoDoSinal,
   type Punctuality,
 } from '@barbearia/core';
+import { agendarOfertaDaVaga } from '@barbearia/jobs';
 import { quemQuerAVagaLiberada, type CandidatoDaVaga } from './espera.js';
 
 /**
@@ -507,6 +508,41 @@ export async function applyAttendance(params: {
       destino === 'cancelled_business'
         ? await quemQuerAVagaLiberada(tx, params.appointmentId)
         : [];
+
+    /**
+     * A vaga vai à fila por prioridade (bloco 39).
+     *
+     * O balcão é onde a maioria dos cancelamentos acontece — o cliente liga e a
+     * recepção desmarca. Sem esta linha, a oferta automática existiria só no
+     * caminho que o próprio cliente usa, que é o menos frequente dos dois.
+     */
+    if (encontrados.length > 0) {
+      const dados = await tx.$queryRaw<
+        {
+          location_id: string;
+          professional_id: string;
+          starts_at: Date;
+          ends_at: Date;
+          timezone: string;
+        }[]
+      >`
+        SELECT a.location_id, a.professional_id, a.starts_at, a.ends_at, l.timezone
+          FROM appointments a
+          JOIN locations l ON l.id = a.location_id
+         WHERE a.id = ${params.appointmentId}::uuid
+      `;
+      const linha = dados[0];
+      if (linha) {
+        await agendarOfertaDaVaga(tx, {
+          locationId: linha.location_id,
+          professionalId: linha.professional_id,
+          inicio: linha.starts_at,
+          fim: linha.ends_at,
+          timezone: linha.timezone,
+          agora: now,
+        });
+      }
+    }
 
     /**
      * Quem não pode ver cliente recebe a **contagem**, não os nomes.

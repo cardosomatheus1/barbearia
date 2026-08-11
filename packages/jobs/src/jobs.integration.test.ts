@@ -73,6 +73,8 @@ let reguasRodadas = 0;
 /** As varreduras de retenção que o worker mandou rodar, por barbearia. */
 const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
 const esperasExpiradas: { tenantId: string; agora: Date }[] = [];
+const vagasOferecidas: { tenantId: string; professionalId: string }[] = [];
+const ofertasVencidas: { tenantId: string; agora: Date }[] = [];
 /** Os alertas que o worker mandou o canal do gestor entregar. */
 const alertasEntregues: { tenantId: string; quantos: number }[] = [];
 /** As conferências de cobrança online que o worker mandou rodar (bloco 35). */
@@ -99,6 +101,17 @@ const ligacoesDaPlataforma = () => ({
   },
   expirarEsperas: async (tenantId: string, agora: Date) => {
     esperasExpiradas.push({ tenantId, agora });
+    return 0;
+  },
+  oferecerVagaDaEspera: async (
+    tenantId: string,
+    vaga: { locationId: string; professionalId: string; inicio: Date; fim: Date },
+  ) => {
+    vagasOferecidas.push({ tenantId, professionalId: vaga.professionalId });
+    return true;
+  },
+  vencerOfertasDaEspera: async (tenantId: string, agora: Date) => {
+    ofertasVencidas.push({ tenantId, agora });
     return 0;
   },
   avisarDaOperacao: async (tenantId: string, alertas: readonly unknown[]) => {
@@ -152,6 +165,8 @@ describeIfDb('fila de trabalho', () => {
     avisosDeCobranca.length = 0;
     retencoesRodadas.length = 0;
     esperasExpiradas.length = 0;
+    vagasOferecidas.length = 0;
+    ofertasVencidas.length = 0;
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
     contexto = {

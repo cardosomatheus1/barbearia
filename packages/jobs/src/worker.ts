@@ -113,6 +113,33 @@ export interface Contexto {
    */
   readonly expirarEsperas: (tenantId: string, agora: Date) => Promise<number>;
   /**
+   * A oferta de vaga da lista de espera (bloco 39), injetada.
+   *
+   * Mesma razão de `varrerRetencao`: ela vive em `packages/scheduling` e manda
+   * mensagem pelo provedor, e `jobs` não conhece nenhum dos dois. O que chega
+   * aqui é a função pronta; quem a liga é `apps/worker`.
+   *
+   * Devolve se alguém foi convidado, só para o log — a decisão de a quem
+   * oferecer é da fórmula de `packages/core`.
+   */
+  readonly oferecerVagaDaEspera: (
+    tenantId: string,
+    vaga: {
+      readonly locationId: string;
+      readonly professionalId: string;
+      readonly inicio: Date;
+      readonly fim: Date;
+    },
+    agora: Date,
+  ) => Promise<boolean>;
+  /**
+   * A passagem ao próximo da fila quando a janela exclusiva vence (bloco 39).
+   *
+   * Devolve quantas vagas voltaram à mesa. Quem oferece de novo é o próprio
+   * handler, pela função acima.
+   */
+  readonly vencerOfertasDaEspera: (tenantId: string, agora: Date) => Promise<number>;
+  /**
    * O alerta operacional saindo pelo canal do gestor (bloco 33), injetado.
    *
    * Era lacuna declarada desde o bloco 22: as regras decidiam, o coletor
@@ -294,6 +321,53 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     const alertas = await alertasDaBarbearia(tarefa.tenantId, agora);
     if (alertas.length === 0) return;
     await contexto.avisarDaOperacao(tarefa.tenantId, alertas, agora);
+  },
+
+  /**
+   * A vaga que abriu, oferecida ao topo da fila (bloco 39, SPEC §2.9).
+   *
+   * A tarefa nasce **dentro da transação do cancelamento** e roda fora dela:
+   * oferecer manda mensagem, e mandar mensagem dentro da transação que desmarca
+   * o horário travaria a tela da recepção num provedor lento.
+   *
+   * Ninguém na fila não é erro — é o caso comum, e a tarefa conclui em silêncio.
+   */
+  'espera.oferecer': async (tarefa, contexto) => {
+    const locationId = String(tarefa.payload['locationId'] ?? '');
+    const professionalId = String(tarefa.payload['professionalId'] ?? '');
+    const inicio = String(tarefa.payload['inicio'] ?? '');
+    const fim = String(tarefa.payload['fim'] ?? '');
+    if (!locationId || !professionalId || !inicio || !fim) return;
+
+    /**
+     * Respeita o interruptor de avisos da barbearia, como todo aviso ao cliente.
+     *
+     * Sem isto, quem desligou as mensagens continuaria mandando convite de vaga
+     * — e o convite é o mais intrusivo de todos, porque tem relógio correndo.
+     */
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+
+    await contexto.oferecerVagaDaEspera(
+      tarefa.tenantId,
+      {
+        locationId,
+        professionalId,
+        inicio: new Date(inicio),
+        fim: new Date(fim),
+      },
+      contexto.relogio.agora(),
+    );
+  },
+
+  /**
+   * A janela exclusiva venceu: passa ao próximo (bloco 39).
+   *
+   * A varredura é por barbearia e não por oferta, mesmo a tarefa carregando um
+   * id: uma oferta que venceu no mesmo minuto que outra sai junto, e o laço
+   * pela fila de trabalho custaria uma volta por pessoa.
+   */
+  'espera.vencer': async (tarefa, contexto) => {
+    await contexto.vencerOfertasDaEspera(tarefa.tenantId, contexto.relogio.agora());
   },
 
   'agendamento.marcar_falta': async (tarefa, contexto) => {

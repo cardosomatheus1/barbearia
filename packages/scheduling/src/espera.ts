@@ -315,16 +315,48 @@ async function mesmoPedido(
 export async function esperasDoCliente(
   tenantId: string,
   customerId: string,
-): Promise<readonly EntradaDeEspera[]> {
+  agora: Date = new Date(),
+): Promise<readonly (EntradaDeEspera & { readonly convite: ConviteVivo | null })[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
-      `${SELECT_DA_ESPERA}
+    const linhas = await tx.$queryRawUnsafe<
+      (LinhaDaEspera & {
+        convite_em: Date | null;
+        convite_vence: Date | null;
+        timezone: string;
+      })[]
+    >(
+      /**
+       * O convite vivo vem junto, e é o que dá **saída** a este estado na tela.
+       *
+       * O convite chega por mensagem, e o token existe em claro uma única vez,
+       * dentro dela. Se a mensagem não chega — janela de silêncio, provedor fora
+       * do ar, ou o provedor de console, que é o que roda até o WhatsApp oficial
+       * entrar no bloco 55 —, a pessoa fica com um horário guardado para ela e
+       * nenhum caminho até ele. Aqui ela vê e aceita pela própria sessão, sem
+       * token nenhum.
+       */
+      `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+              e.window_start_minute, e.window_end_minute, e.duration_minutes,
+              e.professional_id, p.name AS professional_name, e.joined_at,
+              l.timezone,
+              o.service_starts_at AS convite_em, o.expires_at AS convite_vence,
+              array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+         FROM waitlist_entries e
+         JOIN locations l ON l.id = e.location_id
+         LEFT JOIN professionals p ON p.id = e.professional_id
+         LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+         LEFT JOIN services s ON s.id = es.service_id
+         LEFT JOIN waitlist_offers o
+                ON o.entry_id = e.id AND o.status = 'aberta' AND o.expires_at > now()
         WHERE e.customer_id = $1::uuid AND e.status = 'waiting'
-        GROUP BY e.id, p.name
+        GROUP BY e.id, p.name, l.timezone, o.service_starts_at, o.expires_at
         ORDER BY e.wanted_from, e.window_start_minute`,
       customerId,
     );
-    return linhas.map(daLinha);
+    return linhas.map((linha) => ({
+      ...daLinha(linha),
+      convite: conviteDaLinha(linha, agora),
+    }));
   });
 }
 
@@ -352,6 +384,31 @@ export async function sairDaEspera(params: {
       // Não distingue "não existe" de "não é sua": a RLS já tornou invisível o
       // que é de outra barbearia, e diferenciar aqui viraria oráculo.
       throw new EsperaError('espera_nao_encontrada', 'Esta espera não existe ou já terminou.');
+    }
+
+    /**
+     * O convite morre junto, e o horário volta à grade.
+     *
+     * Sem isto, quem sai da lista fica com um link vivo e resgatável — a pessoa
+     * disse "não quero mais" e continua conseguindo marcar por ele. Pior: o
+     * horário segue segurado pelos dez minutos, fora da grade de todo mundo, por
+     * uma espera que já não existe. Achado da revisão de segurança do bloco 39.
+     *
+     * Na mesma transação da saída: se a saída volta atrás, o convite continua
+     * valendo.
+     */
+    const canceladas = await tx.$queryRaw<{ hold_id: string | null }[]>`
+      UPDATE waitlist_offers
+         SET status = 'cancelada', answered_at = now(), updated_at = now()
+       WHERE entry_id = ${params.entryId}::uuid
+         AND status = 'aberta'
+      RETURNING hold_id
+    `;
+    const holds = canceladas
+      .map((linha) => linha.hold_id)
+      .filter((id): id is string => Boolean(id));
+    if (holds.length > 0) {
+      await tx.$executeRaw`DELETE FROM slot_holds WHERE id = ANY(${holds}::uuid[])`;
     }
   });
 }
@@ -566,6 +623,26 @@ export function vagaDoCancelamento(params: {
  * seria N+1 numa tela que o dono abre para decidir se vale abrir mais um
  * horário no sábado.
  */
+/**
+ * O convite que esta pessoa tem na mão agora (bloco 39).
+ *
+ * Sem isto, o balcão lê "seis pessoas esperando o sábado" e não sabe que uma
+ * delas já foi chamada para as 9h — e liga para oferecer o mesmo horário que o
+ * produto está segurando para ela. O horário some da grade e ninguém sabe por
+ * quê, que é o pior jeito de a exclusividade aparecer.
+ */
+export interface ConviteVivo {
+  /** `HH:mm` local da unidade — a hora do corte, não a da arrumação. */
+  readonly hora: string;
+  readonly dia: string;
+  /** Zero quando o prazo já passou e a varredura ainda não rodou. */
+  readonly minutosRestantes: number;
+}
+
+export interface QuemEspera extends CandidatoDaVaga {
+  readonly convite: ConviteVivo | null;
+}
+
 export async function quemEstaEsperando(
   tenantId: string,
   locationId: string,
@@ -579,30 +656,42 @@ export async function quemEstaEsperando(
    * porta. Achado da revisão de segurança deste bloco.
    */
   onlyProfessionalId: string | null = null,
-): Promise<readonly CandidatoDaVaga[]> {
+  agora: Date = new Date(),
+): Promise<readonly QuemEspera[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRawUnsafe<
       (LinhaDaEspera & {
         customer_id: string;
         customer_name: string;
         customer_phone: string | null;
+        convite_em: Date | null;
+        convite_vence: Date | null;
+        timezone: string;
       })[]
     >(
       `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
               e.window_start_minute, e.window_end_minute, e.duration_minutes,
               e.professional_id, p.name AS professional_name, e.joined_at,
               e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
+              l.timezone,
+              o.service_starts_at AS convite_em, o.expires_at AS convite_vence,
               array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
          FROM waitlist_entries e
          JOIN customers c ON c.id = e.customer_id
+         JOIN locations l ON l.id = e.location_id
          LEFT JOIN professionals p ON p.id = e.professional_id
          LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
          LEFT JOIN services s ON s.id = es.service_id
+         -- O convite vivo entra na mesma consulta: uma ida ao banco por pessoa
+         -- seria N+1 numa tela que o dono abre para decidir o sábado.
+         LEFT JOIN waitlist_offers o
+                ON o.entry_id = e.id AND o.status IN ('aberta', 'aceitando')
         WHERE e.location_id = $1::uuid AND e.status = 'waiting'
           AND ($2::uuid IS NULL
                OR e.professional_id IS NULL
                OR e.professional_id = $2::uuid)
-        GROUP BY e.id, p.name, c.name, c.phone_e164
+        GROUP BY e.id, p.name, c.name, c.phone_e164, l.timezone,
+                 o.service_starts_at, o.expires_at
         ORDER BY e.wanted_from, e.window_start_minute, e.joined_at`,
       locationId,
       onlyProfessionalId,
@@ -613,8 +702,25 @@ export async function quemEstaEsperando(
       customerId: linha.customer_id,
       customerNome: linha.customer_name,
       customerTelefoneFinal: linha.customer_phone ? linha.customer_phone.slice(-4) : null,
+      convite: conviteDaLinha(linha, agora),
     }));
   });
+}
+
+function conviteDaLinha(
+  linha: { convite_em: Date | null; convite_vence: Date | null; timezone: string },
+  agora: Date,
+): ConviteVivo | null {
+  if (!linha.convite_em || !linha.convite_vence) return null;
+  const local = instantToLocal(linha.timezone, linha.convite_em);
+  return {
+    dia: local.date,
+    hora: formatHHMM(local.minutes),
+    minutosRestantes: Math.max(
+      0,
+      Math.ceil((linha.convite_vence.getTime() - agora.getTime()) / 60_000),
+    ),
+  };
 }
 
 /**
