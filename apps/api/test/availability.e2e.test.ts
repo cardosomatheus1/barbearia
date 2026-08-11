@@ -31,8 +31,41 @@ const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
 const CABELO = 'eeeeeeee-0000-0000-0000-000000000001';
 const BARBA = 'eeeeeeee-0000-0000-0000-000000000002';
 
-const TERCA = '2026-08-11';
-const SEGUNDA = '2026-08-10';
+/**
+ * A semana da grade, sempre no futuro.
+ *
+ * Era `'2026-08-11'` escrito à mão — uma terça futura no dia em que o teste foi
+ * escrito. Hoje ela **é hoje**, e depois das nove da manhã a API para de
+ * devolver os primeiros horários: a antecedência mínima os descarta, o teste
+ * esperava `09:00` e recebia `13:00`. Amanhã a data vira passado e ele quebra
+ * de outro jeito, com a grade inteira vazia.
+ *
+ * A data agora é derivada: a segunda-feira pelo menos catorze dias à frente. O
+ * teste volta a ser sobre a **grade**, e não sobre que dia é hoje.
+ *
+ * Os instantes em UTC saem da mesma conta. `America/Bahia` é UTC−3 o ano
+ * inteiro — não há horário de verão no Brasil desde 2019 —, então `09:00`
+ * local é sempre `12:00Z`, e escrever isso à mão seria repetir a aritmética
+ * que já falhou uma vez.
+ */
+function segundaDaqui(dias: number): string {
+  const d = new Date();
+  d.setUTCHours(12, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + dias);
+  // 1 = segunda. Anda para a frente até cair nela.
+  while (d.getUTCDay() !== 1) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+const SEGUNDA = segundaDaqui(14);
+const diaSeguinte = (dia: string, n: number): string => {
+  const d = new Date(`${dia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const TERCA = diaSeguinte(SEGUNDA, 1);
+/** 09:00 em America/Bahia (UTC−3, sem horário de verão). */
+const AS_NOVE_EM_UTC = `${TERCA}T12:00:00.000Z`;
 
 let app: INestApplication;
 let admin: PrismaClient;
@@ -107,7 +140,7 @@ describeIfDb('GET /v1/b/:slug/availability', () => {
     expect(response.body.days[0].slots[0]).toMatchObject({
       start: '09:00',
       end: '09:20',
-      startsAt: '2026-08-11T12:00:00.000Z',
+      startsAt: AS_NOVE_EM_UTC,
       professionalId: RUAN,
       priceCents: 4900,
     });
@@ -122,11 +155,11 @@ describeIfDb('GET /v1/b/:slug/availability', () => {
 
   it('aceita intervalo de datas numa consulta só', async () => {
     const response = await request(app.getHttpServer())
-      .get(url('domari', { ...ok, dateFrom: SEGUNDA, dateTo: '2026-08-14' }))
+      .get(url('domari', { ...ok, dateFrom: SEGUNDA, dateTo: diaSeguinte(SEGUNDA, 4) }))
       .expect(200);
 
     expect(response.body.days.map((d: { date: string }) => d.date)).toEqual([
-      '2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14',
+      SEGUNDA, TERCA, diaSeguinte(SEGUNDA, 2), diaSeguinte(SEGUNDA, 3), diaSeguinte(SEGUNDA, 4),
     ]);
     // Segunda é folga; os demais têm grade.
     expect(response.body.days[0].unavailableReason).toBe('closed');
@@ -214,7 +247,7 @@ describeIfDb('GET /v1/b/:slug/availability', () => {
 
   it('recusa intervalo invertido', async () => {
     const response = await request(app.getHttpServer())
-      .get(url('domari', { ...ok, dateFrom: '2026-08-11', dateTo: '2026-08-01' }))
+      .get(url('domari', { ...ok, dateFrom: TERCA, dateTo: SEGUNDA }))
       .expect(400);
     expect(response.body.error.code).toBe('invalid_range');
   });

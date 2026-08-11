@@ -273,8 +273,7 @@ describeIfDb('reserva', () => {
 
     await expect(
       cancelAppointment({
-        tenantId: TENANT, appointmentId: doCarlos.id, by: 'customer', customerId: JOAO,
-      }),
+        tenantId: TENANT, appointmentId: doCarlos.id, by: 'customer', customerId: JOAO, now: AGORA }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
 
     const rows = await admin.$queryRawUnsafe<{ status: string }[]>(
@@ -286,8 +285,7 @@ describeIfDb('reserva', () => {
   it('o dono cancela o próprio', async () => {
     const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
     await cancelAppointment({
-      tenantId: TENANT, appointmentId: doCarlos.id, by: 'customer', customerId: CARLOS,
-    });
+      tenantId: TENANT, appointmentId: doCarlos.id, by: 'customer', customerId: CARLOS, now: AGORA });
     expect(await slotsFor(RUAN)).toContain('09:00');
   });
 
@@ -304,7 +302,7 @@ describeIfDb('reserva', () => {
 
   it('a barbearia cancela sem informar cliente', async () => {
     const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
-    await cancelAppointment({ tenantId: TENANT, appointmentId: doCarlos.id, by: 'business' });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: doCarlos.id, by: 'business', now: AGORA });
     expect(await slotsFor(RUAN)).toContain('09:00');
   });
 
@@ -376,7 +374,7 @@ describeIfDb('reserva', () => {
     const appointment = await createAppointment(base);
     expect(await slotsFor(RUAN)).not.toContain('09:00');
 
-    await cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer' });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer', now: AGORA });
     expect(await slotsFor(RUAN)).toContain('09:00');
   });
 
@@ -386,8 +384,8 @@ describeIfDb('reserva', () => {
       ...base, professionalId: GLEIDSON, idempotencyKey: 'c2',
     });
 
-    await cancelAppointment({ tenantId: TENANT, appointmentId: peloCliente.id, by: 'customer' });
-    await cancelAppointment({ tenantId: TENANT, appointmentId: pelaCasa.id, by: 'business' });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: peloCliente.id, by: 'customer', now: AGORA });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: pelaCasa.id, by: 'business', now: AGORA });
 
     const rows = await admin.$queryRawUnsafe<{ id: string; status: string }[]>(
       `SELECT id, status FROM appointments ORDER BY professional_id`,
@@ -398,10 +396,10 @@ describeIfDb('reserva', () => {
 
   it('cancelar duas vezes falha na segunda', async () => {
     const appointment = await createAppointment(base);
-    await cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer' });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer', now: AGORA });
 
     await expect(
-      cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer' }),
+      cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer', now: AGORA }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
   });
 
@@ -409,7 +407,7 @@ describeIfDb('reserva', () => {
     const appointment = await createAppointment(base);
 
     await expect(
-      cancelAppointment({ tenantId: RIVAL, appointmentId: appointment.id, by: 'customer' }),
+      cancelAppointment({ tenantId: RIVAL, appointmentId: appointment.id, by: 'customer', now: AGORA }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
 
     const rows = await admin.$queryRawUnsafe<{ status: string }[]>(
@@ -501,7 +499,7 @@ describeIfDb('reserva', () => {
 
   it('não reagenda o que já foi cancelado', async () => {
     const appointment = await createAppointment(base);
-    await cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer' });
+    await cancelAppointment({ tenantId: TENANT, appointmentId: appointment.id, by: 'customer', now: AGORA });
 
     await expect(
       rescheduleAppointment({
