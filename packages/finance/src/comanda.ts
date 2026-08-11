@@ -17,6 +17,7 @@ import {
 import { audit } from '@barbearia/identity';
 import { lancarComissaoDaComanda } from './comissao.js';
 import { conferirResgate, creditarDaVenda, programaDaCasa, registrarResgate } from './fidelidade.js';
+import { consumirPacote, consumoDisponivel, venderPacote } from './pacote.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -109,6 +110,7 @@ async function carregar(tx: TransactionClient, orderId: string): Promise<Comanda
     {
       id: string;
       kind: TipoDeItem;
+      service_id: string | null;
       description: string;
       quantity: number;
       unit_price_cents: number;
@@ -116,7 +118,7 @@ async function carregar(tx: TransactionClient, orderId: string): Promise<Comanda
       professional_name: string | null;
     }[]
   >`
-    SELECT i.id, i.kind, i.description, i.quantity, i.unit_price_cents,
+    SELECT i.id, i.kind, i.service_id, i.description, i.quantity, i.unit_price_cents,
            i.professional_id, p.name AS professional_name
       FROM order_items i
       LEFT JOIN professionals p ON p.id = i.professional_id
@@ -132,6 +134,7 @@ async function carregar(tx: TransactionClient, orderId: string): Promise<Comanda
   const itens = linhas.map((linha) => ({
     id: linha.id,
     tipo: linha.kind,
+    serviceId: linha.service_id,
     descricao: linha.description,
     quantidade: linha.quantity,
     precoUnitarioCents: linha.unit_price_cents,
@@ -511,6 +514,14 @@ export async function adicionarItem(params: {
   readonly quantidade: number;
   readonly precoUnitarioCents: number;
   readonly professionalId?: string | null;
+  /**
+   * O pacote do catálogo que este item vende (bloco 42).
+   *
+   * É ele que faz a venda do pacote e o preço cobrado serem o mesmo dado: o
+   * fechamento deriva daqui quem foi vendido, em vez de receber uma lista que
+   * pode discordar do que a comanda cobrou.
+   */
+  readonly packageId?: string | null;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     await exigirAberta(tx, params.orderId);
@@ -543,16 +554,43 @@ export async function adicionarItem(params: {
         throw new ComandaError('servico_desconhecido', 'Profissional não encontrado.');
       }
     }
+    /**
+     * O preço do pacote sai do **catálogo**, não do corpo da requisição.
+     *
+     * Ele é a base de `unit_value_cents` na venda: aceitar o preço da tela faria
+     * um item de R$ 1 congelar cinco unidades de R$ 50, que é dinheiro criado do
+     * nada. Como todo id vindo de fora, o pacote é conferido sob RLS — a chave
+     * estrangeira do Postgres ignora row security.
+     */
+    let precoCents = params.precoUnitarioCents;
+    if (params.packageId) {
+      if (params.tipo !== 'package') {
+        throw new ComandaError('item_invalido', 'Item inválido.', 'tipo');
+      }
+      const pacote = await tx.$queryRaw<{ price_cents: number }[]>`
+        SELECT price_cents FROM packages WHERE id = ${params.packageId}::uuid AND active
+      `;
+      const encontrado = pacote[0];
+      if (!encontrado) {
+        throw new ComandaError('servico_desconhecido', 'Pacote não encontrado.');
+      }
+      precoCents = encontrado.price_cents;
+    } else if (params.tipo === 'package') {
+      // Item de pacote sem pacote é um item que ninguém sabe o que vende — e o
+      // `CHECK` da migração recusaria o contrário.
+      throw new ComandaError('item_invalido', 'Item inválido.', 'tipo');
+    }
 
     await tx.$executeRaw`
       INSERT INTO order_items
-        (tenant_id, order_id, kind, service_id, description, quantity,
+        (tenant_id, order_id, kind, service_id, package_id, description, quantity,
          unit_price_cents, professional_id, position)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${params.orderId}::uuid, ${params.tipo}::order_item_type,
-        ${params.serviceId ?? null}::uuid, ${params.descricao.trim()},
-        ${params.quantidade}, ${params.precoUnitarioCents},
+        ${params.serviceId ?? null}::uuid, ${params.packageId ?? null}::uuid,
+        ${params.descricao.trim()},
+        ${params.quantidade}, ${precoCents},
         ${params.professionalId ?? null}::uuid,
         (SELECT COALESCE(max(position) + 1, 0) FROM order_items WHERE order_id = ${params.orderId}::uuid)
       )
@@ -721,6 +759,20 @@ export async function fecharComanda(params: {
    * `visitas` os dois nem se parecem — dez visitas viram a conta inteira.
    */
   readonly resgateQuantidade?: number;
+  /**
+   * Qual serviço o pacote está cobrindo, quando há pagamento por pacote
+   * (bloco 42).
+   *
+   * Vem separado do pagamento porque a forma diz "quitou pelo pacote" e isto diz
+   * **qual** unidade some — a comanda com corte e barba precisa de alguém para
+   * desempatar. É conferido contra os itens da própria comanda: sem isso, uma
+   * barba de R$ 50 queimaria uma unidade do pacote de corte, e o cliente perderia
+   * um corte pago sem nada ficar vermelho.
+   *
+   * Não existe par `pacotesVendidos`: quem foi vendido é derivado dos itens de
+   * pacote da comanda, que são os que carregam o preço cobrado.
+   */
+  readonly servicoDoPacote?: string;
   /**
    * A transação de fora, quando já existe uma.
    *
@@ -931,6 +983,111 @@ export async function fecharComanda(params: {
       });
     }
 
+    /**
+     * Os pacotes, na mesma transação (bloco 42).
+     *
+     * **Vendidos** viram `customer_packages` com tudo congelado — serviço,
+     * quantidade, preço e validade. **Consumidos** viram `package_uses`, que é o
+     * momento em que a receita diferida na compra é reconhecida.
+     *
+     * Fora desta transação, a comanda fecharia com o corte quitado pelo pacote e
+     * o pacote continuaria cheio: crédito infinito, um corte por comanda.
+     */
+    const pagoComPacote = params.pagamentos
+      .filter((p) => p.forma === 'pacote')
+      .reduce((soma, p) => soma + p.valorCents, 0);
+
+    /**
+     * Quem foi vendido sai dos **itens**, nunca de uma lista no corpo.
+     *
+     * A primeira versão recebia `pacotesVendidos` do fechamento, ao lado dos
+     * itens que dão o preço. Duas fontes para o mesmo fato: um item de R$ 1 e
+     * uma lista com o pacote de R$ 250 fechariam a conta por um real e criariam
+     * cinco cortes de R$ 50 congelados — dinheiro criado do nada, resgatável
+     * como crédito pelo reembolso proporcional, e por fora do teto de desconto
+     * da casa. Cada metade estava internamente coerente, e por isso nada ficava
+     * vermelho.
+     *
+     * Derivado do item, o que foi cobrado e o que foi entregue são o mesmo dado.
+     */
+    const itensDePacote = await tx.$queryRaw<{ package_id: string }[]>`
+      SELECT package_id FROM order_items
+       WHERE order_id = ${params.orderId}::uuid AND package_id IS NOT NULL
+       ORDER BY position
+    `;
+
+    if (pagoComPacote > 0 || itensDePacote.length > 0) {
+      if (!comanda.customerId) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'Identifique o cliente antes de vender ou usar um pacote.',
+        );
+      }
+    }
+
+    for (const item of itensDePacote) {
+      await venderPacote(tx, {
+        tenantId: params.tenantId,
+        customerId: comanda.customerId as string,
+        packageId: item.package_id,
+        orderId: params.orderId,
+        agora: new Date(),
+      });
+    }
+
+    if (pagoComPacote > 0) {
+      const servicoCoberto = params.servicoDoPacote;
+      if (!servicoCoberto) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'Diga qual serviço o pacote está cobrindo.',
+        );
+      }
+
+      /**
+       * O serviço coberto tem que estar **nesta comanda**.
+       *
+       * Sem a conferência, uma barba de R$ 50 fecharia queimando uma unidade do
+       * pacote de corte: os valores batem, o domínio aceita, e o cliente perde
+       * um corte que pagou. A receita ainda seria reconhecida no serviço errado,
+       * e a exportação do titular mostraria a unidade consumida sem dizer que
+       * foi mal aplicada.
+       */
+      const naComanda = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM order_items
+         WHERE order_id = ${params.orderId}::uuid
+           AND service_id = ${servicoCoberto}::uuid
+         LIMIT 1
+      `;
+      if (!naComanda[0]) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'Este pacote não cobre nenhum serviço desta comanda.',
+        );
+      }
+      // Reconferido **sob a trava**: entre a montagem do pagamento e este ponto
+      // pode ter entrado outro consumo do mesmo pacote.
+      const disponivel = await consumoDisponivel({
+        tenantId: params.tenantId,
+        customerId: comanda.customerId,
+        serviceId: servicoCoberto,
+        tx,
+      });
+      if (!disponivel || disponivel.valorCents !== pagoComPacote) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'O pacote mudou. Refaça o pagamento.',
+        );
+      }
+      await consumirPacote(tx, {
+        customerPackageId: disponivel.customerPackageId,
+        orderId: params.orderId,
+        valorCents: disponivel.valorCents,
+        diaDaUnidade: params.hojeNaUnidade,
+        ...(comanda.appointmentId ? { appointmentId: comanda.appointmentId } : {}),
+      });
+    }
+
     await creditarDaVenda(tx, {
       orderId: params.orderId,
       customerId: comanda.customerId,
@@ -985,7 +1142,14 @@ export async function fecharComanda(params: {
  * o extrato inteiro daria outro número no dia em que uma linha fosse corrigida,
  * e o extrato é append-only justamente para que isso nunca aconteça.
  */
-async function lancarNoExtrato(
+/**
+ * Exportada desde o bloco 42: o reembolso de pacote também lança no razão.
+ *
+ * Uma cópia lá dentro esqueceria `balance_after_cents` — e foi exatamente o que
+ * o teste do reembolso pegou na primeira versão. O saldo depois do lançamento é
+ * o que faz o extrato do cliente ser conferível linha a linha.
+ */
+export async function lancarNoExtrato(
   tx: TransactionClient,
   params: {
     readonly customerId: string;

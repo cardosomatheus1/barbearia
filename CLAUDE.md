@@ -645,6 +645,14 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Filtro de varredura por tipo | recorta pelo **fato**, não pelo nome do tipo. `kind = 'acumulo'` na varredura de vencimento fazia o saldo ajustado à mão sumir da leitura sem nunca aparecer no extrato; `amount > 0` é o que descreve a coisa |
 | `@container` numa tela nova | o recipiente é o **ancestral**, e ele precisa declarar `container-type`. Um elemento não responde sobre si mesmo: sem a declaração no pai, a regra nunca casa e a tela fica na versão estreita em qualquer largura — sem nada ficar vermelho |
 | Provedor de mensagem no worker | **um só**, criado onde o processo é montado. Instanciar o de console dentro de um caminho faz daquele caminho o único que não troca junto — e o convite de vaga carrega o token em claro, que é credencial, no log |
+| Venda de pacote | derivada dos **itens** da comanda, nunca de uma lista no corpo do fechamento. Duas fontes para o mesmo fato deixavam um item de R$ 1 fechar a conta e congelar cinco unidades de R$ 50 — dinheiro criado do nada, resgatável como crédito pelo reembolso proporcional e por fora do teto de desconto. Cada metade era internamente coerente, e por isso nada ficava vermelho |
+| Preço de item que vende catálogo | lido do catálogo dentro da transação, nunca do corpo. `precoUnitarioCents` de um item de pacote é ignorado, e a tela não tem campo de preço |
+| Serviço coberto pelo pacote | conferido contra os itens **desta** comanda. Só o valor bater não basta: uma barba de R$ 50 queimava uma unidade do pacote de corte, com o cliente perdendo um corte pago e a receita reconhecida no serviço errado |
+| Leitura que decide gravação | trava a linha (`FOR UPDATE`), e a trava é do caminho que grava — não do que mostra. Sem ela, duas comandas do mesmo cliente fechando juntas leem "usados = 4" as duas e gravam as duas: cinco compradas, seis consumidas. O índice único de `package_uses` é por comanda e não pega duas comandas diferentes |
+| Invariante que protege valor | não mora só na aplicação. O gatilho que recusa consumir mais unidades do que foram compradas existe porque uma cláusula de trava é perdível numa reescrita, e a garantia de que ninguém recebe serviço que não pagou é grande demais para depender disso |
+| `UPDATE` guardado por estado | confere as linhas afetadas antes de mover dinheiro. A trava é quem impede o segundo reembolso hoje; descartar a contagem deixa a segunda camada inerte, e um `UPDATE` que não pegou ninguém vira crédito lançado no razão |
+| Receita de venda antecipada | diferida, reconhecida no consumo. `package_uses` é tabela e não contador porque o **quando** de cada reconhecimento é a informação — sem ela o DRE mostra um mês excelente seguido de meses falsamente ruins (SPEC §4.7) |
+| Casar dado de duas telas | por id, nunca pelo nome. A recepção edita a descrição do item, e um "Corte + escova" deixaria de casar com o pacote de corte em silêncio |
 
 ---
 

@@ -72,6 +72,11 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'loyalty.program_changed': 'mudou o programa de fidelidade',
   'loyalty.adjusted': 'ajustou o saldo de fidelidade de',
 
+  // Pacotes (bloco 42). Mudar o catálogo define por quanto a casa vende cinco
+  // cortes; reembolsar devolve dinheiro a quem já pagou.
+  'package.changed': 'mudou um pacote do catálogo',
+  'package.refunded': 'reembolsou um pacote de',
+
   // Suporte assistido (bloco 26). Estas três não descrevem o que **a equipe**
   // fez: descrevem o que a plataforma fez dentro desta barbearia. É a metade da
   // SPEC §1.2 que uma trilha só de plataforma não cumpre — "o tenant deve poder

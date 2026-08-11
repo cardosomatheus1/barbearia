@@ -345,6 +345,28 @@ export async function exportarDadosDoTitular(
        ORDER BY created_at
     `;
 
+    /**
+     * Os pacotes comprados e o consumo de cada um (bloco 42).
+     *
+     * "Eu comprei cinco cortes e vocês dizem que só restam dois" é a pergunta,
+     * e a resposta é a lista de quando cada unidade foi usada — não o saldo.
+     * É a mesma razão de `package_uses` existir como tabela e não como
+     * contador.
+     */
+    const pacotes = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT cp.id, s.name AS servico, cp.quantity AS comprados,
+             cp.price_cents, cp.unit_value_cents, cp.purchased_at, cp.expires_at,
+             cp.refunded_at, cp.refunded_cents,
+             (SELECT count(*) FROM package_uses u WHERE u.customer_package_id = cp.id)
+               AS usados,
+             (SELECT array_agg(u.business_day ORDER BY u.business_day)
+                FROM package_uses u WHERE u.customer_package_id = cp.id) AS dias_de_uso
+        FROM customer_packages cp
+        LEFT JOIN services s ON s.id = cp.service_id
+       WHERE cp.customer_id = ${customerId}::uuid
+       ORDER BY cp.purchased_at
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
@@ -372,6 +394,7 @@ export async function exportarDadosDoTitular(
       esperas,
       recados,
       fidelidade,
+      pacotes,
     };
   });
 }

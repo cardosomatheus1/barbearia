@@ -16,12 +16,31 @@
  * `service` nasce do agendamento — a SPEC §3.1 é explícita: a comanda nasce
  * pré-preenchida e o barbeiro só acrescenta o extra. Os outros são o extra.
  */
-export const TIPOS_DE_ITEM = ['service', 'product', 'consumable'] as const;
+/**
+ * `package` entrou no bloco 42 e é diferente dos outros três.
+ *
+ * Os três primeiros são coisas entregues **agora**: o corte, a pomada, a água. O
+ * pacote é dinheiro recebido por serviço que ainda não aconteceu — a receita
+ * dele é reconhecida conforme o uso, não na venda (SPEC §4.7).
+ *
+ * Ele fica na mesma lista porque, para a comanda, é um item como qualquer outro:
+ * tem descrição, preço e entra no total. O que muda é o **relatório**, e é lá
+ * que a distinção vive.
+ */
+export const TIPOS_DE_ITEM = ['service', 'product', 'consumable', 'package'] as const;
 export type TipoDeItem = (typeof TIPOS_DE_ITEM)[number];
 
 export interface ItemDaComanda {
   readonly id: string;
   readonly tipo: TipoDeItem;
+  /**
+   * O serviço que este item vende, quando é um serviço.
+   *
+   * A tela do balcão casa o pacote do cliente com o item por **id**, nunca pela
+   * descrição: a recepção edita o texto, e um "Corte + escova" deixaria de casar
+   * com o pacote de corte em silêncio.
+   */
+  readonly serviceId: string | null;
   readonly descricao: string;
   readonly quantidade: number;
   readonly precoUnitarioCents: number;
@@ -181,6 +200,19 @@ export const FORMAS_DE_PAGAMENTO = [
    * corte.
    */
   'fidelidade',
+  /**
+   * Pacote (bloco 42, SPEC §4.7).
+   *
+   * O cliente pagou cinco cortes adiantado; este é o momento em que ele usa um.
+   * Como o resgate de fidelidade, não é dinheiro entrando agora — mas por um
+   * motivo diferente e mais forte: o dinheiro entrou **na venda do pacote**, e
+   * o que acontece aqui é o reconhecimento da receita que já estava diferida.
+   *
+   * O item do corte continua com o preço congelado da unidade, e é de propósito:
+   * é ele que dá base à comissão do barbeiro, que não pode cair só porque o
+   * cliente pagou adiantado.
+   */
+  'pacote',
 ] as const;
 
 export type FormaDePagamento = (typeof FORMAS_DE_PAGAMENTO)[number];
@@ -287,6 +319,13 @@ export function conferirPagamento(params: {
     .filter((p) => p.forma === 'fidelidade')
     .reduce((soma, p) => soma + p.valorCents, 0);
   if (fidelidadeCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
+
+  // Nem consome pacote e leva troco, pelo mesmo motivo: o corte grátis viraria
+  // saque, e cinco cortes por R$ 250 viram R$ 250 na mão.
+  const pacoteCents = params.pagamentos
+    .filter((p) => p.forma === 'pacote')
+    .reduce((soma, p) => soma + p.valorCents, 0);
+  if (pacoteCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
 
   const emDinheiro = params.pagamentos
     .filter((p) => ENTRA_NA_GAVETA.includes(p.forma))

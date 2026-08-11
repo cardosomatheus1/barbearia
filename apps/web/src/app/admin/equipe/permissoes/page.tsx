@@ -97,6 +97,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   // entrega, não o nome técnico: quem a marca está podendo criar crédito que
   // vira pagamento no balcão.
   'finance.loyalty_adjust': 'Ajustar o saldo de fidelidade de um cliente',
+  'finance.package_refund': 'Reembolsar um pacote pela parte não usada',
   // Ler o que os clientes escreveram, e responder em nome da casa. Duas caixas
   // porque são duas coisas: o barbeiro pode precisar da primeira sem a segunda.
   'feedback.view': 'Ler os recados dos clientes',

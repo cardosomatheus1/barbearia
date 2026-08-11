@@ -66,7 +66,7 @@ describe('partição do vocabulário da trilha', () => {
     // manual **cria** saldo gastável, e mudar o programa define a alíquota com
     // que a casa passa a imprimi-lo. "Quem virou o cashback para 50%?" é
     // pergunta de dinheiro.
-    const deDinheiro = /^(cash|order|debt|commission|deposit|loyalty)\./;
+    const deDinheiro = /^(cash|order|debt|commission|deposit|loyalty|package)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

@@ -17,6 +17,7 @@ import {
 const item = (parcial: Partial<ItemDaComanda> = {}): ItemDaComanda => ({
   id: 'i1',
   tipo: 'service',
+  serviceId: null,
   descricao: 'Corte',
   quantidade: 1,
   precoUnitarioCents: 4900,
@@ -385,6 +386,33 @@ describe('fiado', () => {
       ],
     });
     expect(conferido).toEqual({ falha: null, trocoCents: 0 });
+  });
+
+  it('consumir pacote nunca vira troco em dinheiro', () => {
+    // Cinco cortes por R$ 250 virariam R$ 250 na mão: o pacote é serviço
+    // comprado adiantado, não vale-dinheiro.
+    const conferido = conferirPagamento({
+      totalCents: 5000,
+      pagamentos: [
+        { forma: 'cash', valorCents: 4000 },
+        { forma: 'pacote', valorCents: 2000 },
+      ],
+    });
+    expect(conferido.falha).toBe('pagou_demais');
+  });
+
+  it('pacote que fecha a conta exatamente passa, e não entra na gaveta', () => {
+    const conferido = conferirPagamento({
+      totalCents: 5000,
+      pagamentos: [{ forma: 'pacote', valorCents: 5000 }],
+    });
+    expect(conferido).toEqual({ falha: null, trocoCents: 0 });
+
+    const resultado = resultadoDoPagamento({
+      pagamentos: [{ forma: 'pacote', valorCents: 5000 }],
+      trocoCents: 0,
+    });
+    expect(resultado.naGavetaCents).toBe(0);
   });
 
   it('resgate não entra na gaveta', () => {

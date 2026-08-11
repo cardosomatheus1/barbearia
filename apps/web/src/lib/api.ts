@@ -344,6 +344,41 @@ export async function meuSaldoDeFidelidade(
   return (await response.json()) as MeuSaldoDeFidelidade;
 }
 
+/**
+ * Os pacotes do próprio cliente (bloco 42).
+ *
+ * Lista vazia e não `null` numa falha: como a lista de espera, um pacote que não
+ * carregou não pode mandar o cliente para a tela de entrar — ele já está
+ * autenticado, e o resto da página continua útil.
+ */
+export async function meusPacotes(
+  slug: string,
+  token: string,
+): Promise<MeuPacote[]> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/packages`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!response.ok) return [];
+  const corpo = (await response.json()) as { pacotes: MeuPacote[] };
+  return corpo.pacotes;
+}
+
+export interface MeuPacote {
+  id: string;
+  serviceId: string;
+  servicoNome: string;
+  estado: 'ativo' | 'esgotado' | 'vencido' | 'reembolsado';
+  total: number;
+  usados: number;
+  restam: number;
+  venceEm: string | null;
+  frase: string;
+  valorDaUnidadeCents: number;
+  precoCents: number;
+  reembolsadoCents: number | null;
+}
+
 export async function listarEsperas(
   slug: string,
   token: string,

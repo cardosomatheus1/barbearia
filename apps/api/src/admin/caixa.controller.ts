@@ -261,6 +261,7 @@ export class CaixaController {
       quantidade: number;
       precoUnitarioCents: number;
       professionalId?: string;
+      packageId?: string;
     },
   ) {
     const local = await this.unidade(staff.tenantId);
@@ -275,6 +276,7 @@ export class CaixaController {
         quantidade: body.quantidade,
         precoUnitarioCents: body.precoUnitarioCents,
         professionalId: body.professionalId ?? null,
+        packageId: body.packageId ?? null,
       });
     } catch (error) {
       return toHttp(error);
@@ -341,7 +343,11 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(fecharComandaSchema))
-    body: { pagamentos: Pagamento[]; resgateQuantidade?: number },
+    body: {
+      pagamentos: Pagamento[];
+      resgateQuantidade?: number;
+      servicoDoPacote?: string;
+    },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
@@ -358,6 +364,7 @@ export class CaixaController {
         ...(body.resgateQuantidade !== undefined
           ? { resgateQuantidade: body.resgateQuantidade }
           : {}),
+        ...(body.servicoDoPacote ? { servicoDoPacote: body.servicoDoPacote } : {}),
         staffId: staff.staffUserId,
         staffName: staff.name,
         // O dia da unidade, não o do servidor: às 22h de Salvador o UTC já

@@ -514,6 +514,60 @@ async function prepararFila(token) {
 }
 
 /**
+ * Pacotes no catálogo e um comprado pelo cliente (bloco 42).
+ *
+ * Pelo banco, como os recados: a venda nasce do fechamento de uma comanda, e
+ * reproduzir o fluxo aqui custaria mais que o que se mede. O que a medição
+ * precisa é do **estado** — nome longo de verdade, preço de quatro dígitos, e um
+ * pacote parcialmente usado, que é o que faz a barra e a frase aparecerem.
+ */
+async function prepararPacotes(slug, clienteDaFicha) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  const servico = psql(
+    `select id from services where tenant_id = '${tenant}' and active order by price_cents desc limit 1`,
+  );
+  // O mesmo cliente que a ficha desenha: um pacote pendurado em outra pessoa
+  // deixaria o bloco novo fora da única tela em que ele aparece, e a medição
+  // diria "passou" sobre um layout que ninguém viu.
+  const cliente = clienteDaFicha;
+  if (!tenant || !servico) return;
+
+  // Nome longo e preço de quatro dígitos: são eles que quebram o cartão, e só
+  // aparecem com conteúdo verdadeiro.
+  // `primeiraLinha` porque o `psql` devolve o rótulo `INSERT 0 1` na segunda.
+  const pacote = primeiraLinha(
+    psql(
+      `INSERT INTO packages (tenant_id, service_id, name, quantity, price_cents, validity_days)
+       VALUES ('${tenant}', '${servico}', 'Combo fidelidade — 10 cortes com barba', 10, 129000, 365)
+       RETURNING id`,
+    ),
+  );
+  psql(
+    `INSERT INTO packages (tenant_id, service_id, name, quantity, price_cents)
+     VALUES ('${tenant}', '${servico}', '5 cortes', 5, 25000)`,
+  );
+
+  if (cliente && pacote) {
+    const comprado = primeiraLinha(
+      psql(
+        `INSERT INTO customer_packages
+           (tenant_id, customer_id, package_id, service_id, quantity, price_cents, unit_value_cents)
+         VALUES ('${tenant}', '${cliente}', '${pacote}', '${servico}', 10, 129000, 12900)
+         RETURNING id`,
+      ),
+    );
+    // Parcialmente usado: cheio, a barra some e a frase perde o que ela tem de
+    // mais difícil de acomodar.
+    for (let i = 0; i < 8; i += 1) {
+      psql(
+        `INSERT INTO package_uses (tenant_id, customer_package_id, value_cents, business_day)
+         VALUES ('${tenant}', '${comprado}', 12900, current_date - ${i})`,
+      );
+    }
+  }
+}
+
+/**
  * Recados na fila e um programa de fidelidade ligado (blocos 40 e 41).
  *
  * Pelo banco: o recado nasce da página pública e o saldo nasce do fechamento de
@@ -983,6 +1037,7 @@ async function main() {
   const filaPreparada = await prepararFila(token);
   const convitePreparado = await prepararConvite(slug);
   await prepararRecadosEFidelidade(slug);
+  await prepararPacotes(slug, balcao.clienteId);
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },
@@ -1074,6 +1129,7 @@ async function main() {
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recados', url: '/admin/recados', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fidelidade', url: '/admin/fidelidade', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'pacotes', url: '/admin/pacotes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },
     // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
     // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir

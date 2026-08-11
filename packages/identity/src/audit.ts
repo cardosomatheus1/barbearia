@@ -68,6 +68,16 @@ export type AuditAction =
   | 'loyalty.program_changed'
   | 'loyalty.adjusted'
   /**
+   * Pacotes (bloco 42).
+   *
+   * As duas são de dinheiro. Mudar o catálogo define por quanto a barbearia
+   * vende cinco cortes; reembolsar devolve dinheiro proporcional a quem já
+   * pagou. A pergunta "quem baixou o preço do pacote?" é de dinheiro, e quem
+   * precisa respondê-la é quem lê a trilha de dinheiro.
+   */
+  | 'package.changed'
+  | 'package.refunded'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -165,6 +175,8 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'deposit.refunded',
   'loyalty.program_changed',
   'loyalty.adjusted',
+  'package.changed',
+  'package.refunded',
   'commission.closed',
   'commission.rule_changed',
 ];

@@ -38,6 +38,8 @@ import {
   criarProfissional,
   entrarNaFila,
   ajustarSaldoDeFidelidade,
+  salvarPacoteNaApi,
+  reembolsarPacoteNaApi,
   assumirRecadoNaApi,
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
@@ -1157,20 +1159,24 @@ export async function acaoAdicionarItem(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'orderId');
   const tipo = texto(form, 'tipo');
-  if (tipo !== 'service' && tipo !== 'product' && tipo !== 'consumable') {
+  if (tipo !== 'service' && tipo !== 'product' && tipo !== 'consumable' && tipo !== 'package') {
     falhar(`/admin/comanda/${id}`, 'invalid_request');
   }
 
   const serviceId = texto(form, 'serviceId');
   const professionalId = texto(form, 'professionalId');
+  const packageId = texto(form, 'packageId');
 
   const resultado = await adicionarNaComanda(token, id, {
     tipo,
     descricao: texto(form, 'descricao'),
     quantidade: Math.max(1, numero(form, 'quantidade', 1)),
+    // Num item de pacote este número é ignorado: o preço sai do catálogo, e é
+    // isso que impede um item de R$ 1 congelar cinco unidades de R$ 50.
     precoUnitarioCents: centavos(form, 'precoUnitarioCents', `/admin/comanda/${id}`),
     ...(serviceId ? { serviceId } : {}),
     ...(professionalId ? { professionalId } : {}),
+    ...(packageId ? { packageId } : {}),
   });
   if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
   redirect(`/admin/comanda/${id}`);
@@ -1238,12 +1244,25 @@ export async function acaoFecharComanda(form: FormData): Promise<void> {
    */
   const resgate = Number(form.get('resgateQuantidade') ?? 0);
 
+  /**
+   * O pacote viaja separado do valor pela mesma razão do resgate (bloco 42).
+   *
+   * A forma diz "quitou pelo pacote"; `servicoDoPacote` diz **qual** serviço ele
+   * está cobrindo, que é o que decide qual unidade some. O domínio confere que o
+   * serviço está nesta comanda e que o valor bate com a unidade congelada.
+   *
+   * Quem foi **vendido** não viaja: sai dos itens de pacote da comanda, que são
+   * os que carregam o preço cobrado.
+   */
+  const servicoDoPacote = texto(form, 'servicoDoPacote');
+
   const resultado = await fecharAComanda(
     token,
     id,
     pagamentos,
     texto(form, 'idempotencyKey'),
     Number.isInteger(resgate) && resgate > 0 ? resgate : undefined,
+    servicoDoPacote.length > 0 ? servicoDoPacote : undefined,
   );
   if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
   redirect(`/admin/comanda/${id}?pago=1`);
@@ -1887,4 +1906,74 @@ export async function acaoPreferenciasDeAlerta(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
   redirect('/admin/seguranca?salvo=1');
+}
+
+// -- Pacotes (bloco 42) -------------------------------------------------------
+
+/**
+ * Cadastra ou edita um pacote do catálogo.
+ *
+ * O `id` vazio significa "novo": o mesmo formulário serve para os dois, como no
+ * catálogo de serviços. A tela manda porcentagem em lugar nenhum aqui — preço é
+ * em reais e vira centavos inteiros na borda, nunca `float` adiante.
+ */
+export async function acaoSalvarPacote(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+  const validade = Number(form.get('validadeDias') ?? 0);
+  const preco = Number(form.get('precoReais') ?? 0);
+
+  const resultado = await salvarPacoteNaApi(
+    token,
+    {
+      nome: texto(form, 'nome'),
+      serviceId: texto(form, 'serviceId'),
+      quantidade: Number(form.get('quantidade') ?? 2),
+      precoCents: Math.round(preco * 100),
+      validadeDias: validade > 0 ? validade : null,
+      transferivel: form.get('transferivel') === 'on',
+      ativo: form.get('ativo') !== 'off',
+    },
+    id.length > 0 ? id : undefined,
+  );
+  if (!resultado.ok) falhar('/admin/pacotes', resultado.code);
+  redirect('/admin/pacotes?salvo=1');
+}
+
+/**
+ * Reembolsa a parte não usada de um pacote.
+ *
+ * Volta para a ficha do cliente, que é de onde a recepção saiu: o pacote é dele,
+ * e "quanto foi devolvido a quem" é a pergunta seguinte.
+ */
+export async function acaoReembolsarPacote(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await reembolsarPacoteNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=reembolsado`);
+}
+
+/**
+ * Vende um pacote na comanda (bloco 42).
+ *
+ * Ação própria e não o formulário de item genérico: o preço sai do catálogo, e
+ * pedir para a recepção digitá-lo abriria a porta que a revisão de segurança
+ * fechou — item de R$ 1 congelando cinco unidades de R$ 50.
+ */
+export async function acaoVenderPacote(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'orderId');
+
+  const resultado = await adicionarNaComanda(token, id, {
+    tipo: 'package',
+    descricao: texto(form, 'descricao'),
+    quantidade: 1,
+    // O servidor ignora este valor no item de pacote; ele vai por exigência do
+    // schema, e o preço de verdade é lido do catálogo dentro da transação.
+    precoUnitarioCents: 0,
+    packageId: texto(form, 'packageId'),
+  });
+  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  redirect(`/admin/comanda/${id}`);
 }

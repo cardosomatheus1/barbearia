@@ -6,6 +6,7 @@ import {
   listarAgendamentos,
   listarEsperas,
   meuSaldoDeFidelidade,
+  meusPacotes,
   type AgendamentoDoCliente,
   type EsperaDoCliente,
 } from '@/lib/api';
@@ -179,6 +180,10 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
   const consentimento = await lerConsentimento(slug, token);
   const esperas = await listarEsperas(slug, token);
   const fidelidade = await meuSaldoDeFidelidade(slug, token);
+  const pacotes = await meusPacotes(slug, token);
+  // Só os que ainda servem: esgotado e vencido viram histórico, e histórico aqui
+  // empurra para baixo o que a pessoa abriu a página para ver.
+  const pacotesUteis = pacotes.filter((p) => p.estado === 'ativo' && p.restam > 0);
 
   const proximos = agendamentos.filter((a) => a.state === 'active');
   const anteriores = agendamentos.filter((a) => a.state !== 'active');
@@ -308,6 +313,46 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
                   : `Faltam ${fidelidade.faltaParaPremio} para o corte grátis.`}
             </p>
           </div>
+        </section>
+      ) : null}
+
+      {/*
+        Os pacotes (bloco 42, SPEC §4.7).
+
+        "Ainda tenho corte?" é o que o cliente manda no WhatsApp da barbearia, e
+        é a pergunta que este bloco tira da recepção. Só os que ainda servem: um
+        pacote esgotado de dois anos atrás vira histórico, e histórico aqui só
+        empurra para baixo o que a pessoa abriu a página para ver.
+
+        A frase vem do domínio, a mesma que o balcão lê — quando a recepção diz
+        "resta um", o cliente já leu a mesma coisa aqui.
+      */}
+      {pacotesUteis.length > 0 ? (
+        <section aria-labelledby="pacotes">
+          <h2 className="rotulo" id="pacotes">
+            Seus pacotes
+          </h2>
+          {pacotesUteis.map((pacote) => (
+            <div className="pacote-cliente" key={pacote.id}>
+              <div className="pacote-cliente__quem">
+                <p className="pacote-cliente__nome">{pacote.servicoNome}</p>
+                <p className="pacote-cliente__frase">{pacote.frase}</p>
+                <div aria-hidden="true" className="pacote-cliente__barra">
+                  <span
+                    style={{ width: `${Math.round((pacote.usados / pacote.total) * 100)}%` }}
+                  />
+                </div>
+                {pacote.venceEm ? (
+                  <p className="pacote-cliente__frase">
+                    Vale até {new Date(pacote.venceEm).toLocaleDateString('pt-BR')}.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          <p className="politica">
+            É só dizer no balcão que quer usar o pacote. Não precisa levar nada.
+          </p>
         </section>
       ) : null}
 

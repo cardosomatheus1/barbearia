@@ -124,6 +124,11 @@ describe('permissões de dinheiro', () => {
       // saldo de fidelidade **é** criar dinheiro — ele vira forma de pagamento
       // no balcão da operação seguinte.
       'finance.loyalty_adjust',
+      // `finance.package_refund` entrou no bloco 42, e pelo prefixo: o reembolso
+      // proporcional devolve como crédito no razão, gastável no balcão da
+      // operação seguinte. Editar o catálogo de pacotes é `settings.manage` e
+      // não cai aqui — cadastrar "5 cortes por R$ 250" não move centavo nenhum.
+      'finance.package_refund',
       'finance.view',
       'finance.view_profit',
     ]);

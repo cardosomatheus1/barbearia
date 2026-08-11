@@ -1026,11 +1026,12 @@ export const moverAgendamento = (
 /** Espelha `FORMAS_DE_PAGAMENTO` do core, que é o que a borda da API aceita. */
 export type FormaDePagamento =
   | 'cash' | 'pix' | 'debit' | 'credit' | 'link' | 'transfer' | 'fiado' | 'fidelidade';
-export type TipoDeItemDaComanda = 'service' | 'product' | 'consumable';
+export type TipoDeItemDaComanda = 'service' | 'product' | 'consumable' | 'package';
 
 export interface ItemDaComandaNaTela {
   id: string;
   tipo: TipoDeItemDaComanda;
+  serviceId: string | null;
   descricao: string;
   quantidade: number;
   precoUnitarioCents: number;
@@ -1130,6 +1131,8 @@ export const adicionarNaComanda = (
     quantidade: number;
     precoUnitarioCents: number;
     professionalId?: string;
+    /** O pacote do catálogo que este item vende. Com ele o preço sai do catálogo. */
+    packageId?: string;
   },
 ) => chamar<Comanda>('POST', `/v1/admin/orders/${id}/items`, dados, token);
 
@@ -1152,6 +1155,8 @@ export const fecharAComanda = (
   idempotencyKey: string,
   /** Quanto sai do saldo de fidelidade. A unidade é a do programa (bloco 41). */
   resgateQuantidade?: number,
+  /** Qual serviço o pacote está cobrindo, quando há pagamento por pacote (bloco 42). */
+  servicoDoPacote?: string,
 ) =>
   chamar<Comanda>(
     'POST',
@@ -1159,6 +1164,7 @@ export const fecharAComanda = (
     {
       pagamentos,
       ...(resgateQuantidade ? { resgateQuantidade } : {}),
+      ...(servicoDoPacote ? { servicoDoPacote } : {}),
     },
     token,
     idempotencyKey,
@@ -1981,3 +1987,78 @@ export const preferenciasDeAlerta = (token: string) =>
 
 export const salvarPreferenciasDeAlerta = (token: string, dados: PreferenciasDeAlerta) =>
   chamar<PreferenciasDeAlerta>('PUT', '/v1/admin/alertas/preferencias', dados, token);
+
+// -- Pacotes (bloco 42) -------------------------------------------------------
+
+export interface PacoteNoCatalogo {
+  id: string;
+  nome: string;
+  serviceId: string;
+  servicoNome: string;
+  quantidade: number;
+  precoCents: number;
+  validadeDias: number | null;
+  transferivel: boolean;
+  ativo: boolean;
+}
+
+export interface PacoteDoCliente {
+  id: string;
+  serviceId: string;
+  servicoNome: string;
+  estado: 'ativo' | 'esgotado' | 'vencido' | 'reembolsado';
+  total: number;
+  usados: number;
+  restam: number;
+  venceEm: string | null;
+  frase: string;
+  valorDaUnidadeCents: number;
+  precoCents: number;
+  reembolsadoCents: number | null;
+}
+
+export interface ReceitaDePacotes {
+  dia: string;
+  vendidoCents: number;
+  reconhecidoCents: number;
+  diferidoCents: number;
+}
+
+export const catalogoDePacotesNaApi = (token: string, todos = false) =>
+  chamar<{ pacotes: PacoteNoCatalogo[] }>(
+    'GET',
+    `/v1/admin/pacotes/catalogo${todos ? '?todos=true' : ''}`,
+    undefined,
+    token,
+  );
+
+export const salvarPacoteNaApi = (
+  token: string,
+  dados: Omit<PacoteNoCatalogo, 'id' | 'servicoNome'>,
+  id?: string,
+) =>
+  chamar<{ id: string }>(
+    'PUT',
+    id ? `/v1/admin/pacotes/catalogo/${id}` : '/v1/admin/pacotes/catalogo',
+    dados,
+    token,
+  );
+
+export const pacotesDoClienteNaApi = (token: string, customerId: string) =>
+  chamar<{ pacotes: PacoteDoCliente[] }>(
+    'GET',
+    `/v1/admin/pacotes/clientes/${customerId}`,
+    undefined,
+    token,
+  );
+
+export const reembolsarPacoteNaApi = (token: string, id: string) =>
+  chamar<{ valorCents: number }>(
+    'POST',
+    `/v1/admin/pacotes/clientes/pacotes/${id}/reembolsar`,
+    {},
+    token,
+  );
+
+export const receitaDePacotesNaApi = (token: string) =>
+  chamar<ReceitaDePacotes>('GET', '/v1/admin/pacotes/receita', undefined, token);

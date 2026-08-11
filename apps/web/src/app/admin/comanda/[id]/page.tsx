@@ -7,6 +7,8 @@ import {
   cobrancasDaComanda,
   programaDeFidelidade,
   saldoDeFidelidade,
+  catalogoDePacotesNaApi,
+  pacotesDoClienteNaApi,
   type Comanda,
   type CobrancaDaComandaNaTela,
   type ItemDaComandaNaTela,
@@ -18,6 +20,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import {
   acaoAdicionarItem,
+  acaoVenderPacote,
   acaoAjustarComanda,
   acaoCancelarCobranca,
   acaoCobrarComanda,
@@ -101,6 +104,10 @@ const NOME_DA_FORMA: Record<string, string> = {
   link: 'Link de pagamento',
   transfer: 'Transferência',
   fiado: 'Fiado',
+  // A mesma ação tem o mesmo nome em todo lugar (CLAUDE.md §6): sem estas duas
+  // linhas a comanda paga mostrava `fidelidade` e `pacote` crus.
+  fidelidade: 'Saldo de fidelidade',
+  pacote: 'Pacote do cliente',
 };
 
 /**
@@ -388,6 +395,45 @@ export default async function ComandaPage({ params, searchParams }: Props) {
           }),
         }
       : null;
+  /**
+   * Os pacotes: o que a casa vende, e o que este cliente já tem (bloco 42).
+   *
+   * O catálogo é `appointments.view`, que quem opera o balcão tem. Os pacotes da
+   * pessoa são dinheiro e exigem a mesma dupla do saldo — pedir sem ela
+   * devolveria 403 em toda abertura de comanda.
+   */
+  const catalogoResp = !fechada ? await catalogoDePacotesNaApi(token) : null;
+  const aVenda = catalogoResp?.ok ? catalogoResp.dados.pacotes.filter((p) => p.ativo) : [];
+
+  const pacotesResp =
+    conta.customerId && veSaldo && !fechada
+      ? await pacotesDoClienteNaApi(token, conta.customerId)
+      : null;
+
+  /**
+   * Qual pacote cobre um serviço **desta** comanda.
+   *
+   * A tela não pergunta "usar pacote?" e deixa a recepção descobrir qual: ela
+   * mostra o serviço, o pacote e o valor, porque é isso que se fala em voz alta
+   * com o cliente na cadeira. O domínio reconfere sob a trava — este número
+   * nunca é a verdade sobre o saldo.
+   */
+  const servicosDaConta = conta.itens.filter((item) => item.tipo === 'service' && item.serviceId);
+  const usoDePacote = (() => {
+    const vivos = pacotesResp?.ok ? pacotesResp.dados.pacotes : [];
+    for (const item of servicosDaConta) {
+      // Por id, nunca pelo nome: a recepção edita a descrição do item, e um
+      // "Corte + escova" deixaria de casar com o pacote de corte em silêncio.
+      const cobre = vivos.find(
+        (p) => p.estado === 'ativo' && p.restam > 0 && p.serviceId === item.serviceId,
+      );
+      if (cobre && item.serviceId) {
+        return { serviceId: item.serviceId, servico: item.descricao, pacote: cobre };
+      }
+    }
+    return null;
+  })();
+
   // A mesma pergunta que a API faz: dar desconto é `finance.view`, que a
   // recepção não tem. Mostrar o formulário para ela só produziria um 403.
   const podeDarDesconto = podeNaTela(estado, 'finance.view');
@@ -564,6 +610,38 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             </form>
           </details>
 
+          {/*
+            Vender um pacote (bloco 42).
+
+            Um botão por pacote, com o preço escrito — e nenhum campo de preço.
+            O valor sai do catálogo dentro da transação: deixar a recepção
+            digitá-lo abriria a porta que a revisão de segurança fechou, um item
+            de R$ 1 congelando cinco unidades de R$ 50.
+          */}
+          {aVenda.length > 0 ? (
+            <details className="dobra">
+              <summary className="dobra__titulo">Vender um pacote</summary>
+              <p className="dobra__ajuda">
+                O cliente paga adiantado por várias unidades do mesmo serviço. O dinheiro entra
+                hoje; a receita aparece conforme ele usa.
+              </p>
+              {aVenda.map((pacote) => (
+                <form action={acaoVenderPacote} key={pacote.id}>
+                  <input name="orderId" type="hidden" value={conta.id} />
+                  <input name="packageId" type="hidden" value={pacote.id} />
+                  <input name="descricao" type="hidden" value={pacote.nome} />
+                  <button
+                    className="ui-button ui-button--ghost ui-button--block cobranca__meio"
+                    type="submit"
+                  >
+                    {pacote.nome} · {pacote.quantidade} × {pacote.servicoNome} ·{' '}
+                    {reais(pacote.precoCents)}
+                  </button>
+                </form>
+              ))}
+            </details>
+          ) : null}
+
           {podeDarDesconto ? (
           <details className="dobra">
             <summary className="dobra__titulo">Desconto e gorjeta</summary>
@@ -720,6 +798,9 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                       {resgate ? (
                         <option value="fidelidade">Saldo de fidelidade</option>
                       ) : null}
+                      {/* Só quando existe pacote que cobre um serviço desta
+                          comanda: opção que só produz erro é pior que ausente. */}
+                      {usoDePacote ? <option value="pacote">Pacote do cliente</option> : null}
                     </select>
                   </div>
 
@@ -754,6 +835,17 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                     {saldoPorExtenso(saldo!.modo, saldo!.saldo)} de saldo. Escolhendo “Saldo de
                     fidelidade”, digite {reais(resgate.valorCents)} — é o que o resgate cobre
                     nesta conta.
+                  </p>
+                </>
+              ) : null}
+
+              {usoDePacote ? (
+                <>
+                  <input name="servicoDoPacote" type="hidden" value={usoDePacote.serviceId} />
+                  <p className="ui-field__hint">
+                    {usoDePacote.pacote.frase} Escolhendo “Pacote do cliente”, digite{' '}
+                    {reais(usoDePacote.pacote.valorDaUnidadeCents)} — é o que a unidade cobre do{' '}
+                    {usoDePacote.servico}.
                   </p>
                 </>
               ) : null}

@@ -81,6 +81,20 @@ export const PERMISSOES = [
    * fator.
    */
   'finance.loyalty_adjust',
+  /**
+   * Reembolsar um pacote pela proporção não usada (bloco 42).
+   *
+   * Não é `settings.manage`, que edita o **catálogo** de pacotes e não move
+   * centavo nenhum: com uma permissão só, quem podia cadastrar "5 cortes por
+   * R$ 250" podia devolver R$ 150 ao cliente sem passar por dinheiro — e
+   * portanto sem segundo fator. São duas tarefas diferentes, como responder
+   * pedido de LGPD e apagar a base.
+   *
+   * Prefixo `finance.` de propósito: o valor sai como crédito no razão do
+   * cliente, gastável no balcão da operação seguinte, e é `PERMISSOES_DE_DINHEIRO`
+   * que deriva o segundo fator do prefixo.
+   */
+  'finance.package_refund',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',

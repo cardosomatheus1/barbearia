@@ -230,6 +230,9 @@ describeIfDb('direitos do titular', () => {
       // O saldo de fidelidade (bloco 41). "Quantos pontos eu tinha?" é dado do
       // titular tanto quanto o saldo de fiado.
       'loyalty_entries',
+      // Os pacotes (bloco 42). "Eu comprei cinco cortes e vocês dizem que só
+      // restam dois" é a pergunta, e o consumo unidade a unidade é a resposta.
+      'customer_packages',
     ]);
 
     const EXCECOES = new Map([

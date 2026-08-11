@@ -6,11 +6,14 @@ import {
   fichaEstaVazia,
   fraseDaConversa,
   podeTudo,
+  ROTULO_DO_PACOTE,
   saldoPorExtenso,
 } from '@barbearia/core';
 import {
   confiancaDoCliente,
   saldoDeFidelidade,
+  pacotesDoClienteNaApi,
+  type PacoteDoCliente,
   type SaldoDeFidelidade,
   consentimentosDaFicha,
   fichaDoCliente,
@@ -19,6 +22,7 @@ import {
   type VisitaNaFicha,
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
+import { reaisDoCampo } from '@/lib/dinheiro';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
 import {
@@ -28,6 +32,7 @@ import {
   acaoConfiancaDoCliente,
   acaoConsentimentoNoBalcao,
   acaoPreferencias,
+  acaoReembolsarPacote,
   acaoSair,
 } from '../../acoes';
 import { secao } from '../../secoes';
@@ -357,6 +362,72 @@ function Fidelidade({
   );
 }
 
+/**
+ * Os pacotes de um cliente na ficha dele (bloco 42, SPEC §4.7).
+ *
+ * A frase vem do domínio (`fraseDoPacote`), não da tela: "3 de 5 usados — 2
+ * restantes" e o aviso do último precisam dizer a mesma coisa aqui, na comanda e
+ * na página do cliente. Vocabulário de transição mora num lugar só.
+ *
+ * O reembolso é uma ação de dinheiro, atrás de `finance.package_refund`, e ele
+ * devolve **a parte não usada** — o rótulo diz o valor antes do clique, porque
+ * "reembolsar" sem número faz a recepção adivinhar o que vai sair do caixa.
+ */
+function Pacotes({
+  pacotes,
+  customerId,
+  podeReembolsar,
+}: {
+  readonly pacotes: readonly PacoteDoCliente[];
+  readonly customerId: string;
+  readonly podeReembolsar: boolean;
+}) {
+  return (
+    <section aria-labelledby="pacotes" className="secao">
+      <h2 className="rotulo" id="pacotes">
+        Pacotes
+      </h2>
+
+      {pacotes.map((pacote) => {
+        const proporcional = pacote.restam * pacote.valorDaUnidadeCents;
+        const devolve = pacote.estado === 'ativo' && pacote.restam > 0;
+
+        return (
+          <div className="pacote-cliente" key={pacote.id}>
+            <div className="pacote-cliente__quem">
+              <p className="pacote-cliente__nome">
+                {pacote.servicoNome} · {ROTULO_DO_PACOTE[pacote.estado]}
+              </p>
+              <p className="pacote-cliente__frase">{pacote.frase}</p>
+              <div
+                aria-hidden="true"
+                className="pacote-cliente__barra"
+              >
+                <span style={{ width: `${Math.round((pacote.usados / pacote.total) * 100)}%` }} />
+              </div>
+              {pacote.reembolsadoCents !== null ? (
+                <p className="pacote-cliente__frase">
+                  Devolvido R$ {reaisDoCampo(pacote.reembolsadoCents)}.
+                </p>
+              ) : null}
+            </div>
+
+            {podeReembolsar && devolve ? (
+              <form action={acaoReembolsarPacote} className="pacote-cliente__acao">
+                <input name="id" type="hidden" value={pacote.id} />
+                <input name="customerId" type="hidden" value={customerId} />
+                <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                  Devolver R$ {reaisDoCampo(proporcional)}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function Confianca({
   confianca,
   customerId,
@@ -505,13 +576,16 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const veSaldo =
     estado.staff.permissions.includes('finance.view') &&
     estado.staff.permissions.includes('customers.view');
-  const [ficha, consentimentos, confianca, fidelidade] = await Promise.all([
+  const [ficha, consentimentos, confianca, fidelidade, pacotes] = await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
     // Só quem pode mexer em sinal pergunta: a rota exige `finance.deposit`, e
     // pedir sem ela devolveria 403 em toda abertura de ficha da recepção.
     veSinal ? confiancaDoCliente(token, id) : Promise.resolve(null),
     veSaldo ? saldoDeFidelidade(token, id) : Promise.resolve(null),
+    // A rota devolve o que foi pago e o valor da unidade: são centavos, e ela
+    // exige `customers.view` + `finance.view`. Mesma dupla do saldo.
+    veSaldo ? pacotesDoClienteNaApi(token, id) : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -738,6 +812,16 @@ export default async function FichaPage({ params, searchParams }: Props) {
           customerId={ficha.dados.customerId}
           podeAjustar={estado.staff.permissions.includes('finance.loyalty_adjust')}
           saldo={fidelidade.dados}
+        />
+      ) : null}
+
+      {/* Os pacotes (bloco 42). Fica na ficha porque é aqui que a recepção olha
+          antes de cobrar — a mesma decisão do saldo de fidelidade. */}
+      {pacotes?.ok && pacotes.dados.pacotes.length > 0 && !ficha.dados.anonimizado ? (
+        <Pacotes
+          customerId={ficha.dados.customerId}
+          pacotes={pacotes.dados.pacotes}
+          podeReembolsar={estado.staff.permissions.includes('finance.package_refund')}
         />
       ) : null}
 

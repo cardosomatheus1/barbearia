@@ -56,6 +56,13 @@ export const itemSchema = z.object({
   quantidade: z.number().int().positive().max(99),
   precoUnitarioCents: centavos,
   professionalId: uuidSchema.optional(),
+  /**
+   * O pacote do catálogo que este item vende (bloco 42).
+   *
+   * Com ele, `precoUnitarioCents` é ignorado e o preço sai do catálogo: aceitar
+   * o da tela faria um item de R$ 1 congelar cinco unidades de R$ 50.
+   */
+  packageId: uuidSchema.optional(),
 });
 
 export const ajusteSchema = z.object({
@@ -91,6 +98,18 @@ export const fecharComandaSchema = z.object({
    * tela nunca é a verdade sobre o saldo.
    */
   resgateQuantidade: z.number().int().positive().optional(),
+  /**
+   * Qual serviço o pacote está cobrindo, quando há pagamento por pacote
+   * (bloco 42).
+   *
+   * Vem separado do pagamento pela mesma razão do resgate: a forma diz "quitou
+   * pelo pacote", isto diz **qual** unidade some. O domínio confere que o
+   * serviço está nesta comanda e que o valor bate com a unidade congelada.
+   *
+   * Não há par `pacotesVendidos`: quem foi vendido é derivado dos itens de
+   * pacote da comanda, que são os que carregam o preço cobrado.
+   */
+  servicoDoPacote: uuidSchema.optional(),
 });
 
 export const receberFiadoSchema = z.object({

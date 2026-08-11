@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 41 de 79 blocos.**
+**Status: 42 de 79 blocos.**
 
 ---
 
@@ -73,6 +73,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| Passar um pacote para outra pessoa | a coluna `transferable` existe no catálogo e é **congelada em cada compra**, com o cadastro na tela de Pacotes e o padrão desligado — que é o comportamento anterior e o mais conservador, já que um pacote transferível é um vale ao portador | a operação em si: dizer *para quem* vai, o que exige achar a outra pessoa, provar que ela concorda e mover as unidades restantes sem quebrar a receita já reconhecida na compra do primeiro dono | 51 (fiado e crédito do cliente), que é onde mora o razão para onde o valor teria que ir se a transferência for parcial. Escrever a operação agora significaria decidir sozinho o que acontece com o dinheiro reconhecido, e a SPEC §4.7 só diz que o pacote pode ser transferível — não diz o que a contabilidade faz |
 | Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
 | Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
@@ -245,7 +246,7 @@ não é vendável.
 | 39 | Lista de espera: priority queue, janela exclusiva, notificação | ✅ |
 | 40 | Sugestões e reclamações do cliente | ✅ |
 | 41 | Fidelidade: pontos, visitas ou cashback | ✅ |
-| 42 | Pacotes: venda, consumo, validade, receita diferida |
+| 42 | Pacotes: venda, consumo, validade, receita diferida | ✅ |
 | 43 | Avaliações + fluxo de recuperação de nota baixa |
 | 44 | Produtos, estoque, ficha de consumo, CMV |
 
