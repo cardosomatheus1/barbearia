@@ -184,6 +184,29 @@ function CamposDoServico({
         </span>
       </label>
 
+      {/*
+        A exigência de sinal, por serviço (bloco 37).
+
+        Fica no cadastro do serviço e não na tela de configuração porque é uma
+        propriedade dele: a coloração de três horas custa a tarde inteira quando
+        alguém falta, independentemente de quem faltou. O `hidden` acompanhando
+        a caixa é o que faz "desmarcado" chegar como `false` em vez de sumir do
+        formulário — sem ele, desmarcar não desligaria nada.
+      */}
+      <input name="alwaysRequireDeposit" type="hidden" value="0" />
+      <label className="opcao-simples">
+        <input defaultChecked={servico?.alwaysRequireDeposit ?? false}
+               name="alwaysRequireDeposit" type="checkbox" value="1" />
+        <span>
+          <span className="opcao-simples__nome">Sempre pedir sinal para este serviço</span>
+          <span className="opcao-simples__sobre">
+            Para o serviço longo e caro, em que a falta custa a tarde. Quem nunca falta
+            continua sem pagar. Precisa de sinal ligado em{' '}
+            <a href="/admin/configuracoes">Configurações</a>.
+          </span>
+        </span>
+      </label>
+
       <details className="dobra" open={combo}>
         <summary className="dobra__titulo">
           Este serviço é um combo{combo ? ` (${servico?.componentIds.length} partes)` : ''}

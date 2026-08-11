@@ -393,6 +393,14 @@ export interface Comprovante {
   services: string[];
   priceCents: number;
   locationId: string;
+  /**
+   * O sinal deste horário. Nulo quando ele não pede.
+   *
+   * Sem o motivo, de propósito: o score é interno (SPEC §2.13, regra 5), e
+   * "pelo seu histórico de faltas" numa tela que o cliente abre no ônibus é
+   * exatamente o constrangimento que a regra existe para evitar.
+   */
+  deposit: { exigidoCents: number; pagoCents: number } | null;
 }
 
 /**

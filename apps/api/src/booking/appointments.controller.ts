@@ -142,6 +142,14 @@ export class GuestAppointmentsController {
         professionalId: appointment.professionalId,
         status: appointment.status,
         priceCents: appointment.priceCents,
+        /**
+         * O sinal, se o horário pedir (bloco 37).
+         *
+         * Sem o **motivo**: "pelo seu histórico de faltas" é uma frase sobre a
+         * pessoa, e a SPEC §2.13 regra 5 manda o score nunca chegar ao cliente.
+         * Quem precisa do motivo é o balcão, que o tem na tela do dia.
+         */
+        depositRequiredCents: appointment.depositRequiredCents,
       };
     } catch (error) {
       return toHttp(error);

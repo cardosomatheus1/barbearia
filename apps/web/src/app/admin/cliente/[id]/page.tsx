@@ -8,8 +8,10 @@ import {
   podeTudo,
 } from '@barbearia/core';
 import {
+  confiancaDoCliente,
   consentimentosDaFicha,
   fichaDoCliente,
+  type ConfiancaDoCliente,
   type ConsentimentosNaFicha,
   type VisitaNaFicha,
 } from '@/lib/admin-api';
@@ -19,6 +21,7 @@ import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
 import {
   acaoAbrirPedidoDeDados,
   acaoAnonimizarCliente,
+  acaoConfiancaDoCliente,
   acaoConsentimentoNoBalcao,
   acaoPreferencias,
   acaoSair,
@@ -273,6 +276,91 @@ function DireitosDoTitular({
  * irreversível" faria o dono achar que perde a venda junto — e ele não perde:
  * a obrigação fiscal é justamente o motivo de anonimizar em vez de apagar.
  */
+/**
+ * O que a barbearia sabe sobre a pontualidade deste cliente (bloco 37).
+ *
+ * ## O número não aparece
+ *
+ * A SPEC §2.13 regra 5 manda o score ser interno, e a razão é de balcão: um
+ * número visível vira discussão sobre o número. Mesmo do lado de dentro ele
+ * seria ruim de defender — a recepção não consegue explicar por que 72 cobra e
+ * 74 não sem a fórmula na mão. O que a tela diz é o que decide: **este cliente
+ * paga sinal, ou não.**
+ *
+ * A contagem de horários considerados fica, porque ela responde a pergunta
+ * seguinte — "vocês estão julgando pelo quê?" — sem revelar a escala.
+ */
+function Confianca({
+  confianca,
+  customerId,
+  de,
+  podeAjustar,
+}: {
+  readonly confianca: ConfiancaDoCliente;
+  readonly customerId: string;
+  readonly de: string;
+  readonly podeAjustar: boolean;
+}) {
+  const semHistorico = !confianca.temEfeito;
+
+  return (
+    <section className="consentimentos">
+      <h2 className="ficha__titulo">Sinal para garantir o horário</h2>
+
+      <p className="consentimentos__nota">
+        {semHistorico
+          ? 'Ainda não há horários suficientes para julgar. Cliente novo não paga sinal — é de propósito.'
+          : confianca.ajustadoAMao
+            ? `Ajustado à mão pela gerência, sobre ${confianca.considerados} horários no último ano.`
+            : `Calculado sobre ${confianca.considerados} ${
+                confianca.considerados === 1 ? 'horário' : 'horários'
+              } no último ano.`}
+      </p>
+
+      {podeAjustar ? (
+        <details className="anotar">
+          <summary className="anotar__abrir">Ajustar à mão</summary>
+
+          <p className="consentimentos__nota">
+            Para o que a conta não vê: quem faltou por uma internação, e quem tem histórico
+            impecável e sumiu com a chave. O motivo fica na trilha.
+          </p>
+
+          <form action={acaoConfiancaDoCliente} className="formulario">
+            <input name="customerId" type="hidden" value={customerId} />
+            <input name="de" type="hidden" value={de} />
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="decisao">O que fazer</label>
+              <select className="ui-field__input" defaultValue={confianca.ajustadoAMao ? 'manter' : 'dispensar'}
+                      id="decisao" name="decisao">
+                <option value="dispensar">Nunca pedir sinal deste cliente</option>
+                <option value="exigir">Sempre pedir sinal deste cliente</option>
+                <option value="formula">Voltar para o cálculo automático</option>
+              </select>
+            </div>
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="motivoConfianca">Por quê</label>
+              <input className="ui-field__input" id="motivoConfianca" maxLength={300}
+                     minLength={10} name="motivo" required type="text"
+                     placeholder="Faltou por internação, comprovada na recepção" />
+              <p className="ui-field__hint">
+                Pelo menos dez letras. Daqui a seis meses é a única resposta para &ldquo;por que
+                este cliente não paga sinal?&rdquo;.
+              </p>
+            </div>
+
+            <button className="ui-button ui-button--secondary ui-button--block" type="submit">
+              Salvar o ajuste
+            </button>
+          </form>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
 function Apagar({
   customerId,
   de,
@@ -337,13 +425,21 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const voltar = first(query['de']) === 'meu-dia' ? '/admin/meu-dia' : '/admin/dia';
 
   const pediu = first(query['pedido']) === '1';
+  // Sinal próprio, e não `salvo=1`: reaproveitá-lo faria a tela dizer "Anotação
+  // salva" depois de ajustar quem paga sinal. Aviso que fala de outra coisa é o
+  // mesmo defeito de duas telas discordando (CLAUDE.md §6).
+  const ajustou = first(query['ajuste']) === '1';
 
   // As duas leituras juntas: são independentes, e encadeá-las somaria a
   // latência de uma na outra numa tela que o barbeiro abre com o cliente
   // sentado.
-  const [ficha, consentimentos] = await Promise.all([
+  const veSinal = estado.staff.permissions.includes('finance.deposit');
+  const [ficha, consentimentos, confianca] = await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
+    // Só quem pode mexer em sinal pergunta: a rota exige `finance.deposit`, e
+    // pedir sem ela devolveria 403 em toda abertura de ficha da recepção.
+    veSinal ? confiancaDoCliente(token, id) : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -401,6 +497,12 @@ export default async function FichaPage({ params, searchParams }: Props) {
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Anotação salva.
+        </div>
+      ) : null}
+
+      {ajustou ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Ajuste salvo. O motivo ficou na trilha.
         </div>
       ) : null}
 
@@ -556,6 +658,15 @@ export default async function FichaPage({ params, searchParams }: Props) {
         ])}
       />
       )}
+
+      {confianca?.ok && !ficha.dados.anonimizado ? (
+        <Confianca
+          confianca={confianca.dados}
+          customerId={ficha.dados.customerId}
+          de={voltar}
+          podeAjustar={estado.staff.permissions.includes('customers.reliability_override')}
+        />
+      ) : null}
 
       {estado.staff.permissions.includes('customers.anonymize') && !ficha.dados.anonimizado ? (
         <Apagar customerId={ficha.dados.customerId} de={voltar} nome={ficha.dados.nome} />

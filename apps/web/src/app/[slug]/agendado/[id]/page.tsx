@@ -84,7 +84,39 @@ export default async function ConfirmadoPage({ params }: Props) {
             {minutos} min · R$ {money(comprovante.priceCents)}
           </dd>
         </div>
+        {/*
+          O sinal, quando ele existe (bloco 37).
+
+          Dentro do comprovante e não num aviso à parte: é parte do que foi
+          combinado, como o preço e a duração. Um cliente que descobre no balcão
+          que devia ter pago adiantado descobre na frente de outras pessoas.
+        */}
+        {comprovante.deposit ? (
+          <div className="comprovante__linha">
+            <dt>Sinal</dt>
+            <dd className="tabular">
+              R$ {money(comprovante.deposit.exigidoCents)}
+              {comprovante.deposit.pagoCents > 0 ? ' · recebido' : ' · a pagar'}
+            </dd>
+          </div>
+        ) : null}
       </dl>
+
+      {/*
+        O que fazer com o sinal.
+
+        Estado desenhado, não improvisado: sem esta frase, "Sinal R$ 20 · a
+        pagar" seria um número sem instrução — e a pessoa fecharia a tela sem
+        saber para onde mandar o Pix.
+      */}
+      {ativo && comprovante.deposit && comprovante.deposit.pagoCents === 0 ? (
+        <div className="ui-alert ui-alert--warning confirmado__aviso">
+          Este horário só fica garantido com o sinal de R${' '}
+          {money(comprovante.deposit.exigidoCents)}. Fale com a barbearia
+          {profile.location.whatsapp ? ' pelo WhatsApp' : ''} para combinar o pagamento — ele
+          entra no valor do serviço.
+        </div>
+      ) : null}
 
       {ativo ? (
         <div className="ui-alert ui-alert--info confirmado__aviso">

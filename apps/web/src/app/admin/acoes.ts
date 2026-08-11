@@ -2,6 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import {
+  ajustarConfianca,
+  devolverSinalDoHorario,
+  registrarSinal,
   adicionarSlug,
   analisarImportacao,
   aplicarImportacao,
@@ -83,7 +86,22 @@ import { versaoDoConsentimento } from '@/lib/politica';
 import { ehConversa } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
+import { limiarDeFaltas } from '@/lib/sinal';
 import { destinoDoBalcao } from '@/lib/destino';
+
+/**
+ * A modalidade vinda do `select`, conferida antes de virar corpo de requisição.
+ *
+ * Campo de formulário é entrada externa. Um valor fora da lista subiria até a
+ * borda da API e voltaria como 400 genérico — e a tela diria "não deu para
+ * salvar" sobre um campo que a pessoa nem tocou.
+ */
+const MODALIDADES = new Set(['nenhum', 'fixo', 'percentual', 'total']);
+type ModalidadeDoFormulario = 'nenhum' | 'fixo' | 'percentual' | 'total';
+
+function modalidadeDeSinal(valor: string): ModalidadeDoFormulario {
+  return MODALIDADES.has(valor) ? (valor as ModalidadeDoFormulario) : 'nenhum';
+}
 import {
   apagarSessaoGestor,
   guardarConflitoDaAgenda,
@@ -324,6 +342,26 @@ export async function acaoJanela(form: FormData): Promise<void> {
     // quem não responde mais por isso.
     ...(form.has('dpoName') ? { dpoName: texto(form, 'dpoName') } : {}),
     ...(form.has('dpoEmail') ? { dpoEmail: texto(form, 'dpoEmail') } : {}),
+    /**
+     * O sinal (bloco 37).
+     *
+     * A tela pergunta em reais e em "faltas em dez"; o banco guarda centavos,
+     * pontos-base e um limiar de score. As duas conversões ficam aqui, num
+     * lugar só — espalhá-las faria a tela mostrar um número e a API aplicar
+     * outro, que é como o teto de desconto quase entrou.
+     */
+    ...(form.has('depositMode')
+      ? {
+          deposit: {
+            mode: modalidadeDeSinal(texto(form, 'depositMode')),
+            fixedCents: numero(form, 'depositFixed', 20) * 100,
+            percentBps: numero(form, 'depositPercent', 30) * 100,
+            scoreThreshold: limiarDeFaltas(numero(form, 'depositThreshold', 5)),
+            ticketOverCents: numero(form, 'depositTicketOver', 0) * 100,
+            refundHours: numero(form, 'depositRefundHours', 24),
+          },
+        }
+      : {}),
   });
 
   if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
@@ -529,6 +567,10 @@ function entradaDeServico(form: FormData): EntradaDeServico | null {
     bufferBeforeMinutes: numero(form, 'bufferBeforeMinutes', 0),
     bufferAfterMinutes: numero(form, 'bufferAfterMinutes', 0),
     bookableOnline: form.get('bookableOnline') === 'on',
+    // `getAll` porque o campo escondido acompanha a caixa: marcada, chegam "0"
+    // e "1"; desmarcada, chega só "0". `get` devolveria sempre o primeiro e a
+    // caixa nunca ligaria.
+    alwaysRequireDeposit: form.getAll('alwaysRequireDeposit').includes('1'),
     ...(componentIds.length >= 2 ? { componentIds } : {}),
   };
 }
@@ -545,6 +587,72 @@ export async function acaoSalvarServico(form: FormData): Promise<void> {
 
   if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
   redirect('/admin/catalogo?salvo=1');
+}
+
+/**
+ * Ajusta à mão se um cliente paga sinal (bloco 37).
+ *
+ * A tela pergunta em decisão — "nunca pedir", "sempre pedir", "voltar ao
+ * cálculo" — e não em número. O score é interno por regra da SPEC §2.13, e um
+ * campo de 0 a 100 aqui obrigaria o gerente a conhecer a fórmula para escolher
+ * um valor que faça o que ele quer. As duas pontas da escala são o que ele de
+ * fato decide.
+ */
+/**
+ * Registra que o sinal chegou (bloco 37).
+ *
+ * O valor vai no formulário e é reconferido pelo domínio contra o exigido. Não
+ * é redundância inútil: o campo é escondido, e campo escondido é entrada
+ * externa como qualquer outra — quem alterar o HTML mandaria "recebi R$ 2" de
+ * um sinal de R$ 20, e a diferença sumiria sem segunda pessoa olhando.
+ */
+export async function acaoRegistrarSinal(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const voltar = destinoDoBalcao(texto(form, 'voltar'));
+
+  const resultado = await registrarSinal(
+    token,
+    texto(form, 'appointmentId'),
+    numero(form, 'valorCents', 0),
+  );
+  if (!resultado.ok) falhar(voltar, resultado.code);
+  redirect(voltar);
+}
+
+/**
+ * Devolve o sinal (bloco 37).
+ *
+ * Sem valor no formulário: o domínio lê o que está registrado e zera. Aceitar
+ * um valor aqui abriria devolução parcial, que não é uma decisão que a política
+ * conhece — e a soma que não bate só apareceria no fechamento do mês.
+ */
+export async function acaoDevolverSinal(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const voltar = destinoDoBalcao(texto(form, 'voltar'));
+
+  const resultado = await devolverSinalDoHorario(token, texto(form, 'appointmentId'));
+  if (!resultado.ok) falhar(voltar, resultado.code);
+  redirect(voltar);
+}
+
+export async function acaoConfiancaDoCliente(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const customerId = texto(form, 'customerId');
+  const de = texto(form, 'de') === 'meu-dia' ? 'meu-dia' : 'dia';
+  const destino = `/admin/cliente/${customerId}?de=${de}`;
+
+  const decisao = texto(form, 'decisao');
+  // 100 dispensa (o piso de dispensa é 85 e não é configurável); 0 fica abaixo
+  // de qualquer limiar que a barbearia consiga escolher.
+  const score = decisao === 'dispensar' ? 100 : decisao === 'exigir' ? 0 : null;
+
+  const resultado = await ajustarConfianca(token, customerId, {
+    score,
+    motivo: texto(form, 'motivo'),
+  });
+  if (!resultado.ok) falhar(destino, resultado.code);
+  redirect(`${destino}&ajuste=1`);
 }
 
 export async function acaoLigarServico(form: FormData): Promise<void> {

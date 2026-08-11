@@ -5,6 +5,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { politicasDaCasa } from '@/lib/admin-api';
 import { acaoJanela, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { faltasDoLimiar } from '@/lib/sinal';
 
 /**
  * Janela de cancelamento e remarcação.
@@ -186,8 +187,8 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
               Cobrar de quem faltou quantas vezes em dez
             </label>
             <input className="ui-field__input tabular" id="depositThreshold" name="depositThreshold"
-                   type="number" min={0} max={10}
-                   defaultValue={faltasEmDez(politicas?.deposit.scoreThreshold ?? 60)} />
+                   type="number" min={1} max={10}
+                   defaultValue={faltasDoLimiar(politicas?.deposit.scoreThreshold ?? 60)} />
             {/*
               O número na tela é falta em dez, não "score".
 
@@ -197,7 +198,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
               é a mesma regra dita em português.
             */}
             <p className="ui-field__hint">
-              Quem falta pouco não paga. Deixe em 10 para nunca cobrar por histórico.
+              Quem falta menos que isso não paga. Em 10, só quem faltou em todos.
             </p>
           </div>
 

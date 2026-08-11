@@ -18,7 +18,14 @@ import {
 import { addDays, localTime, weekdayShort } from '@/lib/date';
 import { painelDoBalcaoOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoAbrirComanda, acaoAtendimento, acaoSair } from '../acoes';
+import {
+  acaoAbrirComanda,
+  acaoAtendimento,
+  acaoDevolverSinal,
+  acaoRegistrarSinal,
+  acaoSair,
+} from '../acoes';
+import { reaisDoCampo } from '@/lib/dinheiro';
 import { secao } from '../secoes';
 
 /**
@@ -63,6 +70,25 @@ const first = (valor: string | string[] | undefined): string | undefined =>
  */
 const RÓTULO = ROTULO_DO_ESTADO;
 const AÇÃO = VERBO_DA_ACAO;
+/**
+ * Por que este horário pede sinal, em uma frase de balcão.
+ *
+ * Sai de um mapa e não de texto escrito na tela: é vocabulário de estado, e o
+ * CLAUDE.md §6 manda a mesma coisa ter o mesmo nome em todo lugar. Quando a
+ * mesma frase aparecer na página do cliente, ela sai daqui.
+ */
+const MOTIVO_DO_SINAL: Readonly<Record<'servico' | 'score' | 'ticket', string>> = {
+  servico: 'este serviço sempre pede',
+  score: 'pelo histórico de faltas',
+  ticket: 'pelo tamanho da reserva',
+};
+
+/** O verbo da decisão de reembolso, um só para toda a interface. */
+const DESTINO_DO_SINAL: Readonly<Record<'devolver' | 'reter', string>> = {
+  devolver: 'devolver',
+  reter: 'fica com a casa',
+};
+
 const PRINCIPAL = ACAO_PRINCIPAL;
 const PESADA = ACOES_PESADAS;
 
@@ -243,11 +269,13 @@ function Atendimento({
   tolerancia,
   voltarPara,
   podeCobrar,
+  podeSinal,
 }: {
   readonly linha: LinhaDoDia;
   readonly tolerancia: number;
   readonly voltarPara: string;
   readonly podeCobrar: boolean;
+  readonly podeSinal: boolean;
 }) {
   const principal = PRINCIPAL[linha.status];
   const secundarias = linha.actions.filter((a) => a !== principal);
@@ -292,9 +320,42 @@ function Atendimento({
           <span className={`selo ${TOM_DO_SELO[linha.status]}`}>{RÓTULO[linha.status]}</span>
           {frase ? <span className="atendimento__frase">{frase}</span> : null}
         </p>
+
+        {/*
+          O sinal, na linha de quem o deve (bloco 37).
+
+          Só aparece em horário que pede sinal — a esmagadora maioria não pede,
+          e uma linha "sinal: R$ 0,00" em todo cartão é indicador que se aprende
+          a não ler. O motivo vem escrito porque a primeira pergunta do cliente
+          no balcão é "por que eu preciso pagar adiantado?", e a recepção precisa
+          da resposta na tela.
+        */}
+        {linha.deposit ? (
+          <p className="atendimento__sinal">
+            <span className={`selo ${linha.deposit.pagoCents > 0 ? 'selo--ok' : 'selo--atencao'}`}>
+              {linha.deposit.pagoCents > 0 ? 'Sinal pago' : 'Sinal a receber'}
+            </span>
+            <span className="atendimento__frase">
+              R$ {reaisDoCampo(linha.deposit.exigidoCents)} ·{' '}
+              {/*
+                Encerrado o horário, o que importa é o destino do dinheiro — não
+                mais por que ele foi cobrado. A frase vem do domínio, a mesma que
+                a recepção repete para o cliente: ele discute o motivo, não o
+                código.
+              */}
+              {linha.deposit.reembolso
+                ? `${DESTINO_DO_SINAL[linha.deposit.reembolso.desfecho]}: ${
+                    linha.deposit.reembolso.porque
+                  }`
+                : MOTIVO_DO_SINAL[linha.deposit.motivo]}
+            </span>
+          </p>
+        ) : null}
       </div>
 
-      {linha.actions.length > 0 || cobrar ? (
+      {linha.actions.length > 0 || cobrar
+        || (podeSinal && linha.deposit && (linha.deposit.pagoCents === 0
+            || linha.deposit.reembolso?.desfecho === 'devolver')) ? (
         <div className="atendimento__acoes">
           {principal ? (
             <form action={acaoAtendimento}>
@@ -303,6 +364,49 @@ function Atendimento({
               <input type="hidden" name="voltar" value={voltarPara} />
               <button className="ui-button ui-button--primary atendimento__botao" type="submit">
                 {AÇÃO[principal]}
+              </button>
+            </form>
+          ) : null}
+
+          {/*
+            Registrar o sinal que chegou.
+
+            O Pix do sinal cai no celular da recepção dias antes, e é ela que
+            confere o comprovante. Sem este botão, `deposit_paid_cents` seria
+            mais uma coluna que o motor aceita e ninguém preenche — e a decisão
+            de devolver, que depende dele, nunca teria o que decidir.
+          */}
+          {podeSinal && linha.deposit && linha.deposit.pagoCents === 0 ? (
+            <form action={acaoRegistrarSinal}>
+              <input name="appointmentId" type="hidden" value={linha.id} />
+              <input name="valorCents" type="hidden" value={linha.deposit.exigidoCents} />
+              <input name="voltar" type="hidden" value={voltarPara} />
+              <button className="ui-button ui-button--secondary atendimento__botao" type="submit">
+                Recebi o sinal
+              </button>
+            </form>
+          ) : null}
+
+          {/*
+            Devolver o sinal.
+
+            Sem este botão, "sinal pago" seria estado sem saída na tela: o
+            domínio sabe que o dinheiro tem que voltar, a linha diz isso, e não
+            havia por onde fazer — que é o defeito de fluxo do §6, e o mesmo que
+            deixou `in_service` sem botão para fechar.
+
+            Aparece só quando a política manda devolver. Reter não é uma ação:
+            é o que acontece por não fazer nada. Devolver por cortesia contra a
+            política é decisão de balcão, e ela cabe — o domínio aceita —, mas
+            não é o que este botão oferece.
+          */}
+          {podeSinal && linha.deposit && linha.deposit.pagoCents > 0
+            && linha.deposit.reembolso?.desfecho === 'devolver' ? (
+            <form action={acaoDevolverSinal}>
+              <input name="appointmentId" type="hidden" value={linha.id} />
+              <input name="voltar" type="hidden" value={voltarPara} />
+              <button className="ui-button ui-button--secondary atendimento__botao" type="submit">
+                Devolver o sinal
               </button>
             </form>
           ) : null}
@@ -358,6 +462,9 @@ export default async function DiaPage({ searchParams }: Props) {
   // A tela esconde o que a guarda recusaria: o barbeiro que abre esta página
   // por engano não vê um botão que só dá erro. A recusa de verdade é na API.
   const podeCobrar = podeNaTela(estado, 'cashier.open');
+  // A mesma função que a API aplica: um botão que responde 403 é pior que
+  // botão nenhum, porque a recepção aprende a desconfiar da tela.
+  const podeSinal = podeNaTela(estado, 'finance.deposit');
 
   const query = await searchParams;
   const dataPedida = first(query['d']);
@@ -504,6 +611,7 @@ export default async function DiaPage({ searchParams }: Props) {
               <Atendimento
                 linha={linha}
                 podeCobrar={podeCobrar}
+                podeSinal={podeSinal}
                 tolerancia={dia.noShowAfterMinutes}
                 voltarPara={voltarPara}
               />

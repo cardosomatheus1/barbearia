@@ -31,6 +31,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   // "Cancelou" e não "encerrou": quem lê a trilha quer saber que alguém tomou a
   // decisão, e o cliente pode estar com o código na mão nesse instante.
   'order.charge_cancelled': 'cancelou uma cobrança online',
+  'deposit.received': 'registrou o sinal recebido de um horário',
+  'deposit.refunded': 'devolveu o sinal de um horário',
+  // "Score" não diz nada para quem lê a trilha. O que ele decide, sim.
+  'customer.reliability_override': 'ajustou à mão se um cliente paga sinal',
 
   'mfa.enabled': 'ligou o segundo fator de',
   'mfa.disabled': 'desligou o segundo fator de',

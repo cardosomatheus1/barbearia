@@ -1,7 +1,9 @@
 import { withTenant } from '@barbearia/db';
 import {
+  POLITICA_SEM_SINAL,
   allowedActions,
   canApply,
+  decidirReembolso,
   formatHHMM,
   instantToLocal,
   punctuality,
@@ -9,6 +11,8 @@ import {
   statusAfter,
   type AppointmentStatus,
   type AttendanceAction,
+  type DesfechoDoSinal,
+  type MotivoDoSinal,
   type Punctuality,
 } from '@barbearia/core';
 
@@ -57,6 +61,28 @@ export interface BoardEntry {
   readonly customerId: string | null;
   readonly services: readonly string[];
   readonly priceCents: number;
+  /**
+   * O sinal deste horário, quando ele existe.
+   *
+   * Nulo — e não um objeto zerado — quando o horário não pede sinal, que é a
+   * esmagadora maioria. A tela não pode desenhar uma linha "sinal: R$ 0,00"
+   * para todo mundo: indicador que sempre diz a mesma coisa é indicador que se
+   * aprende a não ler.
+   */
+  readonly deposit: {
+    readonly exigidoCents: number;
+    readonly pagoCents: number;
+    readonly motivo: MotivoDoSinal;
+    /**
+     * O que fazer com o dinheiro, quando o horário já acabou de um jeito ou de
+     * outro.
+     *
+     * Nulo enquanto o horário está de pé: indicador que responde antes da
+     * pergunta é pior que indicador nenhum — a recepção aprenderia a ler
+     * "devolver" num agendamento que vai acontecer.
+     */
+    readonly reembolso: { readonly desfecho: DesfechoDoSinal; readonly porque: string } | null;
+  } | null;
   /** Quanto o atendimento levou de fato. Nulo enquanto não terminou. */
   readonly realDurationMinutes: number | null;
   /** Há quantos minutos está na cadeira. Só para `in_progress`. */
@@ -91,6 +117,49 @@ const ATIVOS: readonly AppointmentStatus[] = [
   'in_progress',
 ];
 
+/**
+ * O que a política manda fazer com o sinal deste horário.
+ *
+ * Calculado no painel e não numa segunda ida ao banco por linha: a recepção
+ * abre esta tela uma vez e trabalha nela o dia inteiro, e perguntar por
+ * agendamento seria o N+1 que o CLAUDE.md §3 proíbe.
+ */
+function destinoDoSinal(
+  linha: {
+    readonly status: AppointmentStatus;
+    readonly deposit_paid_cents: number;
+    readonly service_starts_at: Date;
+    readonly cancelled_at: Date | null;
+  },
+  horasParaReembolso: number,
+): { readonly desfecho: DesfechoDoSinal; readonly porque: string } | null {
+  if (linha.deposit_paid_cents <= 0) return null;
+
+  const quem =
+    linha.status === 'no_show'
+      ? ('falta' as const)
+      : linha.status === 'cancelled_business'
+        ? ('casa' as const)
+        : linha.status === 'cancelled_customer'
+          ? ('cliente' as const)
+          : null;
+  if (!quem) return null;
+
+  // Antecedência desconhecida devolve: o carimbo só falta em agendamento
+  // anterior à migração 0039, e reter dinheiro por um registro que a casa não
+  // fez é cobrar pelo próprio buraco.
+  const horas = linha.cancelled_at
+    ? (linha.service_starts_at.getTime() - linha.cancelled_at.getTime()) / 3_600_000
+    : null;
+
+  const { desfecho, porque } = decidirReembolso({
+    politica: { ...POLITICA_SEM_SINAL, horasParaReembolso },
+    quem,
+    horasDeAntecedencia: horas,
+  });
+  return { desfecho, porque };
+}
+
 /** Últimos quatro dígitos, para conferir identidade sem expor o número. */
 function tail(phone: string | null): string | null {
   return phone ? phone.slice(-4) : null;
@@ -117,9 +186,9 @@ export async function getDayBoard(params: {
 
   return withTenant(params.tenantId, async (tx) => {
     const unidades = await tx.$queryRaw<
-      { timezone: string; no_show_after_minutes: number }[]
+      { timezone: string; no_show_after_minutes: number; deposit_refund_hours: number }[]
     >`
-      SELECT timezone, no_show_after_minutes FROM locations
+      SELECT timezone, no_show_after_minutes, deposit_refund_hours FROM locations
       WHERE id = ${params.locationId}::uuid
     `;
     const unidade = unidades[0];
@@ -161,6 +230,10 @@ export async function getDayBoard(params: {
         customer_phone: string | null;
         services: string[];
         price_cents: number;
+        deposit_required_cents: number;
+        deposit_paid_cents: number;
+        deposit_reason: string | null;
+        cancelled_at: Date | null;
         checked_in_at: Date | null;
         started_at: Date | null;
         completed_at: Date | null;
@@ -170,7 +243,12 @@ export async function getDayBoard(params: {
              a.professional_id, p.name AS professional_name,
              a.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
              array_agg(s.name ORDER BY aps.position) AS services,
-             a.price_cents, a.checked_in_at, a.started_at, a.completed_at
+             a.price_cents, a.checked_in_at, a.started_at, a.completed_at,
+             -- O sinal vem na mesma consulta do painel (bloco 37). Uma ida ao
+             -- banco por linha para descobrir se aquele horário pede sinal
+             -- seria N+1 na tela que a recepção deixa aberta o dia inteiro.
+             a.deposit_required_cents, a.deposit_paid_cents, a.deposit_reason,
+             a.cancelled_at
       FROM appointments a
       JOIN professionals p ON p.id = a.professional_id
       LEFT JOIN customers c ON c.id = a.customer_id
@@ -205,6 +283,14 @@ export async function getDayBoard(params: {
         customerId: linha.customer_id,
         services: linha.services,
         priceCents: linha.price_cents,
+        deposit: linha.deposit_required_cents > 0
+          ? {
+              exigidoCents: linha.deposit_required_cents,
+              pagoCents: linha.deposit_paid_cents,
+              motivo: (linha.deposit_reason ?? 'score') as MotivoDoSinal,
+              reembolso: destinoDoSinal(linha, unidade.deposit_refund_hours),
+            }
+          : null,
         realDurationMinutes: realDuration(linha.started_at, linha.completed_at),
         /**
          * Há quanto tempo esta pessoa está na cadeira (correção de fluxo, depois do bloco 36).

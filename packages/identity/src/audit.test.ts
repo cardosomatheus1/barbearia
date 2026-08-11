@@ -54,11 +54,15 @@ describe('partição do vocabulário da trilha', () => {
     expect(inventadas).toEqual([]);
   });
 
-  it('a trilha de gestão não contém nenhuma ação de caixa, comanda, fiado ou comissão', () => {
+  it('a trilha de gestão não contém nenhuma ação de caixa, comanda, fiado, comissão ou sinal', () => {
     // O critério escrito, aplicado como teste: se o nome fala de dinheiro, o
     // lado de gestão não pode tê-lo. Sem isto, uma classificação errada passaria
     // pelos testes acima, que só conferem que cada ação está em algum lugar.
-    const deDinheiro = /^(cash|order|debt|commission)\./;
+    //
+    // `deposit.` entrou no bloco 37: o sinal é dinheiro que entra e sai fora da
+    // comanda, e `before`/`after` carregam centavos — que é a pergunta única
+    // que decide de que lado uma ação fica.
+    const deDinheiro = /^(cash|order|debt|commission|deposit)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

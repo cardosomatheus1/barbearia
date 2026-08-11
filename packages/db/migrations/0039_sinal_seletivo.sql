@@ -169,6 +169,45 @@ CREATE INDEX appointments_historico_do_cliente_idx
   WHERE customer_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
+-- As duas permissões do sinal
+-- ---------------------------------------------------------------------------
+
+/**
+ * `finance.deposit` e `customers.reliability_override` entram no vocabulário.
+ *
+ * O `CHECK` espelha `packages/core/src/permissoes.ts`, e a duplicação é
+ * deliberada desde o bloco 16: é o banco que impede uma permissão inventada de
+ * ser concedida numa correção manual de madrugada. Há teste que reprova se as
+ * duas listas divergirem — e foi ele que reprovou este bloco antes de a
+ * migração existir.
+ *
+ * **Nenhum `INSERT` de retrocompatibilidade**, pelo mesmo motivo da 0034: são
+ * capacidades que ninguém tinha, porque não existiam. Distribuí-las para quem
+ * tem `settings.manage` faria toda gerência já instalada poder dispensar
+ * conhecidos do sinal no dia da migração, sem ninguém decidir isso.
+ *
+ * O dono continua com tudo pela semente de papel do bloco 16, que insere
+ * `PERMISSOES` inteiro para `owner`. O gerente as recebe no padrão de
+ * `permissoesPadrao`, que vale para barbearia nova.
+ */
+ALTER TABLE role_permissions DROP CONSTRAINT role_permissions_conhecida;
+ALTER TABLE role_permissions ADD CONSTRAINT role_permissions_conhecida CHECK (permission IN (
+  'appointments.view', 'appointments.create', 'appointments.cancel',
+  'appointments.reschedule', 'appointments.view_all_professionals',
+  'appointments.attend',
+  'cashier.open', 'cashier.close', 'cashier.withdraw',
+  'finance.view', 'finance.view_profit', 'finance.export', 'finance.discount',
+  'finance.deposit',
+  'commission.view_own', 'commission.view_all', 'commission.edit_rules',
+  'customers.view', 'customers.edit', 'customers.export',
+  'customers.view_photos', 'customers.view_notes', 'customers.edit_notes',
+  'customers.anonymize', 'customers.reliability_override',
+  'reports.finance', 'reports.operational',
+  'inventory.view', 'inventory.adjust',
+  'marketing.send', 'settings.manage', 'team.manage'
+));
+
+-- ---------------------------------------------------------------------------
 -- A anonimização volta a apagar tudo que identifica
 --
 -- Achado da `/security-review` deste bloco. `reliability_override_reason` é

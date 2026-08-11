@@ -96,6 +96,82 @@ describeIfDb('painel do dia', () => {
     expect(board.totals.esperados).toBe(2);
   });
 
+  describe('o sinal na linha do balcão (bloco 37)', () => {
+    /**
+     * O que se prova aqui é a regra de fluxo do CLAUDE.md §6, não a aritmética:
+     * **todo estado tem que ter saída na tela**. O painel é a única superfície
+     * onde a recepção encontra um horário com sinal, e se ele não trouxer o
+     * destino do dinheiro a tela não tem como oferecer o botão de devolver — o
+     * mesmo defeito de `in_service`, que era alcançável e não fechava.
+     */
+    const comSinal = async (extra: string) => {
+      const marcado = await marcar('09:00');
+      await admin.$executeRawUnsafe(
+        `UPDATE appointments
+            SET deposit_required_cents = 2000, deposit_reason = 'score', ${extra}
+          WHERE id = '${marcado.id}'`,
+      );
+      return (await painel()).entries.find((e) => e.id === marcado.id);
+    };
+
+    it('horário sem sinal não carrega linha de sinal nenhuma', async () => {
+      // Nulo e não um objeto zerado: uma linha "sinal R$ 0,00" em todo cartão é
+      // indicador que se aprende a não ler.
+      await marcar('09:00');
+      expect((await painel()).entries[0]?.deposit).toBeNull();
+    });
+
+    it('horário com sinal a receber traz valor e motivo, e nenhuma decisão', async () => {
+      const linha = await comSinal('deposit_paid_cents = 0');
+      expect(linha?.deposit).toMatchObject({
+        exigidoCents: 2000,
+        pagoCents: 0,
+        motivo: 'score',
+        // Indicador que responde antes da pergunta é pior que indicador nenhum:
+        // o horário ainda vai acontecer.
+        reembolso: null,
+      });
+    });
+
+    it('cancelado dentro do prazo: a tela recebe "devolver"', async () => {
+      const linha = await comSinal(
+        `deposit_paid_cents = 2000, status = 'cancelled_customer',
+         cancelled_at = service_starts_at - interval '48 hours'`,
+      );
+      expect(linha?.deposit?.reembolso?.desfecho).toBe('devolver');
+    });
+
+    it('cancelado em cima da hora: a tela recebe "reter"', async () => {
+      const linha = await comSinal(
+        `deposit_paid_cents = 2000, status = 'cancelled_customer',
+         cancelled_at = service_starts_at - interval '2 hours'`,
+      );
+      expect(linha?.deposit?.reembolso?.desfecho).toBe('reter');
+    });
+
+    it('faltou: retém — é o caso para o qual o sinal existe', async () => {
+      const linha = await comSinal(`deposit_paid_cents = 2000, status = 'no_show'`);
+      expect(linha?.deposit?.reembolso?.desfecho).toBe('reter');
+    });
+
+    it('a casa cancelou: devolve, mesmo em cima da hora', async () => {
+      const linha = await comSinal(
+        `deposit_paid_cents = 2000, status = 'cancelled_business',
+         cancelled_at = service_starts_at`,
+      );
+      expect(linha?.deposit?.reembolso?.desfecho).toBe('devolver');
+    });
+
+    it('sinal exigido e não pago não produz decisão de reembolso', async () => {
+      // Não há o que devolver, e um "devolver" aqui poria na tela um botão que
+      // move dinheiro que nunca entrou.
+      const linha = await comSinal(
+        `deposit_paid_cents = 0, status = 'no_show'`,
+      );
+      expect(linha?.deposit?.reembolso).toBeNull();
+    });
+  });
+
   it('o dia é o da barbearia, não o do servidor', async () => {
     // 21:20 em America/Bahia é 00:20 do dia **seguinte** em UTC. Uma consulta
     // que compare a data com a coluna sem converter o fuso perde este

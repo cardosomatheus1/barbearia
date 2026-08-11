@@ -1091,6 +1091,19 @@ export interface AppointmentReceipt {
   readonly services: readonly string[];
   readonly priceCents: number;
   readonly locationId: string;
+  /**
+   * O sinal deste horário, quando ele existe (bloco 37).
+   *
+   * O comprovante é a única tela que o cliente volta a abrir, e ele precisa
+   * dizer que falta pagar — senão o cliente descobre no balcão, na frente de
+   * outras pessoas. O **motivo** não vem: "seu histórico de faltas" é uma frase
+   * sobre a pessoa, e a SPEC §2.13 regra 5 manda o score nunca chegar a ela.
+   * O que ele vê é o valor e se já está pago.
+   */
+  readonly deposit: {
+    readonly exigidoCents: number;
+    readonly pagoCents: number;
+  } | null;
 }
 
 /**
@@ -1119,9 +1132,12 @@ export async function getAppointmentReceipt(
         services: string[];
         price_cents: number;
         location_id: string;
+        deposit_required_cents: number;
+        deposit_paid_cents: number;
       }[]
     >`
-      SELECT a.id, a.service_starts_at, a.service_ends_at, a.status,
+      SELECT a.deposit_required_cents, a.deposit_paid_cents,
+             a.id, a.service_starts_at, a.service_ends_at, a.status,
              p.name AS professional_name,
              array_agg(s.name ORDER BY aps.position) AS services,
              a.price_cents, a.location_id
@@ -1145,6 +1161,13 @@ export async function getAppointmentReceipt(
       services: row.services,
       priceCents: row.price_cents,
       locationId: row.location_id,
+      deposit:
+        row.deposit_required_cents > 0
+          ? {
+              exigidoCents: row.deposit_required_cents,
+              pagoCents: row.deposit_paid_cents,
+            }
+          : null,
     };
   });
 }

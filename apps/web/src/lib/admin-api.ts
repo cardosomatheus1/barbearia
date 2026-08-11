@@ -243,6 +243,14 @@ export interface LinhaDoDia {
   customerId: string | null;
   services: string[];
   priceCents: number;
+  /** O sinal deste horário. Nulo quando ele não pede — que é o caso comum. */
+  deposit: {
+    exigidoCents: number;
+    pagoCents: number;
+    motivo: 'servico' | 'score' | 'ticket';
+    /** Nulo enquanto o horário está de pé — não há o que decidir ainda. */
+    reembolso: { desfecho: 'devolver' | 'reter'; porque: string } | null;
+  } | null;
   realDurationMinutes: number | null;
   /** Há quantos minutos está na cadeira. Instantâneo da carga, não cronômetro. */
   elapsedMinutes: number | null;
@@ -476,6 +484,8 @@ export interface ServicoDoCatalogo {
   bookableOnline: boolean;
   active: boolean;
   photoUrl: string | null;
+  /** Este serviço sempre pede sinal, qualquer que seja o histórico (bloco 37). */
+  alwaysRequireDeposit: boolean;
   componentIds: string[];
   /** Quantos clientes já têm hora marcada com ele — o que se perde ao desativar. */
   futureAppointments: number;
@@ -490,6 +500,7 @@ export interface EntradaDeServico {
   bufferBeforeMinutes: number;
   bufferAfterMinutes: number;
   bookableOnline: boolean;
+  alwaysRequireDeposit?: boolean;
   componentIds?: string[];
 }
 
