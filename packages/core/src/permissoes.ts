@@ -71,6 +71,16 @@ export const PERMISSOES = [
    * fator existe para proteger.
    */
   'finance.deposit',
+  /**
+   * Mexer à mão no saldo de fidelidade de um cliente (bloco 41).
+   *
+   * Prefixo `finance.` de propósito, e não é arrumação: `PERMISSOES_DE_DINHEIRO`
+   * deriva o segundo fator do prefixo, e **criar saldo é criar dinheiro** — ele
+   * vira forma de pagamento no balcão da operação seguinte. Fora do grupo, a
+   * rota que mais se parece com "imprimir dinheiro" seria a única sem segundo
+   * fator.
+   */
+  'finance.loyalty_adjust',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -118,6 +128,23 @@ export const PERMISSOES = [
    * mesma tarefa de editar um cadastro e não é.
    */
   'customers.reliability_override',
+  /**
+   * Ler a fila de recados do cliente (bloco 40).
+   *
+   * Separada de `feedback.manage` pelo mesmo motivo de `customers.view_notes` e
+   * `customers.edit_notes`: ler o que reclamaram e **responder em nome da casa**
+   * são tarefas diferentes. A resposta sai por mensagem, assinada pela
+   * barbearia, e não é de todo mundo.
+   */
+  'feedback.view',
+  /**
+   * Assumir, responder e encerrar um recado (bloco 40).
+   *
+   * Note o que **não** existe: não há `feedback.delete`. É o limite ético da
+   * SPEC §4.10 — o produto não oferece apagar reclamação —, e ele não depende
+   * desta lista: o role da aplicação não tem `DELETE` na tabela.
+   */
+  'feedback.manage',
   'reports.finance',
   'reports.operational',
   'inventory.view',
@@ -217,6 +244,8 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'customers.edit_notes',
     // O override do score é do gerente por definição da SPEC §2.13.
     'customers.reliability_override',
+    'feedback.view',
+    'feedback.manage',
     'reports.operational',
     'inventory.view',
     'inventory.adjust',
@@ -235,6 +264,14 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'customers.edit',
     // Sem `customers.view_photos` nem `customers.view_notes`: a recepção precisa
     // achar o cliente, não ler o que anotaram sobre ele.
+    /**
+     * O recado, sim — inteiro.
+     *
+     * É a recepção que responde WhatsApp o dia todo, e um canal de reclamação
+     * que só o dono consegue responder é um canal que ninguém responde.
+     */
+    'feedback.view',
+    'feedback.manage',
     'inventory.view',
   ],
 
@@ -254,6 +291,15 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
      * tirando de quem já fazia.
      */
     'customers.edit_notes',
+    /**
+     * **Sem `feedback.view` por padrão**, e é decisão.
+     *
+     * Reclamação costuma ser sobre uma pessoa, e escrita por quem não sabe que
+     * alguém do salão vai ler. "O barbeiro do fundo é grosso" na tela do colega
+     * transforma um canal de melhoria em fofoca com endereço. O dono concede
+     * quando quiser — a tela de permissões existe desde o bloco 30 —, e aí é
+     * uma decisão tomada, não um padrão herdado.
+     */
   ],
 };
 

@@ -5,10 +5,13 @@ import {
   catalogoDoBalcao,
   comandaAberta,
   cobrancasDaComanda,
+  programaDeFidelidade,
+  saldoDeFidelidade,
   type Comanda,
   type CobrancaDaComandaNaTela,
   type ItemDaComandaNaTela,
 } from '@/lib/admin-api';
+import { resgateSugerido, saldoPorExtenso, valorDoResgate } from '@barbearia/core';
 import { qrCodeSvg } from '@/lib/qrcode';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -330,6 +333,61 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   const conta = comanda.dados;
   const fechada = conta.status !== 'open';
   const podeFiar = fiadoCabe(conta);
+
+  /**
+   * O saldo de fidelidade do cliente da comanda (bloco 41, SPEC §4.8).
+   *
+   * A SPEC pede a exibição "no app e **no PDV**", e o PDV é aqui. Só é lido
+   * quando há cliente identificado e quem opera tem as duas permissões que a
+   * rota exige — pedir sem elas devolveria 403 em toda abertura de comanda.
+   *
+   * `resgateSugerido` calcula o máximo que cabe no que falta pagar. Fazer a
+   * recepção descobrir de cabeça quantos pontos cabem em R$ 37 é como o
+   * programa deixa de ser usado.
+   */
+  const veSaldo =
+    podeNaTela(estado, 'finance.view') && podeNaTela(estado, 'customers.view');
+  const saldoResposta =
+    conta.customerId && veSaldo && !fechada
+      ? await saldoDeFidelidade(token, conta.customerId)
+      : null;
+  const saldo = saldoResposta?.ok ? saldoResposta.dados : null;
+  const programa = saldo && saldo.modo !== 'nenhum' ? await programaDeFidelidade(token) : null;
+
+  const quantidadeSugerida =
+    saldo && programa?.ok
+      ? resgateSugerido({
+          programa: {
+            modo: programa.dados.modo,
+            pontosPorReal: programa.dados.pontosPorReal,
+            valorDoPontoCents: programa.dados.valorDoPontoCents,
+            visitasParaPremio: programa.dados.visitasParaPremio,
+            cashbackBps: programa.dados.cashbackBps,
+            validadeDias: programa.dados.validadeDias,
+          },
+          saldo: saldo.saldo,
+          tetoCents: conta.totalCents,
+        })
+      : 0;
+
+  const resgate =
+    saldo && programa?.ok && quantidadeSugerida > 0
+      ? {
+          quantidade: quantidadeSugerida,
+          valorCents: valorDoResgate({
+            programa: {
+              modo: programa.dados.modo,
+              pontosPorReal: programa.dados.pontosPorReal,
+              valorDoPontoCents: programa.dados.valorDoPontoCents,
+              visitasParaPremio: programa.dados.visitasParaPremio,
+              cashbackBps: programa.dados.cashbackBps,
+              validadeDias: programa.dados.validadeDias,
+            },
+            quantidade: quantidadeSugerida,
+            tetoCents: conta.totalCents,
+          }),
+        }
+      : null;
   // A mesma pergunta que a API faz: dar desconto é `finance.view`, que a
   // recepção não tem. Mostrar o formulário para ela só produziria um 403.
   const podeDarDesconto = podeNaTela(estado, 'finance.view');
@@ -657,6 +715,11 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                       <option value="link">Link de pagamento</option>
                       <option value="transfer">Transferência</option>
                       {podeFiar ? <option value="fiado">Fiado</option> : null}
+                      {/* Resgate só aparece quando há saldo de verdade: opção
+                          que só produz erro é pior que opção ausente. */}
+                      {resgate ? (
+                        <option value="fidelidade">Saldo de fidelidade</option>
+                      ) : null}
                     </select>
                   </div>
 
@@ -675,6 +738,25 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                   </div>
                 </fieldset>
               ))}
+
+              {/*
+                O resgate viaja separado do valor (bloco 41).
+
+                A unidade é outra: o valor diz quantos centavos abateram da
+                conta, isto diz quanto sai do saldo. Em `visitas` os dois nem se
+                parecem — dez visitas viram a conta inteira. O domínio reconfere
+                o par sob a trava; este número nunca é a verdade sobre o saldo.
+              */}
+              {resgate ? (
+                <>
+                  <input name="resgateQuantidade" type="hidden" value={resgate.quantidade} />
+                  <p className="ui-field__hint">
+                    {saldoPorExtenso(saldo!.modo, saldo!.saldo)} de saldo. Escolhendo “Saldo de
+                    fidelidade”, digite {reais(resgate.valorCents)} — é o que o resgate cobre
+                    nesta conta.
+                  </p>
+                </>
+              ) : null}
 
               <p className="ui-field__hint">
                 Em dinheiro, digite o que o cliente entregou: o troco sai da gaveta e fica

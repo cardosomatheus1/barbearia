@@ -312,6 +312,39 @@ export async function exportarDadosDoTitular(
        ORDER BY e.joined_at
     `;
 
+    /**
+     * Os recados (bloco 40).
+     *
+     * "Eu reclamei da espera e vocês nunca me responderam" é exatamente o que a
+     * exportação existe para responder — e a resposta da casa vai junto, porque
+     * ela também é sobre o titular.
+     *
+     * Recado anônimo não aparece aqui, e é consequência do desenho, não
+     * omissão: sem `customer_id` não há a quem atribuí-lo, e é isso que o torna
+     * anônimo.
+     */
+    const recados = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT kind::text AS tipo, status::text AS estado, body AS texto,
+             answer AS resposta, answered_at, created_at
+        FROM feedbacks WHERE customer_id = ${customerId}::uuid
+       ORDER BY created_at
+    `;
+
+    /**
+     * O saldo de fidelidade (bloco 41).
+     *
+     * "Quantos pontos eu tinha?" é dado do titular tanto quanto o saldo de
+     * fiado, e o extrato é o que responde "por que caiu?". Entrou aqui porque o
+     * teste de completude cobrou — e é o mesmo teste que cobrou a lista de
+     * espera no bloco 38 e os recados no bloco 40.
+     */
+    const fidelidade = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT kind::text AS tipo, mode::text AS modalidade, amount AS quantidade,
+             base_cents, expires_at, note, created_at
+        FROM loyalty_entries WHERE customer_id = ${customerId}::uuid
+       ORDER BY created_at
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
@@ -337,6 +370,8 @@ export async function exportarDadosDoTitular(
       mensagens,
       filas,
       esperas,
+      recados,
+      fidelidade,
     };
   });
 }

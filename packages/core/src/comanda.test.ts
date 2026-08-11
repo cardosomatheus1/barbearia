@@ -359,6 +359,46 @@ describe('fiado', () => {
     expect(conferido.falha).toBe('pagou_demais');
   });
 
+  it('resgate de fidelidade nunca vira troco em dinheiro', () => {
+    /**
+     * Numa conta de R$ 50 paga com R$ 40 em espécie e R$ 20 de saldo, o troco
+     * de R$ 10 sairia da gaveta — e a barbearia estaria comprando de volta o
+     * próprio programa de fidelidade, em dinheiro vivo. Repetido a cada visita,
+     * o cashback vira caixa eletrônico.
+     */
+    const conferido = conferirPagamento({
+      totalCents: 5000,
+      pagamentos: [
+        { forma: 'cash', valorCents: 4000 },
+        { forma: 'fidelidade', valorCents: 2000 },
+      ],
+    });
+    expect(conferido.falha).toBe('pagou_demais');
+  });
+
+  it('resgate que fecha a conta exatamente passa', () => {
+    const conferido = conferirPagamento({
+      totalCents: 5000,
+      pagamentos: [
+        { forma: 'cash', valorCents: 4000 },
+        { forma: 'fidelidade', valorCents: 1000 },
+      ],
+    });
+    expect(conferido).toEqual({ falha: null, trocoCents: 0 });
+  });
+
+  it('resgate não entra na gaveta', () => {
+    // Não passa por maquininha nem por espécie: é crédito sendo consumido.
+    const resultado = resultadoDoPagamento({
+      pagamentos: [
+        { forma: 'cash', valorCents: 4000 },
+        { forma: 'fidelidade', valorCents: 1000 },
+      ],
+      trocoCents: 0,
+    });
+    expect(resultado.naGavetaCents).toBe(4000);
+  });
+
   it('fiado não entra na gaveta nem no faturamento do dia', () => {
     // Somar fiado à receita é como a barbearia comemora um mês que não
     // aconteceu. Não registrá-lo em lugar nenhum é como ela esquece de cobrar.

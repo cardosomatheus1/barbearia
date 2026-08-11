@@ -54,6 +54,20 @@ export type AuditAction =
   | 'deposit.received'
   | 'deposit.refunded'
   /**
+   * Fidelidade (bloco 41).
+   *
+   * As duas são de **dinheiro**, e a segunda pode surpreender: mudar o programa
+   * não move centavo nenhum hoje, mas define a alíquota com que a casa vai
+   * imprimir crédito daqui para a frente. "Quem virou o cashback para 50%?" é
+   * uma pergunta de dinheiro, e quem precisa respondê-la é quem lê a trilha de
+   * dinheiro.
+   *
+   * O ajuste manual é ainda mais direto: ele cria saldo, e saldo vira pagamento
+   * no balcão da operação seguinte.
+   */
+  | 'loyalty.program_changed'
+  | 'loyalty.adjusted'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -88,6 +102,18 @@ export type AuditAction =
   // pode ser o estado atual da fila, que já mudou.
   | 'customer.consent_recorded'
   | 'customer.data_exported'
+  /**
+   * O recado do cliente (bloco 40).
+   *
+   * A trilha é o que sustenta o limite ético da SPEC §4.10 pelo outro lado:
+   * ninguém apaga reclamação — o banco não deixa — e ninguém responde em nome da
+   * casa sem deixar registro de quem foi. `feedback.closed` guarda de que estado
+   * veio, porque "encerrado sem responder" e "encerrado depois de responder" são
+   * duas conversas diferentes com o dono.
+   */
+  | 'feedback.assigned'
+  | 'feedback.answered'
+  | 'feedback.closed'
   | 'lgpd.request_fulfilled'
   | 'lgpd.request_refused'
   /**
@@ -137,6 +163,8 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'order.charge_cancelled',
   'deposit.received',
   'deposit.refunded',
+  'loyalty.program_changed',
+  'loyalty.adjusted',
   'commission.closed',
   'commission.rule_changed',
 ];
@@ -184,6 +212,9 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
    */
   'customer.consent_recorded',
   'customer.data_exported',
+  'feedback.assigned',
+  'feedback.answered',
+  'feedback.closed',
   'lgpd.request_fulfilled',
   'lgpd.request_refused',
   'customer.anonymized',

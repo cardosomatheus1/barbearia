@@ -139,6 +139,20 @@ export interface Contexto {
    * handler, pela função acima.
    */
   readonly vencerOfertasDaEspera: (tenantId: string, agora: Date) => Promise<number>;
+
+  /**
+   * A resposta a um recado, entregue ao cliente (bloco 40).
+   *
+   * Injetada pelo mesmo motivo da oferta de vaga e da varredura de retenção:
+   * `jobs` não conhece `crm`, e quem monta o processo é quem liga as pontas.
+   * Obrigatória e não opcional no tipo — opcional, ela seria esquecida no
+   * primeiro worker novo e a resposta deixaria de sair sem nada ficar vermelho.
+   *
+   * Devolve `false` quando não há mais a quem responder: entre o enfileiramento
+   * e o envio a pessoa pode ter pedido exclusão, e aí o `customer_id` foi
+   * desatado. A tarefa conclui, porque não há o que repetir.
+   */
+  readonly responderRecadoDoCliente: (tenantId: string, recadoId: string) => Promise<boolean>;
   /**
    * O alerta operacional saindo pelo canal do gestor (bloco 33), injetado.
    *
@@ -357,6 +371,26 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       },
       contexto.relogio.agora(),
     );
+  },
+
+  /**
+   * A resposta ao recado do cliente (bloco 40).
+   *
+   * A tarefa nasce **dentro da transação** que grava a resposta: enfileirar
+   * depois do commit abriria a janela em que o balcão vê "respondido" e o
+   * cliente nunca recebe nada — e a mensagem é a única coisa que este canal
+   * entrega.
+   *
+   * Respeita o interruptor de avisos como todo aviso ao cliente. O custo está
+   * escrito: quem desligou as mensagens responde pelo próprio WhatsApp, e a
+   * resposta gravada continua sendo o registro do que foi dito.
+   */
+  'recado.responder': async (tarefa, contexto) => {
+    const recadoId = String(tarefa.payload['recadoId'] ?? '');
+    if (!recadoId) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+
+    await contexto.responderRecadoDoCliente(tarefa.tenantId, recadoId);
   },
 
   /**

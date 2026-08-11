@@ -62,7 +62,11 @@ describe('partição do vocabulário da trilha', () => {
     // `deposit.` entrou no bloco 37: o sinal é dinheiro que entra e sai fora da
     // comanda, e `before`/`after` carregam centavos — que é a pergunta única
     // que decide de que lado uma ação fica.
-    const deDinheiro = /^(cash|order|debt|commission|deposit)\./;
+    // `loyalty.` entrou no bloco 41 pelos dois lados da mesma moeda: o ajuste
+    // manual **cria** saldo gastável, e mudar o programa define a alíquota com
+    // que a casa passa a imprimi-lo. "Quem virou o cashback para 50%?" é
+    // pergunta de dinheiro.
+    const deDinheiro = /^(cash|order|debt|commission|deposit|loyalty)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

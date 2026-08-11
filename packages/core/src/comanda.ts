@@ -165,12 +165,38 @@ export const FORMAS_DE_PAGAMENTO = [
    * só aparece quando ele volta para pagar.
    */
   'fiado',
+  /**
+   * Resgate de fidelidade (bloco 41, SPEC §4.8).
+   *
+   * Forma de pagamento e **não desconto**, e a diferença não é semântica:
+   * desconto é a casa abrindo mão de receita, com permissão própria e teto
+   * (`finance.discount`, `tenants.max_discount_bps`); resgate é o cliente
+   * gastando um crédito que já é dele. Como desconto, o teto do bloco 30
+   * barraria o cliente de usar o próprio saldo, e o relatório de descontos
+   * concedidos passaria a incluir dinheiro já provisionado.
+   *
+   * Como `fiado`, não é dinheiro entrando **agora** — mas por motivo oposto: o
+   * fiado é receita que ainda vem, e o resgate é receita que já veio, na venda
+   * que gerou o saldo. Contá-lo de novo aqui seria faturar duas vezes o mesmo
+   * corte.
+   */
+  'fidelidade',
 ] as const;
 
 export type FormaDePagamento = (typeof FORMAS_DE_PAGAMENTO)[number];
 
 /** Só dinheiro entra na gaveta. O resto some no extrato do adquirente. */
 export const ENTRA_NA_GAVETA: readonly FormaDePagamento[] = ['cash'];
+
+/**
+ * O que o cliente pode escolher **sozinho**, sem alguém do balcão.
+ *
+ * Fiado e fidelidade ficam de fora: o primeiro cria dívida, o segundo gasta
+ * saldo. Os dois passam por quem opera a comanda.
+ */
+export const FORMAS_DO_CLIENTE: readonly FormaDePagamento[] = [
+  'cash', 'pix', 'debit', 'credit', 'link', 'transfer',
+];
 
 /**
  * Formas que não trazem dinheiro agora.
@@ -244,6 +270,23 @@ export function conferirPagamento(params: {
   // Ninguém fia e leva troco. Se sobrou com fiado na conta, o operador digitou
   // errado — e o desfecho seria a barbearia dar dinheiro a quem ficou devendo.
   if (fiadoCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
+
+  /**
+   * Nem resgata fidelidade e leva troco (bloco 41).
+   *
+   * Mesma forma da regra acima e motivo pior: numa conta de R$ 50 paga com
+   * R$ 40 em dinheiro e R$ 20 de saldo, o troco de R$ 10 sairia da gaveta — e a
+   * barbearia estaria **comprando de volta** o próprio programa de fidelidade,
+   * em espécie. Repetido a cada visita, o cashback vira caixa eletrônico.
+   *
+   * O resgate certo nunca passa do que falta pagar, e é o que `valorDoResgate`
+   * garante do outro lado. Esta linha é a guarda para quando o valor não vier
+   * dali.
+   */
+  const fidelidadeCents = params.pagamentos
+    .filter((p) => p.forma === 'fidelidade')
+    .reduce((soma, p) => soma + p.valorCents, 0);
+  if (fidelidadeCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
 
   const emDinheiro = params.pagamentos
     .filter((p) => ENTRA_NA_GAVETA.includes(p.forma))

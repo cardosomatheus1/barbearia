@@ -37,12 +37,18 @@ import {
   type TipoDeExcecao,
   criarProfissional,
   entrarNaFila,
+  ajustarSaldoDeFidelidade,
+  assumirRecadoNaApi,
+  devolverRecadoNaApi,
+  encerrarRecadoNaApi,
   moverNaFila,
+  responderRecadoNaApi,
   sentarDaFila,
   type StatusNaFila,
   criarServico,
   trocarDePlano,
   salvarPermissoesDoPapel,
+  salvarProgramaDeFidelidade,
   editarProfissional,
   editarServico,
   exigenciasDoServico,
@@ -833,6 +839,114 @@ export async function acaoEntrarNaFila(form: FormData): Promise<void> {
   redirect('/admin/fila');
 }
 
+/**
+ * Ajusta o saldo de fidelidade de um cliente à mão (bloco 41).
+ *
+ * A rota exige `finance.loyalty_adjust`, que cai no grupo de dinheiro pelo
+ * prefixo e por isso vem com segundo fator derivado: criar saldo é criar valor
+ * gastável no balcão da operação seguinte.
+ */
+export async function acaoAjustarFidelidade(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const quantidade = Number(form.get('quantidade') ?? 0);
+
+  if (!Number.isInteger(quantidade) || quantidade === 0) {
+    falhar(`/admin/cliente/${customerId}`, 'quantidade_invalida');
+  }
+
+  const resultado = await ajustarSaldoDeFidelidade(token, customerId, {
+    quantidade,
+    motivo: texto(form, 'motivo'),
+  });
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?salvo=fidelidade`);
+}
+
+/**
+ * Escolhe o modelo de fidelidade da casa (bloco 41).
+ *
+ * Um modelo, nunca três: a tela oferece um seletor único porque "você tem 340
+ * pontos, 3 visitas e R$ 12 de cashback" é uma frase que ninguém entende no
+ * balcão — e a chave primária do banco garante o resto.
+ */
+export async function acaoSalvarFidelidade(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const modo = texto(form, 'modo');
+  if (!['nenhum', 'pontos', 'visitas', 'cashback'].includes(modo)) {
+    falhar('/admin/fidelidade', 'invalid_request');
+  }
+
+  const validade = Number(form.get('validadeDias') ?? 0);
+
+  const resultado = await salvarProgramaDeFidelidade(token, {
+    modo: modo as 'nenhum' | 'pontos' | 'visitas' | 'cashback',
+    pontosPorReal: Number(form.get('pontosPorReal') ?? 1),
+    valorDoPontoCents: Number(form.get('valorDoPontoCents') ?? 1),
+    visitasParaPremio: Number(form.get('visitasParaPremio') ?? 10),
+    // A tela pede porcentagem; o produto guarda pontos-base, sempre inteiros.
+    cashbackBps: Math.round(Number(form.get('cashbackPercent') ?? 5) * 100),
+    validadeDias: validade > 0 ? validade : null,
+  });
+  if (!resultado.ok) falhar('/admin/fidelidade', resultado.code);
+  redirect('/admin/fidelidade?salvo=1');
+}
+
+/**
+ * Assume um recado (bloco 40).
+ *
+ * "Assumir" é a palavra que a tela usa e a única que o domínio expõe para este
+ * gesto — vocabulário de transição mora num lugar só (CLAUDE.md §6). Sem
+ * responsável, devolve à triagem: é a saída de "assumi por engano".
+ */
+export async function acaoAssumirRecado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await assumirRecadoNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  redirect('/admin/recados?feito=assumido');
+}
+
+/** Devolve à triagem. Todo estado precisa de saída na tela (CLAUDE.md §6). */
+export async function acaoDevolverRecado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await devolverRecadoNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  redirect('/admin/recados?feito=devolvido');
+}
+
+/**
+ * Responde ao cliente.
+ *
+ * A mensagem sai pela fila de trabalho, dentro da transação que grava a
+ * resposta. Recado anônimo é recusado com código próprio — a tela precisa dizer
+ * *por que* não dá, e não só que não deu.
+ */
+export async function acaoResponderRecado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+
+  const resultado = await responderRecadoNaApi(
+    token,
+    texto(form, 'id'),
+    String(form.get('resposta') ?? ''),
+  );
+  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  redirect('/admin/recados?feito=respondido');
+}
+
+/**
+ * Encerra o recado — que **não** é apagá-lo.
+ *
+ * O texto continua na base e continua contando para a leitura do trimestre. Não
+ * existe caminho de código que faça o contrário: a tabela não tem `DELETE` para
+ * a aplicação (SPEC §4.10).
+ */
+export async function acaoEncerrarRecado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await encerrarRecadoNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  redirect('/admin/recados?feito=encerrado');
+}
+
 export async function acaoMoverNaFila(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const para = texto(form, 'para');
@@ -1114,7 +1228,23 @@ export async function acaoFecharComanda(form: FormData): Promise<void> {
 
   if (pagamentos.length === 0) falhar(`/admin/comanda/${id}`, 'sem_pagamento');
 
-  const resultado = await fecharAComanda(token, id, pagamentos, texto(form, 'idempotencyKey'));
+  /**
+   * O resgate de fidelidade viaja separado do valor (bloco 41).
+   *
+   * A unidade é outra: o pagamento diz quantos centavos abateram da conta, isto
+   * diz quanto sai do saldo. Em `visitas` os dois nem se parecem — dez visitas
+   * viram a conta inteira. O domínio reconfere o par sob a trava e recusa se
+   * não bater; o número desta tela nunca é a verdade sobre o saldo.
+   */
+  const resgate = Number(form.get('resgateQuantidade') ?? 0);
+
+  const resultado = await fecharAComanda(
+    token,
+    id,
+    pagamentos,
+    texto(form, 'idempotencyKey'),
+    Number.isInteger(resgate) && resgate > 0 ? resgate : undefined,
+  );
   if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
   redirect(`/admin/comanda/${id}?pago=1`);
 }

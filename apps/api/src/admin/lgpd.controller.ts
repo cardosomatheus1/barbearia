@@ -165,11 +165,22 @@ export class LgpdController {
    *   `customers.export` para a recepção responder pedido de LGPD entregaria
    *   junto a anotação de todo mundo.
    *
+   * - `feedback.view` porque o arquivo passou a trazer o **corpo dos recados**
+   *   (bloco 40). O profissional não recebe essa permissão por padrão, e o
+   *   motivo está escrito em `permissoes.ts`: reclamação costuma ser sobre uma
+   *   pessoa. Sem esta linha, o dono que tirasse `feedback.view` de um papel e
+   *   deixasse `customers.export` veria a decisão dele deixar de valer, um
+   *   cliente por vez. Achado da revisão de segurança do bloco 40, e é o mesmo
+   *   defeito que a revisão do bloco 31 encontrou nesta mesma rota.
+   *
+   * O saldo de fidelidade (bloco 41) não acrescenta permissão: ele é dinheiro,
+   * e `finance.view` já está declarada acima pelo mesmo motivo.
+   *
    * O caminho oposto — tirar dinheiro e anotação do arquivo — foi descartado:
    * o saldo de fiado de uma pessoa **é** dado pessoal dela, e exportação
    * incompleta é o defeito que a LGPD pune, não o que ela evita.
    */
-  @Exige('customers.export', 'finance.view', 'customers.view_notes')
+  @Exige('customers.export', 'finance.view', 'customers.view_notes', 'feedback.view')
   @Get(':id/dados')
   async exportar(
     @Staff() staff: AuthenticatedStaff,

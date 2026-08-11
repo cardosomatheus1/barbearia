@@ -59,6 +59,19 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'customer.anonymized': 'apagou os dados de',
   'slug.added': 'cadastrou um endereço antigo da barbearia',
 
+  // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
+  // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em
+  // nome da casa sem deixar registro de quem foi.
+  'feedback.assigned': 'assumiu um recado de cliente',
+  'feedback.answered': 'respondeu um recado de cliente',
+  'feedback.closed': 'encerrou um recado de cliente',
+
+  // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
+  // gastável, e mudar o programa define a alíquota com que a casa passa a
+  // imprimi-lo.
+  'loyalty.program_changed': 'mudou o programa de fidelidade',
+  'loyalty.adjusted': 'ajustou o saldo de fidelidade de',
+
   // Suporte assistido (bloco 26). Estas três não descrevem o que **a equipe**
   // fez: descrevem o que a plataforma fez dentro desta barbearia. É a metade da
   // SPEC §1.2 que uma trilha só de plataforma não cumpre — "o tenant deve poder

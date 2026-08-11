@@ -32,6 +32,10 @@ import {
   EsperaPublicaController,
 } from './booking/espera.controller.js';
 import { OfertaPublicaController } from './booking/oferta.controller.js';
+import { RecadoPublicoController } from './booking/recado.controller.js';
+import { RecadoController } from './admin/recado.controller.js';
+import { FidelidadeController } from './admin/fidelidade.controller.js';
+import { FidelidadeDoClienteController } from './booking/fidelidade.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import {
   PlataformaAuthController,
@@ -80,6 +84,10 @@ import { TenantService } from './tenant/tenant.service.js';
     EsperaPublicaController,
     EsperaDoClienteController,
     OfertaPublicaController,
+    RecadoPublicoController,
+    RecadoController,
+    FidelidadeController,
+    FidelidadeDoClienteController,
     FilaPublicaController,
     TeamController,
     MeController,

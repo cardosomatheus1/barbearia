@@ -5,9 +5,11 @@ import {
   lerConsentimento,
   listarAgendamentos,
   listarEsperas,
+  meuSaldoDeFidelidade,
   type AgendamentoDoCliente,
   type EsperaDoCliente,
 } from '@/lib/api';
+import { saldoPorExtenso } from '@barbearia/core';
 import { humanInstant } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
 import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
@@ -176,6 +178,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
   // precisa das duas para montar. Em série, o cliente espera as duas somadas.
   const consentimento = await lerConsentimento(slug, token);
   const esperas = await listarEsperas(slug, token);
+  const fidelidade = await meuSaldoDeFidelidade(slug, token);
 
   const proximos = agendamentos.filter((a) => a.state === 'active');
   const anteriores = agendamentos.filter((a) => a.state !== 'active');
@@ -284,6 +287,41 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
           </ul>
         </section>
       ) : null}
+
+      {/* O saldo de fidelidade (bloco 41, SPEC §4.8: "exibição do saldo no app
+          e no PDV"). Só aparece quando a barbearia tem programa — um bloco
+          dizendo "0 pontos" numa casa sem programa é ruído. */}
+      {fidelidade && fidelidade.modo !== 'nenhum' ? (
+        <section aria-labelledby="fidelidade">
+          <h2 className="rotulo" id="fidelidade">
+            Seu saldo
+          </h2>
+          <div className="saldo-fidelidade">
+            <p className="saldo-fidelidade__numero tabular">
+              {saldoPorExtenso(fidelidade.modo, fidelidade.saldo)}
+            </p>
+            <p className="saldo-fidelidade__nota">
+              {fidelidade.faltaParaPremio === null
+                ? 'Use na barbearia, na hora de pagar.'
+                : fidelidade.faltaParaPremio === 0
+                  ? 'Cartão completo — seu próximo corte pode sair de graça.'
+                  : `Faltam ${fidelidade.faltaParaPremio} para o corte grátis.`}
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* A segunda porta do canal de recados: quem já é cliente entra por aqui,
+          e o recado sai identificado — a barbearia sabe a quem responder. */}
+      <section aria-labelledby="falar">
+        <h2 className="rotulo" id="falar">
+          Falar com a barbearia
+        </h2>
+        <p className="politica">
+          Alguma sugestão, reclamação ou elogio? Chega direto para a equipe.{' '}
+          <a href={`/${slug}/falar`}>Escrever agora</a>.
+        </p>
+      </section>
 
       {consentimento ? <Promocao aceita={consentimento.marketing} slug={slug} /> : null}
       <MeusDados encarregado={profile.encarregado} nome={profile.name} slug={slug} />

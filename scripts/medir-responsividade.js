@@ -514,6 +514,50 @@ async function prepararFila(token) {
 }
 
 /**
+ * Recados na fila e um programa de fidelidade ligado (blocos 40 e 41).
+ *
+ * Pelo banco: o recado nasce da página pública e o saldo nasce do fechamento de
+ * comanda, e reproduzir os dois fluxos aqui custaria mais que o que se mede.
+ * O que a medição precisa é do **estado** — a fila com os três tipos, texto
+ * longo de verdade, e um saldo que faça o bloco aparecer.
+ */
+async function prepararRecadosEFidelidade(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
+  const cliente = psql(
+    `select id from customers where tenant_id = '${tenant}' and phone_e164 = '+5571988887777' limit 1`,
+  );
+  if (!tenant || !local) return;
+
+  // Texto longo de propósito: é o que estoura o cartão, e só aparece com
+  // conteúdo verdadeiro.
+  const textos = [
+    ['reclamacao', 'Esperei quarenta minutos mesmo tendo horario marcado, e ninguem da recepcao veio me avisar que o barbeiro estava atrasado. Sai sem cortar.'],
+    ['sugestao', 'Voces deviam abrir aos domingos de manha, nem que fosse so com um barbeiro de plantao.'],
+    ['elogio', 'O Ruan cortou muito bem, foi a melhor barba que ja fiz aqui.'],
+  ];
+  for (const [tipo, texto] of textos) {
+    psql(
+      `INSERT INTO feedbacks (tenant_id, location_id, customer_id, kind, body)
+       VALUES ('${tenant}', '${local}', ${tipo === 'reclamacao' ? `'${cliente}'` : 'NULL'},
+               '${tipo}', '${texto.replace(/'/g, "''")}')`,
+    );
+  }
+
+  psql(
+    `INSERT INTO loyalty_programs (tenant_id, mode, expires_days)
+     VALUES ('${tenant}', 'pontos', 365)
+     ON CONFLICT (tenant_id) DO UPDATE SET mode = 'pontos', expires_days = 365`,
+  );
+  if (cliente) {
+    psql(
+      `INSERT INTO loyalty_entries (tenant_id, customer_id, kind, mode, amount, note)
+       VALUES ('${tenant}', '${cliente}', 'ajuste', 'pontos', 340, 'saldo para a medicao')`,
+    );
+  }
+}
+
+/**
  * Prepara um convite de vaga aberto, para medir a tela do bloco 39.
  *
  * Pelo banco, e não pela HTTP: o convite nasce no worker, e subir um worker só
@@ -938,6 +982,7 @@ async function main() {
   await prepararRecursos(token);
   const filaPreparada = await prepararFila(token);
   const convitePreparado = await prepararConvite(slug);
+  await prepararRecadosEFidelidade(slug);
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },
@@ -1027,6 +1072,9 @@ async function main() {
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'recados', url: '/admin/recados', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'fidelidade', url: '/admin/fidelidade', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'fale com a gente', url: `/${slug}/falar` },
     // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
     // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir
     // a versão sem faturamento mediria a tela mais fácil.

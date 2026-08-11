@@ -5,3 +5,4 @@ export * from './desempenho.js';
 export * from './painel.js';
 export * from './cobranca-online.js';
 export * from './sinal.js';
+export * from './fidelidade.js';

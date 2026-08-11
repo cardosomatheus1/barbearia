@@ -80,6 +80,17 @@ export const fecharComandaSchema = z.object({
     )
     .min(1)
     .max(5),
+  /**
+   * Quantos pontos, visitas ou centavos o cliente está resgatando (bloco 41).
+   *
+   * Separado do pagamento porque a **unidade** é outra: o pagamento diz quantos
+   * centavos abateram da conta; isto diz quanto sai do saldo. Em `visitas` os
+   * dois nem se parecem — dez visitas viram a conta inteira.
+   *
+   * O domínio reconfere o par sob a trava e recusa se não bater: o número da
+   * tela nunca é a verdade sobre o saldo.
+   */
+  resgateQuantidade: z.number().int().positive().optional(),
 });
 
 export const receberFiadoSchema = z.object({

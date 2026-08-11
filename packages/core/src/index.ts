@@ -33,3 +33,5 @@ export * from './confiabilidade.js';
 export * from './sinal.js';
 export * from './espera.js';
 export * from './prioridade.js';
+export * from './recado.js';
+export * from './fidelidade.js';

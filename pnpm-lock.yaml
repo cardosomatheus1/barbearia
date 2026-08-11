@@ -207,6 +207,9 @@ importers:
       '@barbearia/identity':
         specifier: workspace:*
         version: link:../identity
+      '@barbearia/jobs':
+        specifier: workspace:*
+        version: link:../jobs
     devDependencies:
       '@prisma/client':
         specifier: ^6.19.3

@@ -93,6 +93,14 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'customers.anonymize': 'Apagar os dados de um cliente (não tem volta)',
   // "Score" não diz nada para quem opera o balcão. O que ele decide, sim.
   'customers.reliability_override': 'Ajustar à mão se um cliente paga sinal',
+  // Criar ou tirar saldo de fidelidade à mão. O rótulo diz o que a caixa
+  // entrega, não o nome técnico: quem a marca está podendo criar crédito que
+  // vira pagamento no balcão.
+  'finance.loyalty_adjust': 'Ajustar o saldo de fidelidade de um cliente',
+  // Ler o que os clientes escreveram, e responder em nome da casa. Duas caixas
+  // porque são duas coisas: o barbeiro pode precisar da primeira sem a segunda.
+  'feedback.view': 'Ler os recados dos clientes',
+  'feedback.manage': 'Responder e encerrar recados',
   'reports.finance': 'Relatórios financeiros',
   'reports.operational': 'Relatórios de operação',
   'inventory.view': 'Ver o estoque',

@@ -6,9 +6,12 @@ import {
   fichaEstaVazia,
   fraseDaConversa,
   podeTudo,
+  saldoPorExtenso,
 } from '@barbearia/core';
 import {
   confiancaDoCliente,
+  saldoDeFidelidade,
+  type SaldoDeFidelidade,
   consentimentosDaFicha,
   fichaDoCliente,
   type ConfiancaDoCliente,
@@ -21,6 +24,7 @@ import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
 import {
   acaoAbrirPedidoDeDados,
   acaoAnonimizarCliente,
+  acaoAjustarFidelidade,
   acaoConfiancaDoCliente,
   acaoConsentimentoNoBalcao,
   acaoPreferencias,
@@ -290,6 +294,69 @@ function DireitosDoTitular({
  * A contagem de horários considerados fica, porque ela responde a pergunta
  * seguinte — "vocês estão julgando pelo quê?" — sem revelar a escala.
  */
+/**
+ * O saldo de fidelidade na ficha (bloco 41).
+ *
+ * Mostra o número **e** o que falta para o prêmio quando o modelo é visitas:
+ * "3 visitas" sozinho não diz nada; "faltam 7 para o corte grátis" é o que a
+ * recepção fala em voz alta.
+ *
+ * O ajuste manual fica atrás de `finance.loyalty_adjust`, com motivo
+ * obrigatório: ele **cria** saldo, e saldo vira pagamento na comanda seguinte.
+ */
+function Fidelidade({
+  saldo,
+  customerId,
+  podeAjustar,
+}: {
+  readonly saldo: SaldoDeFidelidade;
+  readonly customerId: string;
+  readonly podeAjustar: boolean;
+}) {
+  return (
+    <section aria-labelledby="fidelidade" className="secao">
+      <h2 className="rotulo" id="fidelidade">
+        Fidelidade
+      </h2>
+
+      <div className="saldo-fidelidade">
+        <p className="saldo-fidelidade__numero tabular">
+          {saldoPorExtenso(saldo.modo, saldo.saldo)}
+        </p>
+        {saldo.faltaParaPremio !== null ? (
+          <p className="saldo-fidelidade__nota">
+            {saldo.faltaParaPremio === 0
+              ? 'Cartão completo — o próximo corte pode sair de graça.'
+              : `Faltam ${saldo.faltaParaPremio} para o corte grátis.`}
+          </p>
+        ) : null}
+
+        {podeAjustar ? (
+          <form action={acaoAjustarFidelidade} className="saldo-fidelidade__ajuste">
+            <input name="customerId" type="hidden" value={customerId} />
+            <label className="fidelidade__campo">
+              <span>Ajustar (use sinal negativo para tirar)</span>
+              <input
+                className="ui-field__input"
+                inputMode="numeric"
+                name="quantidade"
+                type="number"
+              />
+            </label>
+            <label className="fidelidade__campo">
+              <span>Por quê</span>
+              <input className="ui-field__input" minLength={10} name="motivo" type="text" />
+            </label>
+            <button className="ui-button ui-button--ghost recado__acao" type="submit">
+              Ajustar saldo
+            </button>
+          </form>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function Confianca({
   confianca,
   customerId,
@@ -434,12 +501,17 @@ export default async function FichaPage({ params, searchParams }: Props) {
   // latência de uma na outra numa tela que o barbeiro abre com o cliente
   // sentado.
   const veSinal = estado.staff.permissions.includes('finance.deposit');
-  const [ficha, consentimentos, confianca] = await Promise.all([
+  // O saldo é dinheiro, e a rota exige as duas permissões que ela devolve.
+  const veSaldo =
+    estado.staff.permissions.includes('finance.view') &&
+    estado.staff.permissions.includes('customers.view');
+  const [ficha, consentimentos, confianca, fidelidade] = await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
     // Só quem pode mexer em sinal pergunta: a rota exige `finance.deposit`, e
     // pedir sem ela devolveria 403 em toda abertura de ficha da recepção.
     veSinal ? confiancaDoCliente(token, id) : Promise.resolve(null),
+    veSaldo ? saldoDeFidelidade(token, id) : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -658,6 +730,16 @@ export default async function FichaPage({ params, searchParams }: Props) {
         ])}
       />
       )}
+
+      {/* O saldo de fidelidade (bloco 41). A SPEC §4.8 pede a exibição "no app e
+          no PDV" — a ficha é onde o balcão olha antes de cobrar. */}
+      {fidelidade?.ok && fidelidade.dados.modo !== 'nenhum' && !ficha.dados.anonimizado ? (
+        <Fidelidade
+          customerId={ficha.dados.customerId}
+          podeAjustar={estado.staff.permissions.includes('finance.loyalty_adjust')}
+          saldo={fidelidade.dados}
+        />
+      ) : null}
 
       {confianca?.ok && !ficha.dados.anonimizado ? (
         <Confianca

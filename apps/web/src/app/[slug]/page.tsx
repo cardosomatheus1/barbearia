@@ -384,6 +384,25 @@ export default async function BarbershopPage({ params }: Params) {
           a ausência — anuncia o descumprimento em vez de resolvê-lo, e a tela
           de configurações já cobra o cadastro de quem administra.
         */}
+        {/*
+          O canal de recados (bloco 40).
+
+          Fica na página pública e não só em "Meus agendamentos" porque a
+          reclamação mais valiosa é a de quem **não** virou cliente: esperou,
+          desistiu e foi embora. Essa pessoa não tem conta, e não vai criar uma
+          para reclamar.
+        */}
+        <section className="secao secao--miudo">
+          <div>
+            <h2 className="rotulo">Fale com a gente</h2>
+            <p className="politica">
+              Sugestão, reclamação ou elogio — chega direto para a equipe, e não aparece em
+              lugar nenhum público.{' '}
+              <a href={`/${slug}/falar`}>Escrever para a barbearia</a>.
+            </p>
+          </div>
+        </section>
+
         {profile.encarregado ? (
           <section className="secao secao--miudo">
             <div>

@@ -1560,6 +1560,198 @@ main { padding-bottom: var(--space-8); }
    vencido continua precisando alcançar a saída. */
 .convite__alternativa { min-height: 44px; }
 
+/* Fale com a gente (bloco 40): uma escolha, um campo, um botão. */
+.falar {
+  padding: var(--space-7) var(--space-4) var(--space-8);
+  max-width: 34rem;
+}
+.falar__casa {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.falar__titulo { margin: 0 0 var(--space-3); font-size: var(--font-size-xl); }
+.falar__sub { margin: 0 0 var(--space-6); color: var(--color-text-muted); }
+.falar__erro {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+.falar__form { display: grid; gap: var(--space-5); }
+.falar__rotulo {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+.falar__tipos, .falar__contato {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.falar__tipos { display: grid; gap: var(--space-2); }
+/* Alvo de toque inteiro, e não só o círculo do rádio: escolher o tipo é o
+   primeiro gesto da tela, feito em pé e com uma mão. */
+.falar__tipo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.falar__tipo:hover { background: var(--color-surface-hover); }
+.falar__campo { display: grid; gap: var(--space-2); }
+.falar__contato .falar__campo { margin-bottom: var(--space-3); }
+.falar__texto {
+  width: 100%;
+  min-height: 8rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  resize: vertical;
+}
+.falar__texto:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.falar__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.falar__voltar { min-height: 44px; }
+/* Alvo de toque de 44px: link de navegação sozinho no topo não é link dentro de
+   frase, e a WCAG 2.5.8 só isenta o segundo. Foi assim que `← Voltar` ficou com
+   21px em quatro telas até a medição pegar. */
+.falar__voltar-topo {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: var(--space-2);
+}
+
+@container (min-width: 30rem) {
+  .falar__tipos { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* O programa de fidelidade (bloco 41): uma escolha, e ela é a tela inteira. */
+.fidelidade__topo { margin-bottom: var(--space-5); }
+.fidelidade__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.fidelidade__aviso { margin-bottom: var(--space-4); }
+.fidelidade__form { display: grid; gap: var(--space-5); max-width: 42rem; }
+.fidelidade__modos, .fidelidade__numeros {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+.fidelidade__modos { display: grid; gap: var(--space-2); }
+/* Alvo de toque inteiro: escolher o modelo é o gesto que a tela existe para
+   receber, e o balcao faz isso no celular tanto quanto no notebook. */
+.fidelidade__modo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.fidelidade__modo:hover { background: var(--color-surface-hover); }
+.fidelidade__modo > span { display: grid; gap: var(--space-1); }
+.fidelidade__exemplo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fidelidade__numeros { display: grid; gap: var(--space-4); }
+.fidelidade__campo { display: grid; gap: var(--space-2); font-size: var(--font-size-sm); }
+.fidelidade__dica { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fidelidade__nota { margin-top: var(--space-6); max-width: 42rem; }
+.fidelidade__nota p { color: var(--color-text-muted); }
+
+/* O saldo do cliente, na ficha e no balcão. */
+.saldo-fidelidade {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.saldo-fidelidade__numero {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent);
+}
+.saldo-fidelidade__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.saldo-fidelidade__ajuste { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+
+@container (min-width: 34rem) {
+  .fidelidade__numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A fila de recados (bloco 40). Densa: a recepção passa o dia aqui. */
+.recados { padding-bottom: var(--space-8); }
+.recados__topo { margin-bottom: var(--space-5); }
+.recados__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.recados__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+.recados__filtro { margin: var(--space-5) 0 0; font-size: var(--font-size-sm); }
+.recados__aviso { margin-bottom: var(--space-4); }
+/* Alvo de toque no filtro: link de navegação sozinho não é link dentro de frase. */
+.recados__filtro a { display: inline-flex; align-items: center; min-height: 44px; }
+
+.recado {
+  /* O recipiente da `@container` deste cartão: um elemento não responde sobre
+     si mesmo, ele pergunta ao ancestral. */
+  container-type: inline-size;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-lg);
+}
+/* A cor separa o que a triagem precisa distinguir de relance, e a hierarquia
+   verdadeira vem do rótulo escrito — cor é o último recurso, não o primeiro. */
+.recado--reclamacao { border-left-color: var(--color-danger); }
+.recado--sugestao { border-left-color: var(--color-accent); }
+.recado--elogio { border-left-color: var(--color-success); }
+
+.recado__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.recado__tipo { font-weight: var(--font-weight-semibold); }
+.recado__estado, .recado__idade {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.recado__idade { margin-left: auto; }
+.recado__texto { margin: 0 0 var(--space-3); white-space: pre-wrap; }
+.recado__quem { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.recado__resposta {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+}
+.recado__acoes { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.recado__responder { display: grid; gap: var(--space-2); }
+.recado__campo { display: grid; gap: var(--space-2); font-size: var(--font-size-sm); }
+.recado__acao { min-height: 44px; }
+.recado__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* Espaço sobra: as ações deixam de empilhar e o cartão para de crescer. */
+@container (min-width: 34rem) {
+  .recado__acoes { grid-template-columns: auto 1fr auto; align-items: end; }
+  .recado__responder { grid-column: 2; }
+}
+
 @media (min-width: 768px) {
   .cadeiras { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
   .espera { grid-template-columns: auto 1fr auto; align-items: start; }
@@ -3855,10 +4047,12 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='agenda']) .contexto__link[data-para='agenda'],
 .casco:has([data-secao='fila']) .contexto__link[data-para='fila'],
 .casco:has([data-secao='avisos']) .contexto__link[data-para='avisos'],
+.casco:has([data-secao='recados']) .contexto__link[data-para='recados'],
 .casco:has([data-secao='caixa']) .contexto__link[data-para='caixa'],
 .casco:has([data-secao='comanda']) .contexto__link[data-para='comanda'],
 .casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
 .casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
+.casco:has([data-secao='fidelidade']) .contexto__link[data-para='fidelidade'],
 .casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
 .casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
 .casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais'],

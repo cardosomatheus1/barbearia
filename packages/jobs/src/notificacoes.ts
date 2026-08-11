@@ -64,6 +64,24 @@ export interface MensagemDeVaga {
 }
 
 /**
+ * A resposta a um recado do cliente (bloco 40).
+ *
+ * Transacional pelo motivo mais direto que existe: a pessoa escreveu para a
+ * barbearia e está esperando resposta. Não olha consentimento de marketing —
+ * seria pedir autorização para responder uma pergunta.
+ *
+ * O texto da resposta viaja aqui e **não** é gravado em `notifications`: a
+ * conversa entre o cliente e a casa mora em `feedbacks`, sob RLS, e repeti-la
+ * no registro de envio multiplicaria a superfície sem responder nada.
+ */
+export interface MensagemDeRecado {
+  readonly phoneE164: string;
+  readonly clienteNome: string;
+  readonly barbearia: string;
+  readonly resposta: string;
+}
+
+/**
  * O provedor, estendido para além do OTP.
  *
  * Continua abstração pelo mesmo motivo do bloco 4: o WhatsApp oficial exige
@@ -79,12 +97,14 @@ export interface NotificationProvider {
   enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void>;
   enviarDeFila(mensagem: MensagemDeFila): Promise<void>;
   enviarDeVaga(mensagem: MensagemDeVaga): Promise<void>;
+  enviarDeRecado(mensagem: MensagemDeRecado): Promise<void>;
 }
 
 export class FakeNotificationProvider implements NotificationProvider {
   readonly agendamentos: MensagemDeAgendamento[] = [];
   readonly filas: MensagemDeFila[] = [];
   readonly vagas: MensagemDeVaga[] = [];
+  readonly recados: MensagemDeRecado[] = [];
   /** Para provar o caminho de falha sem depender de rede fora do ar. */
   falharProxima = false;
 
@@ -103,6 +123,11 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.vagas.push(mensagem);
   }
 
+  async enviarDeRecado(mensagem: MensagemDeRecado): Promise<void> {
+    this.derrubarSePedido();
+    this.recados.push(mensagem);
+  }
+
   private derrubarSePedido(): void {
     if (this.falharProxima) {
       this.falharProxima = false;
@@ -114,6 +139,7 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.agendamentos.length = 0;
     this.filas.length = 0;
     this.vagas.length = 0;
+    this.recados.length = 0;
   }
 }
 
@@ -154,6 +180,21 @@ export class ConsoleNotificationProvider implements NotificationProvider {
       `[aviso] vaga_liberada para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}, ${mensagem.quandoTexto}, ` +
         `${mensagem.minutosParaResponder} min) ${mensagem.link}`,
+    );
+  }
+
+  /**
+   * O texto da resposta **não** vai para o log, ao contrário do link da vaga.
+   *
+   * O link é credencial e está aqui por necessidade — sem ele não há como
+   * exercitar o aceite numa máquina local. A resposta a uma reclamação é
+   * conteúdo de conversa entre o cliente e a casa, e não há nada a exercitar
+   * com ela impressa.
+   */
+  async enviarDeRecado(mensagem: MensagemDeRecado): Promise<void> {
+    this.log(
+      `[aviso] resposta_recado para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia}, ${mensagem.resposta.length} caracteres)`,
     );
   }
 }

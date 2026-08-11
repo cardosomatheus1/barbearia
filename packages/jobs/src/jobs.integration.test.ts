@@ -75,6 +75,7 @@ const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
 const esperasExpiradas: { tenantId: string; agora: Date }[] = [];
 const vagasOferecidas: { tenantId: string; professionalId: string }[] = [];
 const ofertasVencidas: { tenantId: string; agora: Date }[] = [];
+const recadosRespondidos: { tenantId: string; recadoId: string }[] = [];
 /** Os alertas que o worker mandou o canal do gestor entregar. */
 const alertasEntregues: { tenantId: string; quantos: number }[] = [];
 /** As conferências de cobrança online que o worker mandou rodar (bloco 35). */
@@ -113,6 +114,10 @@ const ligacoesDaPlataforma = () => ({
   vencerOfertasDaEspera: async (tenantId: string, agora: Date) => {
     ofertasVencidas.push({ tenantId, agora });
     return 0;
+  },
+  responderRecadoDoCliente: async (tenantId: string, recadoId: string) => {
+    recadosRespondidos.push({ tenantId, recadoId });
+    return true;
   },
   avisarDaOperacao: async (tenantId: string, alertas: readonly unknown[]) => {
     alertasEntregues.push({ tenantId, quantos: alertas.length });
@@ -167,6 +172,7 @@ describeIfDb('fila de trabalho', () => {
     esperasExpiradas.length = 0;
     vagasOferecidas.length = 0;
     ofertasVencidas.length = 0;
+    recadosRespondidos.length = 0;
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
     contexto = {
@@ -490,6 +496,55 @@ describeIfDb('fila de trabalho', () => {
 
       expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
       expect(provider.agendamentos).toHaveLength(0);
+    } finally {
+      recursosLigados = true;
+    }
+  });
+
+  it('a resposta ao recado chega a quem sabe entregá-la', async () => {
+    // O handler não sabe o que foi respondido nem a quem: `jobs` não conhece
+    // `crm`. Ele carrega o id e chama quem sabe — e o payload guarda só isso.
+    await enfileirarNoTenant({
+      kind: 'recado.responder',
+      payload: { recadoId: 'f0404040-0000-0000-0000-000000000001' },
+      idempotencyKey: 'recado-resposta:f0404040',
+    });
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+    expect(recadosRespondidos).toEqual([
+      { tenantId: TENANT, recadoId: 'f0404040-0000-0000-0000-000000000001' },
+    ]);
+  });
+
+  it('com avisos desligados, a resposta ao recado não sai', async () => {
+    /**
+     * Quem desligou as mensagens responde pelo próprio WhatsApp. O que não pode
+     * acontecer é o produto mandar mensagem por um canal que a barbearia
+     * desligou — e a resposta gravada continua sendo o registro do que foi dito.
+     */
+    await enfileirarNoTenant({
+      kind: 'recado.responder',
+      payload: { recadoId: 'f0404040-0000-0000-0000-000000000002' },
+      idempotencyKey: 'recado-resposta:f0404040-2',
+    });
+
+    recursosLigados = false;
+    try {
+      const resultado = await rodada({
+        provider,
+        relogio: { agora: () => COMECA_EM },
+        recursoLigado: async () => recursosLigados,
+        ...ligacoesDaPlataforma(),
+      });
+      expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+      expect(recadosRespondidos).toHaveLength(0);
     } finally {
       recursosLigados = true;
     }

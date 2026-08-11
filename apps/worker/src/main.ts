@@ -1,5 +1,5 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
-import { varrerRetencao } from '@barbearia/crm';
+import { respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
 import { conciliarCobrancas } from '@barbearia/finance';
 import {
   expirarEsperas,
@@ -263,6 +263,27 @@ async function main(): Promise<void> {
           });
         }
         return vagas.length;
+      },
+
+      /**
+       * A resposta ao recado do cliente (bloco 40), ligada aqui.
+       *
+       * Duas pontas que `jobs` não conhece: `crm`, que sabe o que foi
+       * respondido a quem, e o provedor de mensagem, que entrega. Mesmo desenho
+       * da oferta de vaga — e o **mesmo** provedor, não uma instância nova, para
+       * que ligar o WhatsApp de verdade ligue também este caminho.
+       */
+      responderRecadoDoCliente: async (tenantId, recadoId) => {
+        const resposta = await respostaParaEnviar(tenantId, recadoId);
+        if (!resposta) return false;
+
+        await provider.enviarDeRecado({
+          phoneE164: resposta.telefone,
+          clienteNome: resposta.clienteNome,
+          barbearia: resposta.barbearia,
+          resposta: resposta.resposta,
+        });
+        return true;
       },
 
       expirarEsperas: async (tenantId, agora) => {

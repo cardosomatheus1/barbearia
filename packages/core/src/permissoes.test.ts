@@ -120,6 +120,10 @@ describe('permissões de dinheiro', () => {
       'finance.deposit',
       'finance.discount',
       'finance.export',
+      // `finance.loyalty_adjust` entrou no bloco 41, e pelo prefixo: criar
+      // saldo de fidelidade **é** criar dinheiro — ele vira forma de pagamento
+      // no balcão da operação seguinte.
+      'finance.loyalty_adjust',
       'finance.view',
       'finance.view_profit',
     ]);

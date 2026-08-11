@@ -224,6 +224,12 @@ describeIfDb('direitos do titular', () => {
       // A lista de espera (bloco 38). "Eu pedi para ser avisado do sábado de
       // manhã e nunca me avisaram" é exatamente o que a exportação responde.
       'waitlist_entries',
+      // Os recados (bloco 40). "Eu reclamei da espera e vocês nunca me
+      // responderam" é exatamente o que a exportação existe para responder.
+      'feedbacks',
+      // O saldo de fidelidade (bloco 41). "Quantos pontos eu tinha?" é dado do
+      // titular tanto quanto o saldo de fiado.
+      'loyalty_entries',
     ]);
 
     const EXCECOES = new Map([

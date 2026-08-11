@@ -213,6 +213,14 @@ a régua de cobrança: quem monta o processo (`apps/worker`) liga as duas pontas
 Obrigatória e não opcional no tipo — opcional, ela seria esquecida no primeiro
 worker novo e a lei deixaria de ser cumprida sem nada ficar vermelho.
 
+`crm` depende de `jobs` pela mesma razão de `platform` e de `finance`:
+`enfileirar()`. A resposta a um recado do cliente sai por mensagem, e a tarefa
+que a entrega precisa nascer **dentro da transação** que grava a resposta —
+enfileirar depois do commit abre a janela em que o balcão lê "respondido" e o
+cliente nunca recebe nada, que é a única coisa que aquele canal entrega. A seta
+não volta: `jobs` continua sem saber que existe recado, e recebe do `Contexto`
+do worker a função que sabe.
+
 `crm` depende de `identity` pelo mesmo motivo de `finance`: `audit()`. A trilha
 do consentimento registrado pelo balcão e a do pedido de titular encerrado
 precisam ser gravadas **dentro** da transação que muda o estado — a exportação
@@ -322,6 +330,20 @@ personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
 - **Medição, não olhômetro.** `node scripts/medir-responsividade.js` abre cada
   tela nas quatro larguras e mede elemento a elemento: rolagem horizontal,
   transbordo e alvo de toque. Rodar antes de fechar bloco que produza interface.
+- **Todo bloco com interface entrega os prints no fim.** Medição verde diz que
+  nada quebrou; ela não diz se a tela ficou boa. Quem decide isso é quem olha, e
+  para olhar precisa ver — descrever a tela em prosa não substitui a imagem, e
+  nenhuma das duas classes de defeito que este documento cataloga (§5 e §6)
+  aparece num relatório de "ok".
+
+  ```bash
+  MEDICAO_PRINTS=/tmp/prints scripts/medicao.sh
+  ```
+
+  A variável já existe e a medição fotografa cada tela nas quatro larguras. O
+  que se envia é o **conjunto das telas novas ou alteradas pelo bloco**, na
+  largura de 390px e na de 1280px — o celular do cliente e o notebook do balcão.
+  Print só de uma das duas esconde metade do problema.
 - **Nunca esconder conteúdo no celular — refluir.** `display: none` em tela
   pequena é decisão de que aquilo não importava; se não importa, tire de todas.
 
@@ -493,6 +515,8 @@ Um bloco só está concluído quando **todos** os itens passam:
 - [ ] `/security-review` rodado, se o bloco tocou auth, dinheiro, dado pessoal ou permissão
 - [ ] README atualizado se alguma decisão de arquitetura mudou
 - [ ] Interface conferida em 360, 390, 768 e 1280 — sem rolagem horizontal
+- [ ] **Prints das telas novas ou alteradas enviados**, em 390 e 1280. Medição
+      verde diz que nada quebrou; ela não diz se ficou bom
 - [ ] Estado vazio, carregando e erro desenhados
 - [ ] **Fluxo percorrido como quem opera** (§6): toda tela tem volta, a mesma ação
       tem o mesmo nome em todo lugar, todo estado tem saída na interface, e nenhum
@@ -609,6 +633,17 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Filtro da aplicação e índice parcial | dizem a mesma coisa, ou a gravação recusa o que a leitura aceitou. O filtro que olhava o prazo e o índice que olhava só o estado discordavam entre o vencimento e a varredura, e o `ON CONFLICT DO NOTHING` — que não distingue os dois índices — descartava a vaga inteira em silêncio |
 | Sair de uma lista de espera | cancela o convite aberto e apaga o hold, na mesma transação. Sem isso a pessoa diz "não quero mais" e continua com um link resgatável, com o horário fora da grade por uma espera que já não existe |
 | Convite sem a mensagem | o aceite tem **duas portas**: o token do link, para quem não tem sessão, e a entrada da lista, para quem já está autenticada. O token existe em claro uma vez, dentro da mensagem — se ela não chega, a pessoa vê "abriu um horário para você" e não tem como pegá-lo. Pela entrada, o filtro por `customer_id` é obrigatório: a RLS separa barbearias e não separa clientes dentro de uma |
+| Recado do cliente | sem conta e sem nome: a reclamação mais valiosa é a de quem desistiu da fila e foi embora, e essa pessoa não vai criar cadastro para reclamar. Anônimo é resultado legítimo, não caso degradado — e a tela diz que sem contato não há resposta |
+| Apagar reclamação | não existe. `REVOKE DELETE` na tabela, e nenhuma permissão de apagar no catálogo: o limite ético da SPEC §4.10 escrito onde não depende de ninguém lembrar. Encerrar é **estado**, e o texto continua contando para a leitura do trimestre |
+| Rota pública que cria cadastro por telefone | confere `require_otp_for_booking` antes, sempre. Sem isso ela vira a porta lateral para criar cadastro com telefone alheio — o recado registra anônimo em vez de recusar, porque recusar transformaria o interruptor de segurança do agendamento num silenciador de reclamação |
+| Assumir um item de fila | é sempre **para si**, e o corpo não escolhe por quem. Com `responsavelId` vindo da requisição, o botão "Assumir" mandava vazio e devolvia o recado à triagem — e alguém penduraria a própria reclamação no colega |
+| Fidelidade | **um modelo por barbearia**, e é a chave primária que garante: "você tem 340 pontos, 3 visitas e R$ 12 de cashback" é a frase que ninguém entende no balcão |
+| Saldo de fidelidade | livro-razão append-only, com o **modo congelado em cada lançamento**. Saldo é número que alguém sobrescreve, e a pergunta que chega é "por que caiu?"; e trocar de pontos para cashback em maio não pode transformar 300 pontos de abril em R$ 300 |
+| Acúmulo de fidelidade | sobre o que a pessoa **pagou de verdade** — o que saiu do próprio saldo não gera saldo novo. Sem isso o corte grátis gera o crédito do próximo corte grátis, que é o laço que a SPEC §4.8 nomeia em uma linha |
+| Resgate de fidelidade | forma de pagamento, nunca desconto. Desconto é a casa abrindo mão de receita, com permissão e teto próprios; resgate é o cliente gastando crédito que já é dele — como desconto, o teto do bloco 30 barraria o cliente de usar o próprio saldo. E **nunca vira troco**: numa conta paga com dinheiro e crédito, o troco em espécie faria a barbearia comprar de volta o próprio programa |
+| Criar saldo à mão | `finance.loyalty_adjust`, com prefixo `finance.` de propósito: o segundo fator é derivado do prefixo, e criar saldo é criar valor gastável no balcão da operação seguinte. Motivo escrito obrigatório, na borda, no domínio e por `CHECK` |
+| Filtro de varredura por tipo | recorta pelo **fato**, não pelo nome do tipo. `kind = 'acumulo'` na varredura de vencimento fazia o saldo ajustado à mão sumir da leitura sem nunca aparecer no extrato; `amount > 0` é o que descreve a coisa |
+| `@container` numa tela nova | o recipiente é o **ancestral**, e ele precisa declarar `container-type`. Um elemento não responde sobre si mesmo: sem a declaração no pai, a regra nunca casa e a tela fica na versão estreita em qualquer largura — sem nada ficar vermelho |
 | Provedor de mensagem no worker | **um só**, criado onde o processo é montado. Instanciar o de console dentro de um caminho faz daquele caminho o único que não troca junto — e o convite de vaga carrega o token em claro, que é credencial, no log |
 
 ---

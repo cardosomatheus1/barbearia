@@ -16,6 +16,7 @@ import {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { lancarComissaoDaComanda } from './comissao.js';
+import { conferirResgate, creditarDaVenda, programaDaCasa, registrarResgate } from './fidelidade.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -713,6 +714,14 @@ export async function fecharComanda(params: {
    */
   readonly hojeNaUnidade: string;
   /**
+   * Quantos pontos, visitas ou centavos o cliente está resgatando (bloco 41).
+   *
+   * Vem separado do pagamento porque a **unidade** é outra: o pagamento diz
+   * quantos centavos abateram da conta; isto diz quanto saiu do saldo. Em
+   * `visitas` os dois nem se parecem — dez visitas viram a conta inteira.
+   */
+  readonly resgateQuantidade?: number;
+  /**
    * A transação de fora, quando já existe uma.
    *
    * Existe por uma coisa só: o webhook do Pix (bloco 35). A SPEC §3.3 diz que a
@@ -872,6 +881,65 @@ export async function fecharComanda(params: {
         staffName: params.staffName,
       });
     }
+
+    /**
+     * A fidelidade nasce na mesma transação, e pelo mesmo motivo (bloco 41).
+     *
+     * O resgate **sai** do saldo e o acúmulo **entra**, nesta ordem e aqui
+     * dentro. Gravar o resgate depois do commit deixaria a comanda fechada com
+     * o crédito aplicado e o saldo intacto — crédito infinito, gasto uma vez por
+     * comanda, que é o pior desfecho possível deste bloco.
+     *
+     * O acúmulo desconta o que foi resgatado: é o bloqueio anti-laço que a SPEC
+     * §4.8 pede, e sem ele o corte grátis gera o crédito que compra o próximo
+     * corte grátis.
+     */
+    const resgatadoCents = params.pagamentos
+      .filter((p) => p.forma === 'fidelidade')
+      .reduce((soma, p) => soma + p.valorCents, 0);
+
+    if (resgatadoCents > 0) {
+      if (!comanda.customerId) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'Identifique o cliente antes de usar o saldo de fidelidade.',
+        );
+      }
+      const programaDaVenda = await programaDaCasa(tx);
+      // Reconferido **sob a trava**, e não só na tela: entre a montagem do
+      // pagamento e este ponto pode ter entrado outro resgate do mesmo saldo.
+      const conferido = await conferirResgate({
+        // A transação já está aberta com o tenant no contexto; `conferirResgate`
+        // só usa o id quando precisa abrir a própria.
+        tenantId: params.tenantId,
+        customerId: comanda.customerId,
+        quantidade: params.resgateQuantidade ?? 0,
+        tetoCents: comanda.totalCents,
+        tx,
+      });
+      if (conferido.valorCents !== resgatadoCents) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'O valor do resgate mudou. Refaça o pagamento.',
+        );
+      }
+      await registrarResgate(tx, {
+        customerId: comanda.customerId,
+        orderId: params.orderId,
+        quantidade: conferido.quantidade,
+        modo: programaDaVenda.modo,
+      });
+    }
+
+    await creditarDaVenda(tx, {
+      orderId: params.orderId,
+      customerId: comanda.customerId,
+      // Sem gorjeta: ela é do barbeiro, e premiar o cliente por ela seria a
+      // barbearia pagando fidelidade com dinheiro que não é dela.
+      totalCents: comanda.totalCents - comanda.gorjetaCents,
+      resgatadoCents,
+      agora: new Date(),
+    });
 
     /**
      * A comissão nasce **na mesma transação** que fecha a venda.

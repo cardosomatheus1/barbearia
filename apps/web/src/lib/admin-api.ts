@@ -817,6 +817,105 @@ export const aceitarConvite = (slug: string, token: string) =>
     `/v1/b/${encodeURIComponent(slug)}/offer/${encodeURIComponent(token)}/accept`,
   );
 
+// -- Recados do cliente (bloco 40) --------------------------------------------
+
+export type TipoDeRecado = 'sugestao' | 'reclamacao' | 'elogio';
+export type EstadoDoRecado = 'aberto' | 'em_analise' | 'respondido' | 'encerrado';
+
+export interface RecadoNaTela {
+  id: string;
+  tipo: TipoDeRecado;
+  estado: EstadoDoRecado;
+  texto: string;
+  resposta: string | null;
+  respondidoEm: string | null;
+  criadoEm: string;
+  diasEsperando: number;
+  responsavelId: string | null;
+  responsavelNome: string | null;
+  clienteId: string | null;
+  clienteNome: string | null;
+  temContato: boolean;
+  agendamentoId: string | null;
+}
+
+export const recadosDaFila = (token: string, incluirEncerrados = false) =>
+  chamar<{ recados: RecadoNaTela[] }>(
+    'GET',
+    `/v1/admin/recados${incluirEncerrados ? '?incluirEncerrados=1' : ''}`,
+    undefined,
+    token,
+  );
+
+/** Assumir é sempre para si: quem assume sai da sessão, nunca do corpo. */
+export const assumirRecadoNaApi = (token: string, id: string) =>
+  chamar<{ assumido: boolean }>('POST', `/v1/admin/recados/${id}/assumir`, {}, token);
+
+export const devolverRecadoNaApi = (token: string, id: string) =>
+  chamar<{ devolvido: boolean }>('POST', `/v1/admin/recados/${id}/devolver`, {}, token);
+
+export const responderRecadoNaApi = (token: string, id: string, resposta: string) =>
+  chamar<{ enviada: boolean }>('POST', `/v1/admin/recados/${id}/responder`, { resposta }, token);
+
+export const encerrarRecadoNaApi = (token: string, id: string) =>
+  chamar<{ encerrado: boolean }>('POST', `/v1/admin/recados/${id}/encerrar`, {}, token);
+
+// -- Fidelidade (bloco 41) ----------------------------------------------------
+
+export type ModoDeFidelidade = 'nenhum' | 'pontos' | 'visitas' | 'cashback';
+
+export interface ProgramaDeFidelidade {
+  modo: ModoDeFidelidade;
+  pontosPorReal: number;
+  valorDoPontoCents: number;
+  visitasParaPremio: number;
+  cashbackBps: number;
+  validadeDias: number | null;
+}
+
+export interface LancamentoDeFidelidade {
+  id: string;
+  tipo: 'acumulo' | 'resgate' | 'expiracao' | 'ajuste';
+  quantidade: number;
+  quando: string;
+  venceEm: string | null;
+  nota: string | null;
+  baseCents: number | null;
+}
+
+export interface SaldoDeFidelidade {
+  modo: ModoDeFidelidade;
+  saldo: number;
+  faltaParaPremio: number | null;
+  extrato: LancamentoDeFidelidade[];
+}
+
+export const programaDeFidelidade = (token: string) =>
+  chamar<ProgramaDeFidelidade>('GET', '/v1/admin/fidelidade/programa', undefined, token);
+
+export const salvarProgramaDeFidelidade = (token: string, dados: ProgramaDeFidelidade) =>
+  chamar<ProgramaDeFidelidade>('PUT', '/v1/admin/fidelidade/programa', dados, token);
+
+export const saldoDeFidelidade = (token: string, customerId: string) =>
+  chamar<SaldoDeFidelidade>(
+    'GET',
+    `/v1/admin/fidelidade/clientes/${customerId}`,
+    undefined,
+    token,
+  );
+
+export const ajustarSaldoDeFidelidade = (
+  token: string,
+  customerId: string,
+  dados: { quantidade: number; motivo: string },
+) =>
+  chamar<SaldoDeFidelidade>(
+    'POST',
+    `/v1/admin/fidelidade/clientes/${customerId}/ajuste`,
+    dados,
+    token,
+  );
+
 // -- Agenda do admin -----------------------------------------------------------
 
 export type TipoDeExcecao = 'block' | 'day_off' | 'holiday' | 'vacation' | 'custom_hours';
@@ -926,7 +1025,7 @@ export const moverAgendamento = (
 
 /** Espelha `FORMAS_DE_PAGAMENTO` do core, que é o que a borda da API aceita. */
 export type FormaDePagamento =
-  | 'cash' | 'pix' | 'debit' | 'credit' | 'link' | 'transfer' | 'fiado';
+  | 'cash' | 'pix' | 'debit' | 'credit' | 'link' | 'transfer' | 'fiado' | 'fidelidade';
 export type TipoDeItemDaComanda = 'service' | 'product' | 'consumable';
 
 export interface ItemDaComandaNaTela {
@@ -1051,7 +1150,19 @@ export const fecharAComanda = (
   id: string,
   pagamentos: { forma: FormaDePagamento; valorCents: number }[],
   idempotencyKey: string,
-) => chamar<Comanda>('POST', `/v1/admin/orders/${id}/close`, { pagamentos }, token, idempotencyKey);
+  /** Quanto sai do saldo de fidelidade. A unidade é a do programa (bloco 41). */
+  resgateQuantidade?: number,
+) =>
+  chamar<Comanda>(
+    'POST',
+    `/v1/admin/orders/${id}/close`,
+    {
+      pagamentos,
+      ...(resgateQuantidade ? { resgateQuantidade } : {}),
+    },
+    token,
+    idempotencyKey,
+  );
 
 /** A cobrança online da comanda (blocos 35 e 36). */
 export interface CobrancaDaComandaNaTela {

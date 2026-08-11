@@ -318,6 +318,40 @@ describeIfDb('direitos do titular pela HTTP', () => {
     await com(maria)(http().get(`/v1/admin/customers/${carlos}/consentimentos`)).expect(200);
   });
 
+  it('exportar também não é atalho para o recado que o cliente escreveu', async () => {
+    /**
+     * O mesmo defeito, um bloco depois. A exportação passou a trazer o corpo dos
+     * recados (bloco 40), e `feedback.view` foi tirada do profissional **de
+     * propósito**: reclamação costuma ser sobre uma pessoa. Sem declarar a
+     * permissão aqui, o dono que a tirasse de um papel veria a decisão dele
+     * deixar de valer — um cliente por vez, pela rota de LGPD.
+     *
+     * Achado da revisão de segurança do bloco 40.
+     */
+    const dono = await entrar(DONO);
+    const maria = await recepcionista(dono);
+    const carlos = await cliente(dono);
+
+    // Tudo o que a exportação exige, **menos** o recado.
+    await com(dono)(
+      http()
+        .put('/v1/admin/team/permissoes/receptionist')
+        .send({
+          permissoes: [
+            'appointments.view',
+            'customers.view',
+            'customers.edit',
+            'customers.export',
+            'customers.view_notes',
+            'finance.view',
+          ],
+        }),
+    ).expect(200);
+
+    const negado = await com(maria)(http().get(`/v1/admin/customers/${carlos}/dados`)).expect(403);
+    expect(negado.body.error.code).toBe('forbidden');
+  });
+
   // -- exportação ------------------------------------------------------------
 
   it('exportar exige o segundo fator, porque o arquivo traz dinheiro', async () => {

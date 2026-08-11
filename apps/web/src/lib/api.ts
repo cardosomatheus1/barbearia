@@ -272,6 +272,78 @@ export async function entrarNaEsperaNaApi(
   return { ok: true };
 }
 
+/**
+ * Manda um recado para a barbearia (bloco 40).
+ *
+ * Sem sessão, e sem exigir sequer nome: o recado anônimo é o de quem esperou
+ * quarenta minutos e foi embora, e ele é o mais valioso que existe.
+ *
+ * A resposta é sempre a mesma — "registrado" —, e a tela não tenta descobrir
+ * mais que isso. Distinguir "criei" de "você já é cliente daqui" seria oráculo
+ * sobre cadastro alheio.
+ */
+export async function mandarRecadoNaApi(
+  slug: string,
+  dados: {
+    tipo: string;
+    texto: string;
+    nome?: string;
+    telefone?: string;
+    token?: string;
+  },
+): Promise<{ ok: true } | { ok: false; code: string }> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/feedback`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(dados.token ? { authorization: `Bearer ${dados.token}` } : {}),
+    },
+    body: JSON.stringify({
+      tipo: dados.tipo,
+      texto: dados.texto,
+      ...(dados.nome ? { nome: dados.nome } : {}),
+      ...(dados.telefone ? { telefone: dados.telefone } : {}),
+    }),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const corpo = (await response.json().catch(() => null)) as
+      | { error?: { code?: string } }
+      | null;
+    return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
+  }
+
+  return { ok: true };
+}
+
+export interface MeuSaldoDeFidelidade {
+  modo: 'nenhum' | 'pontos' | 'visitas' | 'cashback';
+  saldo: number;
+  faltaParaPremio: number | null;
+  extrato: {
+    id: string;
+    tipo: 'acumulo' | 'resgate' | 'expiracao' | 'ajuste';
+    quantidade: number;
+    quando: string;
+    venceEm: string | null;
+    nota: string | null;
+  }[];
+}
+
+/** O saldo do próprio cliente. O id vem da sessão, nunca do endereço. */
+export async function meuSaldoDeFidelidade(
+  slug: string,
+  token: string,
+): Promise<MeuSaldoDeFidelidade | null> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/loyalty`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!response.ok) return null;
+  return (await response.json()) as MeuSaldoDeFidelidade;
+}
+
 export async function listarEsperas(
   slug: string,
   token: string,

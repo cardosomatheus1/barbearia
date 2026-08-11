@@ -340,7 +340,8 @@ export class CaixaController {
   async pagar(
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
-    @Body(new ZodValidationPipe(fecharComandaSchema)) body: { pagamentos: Pagamento[] },
+    @Body(new ZodValidationPipe(fecharComandaSchema))
+    body: { pagamentos: Pagamento[]; resgateQuantidade?: number },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
@@ -354,6 +355,9 @@ export class CaixaController {
         locationId: local.id,
         orderId: id,
         pagamentos: body.pagamentos,
+        ...(body.resgateQuantidade !== undefined
+          ? { resgateQuantidade: body.resgateQuantidade }
+          : {}),
         staffId: staff.staffUserId,
         staffName: staff.name,
         // O dia da unidade, não o do servidor: às 22h de Salvador o UTC já
