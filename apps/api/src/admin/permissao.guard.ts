@@ -158,11 +158,24 @@ export class PermissaoGuard implements CanActivate {
  * Mora dentro da `PermissaoGuard`, e não numa guarda separada, pela mesma
  * razão: esta aqui é obrigatória em toda rota do painel (a ausência de `@Exige`
  * é recusa), então não existe caminho que passe ao lado dela.
+ *
+ * ## O interruptor, e o que ele não desliga
+ *
+ * A barbearia decide **se** a cobrança acontece (`tenants.require_mfa_for_money`,
+ * migração 0040), e a decisão nasce desligada. O que ela não decide é **quais**
+ * rotas seriam alcançadas: isso continua derivado da permissão declarada, e uma
+ * rota de dinheiro escrita daqui a dez blocos continua nascendo coberta.
+ *
+ * A separação é o ponto. Um interruptor que também escolhesse rotas seria uma
+ * lista para alguém esquecer de atualizar — o defeito que a derivação existe
+ * para eliminar. Aqui, ligar é uma decisão só, e ela vale para tudo.
  */
 function exigirSegundoFator(
   staff: NonNullable<StaffRequest['staff']>,
   exigidas: readonly Permissao[],
 ): void {
+  if (!staff.exigeSegundoFatorNoDinheiro) return;
+
   const mexeEmDinheiro = exigidas.some((p) => PERMISSOES_DE_DINHEIRO.includes(p));
   if (!mexeEmDinheiro) return;
 

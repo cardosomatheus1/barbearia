@@ -16,6 +16,7 @@ import {
 } from '@/lib/sessao-gestor';
 import {
   acaoComecarSegundoFator,
+  acaoPoliticaDeSegundoFator,
   acaoConfirmarSegundoFator,
   acaoEncerrarSessao,
   acaoExpulsarSuporte,
@@ -126,6 +127,8 @@ export default async function SegurancaPage({ searchParams }: Props) {
   }
 
   const { ativo, pendente, obrigatorio, verificadoNestaSessao } = mfa.dados;
+  const { exigidoNaBarbearia, podeMudarAExigencia } = mfa.dados;
+  const politica = first(query['politica']);
 
   return (
     <main className="ui-container painel__conteudo" {...secao('seguranca')}>
@@ -133,8 +136,8 @@ export default async function SegurancaPage({ searchParams }: Props) {
 
       <h1 className="painel__titulo">Segundo fator</h1>
       <p className="painel__sub">
-        Um código de seis dígitos, do aplicativo do seu celular, para quem mexe em dinheiro. O
-        balcão fica logado o dia inteiro — o código é o que separa a gaveta de quem passa por perto.
+        Um código de seis dígitos, do aplicativo do seu celular. O balcão fica logado o dia
+        inteiro — o código é o que separa a gaveta de quem passa por perto.
       </p>
 
       {erro ? (
@@ -142,6 +145,53 @@ export default async function SegurancaPage({ searchParams }: Props) {
           {FALHA[erro] ?? FALHA['request_failed']}
         </div>
       ) : null}
+
+      {politica ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          {politica === 'ligada'
+            ? 'Pronto. Quem mexe em dinheiro passa a precisar do código — avise a equipe antes do próximo turno.'
+            : 'Pronto. O financeiro deixou de pedir o código. Quem já ativou o segundo fator continua com ele.'}
+        </div>
+      ) : null}
+
+      {/*
+        A decisão da barbearia (bloco 37).
+
+        Fica **no topo** e antes do cadastro da própria conta porque é a
+        pergunta que vem primeiro: sem saber se a casa exige, "ativar segundo
+        fator" é uma escolha sem contexto. Antes deste interruptor a exigência
+        era imposta a toda barbearia no primeiro dia — e o resultado não era
+        mais segurança, era a recepção operando na conta do dono.
+
+        Só quem pode mudar vê o formulário. Para o resto é uma frase, e não um
+        botão que responde 403.
+      */}
+      <section className="cartao-seguranca">
+        <h2 className="cartao-seguranca__titulo">Exigir o código no financeiro</h2>
+        <p className="cartao-seguranca__texto">
+          {exigidoNaBarbearia
+            ? 'Hoje, quem tem acesso a caixa, faturamento ou comissão precisa do código para operar. É a proteção mais forte que o produto tem.'
+            : 'Hoje o financeiro não pede o código. Qualquer pessoa da equipe com permissão de dinheiro abre o caixa direto — e quem ficar logado no balcão continua logado.'}
+        </p>
+
+        {podeMudarAExigencia ? (
+          <form action={acaoPoliticaDeSegundoFator}>
+            <input name="exigir" type="hidden" value={exigidoNaBarbearia ? '0' : '1'} />
+            <button
+              className={`ui-button ui-button--block ${
+                exigidoNaBarbearia ? 'ui-button--ghost' : 'ui-button--primary'
+              }`}
+              type="submit"
+            >
+              {exigidoNaBarbearia ? 'Deixar de exigir' : 'Passar a exigir'}
+            </button>
+          </form>
+        ) : (
+          <p className="cartao-seguranca__texto">
+            Quem muda isso é o dono da barbearia.
+          </p>
+        )}
+      </section>
 
       {ativado && codigos ? (
         <section className="cartao-seguranca cartao-seguranca--destaque">
@@ -262,8 +312,8 @@ export default async function SegurancaPage({ searchParams }: Props) {
           <h2 className="cartao-seguranca__titulo">Passo 1: gerar a chave</h2>
           <p className="cartao-seguranca__texto">
             {obrigatorio
-              ? 'Sua conta tem acesso ao financeiro, então o segundo fator é obrigatório: sem ele o caixa não abre.'
-              : 'Sua conta ainda não mexe em dinheiro, mas ligar o segundo fator protege o cadastro e a equipe.'}
+              ? 'Sua conta tem acesso ao financeiro e esta barbearia exige o código: sem ele o caixa não abre.'
+              : 'Nada obriga a sua conta a isto hoje — mas ligar o segundo fator protege o cadastro e a equipe.'}
           </p>
           <form action={acaoComecarSegundoFator}>
             <button className="ui-button ui-button--primary ui-button--block" type="submit">

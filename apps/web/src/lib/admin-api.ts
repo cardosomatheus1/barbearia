@@ -1083,6 +1083,10 @@ export interface EstadoDoSegundoFator {
   pendente: boolean;
   obrigatorio: boolean;
   verificadoNestaSessao: boolean;
+  /** A barbearia exige segundo fator para o financeiro (bloco 37). */
+  exigidoNaBarbearia: boolean;
+  /** Quem tem `team.manage` muda a exigência. Por padrão, só o dono. */
+  podeMudarAExigencia: boolean;
 }
 
 export const segundoFator = (token: string) =>
@@ -1093,6 +1097,9 @@ export const comecarSegundoFator = (token: string) =>
 
 export const confirmarSegundoFator = (token: string, codigo: string) =>
   chamar<{ codigosDeRecuperacao: string[] }>('POST', '/v1/admin/mfa/confirm', { codigo }, token);
+
+export const definirPoliticaDeSegundoFator = (token: string, exigir: boolean) =>
+  chamar<{ exigir: boolean }>('PUT', '/v1/admin/mfa/policy', { exigir }, token);
 
 export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
   chamar<{ usouRecuperacao: boolean; restantes: number }>(

@@ -102,10 +102,17 @@ A senha tem dez caracteres porque `MIN_PASSWORD` são dez no domínio, e o
 e-mail tem formato de e-mail porque o login valida isso na borda — a
 demonstração não é motivo para afrouxar nenhum dos dois.
 
-As telas de dinheiro exigem segundo fator, que o script liga e cujo segredo ele
-imprime **uma vez**. Cadastre num aplicativo autenticador — ou, onde não dá
-para instalar aplicativo (máquina corporativa, Codespaces), peça o código de
-seis dígitos na linha de comando:
+**Não há código de seis dígitos entre você e as telas de dinheiro.** Até o
+bloco 37 havia: o segundo fator era imposto a toda barbearia, e quem instalava
+o produto para olhar encontrava "digite o código" antes de ver o primeiro
+caixa. Agora a exigência é decisão da barbearia e nasce desligada — liga-se em
+**Segurança**, no painel.
+
+Para exercitar o caminho com segundo fator, semeie com `--com-2fa`. O script
+cadastra o TOTP do dono, liga a exigência da barbearia e imprime o segredo
+**uma vez**. Cadastre num aplicativo autenticador — ou, onde não dá para
+instalar aplicativo (máquina corporativa, Codespaces), peça o código de seis
+dígitos na linha de comando:
 
 ```bash
 node scripts/codigo-2fa.mjs SEUSEGREDOBASE32

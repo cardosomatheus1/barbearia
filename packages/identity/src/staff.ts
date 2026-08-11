@@ -395,6 +395,20 @@ export interface AuthenticatedStaff {
    * dela — seria N+1 na guarda.
    */
   readonly permissions: readonly string[];
+  /**
+   * A barbearia exige segundo fator para as rotas de dinheiro (bloco 37).
+   *
+   * Vem da sessão e não de uma consulta na guarda pelo mesmo motivo das
+   * permissões: seria uma segunda ida ao banco por requisição, para ler um
+   * booleano.
+   *
+   * Nasce **falso**. Ligado por decisão vale mais que ligado por imposição: a
+   * barbearia que encontrava "ative o segundo fator antes de acessar o
+   * financeiro" no primeiro dia, com o cliente na cadeira e sem aplicativo
+   * autenticador instalado, não ganhava segurança — passava a operar o balcão
+   * com a conta do dono, que é o que o segundo fator existia para impedir.
+   */
+  readonly exigeSegundoFatorNoDinheiro: boolean;
   /** Enquanto verdadeiro, a sessão só serve para trocar a própria senha. */
   readonly mustChangePassword: boolean;
   /**
@@ -446,6 +460,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         permissions: string[];
         mfa_enabled: boolean;
         mfa_verified_at: Date | null;
+        require_mfa_for_money: boolean;
         impersonated_by: string | null;
       }[]
     >`
@@ -453,12 +468,17 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
              u.must_change_password, u.professional_id,
              u.totp_confirmed_at IS NOT NULL AS mfa_enabled,
              s.mfa_verified_at,
+             -- A decisão da barbearia vem junto da sessão (bloco 37). Numa
+             -- consulta à parte ela seria uma segunda ida ao banco em **toda**
+             -- requisição do painel, para ler um booleano.
+             t.require_mfa_for_money,
              COALESCE(
                array_agg(rp.permission) FILTER (WHERE rp.permission IS NOT NULL),
                '{}'
              ) AS permissions
       FROM staff_sessions s
       JOIN staff_users u ON u.id = s.staff_user_id
+      JOIN tenants t ON t.id = u.tenant_id
       LEFT JOIN role_permissions rp ON rp.role = u.role
       WHERE s.token_hash = ${partes.hash}
         AND s.revoked_at IS NULL
@@ -466,7 +486,8 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         AND u.active
       GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role,
                u.must_change_password, u.professional_id,
-               u.totp_confirmed_at, s.mfa_verified_at, s.impersonated_by
+               u.totp_confirmed_at, s.mfa_verified_at, s.impersonated_by,
+               t.require_mfa_for_money
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -490,6 +511,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       professionalId: sessao.professional_id,
       mfaEnabled: sessao.mfa_enabled,
       mfaVerifiedAt: sessao.mfa_verified_at,
+      exigeSegundoFatorNoDinheiro: sessao.require_mfa_for_money,
       impersonatedBy: sessao.impersonated_by,
     };
   });

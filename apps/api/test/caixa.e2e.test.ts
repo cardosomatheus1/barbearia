@@ -157,6 +157,16 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     ).expect(200);
 
     await com(token)(http().post('/v1/admin/publish')).expect(201);
+
+    /**
+     * Estas suítes existem para provar o caminho **com** segundo fator, e desde
+     * o bloco 37 ele nasce desligado. Ligar aqui é o que mantém as provas
+     * falando do que dizem falar — sem isto elas passariam a verde por a
+     * exigência não existir mais, que é o pior jeito de um teste continuar
+     * verde.
+     */
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+
     return token;
   }
 
@@ -191,6 +201,35 @@ describeIfDb('caixa e comanda pela HTTP', () => {
 
 
   /** Cria a recepcionista, troca a senha de primeiro acesso e devolve a sessão. */
+  /** Uma conta de papel qualquer, com a senha de primeiro acesso já trocada. */
+  async function outroPapel(
+    dono: string,
+    email: string,
+    papel: string,
+    nome: string,
+  ): Promise<string> {
+    const criada = await com(dono)(
+      http().post('/v1/admin/team').send({ name: nome, email, role: papel }),
+    ).expect(201);
+
+    const senhaInicial: string = criada.body.senhaInicial;
+    const primeira = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: senhaInicial })
+      .expect(201);
+    await com(primeira.body.token)(
+      http()
+        .put('/v1/admin/me/password')
+        .send({ currentPassword: senhaInicial, newPassword: 'a-senha-dele-agora' }),
+    ).expect(200);
+
+    const entrou = await http()
+      .post('/v1/admin/login')
+      .send({ email, password: 'a-senha-dele-agora' })
+      .expect(201);
+    return entrou.body.token as string;
+  }
+
   async function recepcionista(dono: string) {
     const email = 'maria@domari.com.br';
     const criada = await com(dono)(
@@ -235,6 +274,91 @@ describeIfDb('caixa e comanda pela HTTP', () => {
   }
 
   // -- a porta ----------------------------------------------------------------
+
+  it('sem a barbearia exigir, o caixa abre sem nenhum código', async () => {
+    /**
+     * O padrão do bloco 37, e ele é o inverso do que o produto fazia.
+     *
+     * Imposto, o segundo fator produzia o oposto do que queria: a barbearia que
+     * instalava na terça e tentava abrir o caixa na quarta encontrava "ative o
+     * segundo fator" sobre uma conta recém-criada, sem aplicativo autenticador
+     * e com o cliente na cadeira — e passava a operar o balcão na conta do
+     * dono, que é exatamente o que a regra existia para impedir.
+     *
+     * Este teste é o único da suíte que **não** liga a exigência, e por isso
+     * monta a barbearia à mão em vez de usar `abrirBarbearia`.
+     */
+    await http().post('/v1/admin/signup').send(DONO).expect(202);
+    const entrou = await http()
+      .post('/v1/admin/login')
+      .send({ email: DONO.email, password: DONO.password })
+      .expect(201);
+    const token: string = entrou.body.token;
+
+    await abrirCaixa(token).expect(201);
+  });
+
+  it('ligada a exigência, a mesma sessão passa a ser recusada', async () => {
+    // A decisão vale para sessão já aberta, e não só para quem entrar depois:
+    // o balcão fica logado o dia inteiro, e esperar o token vencer deixaria a
+    // proteção sem efeito justamente no turno em que ela foi ligada.
+    await http().post('/v1/admin/signup').send(DONO).expect(202);
+    const entrou = await http()
+      .post('/v1/admin/login')
+      .send({ email: DONO.email, password: DONO.password })
+      .expect(201);
+    const token: string = entrou.body.token;
+
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+    const recusa = await abrirCaixa(token).expect(403);
+    expect(recusa.body.error.code).toBe('mfa_setup_required');
+  });
+
+  it('desligada de novo, volta a abrir — sem precisar entrar outra vez', async () => {
+    const token = await abrirBarbearia();
+    await abrirCaixa(token).expect(403);
+
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: false })).expect(200);
+    await abrirCaixa(token).expect(201);
+  });
+
+  it('quem não administra a equipe não muda a exigência', async () => {
+    /**
+     * `team.manage` e não `settings.manage`: desligar afrouxa o acesso ao caixa
+     * da equipe inteira de uma vez, e isso é da mesma natureza que conceder
+     * permissão. A gerente tem `settings.manage` por padrão e não tem esta.
+     */
+    const dono = await abrirBarbearia();
+    const gerente = await outroPapel(dono, 'bruno@domari.com.br', 'manager', 'Bruno Gerente');
+
+    const recusa = await com(gerente)(
+      http().put('/v1/admin/mfa/policy').send({ exigir: false }),
+    ).expect(403);
+    expect(recusa.body.error.code).toBe('forbidden');
+
+    // E a exigência continua de pé: a recusa não pode ter efeito colateral.
+    const aindaRecusa = await abrirCaixa(dono).expect(403);
+    expect(aindaRecusa.body.error.code).toBe('mfa_setup_required');
+  });
+
+  it('mudar a exigência fica na trilha, nos dois sentidos', async () => {
+    // "Quem tirou o segundo fator do financeiro?" precisa de nome e data. É a
+    // pergunta que mais importa das duas, e por isso as duas são registradas.
+    const token = await abrirBarbearia();
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: false })).expect(200);
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+
+    // Lido do banco e não pela rota da trilha: esta suíte monta um subconjunto
+    // de controllers, e `PainelController` — que serve `/v1/admin/audit` — não
+    // está nele. Ler a tabela prova a mesma coisa de forma mais direta: o que
+    // importa é o registro existir dentro da transação que mudou o estado.
+    const linhas = await admin.$queryRawUnsafe<{ action: string; actor_name: string }[]>(
+      `SELECT action::text AS action, actor_name FROM audit_log
+        WHERE action::text LIKE 'mfa.policy%' ORDER BY created_at`,
+    );
+    expect(linhas.map((l) => l.action)).toEqual(['mfa.policy_enabled', 'mfa.policy_disabled', 'mfa.policy_enabled']);
+    expect(linhas[0]?.actor_name).toBe(DONO.name);
+  });
 
   it('o dono, com todas as permissões, não abre o caixa sem cadastrar o segundo fator', async () => {
     const token = await abrirBarbearia();

@@ -66,6 +66,7 @@ import {
   fecharAComanda,
   receberDoFiado,
   comecarSegundoFator,
+  definirPoliticaDeSegundoFator,
   confirmarSegundoFator,
   verificarSegundoFatorAgora,
   type FormaDePagamento,
@@ -1156,6 +1157,22 @@ export async function acaoReceberFiado(form: FormData): Promise<void> {
 }
 
 // -- Segundo fator ------------------------------------------------------------
+
+/**
+ * A barbearia liga ou desliga a exigência de segundo fator no financeiro.
+ *
+ * O formulário manda o **estado desejado**, nunca "alterne": alternar depende
+ * de saber o estado atual, e com duas abas abertas as duas mandariam a mesma
+ * alternância sobre leituras diferentes.
+ */
+export async function acaoPoliticaDeSegundoFator(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const exigir = texto(form, 'exigir') === '1';
+
+  const resultado = await definirPoliticaDeSegundoFator(token, exigir);
+  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  redirect(`/admin/seguranca?politica=${exigir ? 'ligada' : 'desligada'}`);
+}
 
 export async function acaoComecarSegundoFator(): Promise<void> {
   const token = await exigirSessao();

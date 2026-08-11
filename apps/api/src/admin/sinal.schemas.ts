@@ -28,3 +28,15 @@ export const confiancaSchema = z.object({
   score: z.number().int().min(0).max(100).nullable(),
   motivo: z.string().trim().min(MINIMO_DE_MOTIVO).max(300),
 });
+
+/**
+ * A barbearia liga ou desliga a exigência de segundo fator no financeiro.
+ *
+ * Um booleano e nada mais: a tela manda o estado desejado, nunca "alterne".
+ * Alternar depende de saber o estado atual, e com duas abas abertas as duas
+ * mandariam a mesma alternância sobre leituras diferentes — a segunda desfaria
+ * a primeira sem ninguém pedir.
+ */
+export const politicaDeMfaSchema = z.object({
+  exigir: z.boolean(),
+});

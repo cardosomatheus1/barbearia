@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   confirmarCadastroMfa,
+  definirExigenciaDeSegundoFator,
   desligarMfa,
   estadoDoMfa,
   exigeSegundoFator,
@@ -16,6 +18,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { codigoMfaSchema } from './caixa.schemas.js';
+import { politicaDeMfaSchema } from './sinal.schemas.js';
 
 const STATUS: Record<string, number> = {
   invalid_code: 400,
@@ -59,7 +62,20 @@ export class MfaController {
       // A tela precisa saber se pode oferecer "desligar": para quem mexe em
       // dinheiro, a resposta é não, e mostrar o botão só para recusar depois é
       // prometer o que não se cumpre.
-      obrigatorio: exigeSegundoFator(staff.permissions),
+      obrigatorio: exigeSegundoFator(
+        staff.permissions,
+        staff.exigeSegundoFatorNoDinheiro,
+      ),
+      /**
+       * A decisão da barbearia, e quem pode mudá-la.
+       *
+       * As duas juntas porque a tela precisa das duas para não mentir: mostrar
+       * o interruptor a quem não tem `team.manage` seria oferecer o que a API
+       * recusa, e o estado sem a permissão faria a recepção achar que alguém
+       * desligou a proteção dela.
+       */
+      exigidoNaBarbearia: staff.exigeSegundoFatorNoDinheiro,
+      podeMudarAExigencia: staff.permissions.includes('team.manage'),
       // A mesma função que a guarda aplica, não uma segunda leitura do mesmo
       // campo: a tela precisa oferecer o campo do código de novo assim que a
       // janela vence, senão o caixa recusa e manda para uma tela que não tem
@@ -129,6 +145,36 @@ export class MfaController {
     }
   }
 
+  /**
+   * A barbearia decide se o financeiro exige segundo fator (bloco 37).
+   *
+   * `team.manage` e não `settings.manage`: desligar afrouxa o acesso ao caixa
+   * de **toda a equipe** de uma vez, e isso é da mesma natureza que conceder
+   * permissão — não de quem administra o dia a dia. Por padrão só o dono a tem.
+   *
+   * Não declara permissão de dinheiro de propósito. Declarar seria o laço
+   * fechado ao contrário: quem desligou o segundo fator e ficou sem código não
+   * conseguiria religá-lo depois.
+   */
+  @Exige('team.manage')
+  @Put('policy')
+  async politica(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(politicaDeMfaSchema)) body: { exigir: boolean },
+    @Req() req: Request,
+  ) {
+    const ip = req.ip;
+    const agent = req.get('user-agent');
+    return definirExigenciaDeSegundoFator({
+      tenantId: staff.tenantId,
+      staffUserId: staff.staffUserId,
+      staffName: staff.name,
+      exigir: body.exigir,
+      ...(ip ? { ip } : {}),
+      ...(agent ? { userAgent: agent } : {}),
+    });
+  }
+
   @Exige()
   @Post('disable')
   async desligar(
@@ -142,6 +188,7 @@ export class MfaController {
         staffName: staff.name,
         sessionId: staff.sessionId,
         permissoes: staff.permissions,
+        exigidoNaBarbearia: staff.exigeSegundoFatorNoDinheiro,
         codigo: body.codigo,
         now: new Date(),
       });

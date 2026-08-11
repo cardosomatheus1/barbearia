@@ -8,6 +8,8 @@ import {
   estadoDoMfa,
   iniciarCadastroMfa,
   segundoFatorValido,
+  definirExigenciaDeSegundoFator,
+  exigeSegundoFator,
   verificarSegundoFator,
   VALIDADE_DO_SEGUNDO_FATOR_MINUTOS,
 } from './mfa-staff.js';
@@ -265,6 +267,7 @@ describeIfDb('segundo fator do gestor', () => {
         staffName: CONTA.name,
         sessionId: await sessionId(),
         permissoes: ['finance.view'],
+        exigidoNaBarbearia: true,
         codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(depois)),
         now: depois,
       }),
@@ -284,6 +287,7 @@ describeIfDb('segundo fator do gestor', () => {
       staffName: CONTA.name,
       sessionId: await sessionId(),
       permissoes: ['appointments.create'],
+      exigidoNaBarbearia: true,
       codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(depois)),
       now: depois,
     });
@@ -304,6 +308,7 @@ describeIfDb('segundo fator do gestor', () => {
         staffName: CONTA.name,
         sessionId: await sessionId(),
         permissoes: ['appointments.create'],
+        exigidoNaBarbearia: true,
         codigo: '000000',
         now: new Date(),
       }),
@@ -405,6 +410,7 @@ describeIfDb('segundo fator do gestor', () => {
       staffName: CONTA.name,
       sessionId: await sessionId(),
       permissoes: ['appointments.create'],
+      exigidoNaBarbearia: true,
       codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(maisTarde)),
       now: maisTarde,
     });
@@ -435,5 +441,107 @@ describeIfDb('segundo fator do gestor', () => {
 
     // Nunca provado é sempre inválido — falha fechada.
     expect(segundoFatorValido(null, agora)).toBe(false);
+  });
+
+  describe('a exigência é decisão da barbearia (bloco 37)', () => {
+    const exigirNaCasa = (exigir: boolean) =>
+      definirExigenciaDeSegundoFator({
+        tenantId: sessao.tenantId,
+        staffUserId: sessao.staffUserId,
+        staffName: CONTA.name,
+        exigir,
+      });
+
+    it('nasce desligada', async () => {
+      /**
+       * O padrão é o inverso do que o produto fazia, e é escolha.
+       *
+       * Imposto, o segundo fator produzia o oposto do que queria: a barbearia
+       * que instalava na terça e tentava abrir o caixa na quarta encontrava
+       * "ative o segundo fator" sobre uma conta recém-criada, sem aplicativo
+       * autenticador e com o cliente na cadeira — e passava a operar o balcão
+       * na conta do dono, que é o que a regra existia para impedir.
+       */
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(false);
+    });
+
+    it('ligar vale para a sessão que já estava aberta', async () => {
+      // O balcão fica logado o dia inteiro. Esperar o token vencer deixaria a
+      // proteção sem efeito justamente no turno em que ela foi ligada.
+      await exigirNaCasa(true);
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(true);
+    });
+
+    it('a decisão é auditada nos dois sentidos, com quem decidiu', async () => {
+      // "Quem tirou o segundo fator do financeiro?" é a pergunta que mais
+      // importa das duas, e por isso as duas são registradas.
+      await exigirNaCasa(true);
+      await exigirNaCasa(false);
+
+      const trilha = await admin.$queryRawUnsafe<
+        { action: string; actor_name: string; before: unknown; after: unknown }[]
+      >(
+        `SELECT action::text AS action, actor_name, before, after FROM audit_log
+          WHERE action::text LIKE 'mfa.policy%' ORDER BY created_at`,
+      );
+      expect(trilha.map((l) => l.action)).toEqual(['mfa.policy_enabled', 'mfa.policy_disabled']);
+      expect(trilha[0]?.actor_name).toBe(CONTA.name);
+      expect(trilha[1]?.before).toEqual({ exigir: true });
+      expect(trilha[1]?.after).toEqual({ exigir: false });
+    });
+
+    it('a barbearia vizinha não muda a exigência desta', async () => {
+      // A RLS separa barbearias, e o id do tenant não é segredo — ele viaja no
+      // prefixo de todo token de gestor.
+      const outra = await signUpOwner({
+        ...CONTA,
+        email: 'vizinha@outra.com.br',
+        businessName: 'Barbearia Vizinha',
+      });
+      if (!outra.created) throw new Error('a conta da vizinha não foi criada');
+
+      await definirExigenciaDeSegundoFator({
+        tenantId: outra.session.tenantId,
+        staffUserId: outra.session.staffUserId,
+        staffName: 'Dona Vizinha',
+        exigir: true,
+      });
+
+      expect((await resolveStaffSession(sessao.token)).exigeSegundoFatorNoDinheiro).toBe(false);
+    });
+
+    it('desligada, quem mexe em dinheiro deixa de ser obrigado', async () => {
+      // A função que a guarda e a tela usam, nas duas direções. Uma tela que
+      // dissesse "obrigatório" com a exigência desligada mandaria a pessoa
+      // cadastrar TOTP para nada.
+      expect(exigeSegundoFator(['finance.view'], false)).toBe(false);
+      expect(exigeSegundoFator(['finance.view'], true)).toBe(true);
+      expect(exigeSegundoFator(['appointments.create'], true)).toBe(false);
+    });
+
+    it('com a exigência desligada, quem mexe em dinheiro pode desligar o próprio', async () => {
+      /**
+       * Com a exigência ligada a recusa continua: quem tem acesso ao financeiro
+       * não sai do segundo fator. Desligada, o TOTP é escolha da pessoa, e
+       * trancá-la nele transformaria uma proteção adotada por conta própria em
+       * armadilha.
+       */
+      const agora = new Date();
+      const ligado = await ligar(agora);
+      const depois = new Date(agora.getTime() + 60_000);
+
+      await desligarMfa({
+        tenantId: sessao.tenantId,
+        staffUserId: sessao.staffUserId,
+        staffName: CONTA.name,
+        sessionId: await sessionId(),
+        permissoes: ['finance.view'],
+        exigidoNaBarbearia: false,
+        codigo: codigoDoPasso(ligado.segredoBase32, passoAgora(depois)),
+        now: depois,
+      });
+
+      expect((await estadoDoMfa(sessao.tenantId, sessao.staffUserId)).ativo).toBe(false);
+    });
   });
 });

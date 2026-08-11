@@ -56,9 +56,79 @@ export interface EstadoDoMfa {
   readonly pendente: boolean;
 }
 
-/** Quem tem permissão de dinheiro é obrigado ao segundo fator. */
-export const exigeSegundoFator = (permissoes: readonly string[]): boolean =>
-  PERMISSOES_DE_DINHEIRO.some((p: Permissao) => permissoes.includes(p));
+/**
+ * Se esta conta é obrigada ao segundo fator.
+ *
+ * Duas condições, e as duas contam: a barbearia precisa ter **ligado** a
+ * exigência (bloco 37) e a conta precisa ter permissão de dinheiro. Antes do
+ * interruptor só a segunda existia, e o produto impunha TOTP a toda barbearia
+ * no primeiro dia — com o resultado previsível de a recepção operar na conta do
+ * dono, que é o oposto do que a regra queria.
+ *
+ * `ligadoNaBarbearia` é **obrigatório no tipo**, não opcional. Opcional, ele
+ * seria esquecido no primeiro chamador novo, e a exigência voltaria a valer
+ * para quem a desligou — sem nada ficar vermelho. É o mesmo critério de
+ * `varrerRetencao` no `Contexto` do worker.
+ */
+export const exigeSegundoFator = (
+  permissoes: readonly string[],
+  ligadoNaBarbearia: boolean,
+): boolean =>
+  ligadoNaBarbearia && PERMISSOES_DE_DINHEIRO.some((p: Permissao) => permissoes.includes(p));
+
+/**
+ * Liga ou desliga a exigência de segundo fator para o dinheiro (bloco 37).
+ *
+ * ## Por que não é `settings.manage`
+ *
+ * Quem chama declara `team.manage`, que só o dono tem por padrão. Desligar a
+ * exigência afrouxa o acesso ao caixa de **toda a equipe** de uma vez, e é
+ * decisão da mesma natureza que conceder permissão — não de quem administra o
+ * dia a dia. A permissão é declarada na rota; aqui fica a trilha.
+ *
+ * ## Auditado nos dois sentidos
+ *
+ * Ligar e desligar mudam quem consegue chegar ao caixa, e é exatamente a
+ * pergunta que a trilha responde. Desligar é o que mais importa registrar, e
+ * por isso o motivo não é opcional: seis meses depois, "quem tirou o segundo
+ * fator do financeiro?" precisa de resposta com nome e data.
+ */
+export async function definirExigenciaDeSegundoFator(params: {
+  readonly tenantId: string;
+  readonly staffUserId: string;
+  readonly staffName: string;
+  readonly exigir: boolean;
+  readonly ip?: string;
+  readonly userAgent?: string;
+}): Promise<{ readonly exigir: boolean }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const antes = await tx.$queryRaw<{ require_mfa_for_money: boolean }[]>`
+      SELECT require_mfa_for_money FROM tenants WHERE id = ${params.tenantId}::uuid
+    `;
+    const anterior = antes[0]?.require_mfa_for_money ?? false;
+
+    await tx.$executeRaw`
+      UPDATE tenants
+         SET require_mfa_for_money = ${params.exigir}, updated_at = now()
+       WHERE id = ${params.tenantId}::uuid
+    `;
+
+    // Dentro da transação que muda o estado, como toda trilha deste produto.
+    await audit(tx, {
+      actorId: params.staffUserId,
+      actorName: params.staffName,
+      action: params.exigir ? 'mfa.policy_enabled' : 'mfa.policy_disabled',
+      entity: 'tenant',
+      entityId: params.tenantId,
+      before: { exigir: anterior },
+      after: { exigir: params.exigir },
+      ...(params.ip ? { ip: params.ip } : {}),
+      ...(params.userAgent ? { userAgent: params.userAgent } : {}),
+    });
+
+    return { exigir: params.exigir };
+  });
+}
 
 export async function estadoDoMfa(
   tenantId: string,
@@ -293,10 +363,15 @@ export async function desligarMfa(params: {
   readonly staffName: string;
   readonly sessionId: string;
   readonly permissoes: readonly string[];
+  /** A barbearia exige segundo fator para o dinheiro. Vem da sessão. */
+  readonly exigidoNaBarbearia: boolean;
   readonly codigo: string;
   readonly now: Date;
 }): Promise<void> {
-  if (exigeSegundoFator(params.permissoes)) {
+  // Só enquanto a barbearia exige. Com a exigência desligada, o segundo fator
+  // é uma escolha da pessoa — e trancá-la nele seria transformar uma proteção
+  // que ela adotou por conta própria em armadilha.
+  if (exigeSegundoFator(params.permissoes, params.exigidoNaBarbearia)) {
     throw new MfaError(
       'already_enabled',
       'Contas com acesso ao financeiro não podem desligar o segundo fator.',

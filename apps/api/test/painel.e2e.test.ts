@@ -144,6 +144,16 @@ describeIfDb('painel, diagnóstico e trilha pela HTTP', () => {
     ).expect(200);
 
     await com(token)(http().post('/v1/admin/publish')).expect(201);
+
+    /**
+     * Estas suítes existem para provar o caminho **com** segundo fator, e desde
+     * o bloco 37 ele nasce desligado. Ligar aqui é o que mantém as provas
+     * falando do que dizem falar — sem isto elas passariam a verde por a
+     * exigência não existir mais, que é o pior jeito de um teste continuar
+     * verde.
+     */
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+
     return token;
   }
 

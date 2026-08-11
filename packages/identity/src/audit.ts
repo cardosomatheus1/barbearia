@@ -65,6 +65,15 @@ export type AuditAction =
   | 'mfa.enabled'
   | 'mfa.disabled'
   | 'mfa.recovery_used'
+  /**
+   * A barbearia ligou ou desligou a exigência de segundo fator (bloco 37).
+   *
+   * Diferente de `mfa.enabled`, que é sobre **uma conta**: esta muda a regra
+   * para a equipe inteira de uma vez. Desligar é o que mais importa registrar —
+   * "quem tirou o segundo fator do financeiro?" precisa de nome e data.
+   */
+  | 'mfa.policy_enabled'
+  | 'mfa.policy_disabled'
   // Comissão: fechar um período paga gente, e mudar a regra muda quanto.
   | 'commission.closed'
   | 'commission.rule_changed'
@@ -150,6 +159,8 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'mfa.enabled',
   'mfa.disabled',
   'mfa.recovery_used',
+  'mfa.policy_enabled',
+  'mfa.policy_disabled',
   'import.applied',
   'import.reverted',
   'slug.added',

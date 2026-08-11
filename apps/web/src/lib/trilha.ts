@@ -39,6 +39,8 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'mfa.enabled': 'ligou o segundo fator de',
   'mfa.disabled': 'desligou o segundo fator de',
   'mfa.recovery_used': 'usou um código de recuperação',
+  'mfa.policy_enabled': 'passou a exigir segundo fator no financeiro',
+  'mfa.policy_disabled': 'deixou de exigir segundo fator no financeiro',
 
   'commission.closed': 'fechou a comissão do período',
   'commission.rule_changed': 'mudou a regra de comissão de',

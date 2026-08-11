@@ -86,6 +86,15 @@ function guardaCom(
 const DONO = {
   permissions: [...PERMISSOES],
   mustChangePassword: false,
+  /**
+   * A barbearia deste teste **exige** o segundo fator (bloco 37).
+   *
+   * O padrão do produto é o contrário — a exigência nasce desligada —, e é por
+   * isso que ele está escrito aqui em vez de omitido: um objeto sem o campo
+   * passaria em tudo, e os testes de "cobra o segundo fator" ficariam verdes
+   * provando que a regra não existe.
+   */
+  exigeSegundoFatorNoDinheiro: true,
 };
 
 /**
@@ -279,6 +288,35 @@ describe('as rotas do painel', () => {
     await expect(
       guardaCom(['finance.view']).canActivate(contexto(dono(vencido))),
     ).rejects.toThrowError(/confirme o código/i);
+  });
+
+  it('com a exigência desligada, nem a rota de dinheiro pede o código', async () => {
+    /**
+     * O padrão do bloco 37, e ele é o inverso do que o produto fazia.
+     *
+     * Imposto, o segundo fator produzia o oposto do que queria: a barbearia que
+     * instalava na terça e tentava abrir o caixa na quarta encontrava "ative o
+     * segundo fator" sobre uma conta recém-criada, sem aplicativo autenticador
+     * e com o cliente na cadeira — e passava a operar o balcão na conta do
+     * dono, que é o que a regra existia para impedir.
+     *
+     * O que **não** muda é a derivação: com a exigência ligada, toda permissão
+     * do grupo continua coberta sem ninguém declarar nada. O interruptor decide
+     * se, nunca quais.
+     */
+    const semExigencia = {
+      ...DONO,
+      exigeSegundoFatorNoDinheiro: false,
+      mfaEnabled: false,
+      mfaVerifiedAt: null,
+    };
+
+    for (const permissao of PERMISSOES_DE_DINHEIRO) {
+      await expect(
+        guardaCom([permissao]).canActivate(contexto(semExigencia)),
+        `${permissao} recusada com a exigência desligada`,
+      ).resolves.toBe(true);
+    }
   });
 
   it('rota sem permissão de dinheiro não pede segundo fator', async () => {

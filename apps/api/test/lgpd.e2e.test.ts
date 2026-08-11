@@ -117,7 +117,17 @@ describeIfDb('direitos do titular pela HTTP', () => {
       .post('/v1/admin/login')
       .send({ email: quem.email, password: quem.password })
       .expect(201);
-    return entrou.body.token;
+    const token = entrou.body.token as string;
+
+    /**
+     * A exportação do titular é rota de dinheiro (declara `finance.view`), e
+     * esta suíte prova que ela cobra o segundo fator. Desde o bloco 37 a
+     * exigência nasce desligada — sem ligá-la aqui, a prova passaria a verde
+     * por a regra não existir mais, que é o pior jeito de um teste continuar
+     * verde.
+     */
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+    return token;
   }
 
   async function recepcionista(dono: string) {

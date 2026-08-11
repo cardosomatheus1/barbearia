@@ -360,13 +360,19 @@ async function encherAFila(token, catalogo) {
 // -- o dinheiro --------------------------------------------------------------
 
 /**
- * O segundo fator, e por que ele aparece numa semeadura.
+ * O segundo fator, e por que ele **não** aparece mais por padrão.
  *
- * Toda rota de dinheiro exige prova de segundo fator na sessão — a
- * `PermissaoGuard` **deriva** a exigência da permissão declarada, então não há
- * como uma tela de caixa existir sem ela. Semear o caixa sem passar por aqui
- * simplesmente não funciona, e um `.catch` que engolisse o erro deixaria a
- * demonstração dizendo "caixa aberto" com a gaveta fechada.
+ * Até o bloco 37 a exigência era imposta: toda rota de dinheiro pedia prova de
+ * segundo fator, e a semeadura tinha que ligá-la para conseguir abrir o caixa.
+ * O efeito colateral era o pior possível para uma demonstração — quem instalava
+ * o produto para *olhar* encontrava "digite o código de seis dígitos" antes de
+ * ver a primeira tela de dinheiro, com um segredo impresso no terminal e sem
+ * aplicativo autenticador à mão.
+ *
+ * Agora a exigência é decisão da barbearia e nasce desligada. A semeadura segue
+ * o padrão: nada de código para ver a demonstração. Quem quiser exercitar o
+ * caminho com segundo fator liga na tela — `/admin/seguranca` — ou pede a
+ * semeadura com `--com-2fa`.
  */
 async function ligarSegundoFator(token) {
   const { codigoDoPasso, passoAgora } = await import(
@@ -387,12 +393,30 @@ async function ligarSegundoFator(token) {
     token,
     corpo: { codigo: codigoDoPasso(segredoBase32, agora + 1) },
   });
-  passo('segundo fator ligado (as telas de dinheiro exigem)');
+  passo('segundo fator cadastrado nesta conta');
   // Os códigos de recuperação são a saída que a própria tela promete — "perdeu
   // o celular? digite um código que você anotou". Descartá-los aqui deixaria a
   // promessa sem lastro para quem perder o segredo, e a única saída seria
   // recomeçar tudo com --zerar.
   return { segredoBase32, codigosDeRecuperacao };
+}
+
+/**
+ * Liga a exigência para a barbearia inteira.
+ *
+ * Separado de `ligarSegundoFator`, que é sobre **uma conta**: cadastrar o TOTP
+ * do dono não faz o caixa pedir código. Quem decide isso é a barbearia, e a
+ * decisão nasce desligada — então a semeadura com `--com-2fa` precisa das duas
+ * coisas, e nesta ordem: ligar a exigência antes de cadastrar trancaria a
+ * própria semeadura para fora do caixa.
+ */
+async function exigirSegundoFatorNaBarbearia(token) {
+  await chamar('/v1/admin/mfa/policy', {
+    metodo: 'PUT',
+    token,
+    corpo: { exigir: true },
+  });
+  passo('a barbearia passou a exigir o código no financeiro');
 }
 
 /**
@@ -591,7 +615,20 @@ async function main() {
   await marcarExcecoes(token, catalogo, today);
   await encherAFila(token, catalogo);
 
-  const { segredoBase32: segredo, codigosDeRecuperacao: recuperacao } = await ligarSegundoFator(token);
+  /**
+   * Ligar o segundo fator é opcional, e desligado é o padrão.
+   *
+   * A demonstração existe para a pessoa **ver o produto**. Um código de seis
+   * dígitos entre ela e a primeira tela de caixa não demonstra segurança:
+   * demonstra atrito. Quem quiser exercitar o caminho protegido passa
+   * `--com-2fa`, e aí a semeadura liga a exigência da barbearia junto — senão o
+   * segredo impresso no terminal não protegeria nada.
+   */
+  const com2fa = process.argv.includes('--com-2fa');
+  const segundoFator = com2fa ? await ligarSegundoFator(token) : {};
+  if (com2fa) await exigirSegundoFatorNaBarbearia(token);
+  const { segredoBase32: segredo, codigosDeRecuperacao: recuperacao } = segundoFator;
+
   await moverDinheiro(token, catalogo);
 
   const barbeiro = await convidarBarbeiro(token, catalogo, today);
@@ -624,8 +661,8 @@ function contar({ slug, segredo, barbeiro, recuperacao }) {
   if (segredo) {
     console.log('');
     console.log(`    ${verde('segundo fator')}  ${segredo}`);
-    console.log(cinza('      As telas de dinheiro — caixa, comanda, fiado, comissão — exigem prova'));
-    console.log(cinza('      de segundo fator, e a prova vence em 30 min.'));
+    console.log(cinza('      Você pediu --com-2fa: as telas de dinheiro — caixa, comanda, fiado,'));
+    console.log(cinza('      comissão — exigem prova, e a prova vence em 30 min.'));
     console.log(cinza(''));
     console.log(cinza('      Cadastre em qualquer aplicativo autenticador (chave manual, base32) —'));
     console.log(cinza('      ou, em máquina onde não dá para instalar aplicativo, peça o código aqui:'));

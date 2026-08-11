@@ -144,6 +144,16 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
     ).expect(200);
     await com(token)(http().post('/v1/admin/publish')).expect(201);
 
+    /**
+     * Estas suítes existem para provar o caminho **com** segundo fator, e desde
+     * o bloco 37 ele nasce desligado. Ligar aqui é o que mantém as provas
+     * falando do que dizem falar — sem isto elas passariam a verde por a
+     * exigência não existir mais, que é o pior jeito de um teste continuar
+     * verde.
+     */
+    await com(token)(http().put('/v1/admin/mfa/policy').send({ exigir: true })).expect(200);
+
+
     const inicio = await com(token)(http().post('/v1/admin/mfa/setup')).expect(201);
     const segredo: string = inicio.body.segredoBase32;
     const passo = passoAgora(new Date());
@@ -229,6 +239,13 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
       .post('/v1/admin/login')
       .send({ email: DONO.email, password: DONO.password })
       .expect(201);
+
+    // A barbearia precisa ter **ligado** a exigência: desde o bloco 37 ela
+    // nasce desligada. Sem esta linha o teste continuaria verde por a regra não
+    // valer mais — e o 404 que aparecia no lugar do 403 era a pista.
+    await com(entrou.body.token)(
+      http().put('/v1/admin/mfa/policy').send({ exigir: true }),
+    ).expect(200);
 
     const recusa = await com(entrou.body.token)(
       http()

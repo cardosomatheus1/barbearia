@@ -77,10 +77,22 @@ externa.** Na prática: quase todos.
   telefone existente e inexistente.
 - OTP: 6 dígitos, TTL 5 min, máximo 5 tentativas, invalidação no acerto,
   cooldown progressivo no reenvio.
-- MFA obrigatório para papéis com permissão `finance.*` — e para `cashier.*`,
-  que move dinheiro de verdade. A `PermissaoGuard` **deriva** a exigência da
-  permissão declarada na rota: não há decorador separado a esquecer. A prova é
-  por sessão e vence em 30 minutos, porque o balcão fica logado o dia inteiro.
+- MFA para papéis com permissão `finance.*` — e para `cashier.*`, que move
+  dinheiro de verdade. A `PermissaoGuard` **deriva** a exigência da permissão
+  declarada na rota: não há decorador separado a esquecer. A prova é por sessão
+  e vence em 30 minutos, porque o balcão fica logado o dia inteiro.
+
+  **Quem decide se a cobrança acontece é a barbearia** (`tenants.
+  require_mfa_for_money`, bloco 37), e ela **nasce desligada**. Imposto, o
+  segundo fator produzia o oposto do que queria: a barbearia que instalava o
+  produto na terça e tentava abrir o caixa na quarta encontrava "ative o segundo
+  fator" sobre uma conta recém-criada, sem aplicativo autenticador e com o
+  cliente na cadeira — e passava a operar o balcão na conta do dono.
+
+  O interruptor decide **se**, nunca **quais** rotas: isso continua derivado da
+  permissão, e uma rota de dinheiro escrita daqui a dez blocos continua nascendo
+  coberta. Um interruptor que escolhesse rotas seria a lista que a derivação
+  existe para eliminar.
 
 ### Dinheiro e efeitos colaterais
 
