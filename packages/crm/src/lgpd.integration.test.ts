@@ -221,6 +221,9 @@ describeIfDb('direitos do titular', () => {
       'customer_ledger',
       'notifications',
       'queue_entries',
+      // A lista de espera (bloco 38). "Eu pedi para ser avisado do sábado de
+      // manhã e nunca me avisaram" é exatamente o que a exportação responde.
+      'waitlist_entries',
     ]);
 
     const EXCECOES = new Map([

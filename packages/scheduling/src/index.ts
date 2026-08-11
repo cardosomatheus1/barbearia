@@ -8,3 +8,4 @@ export * from './counter.js';
 export * from './fila.js';
 export * from './agenda.js';
 export * from './confianca.js';
+export * from './espera.js';

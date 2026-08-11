@@ -31,3 +31,4 @@ export * from './pagamento.js';
 export * from './vocabulario.js';
 export * from './confiabilidade.js';
 export * from './sinal.js';
+export * from './espera.js';

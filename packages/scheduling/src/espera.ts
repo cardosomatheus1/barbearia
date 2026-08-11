@@ -1,0 +1,448 @@
+import { withTenant, type TransactionClient } from '@barbearia/db';
+import {
+  DIAS_MAXIMOS_DE_ESPERA,
+  LIMITE_DE_ESPERAS_ATIVAS,
+  formatHHMM,
+  instantToLocal,
+  podeEsperar,
+  vagaServe,
+  type PedidoDeEspera,
+  type RecusaDeEspera,
+  type VagaAberta,
+} from '@barbearia/core';
+
+/**
+ * A lista de espera, do banco para a decisão (bloco 38, SPEC §2.9).
+ *
+ * A regra de compatibilidade mora em `packages/core` e não sabe que existe
+ * banco. Aqui se carrega o estado, se chama o domínio e se grava o resultado.
+ *
+ * ## O gatilho roda dentro da transação do cancelamento
+ *
+ * `appointment.cancelled` abre uma vaga, e é nesse instante que se pergunta
+ * quem a quer. Perguntar depois do commit criaria a janela em que o horário
+ * está livre e ninguém sabe — e é justamente a janela em que outro cliente
+ * marca pelo site, deixando a lista de espera sem função no único momento em
+ * que ela serviria.
+ */
+
+export type EsperaFailure =
+  | 'espera_nao_encontrada'
+  | 'unidade_desconhecida'
+  | RecusaDeEspera;
+
+export class EsperaError extends Error {
+  constructor(readonly code: EsperaFailure, message: string) {
+    super(message);
+    this.name = 'EsperaError';
+  }
+}
+
+export interface EntradaDeEspera {
+  readonly id: string;
+  readonly status: 'waiting' | 'booked' | 'left' | 'expired';
+  readonly de: string;
+  readonly ate: string;
+  /** `HH:mm` locais, para a tela não repetir a conversão. */
+  readonly inicio: string;
+  readonly fim: string;
+  readonly duracaoMinutos: number;
+  readonly profissionalId: string | null;
+  readonly profissionalNome: string | null;
+  readonly servicos: readonly string[];
+  readonly entrouEm: string;
+}
+
+interface LinhaDaEspera {
+  readonly id: string;
+  readonly status: EntradaDeEspera['status'];
+  readonly wanted_from: Date;
+  readonly wanted_to: Date;
+  readonly window_start_minute: number;
+  readonly window_end_minute: number;
+  readonly duration_minutes: number;
+  readonly professional_id: string | null;
+  readonly professional_name: string | null;
+  readonly services: string[] | null;
+  readonly joined_at: Date;
+}
+
+/**
+ * `date` do Postgres volta como `Date` à meia-noite UTC pelo driver.
+ *
+ * Formatar com o fuso do processo devolveria o dia anterior a oeste de
+ * Greenwich — que é o Brasil inteiro. O recorte da string é o que mantém
+ * "sábado" sendo sábado.
+ */
+const diaDe = (valor: Date): string => valor.toISOString().slice(0, 10);
+
+function daLinha(linha: LinhaDaEspera): EntradaDeEspera {
+  return {
+    id: linha.id,
+    status: linha.status,
+    de: diaDe(linha.wanted_from),
+    ate: diaDe(linha.wanted_to),
+    inicio: formatHHMM(linha.window_start_minute),
+    fim: formatHHMM(linha.window_end_minute),
+    duracaoMinutos: linha.duration_minutes,
+    profissionalId: linha.professional_id,
+    profissionalNome: linha.professional_name,
+    servicos: linha.services ?? [],
+    entrouEm: linha.joined_at.toISOString(),
+  };
+}
+
+const SELECT_DA_ESPERA = `
+  SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+         e.window_start_minute, e.window_end_minute, e.duration_minutes,
+         e.professional_id, p.name AS professional_name, e.joined_at,
+         array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+    FROM waitlist_entries e
+    LEFT JOIN professionals p ON p.id = e.professional_id
+    LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+    LEFT JOIN services s ON s.id = es.service_id
+`;
+
+export interface PedidoDeEntrada {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly customerId: string;
+  readonly serviceIds: readonly string[];
+  readonly professionalId?: string | null;
+  /** Datas locais da unidade, `YYYY-MM-DD`. */
+  readonly de: string;
+  readonly ate: string;
+  /** Minutos locais desde a meia-noite. */
+  readonly inicioMinuto: number;
+  readonly fimMinuto: number;
+  readonly idempotencyKey?: string;
+  readonly now?: Date;
+}
+
+/**
+ * Põe alguém na lista.
+ *
+ * A duração é somada **do catálogo**, nunca da requisição — mesma regra da
+ * reserva: aceitar duração do cliente deixaria alguém pedir "quero ser avisado
+ * de qualquer buraco de 5 minutos" e ganhar prioridade sobre a agenda inteira.
+ */
+export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDeEspera> {
+  return withTenant(pedido.tenantId, async (tx) => {
+    const agora = pedido.now ?? new Date();
+
+    const unidades = await tx.$queryRaw<{ timezone: string }[]>`
+      SELECT timezone FROM locations WHERE id = ${pedido.locationId}::uuid
+    `;
+    const timezone = unidades[0]?.timezone;
+    if (!timezone) {
+      throw new EsperaError('unidade_desconhecida', 'Unidade não encontrada.');
+    }
+
+    if (pedido.idempotencyKey) {
+      const anterior = await porChave(tx, pedido.idempotencyKey);
+      if (anterior) return anterior;
+    }
+
+    // Duração e existência dos serviços numa consulta. Serviço de outra
+    // barbearia não aparece — a RLS já recortou —, e a soma dá zero, que a
+    // CHECK do banco recusa.
+    const duracoes = await tx.$queryRaw<{ total: number | null }[]>`
+      SELECT sum(duration_minutes + buffer_before_minutes + buffer_after_minutes)::int AS total
+        FROM services WHERE id = ANY(${[...pedido.serviceIds]}::uuid[]) AND active
+    `;
+    const duracaoMinutos = duracoes[0]?.total ?? 0;
+
+    const ativas = await tx.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM waitlist_entries
+       WHERE customer_id = ${pedido.customerId}::uuid AND status = 'waiting'
+    `;
+
+    const hoje = diaLocal(timezone, agora);
+    const decisao = podeEsperar({
+      pedido: {
+        de: pedido.de,
+        ate: pedido.ate,
+        janela: { start: pedido.inicioMinuto, end: pedido.fimMinuto },
+        profissionalId: pedido.professionalId ?? null,
+        duracaoMinutos,
+      },
+      ativasDoCliente: Number(ativas[0]?.n ?? 0),
+      hojeNaUnidade: hoje,
+      ultimoDiaAceito: somarDias(hoje, DIAS_MAXIMOS_DE_ESPERA),
+    });
+
+    if (!decisao.aceito && decisao.recusa) {
+      throw new EsperaError(decisao.recusa, MENSAGEM[decisao.recusa]);
+    }
+    if (duracaoMinutos <= 0) {
+      throw new EsperaError('janela_invalida', 'Escolha ao menos um serviço.');
+    }
+
+    const criadas = await tx.$queryRaw<{ id: string }[]>`
+      INSERT INTO waitlist_entries
+        (tenant_id, location_id, customer_id, professional_id,
+         wanted_from, wanted_to, window_start_minute, window_end_minute,
+         duration_minutes, idempotency_key)
+      VALUES (
+        ${pedido.tenantId}::uuid, ${pedido.locationId}::uuid,
+        ${pedido.customerId}::uuid, ${pedido.professionalId ?? null}::uuid,
+        ${pedido.de}::date, ${pedido.ate}::date,
+        ${pedido.inicioMinuto}, ${pedido.fimMinuto},
+        ${duracaoMinutos}, ${pedido.idempotencyKey ?? null}
+      )
+      ON CONFLICT DO NOTHING
+      RETURNING id
+    `;
+
+    const id = criadas[0]?.id;
+    if (!id) {
+      // O índice parcial recusou uma entrada igual que já está esperando.
+      // Devolver a que existe é mais certo que erro: a pessoa queria estar na
+      // lista, e ela está.
+      const existente = await mesmoPedido(tx, pedido);
+      if (existente) return existente;
+      throw new EsperaError('limite_atingido', MENSAGEM['limite_atingido']);
+    }
+
+    for (const [posicao, serviceId] of pedido.serviceIds.entries()) {
+      await tx.$executeRaw`
+        INSERT INTO waitlist_entry_services (entry_id, service_id, tenant_id, position)
+        VALUES (${id}::uuid, ${serviceId}::uuid, ${pedido.tenantId}::uuid, ${posicao})
+        ON CONFLICT DO NOTHING
+      `;
+    }
+
+    const criada = await porId(tx, id);
+    if (!criada) throw new EsperaError('espera_nao_encontrada', 'Entrada não encontrada.');
+    return criada;
+  });
+}
+
+const MENSAGEM: Readonly<Record<RecusaDeEspera, string>> = {
+  janela_invalida: 'O horário final precisa ser depois do inicial.',
+  periodo_invertido: 'A data final precisa ser depois da inicial.',
+  periodo_longo_demais: `A lista de espera vai até ${DIAS_MAXIMOS_DE_ESPERA} dias à frente.`,
+  dia_no_passado: 'Escolha um dia que ainda não passou.',
+  limite_atingido: `Você já está em ${LIMITE_DE_ESPERAS_ATIVAS} listas de espera. Saia de uma para entrar em outra.`,
+};
+
+async function porId(tx: TransactionClient, id: string): Promise<EntradaDeEspera | null> {
+  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
+    `${SELECT_DA_ESPERA} WHERE e.id = $1::uuid GROUP BY e.id, p.name`,
+    id,
+  );
+  const linha = linhas[0];
+  return linha ? daLinha(linha) : null;
+}
+
+async function porChave(
+  tx: TransactionClient,
+  chave: string,
+): Promise<EntradaDeEspera | null> {
+  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
+    `${SELECT_DA_ESPERA} WHERE e.idempotency_key = $1 GROUP BY e.id, p.name`,
+    chave,
+  );
+  const linha = linhas[0];
+  return linha ? daLinha(linha) : null;
+}
+
+/** A entrada idêntica que o índice parcial acabou de recusar. */
+async function mesmoPedido(
+  tx: TransactionClient,
+  pedido: PedidoDeEntrada,
+): Promise<EntradaDeEspera | null> {
+  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
+    `${SELECT_DA_ESPERA}
+      WHERE e.customer_id = $1::uuid AND e.status = 'waiting'
+        AND e.wanted_from = $2::date AND e.wanted_to = $3::date
+        AND e.window_start_minute = $4 AND e.window_end_minute = $5
+        AND e.professional_id IS NOT DISTINCT FROM $6::uuid
+      GROUP BY e.id, p.name`,
+    pedido.customerId,
+    pedido.de,
+    pedido.ate,
+    pedido.inicioMinuto,
+    pedido.fimMinuto,
+    pedido.professionalId ?? null,
+  );
+  const linha = linhas[0];
+  return linha ? daLinha(linha) : null;
+}
+
+/**
+ * As esperas de um cliente.
+ *
+ * Filtra por `customer_id` porque a RLS separa barbearias e **não** separa
+ * clientes dentro de uma. Sem isto, qualquer cliente autenticado leria a lista
+ * de espera de qualquer outro.
+ */
+export async function esperasDoCliente(
+  tenantId: string,
+  customerId: string,
+): Promise<readonly EntradaDeEspera[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
+      `${SELECT_DA_ESPERA}
+        WHERE e.customer_id = $1::uuid AND e.status = 'waiting'
+        GROUP BY e.id, p.name
+        ORDER BY e.wanted_from, e.window_start_minute`,
+      customerId,
+    );
+    return linhas.map(daLinha);
+  });
+}
+
+/**
+ * Sai da lista.
+ *
+ * `customerId` é obrigatório e não opcional: esta operação parte sempre do
+ * cliente, e um parâmetro opcional aqui seria esquecido no primeiro chamador
+ * novo — tirando qualquer pessoa da lista de qualquer outra, bastando o id.
+ */
+export async function sairDaEspera(params: {
+  readonly tenantId: string;
+  readonly customerId: string;
+  readonly entryId: string;
+}): Promise<void> {
+  await withTenant(params.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      UPDATE waitlist_entries
+         SET status = 'left', closed_at = now(), updated_at = now()
+       WHERE id = ${params.entryId}::uuid
+         AND customer_id = ${params.customerId}::uuid
+         AND status = 'waiting'
+    `;
+    if (afetadas === 0) {
+      // Não distingue "não existe" de "não é sua": a RLS já tornou invisível o
+      // que é de outra barbearia, e diferenciar aqui viraria oráculo.
+      throw new EsperaError('espera_nao_encontrada', 'Esta espera não existe ou já terminou.');
+    }
+  });
+}
+
+export interface CandidatoDaVaga extends EntradaDeEspera {
+  readonly customerId: string;
+  readonly customerNome: string;
+  /** Só os quatro últimos: a tela do balcão fica virada para o salão. */
+  readonly customerTelefoneFinal: string | null;
+}
+
+/**
+ * Quem quer esta vaga.
+ *
+ * Chamada **dentro da transação do cancelamento**. O recorte grosso é do banco
+ * — unidade, dia dentro do período pedido, ainda esperando — servido pelo
+ * índice parcial da migração 0041; o casamento fino é do domínio, que é onde a
+ * regra pode ser lida e discutida.
+ *
+ * A ordem é a de entrada na fila, que é o décimo do score da SPEC §2.9 e a
+ * única parte dele que este bloco tem. O resto — aderência, recorrência,
+ * assinatura, confiabilidade — é o bloco 39, junto da janela exclusiva.
+ */
+export async function candidatosDaVaga(
+  tx: TransactionClient,
+  params: { readonly locationId: string; readonly vaga: VagaAberta },
+): Promise<readonly CandidatoDaVaga[]> {
+  const linhas = await tx.$queryRawUnsafe<
+    (LinhaDaEspera & {
+      customer_id: string;
+      customer_name: string;
+      customer_phone: string | null;
+    })[]
+  >(
+    `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+            e.window_start_minute, e.window_end_minute, e.duration_minutes,
+            e.professional_id, p.name AS professional_name, e.joined_at,
+            e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
+            array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+       FROM waitlist_entries e
+       JOIN customers c ON c.id = e.customer_id
+       LEFT JOIN professionals p ON p.id = e.professional_id
+       LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+       LEFT JOIN services s ON s.id = es.service_id
+      WHERE e.location_id = $1::uuid
+        AND e.status = 'waiting'
+        AND e.wanted_from <= $2::date
+        AND e.wanted_to >= $2::date
+      GROUP BY e.id, p.name, c.name, c.phone_e164
+      ORDER BY e.joined_at`,
+    params.locationId,
+    params.vaga.dia,
+  );
+
+  return linhas
+    .filter((linha) =>
+      vagaServe(
+        {
+          de: diaDe(linha.wanted_from),
+          ate: diaDe(linha.wanted_to),
+          janela: { start: linha.window_start_minute, end: linha.window_end_minute },
+          profissionalId: linha.professional_id,
+          duracaoMinutos: linha.duration_minutes,
+        },
+        params.vaga,
+      ),
+    )
+    .map((linha) => ({
+      ...daLinha(linha),
+      customerId: linha.customer_id,
+      customerNome: linha.customer_name,
+      customerTelefoneFinal: linha.customer_phone ? linha.customer_phone.slice(-4) : null,
+    }));
+}
+
+/**
+ * A vaga que este cancelamento abriu, no fuso da unidade.
+ *
+ * A janela é a **ocupada**, com buffers — é o buraco de verdade na grade, e é o
+ * que outro atendimento poderia preencher. Usar a janela de serviço deixaria de
+ * fora os minutos de arrumação, e a vaga anunciada não caberia.
+ */
+export function vagaDoCancelamento(params: {
+  readonly timezone: string;
+  readonly inicio: Date;
+  readonly fim: Date;
+  readonly professionalId: string;
+}): VagaAberta {
+  const de = instantToLocal(params.timezone, params.inicio);
+  const ate = instantToLocal(params.timezone, params.fim);
+  return {
+    dia: de.date,
+    janela: { start: de.minutes, end: ate.minutes },
+    profissionalId: params.professionalId,
+  };
+}
+
+/**
+ * Marca como expirada toda entrada cujo último dia já passou.
+ *
+ * Roda na varredura diária. O recorte é feito **no banco**, com a data local da
+ * unidade calculada pelo próprio Postgres a partir do fuso dela: comparar com a
+ * data do processo expiraria o sábado da barbearia de Salvador às 21h de sexta,
+ * quando o servidor em UTC já virou o dia.
+ */
+export async function expirarEsperas(tenantId: string, agora: Date): Promise<number> {
+  return withTenant(tenantId, async (tx) => {
+    return tx.$executeRaw`
+      UPDATE waitlist_entries e
+         SET status = 'expired', closed_at = ${agora}, updated_at = now()
+        FROM locations l
+       WHERE l.id = e.location_id
+         AND e.status = 'waiting'
+         AND e.wanted_to < (${agora} AT TIME ZONE l.timezone)::date
+    `;
+  });
+}
+
+/** `YYYY-MM-DD` do instante, no fuso da unidade. */
+function diaLocal(timezone: string, agora: Date): string {
+  return instantToLocal(timezone, agora).date;
+}
+
+/** Soma dias a uma data `YYYY-MM-DD`, sem trazer fuso para dentro da conta. */
+function somarDias(dia: string, dias: number): string {
+  const base = new Date(`${dia}T00:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + dias);
+  return base.toISOString().slice(0, 10);
+}

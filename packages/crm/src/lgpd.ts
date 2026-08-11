@@ -293,6 +293,25 @@ export async function exportarDadosDoTitular(
        ORDER BY joined_at
     `;
 
+    /**
+     * A lista de espera (bloco 38).
+     *
+     * Entrou aqui porque o teste de completude cobrou: `waitlist_entries` tem
+     * `customer_id`, e toda tabela com essa coluna ou é exportada ou tem
+     * exceção escrita. E é dado do titular de verdade — "eu pedi para ser
+     * avisado do sábado de manhã e nunca me avisaram" é exatamente o tipo de
+     * pergunta que a exportação existe para responder.
+     */
+    const esperas = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT e.status::text AS status, e.wanted_from, e.wanted_to,
+             e.window_start_minute, e.window_end_minute, e.duration_minutes,
+             p.name AS profissional, e.joined_at, e.closed_at
+        FROM waitlist_entries e
+        LEFT JOIN professionals p ON p.id = e.professional_id
+       WHERE e.customer_id = ${customerId}::uuid
+       ORDER BY e.joined_at
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
@@ -317,6 +336,7 @@ export async function exportarDadosDoTitular(
       fiado,
       mensagens,
       filas,
+      esperas,
     };
   });
 }

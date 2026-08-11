@@ -22,6 +22,7 @@ import {
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
 import { avaliarSinalEm } from './confianca.js';
+import { candidatosDaVaga, vagaDoCancelamento, type CandidatoDaVaga } from './espera.js';
 
 /**
  * Operações de reserva.
@@ -643,9 +644,22 @@ export interface DesfechoDoSinalNoCancelamento extends DecisaoDeReembolso {
   readonly valorCents: number;
 }
 
+/**
+ * O que o cancelamento deixa para trás.
+ *
+ * As duas coisas que a recepção precisa saber no instante em que desmarca: o
+ * que fazer com o sinal, e quem quer o horário que acabou de vagar. Devolver as
+ * duas juntas é o que evita a segunda tela — e a lista de espera só serve
+ * **agora**, antes de outro cliente marcar pelo site.
+ */
+export interface DesfechoDoCancelamento {
+  readonly sinal: DesfechoDoSinalNoCancelamento | null;
+  readonly esperando: readonly CandidatoDaVaga[];
+}
+
 export async function cancelAppointment(
   request: CancelRequest,
-): Promise<DesfechoDoSinalNoCancelamento | null> {
+): Promise<DesfechoDoCancelamento> {
   return withTenant(request.tenantId, async (tx) => {
     const status = request.by === 'customer' ? 'cancelled_customer' : 'cancelled_business';
     // Quem desmarcou não pode receber "não esqueça do seu horário". Esta é a
@@ -691,7 +705,55 @@ export async function cancelAppointment(
       );
     }
 
-    return decidirDestinoDoSinal(tx, request.appointmentId, request.by, agora);
+    const sinal = await decidirDestinoDoSinal(tx, request.appointmentId, request.by, agora);
+    const esperando = await quemQuerEstaVaga(tx, request.appointmentId);
+    return { sinal, esperando };
+  });
+}
+
+/**
+ * A lista de espera, perguntada **dentro da transação do cancelamento**
+ * (bloco 38).
+ *
+ * Perguntar depois do commit criaria a janela em que o horário está livre e
+ * ninguém sabe — e é justamente a janela em que outro cliente marca pelo site,
+ * deixando a lista sem função no único momento em que ela serviria.
+ *
+ * Erro aqui **não derruba o cancelamento**: desmarcar é a operação que o
+ * cliente pediu, e ela não pode falhar porque uma consulta auxiliar falhou. A
+ * lista vazia é indistinguível de "ninguém quer", e é o pior que acontece.
+ */
+async function quemQuerEstaVaga(
+  tx: TransactionClient,
+  appointmentId: string,
+): Promise<readonly CandidatoDaVaga[]> {
+  const linhas = await tx.$queryRaw<
+    {
+      location_id: string;
+      professional_id: string;
+      starts_at: Date;
+      ends_at: Date;
+      timezone: string;
+    }[]
+  >`
+    SELECT a.location_id, a.professional_id, a.starts_at, a.ends_at, l.timezone
+      FROM appointments a
+      JOIN locations l ON l.id = a.location_id
+     WHERE a.id = ${appointmentId}::uuid
+  `;
+  const linha = linhas[0];
+  if (!linha) return [];
+
+  return candidatosDaVaga(tx, {
+    locationId: linha.location_id,
+    // A janela **ocupada**, com buffers: é o buraco de verdade na grade, e é o
+    // que outro atendimento poderia preencher.
+    vaga: vagaDoCancelamento({
+      timezone: linha.timezone,
+      inicio: linha.starts_at,
+      fim: linha.ends_at,
+      professionalId: linha.professional_id,
+    }),
   });
 }
 
