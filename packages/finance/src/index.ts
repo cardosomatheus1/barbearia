@@ -6,5 +6,6 @@ export * from './painel.js';
 export * from './cobranca-online.js';
 export * from './sinal.js';
 export * from './fidelidade.js';
+export * from './assinatura.js';
 export * from './estoque.js';
 export * from './pacote.js';

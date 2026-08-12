@@ -44,6 +44,9 @@ import {
   salvarProdutoNaApi,
   moverEstoqueNaApi,
   salvarFichaNaApi,
+  salvarPlanoNaApi,
+  assinarNaApi,
+  cancelarAssinaturaNaApi,
   assumirRecadoNaApi,
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
@@ -2089,4 +2092,71 @@ export async function acaoSalvarFicha(form: FormData): Promise<void> {
   const resultado = await salvarFichaNaApi(token, serviceId, itens);
   if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
   redirect('/admin/catalogo?ficha=1');
+}
+
+// -- Clube de assinatura (bloco 45) -------------------------------------------
+
+/**
+ * Salva um plano do clube.
+ *
+ * Os benefícios são substituídos inteiros, como a ficha de consumo: é uma lista
+ * curta que a barbearia refaz de uma vez. O preço já vendido não muda por isso —
+ * a assinatura congela o valor na adesão.
+ *
+ * Quantidade vazia significa **ilimitado**, e é por isso que o campo aceita
+ * vazio em vez de exigir um número grande: `9999` é uma cota disfarçada.
+ */
+export async function acaoSalvarPlano(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+  const preco = Number(form.get('precoReais') ?? 0);
+  const desconto = Number(form.get('descontoPercent') ?? 0);
+
+  const beneficios = form
+    .getAll('servicoId')
+    .map(String)
+    .map((serviceId) => {
+      const bruto = String(form.get(`qtd-${serviceId}`) ?? '').trim();
+      const marcado = form.get(`inclui-${serviceId}`) === 'on';
+      return {
+        serviceId,
+        marcado,
+        // Vazio é ilimitado; um número é a cota.
+        quantidade: bruto.length > 0 ? Number(bruto) : null,
+        cooldownDias: Number(form.get(`cd-${serviceId}`) ?? 0),
+      };
+    })
+    .filter((b) => b.marcado)
+    .map(({ serviceId, quantidade, cooldownDias }) => ({ serviceId, quantidade, cooldownDias }));
+
+  const resultado = await salvarPlanoNaApi(
+    token,
+    {
+      nome: texto(form, 'nome'),
+      descricao: texto(form, 'descricao') || null,
+      precoCents: Math.round(preco * 100),
+      descontoEmProdutoBps: Math.round(desconto * 100),
+      ativo: form.get('ativo') === 'on',
+      beneficios,
+    },
+    id.length > 0 ? id : undefined,
+  );
+  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  redirect('/admin/clube?salvo=1');
+}
+
+export async function acaoAssinar(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await assinarNaApi(token, customerId, texto(form, 'planId'));
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=assinou`);
+}
+
+export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=cancelou`);
 }

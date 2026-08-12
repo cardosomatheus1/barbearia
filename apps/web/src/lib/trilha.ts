@@ -78,6 +78,12 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'product.changed': 'mexeu no cadastro de um produto',
   'stock.adjusted': 'baixou ou ajustou estoque à mão',
 
+  // O clube de assinatura (bloco 45). As três são de dinheiro: definem ou ligam
+  // receita recorrente.
+  'subscription.plan_changed': 'mexeu num plano de assinatura',
+  'subscription.started': 'assinou um cliente num plano',
+  'subscription.cancelled': 'cancelou a assinatura de um cliente',
+
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a
   // imprimi-lo.

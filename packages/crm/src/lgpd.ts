@@ -384,6 +384,25 @@ export async function exportarDadosDoTitular(
        ORDER BY created_at
     `;
 
+    /**
+     * A assinatura do clube (bloco 45).
+     *
+     * "Quanto eu pago por mês e desde quando" é dado do titular tanto quanto o
+     * saldo de fiado — e o valor **congelado na adesão** é o que responde a
+     * pergunta que mais chega: "por que eu pago diferente do meu amigo?".
+     *
+     * Não é a assinatura da plataforma: aquela é o que a barbearia paga a nós, e
+     * não tem cliente nenhum dentro.
+     */
+    const assinaturas = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT p.name AS plano, s.status::text AS estado, s.price_cents,
+             s.started_at, s.cancelled_at, s.cancel_reason
+        FROM club_subscriptions s
+        LEFT JOIN club_plans p ON p.id = s.plan_id
+       WHERE s.customer_id = ${customerId}::uuid
+       ORDER BY s.started_at
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
@@ -413,6 +432,7 @@ export async function exportarDadosDoTitular(
       fidelidade,
       pacotes,
       avaliacoes,
+      assinaturas,
     };
   });
 }

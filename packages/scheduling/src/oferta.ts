@@ -299,6 +299,7 @@ async function medirCandidatos(
       faltas: bigint;
       considerados: bigint;
       override: number | null;
+      assinante: boolean;
     }[]
   >`
     SELECT c.id AS customer_id,
@@ -310,7 +311,26 @@ async function medirCandidatos(
              WHERE a.status IN ('completed', 'no_show', 'cancelled_customer')
                AND a.service_starts_at >= ${desde}
            ) AS considerados,
-           c.reliability_override AS override
+           c.reliability_override AS override,
+           -- O termo assinante do score (SPEC 2.9), entregue no bloco 45.
+           --
+           -- Era lacuna declarada desde o bloco 38: ele entrava constante e
+           -- falso para todo mundo, e o efeito era o score inteiro caber em
+           -- 0,8 em vez de 1,0 -- sem alterar a ordem de ninguem.
+           --
+           -- A leitura e feita aqui e nao por packages/finance porque a seta
+           -- nao volta: scheduling nao depende de finance. Ler uma tabela para
+           -- responder "esta pessoa assina?" e a mesma coisa que ler customers;
+           -- o que mora em finance e a operacao de assinar.
+           --
+           -- Inadimplente conta junto de ativa, como no resto do produto: o
+           -- cartao que falhou na terca costuma passar na quinta, e tirar a
+           -- prioridade da fila no primeiro erro e a punicao que a SPEC 4.6
+           -- manda evitar.
+           EXISTS (
+             SELECT 1 FROM club_subscriptions s
+              WHERE s.customer_id = c.id AND s.status IN ('ativa', 'inadimplente')
+           ) AS assinante
       FROM customers c
       LEFT JOIN appointments a ON a.customer_id = c.id
      WHERE c.id = ANY(${clientes}::uuid[])
@@ -347,10 +367,7 @@ async function medirCandidatos(
         end: minutosDe(candidato.fim),
       },
       visitas: Number(medida?.visitas ?? 0),
-      // Assinatura não existe no produto até o bloco 45. Constante para todos,
-      // o termo não altera a ordem de ninguém — ver o cabeçalho de
-      // `packages/core/src/prioridade.ts`.
-      assinante: false,
+      assinante: medida?.assinante ?? false,
       confiabilidade,
       entrouEm: new Date(candidato.entrouEm),
     };

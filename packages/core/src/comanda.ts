@@ -213,6 +213,14 @@ export const FORMAS_DE_PAGAMENTO = [
    * cliente pagou adiantado.
    */
   'pacote',
+  /**
+   * A assinatura do clube quita a conta (bloco 45).
+   *
+   * Como o pacote: o item do corte continua com o preço de tabela — é ele que
+   * dá base à comissão do barbeiro, que não pode cair porque o cliente é
+   * assinante — e a mensalidade cobre.
+   */
+  'assinatura',
 ] as const;
 
 export type FormaDePagamento = (typeof FORMAS_DE_PAGAMENTO)[number];
@@ -326,6 +334,13 @@ export function conferirPagamento(params: {
     .filter((p) => p.forma === 'pacote')
     .reduce((soma, p) => soma + p.valorCents, 0);
   if (pacoteCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
+
+  // Nem a assinatura vira troco (bloco 45): a mensalidade paga o corte, não a
+  // gaveta. Com troco, o assinante sacaria dinheiro do próprio plano todo mês.
+  const assinaturaCents = params.pagamentos
+    .filter((p) => p.forma === 'assinatura')
+    .reduce((soma, p) => soma + p.valorCents, 0);
+  if (assinaturaCents > 0) return { falha: 'pagou_demais', trocoCents: 0 };
 
   const emDinheiro = params.pagamentos
     .filter((p) => ENTRA_NA_GAVETA.includes(p.forma))

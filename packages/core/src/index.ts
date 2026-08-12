@@ -36,5 +36,6 @@ export * from './prioridade.js';
 export * from './recado.js';
 export * from './fidelidade.js';
 export * from './avaliacao.js';
+export * from './assinatura.js';
 export * from './estoque.js';
 export * from './pacote.js';

@@ -514,6 +514,56 @@ async function prepararFila(token) {
 }
 
 /**
+ * Planos do clube e um assinante (bloco 45).
+ *
+ * O que a medição precisa é do **estado**: um plano com nome longo, um benefício
+ * ilimitado com intervalo — que é o que empilha texto no cartão — e um assinante,
+ * para o bloco da ficha aparecer.
+ */
+async function prepararClube(slug, clienteDaFicha) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  const servicos = psql(
+    `select id from services where tenant_id = '${tenant}' and active order by price_cents desc limit 2`,
+  ).split('\n').map((l) => l.trim()).filter(Boolean);
+  if (servicos.length === 0) return;
+
+  const plano = primeiraLinha(
+    psql(
+      `INSERT INTO club_plans (tenant_id, name, description, price_cents, product_discount_bps)
+       VALUES ('${tenant}', 'Premium ilimitado com barba', 'Para quem corta toda semana',
+               14900, 1000)
+       RETURNING id`,
+    ),
+  );
+  psql(
+    `INSERT INTO club_plans (tenant_id, name, price_cents) VALUES ('${tenant}', 'Essencial', 8900)`,
+  );
+
+  if (plano) {
+    psql(
+      `INSERT INTO club_plan_benefits (plan_id, service_id, tenant_id, quantity, cooldown_days)
+       VALUES ('${plano}', '${servicos[0]}', '${tenant}', NULL, 7)`,
+    );
+    if (servicos[1]) {
+      psql(
+        `INSERT INTO club_plan_benefits (plan_id, service_id, tenant_id, quantity, cooldown_days)
+         VALUES ('${plano}', '${servicos[1]}', '${tenant}', 2, 0)`,
+      );
+    }
+  }
+
+  if (plano && clienteDaFicha) {
+    psql(
+      `INSERT INTO club_subscriptions (tenant_id, customer_id, plan_id, price_cents, status, started_at)
+       VALUES ('${tenant}', '${clienteDaFicha}', '${plano}', 14900, 'ativa', now() - interval '40 days')
+       ON CONFLICT DO NOTHING`,
+    );
+  }
+}
+
+/**
  * Produtos, movimentos e ficha de consumo (bloco 44).
  *
  * Pelo banco, como os outros: o que a medição precisa é do **estado** — nome
@@ -1202,6 +1252,7 @@ async function main() {
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);
+  await prepararClube(slug, balcao.clienteId);
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },
@@ -1296,6 +1347,7 @@ async function main() {
     { nome: 'fidelidade', url: '/admin/fidelidade', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'pacotes', url: '/admin/pacotes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'estoque', url: '/admin/estoque', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'clube', url: '/admin/clube', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },
     // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
     // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir

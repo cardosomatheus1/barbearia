@@ -129,6 +129,11 @@ describe('permissões de dinheiro', () => {
       // operação seguinte. Editar o catálogo de pacotes é `settings.manage` e
       // não cai aqui — cadastrar "5 cortes por R$ 250" não move centavo nenhum.
       'finance.package_refund',
+      // `finance.subscription_manage` entrou no bloco 45, e pelo prefixo:
+      // assinar liga **receita recorrente**, cancelar a desliga. Montar o
+      // cadastro do plano é `settings.manage`; dizer que um cliente passa a
+      // pagar R$ 149 por mês é mexer em dinheiro.
+      'finance.subscription_manage',
       'finance.view',
       'finance.view_profit',
     ]);

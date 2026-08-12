@@ -4058,6 +4058,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
 .casco:has([data-secao='pacotes']) .contexto__link[data-para='pacotes'],
 .casco:has([data-secao='estoque']) .contexto__link[data-para='estoque'],
+.casco:has([data-secao='clube']) .contexto__link[data-para='clube'],
 .casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais'],
 .casco:has([data-secao='recursos']) .contexto__link[data-para='recursos'],
 .casco:has([data-secao='fotos']) .contexto__link[data-para='fotos'],
@@ -6458,4 +6459,48 @@ main { padding-bottom: var(--space-8); }
 @container (min-width: 30rem) {
   .margem__linhas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
   .margem__linhas > div { flex-direction: column; gap: var(--space-1); }
+}
+
+/* ---------------------------------------------------------------------------
+   Clube de assinatura (bloco 45)
+   --------------------------------------------------------------------------- */
+.plano__lista {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.plano__servicos {
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  border: 0;
+}
+.plano__servico {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.assinatura {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.assinatura__plano { margin: 0; font-weight: var(--font-weight-semibold); }
+.assinatura__ciclo {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.assinatura__beneficios {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-5);
+  font-size: var(--font-size-sm);
+}
+/* O que está segurado pelo intervalo mínimo é o que a recepção precisa ver
+   antes de prometer o corte de amanhã. */
+.assinatura__trava { color: var(--color-warning); }
+.assinatura__cancelar {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
 }

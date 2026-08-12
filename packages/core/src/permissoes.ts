@@ -95,6 +95,16 @@ export const PERMISSOES = [
    * que deriva o segundo fator do prefixo.
    */
   'finance.package_refund',
+  /**
+   * Montar plano de assinatura e assinar alguém (bloco 45).
+   *
+   * Prefixo `finance.` de propósito: assinar liga **receita recorrente**, e
+   * cancelar a desliga. É o mesmo raciocínio de `finance.loyalty_adjust` —
+   * `settings.manage` monta o cadastro, mas dizer "este cliente agora paga
+   * R$ 149 por mês" é mexer em dinheiro, e o segundo fator é derivado do
+   * prefixo.
+   */
+  'finance.subscription_manage',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -276,6 +286,7 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'feedback.manage',
     'reviews.view',
     'reviews.recover',
+    'finance.subscription_manage',
     'reports.operational',
     'inventory.view',
     'inventory.adjust',

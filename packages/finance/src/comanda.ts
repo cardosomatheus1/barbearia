@@ -19,6 +19,7 @@ import { lancarComissaoDaComanda } from './comissao.js';
 import { conferirResgate, creditarDaVenda, programaDaCasa, registrarResgate } from './fidelidade.js';
 import { consumirPacote, consumoDisponivel, venderPacote } from './pacote.js';
 import { baixarVendas, consumirFicha } from './estoque.js';
+import { consumirAssinatura, usoDisponivel } from './assinatura.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -805,6 +806,25 @@ export async function fecharComanda(params: {
    */
   readonly servicoDoPacote?: string;
   /**
+   * Qual serviço a assinatura está cobrindo, quando há pagamento por assinatura
+   * (bloco 45).
+   *
+   * Separado do pagamento pela mesma razão do pacote: a forma diz "quitou pelo
+   * plano", isto diz **qual** cota some. O domínio confere que o serviço está
+   * nesta comanda, que o plano o cobre, e que a cota e o cooldown permitem.
+   */
+  readonly servicoDaAssinatura?: string;
+  /**
+   * O instante do fechamento, para o que depende de janela de tempo.
+   *
+   * O ciclo da assinatura é ancorado no dia da adesão, e o uso precisa cair
+   * **dentro** dele. Com `new Date()` fixo aqui dentro, o teste que congela o
+   * relógio grava o uso fora do ciclo que ele mesmo montou — e o produto ficaria
+   * sem prova de que a cota conta. Relógio entra por parâmetro; a ausência
+   * continua sendo agora.
+   */
+  readonly agora?: Date;
+  /**
    * A transação de fora, quando já existe uma.
    *
    * Existe por uma coisa só: o webhook do Pix (bloco 35). A SPEC §3.3 diz que a
@@ -1131,6 +1151,79 @@ export async function fecharComanda(params: {
      * lista no corpo do fechamento seria a segunda fonte do mesmo fato, e o que
      * foi cobrado poderia discordar do que baixou.
      */
+    /**
+     * A assinatura, na mesma transação (bloco 45).
+     *
+     * Fora dela, a comanda fecharia com o corte quitado pelo plano e a cota
+     * continuaria cheia — corte ilimitado de graça, um por comanda. É o mesmo
+     * defeito que o pacote e o resgate de fidelidade teriam, e a mesma solução.
+     */
+    const agoraNoFechamento = params.agora ?? new Date();
+    const pagoComAssinatura = params.pagamentos
+      .filter((p) => p.forma === 'assinatura')
+      .reduce((soma, p) => soma + p.valorCents, 0);
+
+    if (pagoComAssinatura > 0) {
+      if (!comanda.customerId) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'Identifique o cliente antes de usar a assinatura.',
+        );
+      }
+      const servicoCoberto = params.servicoDaAssinatura;
+      if (!servicoCoberto) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'Diga qual serviço a assinatura está cobrindo.',
+        );
+      }
+
+      /**
+       * O serviço coberto tem que estar **nesta comanda**.
+       *
+       * Sem a conferência, uma barba fecharia queimando a cota de corte do
+       * plano: os valores batem, o domínio aceita, e o cliente perde um corte
+       * que pagou na mensalidade. É a mesma lição do bloco 42.
+       */
+      const naComanda = comanda.itens.find(
+        (i) => i.serviceId === servicoCoberto && i.tipo === 'service',
+      );
+      if (!naComanda) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'A assinatura não cobre nenhum serviço desta comanda.',
+        );
+      }
+
+      // Reconferido **sob a trava**: entre a montagem do pagamento e este ponto
+      // pode ter entrado outro uso do mesmo plano.
+      const disponivel = await usoDisponivel({
+        tenantId: params.tenantId,
+        customerId: comanda.customerId,
+        serviceId: servicoCoberto,
+        precoCents: naComanda.precoUnitarioCents,
+        agora: agoraNoFechamento,
+        tx,
+      });
+
+      if (!disponivel || 'recusa' in disponivel || disponivel.valorCents !== pagoComAssinatura) {
+        throw new ComandaError(
+          'pagamento_invalido',
+          'A assinatura mudou. Refaça o pagamento.',
+        );
+      }
+
+      await consumirAssinatura(tx, {
+        subscriptionId: disponivel.subscriptionId,
+        serviceId: servicoCoberto,
+        orderId: params.orderId,
+        valorCents: disponivel.valorCents,
+        diaDaUnidade: params.hojeNaUnidade,
+        agora: agoraNoFechamento,
+        ...(comanda.appointmentId ? { appointmentId: comanda.appointmentId } : {}),
+      });
+    }
+
     await baixarVendas(tx, {
       orderId: params.orderId,
       diaDaUnidade: params.hojeNaUnidade,

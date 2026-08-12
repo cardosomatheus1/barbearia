@@ -64,7 +64,7 @@ export interface CandidatoNaFila {
   readonly janelaPedida: TimeRange;
   /** Atendimentos concluídos desta pessoa nesta barbearia. */
   readonly visitas: number;
-  /** Assinatura ativa. Sempre falso até o bloco 45 — ver o cabeçalho. */
+  /** Assinatura do clube valendo (`ativa` ou `inadimplente`), desde o bloco 45. */
   readonly assinante: boolean;
   /** 0 a 100, do bloco 37. */
   readonly confiabilidade: number;

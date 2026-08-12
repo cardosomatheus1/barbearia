@@ -66,7 +66,11 @@ describe('partição do vocabulário da trilha', () => {
     // manual **cria** saldo gastável, e mudar o programa define a alíquota com
     // que a casa passa a imprimi-lo. "Quem virou o cashback para 50%?" é
     // pergunta de dinheiro.
-    const deDinheiro = /^(cash|order|debt|commission|deposit|loyalty|package)\./;
+    // `subscription.` entrou no bloco 45: assinar liga **receita recorrente** e
+    // cancelar a desliga, e o plano define quanto a casa cobra por mês de todo
+    // assinante novo. É o clube da barbearia, não a assinatura da plataforma —
+    // aquela tem trilha própria, do outro lado do produto.
+    const deDinheiro = /^(cash|order|debt|commission|deposit|loyalty|package|subscription)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

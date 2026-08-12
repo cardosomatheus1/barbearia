@@ -98,6 +98,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   // vira pagamento no balcão.
   'finance.loyalty_adjust': 'Ajustar o saldo de fidelidade de um cliente',
   'finance.package_refund': 'Reembolsar um pacote pela parte não usada',
+  'finance.subscription_manage': 'Criar planos e assinar clientes no clube',
   'reviews.view': 'Ver as avaliações dos atendimentos',
   'reviews.recover': 'Tratar uma nota baixa dentro da janela de 48h',
   // Ler o que os clientes escreveram, e responder em nome da casa. Duas caixas

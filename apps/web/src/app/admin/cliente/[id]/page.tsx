@@ -7,6 +7,7 @@ import {
   fraseDaConversa,
   podeTudo,
   ESTADO_TRATADA,
+  ROTULO_DA_ASSINATURA,
   ROTULO_DO_PACOTE,
   saldoPorExtenso,
 } from '@barbearia/core';
@@ -15,6 +16,10 @@ import {
   saldoDeFidelidade,
   pacotesDoClienteNaApi,
   avaliacoesDoClienteNaApi,
+  assinaturaDoClienteNaApi,
+  planosNaApi,
+  type AssinaturaDoCliente,
+  type PlanoNaTela,
   type AvaliacaoNaTela,
   type PacoteDoCliente,
   type SaldoDeFidelidade,
@@ -35,6 +40,8 @@ import {
   acaoConfiancaDoCliente,
   acaoConsentimentoNoBalcao,
   acaoPreferencias,
+  acaoAssinar,
+  acaoCancelarAssinatura,
   acaoReembolsarPacote,
   acaoSair,
 } from '../../acoes';
@@ -475,6 +482,109 @@ function Avaliacoes({ avaliacoes }: { readonly avaliacoes: readonly AvaliacaoNaT
   );
 }
 
+/**
+ * A assinatura do clube na ficha (bloco 45, SPEC §4.6).
+ *
+ * O balcão precisa de duas coisas antes de cobrar: se a pessoa assina, e
+ * **quanto do plano dela ainda cabe neste ciclo**. A segunda é a que evita a
+ * conversa ruim — "achei que estava incluído" — e é por isso que a cota e o
+ * intervalo aparecem por serviço, não como um selo de "assinante".
+ */
+function Assinatura({
+  assinatura,
+  planos,
+  customerId,
+  podeMexer,
+}: {
+  readonly assinatura: AssinaturaDoCliente | null;
+  readonly planos: readonly PlanoNaTela[];
+  readonly customerId: string;
+  readonly podeMexer: boolean;
+}) {
+  const dia = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
+
+  return (
+    <section aria-labelledby="clube" className="secao">
+      <h2 className="rotulo" id="clube">
+        Clube
+      </h2>
+
+      {assinatura ? (
+        <div className="assinatura">
+          <p className="assinatura__plano">
+            {assinatura.planoNome} · {ROTULO_DA_ASSINATURA[assinatura.estado]}
+          </p>
+          <p className="assinatura__ciclo">
+            R$ {reaisDoCampo(assinatura.precoCents)} por mês · ciclo de {dia(assinatura.cicloDe)} a{' '}
+            {dia(assinatura.cicloAte)}
+          </p>
+
+          <ul className="assinatura__beneficios">
+            {assinatura.beneficios.map((b) => {
+              const segurado = b.liberaEm && new Date(b.liberaEm) > new Date();
+              return (
+                <li key={b.serviceId}>
+                  <strong>{b.servicoNome}</strong>{' '}
+                  {b.quantidade === null
+                    ? 'ilimitado'
+                    : `${b.usados} de ${b.quantidade} usados`}
+                  {segurado ? (
+                    <span className="assinatura__trava">
+                      {' '}
+                      · libera em {dia(b.liberaEm as string)}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+
+          {podeMexer ? (
+            <form action={acaoCancelarAssinatura} className="assinatura__cancelar">
+              <input name="id" type="hidden" value={assinatura.id} />
+              <input name="customerId" type="hidden" value={customerId} />
+              <label className="ui-field">
+                <span className="ui-field__label">Cancelar — por quê</span>
+                <input
+                  className="ui-field__input"
+                  maxLength={300}
+                  minLength={3}
+                  name="motivo"
+                  placeholder="Pediu para cancelar no balcão"
+                  required
+                />
+              </label>
+              <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                Cancelar assinatura
+              </button>
+            </form>
+          ) : null}
+        </div>
+      ) : podeMexer && planos.length > 0 ? (
+        <form action={acaoAssinar} className="assinatura">
+          <input name="customerId" type="hidden" value={customerId} />
+          <p className="assinatura__ciclo">Este cliente ainda não assina.</p>
+          <label className="ui-field">
+            <span className="ui-field__label">Plano</span>
+            <select className="ui-field__input" name="planId">
+              {planos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} — R$ {reaisDoCampo(p.precoCents)}/mês
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="ui-button ui-button--ghost recado__acao" type="submit">
+            Assinar
+          </button>
+        </form>
+      ) : (
+        <p className="assinatura__ciclo">Este cliente não assina nenhum plano.</p>
+      )}
+    </section>
+  );
+}
+
 function Confianca({
   confianca,
   customerId,
@@ -623,7 +733,9 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const veSaldo =
     estado.staff.permissions.includes('finance.view') &&
     estado.staff.permissions.includes('customers.view');
-  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes] = await Promise.all([
+  const veClube = estado.staff.permissions.includes('finance.subscription_manage');
+  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube] =
+    await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
     // Só quem pode mexer em sinal pergunta: a rota exige `finance.deposit`, e
@@ -638,6 +750,10 @@ export default async function FichaPage({ params, searchParams }: Props) {
     estado.staff.permissions.includes('reviews.view')
       ? avaliacoesDoClienteNaApi(token, id)
       : Promise.resolve(null),
+    // A rota traz o valor que a pessoa paga: exige `customers.view` + `finance.view`,
+    // a mesma dupla do saldo e dos pacotes.
+    veSaldo ? assinaturaDoClienteNaApi(token, id) : Promise.resolve(null),
+    veClube ? planosNaApi(token) : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -879,6 +995,17 @@ export default async function FichaPage({ params, searchParams }: Props) {
 
       {avaliacoes?.ok && avaliacoes.dados.avaliacoes.length > 0 ? (
         <Avaliacoes avaliacoes={avaliacoes.dados.avaliacoes} />
+      ) : null}
+
+      {/* O clube (bloco 45). Fica na ficha porque é onde o balcão olha antes de
+          cobrar — a mesma decisão do saldo, dos pacotes e das avaliações. */}
+      {assinatura?.ok && !ficha.dados.anonimizado ? (
+        <Assinatura
+          assinatura={assinatura.dados.assinatura}
+          customerId={ficha.dados.customerId}
+          planos={planosDoClube?.ok ? planosDoClube.dados.planos.filter((p) => p.ativo) : []}
+          podeMexer={veClube}
+        />
       ) : null}
 
       {confianca?.ok && !ficha.dados.anonimizado ? (

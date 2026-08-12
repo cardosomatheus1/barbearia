@@ -2222,3 +2222,106 @@ export const salvarFichaNaApi = (
 
 export const margemNaApi = (token: string) =>
   chamar<RelatorioDeMargem>('GET', '/v1/admin/estoque/margem', undefined, token);
+
+// -- Clube de assinatura (bloco 45) -------------------------------------------
+
+export type EstadoDaAssinatura = 'ativa' | 'pendente' | 'inadimplente' | 'suspensa' | 'cancelada';
+
+export interface BeneficioNaTela {
+  serviceId: string;
+  servicoNome: string;
+  precoAvulsoCents: number;
+  quantidade: number | null;
+  cooldownDias: number;
+}
+
+export interface PlanoNaTela {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  precoCents: number;
+  descontoEmProdutoBps: number;
+  ativo: boolean;
+  beneficios: BeneficioNaTela[];
+  assinantes: number;
+}
+
+export interface AssinaturaDoCliente {
+  id: string;
+  planoNome: string;
+  estado: EstadoDaAssinatura;
+  precoCents: number;
+  desdeEm: string;
+  cicloDe: string;
+  cicloAte: string;
+  descontoEmProdutoBps: number;
+  beneficios: {
+    serviceId: string;
+    servicoNome: string;
+    quantidade: number | null;
+    cooldownDias: number;
+    usados: number;
+    ultimoUso: string | null;
+    liberaEm: string | null;
+  }[];
+}
+
+export interface ClubeDaCasa {
+  mrrCents: number;
+  ativas: number;
+  inadimplentes: number;
+  porPlano: { planoId: string; nome: string; assinantes: number; mrrCents: number }[];
+}
+
+export const planosNaApi = (token: string, todos = false) =>
+  chamar<{ planos: PlanoNaTela[] }>(
+    'GET',
+    `/v1/admin/clube/planos${todos ? '?todos=true' : ''}`,
+    undefined,
+    token,
+  );
+
+/**
+ * O mesmo catálogo com a contagem de assinantes.
+ *
+ * Rota separada porque a contagem × preço é o faturamento recorrente da casa, e
+ * ela exige `finance.view`. A lista aberta a quem monta a comanda vem com zero.
+ */
+export const planosContadosNaApi = (token: string, todos = false) =>
+  chamar<{ planos: PlanoNaTela[] }>(
+    'GET',
+    `/v1/admin/clube/planos/contados${todos ? '?todos=true' : ''}`,
+    undefined,
+    token,
+  );
+
+export const salvarPlanoNaApi = (
+  token: string,
+  dados: Omit<PlanoNaTela, 'id' | 'assinantes' | 'beneficios'> & {
+    beneficios: { serviceId: string; quantidade: number | null; cooldownDias: number }[];
+  },
+  id?: string,
+) =>
+  chamar<{ id: string }>(
+    'PUT',
+    id ? `/v1/admin/clube/planos/${id}` : '/v1/admin/clube/planos',
+    dados,
+    token,
+  );
+
+export const clubeNaApi = (token: string) =>
+  chamar<ClubeDaCasa>('GET', '/v1/admin/clube', undefined, token);
+
+export const assinaturaDoClienteNaApi = (token: string, customerId: string) =>
+  chamar<{ assinatura: AssinaturaDoCliente | null }>(
+    'GET',
+    `/v1/admin/clube/clientes/${customerId}`,
+    undefined,
+    token,
+  );
+
+export const assinarNaApi = (token: string, customerId: string, planId: string) =>
+  chamar<{ id: string }>('POST', '/v1/admin/clube/assinar', { customerId, planId }, token);
+
+export const cancelarAssinaturaNaApi = (token: string, id: string, motivo: string) =>
+  chamar<{ cancelada: boolean }>('POST', `/v1/admin/clube/${id}/cancelar`, { motivo }, token);

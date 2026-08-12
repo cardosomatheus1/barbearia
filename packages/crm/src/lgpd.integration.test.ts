@@ -236,6 +236,10 @@ describeIfDb('direitos do titular', () => {
       // As avaliações (bloco 43). O texto que a pessoa escreveu sobre um
       // atendimento é dado dela tanto quanto a anotação da ficha.
       'reviews',
+      // O clube (bloco 45). "Quanto eu pago por mês e desde quando" é dado do
+      // titular — e `club_uses` fica de fora porque ele não tem `customer_id`:
+      // o vínculo é pela assinatura, que já entra.
+      'club_subscriptions',
     ]);
 
     const EXCECOES = new Map([

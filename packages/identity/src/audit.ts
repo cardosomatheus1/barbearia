@@ -94,6 +94,17 @@ export type AuditAction =
   | 'product.changed'
   | 'stock.adjusted'
   /**
+   * O clube de assinatura (bloco 45).
+   *
+   * As três são de **dinheiro**. Mudar o plano define quanto a casa cobra por
+   * mês de todo assinante novo; assinar e cancelar ligam e desligam receita
+   * recorrente. "Quem cancelou a assinatura do meu cliente?" é pergunta de
+   * dinheiro, e quem precisa respondê-la é quem lê a trilha de dinheiro.
+   */
+  | 'subscription.plan_changed'
+  | 'subscription.started'
+  | 'subscription.cancelled'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -201,6 +212,9 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'deposit.refunded',
   'loyalty.program_changed',
   'loyalty.adjusted',
+  'subscription.plan_changed',
+  'subscription.started',
+  'subscription.cancelled',
   'package.changed',
   'package.refunded',
   'commission.closed',
