@@ -2235,6 +2235,12 @@ export interface BeneficioNaTela {
   cooldownDias: number;
 }
 
+export interface JanelaBloqueada {
+  diaDaSemana: number | null;
+  inicio: number;
+  fim: number;
+}
+
 export interface PlanoNaTela {
   id: string;
   nome: string;
@@ -2244,6 +2250,8 @@ export interface PlanoNaTela {
   ativo: boolean;
   beneficios: BeneficioNaTela[];
   assinantes: number;
+  janelaDeAgendamentoDias: number;
+  bloqueios: JanelaBloqueada[];
 }
 
 export interface AssinaturaDoCliente {
@@ -2255,6 +2263,8 @@ export interface AssinaturaDoCliente {
   cicloDe: string;
   cicloAte: string;
   descontoEmProdutoBps: number;
+  janelaDeAgendamentoDias: number;
+  bloqueios: JanelaBloqueada[];
   beneficios: {
     serviceId: string;
     servicoNome: string;
@@ -2297,8 +2307,9 @@ export const planosContadosNaApi = (token: string, todos = false) =>
 
 export const salvarPlanoNaApi = (
   token: string,
-  dados: Omit<PlanoNaTela, 'id' | 'assinantes' | 'beneficios'> & {
+  dados: Omit<PlanoNaTela, 'id' | 'assinantes' | 'beneficios' | 'bloqueios'> & {
     beneficios: { serviceId: string; quantidade: number | null; cooldownDias: number }[];
+    bloqueios: JanelaBloqueada[];
   },
   id?: string,
 ) =>
@@ -2325,3 +2336,33 @@ export const assinarNaApi = (token: string, customerId: string, planId: string) 
 
 export const cancelarAssinaturaNaApi = (token: string, id: string, motivo: string) =>
   chamar<{ cancelada: boolean }>('POST', `/v1/admin/clube/${id}/cancelar`, { motivo }, token);
+
+export interface DependenteNaTela {
+  customerId: string;
+  nome: string;
+  usosNoCiclo: number;
+}
+
+export const dependentesNaApi = (token: string, subscriptionId: string) =>
+  chamar<{ dependentes: DependenteNaTela[] }>(
+    'GET',
+    `/v1/admin/clube/${subscriptionId}/dependentes`,
+    undefined,
+    token,
+  );
+
+export const incluirDependenteNaApi = (token: string, subscriptionId: string, customerId: string) =>
+  chamar<{ incluido: boolean }>(
+    'POST',
+    `/v1/admin/clube/${subscriptionId}/dependentes`,
+    { customerId },
+    token,
+  );
+
+export const removerDependenteNaApi = (token: string, subscriptionId: string, customerId: string) =>
+  chamar<{ removido: boolean }>(
+    'POST',
+    `/v1/admin/clube/${subscriptionId}/dependentes/remover`,
+    { customerId },
+    token,
+  );

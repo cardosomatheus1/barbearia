@@ -403,6 +403,34 @@ export async function exportarDadosDoTitular(
        ORDER BY s.started_at
     `;
 
+    /**
+     * O uso do plano, e o vínculo de dependente (bloco 46).
+     *
+     * "Quando eu usei o meu plano" é dado do titular tanto quanto o extrato de
+     * fidelidade. E quem é dependente do plano de outra pessoa tem direito a
+     * saber que está coberto — e desde quando.
+     *
+     * O que **não** entra é o nome de quem banca: seria terceiro num arquivo que
+     * o titular leva embora, pela mesma razão que a trilha fica de fora. Sai o
+     * nome do plano e a data; a pergunta "quem paga?" é do balcão, não da
+     * exportação.
+     */
+    const usosDoPlano = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT s.name AS servico, u.value_cents, u.business_day, u.used_at
+        FROM club_uses u
+        LEFT JOIN services s ON s.id = u.service_id
+       WHERE u.customer_id = ${customerId}::uuid
+       ORDER BY u.used_at
+    `;
+
+    const coberturaPorOutro = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT p.name AS plano, d.created_at AS desde
+        FROM club_dependents d
+        JOIN club_subscriptions sub ON sub.id = d.subscription_id
+        LEFT JOIN club_plans p ON p.id = sub.plan_id
+       WHERE d.customer_id = ${customerId}::uuid
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
@@ -433,6 +461,8 @@ export async function exportarDadosDoTitular(
       pacotes,
       avaliacoes,
       assinaturas,
+      usosDoPlano,
+      coberturaPorOutro,
     };
   });
 }

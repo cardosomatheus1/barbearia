@@ -47,6 +47,8 @@ import {
   salvarPlanoNaApi,
   assinarNaApi,
   cancelarAssinaturaNaApi,
+  incluirDependenteNaApi,
+  removerDependenteNaApi,
   assumirRecadoNaApi,
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
@@ -2112,6 +2114,23 @@ export async function acaoSalvarPlano(form: FormData): Promise<void> {
   const preco = Number(form.get('precoReais') ?? 0);
   const desconto = Number(form.get('descontoPercent') ?? 0);
 
+  /**
+   * As faixas em que o plano não vale (bloco 46).
+   *
+   * Uma linha por dia da semana, com começo e fim vazios significando "não
+   * bloqueia". Guardar o proibido e não o permitido é a decisão do bloco: a
+   * barbearia abre setenta horas e bloqueia quatro.
+   */
+  const bloqueios = [0, 1, 2, 3, 4, 5, 6]
+    .map((dia) => ({
+      diaDaSemana: dia,
+      inicio: horaEmMinutos(String(form.get(`blk-ini-${dia}`) ?? '')),
+      fim: horaEmMinutos(String(form.get(`blk-fim-${dia}`) ?? '')),
+    }))
+    .filter((b): b is { diaDaSemana: number; inicio: number; fim: number } =>
+      b.inicio !== null && b.fim !== null && b.inicio < b.fim,
+    );
+
   const beneficios = form
     .getAll('servicoId')
     .map(String)
@@ -2137,7 +2156,9 @@ export async function acaoSalvarPlano(form: FormData): Promise<void> {
       precoCents: Math.round(preco * 100),
       descontoEmProdutoBps: Math.round(desconto * 100),
       ativo: form.get('ativo') === 'on',
+      janelaDeAgendamentoDias: Number(form.get('janelaDias') ?? 0),
       beneficios,
+      bloqueios,
     },
     id.length > 0 ? id : undefined,
   );
@@ -2159,4 +2180,38 @@ export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
   const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
   if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
   redirect(`/admin/cliente/${customerId}?feito=cancelou`);
+}
+
+/** `HH:mm` para minutos desde a meia-noite. Vazio devolve nulo. */
+function horaEmMinutos(valor: string): number | null {
+  const casou = /^(\d{1,2}):(\d{2})$/.exec(valor.trim());
+  if (!casou) return null;
+  const h = Number(casou[1]);
+  const m = Number(casou[2]);
+  if (h > 23 || m > 59) return null;
+  return h * 60 + m;
+}
+
+export async function acaoIncluirDependente(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await incluirDependenteNaApi(
+    token,
+    texto(form, 'subscriptionId'),
+    texto(form, 'dependenteId'),
+  );
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=dependente`);
+}
+
+export async function acaoRemoverDependente(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await removerDependenteNaApi(
+    token,
+    texto(form, 'subscriptionId'),
+    texto(form, 'dependenteId'),
+  );
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=dependente`);
 }

@@ -4,8 +4,11 @@ import {
   cicloDaAssinatura,
   mrrDasAssinaturas,
   podeUsarBeneficio,
+  planoValeNoHorario,
+  podeSerDependente,
   type BeneficioDoPlano,
   type EstadoDaAssinatura,
+  type JanelaBloqueada,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 
@@ -33,7 +36,10 @@ export type AssinaturaFailure =
   | 'assinatura_inativa'
   | 'servico_fora_do_plano'
   | 'cota_esgotada'
-  | 'dentro_do_cooldown';
+  | 'dentro_do_cooldown'
+  | 'e_o_titular'
+  | 'ja_e_dependente'
+  | 'fora_do_horario_do_plano';
 
 export class AssinaturaError extends Error {
   constructor(readonly code: AssinaturaFailure, message: string) {
@@ -53,6 +59,9 @@ const MENSAGEM: Readonly<Record<AssinaturaFailure, string>> = {
   servico_fora_do_plano: 'O plano dele não cobre este serviço.',
   cota_esgotada: 'Ele já usou tudo que o plano dá neste ciclo.',
   dentro_do_cooldown: 'Ainda não passou o intervalo mínimo entre um uso e outro.',
+  e_o_titular: 'Ele já é o titular desta assinatura.',
+  ja_e_dependente: 'Esta pessoa já está em outra assinatura.',
+  fora_do_horario_do_plano: 'O plano dele não vale neste horário.',
 };
 
 function recusar(code: AssinaturaFailure): never {
@@ -82,6 +91,10 @@ export interface PlanoNaTela {
   readonly ativo: boolean;
   readonly beneficios: readonly BeneficioNaTela[];
   readonly assinantes: number;
+  /** Dias de antecedência a mais que o visitante. Zero é a janela da casa. */
+  readonly janelaDeAgendamentoDias: number;
+  /** As faixas em que o plano **não** vale (bloco 46). */
+  readonly bloqueios: readonly JanelaBloqueada[];
 }
 
 /**
@@ -117,11 +130,19 @@ export async function planos(
         price_cents: number;
         product_discount_bps: number;
         active: boolean;
+        booking_window_days: number;
         assinantes: bigint;
         beneficios: unknown;
+        bloqueios: unknown;
       }[]
     >(
       `SELECT p.id, p.name, p.description, p.price_cents, p.product_discount_bps, p.active,
+              p.booking_window_days,
+              (SELECT jsonb_agg(jsonb_build_object(
+                        'diaDaSemana', bl.weekday,
+                        'inicio', bl.start_minute,
+                        'fim', bl.end_minute) ORDER BY bl.weekday, bl.start_minute)
+                 FROM club_plan_blackouts bl WHERE bl.plan_id = p.id) AS bloqueios,
               CASE WHEN $2::boolean THEN
                 (SELECT count(*) FROM club_subscriptions s
                   WHERE s.plan_id = p.id AND s.status IN ('ativa', 'inadimplente'))
@@ -150,7 +171,9 @@ export async function planos(
       descontoEmProdutoBps: l.product_discount_bps,
       ativo: l.active,
       assinantes: Number(l.assinantes),
+      janelaDeAgendamentoDias: l.booking_window_days,
       beneficios: (l.beneficios ?? []) as readonly BeneficioNaTela[],
+      bloqueios: (l.bloqueios ?? []) as readonly JanelaBloqueada[],
     }));
   });
 }
@@ -163,11 +186,14 @@ export async function salvarPlano(entrada: {
   readonly precoCents: number;
   readonly descontoEmProdutoBps: number;
   readonly ativo: boolean;
+  readonly janelaDeAgendamentoDias?: number;
   readonly beneficios: readonly {
     readonly serviceId: string;
     readonly quantidade: number | null;
     readonly cooldownDias: number;
   }[];
+  /** As faixas em que o plano não vale (bloco 46). Substituídas inteiras. */
+  readonly bloqueios?: readonly JanelaBloqueada[];
   readonly ator: Ator;
 }): Promise<{ readonly id: string }> {
   if (
@@ -215,6 +241,7 @@ export async function salvarPlano(entrada: {
            SET name = ${entrada.nome.trim()}, description = ${entrada.descricao ?? null},
                price_cents = ${entrada.precoCents},
                product_discount_bps = ${entrada.descontoEmProdutoBps},
+               booking_window_days = ${entrada.janelaDeAgendamentoDias ?? 0},
                active = ${entrada.ativo}, updated_at = now()
          WHERE id = ${id}::uuid
       `;
@@ -222,11 +249,13 @@ export async function salvarPlano(entrada: {
     } else {
       const criados = await tx.$queryRaw<{ id: string }[]>`
         INSERT INTO club_plans
-          (tenant_id, name, description, price_cents, product_discount_bps, active)
+          (tenant_id, name, description, price_cents, product_discount_bps,
+           booking_window_days, active)
         VALUES (
           NULLIF(current_setting('app.tenant_id', true), '')::uuid,
           ${entrada.nome.trim()}, ${entrada.descricao ?? null}, ${entrada.precoCents},
-          ${entrada.descontoEmProdutoBps}, ${entrada.ativo}
+          ${entrada.descontoEmProdutoBps}, ${entrada.janelaDeAgendamentoDias ?? 0},
+          ${entrada.ativo}
         )
         RETURNING id
       `;
@@ -250,6 +279,25 @@ export async function salvarPlano(entrada: {
           ${id}::uuid, ${b.serviceId}::uuid,
           NULLIF(current_setting('app.tenant_id', true), '')::uuid,
           ${b.quantidade}, ${b.cooldownDias}
+        )
+      `;
+    }
+
+    /**
+     * Os bloqueios também são substituídos inteiros.
+     *
+     * Mesma decisão dos benefícios e da ficha de consumo: é uma lista curta que
+     * a barbearia refaz de uma vez ("agora o Essencial não pega sábado de
+     * manhã"), e um formulário de adicionar e remover por faixa seria mais tela
+     * do que o dado merece.
+     */
+    await tx.$executeRaw`DELETE FROM club_plan_blackouts WHERE plan_id = ${id}::uuid`;
+    for (const b of entrada.bloqueios ?? []) {
+      await tx.$executeRaw`
+        INSERT INTO club_plan_blackouts (tenant_id, plan_id, weekday, start_minute, end_minute)
+        VALUES (
+          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+          ${id}::uuid, ${b.diaDaSemana}, ${b.inicio}, ${b.fim}
         )
       `;
     }
@@ -284,6 +332,8 @@ export interface AssinaturaNaTela {
   readonly cicloDe: string;
   readonly cicloAte: string;
   readonly descontoEmProdutoBps: number;
+  readonly janelaDeAgendamentoDias: number;
+  readonly bloqueios: readonly JanelaBloqueada[];
   readonly beneficios: readonly {
     readonly serviceId: string;
     readonly servicoNome: string;
@@ -303,12 +353,21 @@ interface LinhaDaAssinatura {
   started_at: Date;
   plano: string | null;
   desconto: number | null;
+  janela: number | null;
+  bloqueios: unknown;
   plan_id: string | null;
 }
 
 const SELECT_DA_ASSINATURA = `
   SELECT s.id, s.status, s.price_cents, s.started_at,
-         p.name AS plano, p.product_discount_bps AS desconto, s.plan_id
+         p.name AS plano, p.product_discount_bps AS desconto,
+         p.booking_window_days AS janela,
+         (SELECT jsonb_agg(jsonb_build_object(
+                   'diaDaSemana', bl.weekday,
+                   'inicio', bl.start_minute,
+                   'fim', bl.end_minute))
+            FROM club_plan_blackouts bl WHERE bl.plan_id = p.id) AS bloqueios,
+         s.plan_id
     FROM club_subscriptions s
     LEFT JOIN club_plans p ON p.id = s.plan_id
 `;
@@ -368,6 +427,8 @@ export async function assinaturaDoCliente(
       cicloDe: ciclo.de.toISOString(),
       cicloAte: ciclo.ate.toISOString(),
       descontoEmProdutoBps: assinatura.desconto ?? 0,
+      janelaDeAgendamentoDias: assinatura.janela ?? 0,
+      bloqueios: (assinatura.bloqueios ?? []) as readonly JanelaBloqueada[],
       beneficios: beneficios.map((b) => ({
         serviceId: b.service_id,
         servicoNome: b.nome,
@@ -523,6 +584,16 @@ export async function usoDisponivel(params: {
   readonly serviceId: string;
   readonly precoCents: number;
   readonly agora?: Date;
+  /**
+   * O dia da semana e o minuto **locais** do atendimento, para a restrição de
+   * horário do plano (bloco 46).
+   *
+   * Da unidade, nunca do aparelho — é a regra do produto inteiro. Ausente
+   * significa "não confira o horário", que é o caso do balcão fechando uma
+   * comanda de um atendimento que já aconteceu: barrar ali seria punir o
+   * cliente por um horário que a própria casa concedeu.
+   */
+  readonly quandoLocal?: { readonly diaDaSemana: number; readonly minuto: number };
   readonly tx?: TransactionClient;
 }): Promise<UsoDisponivel | { readonly recusa: AssinaturaFailure } | null> {
   const agora = params.agora ?? new Date();
@@ -547,8 +618,39 @@ export async function usoDisponivel(params: {
       `;
     }
 
-    const assinatura = await assinaturaDoCliente(params.tenantId, params.customerId, agora, tx);
+    /**
+     * A assinatura que **cobre** esta pessoa: a dela, ou a de quem a inclui.
+     *
+     * É por aqui que o dependente usa a cota da família (bloco 46). Sem isto, o
+     * filho no plano do pai pagaria o corte inteiro no balcão — e a família
+     * descobriria que "plano família" não incluía a família.
+     */
+    const cobertura = await assinaturaQueCobre(params.tenantId, params.customerId, tx);
+    if (!cobertura) return null;
+
+    const assinatura = await assinaturaDoCliente(
+      params.tenantId,
+      cobertura.titularId,
+      agora,
+      tx,
+    );
     if (!assinatura) return null;
+
+    /**
+     * A restrição de horário do plano (SPEC §4.6).
+     *
+     * *"Assinante do plano Essencial pode não ter acesso a sábado 09:00–13:00, o
+     * horário mais disputado."* Sem ela, o plano barato ocupa a hora que a casa
+     * vende cheia — e o clube passa a substituir receita em vez de somar.
+     */
+    if (params.quandoLocal && assinatura.bloqueios.length > 0) {
+      const vale = planoValeNoHorario(
+        assinatura.bloqueios,
+        params.quandoLocal.diaDaSemana,
+        params.quandoLocal.minuto,
+      );
+      if (!vale) return { recusa: 'fora_do_horario_do_plano' };
+    }
 
     /**
      * O repositório já conta e já sabe o último uso; o domínio recebe os dois
@@ -594,6 +696,8 @@ export async function consumirAssinatura(
   tx: TransactionClient,
   params: {
     readonly subscriptionId: string;
+    /** Quem usou — pode ser o titular ou um dependente (bloco 46). */
+    readonly customerId: string;
     readonly serviceId: string;
     readonly orderId: string;
     readonly valorCents: number;
@@ -604,11 +708,11 @@ export async function consumirAssinatura(
 ): Promise<void> {
   await tx.$executeRaw`
     INSERT INTO club_uses
-      (tenant_id, subscription_id, service_id, order_id, appointment_id,
+      (tenant_id, subscription_id, customer_id, service_id, order_id, appointment_id,
        value_cents, business_day, used_at)
     VALUES (
       NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-      ${params.subscriptionId}::uuid, ${params.serviceId}::uuid,
+      ${params.subscriptionId}::uuid, ${params.customerId}::uuid, ${params.serviceId}::uuid,
       ${params.orderId}::uuid, ${params.appointmentId ?? null}::uuid,
       ${params.valorCents}, ${params.diaDaUnidade}::date, ${params.agora}
     )
@@ -670,4 +774,171 @@ export async function clubeDaCasa(tenantId: string): Promise<ClubeDaCasa> {
       porPlano: [...porPlano].map(([planoId, c]) => ({ planoId, ...c })),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Dependentes (bloco 46, SPEC §4.6)
+// ---------------------------------------------------------------------------
+
+export interface DependenteNaTela {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly usosNoCiclo: number;
+}
+
+/**
+ * Quem mais consome esta assinatura.
+ *
+ * A cota é **da assinatura**, não da pessoa: o plano família de dois cortes dá
+ * dois cortes para a família inteira. O que a lista responde é a pergunta
+ * seguinte — "quem usou?" —, sem a qual "3 de 5 usados" numa família de quatro é
+ * um número que ninguém consegue conferir.
+ */
+export async function dependentes(
+  tenantId: string,
+  subscriptionId: string,
+  cicloDe: Date,
+  cicloAte: Date,
+): Promise<readonly DependenteNaTela[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ customer_id: string; nome: string; usos: bigint }[]>`
+      SELECT d.customer_id, c.name AS nome,
+             (SELECT count(*) FROM club_uses u
+               WHERE u.subscription_id = d.subscription_id
+                 AND u.customer_id = d.customer_id
+                 AND u.used_at >= ${cicloDe} AND u.used_at < ${cicloAte}) AS usos
+        FROM club_dependents d
+        JOIN customers c ON c.id = d.customer_id
+       WHERE d.subscription_id = ${subscriptionId}::uuid
+       ORDER BY c.name
+    `;
+    return linhas.map((l) => ({
+      customerId: l.customer_id,
+      nome: l.nome,
+      usosNoCiclo: Number(l.usos),
+    }));
+  });
+}
+
+export async function incluirDependente(entrada: {
+  readonly tenantId: string;
+  readonly subscriptionId: string;
+  readonly customerId: string;
+  readonly ator: Ator;
+}): Promise<{ readonly incluido: true }> {
+  return withTenant(entrada.tenantId, async (tx) => {
+    // Ids da requisição conferidos sob RLS antes de virarem chave estrangeira.
+    const clientes = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM customers WHERE id = ${entrada.customerId}::uuid
+    `;
+    if (!clientes[0]) recusar('cliente_nao_encontrado');
+
+    const assinaturas = await tx.$queryRaw<{ status: EstadoDaAssinatura; customer_id: string }[]>`
+      SELECT status, customer_id FROM club_subscriptions
+       WHERE id = ${entrada.subscriptionId}::uuid
+    `;
+    const assinatura = assinaturas[0];
+    if (!assinatura) recusar('assinatura_nao_encontrada');
+
+    const jaEDeOutra = await tx.$queryRaw<{ subscription_id: string }[]>`
+      SELECT subscription_id FROM club_dependents
+       WHERE customer_id = ${entrada.customerId}::uuid
+    `;
+
+    const recusa = podeSerDependente({
+      estado: assinatura.status,
+      titularId: assinatura.customer_id,
+      candidatoId: entrada.customerId,
+      jaEDependenteDeOutra: jaEDeOutra.length > 0,
+    });
+    if (recusa === 'e_o_titular') recusar('e_o_titular');
+    if (recusa === 'ja_e_dependente') recusar('ja_e_dependente');
+    if (recusa === 'assinatura_inativa') recusar('assinatura_inativa');
+
+    await tx.$executeRaw`
+      INSERT INTO club_dependents (subscription_id, customer_id, tenant_id)
+      VALUES (
+        ${entrada.subscriptionId}::uuid, ${entrada.customerId}::uuid,
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid
+      )
+      ON CONFLICT DO NOTHING
+    `;
+
+    await audit(tx, {
+      actorId: entrada.ator.id,
+      actorName: entrada.ator.name,
+      action: 'subscription.dependent_changed',
+      entity: 'club_subscriptions',
+      entityId: entrada.subscriptionId,
+      after: { incluiu: entrada.customerId },
+    });
+
+    return { incluido: true as const };
+  });
+}
+
+export async function removerDependente(entrada: {
+  readonly tenantId: string;
+  readonly subscriptionId: string;
+  readonly customerId: string;
+  readonly ator: Ator;
+}): Promise<{ readonly removido: true }> {
+  return withTenant(entrada.tenantId, async (tx) => {
+    const afetados = await tx.$executeRaw`
+      DELETE FROM club_dependents
+       WHERE subscription_id = ${entrada.subscriptionId}::uuid
+         AND customer_id = ${entrada.customerId}::uuid
+    `;
+    if (afetados === 0) recusar('assinatura_nao_encontrada');
+
+    await audit(tx, {
+      actorId: entrada.ator.id,
+      actorName: entrada.ator.name,
+      action: 'subscription.dependent_changed',
+      entity: 'club_subscriptions',
+      entityId: entrada.subscriptionId,
+      after: { removeu: entrada.customerId },
+    });
+
+    return { removido: true as const };
+  });
+}
+
+/**
+ * A assinatura que **cobre** esta pessoa: a dela, ou a de quem a inclui.
+ *
+ * É por aqui que o dependente usa a cota da família. A busca é em dois passos e
+ * não num `OR`: o vínculo de dependente é o caso raro, e um `OR` faria toda
+ * abertura de comanda pagar por ele.
+ */
+export async function assinaturaQueCobre(
+  tenantId: string,
+  customerId: string,
+  tx?: TransactionClient,
+): Promise<{ readonly subscriptionId: string; readonly titularId: string } | null> {
+  const dentro = async (
+    t: TransactionClient,
+  ): Promise<{ readonly subscriptionId: string; readonly titularId: string } | null> => {
+    const propria = await t.$queryRaw<{ id: string; customer_id: string }[]>`
+      SELECT id, customer_id FROM club_subscriptions
+       WHERE customer_id = ${customerId}::uuid AND status <> 'cancelada'
+       LIMIT 1
+    `;
+    if (propria[0]) {
+      return { subscriptionId: propria[0].id, titularId: propria[0].customer_id };
+    }
+
+    const comoDependente = await t.$queryRaw<{ id: string; customer_id: string }[]>`
+      SELECT s.id, s.customer_id
+        FROM club_dependents d
+        JOIN club_subscriptions s ON s.id = d.subscription_id
+       WHERE d.customer_id = ${customerId}::uuid AND s.status <> 'cancelada'
+       LIMIT 1
+    `;
+    return comoDependente[0]
+      ? { subscriptionId: comoDependente[0].id, titularId: comoDependente[0].customer_id }
+      : null;
+  };
+
+  return tx ? dentro(tx) : withTenant(tenantId, dentro);
 }

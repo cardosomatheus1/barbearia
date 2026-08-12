@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { fraseDoBloqueio } from '@barbearia/core';
 import {
   catalogoDeServicos,
   clubeNaApi,
@@ -53,6 +54,12 @@ const FALHA: Record<string, string> = {
 };
 
 const dinheiro = (cents: number) => `R$ ${reaisDoCampo(cents)}`;
+
+const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'] as const;
+
+/** Minutos desde a meia-noite para `HH:mm`. */
+const emHora = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 function CamposDoPlano({
   plano,
@@ -133,6 +140,69 @@ function CamposDoPlano({
           placeholder="Para quem corta toda semana"
         />
       </div>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`${prefixo}-janelaDias`}>
+          Marca com quantos dias de antecedência
+        </label>
+        <input
+          className="ui-field__input"
+          defaultValue={plano?.janelaDeAgendamentoDias ?? 0}
+          id={`${prefixo}-janelaDias`}
+          inputMode="numeric"
+          max={180}
+          min={0}
+          name="janelaDias"
+          type="number"
+        />
+        {/* O outro lado da prioridade na fila: quem assina vê o sábado antes e
+            por isso o pega antes. Zero é a mesma janela de todo mundo. */}
+        <p className="ui-field__hint">
+          Zero é a mesma janela de quem não assina. Acima disso, o assinante enxerga a agenda mais
+          longe — e pega o sábado antes.
+        </p>
+      </div>
+
+      <fieldset className="plano__servicos">
+        <legend className="ui-field__label">Quando o plano não vale</legend>
+        <p className="ui-field__hint">
+          Deixe vazio para o plano valer o dia inteiro. Bloquear o sábado de manhã é o que impede
+          o plano barato de ocupar a hora que a casa vende cheia — e aí o clube soma receita em
+          vez de substituir.
+        </p>
+
+        {DIAS.map((nome, dia) => {
+          const atual = plano?.bloqueios.find((b) => b.diaDaSemana === dia);
+          return (
+            <div className="campos-lado" key={dia}>
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor={`${prefixo}-bi-${dia}`}>
+                  {nome} — a partir de
+                </label>
+                <input
+                  className="ui-field__input"
+                  defaultValue={atual ? emHora(atual.inicio) : ''}
+                  id={`${prefixo}-bi-${dia}`}
+                  name={`blk-ini-${dia}`}
+                  placeholder="09:00"
+                />
+              </div>
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor={`${prefixo}-bf-${dia}`}>
+                  até
+                </label>
+                <input
+                  className="ui-field__input"
+                  defaultValue={atual ? emHora(atual.fim) : ''}
+                  id={`${prefixo}-bf-${dia}`}
+                  name={`blk-fim-${dia}`}
+                  placeholder="13:00"
+                />
+              </div>
+            </div>
+          );
+        })}
+      </fieldset>
 
       <fieldset className="plano__servicos">
         <legend className="ui-field__label">O que o plano dá</legend>
@@ -258,6 +328,18 @@ function Plano({
             ))}
             {plano.beneficios.length === 0 ? <li>Nenhum serviço incluído ainda.</li> : null}
           </ul>
+
+          {plano.bloqueios.length > 0 ? (
+            <p className="item-cadastro__linha">
+              Não vale {plano.bloqueios.map((b) => fraseDoBloqueio(b)).join('; ')}.
+            </p>
+          ) : null}
+          {plano.janelaDeAgendamentoDias > 0 ? (
+            <p className="item-cadastro__linha">
+              Marca com <span className="tabular">{plano.janelaDeAgendamentoDias}</span> dias de
+              antecedência.
+            </p>
+          ) : null}
 
           {semTravaNoIlimitado.length > 0 ? (
             <p className="item-cadastro__aviso">

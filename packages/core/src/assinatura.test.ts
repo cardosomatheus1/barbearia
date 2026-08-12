@@ -7,8 +7,13 @@ import {
   eAssinante,
   fraseDoBeneficio,
   mrrDasAssinaturas,
+  antecedenciaDoAssinante,
+  fraseDoBloqueio,
+  planoValeNoHorario,
+  podeSerDependente,
   podeUsarBeneficio,
   proximoUsoLiberado,
+  quemConsome,
   usosQueOPlanoPaga,
   type BeneficioDoPlano,
 } from './assinatura.js';
@@ -238,5 +243,94 @@ describe('o assinante na fila de espera', () => {
     expect(eAssinante('inadimplente')).toBe(true);
     expect(eAssinante('suspensa')).toBe(false);
     expect(eAssinante(null)).toBe(false);
+  });
+});
+
+describe('a restrição de horário protege o pico', () => {
+  const sabadoDeManha = [{ diaDaSemana: 6, inicio: 540, fim: 780 }];
+
+  it('bloqueia a janela cheia do sábado', () => {
+    /**
+     * Sem a restrição, o plano barato ocupa a hora que a casa vende cheia — e o
+     * clube passa a **substituir** receita em vez de somar.
+     */
+    expect(planoValeNoHorario(sabadoDeManha, 6, 600)).toBe(false);
+    expect(planoValeNoHorario(sabadoDeManha, 6, 900)).toBe(true);
+  });
+
+  it('o intervalo é semiaberto: encostar não é sobrepor', () => {
+    // Um bloqueio até as 13:00 libera o horário das 13:00, como todo intervalo
+    // deste produto.
+    expect(planoValeNoHorario(sabadoDeManha, 6, 540)).toBe(false);
+    expect(planoValeNoHorario(sabadoDeManha, 6, 780)).toBe(true);
+  });
+
+  it('outro dia não é afetado', () => {
+    expect(planoValeNoHorario(sabadoDeManha, 3, 600)).toBe(true);
+  });
+
+  it('dia nulo bloqueia a mesma faixa em todos', () => {
+    const almoco = [{ diaDaSemana: null, inicio: 720, fim: 780 }];
+    for (const dia of [0, 1, 2, 3, 4, 5, 6]) {
+      expect(planoValeNoHorario(almoco, dia, 750)).toBe(false);
+    }
+  });
+
+  it('sem bloqueio o plano vale sempre', () => {
+    expect(planoValeNoHorario([], 6, 600)).toBe(true);
+  });
+
+  it('a frase diz o dia e a faixa', () => {
+    expect(fraseDoBloqueio({ diaDaSemana: 6, inicio: 540, fim: 780 })).toBe(
+      'sábado, das 09:00 às 13:00',
+    );
+    expect(fraseDoBloqueio({ diaDaSemana: null, inicio: 720, fim: 780 })).toBe(
+      'todo dia, das 12:00 às 13:00',
+    );
+  });
+});
+
+describe('a antecedência do assinante', () => {
+  it('é a maior entre a da casa e a do plano', () => {
+    // Nunca menor que a de todo mundo: um plano com janela curta viraria uma
+    // punição por assinar.
+    expect(antecedenciaDoAssinante(30, 60)).toBe(60);
+    expect(antecedenciaDoAssinante(30, 0)).toBe(30);
+    expect(antecedenciaDoAssinante(90, 60)).toBe(90);
+  });
+});
+
+describe('os dependentes', () => {
+  const base = { estado: 'ativa' as const, titularId: 'pai', candidatoId: 'filho' };
+
+  it('o filho entra na assinatura do pai', () => {
+    expect(podeSerDependente({ ...base, jaEDependenteDeOutra: false })).toBeNull();
+  });
+
+  it('o titular não é dependente de si mesmo', () => {
+    // Ele apareceria duas vezes na lista de quem usa a cota.
+    expect(
+      podeSerDependente({ ...base, candidatoId: 'pai', jaEDependenteDeOutra: false }),
+    ).toBe('e_o_titular');
+  });
+
+  it('ninguém é dependente de duas assinaturas', () => {
+    // A mesma cota seria descontada de dois lugares.
+    expect(podeSerDependente({ ...base, jaEDependenteDeOutra: true })).toBe('ja_e_dependente');
+  });
+
+  it('assinatura suspensa não recebe dependente', () => {
+    expect(
+      podeSerDependente({ ...base, estado: 'suspensa', jaEDependenteDeOutra: false }),
+    ).toBe('assinatura_inativa');
+  });
+
+  it('a cota é da assinatura, não da pessoa', () => {
+    /**
+     * O plano família de dois cortes dá dois cortes para a família inteira, não
+     * dois para cada. É o que a SPEC descreve — *"consumindo da mesma cota"* — e
+     * é o que faz o plano ter preço.
+     */
+    expect(quemConsome('pai', ['filho', 'filha'])).toEqual(['pai', 'filho', 'filha']);
   });
 });

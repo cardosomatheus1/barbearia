@@ -83,6 +83,7 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'subscription.plan_changed': 'mexeu num plano de assinatura',
   'subscription.started': 'assinou um cliente num plano',
   'subscription.cancelled': 'cancelou a assinatura de um cliente',
+  'subscription.dependent_changed': 'mexeu em quem usa a cota de uma assinatura',
 
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a

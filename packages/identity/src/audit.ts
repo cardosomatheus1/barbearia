@@ -105,6 +105,14 @@ export type AuditAction =
   | 'subscription.started'
   | 'subscription.cancelled'
   /**
+   * Dependente entrando ou saindo de uma assinatura (bloco 46).
+   *
+   * De dinheiro pelo mesmo motivo das três acima: incluir alguém dá a essa
+   * pessoa acesso à cota **sem** a casa cobrar nada a mais. A pergunta do dia
+   * seguinte — "quem pendurou o primo do Carlos no plano?" — é de dinheiro.
+   */
+  | 'subscription.dependent_changed'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -215,6 +223,7 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'subscription.plan_changed',
   'subscription.started',
   'subscription.cancelled',
+  'subscription.dependent_changed',
   'package.changed',
   'package.refunded',
   'commission.closed',

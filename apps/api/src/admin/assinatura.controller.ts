@@ -5,7 +5,10 @@ import {
   assinaturaDoCliente,
   cancelarAssinatura,
   clubeDaCasa,
+  dependentes,
+  incluirDependente,
   planos,
+  removerDependente,
   salvarPlano,
 } from '@barbearia/finance';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -14,7 +17,12 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
-import { assinarSchema, cancelarSchema, planoSchema } from './assinatura.schemas.js';
+import {
+  assinarSchema,
+  cancelarSchema,
+  dependenteSchema,
+  planoSchema,
+} from './assinatura.schemas.js';
 
 /**
  * O clube de assinatura (bloco 45, SPEC §4.6).
@@ -33,6 +41,9 @@ import { assinarSchema, cancelarSchema, planoSchema } from './assinatura.schemas
 
 const STATUS: Record<string, number> = {
   plano_nao_encontrado: 404,
+  e_o_titular: 409,
+  ja_e_dependente: 409,
+  fora_do_horario_do_plano: 409,
   plano_invalido: 400,
   cliente_nao_encontrado: 404,
   ja_assina: 409,
@@ -89,6 +100,8 @@ export class AssinaturaController {
       precoCents: number;
       descontoEmProdutoBps: number;
       ativo: boolean;
+      janelaDeAgendamentoDias?: number;
+      bloqueios?: { diaDaSemana: number | null; inicio: number; fim: number }[];
       beneficios: { serviceId: string; quantidade: number | null; cooldownDias: number }[];
     },
   ) {
@@ -115,6 +128,8 @@ export class AssinaturaController {
       precoCents: number;
       descontoEmProdutoBps: number;
       ativo: boolean;
+      janelaDeAgendamentoDias?: number;
+      bloqueios?: { diaDaSemana: number | null; inicio: number; fim: number }[];
       beneficios: { serviceId: string; quantidade: number | null; cooldownDias: number }[];
     },
   ) {
@@ -171,6 +186,64 @@ export class AssinaturaController {
    * cancelamento **self-service** — em que o filtro por cliente é obrigatório,
    * porque a RLS não separa clientes dentro de uma casa — é do bloco 47.
    */
+  /**
+   * Quem mais usa a cota desta assinatura (bloco 46).
+   *
+   * `customers.view` junto porque a lista traz **nome de gente**: sem ela,
+   * `finance.subscription_manage` viraria o caminho mais curto para a base de
+   * nomes por uma rota chamada dependentes.
+   */
+  @Exige('finance.subscription_manage', 'customers.view')
+  @Get(':id/dependentes')
+  async lista_dependentes(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+  ) {
+    // O ciclo do mês corrente: é o que a tela mostra ao lado da cota.
+    const agora = new Date();
+    const de = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1));
+    const ate = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 1));
+    return { dependentes: await dependentes(staff.tenantId, id, de, ate) };
+  }
+
+  @Exige('finance.subscription_manage')
+  @Post(':id/dependentes')
+  async incluir(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(dependenteSchema)) body: { customerId: string },
+  ) {
+    try {
+      return await incluirDependente({
+        tenantId: staff.tenantId,
+        subscriptionId: id,
+        customerId: body.customerId,
+        ator: { id: staff.staffUserId, name: staff.name },
+      });
+    } catch (erro) {
+      return assinaturaParaHttp(erro);
+    }
+  }
+
+  @Exige('finance.subscription_manage')
+  @Post(':id/dependentes/remover')
+  async remover(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(dependenteSchema)) body: { customerId: string },
+  ) {
+    try {
+      return await removerDependente({
+        tenantId: staff.tenantId,
+        subscriptionId: id,
+        customerId: body.customerId,
+        ator: { id: staff.staffUserId, name: staff.name },
+      });
+    } catch (erro) {
+      return assinaturaParaHttp(erro);
+    }
+  }
+
   @Exige('finance.subscription_manage')
   @Post(':id/cancelar')
   async cancelar(

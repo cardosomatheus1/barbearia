@@ -240,6 +240,13 @@ describeIfDb('direitos do titular', () => {
       // titular — e `club_uses` fica de fora porque ele não tem `customer_id`:
       // o vínculo é pela assinatura, que já entra.
       'club_subscriptions',
+      // O uso do plano (bloco 46): "quando eu usei" é dado do titular tanto
+      // quanto o extrato de fidelidade.
+      'club_uses',
+      // Quem é dependente do plano de outra pessoa tem direito a saber que está
+      // coberto e desde quando. O **nome de quem banca** não entra: é terceiro
+      // num arquivo que o titular leva embora, como a trilha.
+      'club_dependents',
     ]);
 
     const EXCECOES = new Map([

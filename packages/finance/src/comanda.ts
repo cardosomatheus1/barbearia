@@ -825,6 +825,15 @@ export async function fecharComanda(params: {
    */
   readonly agora?: Date;
   /**
+   * O dia da semana e o minuto **locais** do atendimento, para a restrição de
+   * horário do plano (bloco 46).
+   *
+   * Da unidade, nunca do aparelho. Ausente significa "não confira": é o caso do
+   * balcão fechando o que já aconteceu, e barrar ali seria punir o cliente por um
+   * horário que a própria casa concedeu.
+   */
+  readonly quandoLocal?: { readonly diaDaSemana: number; readonly minuto: number };
+  /**
    * A transação de fora, quando já existe uma.
    *
    * Existe por uma coisa só: o webhook do Pix (bloco 35). A SPEC §3.3 diz que a
@@ -1203,6 +1212,7 @@ export async function fecharComanda(params: {
         serviceId: servicoCoberto,
         precoCents: naComanda.precoUnitarioCents,
         agora: agoraNoFechamento,
+        ...(params.quandoLocal ? { quandoLocal: params.quandoLocal } : {}),
         tx,
       });
 
@@ -1215,6 +1225,9 @@ export async function fecharComanda(params: {
 
       await consumirAssinatura(tx, {
         subscriptionId: disponivel.subscriptionId,
+        // Quem usou, para o extrato da família (bloco 46): sem isso, "3 de 5
+        // usados" numa família de quatro é um número que ninguém confere.
+        customerId: comanda.customerId,
         serviceId: servicoCoberto,
         orderId: params.orderId,
         valorCents: disponivel.valorCents,

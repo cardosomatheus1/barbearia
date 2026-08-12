@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 45 de 79 blocos.**
+**Status: 46 de 79 blocos.**
 
 ---
 
@@ -286,7 +286,7 @@ igual — o produto não oferece apagar reclamação.
 | # | Bloco |
 |---|---|
 | 45 | Planos de assinatura: modelagem, regras, cooldown | ✅ |
-| 46 | Assinatura: restrição de horário, dependentes, prioridade na fila |
+| 46 | Assinatura: restrição de horário, dependentes, prioridade na fila | ✅ |
 | 47 | Cobrança recorrente: régua, suspensão gradual, cancelamento self-service |
 | 48 | Rentabilidade da assinatura (simulação dos três modelos de comissão) |
 | 49 | Split: modelagem derivada da comissão |

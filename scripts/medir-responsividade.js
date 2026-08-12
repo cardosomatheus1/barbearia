@@ -555,11 +555,35 @@ async function prepararClube(slug, clienteDaFicha) {
   }
 
   if (plano && clienteDaFicha) {
-    psql(
-      `INSERT INTO club_subscriptions (tenant_id, customer_id, plan_id, price_cents, status, started_at)
-       VALUES ('${tenant}', '${clienteDaFicha}', '${plano}', 14900, 'ativa', now() - interval '40 days')
-       ON CONFLICT DO NOTHING`,
+    const assinatura = primeiraLinha(
+      psql(
+        `INSERT INTO club_subscriptions (tenant_id, customer_id, plan_id, price_cents, status, started_at)
+         VALUES ('${tenant}', '${clienteDaFicha}', '${plano}', 14900, 'ativa', now() - interval '40 days')
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+      ),
     );
+
+    // Bloqueio de sábado de manhã e um dependente (bloco 46): são os dois que
+    // empilham texto no cartão do plano e na ficha.
+    psql(
+      `INSERT INTO club_plan_blackouts (tenant_id, plan_id, weekday, start_minute, end_minute)
+       VALUES ('${tenant}', '${plano}', 6, 540, 780)`,
+    );
+    psql(`UPDATE club_plans SET booking_window_days = 60 WHERE id = '${plano}'`);
+
+    const outro = primeiraLinha(
+      psql(
+        `select id from customers where tenant_id = '${tenant}'
+           and id <> '${clienteDaFicha}' limit 1`,
+      ),
+    );
+    if (assinatura && outro) {
+      psql(
+        `INSERT INTO club_dependents (subscription_id, customer_id, tenant_id)
+         VALUES ('${assinatura}', '${outro}', '${tenant}') ON CONFLICT DO NOTHING`,
+      );
+    }
   }
 }
 

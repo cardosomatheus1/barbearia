@@ -268,3 +268,108 @@ export function fraseDoBeneficio(
 export function eAssinante(estado: EstadoDaAssinatura | null): boolean {
   return estado !== null && assinaturaVale(estado);
 }
+
+// ---------------------------------------------------------------------------
+// Restrição de horário, dependentes e antecedência (bloco 46, SPEC §4.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * A janela em que o plano **não** vale.
+ *
+ * Guarda o proibido e não o permitido: a barbearia abre setenta horas por semana
+ * e bloqueia quatro. Guardar o permitido faria toda mudança de horário de
+ * funcionamento exigir reescrever o plano — e um plano que esqueceu de liberar a
+ * terça nova é um plano que some da grade sem ninguém saber.
+ */
+export interface JanelaBloqueada {
+  /** 0 = domingo. Nulo é todo dia. */
+  readonly diaDaSemana: number | null;
+  /** Minutos locais desde a meia-noite, semiaberto `[início, fim)`. */
+  readonly inicio: number;
+  readonly fim: number;
+}
+
+/**
+ * O plano vale neste horário?
+ *
+ * *"Assinante do plano Essencial pode não ter acesso a sábado 09:00–13:00, o
+ * horário mais disputado."* Sem a restrição, o plano barato ocupa a hora que a
+ * casa vende cheia — e o clube passa a **substituir** receita em vez de somar.
+ *
+ * Intervalo semiaberto, como todo intervalo deste produto: um bloqueio até as
+ * 13:00 libera o horário das 13:00. Encostar não é sobrepor.
+ */
+export function planoValeNoHorario(
+  bloqueios: readonly JanelaBloqueada[],
+  diaDaSemana: number,
+  minutoDoDia: number,
+): boolean {
+  return !bloqueios.some(
+    (b) =>
+      (b.diaDaSemana === null || b.diaDaSemana === diaDaSemana) &&
+      minutoDoDia >= b.inicio &&
+      minutoDoDia < b.fim,
+  );
+}
+
+/** "Sábado das 09:00 às 13:00" — a frase que a tela mostra. */
+const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'] as const;
+
+export function fraseDoBloqueio(bloqueio: JanelaBloqueada): string {
+  const hora = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const quando = bloqueio.diaDaSemana === null ? 'todo dia' : DIAS[bloqueio.diaDaSemana];
+  return `${quando}, das ${hora(bloqueio.inicio)} às ${hora(bloqueio.fim)}`;
+}
+
+/**
+ * Até quando o assinante enxerga a grade.
+ *
+ * É o outro lado da prioridade na fila: quem assina vê o sábado antes e por isso
+ * o pega antes. Zero significa "a mesma janela de todo mundo" — e é o padrão,
+ * porque um benefício que ninguém escolheu não é benefício.
+ */
+export function antecedenciaDoAssinante(
+  janelaDaCasaDias: number,
+  janelaDoPlanoDias: number,
+): number {
+  return Math.max(janelaDaCasaDias, janelaDoPlanoDias);
+}
+
+export type RecusaDoDependente = 'ja_e_dependente' | 'e_o_titular' | 'assinatura_inativa';
+
+/**
+ * Esta pessoa pode entrar como dependente desta assinatura?
+ *
+ * O titular não é dependente de si mesmo: ele apareceria duas vezes na lista de
+ * quem usa a cota, e a tela mostraria "Carlos (titular)" e "Carlos (dependente)"
+ * lado a lado.
+ *
+ * E ninguém é dependente de duas: a mesma cota seria descontada de dois lugares,
+ * e no balcão ninguém saberia de qual plano o corte saiu.
+ */
+export function podeSerDependente(params: {
+  readonly estado: EstadoDaAssinatura;
+  readonly titularId: string;
+  readonly candidatoId: string;
+  readonly jaEDependenteDeOutra: boolean;
+}): RecusaDoDependente | null {
+  if (!assinaturaVale(params.estado)) return 'assinatura_inativa';
+  if (params.titularId === params.candidatoId) return 'e_o_titular';
+  if (params.jaEDependenteDeOutra) return 'ja_e_dependente';
+  return null;
+}
+
+/**
+ * Quantas pessoas consomem esta assinatura, e quem são.
+ *
+ * A cota é **da assinatura**, não da pessoa: o plano família de dois cortes dá
+ * dois cortes para a família inteira, não dois para cada. É o desenho que a SPEC
+ * descreve — *"consumindo da mesma cota"* — e é o que faz o plano ter preço.
+ */
+export function quemConsome(
+  titularId: string,
+  dependentes: readonly string[],
+): readonly string[] {
+  return [titularId, ...dependentes];
+}

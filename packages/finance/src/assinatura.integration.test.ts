@@ -6,9 +6,13 @@ import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
 import {
   assinar,
   assinaturaDoCliente,
+  assinaturaQueCobre,
   cancelarAssinatura,
   clubeDaCasa,
+  dependentes,
+  incluirDependente,
   planos,
+  removerDependente,
   salvarPlano,
   usoDisponivel,
 } from './assinatura.js';
@@ -396,6 +400,144 @@ describeIfDb('clube de assinatura', () => {
       precoCents: 6000, agora: doisDeNovembro,
     });
     expect(disponivel).toMatchObject({ recusa: 'dentro_do_cooldown' });
+  });
+
+
+  // -- restrição de horário, dependentes e antecedência (bloco 46) --------------
+
+  it('o plano não vale no horário de pico bloqueado', async () => {
+    /**
+     * *"Assinante do plano Essencial pode não ter acesso a sábado 09:00–13:00, o
+     * horário mais disputado."* Sem a restrição, o plano barato ocupa a hora que
+     * a casa vende cheia — e o clube passa a substituir receita em vez de somar.
+     */
+    const { id: planoId } = await novoPlano({
+      bloqueios: [{ diaDaSemana: 6, inicio: 540, fim: 780 }],
+    });
+    await assinar({ tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA });
+
+    const noPico = await usoDisponivel({
+      tenantId: TENANT, customerId: CARLOS, serviceId: CORTE, precoCents: 6000,
+      agora: AGORA, quandoLocal: { diaDaSemana: 6, minuto: 600 },
+    });
+    expect(noPico).toMatchObject({ recusa: 'fora_do_horario_do_plano' });
+
+    // E à tarde do mesmo sábado, vale.
+    const aTarde = await usoDisponivel({
+      tenantId: TENANT, customerId: CARLOS, serviceId: CORTE, precoCents: 6000,
+      agora: AGORA, quandoLocal: { diaDaSemana: 6, minuto: 900 },
+    });
+    expect(aTarde).toMatchObject({ subscriptionId: expect.any(String) });
+  });
+
+  it('sem o horário, a restrição não barra o balcão', async () => {
+    /**
+     * O balcão fecha o que **já aconteceu**: barrar ali seria punir o cliente por
+     * um horário que a própria casa concedeu.
+     */
+    const { id: planoId } = await novoPlano({
+      bloqueios: [{ diaDaSemana: 6, inicio: 540, fim: 780 }],
+    });
+    await assinar({ tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA });
+
+    const semHorario = await usoDisponivel({
+      tenantId: TENANT, customerId: CARLOS, serviceId: CORTE, precoCents: 6000, agora: AGORA,
+    });
+    expect(semHorario).toMatchObject({ subscriptionId: expect.any(String) });
+  });
+
+  it('o dependente usa a cota do titular', async () => {
+    /**
+     * É o plano família da SPEC §4.6: *"cada dependente é cliente próprio, com
+     * agenda e histórico, consumindo da mesma cota"*. Sem isto, o filho no plano
+     * do pai pagaria o corte inteiro — e a família descobriria que "plano
+     * família" não incluía a família.
+     */
+    const { id: planoId } = await novoPlano();
+    const { id } = await assinar({
+      tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA,
+    });
+    await incluirDependente({
+      tenantId: TENANT, subscriptionId: id, customerId: BRUNO, ator,
+    });
+
+    const cobre = await assinaturaQueCobre(TENANT, BRUNO);
+    expect(cobre).toMatchObject({ subscriptionId: id, titularId: CARLOS });
+
+    // E o uso dele gasta a cota da família, não uma cota própria.
+    await usarPlano(BRUNO);
+    const doTitular = await assinaturaDoCliente(TENANT, CARLOS, AGORA);
+    expect(doTitular?.beneficios[0]).toMatchObject({ usados: 1 });
+  });
+
+  it('o extrato da família diz quem usou', async () => {
+    // "3 de 5 usados" numa família de quatro é um número que ninguém confere.
+    const { id: planoId } = await novoPlano();
+    const { id } = await assinar({
+      tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA,
+    });
+    await incluirDependente({ tenantId: TENANT, subscriptionId: id, customerId: BRUNO, ator });
+    await usarPlano(BRUNO);
+
+    const dele = await assinaturaDoCliente(TENANT, CARLOS, AGORA);
+    const lista = await dependentes(
+      TENANT, id, new Date(dele!.cicloDe), new Date(dele!.cicloAte),
+    );
+    expect(lista).toEqual([{ customerId: BRUNO, nome: 'Bruno Lima', usosNoCiclo: 1 }]);
+  });
+
+  it('o titular não é dependente de si mesmo', async () => {
+    const { id: planoId } = await novoPlano();
+    const { id } = await assinar({
+      tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA,
+    });
+    await expect(
+      incluirDependente({ tenantId: TENANT, subscriptionId: id, customerId: CARLOS, ator }),
+    ).rejects.toMatchObject({ code: 'e_o_titular' });
+  });
+
+  it('ninguém é dependente de duas assinaturas', async () => {
+    // A mesma cota seria descontada de dois lugares, e no balcão ninguém saberia
+    // de qual plano o corte saiu.
+    const { id: planoId } = await novoPlano();
+    const primeira = await assinar({
+      tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA,
+    });
+    await incluirDependente({
+      tenantId: TENANT, subscriptionId: primeira.id, customerId: BRUNO, ator,
+    });
+
+    const TERCEIRO = 'c4545454-0000-0000-0000-000000000003';
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('${TERCEIRO}', '${TENANT}', 'Ana Paula', '+5571966665555');
+    `);
+    const segunda = await assinar({
+      tenantId: TENANT, customerId: TERCEIRO, planId: planoId, ator, agora: AGORA,
+    });
+
+    await expect(
+      incluirDependente({ tenantId: TENANT, subscriptionId: segunda.id, customerId: BRUNO, ator }),
+    ).rejects.toMatchObject({ code: 'ja_e_dependente' });
+  });
+
+  it('remover o dependente tira a cobertura dele', async () => {
+    const { id: planoId } = await novoPlano();
+    const { id } = await assinar({
+      tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA,
+    });
+    await incluirDependente({ tenantId: TENANT, subscriptionId: id, customerId: BRUNO, ator });
+    await removerDependente({ tenantId: TENANT, subscriptionId: id, customerId: BRUNO, ator });
+
+    expect(await assinaturaQueCobre(TENANT, BRUNO)).toBeNull();
+  });
+
+  it('a janela de antecedência maior fica no plano', async () => {
+    const { id: planoId } = await novoPlano({ janelaDeAgendamentoDias: 60 });
+    await assinar({ tenantId: TENANT, customerId: CARLOS, planId: planoId, ator, agora: AGORA });
+
+    const dele = await assinaturaDoCliente(TENANT, CARLOS, AGORA);
+    expect(dele?.janelaDeAgendamentoDias).toBe(60);
   });
 
 });

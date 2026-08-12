@@ -18,6 +18,8 @@ import {
   avaliacoesDoClienteNaApi,
   assinaturaDoClienteNaApi,
   planosNaApi,
+  dependentesNaApi,
+  type DependenteNaTela,
   type AssinaturaDoCliente,
   type PlanoNaTela,
   type AvaliacaoNaTela,
@@ -42,6 +44,8 @@ import {
   acaoPreferencias,
   acaoAssinar,
   acaoCancelarAssinatura,
+  acaoIncluirDependente,
+  acaoRemoverDependente,
   acaoReembolsarPacote,
   acaoSair,
 } from '../../acoes';
@@ -495,13 +499,18 @@ function Assinatura({
   planos,
   customerId,
   podeMexer,
+  dependentes,
 }: {
   readonly assinatura: AssinaturaDoCliente | null;
   readonly planos: readonly PlanoNaTela[];
   readonly customerId: string;
   readonly podeMexer: boolean;
+  readonly dependentes: readonly DependenteNaTela[];
 }) {
   const dia = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
+  const DIAS_CURTOS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'todo dia'] as const;
+  const emHora = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
   return (
     <section aria-labelledby="clube" className="secao">
@@ -538,6 +547,74 @@ function Assinatura({
               );
             })}
           </ul>
+
+          {assinatura.bloqueios.length > 0 ? (
+            <p className="assinatura__ciclo">
+              O plano não vale{' '}
+              {assinatura.bloqueios
+                .map((b) => `${DIAS_CURTOS[b.diaDaSemana ?? 7]} ${emHora(b.inicio)}–${emHora(b.fim)}`)
+                .join(', ')}
+              .
+            </p>
+          ) : null}
+
+          {/*
+            Quem mais usa a cota (bloco 46). A cota é **da assinatura**, não da
+            pessoa: o plano família de dois cortes dá dois para a família
+            inteira. Sem saber quem usou, "1 de 2" numa família de três é um
+            número que ninguém confere.
+          */}
+          {dependentes.length > 0 || podeMexer ? (
+            <div className="assinatura__familia">
+              <p className="rotulo">Quem mais usa este plano</p>
+              {dependentes.length === 0 ? (
+                <p className="assinatura__ciclo">Só o titular.</p>
+              ) : (
+                <ul className="assinatura__beneficios">
+                  {dependentes.map((d) => (
+                    <li key={d.customerId}>
+                      {d.nome} — <span className="tabular">{d.usosNoCiclo}</span> neste ciclo
+                      {podeMexer ? (
+                        <form action={acaoRemoverDependente}>
+                          <input name="subscriptionId" type="hidden" value={assinatura.id} />
+                          <input name="dependenteId" type="hidden" value={d.customerId} />
+                          <input name="customerId" type="hidden" value={customerId} />
+                          <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                            Tirar do plano
+                          </button>
+                        </form>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {podeMexer ? (
+                <form action={acaoIncluirDependente}>
+                  <input name="subscriptionId" type="hidden" value={assinatura.id} />
+                  <input name="customerId" type="hidden" value={customerId} />
+                  <label className="ui-field">
+                    <span className="ui-field__label">
+                      Incluir alguém — o código do cliente
+                    </span>
+                    <input
+                      className="ui-field__input"
+                      name="dependenteId"
+                      placeholder="cole aqui o link da ficha dele"
+                      required
+                    />
+                    <span className="ui-field__hint">
+                      Cada dependente continua sendo cliente próprio, com agenda e histórico. O
+                      que ele divide é a cota.
+                    </span>
+                  </label>
+                  <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                    Incluir no plano
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
 
           {podeMexer ? (
             <form action={acaoCancelarAssinatura} className="assinatura__cancelar">
@@ -755,6 +832,18 @@ export default async function FichaPage({ params, searchParams }: Props) {
     veSaldo ? assinaturaDoClienteNaApi(token, id) : Promise.resolve(null),
     veClube ? planosNaApi(token) : Promise.resolve(null),
   ]);
+
+  /**
+   * Os dependentes vêm numa segunda ida, e de propósito.
+   *
+   * Só existem quando a pessoa **tem** assinatura, e a maioria não tem — pedi-los
+   * junto seria uma chamada a mais em toda abertura de ficha para responder uma
+   * pergunta que quase nunca é feita.
+   */
+  const familia =
+    veClube && assinatura?.ok && assinatura.dados.assinatura
+      ? await dependentesNaApi(token, assinatura.dados.assinatura.id)
+      : null;
 
   const topo = (
     <header className="painel__topo">
@@ -1003,6 +1092,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
         <Assinatura
           assinatura={assinatura.dados.assinatura}
           customerId={ficha.dados.customerId}
+          dependentes={familia?.ok ? familia.dados.dependentes : []}
           planos={planosDoClube?.ok ? planosDoClube.dados.planos.filter((p) => p.ativo) : []}
           podeMexer={veClube}
         />
