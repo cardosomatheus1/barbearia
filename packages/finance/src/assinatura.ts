@@ -729,6 +729,14 @@ export async function consumirAssinatura(
     readonly customerId: string;
     readonly serviceId: string;
     readonly orderId: string;
+    /**
+     * A **linha** da comanda que o plano cobriu (bloco 48).
+     *
+     * Guardada porque a comissão sobre assinatura precisa saber qual item veio
+     * do plano, e casar por serviço marcaria os dois cortes de uma comanda com
+     * dois cortes quando só um foi coberto.
+     */
+    readonly orderItemId: string;
     readonly valorCents: number;
     readonly diaDaUnidade: string;
     readonly agora: Date;
@@ -737,12 +745,13 @@ export async function consumirAssinatura(
 ): Promise<void> {
   await tx.$executeRaw`
     INSERT INTO club_uses
-      (tenant_id, subscription_id, customer_id, service_id, order_id, appointment_id,
-       value_cents, business_day, used_at)
+      (tenant_id, subscription_id, customer_id, service_id, order_id, order_item_id,
+       appointment_id, value_cents, business_day, used_at)
     VALUES (
       NULLIF(current_setting('app.tenant_id', true), '')::uuid,
       ${params.subscriptionId}::uuid, ${params.customerId}::uuid, ${params.serviceId}::uuid,
-      ${params.orderId}::uuid, ${params.appointmentId ?? null}::uuid,
+      ${params.orderId}::uuid, ${params.orderItemId}::uuid,
+      ${params.appointmentId ?? null}::uuid,
       ${params.valorCents}, ${params.diaDaUnidade}::date, ${params.agora}
     )
     ON CONFLICT DO NOTHING

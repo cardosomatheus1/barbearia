@@ -104,3 +104,21 @@ export const cartaoDaAssinaturaSchema = z.object({
 export const meuCancelamentoSchema = z.object({
   motivo: z.string().trim().max(300).optional(),
 });
+
+/**
+ * O modelo de comissão sobre assinatura (bloco 48, SPEC §3.4).
+ *
+ * O teto vale só para o híbrido, e vem sempre: guardá-lo mesmo quando o modelo é
+ * outro é o que permite alternar entre eles sem perder o número que o dono
+ * escolheu — voltar do rateio para o híbrido não pode zerar o teto.
+ */
+export const modeloDaAssinaturaSchema = z.object({
+  modo: z.enum(['por_uso', 'rateio', 'hibrido']),
+  tetoBps: z.number().int().min(0).max(10000),
+});
+
+/** O recorte da simulação. Um mês fechado é o que responde a pergunta. */
+export const periodoSchema = z.object({
+  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});

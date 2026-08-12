@@ -329,6 +329,129 @@ describe('as rotas do painel', () => {
     ).resolves.toBe(true);
   });
 
+  /**
+   * Margem e custo não saem por `finance.view` (achado da revisão do bloco 48).
+   *
+   * `finance.view_profit` existe para o dono **delegar a operação sem entregar a
+   * estratégia**: o gerente padrão vê faturamento e não vê margem, e há teste em
+   * `packages/core/src/permissoes.test.ts` prendendo isso.
+   *
+   * A rota de rentabilidade do clube nasceu declarando `finance.view` e
+   * devolvendo `margemCents` e `insumoCents` — a mesma decomposição que
+   * `GET /estoque/margem` guarda desde o bloco 44.
+   *
+   * ## Por que este teste lê o **tipo de retorno**, e não o corpo do handler
+   *
+   * A primeira versão procurava as palavras "margem" e "insumo" dentro do
+   * handler, e passou verde sobre a rota defeituosa: o corpo dela é
+   * `return rentabilidadeDoClube({...})` e não escreve nenhuma das duas. Um
+   * teste que não pega o defeito que o motivou é pior que teste nenhum — ele
+   * ensina a confiar no verde.
+   *
+   * A versão que vale deriva de duas fontes, as duas do código: as interfaces de
+   * `packages/finance` que **têm** campo de margem, custo ou sobra; e a
+   * assinatura das funções que devolvem essas interfaces. Uma rota que chame
+   * qualquer uma delas precisa declarar a permissão.
+   *
+   * O que ele **não** pega: uma função que devolva margem sem tipo declarado. É
+   * limite conhecido, e o código tem `noImplicitAny` — o tipo existe.
+   */
+  it('rota que devolve margem, custo ou sobra declara finance.view_profit', () => {
+    /**
+     * `core` **e** `finance`, e a primeira não é opcional.
+     *
+     * `MargemDoServico extends DecomposicaoDaMargem`, e a base mora em `core`.
+     * Varrendo só `finance`, a herança não se resolvia e a rota de margem do
+     * estoque — que já declarava a permissão certa — passava despercebida: o
+     * teste dizia verde sem enxergá-la, que é o pior tipo de verde.
+     */
+    const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
+    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
+    /**
+     * `margem`, `lucro`, `sobra`, `insumo` e `cmv` — e **não** `custo`.
+     *
+     * Custo sozinho é cadastro: o dono digita quanto pagou no shampoo, e ler
+     * isso é `inventory.view`. O que `finance.view_profit` separa é a
+     * **decomposição do resultado** — quanto sobra depois de comissão e insumo.
+     * Com `custo` na lista, a varredura acusava a listagem de produtos e a
+     * comanda, que é falso positivo por palavra igual.
+     */
+    const CAMPO_DE_LUCRO = /\b(margem\w*|insumo\w*|sobra\w*|lucro\w*|cmv)\s*:/i;
+
+    /** As interfaces de `finance` que carregam decomposição de resultado. */
+    const tiposDeLucro = new Set<string>();
+    /** Funções exportadas que devolvem uma delas. */
+    const funcoesDeLucro = new Set<string>();
+    const fontes = PASTAS.flatMap((pasta) =>
+      readdirSync(pasta)
+        .filter((n) => n.endsWith('.ts') && !n.includes('.test.'))
+        .map((n) => readFileSync(join(pasta, n), 'utf8')),
+    );
+
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
+        if (CAMPO_DE_LUCRO.test(bloco[2] ?? '')) tiposDeLucro.add(bloco[1] ?? '');
+      }
+    }
+    /*
+      Segunda passada: uma interface que **estende** outra de lucro também é de
+      lucro, e `RentabilidadeNaTela extends RentabilidadeDoAssinante` é o caso.
+      A herança entra e a composição não: um tipo que só **cita** outro num
+      campo pode estar citando para outra coisa, e a varancia viral acusava a
+      comanda inteira.
+    */
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export interface (\w+) extends (\w+)/g)) {
+        if (tiposDeLucro.has(bloco[2] ?? '')) tiposDeLucro.add(bloco[1] ?? '');
+      }
+    }
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export async function (\w+)[\s\S]{0,900}?Promise<([^>]+)>/g)) {
+        const retorno = bloco[2] ?? '';
+        if ([...tiposDeLucro].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
+          funcoesDeLucro.add(bloco[1] ?? '');
+        }
+      }
+    }
+
+    expect(
+      tiposDeLucro.size,
+      'a varredura não achou nenhum tipo de margem — ela deixou de valer',
+    ).toBeGreaterThan(0);
+    expect(funcoesDeLucro.size).toBeGreaterThan(0);
+
+    const faltando: string[] = [];
+    for (const { arquivo, classe, corpo, guardada } of controllers()) {
+      if (!guardada) continue;
+
+      /**
+       * O terminador é `$`, e não `\n\}$`.
+       *
+       * A primeira versão parava no fecha-chaves da classe **em fim de string**,
+       * e o arquivo termina com uma quebra de linha depois dele: o resultado é
+       * que o **último handler de cada controller** nunca era capturado. Foi
+       * assim que a rota de margem do estoque — que declara a permissão certa —
+       * passou despercebida, e é o defeito que quebrar o portão de propósito
+       * revelou. Guarda que engole a última rota de todo arquivo é pior que
+       * guarda nenhuma.
+       */
+      const handlers = [...corpo.matchAll(/@Exige\(([^)]*)\)([\s\S]*?)(?=@Exige\(|$)/g)];
+      for (const handler of handlers) {
+        const permissoes = handler[1] ?? '';
+        // Só o que o handler **chama**: o comentário fala de margem o tempo todo.
+        const codigo = (handler[2] ?? '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/.*/g, '');
+        const chamada = [...funcoesDeLucro].find((f) => new RegExp(`\\b${f}\\s*\\(`).test(codigo));
+        if (!chamada) continue;
+        if (permissoes.includes('finance.view_profit')) continue;
+        faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
+      }
+    }
+
+    expect(faltando, 'rota devolve margem ou custo sem finance.view_profit').toEqual([]);
+  });
+
   it('rota marcada com @Recurso pergunta pelo recurso; rota sem @Recurso não', async () => {
     // Sem o segundo argumento nenhuma consulta acontece — é o que mantém este
     // arquivo sendo teste de unidade. Com ele, a guarda vai ao banco, e é isso

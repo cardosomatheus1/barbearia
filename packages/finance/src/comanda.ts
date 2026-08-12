@@ -1230,6 +1230,7 @@ export async function fecharComanda(params: {
         customerId: comanda.customerId,
         serviceId: servicoCoberto,
         orderId: params.orderId,
+        orderItemId: naComanda.id,
         valorCents: disponivel.valorCents,
         diaDaUnidade: params.hojeNaUnidade,
         agora: agoraNoFechamento,

@@ -349,7 +349,8 @@ export function baseDoItem(params: {
   return Math.max(0, params.item.totalCents - desconto - taxa);
 }
 
-const porCento = (valorCents: number, pontosBase: number): number =>
+/** Exportada desde o bloco 48: a comissão sobre assinatura aplica a mesma conta. */
+export const porCento = (valorCents: number, pontosBase: number): number =>
   Math.round((valorCents * pontosBase) / 10_000);
 
 /**

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   AssinaturaError,
+  ComissaoError,
   agendarCancelamento,
   assinar,
   assinaturaDoCliente,
@@ -14,6 +15,9 @@ import {
   faturasDoClube,
   registrarPagamentoDaFatura,
   removerDependente,
+  rentabilidadeDoClube,
+  salvarModeloDaAssinatura,
+  simulacaoDaAssinatura,
   salvarCartaoDaAssinatura,
   salvarPlano,
 } from '@barbearia/finance';
@@ -30,6 +34,7 @@ import {
   cancelarSchema,
   cartaoDaAssinaturaSchema,
   dependenteSchema,
+  modeloDaAssinaturaSchema,
   planoSchema,
 } from './assinatura.schemas.js';
 
@@ -62,13 +67,43 @@ const STATUS: Record<string, number> = {
   servico_fora_do_plano: 409,
   cota_esgotada: 409,
   dentro_do_cooldown: 409,
+  aliquota_invalida: 400,
   fatura_nao_encontrada: 404,
   motivo_obrigatorio: 400,
   cartao_invalido: 400,
 };
 
+/**
+ * O recorte padrão da simulação: o **mês corrente**.
+ *
+ * Sem parâmetro a tela pergunta pelo mês em curso, que é o que o dono tem na
+ * cabeça. Data fora do formato não vira erro nem data mágica — ela é ignorada e
+ * o mês corrente responde, porque uma simulação é leitura e uma leitura que
+ * recusa por causa de um parâmetro mal digitado só ensina a não abrir a tela.
+ */
+function mesCorrente(de?: string, ate?: string): { de: string; ate: string } {
+  const valida = (valor?: string) => (valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : null);
+  const inicio = valida(de);
+  const fim = valida(ate);
+  if (inicio && fim && fim >= inicio) return { de: inicio, ate: fim };
+
+  const agora = new Date();
+  const primeiro = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1));
+  const ultimo = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0));
+  return { de: primeiro.toISOString().slice(0, 10), ate: ultimo.toISOString().slice(0, 10) };
+}
+
 export function assinaturaParaHttp(erro: unknown): never {
   if (erro instanceof AssinaturaError) {
+    throw new DomainError(erro.code, STATUS[erro.code] ?? 400, erro.message);
+  }
+  /**
+   * O modelo de comissão (bloco 48) recusa por `ComissaoError`, e é de
+   * propósito: a validação do teto mora em `packages/finance/src/comissao.ts`,
+   * ao lado da regra que ele limita. Sem esta linha, um teto de 200% vinha como
+   * erro 500 — o cliente lê "algo deu errado" para um campo que ele digitou.
+   */
+  if (erro instanceof ComissaoError) {
     throw new DomainError(erro.code, STATUS[erro.code] ?? 400, erro.message);
   }
   throw erro;
@@ -392,6 +427,86 @@ export class AssinaturaController {
         assinaturaId: id,
         motivo: body.motivo,
         ator: { id: staff.staffUserId, name: staff.name },
+      });
+    } catch (erro) {
+      return assinaturaParaHttp(erro);
+    }
+  }
+
+  // -- a rentabilidade do clube (bloco 48) ------------------------------------
+
+  /**
+   * A simulação dos três modelos de comissão sobre assinatura.
+   *
+   * `finance.view_profit` junto de `finance.view`, e a diferença importa: o que
+   * ela devolve é **quanto sobra da mensalidade depois da comissão** em cada
+   * modelo — margem, não faturamento. É a mesma linha que separa
+   * `GET /estoque/margem` de `inventory.view` desde o bloco 44, e o gerente
+   * padrão tem `finance.view` **sem** `finance.view_profit` exatamente para que
+   * o dono possa delegar a operação sem entregar a estratégia.
+   *
+   * Achado da `/security-review`: a primeira versão exigia só `finance.view`, e
+   * era o caminho mais curto para a margem que a permissão vizinha guarda.
+   */
+  @Exige('finance.view', 'finance.view_profit')
+  @Get('simulacao')
+  async simulacao(
+    @Staff() staff: AuthenticatedStaff,
+    @Query('de') de?: string,
+    @Query('ate') ate?: string,
+  ) {
+    const janela = mesCorrente(de, ate);
+    return simulacaoDaAssinatura({ tenantId: staff.tenantId, ...janela });
+  }
+
+  /**
+   * A rentabilidade, assinante a assinante.
+   *
+   * Três permissões, e cada uma cobre um pedaço do que a rota devolve:
+   * `customers.view` pelo **nome de gente**, `finance.view` pelo valor da
+   * mensalidade, e `finance.view_profit` pela **margem e pelo custo do insumo**.
+   * Rota que agrega declara todas as permissões do que devolve — e a primeira
+   * versão declarou duas de três, o que a `/security-review` cobrou.
+   */
+  @Exige('finance.view', 'finance.view_profit', 'customers.view')
+  @Get('rentabilidade')
+  async rentabilidade(
+    @Staff() staff: AuthenticatedStaff,
+    @Query('de') de?: string,
+    @Query('ate') ate?: string,
+  ) {
+    const janela = mesCorrente(de, ate);
+    return rentabilidadeDoClube({ tenantId: staff.tenantId, ...janela });
+  }
+
+  /**
+   * O dono escolhe o modelo.
+   *
+   * `commission.edit_rules` **junto** de `finance.subscription_manage`, e não só
+   * a segunda. Isto aqui é uma regra de comissão: ela reescreve a base de todo
+   * lançamento de assinatura do período aberto, e a própria função a registra na
+   * trilha como `commission.rule_changed`.
+   *
+   * Achado da `/security-review`. Com só `finance.subscription_manage` — que o
+   * gerente padrão tem —, um teto de 0% zerava a comissão da equipe inteira
+   * sobre o clube por uma rota que se chama "modelo", sem passar pela permissão
+   * que existe para guardar exatamente isso. O segundo fator não fechava a
+   * brecha: as duas permissões são de dinheiro, e a derivação já valia.
+   */
+  @Exige('finance.subscription_manage', 'commission.edit_rules')
+  @Put('modelo')
+  async modelo(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(modeloDaAssinaturaSchema))
+    body: { modo: 'por_uso' | 'rateio' | 'hibrido'; tetoBps: number },
+  ) {
+    try {
+      return await salvarModeloDaAssinatura({
+        tenantId: staff.tenantId,
+        modo: body.modo,
+        tetoBps: body.tetoBps,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
       });
     } catch (erro) {
       return assinaturaParaHttp(erro);

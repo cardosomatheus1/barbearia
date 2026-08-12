@@ -2382,6 +2382,57 @@ export const desfazerCancelamentoNaApi = (token: string, id: string) =>
     token,
   );
 
+/**
+ * A simulação dos três modelos de comissão sobre assinatura (bloco 48).
+ *
+ * `finance.view` sozinho: são três totais e nenhum nome. A rentabilidade, que
+ * traz nome de gente, é outra rota e exige `customers.view` junto.
+ */
+export interface SimulacaoDaAssinaturaNaTela {
+  receitaCents: number;
+  atendimentos: number;
+  emUso: 'por_uso' | 'rateio' | 'hibrido';
+  modelos: {
+    modo: 'por_uso' | 'rateio' | 'hibrido';
+    comissaoCents: number;
+    sobraCents: number;
+    pesoBps: number;
+  }[];
+}
+
+export interface RentabilidadeDoClubeNaTela {
+  de: string;
+  ate: string;
+  modo: 'por_uso' | 'rateio' | 'hibrido';
+  receitaCents: number;
+  comissaoCents: number;
+  insumoCents: number;
+  margemCents: number;
+  assinantes: {
+    assinaturaId: string;
+    cliente: string;
+    plano: string | null;
+    mensalidadeCents: number;
+    usos: number;
+    valorEntregueCents: number;
+    comissaoCents: number;
+    insumoCents: number;
+    margemCents: number;
+  }[];
+}
+
+export const simulacaoDaAssinaturaNaApi = (token: string) =>
+  chamar<SimulacaoDaAssinaturaNaTela>('GET', '/v1/admin/clube/simulacao', undefined, token);
+
+export const rentabilidadeDoClubeNaApi = (token: string) =>
+  chamar<RentabilidadeDoClubeNaTela>('GET', '/v1/admin/clube/rentabilidade', undefined, token);
+
+export const salvarModeloDaAssinaturaNaApi = (
+  token: string,
+  modo: string,
+  tetoBps: number,
+) => chamar<{ salvo: boolean }>('PUT', '/v1/admin/clube/modelo', { modo, tetoBps }, token);
+
 export const assinaturaDoClienteNaApi = (token: string, customerId: string) =>
   chamar<{ assinatura: AssinaturaDoCliente | null }>(
     'GET',

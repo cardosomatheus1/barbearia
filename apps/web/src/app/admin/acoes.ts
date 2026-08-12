@@ -51,6 +51,7 @@ import {
   cancelarFaturaNaApi,
   desfazerCancelamentoNaApi,
   pagarFaturaNaApi,
+  salvarModeloDaAssinaturaNaApi,
   incluirDependenteNaApi,
   removerDependenteNaApi,
   assumirRecadoNaApi,
@@ -2184,6 +2185,25 @@ export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
   const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
   if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
   redirect(`/admin/cliente/${customerId}?feito=cancelou`);
+}
+
+/**
+ * O dono escolhe como a comissão sobre assinatura é paga (bloco 48).
+ *
+ * Muda **quanto a equipe inteira recebe** a partir do próximo fechamento, e por
+ * isso passa por `finance.subscription_manage` — que cai no grupo de dinheiro
+ * pelo prefixo e traz o segundo fator derivado junto.
+ */
+export async function acaoSalvarModeloDaAssinatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const teto = Number(form.get('tetoPercent') ?? 60);
+  const resultado = await salvarModeloDaAssinaturaNaApi(
+    token,
+    texto(form, 'modo'),
+    Math.round(teto * 100),
+  );
+  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  redirect('/admin/clube?feito=modelo');
 }
 
 // -- as mensalidades do clube (bloco 47) --------------------------------------

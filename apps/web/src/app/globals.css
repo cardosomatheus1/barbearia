@@ -6623,3 +6623,61 @@ main { padding-bottom: var(--space-8); }
   border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
   border-radius: var(--radius-md);
 }
+
+/* ---------------------------------------------------------------------------
+   Os três modelos de comissão sobre assinatura (bloco 48)
+
+   Lado a lado quando há largura, empilhados no celular. A SPEC §3.4 pede a
+   comparação — "o sistema precisa mostrar ao dono, antes de ele escolher, a
+   simulação dos três sobre os dados reais dele" —, e comparar em três telas
+   diferentes não é comparar.
+
+   `@container` porque o mesmo bloco cabe na tela cheia do Clube e caberia numa
+   coluna estreita; o recipiente é `.modelos`, que é o **ancestral** de quem
+   responde.
+   --------------------------------------------------------------------------- */
+.modelos {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+@container (min-width: 40rem) {
+  .modelos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.modelo {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+/* O que está em uso ganha a borda de acento — um só, como toda tela deste
+   produto tem uma ação primária só. */
+.modelo--em-uso {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+.modelo__nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.modelo__valor {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+}
+.modelo__nota {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+/* Margem negativa é informação, não alarme: um plano que enche a terça pode
+   valer a pena. A cor diz "olhe aqui", não "conserte isto". */
+.modelo__negativo { color: var(--color-warning); }

@@ -686,6 +686,54 @@ function prepararPlanoDoCliente(slug, telefone) {
   */
   psql(`UPDATE club_subscriptions SET status = 'inadimplente' WHERE id = '${assinatura}'`);
 
+  /*
+    Um plano usado de verdade, para a simulação dos três modelos ter o que
+    comparar (bloco 48). Quatro cortes num mês de mensalidade de R$ 89 é
+    exatamente o caso que a SPEC §3.4 chama de "o que mais gera conflito": por
+    uso custa mais que a mensalidade, e o dono precisa ver isso na tela.
+
+    Pelo banco e não pela comanda: o que a medição precisa é do **estado**, e
+    fechar quatro comandas aqui custaria meia dúzia de idas à API por um número
+    que já se sabe.
+  */
+  /*
+    A regra de comissão da casa, criada aqui se ainda não existir: sem ela não
+    há lançamento, e a simulação mede o estado vazio em vez do estado que este
+    bloco entregou.
+  */
+  psql(
+    `INSERT INTO commission_rules (tenant_id, mode, value)
+     SELECT '${tenant}', 'percent', 4000
+      WHERE NOT EXISTS (SELECT 1 FROM commission_rules WHERE tenant_id = '${tenant}')`,
+  );
+  const regra = primeiraLinha(
+    psql(
+      `select id from commission_rules where tenant_id = '${tenant}' limit 1`,
+    ),
+  );
+  const barbeiro = primeiraLinha(
+    psql(`select id from professionals where tenant_id = '${tenant}' limit 1`),
+  );
+  if (regra && barbeiro && servico) {
+    for (let i = 0; i < 4; i += 1) {
+      psql(
+        `INSERT INTO club_uses (tenant_id, subscription_id, customer_id, service_id,
+                                value_cents, business_day, used_at)
+         VALUES ('${tenant}', '${assinatura}', '${cliente}', '${servico}', 6000,
+                 date_trunc('day', now() - interval '${i} days'),
+                 now() - interval '${i} days')`,
+      );
+      psql(
+        `INSERT INTO commission_entries
+           (tenant_id, professional_id, earned_on, rule_id, mode, value, base_cents, sign,
+            club_subscription_id, subscription_fee_cents)
+         VALUES ('${tenant}', '${barbeiro}',
+                 date_trunc('day', now() - interval '${i} days')::date,
+                 '${regra}', 'percent', 4000, 6000, 1, '${assinatura}', 8900)`,
+      );
+    }
+  }
+
   // Duas pagas e uma em aberto: é o extrato que a pessoa abre para conferir se
   // aquele desconto no cartão era o plano.
   for (const [meses, estado] of [[70, 'paga'], [40, 'paga'], [10, 'aberta']]) {

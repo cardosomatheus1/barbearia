@@ -1,20 +1,36 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { fraseDoBloqueio } from '@barbearia/core';
+import {
+  EXPLICACAO_DO_MODO_DA_ASSINATURA,
+  MODOS_DA_ASSINATURA,
+  ROTULO_DO_MODO_DA_ASSINATURA,
+  fraseDaSimulacao,
+  fraseDoBloqueio,
+} from '@barbearia/core';
 import {
   catalogoDeServicos,
   clubeNaApi,
   faturasDoClubeNaApi,
   planosContadosNaApi,
+  rentabilidadeDoClubeNaApi,
+  simulacaoDaAssinaturaNaApi,
   planosNaApi,
   type FaturaDoClubeNaTela,
   type PlanoNaTela,
+  type RentabilidadeDoClubeNaTela,
+  type SimulacaoDaAssinaturaNaTela,
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
-import { acaoCancelarFatura, acaoPagarFatura, acaoSair, acaoSalvarPlano } from '../acoes';
+import {
+  acaoCancelarFatura,
+  acaoPagarFatura,
+  acaoSair,
+  acaoSalvarModeloDaAssinatura,
+  acaoSalvarPlano,
+} from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -52,6 +68,7 @@ const FALHA: Record<string, string> = {
   plano_nao_encontrado: 'Este plano não existe mais.',
   fatura_nao_encontrada: 'Esta mensalidade já foi baixada ou cancelada.',
   motivo_obrigatorio: 'Escreva o motivo do cancelamento.',
+  aliquota_invalida: 'O teto vai de 0% a 100%.',
   forbidden: 'Sua conta não mexe no clube.',
   invalid_request: 'Confira os dados e tente de novo.',
   request_failed: 'Não deu para salvar. Tente de novo.',
@@ -60,6 +77,7 @@ const FALHA: Record<string, string> = {
 const FEITO: Record<string, string> = {
   pagou: 'Pagamento registrado. O plano voltou a valer.',
   cancelou_fatura: 'Mensalidade cancelada. A linha continua no histórico.',
+  modelo: 'Modelo salvo. Ele vale a partir do próximo fechamento de comissão.',
 };
 
 const dinheiro = (cents: number) => `R$ ${reaisDoCampo(cents)}`;
@@ -486,8 +504,12 @@ export default async function ClubePage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
   const podeMexer = podeNaTela(estado, 'finance.subscription_manage');
   const veDinheiro = podeMexer && podeNaTela(estado, 'finance.view');
+  const veMargem =
+    podeNaTela(estado, 'finance.view') && podeNaTela(estado, 'finance.view_profit');
+  // Escolher o modelo é mexer em regra de comissão, e a rota exige as duas.
+  const mexeNaComissao = podeMexer && podeNaTela(estado, 'commission.edit_rules');
 
-  const [resposta, catalogo, clube, cobrancas] = await Promise.all([
+  const [resposta, catalogo, clube, cobrancas, simulada, rendeu] = await Promise.all([
     // Com a contagem só para quem pode ver o MRR: ela × preço é o faturamento
     // recorrente da casa, e a rota aberta devolve zero de propósito.
     veDinheiro ? planosContadosNaApi(token, true) : planosNaApi(token, true),
@@ -502,6 +524,17 @@ export default async function ClubePage({ searchParams }: Props) {
      */
     veDinheiro && podeNaTela(estado, 'customers.view')
       ? faturasDoClubeNaApi(token)
+      : Promise.resolve(null),
+    /*
+      A simulação diz **quanto sobra** da mensalidade em cada modelo, e sobra é
+      margem: `finance.view_profit`, não `finance.view`. O gerente padrão tem a
+      segunda e não a primeira, de propósito — é como o dono delega a operação
+      sem entregar a estratégia. Achado da revisão deste bloco.
+    */
+    veMargem ? simulacaoDaAssinaturaNaApi(token) : Promise.resolve(null),
+    // A rentabilidade traz nome de gente ao lado da margem.
+    veMargem && podeNaTela(estado, 'customers.view')
+      ? rentabilidadeDoClubeNaApi(token)
       : Promise.resolve(null),
   ]);
 
@@ -539,6 +572,8 @@ export default async function ClubePage({ searchParams }: Props) {
 
   const lista = resposta.dados.planos;
   const faturas = cobrancas?.ok ? cobrancas.dados.faturas : null;
+  const simulacao: SimulacaoDaAssinaturaNaTela | null = simulada?.ok ? simulada.dados : null;
+  const rentabilidade: RentabilidadeDoClubeNaTela | null = rendeu?.ok ? rendeu.dados : null;
   const emAberto = (faturas ?? []).filter((f) => f.estado === 'aberta');
   const fechadas = (faturas ?? []).filter((f) => f.estado !== 'aberta');
   const totalEmAberto = emAberto.reduce((soma, f) => soma + f.valorCents, 0);
@@ -593,6 +628,155 @@ export default async function ClubePage({ searchParams }: Props) {
               </p>
             </div>
           </dl>
+        </section>
+      ) : null}
+
+      {simulacao ? (
+        <section className="painel__grupo">
+          <h2 className="rotulo">Quanto o clube rende</h2>
+          <p className="painel__sub">
+            {fraseDaSimulacao({
+              receitaCents: simulacao.receitaCents,
+              atendimentos: simulacao.atendimentos,
+              emUso: simulacao.emUso,
+              modelos: simulacao.modelos,
+            })}
+          </p>
+
+          {/*
+            Sem atendimento pago por plano, os três cartões seriam R$ 0,00 lado a
+            lado — três números que prometem uma resposta e nunca a dão, que é o
+            defeito que o §6 do CLAUDE.md chama de indicador sempre `—`. O estado
+            vazio é desenhado e diz o que fará ele aparecer.
+          */}
+          {simulacao.atendimentos === 0 ? (
+            <div className="ui-card vazio">
+              <p className="vazio__titulo">Ainda não há o que comparar</p>
+              <p className="vazio__saida">
+                A comparação aparece quando um assinante for atendido e a comanda fechar com o
+                plano como forma de pagamento. Até lá, a comissão do clube segue o modelo em uso:{' '}
+                {ROTULO_DO_MODO_DA_ASSINATURA[simulacao.emUso].toLowerCase()}.
+              </p>
+            </div>
+          ) : null}
+
+          {/*
+            Os três lado a lado, com o que está em uso marcado. É o que a SPEC
+            §3.4 pede em letras: "o sistema precisa mostrar ao dono, antes de ele
+            escolher, a simulação dos três sobre os dados reais dele".
+          */}
+          <div className="modelos">
+            {simulacao.modelos.map((m) => (
+              <div
+                className={`modelo ${m.modo === simulacao.emUso ? 'modelo--em-uso' : ''}`}
+                key={m.modo}
+              >
+                <p className="modelo__nome">
+                  {ROTULO_DO_MODO_DA_ASSINATURA[m.modo]}
+                  {m.modo === simulacao.emUso ? (
+                    <span className="item-cadastro__selo">em uso</span>
+                  ) : null}
+                </p>
+                {/*
+                  O número só aparece quando existe. Zero aqui não é "custou
+                  zero": é "não houve atendimento" — e as duas coisas na mesma
+                  fonte grande é a tela mentindo sobre o que sabe.
+                */}
+                {simulacao.atendimentos > 0 ? (
+                  <>
+                    <p className="modelo__valor tabular">{dinheiro(m.comissaoCents)}</p>
+                    <p className="modelo__nota">
+                      de comissão sobre {dinheiro(simulacao.receitaCents)} de mensalidade —{' '}
+                      {Math.round(m.pesoBps / 100)}%
+                    </p>
+                  </>
+                ) : null}
+                <p className="modelo__nota">{EXPLICACAO_DO_MODO_DA_ASSINATURA[m.modo]}</p>
+              </div>
+            ))}
+          </div>
+
+          {mexeNaComissao ? (
+            <form action={acaoSalvarModeloDaAssinatura} className="formulario">
+              <div className="campos-lado">
+                <div className="ui-field">
+                  <label className="ui-field__label" htmlFor="modo">
+                    Como pagar a comissão do assinante
+                  </label>
+                  <select className="ui-field__input" defaultValue={simulacao.emUso} id="modo" name="modo">
+                    {MODOS_DA_ASSINATURA.map((modo) => (
+                      <option key={modo} value={modo}>
+                        {ROTULO_DO_MODO_DA_ASSINATURA[modo]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ui-field">
+                  <label className="ui-field__label" htmlFor="teto">
+                    Teto do híbrido (% da mensalidade)
+                  </label>
+                  <input
+                    className="ui-field__input"
+                    defaultValue={60}
+                    id="teto"
+                    inputMode="numeric"
+                    max={100}
+                    min={0}
+                    name="tetoPercent"
+                    type="number"
+                  />
+                  <p className="ui-field__hint">Só vale no modelo com teto.</p>
+                </div>
+              </div>
+              <button className="ui-button ui-button--secondary" type="submit">
+                Salvar modelo
+              </button>
+              <p className="painel__nota">
+                Vale a partir do próximo fechamento. Período já fechado não muda — a comissão paga
+                fica como foi paga.
+              </p>
+            </form>
+          ) : null}
+
+          {rentabilidade && rentabilidade.assinantes.length > 0 ? (
+            <details className="dobra">
+              <summary className="dobra__titulo">
+                Assinante a assinante ({rentabilidade.assinantes.length})
+              </summary>
+              <p className="ui-field__hint">
+                Do que menos sobra para o que mais sobra. Margem negativa não é necessariamente
+                erro: um plano que enche a terça pode valer a pena. O que não pode é você não saber.
+              </p>
+              <div className="ui-scroll-x">
+                <table className="clube-faturas">
+                  <thead>
+                    <tr>
+                      <th scope="col">Assinante</th>
+                      <th scope="col">Usos</th>
+                      <th scope="col">Pagou</th>
+                      <th scope="col">Custou</th>
+                      <th scope="col">Sobrou</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rentabilidade.assinantes.map((a) => (
+                      <tr key={a.assinaturaId}>
+                        <td>{a.cliente}</td>
+                        <td className="tabular">{a.usos}</td>
+                        <td className="tabular">{dinheiro(a.mensalidadeCents)}</td>
+                        <td className="tabular">
+                          {dinheiro(a.comissaoCents + a.insumoCents)}
+                        </td>
+                        <td className={`tabular ${a.margemCents < 0 ? 'modelo__negativo' : ''}`}>
+                          {dinheiro(a.margemCents)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
         </section>
       ) : null}
 
