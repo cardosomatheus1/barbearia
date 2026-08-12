@@ -257,6 +257,12 @@ export default async function UnidadesPage({ searchParams }: Props) {
                       {unidade.nome}
                       {unidade.cidade ? ` · ${unidade.cidade}` : ''}
                       {unidade.ativa ? '' : ' · fechada'}
+                      {/* Fechar a loja em que se está é permitido e derruba a
+                          própria escolha — quem faz isso precisa saber antes,
+                          não descobrir na tela seguinte. */}
+                      {unidade.ativa && unidade.id === atual?.id
+                        ? ' · você está operando aqui'
+                        : ''}
                     </span>
                     <button className="ui-button ui-button--ghost" type="submit">
                       {unidade.ativa ? 'Fechar' : 'Reabrir'}
@@ -324,7 +330,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
               </div>
             </div>
 
-            <button className="ui-button ui-button--accent" type="submit">
+            <button className="ui-button ui-button--ghost" type="submit">
               Abrir unidade
             </button>
           </form>
@@ -342,7 +348,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
             <ul className="lista-cadastro">
               {equipe.dados.equipe.map((pessoa) => (
                 <li key={pessoa.id}>
-                  <form action={acaoDefinirUnidadesDaConta} className="formulario">
+                  <form action={acaoDefinirUnidadesDaConta} className="formulario unidade-vinculo">
                     <input name="staffUserId" type="hidden" value={pessoa.id} />
                     <h3 className="item-cadastro__nome">{pessoa.nome}</h3>
                     <p className="item-cadastro__linha">
@@ -477,7 +483,11 @@ export default async function UnidadesPage({ searchParams }: Props) {
                 />
               </div>
 
-              <button className="ui-button ui-button--accent" type="submit">
+              {/* `ghost`, e não `accent`: a ação primária desta tela é trocar
+                  de loja, que é o que a recepção faz ao chegar. Três botões em
+                  destaque em três cartões seria a tela dizendo que tudo importa
+                  igual. */}
+              <button className="ui-button ui-button--ghost" type="submit">
                 Transferir
               </button>
             </form>

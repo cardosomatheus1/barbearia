@@ -1337,6 +1337,34 @@ main { padding-bottom: var(--space-8); }
   accent-color: var(--color-accent);
 }
 
+/* A caixa nativa esticada para 44px vira um bloco cinza do tamanho de uma foto,
+   e no tema escuro ela é lida como imagem quebrada — foi assim que a tela de
+   unidades saiu na primeira medição: seis quadrados vazios ao lado de nomes.
+
+   O alvo continua com 44px; o que muda é a **aparência**. A marca é uma imagem
+   de fundo e não um `::after`, porque pseudo-elemento em `input` depende do
+   navegador, e esta caixa decide em quais lojas alguém trabalha. */
+.ui-field__label input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 60% 60%;
+  cursor: pointer;
+}
+.ui-field__label input[type='checkbox']:checked {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23111' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.5 3.5L13 4.5'/%3E%3C/svg%3E");
+}
+.ui-field__label input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .item-cadastro__acao {
   display: flex;
   flex-wrap: wrap;
@@ -6978,6 +7006,13 @@ main { padding-bottom: var(--space-8); }
   .unidade-linha .ui-button {
     width: auto;
   }
+}
+
+/* O botão nasce colado à esquerda do cartão. Dentro de `.formulario`, que é
+   flex em coluna, ele esticaria para a largura toda e pareceria uma faixa —
+   que é o que a primeira medição mostrou em "Salvar unidades". */
+.unidade-vinculo .ui-button {
+  align-self: flex-start;
 }
 
 .unidades-saldos {
