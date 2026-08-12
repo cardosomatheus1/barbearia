@@ -47,6 +47,7 @@ import {
   salvarDocumentoDoTomadorNaApi,
   salvarCadastroDoWhatsAppNaApi,
   submeterTemplateNaApi,
+  salvarAutomacaoNaApi,
   cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
@@ -2592,6 +2593,29 @@ export async function acaoSalvarDocumentoDoTomador(form: FormData): Promise<void
 }
 
 const ROTA_WHATSAPP = '/admin/whatsapp';
+const ROTA_AUTOMACOES = '/admin/automacoes';
+
+export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const limiarBruto = texto(form, 'limiar');
+  const id = texto(form, 'id');
+  const resultado = await salvarAutomacaoNaApi(token, {
+    ...(id ? { id } : {}),
+    nome: texto(form, 'nome'),
+    gatilho: texto(form, 'gatilho'),
+    // Vazio é "este gatilho não pede número", e não zero: zero é recusado pelo
+    // domínio de propósito, porque um limiar de zero dispara para todo mundo.
+    limiar: limiarBruto ? Number(limiarBruto) : null,
+    atrasoMinutos: Number(texto(form, 'atrasoMinutos') || '0'),
+    tipo: texto(form, 'tipo'),
+    objetivo: texto(form, 'objetivo'),
+    janelaDias: Number(texto(form, 'janelaDias') || '7'),
+    ativa: form.get('ativa') === 'on',
+  });
+  if (!resultado.ok) falhar(ROTA_AUTOMACOES, resultado.code);
+  redirect(`${ROTA_AUTOMACOES}?feito=salva`);
+}
+
 
 export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void> {
   const token = await exigirSessao();

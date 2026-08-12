@@ -40,6 +40,7 @@ import { FinanceiroController } from './admin/financeiro.controller.js';
 import { DreController } from './admin/dre.controller.js';
 import { FiscalController } from './admin/fiscal.controller.js';
 import { WhatsAppController } from './admin/whatsapp.controller.js';
+import { AutomacaoController } from './admin/automacao.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
 import { AssinaturaController } from './admin/assinatura.controller.js';
@@ -105,6 +106,7 @@ import { TenantService } from './tenant/tenant.service.js';
     DreController,
     FiscalController,
     WhatsAppController,
+    AutomacaoController,
     AvaliacaoController,
     EstoqueController,
     AssinaturaController,

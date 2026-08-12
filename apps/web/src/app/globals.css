@@ -1316,6 +1316,27 @@ main { padding-bottom: var(--space-8); }
 /* Flex com quebra porque a nota fiscal pôs dois botões lado a lado aqui: em
    360px eles não cabem na mesma linha, e sem a quebra o segundo empurra a
    página para o lado. */
+/*
+   Caixa de seleção com alvo de toque de verdade.
+   
+   O padrão do navegador dá 13px, e a regra dos 44px vale **em qualquer
+   largura** — mouse impreciso e limitação motora não são exclusividade do
+   aparelho pequeno. A medição pegou isto na primeira tela do produto a usar
+   uma caixa de seleção; sem esta regra, toda tela nova que usar uma repete o
+   defeito.
+
+   O `accent-color` é o que faz a caixa marcada usar o acento do tema em vez do
+   azul do sistema — sem ele, o único elemento fora da paleta seria justamente o
+   que confirma uma escolha. */
+.ui-field__label input[type='checkbox'],
+.ui-field__label input[type='radio'] {
+  inline-size: var(--size-touch);
+  block-size: var(--size-touch);
+  margin-inline-end: var(--space-2);
+  vertical-align: middle;
+  accent-color: var(--color-accent);
+}
+
 .item-cadastro__acao {
   display: flex;
   flex-wrap: wrap;
@@ -4082,6 +4103,7 @@ main { padding-bottom: var(--space-8); }
    tinha uma lista escrita à mão. O teste agora deriva do registro. */
 .casco:has([data-secao='fiscal']) .contexto__link[data-para='fiscal'],
 .casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp'],
+.casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes'],
 .casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
 .casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);

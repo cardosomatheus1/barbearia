@@ -255,6 +255,18 @@ describeIfDb('direitos do titular', () => {
     ]);
 
     const EXCECOES = new Map([
+      /**
+       * O disparo de automação é registro **da casa**, não do titular (bloco 56).
+       *
+       * Ele responde "esta automação funciona?" — quantas saíram e quantas
+       * trouxeram alguém de volta —, e o que ele guarda sobre a pessoa é o
+       * vínculo e a hora. O conteúdo que ela recebeu já entra na exportação por
+       * `whatsapp_messages`, que é onde a mensagem de verdade está.
+       *
+       * O vínculo some na anonimização pela chave estrangeira `SET NULL`, que é
+       * o que separa esta linha de uma cópia de dado pessoal.
+       */
+      ['automation_sends', 'registro de desempenho da casa; a mensagem entra por whatsapp_messages'],
       // Token de sessão é credencial, não dado pessoal: exportá-lo entregaria um
       // acesso vivo num arquivo que o titular recebe por e-mail.
       ['customer_sessions', 'credencial, não dado do titular'],

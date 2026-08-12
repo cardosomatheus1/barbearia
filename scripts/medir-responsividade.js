@@ -1371,6 +1371,28 @@ function prepararWhatsApp(slug) {
   );
 }
 
+/**
+ * Duas automações, uma com resultado e outra sem (bloco 56).
+ *
+ * Pelo banco, como o resto. O que estoura a linha é a automação com nome longo,
+ * gatilho, objetivo, janela e os dois contadores juntos — não a lista vazia.
+ */
+function prepararAutomacoes(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  psql(
+    `INSERT INTO automations
+       (tenant_id, name, trigger, threshold, delay_minutes, kind, goal, goal_window_days, active)
+     VALUES
+       ('${tenant}', 'Volta pro corte — quem sumiu há um mês', 'sem_retorno', 30, 0,
+        'retorno', 'agendamento', 7, true),
+       ('${tenant}', 'Parabéns na véspera', 'aniversario', 1, 0,
+        'retorno', 'agendamento', 14, false)
+     ON CONFLICT DO NOTHING`,
+  );
+}
+
 function prepararFiscal(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -1778,6 +1800,7 @@ async function main() {
   prepararValeEEstorno(slug);
   const vendaComNota = prepararFiscal(slug);
   prepararWhatsApp(slug);
+  prepararAutomacoes(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -1881,6 +1904,7 @@ async function main() {
     { nome: 'diagnóstico do catálogo', url: '/admin/catalogo/diagnostico', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'nota fiscal', url: '/admin/fiscal', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'whatsapp', url: '/admin/whatsapp', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'automações', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

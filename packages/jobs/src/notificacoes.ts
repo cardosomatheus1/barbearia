@@ -125,6 +125,25 @@ export interface MensagemDeNota {
   readonly link: string;
 }
 
+/**
+ * A mensagem de automação (bloco 56).
+ *
+ * Contrato próprio e não `MensagemDeAgendamento`, porque ela **não é sobre um
+ * agendamento**: "sentimos sua falta" e "parabéns" não têm profissional nem
+ * horário, e reusar aquela forma obrigaria a inventar os dois. Campo inventado
+ * é o que vira texto errado na mensagem — e texto errado sobre horário é o que
+ * faz o cliente parar de ler os próximos.
+ *
+ * `tipo` viaja porque o WhatsApp oficial exige **um template aprovado por tipo
+ * de mensagem**, e é por ele que a implementação de verdade escolhe qual usar.
+ */
+export interface MensagemDeAutomacao {
+  readonly phoneE164: string;
+  readonly clienteNome: string;
+  readonly barbearia: string;
+  readonly tipo: TipoDeNotificacao;
+}
+
 export interface NotificationProvider {
   enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void>;
   enviarDeFila(mensagem: MensagemDeFila): Promise<void>;
@@ -132,6 +151,7 @@ export interface NotificationProvider {
   enviarDeRecado(mensagem: MensagemDeRecado): Promise<void>;
   enviarDoClube(mensagem: MensagemDoClube): Promise<void>;
   enviarDeNota(mensagem: MensagemDeNota): Promise<void>;
+  enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void>;
 }
 
 export class FakeNotificationProvider implements NotificationProvider {
@@ -141,6 +161,7 @@ export class FakeNotificationProvider implements NotificationProvider {
   readonly recados: MensagemDeRecado[] = [];
   readonly avisosDoClube: MensagemDoClube[] = [];
   readonly notas: MensagemDeNota[] = [];
+  readonly automacoes: MensagemDeAutomacao[] = [];
   /** Para provar o caminho de falha sem depender de rede fora do ar. */
   falharProxima = false;
 
@@ -174,6 +195,11 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.notas.push(mensagem);
   }
 
+  async enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void> {
+    this.derrubarSePedido();
+    this.automacoes.push(mensagem);
+  }
+
   private derrubarSePedido(): void {
     if (this.falharProxima) {
       this.falharProxima = false;
@@ -188,6 +214,7 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.recados.length = 0;
     this.avisosDoClube.length = 0;
     this.notas.length = 0;
+    this.automacoes.length = 0;
   }
 }
 
@@ -265,6 +292,13 @@ export class ConsoleNotificationProvider implements NotificationProvider {
     this.log(
       `[aviso] nota_fiscal para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}${mensagem.numero ? `, nota ${mensagem.numero}` : ''})`,
+    );
+  }
+
+  async enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void> {
+    this.log(
+      `[aviso] automacao_${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia})`,
     );
   }
 }

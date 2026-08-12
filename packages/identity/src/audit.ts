@@ -134,6 +134,8 @@ export type AuditAction =
    */
   | 'whatsapp.settings_changed'
   | 'whatsapp.template_submitted'
+  /** Ligar ou desligar o que a casa manda sozinha para a base (bloco 56). */
+  | 'automation.changed'
   /**
    * Estoque (bloco 44).
    *
@@ -364,6 +366,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'customers.tax_id_changed',
   'whatsapp.settings_changed',
   'whatsapp.template_submitted',
+  'automation.changed',
   // O override não carrega centavo: guarda o score de antes, o de depois e o
   // motivo. A pergunta que responde — "quem dispensou este cliente do sinal?" —
   // é de quem administra a casa.

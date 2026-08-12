@@ -85,6 +85,7 @@ export const MODULOS = [
       { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema' },
       { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas' },
       { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'número da casa e textos aprovados' },
+      { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha' },
       { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', nota: 'solicitações e dados de clientes' },
       { href: '/admin/plano', nome: 'Plano e cobrança', secao: 'plano', nota: 'assinatura, uso e limites' },
     ],

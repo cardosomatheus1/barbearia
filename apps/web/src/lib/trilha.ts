@@ -101,6 +101,7 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   // pela primeira vez e para quem trocou o token depois.
   'whatsapp.settings_changed': 'mexeu no WhatsApp da casa',
   'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
+  'automation.changed': 'mexeu numa automação de mensagem',
 
   // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
   // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em

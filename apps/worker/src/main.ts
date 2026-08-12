@@ -1,5 +1,13 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
-import { executarResposta, respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
+import {
+  atribuirObjetivos,
+  disparosAEnviar,
+  executarResposta,
+  marcarDisparoEnviado,
+  respostaParaEnviar,
+  varrerAutomacoes,
+  varrerRetencao,
+} from '@barbearia/crm';
 import {
   aplicarReguaDoClube,
   conciliarCobrancas,
@@ -250,6 +258,42 @@ async function main(): Promise<void> {
             await confirmAppointment({ tenantId, appointmentId, customerId });
           },
         });
+      },
+
+      /**
+       * Uma volta do motor de automação (bloco 56).
+       *
+       * Marca os disparos e manda o que já venceu, na mesma volta. O carimbo vem
+       * **antes** da mensagem — precedente do bloco 54 —, e a mensagem sai pelo
+       * mesmo `provider` de todo o resto: instanciar um aqui faria deste o único
+       * caminho que não troca junto quando o WhatsApp oficial entrar.
+       */
+      rodarAutomacoes: async (tenantId, agora) => {
+        const local = await primaryLocation(tenantId);
+        if (!local) return;
+
+        const varrida = await varrerAutomacoes({ tenantId, agora, timeZone: local.timezone });
+        const fila = await disparosAEnviar(tenantId, agora);
+
+        let enviados = 0;
+        for (const disparo of fila) {
+          const nossa = await marcarDisparoEnviado({ tenantId, disparoId: disparo.id });
+          if (!nossa) continue;
+          await provider.enviarDeAutomacao({
+            phoneE164: disparo.telefone,
+            clienteNome: disparo.clienteNome,
+            barbearia: disparo.barbearia,
+            tipo: disparo.tipo,
+          });
+          enviados += 1;
+        }
+
+        await atribuirObjetivos({ tenantId, agora });
+
+        if (varrida.marcados > 0 || enviados > 0) {
+          // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.
+          console.log('[automacao]', { tenantId, marcados: varrida.marcados, enviados });
+        }
       },
 
       entregarNotas: async (tenantId, agora) => {

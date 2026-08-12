@@ -11,7 +11,11 @@ import {
 import { marcarFalta } from './faltas.js';
 import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
 import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
-import { agendarEntregaDeNotasDeTodas, entregaDeNotasPendente } from './fiscal.js';
+import {
+  agendarAutomacaoDeTodas,
+  agendarEntregaDeNotasDeTodas,
+  entregaDeNotasPendente,
+} from './fiscal.js';
 import { agendarAlertasDeTodas, alertaPendente } from './alerta-agendado.js';
 import {
   agendarCobrancaDoClubeDeTodas,
@@ -113,6 +117,15 @@ export interface Contexto {
    * a nota deixaria de chegar ao cliente sem nada ficar vermelho.
    */
   readonly entregarNotas: (tenantId: string, agora: Date) => Promise<void>;
+  /**
+   * Uma volta do motor de automação (bloco 56), injetada.
+   *
+   * Mesma razão de `varrerRetencao`: ela lê em `packages/crm`, decide com
+   * `packages/core` e manda pelo provedor de mensagem. Obrigatória no tipo —
+   * opcional, o primeiro worker novo esqueceria dela e as automações ficariam
+   * ligadas sem nunca disparar.
+   */
+  readonly rodarAutomacoes: (tenantId: string, agora: Date) => Promise<void>;
   /**
    * O toque no botão da mensagem virando ação (bloco 55), injetado.
    *
@@ -350,6 +363,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     const inboundId = String(tarefa.payload['inboundId'] ?? '');
     if (!inboundId) throw new Error('resposta de WhatsApp sem id');
     await contexto.responderWhatsApp(tarefa.tenantId, inboundId, contexto.relogio.agora());
+  },
+
+  /**
+   * Uma volta da automação para uma barbearia (bloco 56).
+   *
+   * Marca os disparos e manda o que já venceu. As duas coisas na mesma tarefa
+   * porque são a mesma volta do relógio — separá-las criaria uma segunda cadeia
+   * de agendamento para não fazer nada novo.
+   */
+  'automacao.varrer': async (tarefa, contexto) => {
+    await contexto.rodarAutomacoes(tarefa.tenantId, contexto.relogio.agora());
   },
 
   'fiscal.entregar': async (tarefa, contexto) => {
@@ -701,6 +725,7 @@ export async function rodarWorker(
   /** O último dia em que este processo enfileirou a varredura de retenção. */
   let ultimaRetencao: string | null = null;
   let ultimaEntregaDeNotas: string | null = null;
+  let ultimaAutomacao: string | null = null;
   /** E a de alerta, que roda de manhã em vez de de madrugada. */
   let ultimoAlerta: string | null = null;
   /** E a da cobrança do clube, que roda de madrugada e fala com o adquirente. */
@@ -742,6 +767,12 @@ export async function rodarWorker(
      * janela de silêncio, decidida **por nota** com o fuso da unidade — o
      * horário do laço é UTC e valeria a mesma hora para Salvador e Rio Branco.
      */
+    // A automação acompanha a entrega da nota: mesma cadência, mesma razão.
+    if (entregaDeNotasPendente(contexto.relogio.agora()).hora !== ultimaAutomacao) {
+      ultimaAutomacao = entregaDeNotasPendente(contexto.relogio.agora()).hora;
+      await agendarAutomacaoDeTodas(entregaDeNotasPendente(contexto.relogio.agora()));
+    }
+
     const entrega = entregaDeNotasPendente(contexto.relogio.agora());
     if (entrega.hora !== ultimaEntregaDeNotas) {
       ultimaEntregaDeNotas = entrega.hora;

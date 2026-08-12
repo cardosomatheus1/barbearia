@@ -3003,3 +3003,42 @@ export const submeterTemplateNaApi = (
   token: string,
   corpo: { tipo: string; nome: string; corpo: string },
 ) => chamar<TemplateNaTelaDoAdmin>('POST', '/v1/admin/whatsapp/templates', corpo, token);
+
+// -- automação (bloco 56) ----------------------------------------------------
+
+export interface AutomacaoNaTelaDoAdmin {
+  readonly id: string;
+  readonly nome: string;
+  readonly gatilho: string;
+  readonly limiar: number | null;
+  readonly atrasoMinutos: number;
+  readonly tipo: string;
+  readonly objetivo: string;
+  readonly janelaDias: number;
+  readonly ativa: boolean;
+  readonly enviadas: number;
+  readonly alcancadas: number;
+}
+
+export const automacoesNaApi = (token: string) =>
+  chamar<{ automacoes: readonly AutomacaoNaTelaDoAdmin[] }>(
+    'GET',
+    '/v1/admin/automacoes',
+    undefined,
+    token,
+  );
+
+export const salvarAutomacaoNaApi = (
+  token: string,
+  corpo: {
+    id?: string;
+    nome: string;
+    gatilho: string;
+    limiar: number | null;
+    atrasoMinutos: number;
+    tipo: string;
+    objetivo: string;
+    janelaDias: number;
+    ativa: boolean;
+  },
+) => chamar<{ id: string }>('PUT', '/v1/admin/automacoes', corpo, token);

@@ -64,3 +64,33 @@ export function entregaDeNotasPendente(agora: Date): {
   const hora = agora.toISOString().slice(0, 13);
   return { hora, quando: agora };
 }
+
+/**
+ * A varredura de automação (bloco 56), agendada como a de entrega da nota.
+ *
+ * Uma tarefa por barbearia porque `customers` e `automation_sends` têm RLS: um
+ * processo sem tenant no contexto enxerga zero linhas, sempre e em silêncio.
+ *
+ * De hora em hora e não uma vez por dia: os gatilhos são sobre fatos que
+ * acabaram de acontecer — quem cortou hoje, quem fez aniversário hoje — e uma
+ * volta diária faria "duas horas depois do corte" virar "amanhã de manhã". A
+ * janela de silêncio é quem segura o que cai de madrugada, e ela é decidida por
+ * disparo, com o fuso da unidade.
+ */
+export async function agendarAutomacaoDeTodas(params: {
+  readonly hora: string;
+  readonly quando?: Date;
+}): Promise<number> {
+  return semTenant(async (tx) =>
+    tx.$executeRaw`
+      INSERT INTO jobs (tenant_id, kind, payload, run_after, idempotency_key, max_attempts)
+      SELECT tp.tenant_id, 'automacao.varrer', '{}'::jsonb,
+             ${params.quando ?? new Date()},
+             'automacao:' || tp.tenant_id::text || ':' || ${params.hora},
+             3
+      FROM tenant_platform tp
+      WHERE tp.blocked_at IS NULL
+      ON CONFLICT DO NOTHING
+    `,
+  );
+}
