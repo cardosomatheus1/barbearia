@@ -247,6 +247,11 @@ describeIfDb('direitos do titular', () => {
       // coberto e desde quando. O **nome de quem banca** não entra: é terceiro
       // num arquivo que o titular leva embora, como a trilha.
       'club_dependents',
+      // A conversa pelo WhatsApp (bloco 55). As duas pontas são dado do
+      // titular: "o que vocês têm de mim" inclui o que eu digitei para vocês, e
+      // inclui saber se a mensagem que vocês mandaram chegou.
+      'whatsapp_inbound',
+      'whatsapp_messages',
     ]);
 
     const EXCECOES = new Map([

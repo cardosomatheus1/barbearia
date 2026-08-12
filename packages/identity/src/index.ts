@@ -5,5 +5,6 @@ export * from './staff.js';
 export * from './team.js';
 export * from './audit.js';
 export * from './mfa.js';
+export * from './cofre.js';
 export * from './mfa-staff.js';
 export * from './forca-bruta.js';

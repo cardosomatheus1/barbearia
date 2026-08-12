@@ -35,6 +35,9 @@ DATABASE_URL="$(../../scripts/url-do-app.sh "$ADMIN_URL" "$APP_DB_PASSWORD" "$DB
 export DATABASE_URL
 export APP_DATABASE_URL="$DATABASE_URL"
 # O seed precisa de superusuário; a aplicação, do role restrito.
+# Efêmera por execução, como a senha do role: nenhuma chave previsível, e
+# nenhuma no repositório. O código falha alto sem ela, que é o que se quer.
+export WHATSAPP_TOKEN_KEY="${WHATSAPP_TOKEN_KEY:-$(openssl rand -base64 32)}"
 export SEED_DATABASE_URL="$BASE/$DB_NAME"
 # A suíte funcional dispara muitos pedidos do mesmo IP. O limite tem teste
 # próprio (rate-limit.e2e.test.ts); aqui ele não pode virar ruído.

@@ -14,7 +14,17 @@ import {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { enfileirarPara } from '@barbearia/jobs';
-import { cifrarSegredo, decifrarSegredo } from '@barbearia/identity';
+import { cifrarCom, decifrarCom } from '@barbearia/identity';
+
+/**
+ * A chave do token do WhatsApp é **própria**, não a do segundo fator.
+ *
+ * Uma por finalidade: com uma só, girar a chave do segundo fator — operação
+ * normal de segurança — deixaria ilegível o token de todas as barbearias ao
+ * mesmo tempo, e o defeito apareceria como "a mensagem parou de sair" dias
+ * depois. É o precedente do segredo próprio do webhook da Stripe.
+ */
+const CHAVE_DO_TOKEN = 'WHATSAPP_TOKEN_KEY';
 
 /**
  * WhatsApp oficial, do banco para a Meta (bloco 55, SPEC §4.12).
@@ -148,7 +158,7 @@ export async function salvarCadastroDoWhatsApp(params: {
     recusar('numero_invalido');
   }
 
-  const cifrado = params.token ? cifrarSegredo(params.token) : null;
+  const cifrado = params.token ? cifrarCom(CHAVE_DO_TOKEN, params.token) : null;
 
   return withTenant(params.tenantId, async (tx) => {
     const antes = await cadastroDoWhatsApp(params.tenantId, params.locationId, tx);
@@ -191,6 +201,24 @@ export async function salvarCadastroDoWhatsApp(params: {
     if (gravadas === 0) recusar('nao_configurado');
 
     /**
+     * A rota do webhook, em dia com o cadastro.
+     *
+     * Sem esta linha o webhook da Meta chegaria com um `phone_number_id` que
+     * ninguém sabe de quem é — e sem tenant não há como ler nada que tenha RLS.
+     * Mora na mesma transação do cadastro porque as duas coisas são o mesmo
+     * fato: este número é desta barbearia.
+     */
+    await tx.$executeRaw`
+      INSERT INTO whatsapp_numbers (phone_number_id, tenant_id, location_id)
+      VALUES (${params.phoneNumberId},
+              NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+              ${params.locationId}::uuid)
+      ON CONFLICT (phone_number_id) DO UPDATE SET
+        tenant_id = EXCLUDED.tenant_id,
+        location_id = EXCLUDED.location_id
+    `;
+
+    /**
      * Auditado, e a trilha guarda **se** o token mudou, nunca o token.
      *
      * É o precedente do CPF no bloco 54: `audit_log` é append-only e legível por
@@ -229,7 +257,7 @@ async function tokenDaUnidade(tenantId: string, locationId: string): Promise<str
   });
   if (!cifrado) recusar('nao_configurado');
   try {
-    return decifrarSegredo(cifrado);
+    return decifrarCom(CHAVE_DO_TOKEN, cifrado);
   } catch {
     // Chave de ambiente trocada, ou linha corrompida. Recusar alto é o certo:
     // seguir com token vazio produziria erro da Meta em toda mensagem.
@@ -512,19 +540,25 @@ const ORDEM: Readonly<Record<EstadoDaMensagem, number>> = {
 };
 
 export async function registrarEstadoDaMensagem(params: {
+  readonly tenantId: string;
   readonly wamid: string;
   readonly estado: EstadoDaMensagem;
   readonly motivo?: string | null;
 }): Promise<boolean> {
   /**
-   * `semTenant` porque o webhook chega **antes** de sabermos de quem é.
+   * Sob `withTenant`, e a primeira versão não era — foi o teste que pegou.
    *
-   * A Meta manda o id da mensagem, não o nosso id de barbearia. A linha já
-   * existe com o `tenant_id` certo, gravado no envio, e o `wamid` é único no
-   * produto inteiro — há invariante no banco provando isso. O `UPDATE` alcança
-   * uma linha só, e é a dela.
+   * A tentação era usar `semTenant`, porque o webhook chega antes de sabermos
+   * de quem é: a Meta manda o id da mensagem, não o nosso id de barbearia. Mas
+   * sem tenant no contexto a política de RLS não casa com **nenhuma** linha, e
+   * o `UPDATE` não achava nada — a função devolvia `false` para tudo, em
+   * silêncio, e a mensagem ficaria "enviada" para sempre.
+   *
+   * Quem resolve o tenant é a porta do webhook, por `tenantDoNumero`, antes de
+   * chamar aqui. É o mesmo desenho do webhook da Stripe: o metadado abre o
+   * tenant, e o id procurado **dentro** dele é quem confirma.
    */
-  return semTenant(async (tx) => {
+  return withTenant(params.tenantId, async (tx) => {
     const afetadas = await tx.$executeRaw`
       UPDATE whatsapp_messages
          SET status = ${params.estado}::whatsapp_message_status,
@@ -562,12 +596,44 @@ export async function registrarResposta(params: {
 }): Promise<{ readonly novo: boolean }> {
   return withTenant(params.tenantId, async (tx) => {
     const lido = lerPayload(params.payload);
+
+    /**
+     * O agendamento é **provado** antes de virar coluna, e a prova tem duas
+     * partes.
+     *
+     * `lerPayload` confere forma — botão conhecido, UUID bem formado — e nada
+     * mais. Gravá-lo direto na chave estrangeira seria confiar num id que
+     * voltou pelo aparelho do cliente por um endereço público: a checagem de
+     * integridade referencial do Postgres roda como dono da tabela e **ignora
+     * row security**, então a chave aceitaria o horário de outra barbearia sem
+     * reclamar. É a regra escrita do projeto, e a `/security-review` deste bloco
+     * a cobrou aqui.
+     *
+     * A consulta abaixo dá as duas partes: a RLS filtra a barbearia, e o
+     * `customer_id` — resolvido pelo telefone que a Meta mandou — filtra a
+     * pessoa. A RLS separa barbearias e **não** separa clientes dentro de uma;
+     * sem a segunda metade, quem descobrisse um id cancelaria o horário de
+     * qualquer outro cliente da mesma casa.
+     *
+     * Não casou, grava nulo: a linha continua existindo — é o registro de que
+     * alguém respondeu — e o desfecho explica por que nada foi feito. Recusar a
+     * gravação inteira apagaria o rastro justamente do caso suspeito.
+     */
+    const donos = await tx.$queryRaw<{ id: string }[]>`
+      SELECT a.id
+        FROM appointments a
+        JOIN customers c ON c.id = a.customer_id
+       WHERE a.id = ${lido?.agendamentoId ?? null}::uuid
+         AND c.phone_e164 = ${params.telefone}
+    `;
+    const agendamentoProvado = donos[0]?.id ?? null;
+
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO whatsapp_inbound
         (tenant_id, wamid, from_phone, payload, body, appointment_id, customer_id)
       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${params.wamid}, ${params.telefone}, ${params.payload}, ${params.texto},
-             ${lido?.agendamentoId ?? null}::uuid,
+             ${agendamentoProvado}::uuid,
              (SELECT id FROM customers WHERE phone_e164 = ${params.telefone} LIMIT 1)
       ON CONFLICT (wamid) DO NOTHING
       RETURNING id
@@ -698,7 +764,12 @@ export async function executarResposta(params: {
     return desfecho;
   };
 
-  if (!resposta.botao || !resposta.agendamentoId) {
+  /**
+   * `agendamentoId` aqui é o **provado**, lido da coluna que só foi escrita
+   * depois de casar barbearia e cliente. O que veio no payload não chega até
+   * este ponto: sem prova, a coluna é nula e a resposta cai no caminho de baixo.
+   */
+  if (!resposta.botao) {
     // Texto livre: a pessoa escreveu em vez de tocar. Fica para alguém ler.
     return fechar('mensagem de texto, sem ação automática');
   }
@@ -707,12 +778,26 @@ export async function executarResposta(params: {
    * Sem cliente conhecido, nada acontece.
    *
    * O telefone que a Meta manda é o do aparelho, e ele pode não estar no
-   * cadastro — número novo, pessoa que nunca marcou, ou um webhook forjado. Sem
-   * `customerId` não há como provar que o horário é dela, e agir seria agir com
-   * base só no id que veio de fora.
+   * cadastro — número novo, pessoa que nunca marcou, ou um webhook forjado.
+   *
+   * A ordem importa: esta pergunta vem **antes** da do agendamento porque as
+   * duas dão nulo no mesmo caso, e sem separá-las quem tocou um botão de
+   * número desconhecido lia "mensagem de texto" no balcão — que é falso e manda
+   * procurar um texto que não existe.
    */
   if (!resposta.customerId) {
     return fechar('quem respondeu não está no cadastro — nada foi alterado');
+  }
+
+  /**
+   * Botão com dono conhecido, mas sem horário provado.
+   *
+   * A coluna só foi escrita depois de casar barbearia **e** cliente. Nulo aqui
+   * significa que o id que voltou não é um horário desta pessoa — horário de
+   * outro cliente, de outra barbearia, ou que já não existe.
+   */
+  if (!resposta.agendamentoId) {
+    return fechar('o horário não é de quem respondeu — nada foi alterado');
   }
 
   const entrada = {
@@ -826,4 +911,29 @@ export function conferirAssinaturaDaMeta(entrada: {
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     throw new AssinaturaDoWhatsAppInvalida('assinatura_invalida');
   }
+}
+
+/**
+ * De quem é este número — a porta do webhook.
+ *
+ * `semTenant` aqui é legítimo e é o único lugar do arquivo em que ele é: a
+ * tabela consultada **não tem RLS**, de propósito, porque o webhook chega antes
+ * de existir tenant no contexto. É a mesma decisão de `tenant_slugs`, que
+ * resolve a barbearia a partir do endereço público.
+ *
+ * O que ela devolve são dois ids opacos. Nada mais é lido sem tenant: o token,
+ * as mensagens e as respostas moram em tabelas com RLS, e só são alcançadas
+ * depois desta linha.
+ */
+export async function tenantDoNumero(
+  phoneNumberId: string,
+): Promise<{ readonly tenantId: string; readonly locationId: string } | null> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{ tenant_id: string; location_id: string }[]>`
+      SELECT tenant_id, location_id FROM whatsapp_numbers
+       WHERE phone_number_id = ${phoneNumberId}
+    `;
+    const linha = linhas[0];
+    return linha ? { tenantId: linha.tenant_id, locationId: linha.location_id } : null;
+  });
 }

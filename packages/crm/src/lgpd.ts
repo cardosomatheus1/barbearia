@@ -451,9 +451,37 @@ export async function exportarDadosDoTitular(
        WHERE d.customer_id = ${customerId}::uuid
     `;
 
+    /**
+     * O que a pessoa escreveu pelo WhatsApp, e o que a casa mandou (bloco 55).
+     *
+     * As duas pontas da conversa são dado do titular: "o que vocês têm de mim"
+     * inclui o que eu digitei para vocês. O texto sai inteiro — é dele.
+     *
+     * O que **não** sai é o `wamid` nem o id do template: são identificadores
+     * internos da Meta e nossos, não dizem nada a quem lê, e o critério aqui é o
+     * mesmo de `customer_sessions` — o arquivo entrega o que é da pessoa, não o
+     * encanamento.
+     */
+    const mensagensRecebidas = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT received_at AS recebida_em, payload AS botao, body AS texto, outcome AS desfecho
+        FROM whatsapp_inbound
+       WHERE customer_id = ${customerId}::uuid
+       ORDER BY received_at
+    `;
+
+    const mensagensEnviadas = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT sent_at AS enviada_em, status::text AS estado,
+             delivered_at AS entregue_em, read_at AS lida_em
+        FROM whatsapp_messages
+       WHERE customer_id = ${customerId}::uuid
+       ORDER BY sent_at
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
+      whatsappRecebidas: mensagensRecebidas,
+      whatsappEnviadas: mensagensEnviadas,
       geradoEm: agora.toISOString(),
       barbearia: {
         nome: String(cliente['barbearia'] ?? ''),
