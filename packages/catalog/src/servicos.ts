@@ -63,6 +63,14 @@ export interface Servico {
   readonly comboToleranceMinutes: number;
   /** Quantos agendamentos futuros ainda apontam para ele. */
   readonly futureAppointments: number;
+  /**
+   * A ficha de consumo: quanto de cada insumo este serviço gasta (bloco 44).
+   *
+   * Vem junto do catálogo e não numa segunda chamada porque a tela que edita o
+   * serviço é a mesma que edita a ficha — e uma ida ao banco por serviço seria
+   * N+1 na tela que o dono mais abre depois do balcão.
+   */
+  readonly consumiveis: Readonly<Record<string, number>>;
 }
 
 export interface Categoria {
@@ -88,6 +96,7 @@ interface ServicoRow {
   component_ids: string[] | null;
   combo_tolerance_minutes: number | null;
   future_appointments: bigint;
+  consumiveis: Record<string, number> | null;
 }
 
 function toServico(row: ServicoRow): Servico {
@@ -108,6 +117,7 @@ function toServico(row: ServicoRow): Servico {
     componentIds: row.component_ids ?? [],
     comboToleranceMinutes: row.combo_tolerance_minutes ?? 0,
     futureAppointments: Number(row.future_appointments),
+    consumiveis: row.consumiveis ?? {},
   };
 }
 
@@ -143,7 +153,10 @@ export async function listServices(
                WHERE aps.service_id = s.id
                  AND a.service_starts_at >= ${now}
                  AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
-             ) AS future_appointments
+             ) AS future_appointments,
+             (SELECT jsonb_object_agg(sc2.product_id::text, sc2.quantity)
+                FROM service_consumables sc2
+               WHERE sc2.service_id = s.id) AS consumiveis
       FROM services s
       LEFT JOIN service_categories c ON c.id = s.category_id
       ORDER BY s.active DESC, c.position NULLS LAST, c.name NULLS LAST, s.name

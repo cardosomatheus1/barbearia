@@ -514,6 +514,68 @@ async function prepararFila(token) {
 }
 
 /**
+ * Produtos, movimentos e ficha de consumo (bloco 44).
+ *
+ * Pelo banco, como os outros: o que a medição precisa é do **estado** — nome
+ * longo de verdade, um produto abaixo do mínimo, um vencendo e um esgotado, que
+ * são os três selos que empilham no cartão.
+ */
+async function prepararEstoque(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  const cadastro = [
+    ['Pomada modeladora efeito matte 120g', 'resale', 1200, 3500, 5, 'un', null, 2],
+    ['Shampoo profissional antirresíduo', 'internal', 45, null, 200, 'ml', null, 1000],
+    ['Lâmina de barbear descartável', 'internal', 140, null, 20, 'un', "current_date + 20", 8],
+    ['Óleo pré-barba', 'internal', 20, null, 100, 'ml', null, 0],
+  ];
+
+  for (const [nome, tipo, custo, preco, minimo, unidade, vence, saldo] of cadastro) {
+    const id = primeiraLinha(
+      psql(
+        `INSERT INTO products (tenant_id, name, kind, cost_cents, price_cents, min_stock, unit, expires_on)
+         VALUES ('${tenant}', '${nome}', '${tipo}', ${custo}, ${preco === null ? 'NULL' : preco},
+                 ${minimo}, '${unidade}', ${vence ?? 'NULL'})
+         RETURNING id`,
+      ),
+    );
+    if (!id || saldo <= 0) continue;
+    psql(
+      `INSERT INTO stock_movements (tenant_id, product_id, kind, quantity, unit_cost_cents, business_day)
+       VALUES ('${tenant}', '${id}', 'entrada', ${saldo}, ${custo}, current_date)`,
+    );
+  }
+
+  // Uma perda com motivo, que é a linha mais larga do extrato.
+  const pomada = primeiraLinha(
+    psql(`select id from products where tenant_id = '${tenant}' and kind = 'resale' limit 1`),
+  );
+  if (pomada) {
+    psql(
+      `INSERT INTO stock_movements
+         (tenant_id, product_id, kind, quantity, unit_cost_cents, business_day, reason)
+       VALUES ('${tenant}', '${pomada}', 'perda', -1, 1200, current_date,
+               'Vidro quebrou na caixa da entrega de terca-feira')`,
+    );
+  }
+
+  // A ficha de consumo do serviço mais caro.
+  const servico = primeiraLinha(
+    psql(`select id from services where tenant_id = '${tenant}' and active order by price_cents desc limit 1`),
+  );
+  const shampoo = primeiraLinha(
+    psql(`select id from products where tenant_id = '${tenant}' and kind = 'internal' order by name limit 1`),
+  );
+  if (servico && shampoo) {
+    psql(
+      `INSERT INTO service_consumables (service_id, product_id, tenant_id, quantity)
+       VALUES ('${servico}', '${shampoo}', '${tenant}', 15) ON CONFLICT DO NOTHING`,
+    );
+  }
+}
+
+/**
  * Avaliações, uma delas dentro da janela de recuperação (bloco 43).
  *
  * Pelo banco, como os recados: a nota nasce da página do cliente, e reproduzir
@@ -1139,6 +1201,7 @@ async function main() {
   await prepararRecadosEFidelidade(slug);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
+  await prepararEstoque(slug);
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },
@@ -1232,6 +1295,7 @@ async function main() {
     { nome: 'avaliações', url: '/admin/avaliacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fidelidade', url: '/admin/fidelidade', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'pacotes', url: '/admin/pacotes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'estoque', url: '/admin/estoque', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },
     // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
     // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir

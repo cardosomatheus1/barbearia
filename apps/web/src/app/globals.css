@@ -4057,6 +4057,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
 .casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
 .casco:has([data-secao='pacotes']) .contexto__link[data-para='pacotes'],
+.casco:has([data-secao='estoque']) .contexto__link[data-para='estoque'],
 .casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais'],
 .casco:has([data-secao='recursos']) .contexto__link[data-para='recursos'],
 .casco:has([data-secao='fotos']) .contexto__link[data-para='fotos'],
@@ -6395,3 +6396,66 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-accent);
 }
 .reputacao__quantas { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* ---------------------------------------------------------------------------
+   Margem por serviço (bloco 44, SPEC §3.8)
+
+   A decomposição precisa ser lida de cima para baixo como uma conta de papel:
+   preço, três subtrações, e o que sobra em destaque. Margem negativa fica
+   vermelha porque é a única leitura que muda decisão no mesmo dia.
+   --------------------------------------------------------------------------- */
+.lista-margem {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.margem {
+  container-type: inline-size;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.margem__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.margem__nome { margin: 0; font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.margem__valor { margin: 0; font-size: var(--font-size-lg); }
+.margem__linhas {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.margem__linhas > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-1);
+}
+.margem__linhas dt, .margem__linhas dd { margin: 0; }
+.margem__sobra {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+.margem__sobra--negativa { color: var(--color-danger); }
+.margem__pct { font-weight: var(--font-weight-normal); }
+.margem__vezes {
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+@container (min-width: 30rem) {
+  .margem__linhas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+  .margem__linhas > div { flex-direction: column; gap: var(--space-1); }
+}

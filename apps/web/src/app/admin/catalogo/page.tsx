@@ -1,10 +1,15 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { catalogoDeServicos, type ServicoDoCatalogo } from '@/lib/admin-api';
-import { painelOuDesvio } from '@/lib/painel';
+import {
+  catalogoDeServicos,
+  produtosNaApi,
+  type ProdutoNaTela,
+  type ServicoDoCatalogo,
+} from '@/lib/admin-api';
+import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
-import { acaoLigarServico, acaoSair, acaoSalvarServico } from '../acoes';
+import { acaoLigarServico, acaoSair, acaoSalvarFicha, acaoSalvarServico } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -239,12 +244,73 @@ function CamposDoServico({
   );
 }
 
+/**
+ * A ficha de consumo de um serviço (bloco 44, SPEC §3.7).
+ *
+ * ```
+ * Barba Premium consome:
+ *   óleo pré-barba    5 ml
+ *   pós-barba         2 ml
+ *   lâmina            1 un
+ * ```
+ *
+ * Fica no cadastro do **serviço** e não no do produto porque a pergunta é dele:
+ * "o que este corte gasta?". Lista todos os insumos com a quantidade em branco —
+ * quem ficar em zero simplesmente não entra, e não há botão de adicionar linha
+ * para uma lista que cabe inteira na tela.
+ *
+ * É ela que faz a margem de contribuição existir: sem a ficha, o shampoo vira
+ * custo nenhum e o corte parece render mais do que rende.
+ */
+function FichaDeConsumo({
+  servico,
+  insumos,
+}: {
+  readonly servico: ServicoDoCatalogo;
+  readonly insumos: readonly ProdutoNaTela[];
+}) {
+  return (
+    <form action={acaoSalvarFicha} className="formulario">
+      <input name="serviceId" type="hidden" value={servico.id} />
+      <p className="dobra__ajuda">
+        Quanto de cada insumo este serviço gasta. É o que faz o custo real por atendimento — e a
+        margem — aparecerem no estoque.
+      </p>
+
+      {insumos.map((produto) => (
+        <div className="ui-field" key={produto.id}>
+          <input name="produtoId" type="hidden" value={produto.id} />
+          <label className="ui-field__label" htmlFor={`f-${servico.id}-${produto.id}`}>
+            {produto.nome} <span className="ui-field__opcional">({produto.unidade})</span>
+          </label>
+          <input
+            className="ui-field__input"
+            defaultValue={servico.consumiveis[produto.id] ?? ''}
+            id={`f-${servico.id}-${produto.id}`}
+            inputMode="numeric"
+            min={0}
+            name={`qtd-${produto.id}`}
+            placeholder="0"
+            type="number"
+          />
+        </div>
+      ))}
+
+      <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+        Salvar ficha
+      </button>
+    </form>
+  );
+}
+
 function Servico({
   servico,
   outros,
+  insumos,
 }: {
   readonly servico: ServicoDoCatalogo;
   readonly outros: readonly ServicoDoCatalogo[];
+  readonly insumos: readonly ProdutoNaTela[];
 }) {
   return (
     <li className={`item-cadastro ${servico.active ? '' : 'item-cadastro--fora'}`}>
@@ -292,6 +358,13 @@ function Servico({
         <summary className="dobra__titulo">Editar</summary>
         <CamposDoServico outros={outros} prefixo={`s-${servico.id}`} servico={servico} />
       </details>
+
+      {insumos.length > 0 ? (
+        <details className="dobra">
+          <summary className="dobra__titulo">O que este serviço consome</summary>
+          <FichaDeConsumo insumos={insumos} servico={servico} />
+        </details>
+      ) : null}
     </li>
   );
 }
@@ -301,7 +374,15 @@ export default async function CatalogoPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
-  const resposta = await catalogoDeServicos(token);
+  const [resposta, estoque] = await Promise.all([
+    catalogoDeServicos(token),
+    // A ficha técnica só aparece para quem pode editá-la, e a rota que a grava
+    // exige as duas permissões. Pedir a lista sem `inventory.view` devolveria
+    // 403 em toda abertura do catálogo.
+    podeNaTela(estado, 'inventory.view') && podeNaTela(estado, 'inventory.adjust')
+      ? produtosNaApi(token)
+      : Promise.resolve(null),
+  ]);
   const query = await searchParams;
   const erro = first(query['erro']);
   const salvo = first(query['salvo']) === '1';
@@ -322,6 +403,11 @@ export default async function CatalogoPage({ searchParams }: Props) {
   }
 
   const servicos = resposta.dados.services;
+  // Só o de uso interno entra na ficha: pendurar uma pomada de revenda faria o
+  // serviço baixar do estoque de venda sem ninguém ter comprado nada.
+  const insumos = estoque?.ok
+    ? estoque.dados.produtos.filter((p) => p.tipo === 'internal' && p.ativo)
+    : [];
   const ativos = servicos.filter((servico) => servico.active);
 
   return (
@@ -373,6 +459,7 @@ export default async function CatalogoPage({ searchParams }: Props) {
         <ul className="lista-cadastro">
           {servicos.map((servico) => (
             <Servico
+              insumos={insumos}
               key={servico.id}
               outros={ativos.filter((outro) => outro.id !== servico.id)}
               servico={servico}

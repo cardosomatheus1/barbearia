@@ -456,3 +456,54 @@ export function comissaoDoPeriodo(
     })
     .sort((a, b) => (a.professionalId < b.professionalId ? -1 : 1));
 }
+
+/**
+ * A comissão **de cada item**, para a margem por serviço (bloco 44).
+ *
+ * `percent` e `fixed` são exatos por lançamento: a alíquota incide sobre a base
+ * daquele item, e o valor fixo é por item vendido.
+ *
+ * `tiers` não é. A faixa depende do **acumulado do período**, e o mesmo corte
+ * vale 30% em janeiro e 40% em dezembro dependendo do que veio antes — não
+ * existe "a comissão deste item" em regra progressiva. O que se faz aqui é
+ * ratear a comissão da regra pelo peso da base de cada lançamento, e o rateio
+ * está escrito porque é uma escolha: a alternativa — atribuir a alíquota
+ * marginal a cada item — faria o último corte do mês parecer o menos rentável
+ * do ano, e o relatório de margem viraria uma leitura sobre a ordem das vendas.
+ */
+export function comissaoPorItem(
+  lancamentos: readonly (LancamentoDeComissao & { readonly itemId: string })[],
+): ReadonlyMap<string, number> {
+  const porItem = new Map<string, number>();
+  const faixasPorRegra = new Map<
+    string,
+    { base: number; faixas: readonly FaixaDeComissao[]; itens: { id: string; base: number }[] }
+  >();
+
+  for (const l of lancamentos) {
+    const base = l.baseCents * l.sinal;
+
+    if (l.modo === 'percent') {
+      porItem.set(l.itemId, (porItem.get(l.itemId) ?? 0) + porCento(base, l.valor));
+    } else if (l.modo === 'fixed') {
+      porItem.set(l.itemId, (porItem.get(l.itemId) ?? 0) + l.valor * l.sinal);
+    } else {
+      const acumulado =
+        faixasPorRegra.get(l.regraId) ?? { base: 0, faixas: l.faixas, itens: [] };
+      acumulado.base += base;
+      acumulado.itens.push({ id: l.itemId, base });
+      faixasPorRegra.set(l.regraId, acumulado);
+    }
+  }
+
+  for (const { base, faixas, itens } of faixasPorRegra.values()) {
+    const total = aplicarFaixas(faixas, base);
+    if (base === 0) continue;
+    for (const item of itens) {
+      const parte = Math.round((total * item.base) / base);
+      porItem.set(item.id, (porItem.get(item.id) ?? 0) + parte);
+    }
+  }
+
+  return porItem;
+}

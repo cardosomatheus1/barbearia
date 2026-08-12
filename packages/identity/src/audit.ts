@@ -78,6 +78,22 @@ export type AuditAction =
   | 'package.changed'
   | 'package.refunded'
   /**
+   * Estoque (bloco 44).
+   *
+   * `stock.adjusted` cobre perda e ajuste — os dois movimentos em que o número
+   * muda **sem nota fiscal nem venda**, e a pergunta do dia seguinte é "quem
+   * baixou trinta unidades?". Entrada não é auditada: a nota do fornecedor é o
+   * registro dela, e auditar toda reposição encheria a trilha do que ninguém
+   * procura.
+   *
+   * Fica no lado da gestão e não no do dinheiro: mexer no estoque não move
+   * centavo do caixa, e `inventory.adjust` não tem prefixo de dinheiro — a
+   * separação das duas listas é **por permissão**, e é dela que sai a exigência
+   * de segundo fator.
+   */
+  | 'product.changed'
+  | 'stock.adjusted'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -238,6 +254,8 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'feedback.answered',
   'feedback.closed',
   'review.recovered',
+  'product.changed',
+  'stock.adjusted',
   'lgpd.request_fulfilled',
   'lgpd.request_refused',
   'customer.anonymized',

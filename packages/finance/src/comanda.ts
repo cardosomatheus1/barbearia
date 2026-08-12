@@ -18,6 +18,7 @@ import { audit } from '@barbearia/identity';
 import { lancarComissaoDaComanda } from './comissao.js';
 import { conferirResgate, creditarDaVenda, programaDaCasa, registrarResgate } from './fidelidade.js';
 import { consumirPacote, consumoDisponivel, venderPacote } from './pacote.js';
+import { baixarVendas, consumirFicha } from './estoque.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -522,6 +523,13 @@ export async function adicionarItem(params: {
    * pode discordar do que a comanda cobrou.
    */
   readonly packageId?: string | null;
+  /**
+   * O produto do catálogo que este item vende (bloco 44).
+   *
+   * Mesma decisão de `packageId`: é ele que faz a venda e a baixa de estoque
+   * serem o mesmo dado, e o preço vem do cadastro — não do corpo.
+   */
+  readonly productId?: string | null;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     await exigirAberta(tx, params.orderId);
@@ -581,15 +589,38 @@ export async function adicionarItem(params: {
       throw new ComandaError('item_invalido', 'Item inválido.', 'tipo');
     }
 
+    /**
+     * O preço do produto sai do **catálogo**, como o do pacote.
+     *
+     * Aceitar o do corpo faria a pomada de R$ 35 ser vendida por R$ 1 com o
+     * estoque baixando um vidro de verdade — desconto sem passar pelo teto da
+     * casa, e CMV negativo no relatório.
+     *
+     * Só `resale` entra: um item apontando para shampoo de uso interno venderia
+     * ao cliente o que a casa usa no serviço, e baixaria duas vezes o mesmo
+     * frasco.
+     */
+    if (params.productId) {
+      const produto = await tx.$queryRaw<{ price_cents: number | null }[]>`
+        SELECT price_cents FROM products
+         WHERE id = ${params.productId}::uuid AND active AND kind = 'resale'
+      `;
+      const achado = produto[0];
+      if (!achado || achado.price_cents === null) {
+        throw new ComandaError('servico_desconhecido', 'Produto não encontrado.');
+      }
+      precoCents = achado.price_cents;
+    }
+
     await tx.$executeRaw`
       INSERT INTO order_items
-        (tenant_id, order_id, kind, service_id, package_id, description, quantity,
+        (tenant_id, order_id, kind, service_id, package_id, product_id, description, quantity,
          unit_price_cents, professional_id, position)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${params.orderId}::uuid, ${params.tipo}::order_item_type,
         ${params.serviceId ?? null}::uuid, ${params.packageId ?? null}::uuid,
-        ${params.descricao.trim()},
+        ${params.productId ?? null}::uuid, ${params.descricao.trim()},
         ${params.quantidade}, ${precoCents},
         ${params.professionalId ?? null}::uuid,
         (SELECT COALESCE(max(position) + 1, 0) FROM order_items WHERE order_id = ${params.orderId}::uuid)
@@ -1087,6 +1118,34 @@ export async function fecharComanda(params: {
         ...(comanda.appointmentId ? { appointmentId: comanda.appointmentId } : {}),
       });
     }
+
+    /**
+     * O estoque, na mesma transação (bloco 44).
+     *
+     * **Venda** baixa a pomada que o cliente levou; **consumo** baixa o shampoo
+     * que o barbeiro usou, pela ficha técnica. Fora desta transação, a comanda
+     * fecharia e a prateleira continuaria cheia no sistema — e o CMV apontaria
+     * margem que a casa não teve.
+     *
+     * Os dois derivam dos **itens** da comanda, como a venda de pacote: uma
+     * lista no corpo do fechamento seria a segunda fonte do mesmo fato, e o que
+     * foi cobrado poderia discordar do que baixou.
+     */
+    await baixarVendas(tx, {
+      orderId: params.orderId,
+      diaDaUnidade: params.hojeNaUnidade,
+      locationId: params.locationId,
+    });
+    await consumirFicha(tx, {
+      // Com a quantidade: uma linha "Corte × 2" consome duas fichas.
+      servicos: comanda.itens
+        .filter((i) => i.tipo === 'service' && i.serviceId)
+        .map((i) => ({ serviceId: i.serviceId as string, quantidade: i.quantidade })),
+      orderId: params.orderId,
+      diaDaUnidade: params.hojeNaUnidade,
+      locationId: params.locationId,
+      ...(comanda.appointmentId ? { appointmentId: comanda.appointmentId } : {}),
+    });
 
     await creditarDaVenda(tx, {
       orderId: params.orderId,

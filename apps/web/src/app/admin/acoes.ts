@@ -41,6 +41,9 @@ import {
   salvarPacoteNaApi,
   reembolsarPacoteNaApi,
   tratarAvaliacaoNaApi,
+  salvarProdutoNaApi,
+  moverEstoqueNaApi,
+  salvarFichaNaApi,
   assumirRecadoNaApi,
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
@@ -2001,4 +2004,89 @@ export async function acaoTratarAvaliacao(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
   redirect('/admin/avaliacoes?tratada=1');
+}
+
+// -- Estoque (bloco 44) -------------------------------------------------------
+
+export async function acaoSalvarProduto(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+  const tipo = texto(form, 'tipo');
+  if (tipo !== 'resale' && tipo !== 'internal') falhar('/admin/estoque', 'invalid_request');
+
+  const preco = Number(form.get('precoReais') ?? 0);
+  const custo = Number(form.get('custoReais') ?? 0);
+  const vence = texto(form, 'venceEm');
+
+  const resultado = await salvarProdutoNaApi(
+    token,
+    {
+      nome: texto(form, 'nome'),
+      tipo: tipo as 'resale' | 'internal',
+      sku: texto(form, 'sku') || null,
+      barcode: texto(form, 'barcode') || null,
+      categoria: texto(form, 'categoria') || null,
+      fornecedor: texto(form, 'fornecedor') || null,
+      custoCents: Math.round(custo * 100),
+      // O preço só existe na revenda; no uso interno vira nulo, e o domínio
+      // ignora o que vier.
+      precoCents: tipo === 'resale' ? Math.round(preco * 100) : null,
+      minimo: Number(form.get('minimo') ?? 0),
+      unidade: texto(form, 'unidade') || 'un',
+      venceEm: vence.length > 0 ? vence : null,
+      ativo: form.get('ativo') === 'on',
+    },
+    id.length > 0 ? id : undefined,
+  );
+  if (!resultado.ok) falhar('/admin/estoque', resultado.code);
+  redirect('/admin/estoque?salvo=1');
+}
+
+/**
+ * Lança um movimento à mão: entrada, perda, ajuste.
+ *
+ * `venda` e `consumo` não têm botão em lugar nenhum — eles nascem do fechamento
+ * da comanda. Um botão de "vender" aqui seria a segunda fonte do mesmo fato: o
+ * estoque baixando sem dinheiro entrando no caixa.
+ */
+export async function acaoMoverEstoque(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const motivo = texto(form, 'motivo');
+
+  const resultado = await moverEstoqueNaApi(token, {
+    produtoId: texto(form, 'produtoId'),
+    tipo: texto(form, 'tipo'),
+    quantidade: Number(form.get('quantidade') ?? 0),
+    ...(motivo.length > 0 ? { motivo } : {}),
+  });
+  if (!resultado.ok) falhar('/admin/estoque', resultado.code);
+  redirect('/admin/estoque?movido=1');
+}
+
+/**
+ * Salva a ficha de consumo de um serviço (bloco 44).
+ *
+ * A ficha é substituída inteira: é uma lista curta que a barbearia refaz de uma
+ * vez ("agora a barba usa outro pós-barba"), e um formulário com adicionar e
+ * remover por linha seria mais tela do que o dado merece.
+ *
+ * Quantidade zero significa "não usa": a tela lista todos os produtos internos
+ * e quem estiver em zero simplesmente não entra.
+ */
+export async function acaoSalvarFicha(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const serviceId = texto(form, 'serviceId');
+
+  const itens = form
+    .getAll('produtoId')
+    .map(String)
+    .map((produtoId) => ({
+      produtoId,
+      quantidade: Number(form.get(`qtd-${produtoId}`) ?? 0),
+    }))
+    .filter((i) => Number.isInteger(i.quantidade) && i.quantidade > 0);
+
+  const resultado = await salvarFichaNaApi(token, serviceId, itens);
+  if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
+  redirect('/admin/catalogo?ficha=1');
 }

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 43 de 79 blocos.**
+**Status: 44 de 79 blocos.**
 
 ---
 
@@ -248,7 +248,7 @@ não é vendável.
 | 41 | Fidelidade: pontos, visitas ou cashback | ✅ |
 | 42 | Pacotes: venda, consumo, validade, receita diferida | ✅ |
 | 43 | Avaliações + fluxo de recuperação de nota baixa | ✅ |
-| 44 | Produtos, estoque, ficha de consumo, CMV |
+| 44 | Produtos, estoque, ficha de consumo, CMV | ✅ |
 
 ### O bloco 40 e o 43 são irmãos, e não a mesma coisa
 

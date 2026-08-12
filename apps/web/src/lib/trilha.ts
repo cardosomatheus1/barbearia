@@ -73,6 +73,11 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
    */
   'review.recovered': 'tratou uma avaliação de nota baixa',
 
+  // Estoque (bloco 44). Só perda e ajuste: são os dois em que o número muda sem
+  // nota fiscal nem venda.
+  'product.changed': 'mexeu no cadastro de um produto',
+  'stock.adjusted': 'baixou ou ajustou estoque à mão',
+
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a
   // imprimi-lo.

@@ -515,6 +515,8 @@ export interface ServicoDoCatalogo {
   componentIds: string[];
   /** Quantos clientes já têm hora marcada com ele — o que se perde ao desativar. */
   futureAppointments: number;
+  /** A ficha de consumo: produtoId → quantidade (bloco 44). */
+  consumiveis: Record<string, number>;
 }
 
 export interface EntradaDeServico {
@@ -2113,3 +2115,110 @@ export const tratarAvaliacaoNaApi = (
   id: string,
   dados: { desfecho: DesfechoDaRecuperacao; nota: string },
 ) => chamar<{ resolvida: boolean }>('POST', `/v1/admin/avaliacoes/${id}/tratar`, dados, token);
+
+// -- Estoque (bloco 44) -------------------------------------------------------
+
+export type TipoDeProduto = 'resale' | 'internal';
+export type TipoDeMovimentoDeEstoque =
+  | 'entrada' | 'saida' | 'venda' | 'consumo' | 'perda' | 'ajuste' | 'transferencia';
+export type AlertaDeEstoque = 'abaixo_do_minimo' | 'sem_estoque' | 'vencendo' | 'vencido';
+
+export interface ProdutoNaTela {
+  id: string;
+  sku: string | null;
+  barcode: string | null;
+  nome: string;
+  categoria: string | null;
+  fornecedor: string | null;
+  tipo: TipoDeProduto;
+  custoCents: number;
+  precoCents: number | null;
+  minimo: number;
+  unidade: string;
+  venceEm: string | null;
+  ativo: boolean;
+  saldo: number;
+  alertas: AlertaDeEstoque[];
+  sugestaoDeCompra: number;
+}
+
+export interface MovimentoNaTela {
+  id: string;
+  tipo: TipoDeMovimentoDeEstoque;
+  quantidade: number;
+  custoUnitarioCents: number;
+  motivo: string | null;
+  quem: string | null;
+  dia: string;
+  quando: string;
+}
+
+export interface MargemDoServico {
+  serviceId: string;
+  nome: string;
+  vezes: number;
+  precoCents: number;
+  comissaoCents: number;
+  insumosCents: number;
+  taxaCents: number;
+  custoVariavelCents: number;
+  margemCents: number;
+  margemBps: number;
+}
+
+export interface RelatorioDeMargem {
+  de: string;
+  ate: string;
+  servicos: MargemDoServico[];
+  cmv: { vendaCents: number; consumoCents: number; perdaCents: number };
+}
+
+export const produtosNaApi = (token: string, todos = false) =>
+  chamar<{ produtos: ProdutoNaTela[] }>(
+    'GET',
+    `/v1/admin/estoque/produtos${todos ? '?todos=true' : ''}`,
+    undefined,
+    token,
+  );
+
+export const salvarProdutoNaApi = (
+  token: string,
+  dados: Omit<ProdutoNaTela, 'id' | 'saldo' | 'alertas' | 'sugestaoDeCompra'>,
+  id?: string,
+) =>
+  chamar<{ id: string }>(
+    'PUT',
+    id ? `/v1/admin/estoque/produtos/${id}` : '/v1/admin/estoque/produtos',
+    dados,
+    token,
+  );
+
+export const moverEstoqueNaApi = (
+  token: string,
+  dados: { produtoId: string; tipo: string; quantidade: number; motivo?: string },
+) => chamar<{ lancado: boolean }>('POST', '/v1/admin/estoque/movimentos', dados, token);
+
+export const movimentosNaApi = (token: string, produtoId: string) =>
+  chamar<{ movimentos: MovimentoNaTela[] }>(
+    'GET',
+    `/v1/admin/estoque/produtos/${produtoId}/movimentos`,
+    undefined,
+    token,
+  );
+
+export const fichaNaApi = (token: string, serviceId: string) =>
+  chamar<{ itens: { produtoId: string; nome: string; unidade: string; quantidade: number; custoUnitarioCents: number }[] }>(
+    'GET',
+    `/v1/admin/estoque/ficha/${serviceId}`,
+    undefined,
+    token,
+  );
+
+export const salvarFichaNaApi = (
+  token: string,
+  serviceId: string,
+  itens: { produtoId: string; quantidade: number }[],
+) => chamar<{ itens: number }>('PUT', `/v1/admin/estoque/ficha/${serviceId}`, { itens }, token);
+
+export const margemNaApi = (token: string) =>
+  chamar<RelatorioDeMargem>('GET', '/v1/admin/estoque/margem', undefined, token);
