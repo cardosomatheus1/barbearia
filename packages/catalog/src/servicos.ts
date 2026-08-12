@@ -23,7 +23,11 @@ export type CatalogFailure =
   | 'professional_not_found'
   | 'invalid_catalog'
   | 'name_taken'
-  | 'category_not_found';
+  | 'category_not_found'
+  // Bloco 58: a unidade tem nome, existe, e a última aberta não fecha.
+  | 'invalid_location'
+  | 'location_not_found'
+  | 'ultima_unidade';
 
 export class CatalogError extends Error {
   constructor(

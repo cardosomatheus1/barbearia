@@ -10,4 +10,5 @@ export * from './agenda.js';
 export * from './confianca.js';
 export * from './espera.js';
 export * from './oferta.js';
+export * from './multiunidade.js';
 export * from './ocupacao.js';

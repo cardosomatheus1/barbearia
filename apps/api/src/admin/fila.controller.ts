@@ -4,7 +4,6 @@ import {
   getQueue,
   joinQueue,
   moveQueueEntry,
-  primaryLocation,
   QueueError,
   queuePositionByToken,
   seatQueueEntry,
@@ -16,6 +15,7 @@ import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   fitQuerySchema,
   joinQueueSchema,
@@ -62,16 +62,14 @@ function toHttp(error: unknown): never {
 @Recurso('fila')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class FilaController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   @Exige('appointments.view')
   @Get()
   async list(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return getQueue({
       tenantId: staff.tenantId,
       locationId: local.id,
@@ -92,7 +90,7 @@ export class FilaController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(fitQuerySchema)) query: { serviceIds: string[] },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return {
       cadeiras: await custoDoEncaixeNaFila({
         tenantId: staff.tenantId,
@@ -130,7 +128,7 @@ export class FilaController {
       throw badRequest('invalid_request', 'Idempotency-Key com tamanho inválido');
     }
 
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
 
     try {
       const customerId = await this.identificar(staff.tenantId, body);

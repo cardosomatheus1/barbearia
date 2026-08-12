@@ -8,7 +8,6 @@ import {
   salvarPacoteDoCatalogo,
 } from '@barbearia/finance';
 import { diaNaUnidade } from '@barbearia/core';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -17,6 +16,7 @@ import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
 import { diaSchema } from './painel.schemas.js';
 import { pacoteDoCatalogoSchema } from './pacote.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * Pacotes: catálogo, pacotes do cliente, reembolso e receita diferida
@@ -165,8 +165,7 @@ export class PacoteController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string },
   ) {
-    const local = await primaryLocation(staff.tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
+    const local = await unidadeDoBalcao(staff);
     const dia = query.dia ?? diaNaUnidade(null, local.timezone, new Date()).dia;
     return { dia, ...(await receitaDePacotes(staff.tenantId, dia)) };
   }

@@ -3089,3 +3089,89 @@ export const criarCampanhaNaApi = (
     janelaDias: number;
   },
 ) => chamar<{ id: string; publico: number }>('POST', '/v1/admin/campanhas', corpo, token);
+
+// -- Multiunidade (bloco 58) --------------------------------------------------
+
+export interface UnidadeNaTelaDoAdmin {
+  readonly id: string;
+  readonly nome: string;
+  readonly ativa: boolean;
+}
+
+export interface TransferenciaNaTelaDoAdmin {
+  readonly id: string;
+  readonly produto: string;
+  readonly deNome: string;
+  readonly paraNome: string;
+  readonly quantidade: number;
+  readonly quando: string;
+  readonly quem: string;
+  readonly nota: string | null;
+}
+
+export const unidadesNaApi = (token: string) =>
+  chamar<{
+    atual: { id: string; nome: string; timezone: string; today: string } | null;
+    disponiveis: readonly UnidadeNaTelaDoAdmin[];
+    falha: string | null;
+  }>('GET', '/v1/admin/unidades', undefined, token);
+
+export const escolherUnidadeNaApi = (token: string, unidadeId: string) =>
+  chamar<{ ok: boolean }>('POST', '/v1/admin/unidades/escolher', { unidadeId }, token);
+
+export const equipePorUnidadeNaApi = (token: string) =>
+  chamar<{
+    unidades: readonly UnidadeNaTelaDoAdmin[];
+    equipe: readonly {
+      id: string;
+      nome: string;
+      papel: string;
+      unidades: readonly string[];
+    }[];
+  }>('GET', '/v1/admin/unidades/equipe', undefined, token);
+
+export const definirUnidadesNaApi = (token: string, staffUserId: string, unidades: string[]) =>
+  chamar<{ ok: boolean }>('POST', `/v1/admin/unidades/equipe/${staffUserId}`, { unidades }, token);
+
+export const transferenciasNaApi = (token: string) =>
+  chamar<{
+    transferencias: readonly TransferenciaNaTelaDoAdmin[];
+    produtos: readonly { id: string; nome: string; saldo: number }[];
+    saldos: readonly { produtoId: string; unidadeId: string; saldo: number }[];
+    unidades: readonly UnidadeNaTelaDoAdmin[];
+  }>('GET', '/v1/admin/estoque/transferencias', undefined, token);
+
+export const transferirEstoqueNaApi = (
+  token: string,
+  corpo: {
+    produtoId: string;
+    origemId: string;
+    destinoId: string;
+    quantidade: number;
+    nota?: string | null;
+  },
+) => chamar<{ id: string }>('POST', '/v1/admin/estoque/transferencias', corpo, token);
+
+export interface UnidadeDoCadastroNaTela {
+  readonly id: string;
+  readonly nome: string;
+  readonly timezone: string;
+  readonly ativa: boolean;
+  readonly cidade: string | null;
+}
+
+export const cadastroDeUnidadesNaApi = (token: string) =>
+  chamar<{ unidades: readonly UnidadeDoCadastroNaTela[] }>(
+    'GET',
+    '/v1/admin/unidades/cadastro',
+    undefined,
+    token,
+  );
+
+export const abrirUnidadeNaApi = (
+  token: string,
+  corpo: { nome: string; timezone: string; cidade?: string | null },
+) => chamar<{ id: string }>('POST', '/v1/admin/unidades/cadastro', corpo, token);
+
+export const definirUnidadeAtivaNaApi = (token: string, id: string, ativa: boolean) =>
+  chamar<{ ok: boolean }>('POST', `/v1/admin/unidades/cadastro/${id}`, { ativa }, token);

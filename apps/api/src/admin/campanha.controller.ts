@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CampanhaError, campanhasDaCasa, criarCampanha, type FiltroDeCampanha } from '@barbearia/crm';
-import { gradeDeOcupacao, primaryLocation } from '@barbearia/scheduling';
+import { gradeDeOcupacao } from '@barbearia/scheduling';
 import type { TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
@@ -8,6 +8,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { campanhaSchema } from './campanha.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * Campanhas e o heatmap (bloco 57, SPEC §4.13 e §5.9).
@@ -33,16 +34,14 @@ function toHttp(erro: unknown): never {
 @Controller('v1/admin/campanhas')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class CampanhaController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   @Exige('marketing.send')
   @Get()
   async listar(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     const [campanhas, grade] = await Promise.all([
       campanhasDaCasa(staff.tenantId),
       gradeDeOcupacao({ tenantId: staff.tenantId, locationId: local.id, agora: new Date() }),

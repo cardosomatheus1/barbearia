@@ -79,6 +79,7 @@ export const MODULOS = [
     nome: 'Administração',
     telas: [
       { href: '/admin/equipe', nome: 'Usuários e acessos', secao: 'equipe', nota: 'contas, papéis e permissões' },
+      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', nota: 'lojas da rede, quem opera cada uma e estoque entre elas' },
       { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'horários, políticas e preferências' },
       { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'senha e segundo fator' },
       { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', nota: 'histórico de alterações' },

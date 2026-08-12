@@ -116,11 +116,11 @@ describeIfDb('estoque', () => {
      */
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 20, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 20, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: id, tipo: 'perda', quantidade: 3,
-      diaDaUnidade: HOJE, motivo: 'dois vidros quebraram na caixa', ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, motivo: 'dois vidros quebraram na caixa', ator,
     });
 
     expect(await saldoDe(id)).toBe(17);
@@ -134,11 +134,11 @@ describeIfDb('estoque', () => {
     // contamina o CMV do mês inteiro.
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 2, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 2, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await expect(
       lancarMovimento({
-        tenantId: TENANT, produtoId: id, tipo: 'saida', quantidade: 5, diaDaUnidade: HOJE, ator,
+        tenantId: TENANT, produtoId: id, tipo: 'saida', quantidade: 5, diaDaUnidade: HOJE, locationId: LOCAL, ator,
       }),
     ).rejects.toMatchObject({ code: 'saldo_insuficiente' });
   });
@@ -146,11 +146,11 @@ describeIfDb('estoque', () => {
   it('perda sem motivo escrito é recusada', async () => {
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 5, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 5, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await expect(
       lancarMovimento({
-        tenantId: TENANT, produtoId: id, tipo: 'perda', quantidade: 1, diaDaUnidade: HOJE, ator,
+        tenantId: TENANT, produtoId: id, tipo: 'perda', quantidade: 1, diaDaUnidade: HOJE, locationId: LOCAL, ator,
       }),
     ).rejects.toMatchObject({ code: 'motivo_obrigatorio' });
   });
@@ -158,7 +158,7 @@ describeIfDb('estoque', () => {
   it('o movimento é append-only: a aplicação não reescreve nem apaga', async () => {
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 5, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 5, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
 
     await expect(
@@ -177,11 +177,11 @@ describeIfDb('estoque', () => {
      */
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: id, tipo: 'perda', quantidade: 1,
-      diaDaUnidade: HOJE, motivo: 'vidro quebrado', ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, motivo: 'vidro quebrado', ator,
     });
 
     const trilha = await withTenant(TENANT, (tx) =>
@@ -283,7 +283,7 @@ describeIfDb('estoque', () => {
   it('vender um produto baixa o estoque na mesma transação', async () => {
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
 
     const aberta = await abrirComanda({
@@ -309,7 +309,7 @@ describeIfDb('estoque', () => {
      */
     const { id } = await novoProduto();
     await lancarMovimento({
-      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10, diaDaUnidade: HOJE, ator,
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10, diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
 
     const aberta = await abrirComanda({
@@ -328,7 +328,7 @@ describeIfDb('estoque', () => {
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: shampoo.id, tipo: 'entrada', quantidade: 100,
-      diaDaUnidade: HOJE, ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await salvarFicha({
       tenantId: TENANT, serviceId: CORTE, itens: [{ produtoId: shampoo.id, quantidade: 10 }], ator,
@@ -389,11 +389,11 @@ describeIfDb('estoque', () => {
     const pomada = await novoProduto();
     await lancarMovimento({
       tenantId: TENANT, produtoId: pomada.id, tipo: 'entrada', quantidade: 10,
-      diaDaUnidade: HOJE, ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: pomada.id, tipo: 'perda', quantidade: 2,
-      diaDaUnidade: HOJE, motivo: 'caixa amassada na entrega', ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, motivo: 'caixa amassada na entrega', ator,
     });
 
     const cmv = await cmvDoPeriodo(TENANT, HOJE, HOJE);
@@ -416,7 +416,7 @@ describeIfDb('estoque', () => {
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: shampoo.id, tipo: 'entrada', quantidade: 100,
-      diaDaUnidade: HOJE, ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await salvarFicha({
       tenantId: TENANT, serviceId: CORTE, itens: [{ produtoId: shampoo.id, quantidade: 10 }], ator,
@@ -459,7 +459,7 @@ describeIfDb('estoque', () => {
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: shampoo.id, tipo: 'entrada', quantidade: 100,
-      diaDaUnidade: HOJE, ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await salvarFicha({
       tenantId: TENANT, serviceId: CORTE, itens: [{ produtoId: shampoo.id, quantidade: 10 }], ator,
@@ -528,7 +528,7 @@ describeIfDb('estoque', () => {
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: shampoo.id, tipo: 'entrada', quantidade: 100,
-      diaDaUnidade: HOJE, ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await salvarFicha({
       tenantId: TENANT, serviceId: CORTE, itens: [{ produtoId: shampoo.id, quantidade: 10 }], ator,
@@ -562,7 +562,7 @@ describeIfDb('estoque', () => {
     });
     await lancarMovimento({
       tenantId: TENANT, produtoId: shampoo.id, tipo: 'entrada', quantidade: 100,
-      diaDaUnidade: HOJE, ator,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
     });
     await salvarFicha({
       tenantId: TENANT, serviceId: CORTE, itens: [{ produtoId: shampoo.id, quantidade: 10 }], ator,

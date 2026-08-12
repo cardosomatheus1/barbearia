@@ -48,7 +48,12 @@ import {
   salvarCadastroDoWhatsAppNaApi,
   submeterTemplateNaApi,
   salvarAutomacaoNaApi,
+  abrirUnidadeNaApi,
   criarCampanhaNaApi,
+  definirUnidadeAtivaNaApi,
+  definirUnidadesNaApi,
+  escolherUnidadeNaApi,
+  transferirEstoqueNaApi,
   cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
@@ -2666,4 +2671,82 @@ export async function acaoCancelarNota(form: FormData): Promise<void> {
   const resultado = await cancelarNotaNaApi(token, texto(form, 'notaId'), texto(form, 'motivo'));
   if (!resultado.ok) falhar(ROTA_FISCAL, resultado.code);
   redirect(`${ROTA_FISCAL}?feito=nota-cancelada`);
+}
+
+// -- Multiunidade (bloco 58) --------------------------------------------------
+
+const ROTA_UNIDADES = '/admin/unidades';
+
+/**
+ * Troca a loja em que o balcão está.
+ *
+ * O `de` diz de onde a pessoa clicou, porque o seletor mora no casco e aparece
+ * em toda tela: mandar sempre para a lista de unidades faria trocar de loja
+ * custar dois cliques de volta ao lugar onde se estava trabalhando.
+ */
+export async function acaoEscolherUnidade(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const volta = texto(form, 'de') || ROTA_UNIDADES;
+  const resultado = await escolherUnidadeNaApi(token, texto(form, 'unidadeId'));
+  if (!resultado.ok) falhar(volta, resultado.code);
+  redirect(`${volta}?feito=unidade`);
+}
+
+export async function acaoDefinirUnidadesDaConta(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  /**
+   * Nenhuma caixa marcada significa **todas**, e é o que a tela diz em letras.
+   *
+   * O contrário — nenhuma marcada trancar a pessoa fora de tudo — seria a
+   * interpretação óbvia e está errada: é o padrão de toda barbearia de uma loja
+   * só, e negá-lo por omissão trancaria a equipe inteira.
+   */
+  const unidades = form.getAll('unidade').map(String).filter(Boolean);
+  const resultado = await definirUnidadesNaApi(token, texto(form, 'staffUserId'), unidades);
+  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  redirect(`${ROTA_UNIDADES}?feito=equipe`);
+}
+
+export async function acaoTransferirEstoque(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const nota = texto(form, 'nota');
+  const resultado = await transferirEstoqueNaApi(token, {
+    produtoId: texto(form, 'produtoId'),
+    origemId: texto(form, 'origemId'),
+    destinoId: texto(form, 'destinoId'),
+    quantidade: Number(form.get('quantidade') ?? 0),
+    ...(nota ? { nota } : {}),
+  });
+  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  redirect(`${ROTA_UNIDADES}?feito=transferencia`);
+}
+
+export async function acaoAbrirUnidade(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const cidade = texto(form, 'cidade');
+  const resultado = await abrirUnidadeNaApi(token, {
+    nome: texto(form, 'nome'),
+    timezone: texto(form, 'timezone'),
+    ...(cidade ? { cidade } : {}),
+  });
+  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  redirect(`${ROTA_UNIDADES}?feito=aberta`);
+}
+
+/**
+ * Fecha ou reabre uma loja.
+ *
+ * Um botão só, e não dois: o estado da unidade decide o que ele diz e o que ele
+ * manda. Dois botões lado a lado — um sempre inútil — é o que faz a recepção
+ * clicar no errado com pressa.
+ */
+export async function acaoDefinirUnidadeAtiva(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await definirUnidadeAtivaNaApi(
+    token,
+    texto(form, 'unidadeId'),
+    texto(form, 'ativa') === 'sim',
+  );
+  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  redirect(`${ROTA_UNIDADES}?feito=${texto(form, 'ativa') === 'sim' ? 'reaberta' : 'fechada'}`);
 }

@@ -27,6 +27,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   assinarSchema,
   baixaDaFaturaSchema,
@@ -213,11 +214,15 @@ export class AssinaturaController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(assinarSchema)) body: { customerId: string; planId: string },
   ) {
+    // A unidade em que o balcão está, congelada na adesão: é ela que faz a
+    // mensalidade aparecer no DRE de uma loja e não no das duas (bloco 58).
+    const local = await unidadeDoBalcao(staff);
     try {
       return await assinar({
         tenantId: staff.tenantId,
         customerId: body.customerId,
         planId: body.planId,
+        locationId: local.id,
         ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (erro) {

@@ -29,12 +29,16 @@ import { lerModeloDaAssinatura, paraLancamento } from './comissao.js';
  *
  * ## Toda linha é recortada pela unidade
  *
- * Cinco das oito filtram por `location_id` direto ou pelo `orders` de onde
- * vieram. A mensalidade do clube é a exceção, e ela é **escrita**: `club_invoices`
- * não tem unidade porque a assinatura é do cliente com a barbearia, não com uma
- * loja — atribuí-la a uma delas seria inventar o dado. Enquanto o produto é de
- * uma unidade só isso não muda número nenhum; a partir do bloco 58 muda, e a
- * lacuna está declarada apontando para lá.
+ * Todas filtram por `location_id` direto ou pelo `orders` de onde vieram. A
+ * mensalidade do clube era a exceção declarada — `club_invoices` não tinha
+ * unidade porque a assinatura é do cliente com a barbearia, não com uma loja —
+ * e o bloco 58 a fechou: `club_subscriptions.location_id` guarda **onde a
+ * adesão aconteceu**, congelado. Não é inventar o dado; é gravar o que se sabe
+ * no momento em que se sabe.
+ *
+ * A assinatura anterior ao bloco 58 tem unidade nula, e ela conta para **todas**
+ * as leituras: o dinheiro é da barbearia, e somir de todas seria pior que
+ * aparecer em cada uma.
  *
  * A inconsistência era achado da `/security-review` deste bloco: metade das
  * consultas filtrava e a outra metade não, o que produziria um DRE "da Matriz"
@@ -131,10 +135,15 @@ async function fatosDoPeriodo(
   const assinaturas = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(f.amount_cents)::int AS total
       FROM club_invoices f
+      JOIN club_subscriptions s ON s.id = f.subscription_id
      WHERE f.status = 'paga'
        AND f.paid_at IS NOT NULL
        AND (f.paid_at AT TIME ZONE 'UTC')::date
              BETWEEN ${params.de}::date AND ${params.ate}::date
+       -- Assinatura anterior ao bloco 58 não tem unidade, e o dinheiro é da
+       -- barbearia: ela entra em toda leitura em vez de sumir de todas. Um
+       -- rateio retroativo seria inventar de qual loja veio.
+       AND (s.location_id IS NULL OR s.location_id = ${params.locationId}::uuid)
   `;
 
   const comissoesCents = await comissaoDoIntervalo(tx, params);

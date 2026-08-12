@@ -6,7 +6,6 @@ import {
   deleteException,
   getAgenda,
   MAX_DIAS_DA_AGENDA,
-  primaryLocation,
   quemEstaEsperando,
   rescheduleAppointment,
 } from '@barbearia/scheduling';
@@ -17,6 +16,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { appointmentIdSchema } from '../booking/booking.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   agendaQuerySchema,
   excecaoIdSchema,
@@ -99,10 +99,8 @@ export class AgendaController {
       : staff.professionalId;
   }
 
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   /**
@@ -131,7 +129,7 @@ export class AgendaController {
   @Exige('appointments.view', 'customers.view')
   @Get('espera')
   async espera(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     const esperando = await quemEstaEsperando(
       staff.tenantId,
       local.id,
@@ -147,7 +145,7 @@ export class AgendaController {
     @Query(new ZodValidationPipe(agendaQuerySchema))
     query: { from?: string; to?: string; professionalId?: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     const from = query.from ?? local.today;
 
     try {
@@ -261,7 +259,7 @@ export class AgendaController {
       confirmarConflitos: boolean;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
 
     try {
       return await createException({
@@ -288,7 +286,7 @@ export class AgendaController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(excecaoIdSchema)) id: string,
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       await deleteException({
         tenantId: staff.tenantId,

@@ -138,6 +138,12 @@ export type AuditAction =
   | 'automation.changed'
   /** Uma campanha criada, com o tamanho do público (bloco 57). */
   | 'campaign.created'
+  /** Multiunidade (bloco 58). */
+  | 'team.locations_changed'
+  | 'location.created'
+  | 'location.closed'
+  | 'location.reopened'
+  | 'stock.transferred'
   /**
    * Estoque (bloco 44).
    *
@@ -370,6 +376,11 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'whatsapp.template_submitted',
   'automation.changed',
   'campaign.created',
+  'team.locations_changed',
+  'location.created',
+  'location.closed',
+  'location.reopened',
+  'stock.transferred',
   // O override não carrega centavo: guarda o score de antes, o de depois e o
   // motivo. A pergunta que responde — "quem dispensou este cliente do sinal?" —
   // é de quem administra a casa.

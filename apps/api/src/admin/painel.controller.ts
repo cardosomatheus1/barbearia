@@ -15,13 +15,13 @@ import {
   type AuthenticatedStaff,
 } from '@barbearia/identity';
 import { withTenant } from '@barbearia/db';
-import { primaryLocation } from '@barbearia/scheduling';
 import { diaNaUnidade } from '@barbearia/core';
 import { notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { diaSchema, trilhaSchema } from './painel.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * O painel do proprietário, o validador de catálogo e a trilha.
@@ -52,10 +52,8 @@ import { diaSchema, trilhaSchema } from './painel.schemas.js';
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class PainelController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   /**
@@ -65,8 +63,11 @@ export class PainelController {
    * dispositivo, quem abrisse às 21h de sábado em outro fuso veria o domingo —
    * que é o defeito D2 aplicado ao número que decide contratação.
    */
-  private async diaDaCasa(tenantId: string, pedido?: string): Promise<{ dia: string; locationId: string }> {
-    const local = await this.unidade(tenantId);
+  private async diaDaCasa(
+    staff: AuthenticatedStaff,
+    pedido?: string,
+  ): Promise<{ dia: string; locationId: string }> {
+    const local = await this.unidade(staff);
     return {
       dia: pedido ?? diaNaUnidade(null, local.timezone, new Date()).dia,
       locationId: local.id,
@@ -79,7 +80,7 @@ export class PainelController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string; periodo?: PeriodoPainel },
   ) {
-    const { dia, locationId } = await this.diaDaCasa(staff.tenantId, query.dia);
+    const { dia, locationId } = await this.diaDaCasa(staff, query.dia);
     return query.periodo
       ? painelOperacionalDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo: query.periodo })
       : painelOperacional({ tenantId: staff.tenantId, locationId, dia });
@@ -92,7 +93,7 @@ export class PainelController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string; periodo?: PeriodoPainel },
   ) {
-    const { dia, locationId } = await this.diaDaCasa(staff.tenantId, query.dia);
+    const { dia, locationId } = await this.diaDaCasa(staff, query.dia);
     return query.periodo
       ? painelDeDinheiroDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo: query.periodo })
       : painelDeDinheiro({ tenantId: staff.tenantId, locationId, dia });
@@ -101,7 +102,7 @@ export class PainelController {
   @Exige('settings.manage')
   @Get('catalog/diagnosis')
   async diagnostico(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return diagnosticarCatalogo({ tenantId: staff.tenantId, locationId: local.id });
   }
 

@@ -1400,6 +1400,73 @@ function prepararAutomacoes(slug) {
  * precisa de semente é a **linha da campanha**: é ela que carrega as seis
  * colunas da SPEC §4.13 numa linha só, e é ela que pode estourar a largura.
  */
+/**
+ * A segunda loja (bloco 58).
+ *
+ * A tela de unidades tem dois estados, e o de uma loja só é uma frase — que é
+ * honesta e não é o que precisa ser fotografado. A filial nasce com produto na
+ * prateleira e uma transferência já feita, para a lista e a tabela de saldo
+ * desenharem o que desenham em uso.
+ */
+function prepararUnidades(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  const matriz = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' order by created_at limit 1`),
+  );
+  if (!matriz) return;
+
+  const filial = primeiraLinha(
+    psql(
+      `INSERT INTO locations (tenant_id, name, timezone, street, district, city, state)
+       VALUES ('${tenant}', 'Domari Pituba', 'America/Bahia',
+               'Rua Ceará, 1210', 'Pituba', 'Salvador', 'BA')
+       RETURNING id`,
+    ),
+  );
+  if (!filial) return;
+
+  const produto = primeiraLinha(
+    psql(`select id from products where tenant_id = '${tenant}' order by name limit 1`),
+  );
+  const dono = primeiraLinha(
+    psql(`select id from staff_users where tenant_id = '${tenant}' and role = 'owner' limit 1`),
+  );
+  if (!produto || !dono) return;
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  psql(
+    `INSERT INTO stock_movements
+       (tenant_id, product_id, location_id, kind, quantity, unit_cost_cents,
+        reason, staff_user_id, business_day)
+     VALUES ('${tenant}', '${produto}', '${matriz}', 'entrada', 40, 1200,
+             'compra do mês', '${dono}', '${hoje}')`,
+  );
+
+  const transferencia = primeiraLinha(
+    psql(
+      `INSERT INTO stock_transfers
+         (tenant_id, product_id, from_location_id, to_location_id, quantity,
+          unit_cost_cents, note, created_by, created_by_name)
+       VALUES ('${tenant}', '${produto}', '${matriz}', '${filial}', 12, 1200,
+               'abertura da Pituba', '${dono}', 'Matheus Cardoso')
+       RETURNING id`,
+    ),
+  );
+  if (!transferencia) return;
+
+  psql(
+    `INSERT INTO stock_movements
+       (tenant_id, product_id, location_id, kind, quantity, unit_cost_cents,
+        reason, staff_user_id, business_day)
+     VALUES ('${tenant}', '${produto}', '${matriz}', 'transferencia', -12, 1200,
+             'transferência ${transferencia}', '${dono}', '${hoje}'),
+            ('${tenant}', '${produto}', '${filial}', 'transferencia', 12, 1200,
+             'transferência ${transferencia}', '${dono}', '${hoje}')`,
+  );
+}
+
 function prepararCampanha(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return;
@@ -1901,6 +1968,7 @@ async function main() {
   prepararWhatsApp(slug);
   prepararAutomacoes(slug);
   prepararCampanha(slug);
+  prepararUnidades(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -2006,6 +2074,7 @@ async function main() {
     { nome: 'whatsapp', url: '/admin/whatsapp', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'automações', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'campanhas', url: '/admin/campanhas', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'unidades', url: '/admin/unidades', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

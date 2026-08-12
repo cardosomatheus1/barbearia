@@ -19,12 +19,12 @@ import {
   type ProfessionalInput,
   type ServiceInput,
 } from '@barbearia/catalog';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   activeSchema,
   idSchema,
@@ -66,10 +66,8 @@ function toHttp(error: unknown): never {
 @Controller('v1/admin/catalog')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class CatalogoController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   // -- Serviços ---------------------------------------------------------------
@@ -138,7 +136,7 @@ export class CatalogoController {
     @Body(new ZodValidationPipe(serviceResourcesSchema))
     body: { requirements: { resourceType: string; quantity: number }[] },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       await setServiceResources({
         tenantId: staff.tenantId,
@@ -157,7 +155,7 @@ export class CatalogoController {
   @Exige('settings.manage')
   @Get('professionals')
   async professionals(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return { professionals: await listProfessionals(staff.tenantId, local.id) };
   }
 
@@ -167,7 +165,7 @@ export class CatalogoController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(professionalSchema)) body: ProfessionalInput,
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await createProfessional(staff.tenantId, local.id, body);
     } catch (error) {
@@ -262,7 +260,7 @@ export class CatalogoController {
   @Exige('settings.manage')
   @Get('resources')
   async resources(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return { resources: await listResources(staff.tenantId, local.id) };
   }
 
@@ -273,7 +271,7 @@ export class CatalogoController {
     @Body(new ZodValidationPipe(resourcesSchema))
     body: { pools: { resourceType: string; capacity: number }[] },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       await saveResources({ tenantId: staff.tenantId, locationId: local.id, pools: body.pools });
       return { saved: true };

@@ -20,13 +20,13 @@ import {
   transferirPacote,
   valesDoPeriodo,
 } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   cancelamentoDeValeSchema,
   estornoSchema,
@@ -94,10 +94,8 @@ function toHttp(erro: unknown): never {
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class DreController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   @Exige('finance.view_profit')
@@ -106,7 +104,7 @@ export class DreController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoDoDreSchema)) query: { de?: string; ate?: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     const padrao = mesDaUnidade(local.today);
     return dreDoPeriodo({
       tenantId: staff.tenantId,
@@ -176,7 +174,7 @@ export class DreController {
       throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
     }
 
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await conceberVale({
         tenantId: staff.tenantId,
@@ -223,7 +221,7 @@ export class DreController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(estornoSchema)) body: { motivo: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await estornarVenda({
         tenantId: staff.tenantId,

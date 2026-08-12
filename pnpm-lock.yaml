@@ -173,6 +173,9 @@ importers:
       '@barbearia/db':
         specifier: workspace:*
         version: link:../db
+      '@barbearia/identity':
+        specifier: workspace:*
+        version: link:../identity
     devDependencies:
       '@prisma/client':
         specifier: ^6.19.3

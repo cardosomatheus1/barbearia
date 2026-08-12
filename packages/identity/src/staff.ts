@@ -42,7 +42,11 @@ export type StaffFailure =
   // Convite do barbeiro: a cadeira precisa existir nesta barbearia, e não pode
   // já ter dono.
   | 'professional_not_found'
-  | 'professional_already_invited';
+  | 'professional_already_invited'
+  // Bloco 58: a unidade precisa existir **nesta** barbearia e estar ligada a
+  // quem escolheu. O id vem da tela, e a chave estrangeira não confere nenhuma
+  // das duas coisas — ela ignora row security.
+  | 'unknown_location';
 
 export class StaffError extends Error {
   constructor(readonly code: StaffFailure, message: string) {
@@ -439,6 +443,25 @@ export interface AuthenticatedStaff {
    * acabaria pulando.
    */
   readonly impersonatedBy: string | null;
+  /**
+   * A unidade que esta sessão escolheu operar (bloco 58).
+   *
+   * Nula é "ainda não escolheu", e cai na primeira aberta — o comportamento que
+   * o produto sempre teve com `primaryLocation`. Fica na sessão, e não num
+   * cabeçalho que a tela mandasse, pelo mesmo motivo de `mfaVerifiedAt`: a
+   * recepção escolhe a loja ao chegar e trabalha nela o dia inteiro, e a tela
+   * que esquecesse de repassar o cabeçalho abriria o caixa da outra unidade sem
+   * nada ficar vermelho.
+   */
+  readonly unidadeEscolhidaId: string | null;
+  /**
+   * As unidades que esta conta administra. **Vazio significa todas.**
+   *
+   * Vem junto da sessão pelo mesmo motivo das permissões — toda rota do painel
+   * precisa dela para saber em qual loja está —, e o padrão permissivo é o que
+   * faz a barbearia de uma unidade só não notar que este bloco existiu.
+   */
+  readonly unidadesAutorizadas: readonly string[];
 }
 
 export async function resolveStaffSession(token: string): Promise<AuthenticatedStaff> {
@@ -462,12 +485,23 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
         mfa_verified_at: Date | null;
         require_mfa_for_money: boolean;
         impersonated_by: string | null;
+        location_id: string | null;
+        unidades: string[];
       }[]
     >`
       SELECT s.id, s.staff_user_id, s.token_hash, u.name, u.role, s.impersonated_by,
              u.must_change_password, u.professional_id,
              u.totp_confirmed_at IS NOT NULL AS mfa_enabled,
-             s.mfa_verified_at,
+             s.mfa_verified_at, s.location_id,
+             -- As unidades da conta na mesma consulta, pelo mesmo motivo das
+             -- permissões: toda rota do painel precisa saber em qual loja está,
+             -- e buscá-las depois seria N+1 na guarda.
+             COALESCE(
+               (SELECT array_agg(sl.location_id)
+                  FROM staff_locations sl
+                 WHERE sl.staff_user_id = s.staff_user_id),
+               '{}'
+             ) AS unidades,
              -- A decisão da barbearia vem junto da sessão (bloco 37). Numa
              -- consulta à parte ela seria uma segunda ida ao banco em **toda**
              -- requisição do painel, para ler um booleano.
@@ -487,7 +521,7 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       GROUP BY s.id, s.staff_user_id, s.token_hash, u.name, u.role,
                u.must_change_password, u.professional_id,
                u.totp_confirmed_at, s.mfa_verified_at, s.impersonated_by,
-               t.require_mfa_for_money
+               s.location_id, t.require_mfa_for_money
     `;
     const sessao = linhas[0];
     if (!sessao) throw new StaffError('invalid_session', 'Sessão inválida');
@@ -513,7 +547,56 @@ export async function resolveStaffSession(token: string): Promise<AuthenticatedS
       mfaVerifiedAt: sessao.mfa_verified_at,
       exigeSegundoFatorNoDinheiro: sessao.require_mfa_for_money,
       impersonatedBy: sessao.impersonated_by,
+      unidadeEscolhidaId: sessao.location_id,
+      unidadesAutorizadas: sessao.unidades,
     };
+  });
+}
+
+/**
+ * Guarda em qual loja esta sessão está operando (bloco 58).
+ *
+ * O id vem da tela e é conferido **sob RLS antes de gravar**: a checagem de
+ * integridade referencial do Postgres ignora row security, então sem isto a
+ * chave estrangeira aceitaria a unidade de outra barbearia. E a conferência
+ * inclui o vínculo da conta — trocar de loja pelo seletor não pode ser o
+ * caminho para operar onde quem administra não deixou.
+ *
+ * Devolve o número de linhas escritas: um `UPDATE` guardado por estado que não
+ * pegou ninguém precisa virar recusa, nunca sucesso silencioso.
+ */
+export async function escolherUnidadeDaSessao(request: {
+  readonly tenantId: string;
+  readonly sessionId: string;
+  readonly staffUserId: string;
+  readonly locationId: string;
+}): Promise<void> {
+  await withTenant(request.tenantId, async (tx) => {
+    const atingidas = await tx.$executeRaw`
+      UPDATE staff_sessions s
+         SET location_id = ${request.locationId}::uuid
+       WHERE s.id = ${request.sessionId}::uuid
+         AND s.revoked_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM locations l
+            WHERE l.id = ${request.locationId}::uuid
+              AND l.active
+              AND (
+                NOT EXISTS (
+                  SELECT 1 FROM staff_locations sl
+                   WHERE sl.staff_user_id = ${request.staffUserId}::uuid
+                )
+                OR EXISTS (
+                  SELECT 1 FROM staff_locations sl
+                   WHERE sl.staff_user_id = ${request.staffUserId}::uuid
+                     AND sl.location_id = ${request.locationId}::uuid
+                )
+              )
+         )
+    `;
+    if (atingidas === 0) {
+      throw new StaffError('unknown_location', 'Esta unidade não existe ou não é sua.');
+    }
   });
 }
 

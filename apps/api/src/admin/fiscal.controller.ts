@@ -12,13 +12,13 @@ import {
 } from '@barbearia/finance';
 import { FakeFiscalProvider, type RegimeFiscal } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   cancelamentoDeNotaSchema,
   configuracaoFiscalSchema,
@@ -89,16 +89,14 @@ const EMISSOR = new FakeFiscalProvider();
 @Controller('v1/admin/fiscal')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class FiscalController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   @Exige('fiscal.settings')
   @Get('configuracao')
   async configuracao(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return { configuracao: await configuracaoFiscal(staff.tenantId, local.id) };
   }
 
@@ -116,7 +114,7 @@ export class FiscalController {
       emitirAutomaticamente: boolean;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await salvarConfiguracaoFiscal({
         tenantId: staff.tenantId,
@@ -155,7 +153,7 @@ export class FiscalController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoDasNotasSchema)) query: { de: string; ate: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return {
       notas: await notasDoPeriodo({
         tenantId: staff.tenantId,
@@ -255,7 +253,7 @@ export class FiscalController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       const criada = await withTenant(staff.tenantId, (tx) =>
         pedirNota(tx, {

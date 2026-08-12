@@ -103,6 +103,11 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
   'automation.changed': 'mexeu numa automação de mensagem',
   'campaign.created': 'criou uma campanha',
+  'team.locations_changed': 'mudou de quais unidades alguém cuida',
+  'stock.transferred': 'transferiu produto entre unidades',
+  'location.created': 'abriu uma unidade',
+  'location.closed': 'fechou uma unidade',
+  'location.reopened': 'reabriu uma unidade',
 
   // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
   // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em

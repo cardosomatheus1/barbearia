@@ -479,6 +479,8 @@ export async function assinar(entrada: {
   readonly tenantId: string;
   readonly customerId: string;
   readonly planId: string;
+  /** A unidade onde a adesão aconteceu, congelada na linha (bloco 58). */
+  readonly locationId?: string | null;
   readonly ator: Ator;
   readonly agora?: Date;
 }): Promise<{ readonly id: string }> {
@@ -504,13 +506,24 @@ export async function assinar(entrada: {
      * uma assinatura de R$ 1 dar corte ilimitado, com o MRR mentindo e a
      * cobrança recorrente do bloco 47 cobrando o valor errado para sempre.
      */
+    /**
+     * A unidade da adesão, congelada (bloco 58).
+     *
+     * Era a lacuna declarada do DRE por unidade: a mensalidade não tinha loja,
+     * e o relatório de uma rede somava o clube inteiro em toda unidade. Ela é
+     * gravada aqui e não recalculada na leitura — o cliente que troca de loja
+     * em maio não pode mudar o resultado de março.
+     *
+     * Nula continua sendo válida: é a assinatura anterior a este bloco, e
+     * inventar um rateio retroativo para ela seria pior que a lacuna.
+     */
     const criadas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO club_subscriptions
-        (tenant_id, customer_id, plan_id, price_cents, status, started_at)
+        (tenant_id, customer_id, plan_id, price_cents, status, started_at, location_id)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${entrada.customerId}::uuid, ${entrada.planId}::uuid,
-        ${plano.price_cents}, 'ativa', ${agora}
+        ${plano.price_cents}, 'ativa', ${agora}, ${entrada.locationId ?? null}::uuid
       )
       ON CONFLICT DO NOTHING
       RETURNING id

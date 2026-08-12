@@ -10,8 +10,10 @@ import {
   definirPermissoesDoPapel,
   permissionsByRole,
   convidarProfissional,
+  definirUnidadesDoOperador,
   resetStaffPassword,
   setStaffActive,
+  unidadesPorOperador,
 } from './team.js';
 import { FakeMessagingProvider } from './messaging.js';
 import { resolveStaffSession, signUpOwner, staffLogin } from './staff.js';
@@ -915,6 +917,149 @@ describeIfDb('equipe e permissões', () => {
     });
     const mapa = await permissionsByRole(dono.tenantId);
     expect([...(mapa['manager'] ?? [])].sort()).toEqual([...PERMISSOES].sort());
+  });
+
+  // -- unidades da equipe (bloco 58) -----------------------------------------
+
+  /** A segunda loja, que nenhuma barbearia tem até alguém abrir uma. */
+  async function abrirFilial(tenantId: string): Promise<string> {
+    const linhas = await admin.$queryRawUnsafe<{ id: string }[]>(
+      `INSERT INTO locations (tenant_id, name, timezone)
+       VALUES ($1::uuid, 'Filial Pituba', 'America/Bahia') RETURNING id`,
+      tenantId,
+    );
+    const filial = linhas[0]?.id;
+    if (!filial) throw new Error('a filial deveria ter sido criada');
+    return filial;
+  }
+
+  it('lista vazia é o padrão e significa todas as unidades', async () => {
+    const sessao = await abrirBarbearia();
+    expect(await unidadesPorOperador(sessao.tenantId)).toEqual({});
+  });
+
+  it('escopar alguém a uma unidade derruba a escolha das sessões abertas dessa pessoa', async () => {
+    /**
+     * Tirar o gerente da filial e deixá-lo com a filial selecionada no
+     * navegador é tirar no papel e não tirar de fato — é o mesmo motivo de
+     * `setStaffActive` revogar sessão.
+     */
+    const dono = await abrirBarbearia();
+    const filial = await abrirFilial(dono.tenantId);
+    const criado = await createStaffUser({
+      tenantId: dono.tenantId, actor: ator(dono), name: 'Vitória',
+      email: 'vi@domari.com.br', role: 'manager', messaging,
+    });
+    const sessao = await staffLogin({ email: 'vi@domari.com.br', password: criado.senhaInicial });
+    await admin.$executeRawUnsafe(
+      `UPDATE staff_sessions SET location_id = $1::uuid WHERE staff_user_id = $2::uuid`,
+      filial,
+      criado.member.id,
+    );
+
+    await definirUnidadesDoOperador({
+      tenantId: dono.tenantId, actor: ator(dono),
+      staffUserId: criado.member.id, unidades: [filial],
+    });
+
+    const depois = await resolveStaffSession(sessao.token);
+    expect(depois.unidadeEscolhidaId).toBeNull();
+    expect(depois.unidadesAutorizadas).toEqual([filial]);
+  });
+
+  it('o dono opera todas as unidades, e isso não se edita', async () => {
+    // É a única conta que não pode ficar trancada para fora do próprio negócio.
+    // Escopá-lo a uma loja faria vinte rotas do painel devolverem 404 para ele.
+    const dono = await abrirBarbearia();
+    const filial = await abrirFilial(dono.tenantId);
+    await expect(
+      definirUnidadesDoOperador({
+        tenantId: dono.tenantId, actor: ator(dono),
+        staffUserId: dono.staffUserId, unidades: [filial],
+      }),
+    ).rejects.toMatchObject({ code: 'owner_protected' });
+  });
+
+  it('quem administra só uma unidade não se promove a todas', async () => {
+    /**
+     * Achado da `/security-review` do bloco 58: um `team.manage` escopado à
+     * filial chamava esta rota sobre a própria conta com lista vazia — que
+     * significa "todas" — e passava a operar a rede inteira no toque seguinte.
+     * O seletor recusava a matriz; a rota que **alimenta** o seletor a entregava.
+     */
+    const dono = await abrirBarbearia();
+    const filial = await abrirFilial(dono.tenantId);
+    const gerente = await createStaffUser({
+      tenantId: dono.tenantId, actor: ator(dono), name: 'Vitória',
+      email: 'vi@domari.com.br', role: 'manager', messaging,
+    });
+    await definirUnidadesDoOperador({
+      tenantId: dono.tenantId, actor: ator(dono),
+      staffUserId: gerente.member.id, unidades: [filial],
+    });
+
+    const dela = { id: gerente.member.id, name: 'Vitória' };
+    await expect(
+      definirUnidadesDoOperador({
+        tenantId: dono.tenantId, actor: dela,
+        staffUserId: gerente.member.id, unidades: [],
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // Nem a matriz, que ela não administra.
+    const matriz = await admin.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM locations WHERE tenant_id = $1::uuid AND id <> $2::uuid`,
+      dono.tenantId,
+      filial,
+    );
+    await expect(
+      definirUnidadesDoOperador({
+        tenantId: dono.tenantId, actor: dela,
+        staffUserId: gerente.member.id, unidades: [matriz[0]?.id ?? filial],
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+  });
+
+  it('a unidade da barbearia vizinha é recusada, apesar de a chave estrangeira aceitá-la', async () => {
+    const primeira = await abrirBarbearia();
+    const segunda = await signUpOwner({
+      ...DONO, email: 'dono@vizinha.com.br', businessName: 'Vizinha Barber',
+    });
+    if (!segunda.created) throw new Error('a vizinha deveria ter sido criada');
+    const deles = await abrirFilial(segunda.session.tenantId);
+
+    const criado = await createStaffUser({
+      tenantId: primeira.tenantId, actor: ator(primeira), name: 'Vitória',
+      email: 'vi@domari.com.br', role: 'manager', messaging,
+    });
+
+    await expect(
+      definirUnidadesDoOperador({
+        tenantId: primeira.tenantId, actor: ator(primeira),
+        staffUserId: criado.member.id, unidades: [deles],
+      }),
+    ).rejects.toMatchObject({ code: 'unknown_location' });
+  });
+
+  it('a trilha registra quantas unidades, nunca quais', async () => {
+    // Uma lista de uuid em `audit_log` não responde nada a quem lê a trilha —
+    // é a mesma decisão do `{ tinha: true }` do CPF no bloco 54.
+    const dono = await abrirBarbearia();
+    const filial = await abrirFilial(dono.tenantId);
+    const criado = await createStaffUser({
+      tenantId: dono.tenantId, actor: ator(dono), name: 'Vitória',
+      email: 'vi@domari.com.br', role: 'manager', messaging,
+    });
+    await definirUnidadesDoOperador({
+      tenantId: dono.tenantId, actor: ator(dono),
+      staffUserId: criado.member.id, unidades: [filial],
+    });
+
+    const eventos = await withTenant(dono.tenantId, (tx) =>
+      listAudit(tx, { acoes: ['team.locations_changed'] }),
+    );
+    expect(eventos).toHaveLength(1);
+    expect(JSON.stringify(eventos[0]?.after)).not.toContain(filial);
   });
 
   it('a permissão de uma barbearia não alcança a outra', async () => {

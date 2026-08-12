@@ -4094,6 +4094,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='recursos']) .contexto__link[data-para='recursos'],
 .casco:has([data-secao='fotos']) .contexto__link[data-para='fotos'],
 .casco:has([data-secao='equipe']) .contexto__link[data-para='equipe'],
+.casco:has([data-secao='unidades']) .contexto__link[data-para='unidades'],
 .casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
 .casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
 .casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca'],
@@ -6933,4 +6934,71 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-on-accent);
   background: var(--color-accent);
   font-weight: var(--font-weight-medium);
+}
+
+/* ---------------------------------------------------------------------------
+   Unidades (bloco 58)
+
+   A tela responde três perguntas na mesma rolagem: onde estou, quem administra
+   o quê, e como mando produto de uma loja para a outra. O que muda de forma
+   entre o celular e o notebook é só a linha de escolha — no aparelho estreito
+   ela empilha nome e botão, e o botão ocupa a largura toda, porque trocar de
+   loja é a ação que a recepção faz com uma mão ao chegar.
+   --------------------------------------------------------------------------- */
+
+.unidade-atual {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.unidade-linha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.unidade-linha__nome {
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+}
+/* O botão nasce com a largura toda: no piso de 360px é o alvo mais fácil de
+   acertar em pé, com uma mão. */
+.unidade-linha .ui-button {
+  width: 100%;
+}
+
+@media (min-width: 40rem) {
+  .unidade-linha {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .unidade-linha .ui-button {
+    width: auto;
+  }
+}
+
+.unidades-saldos {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  /* Produto e loja não quebram em duas linhas: a tabela rola dentro do
+     `.ui-scroll-x`, que é o recipiente, e nunca leva a página junto. */
+  white-space: nowrap;
+}
+.unidades-saldos th,
+.unidades-saldos td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.unidades-saldos thead th {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+.unidades-saldos td {
+  font-variant-numeric: tabular-nums;
 }

@@ -11,7 +11,6 @@ import {
   listarSlugs,
   reverterImportacao,
 } from '@barbearia/crm';
-import { primaryLocation } from '@barbearia/scheduling';
 import { diaNaUnidade } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
@@ -19,6 +18,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
 import { importIdSchema, importacaoSchema, slugLegadoSchema } from './importacao.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * A importação de base — SPEC §5.8.
@@ -69,9 +69,8 @@ function toHttp(error: unknown): never {
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class ImportacaoController {
-  private async anoDaCasa(tenantId: string): Promise<number> {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
+  private async anoDaCasa(staff: AuthenticatedStaff): Promise<number> {
+    const local = await unidadeDoBalcao(staff);
     return Number(diaNaUnidade(null, local.timezone, new Date()).dia.slice(0, 4));
   }
 
@@ -118,7 +117,7 @@ export class ImportacaoController {
         staffId: staff.staffUserId,
         fileName: body.fileName,
         conteudo: body.conteudo,
-        anoLimite: await this.anoDaCasa(staff.tenantId),
+        anoLimite: await this.anoDaCasa(staff),
         ...(body.separador ? { separador: body.separador } : {}),
       });
     } catch (error) {

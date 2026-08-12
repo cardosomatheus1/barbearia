@@ -855,3 +855,144 @@ export async function changeOwnPassword(request: {
     `;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Em quais unidades a pessoa trabalha (bloco 58)
+// ---------------------------------------------------------------------------
+
+/**
+ * Liga a conta a um conjunto de unidades. **Lista vazia significa todas.**
+ *
+ * O padrão permissivo é o contrário do resto deste schema, e a razão é
+ * migração: toda barbearia existente tem uma unidade e nenhuma linha aqui, e
+ * negar por omissão trancaria a equipe inteira para fora no dia em que este
+ * bloco entrasse.
+ *
+ * O risco está contido em outro lugar: o que a pessoa **pode fazer** continua
+ * saindo de `role_permissions`. Isto decide apenas *onde*, e quem não tem
+ * `cashier.open` não abre caixa em loja nenhuma.
+ *
+ * Mudar as unidades **derruba a escolha das sessões abertas**, pela mesma razão
+ * de `setStaffActive` revogar sessão: tirar o gerente da filial e deixá-lo com
+ * a filial selecionada no navegador é tirar no papel e não tirar de fato.
+ */
+export async function definirUnidadesDoOperador(request: {
+  readonly tenantId: string;
+  readonly actor: { readonly id: string; readonly name: string };
+  readonly staffUserId: string;
+  readonly unidades: readonly string[];
+  readonly ip?: string | undefined;
+  readonly userAgent?: string | undefined;
+}): Promise<void> {
+  await withTenant(request.tenantId, async (tx) => {
+    const atual = await carregar(tx, request.staffUserId);
+    if (!atual) throw new StaffError('staff_not_found', 'Conta não encontrada.');
+    /**
+     * O dono opera todas as unidades, e isso não se edita.
+     *
+     * Mesma proteção de `changeStaffRole`, `setStaffActive` e
+     * `definirPermissoesDoPapel`, e pela mesma razão: é a única conta que não
+     * pode ficar trancada para fora do próprio negócio. Escopá-lo a uma loja
+     * fechada faria vinte rotas do painel devolverem 404 para o dono, e o
+     * `UPDATE` abaixo derruba a escolha das sessões abertas — ele descobriria
+     * na requisição seguinte, não no login seguinte.
+     */
+    if (atual.role === 'owner') {
+      throw new StaffError('owner_protected', 'O dono opera todas as unidades.');
+    }
+
+    /**
+     * Ninguém concede o que não tem, e o que o ator tem sai do **banco**.
+     *
+     * É a regra do bloco 30 aplicada a unidade: um `team.manage` escopado a uma
+     * filial chamava esta rota sobre a própria conta com `unidades: []` — que
+     * significa "todas" — e passava a operar a rede inteira no toque seguinte.
+     * O seletor recusava a matriz corretamente; a rota que **alimenta** o
+     * seletor é que a entregava. Achado da `/security-review` do bloco 58.
+     *
+     * Ator sem vínculo já opera todas, então não há o que restringir — é o caso
+     * do dono e o de toda barbearia de uma loja só.
+     */
+    const doAtor = await tx.$queryRaw<{ location_id: string }[]>`
+      SELECT location_id FROM staff_locations WHERE staff_user_id = ${request.actor.id}::uuid
+    `;
+
+    /**
+     * Os ids vêm do corpo e são conferidos **sob RLS antes de gravar**, com a
+     * contagem batendo.
+     *
+     * A checagem de integridade referencial do Postgres ignora row security, e
+     * sem isto a chave estrangeira aceitaria a unidade de outra barbearia. Só
+     * conferir que "achou alguma" não pega um id legítimo misturado com dois
+     * alheios — por isso a contagem, e não a existência.
+     */
+    const pedidas = [...new Set(request.unidades)];
+    if (pedidas.length > 0) {
+      const conferidas = await tx.$queryRaw<{ total: bigint }[]>`
+        SELECT count(*) AS total FROM locations WHERE id = ANY(${pedidas}::uuid[])
+      `;
+      if (Number(conferidas[0]?.total ?? 0) !== pedidas.length) {
+        throw new StaffError('unknown_location', 'Esta unidade não existe nesta barbearia.');
+      }
+    }
+
+    if (doAtor.length > 0) {
+      const dele = new Set(doAtor.map((l) => l.location_id));
+      // Lista vazia é "todas", e quem não tem todas não concede todas.
+      if (pedidas.length === 0 || pedidas.some((u) => !dele.has(u))) {
+        throw new StaffError('cannot_grant', 'Você não administra essa unidade.');
+      }
+    }
+
+    await tx.$executeRaw`
+      DELETE FROM staff_locations WHERE staff_user_id = ${request.staffUserId}::uuid
+    `;
+    if (pedidas.length > 0) {
+      await tx.$executeRaw`
+        INSERT INTO staff_locations (staff_user_id, location_id, tenant_id)
+        SELECT ${request.staffUserId}::uuid, u,
+               NULLIF(current_setting('app.tenant_id', true), '')::uuid
+          FROM unnest(${pedidas}::uuid[]) AS u
+      `;
+    }
+
+    await tx.$executeRaw`
+      UPDATE staff_sessions SET location_id = NULL
+       WHERE staff_user_id = ${request.staffUserId}::uuid
+    `;
+
+    /**
+     * A trilha guarda **quantas**, não quais.
+     *
+     * Uma lista de uuid em `audit_log` não responde nada a quem lê a trilha, e
+     * o que importa é a mudança ter acontecido e por quem — é a mesma decisão
+     * do `{ tinha: true }` do CPF no bloco 54.
+     */
+    await audit(tx, {
+      actorId: request.actor.id,
+      actorName: request.actor.name,
+      action: 'team.locations_changed',
+      entity: 'staff_users',
+      entityId: request.staffUserId,
+      after: { unidades: pedidas.length === 0 ? 'todas' : pedidas.length },
+      ip: request.ip,
+      userAgent: request.userAgent,
+    });
+  });
+}
+
+/** Em quais unidades esta conta trabalha, para a tela de equipe. */
+export async function unidadesPorOperador(
+  tenantId: string,
+): Promise<Readonly<Record<string, readonly string[]>>> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ staff_user_id: string; location_id: string }[]>`
+      SELECT staff_user_id, location_id FROM staff_locations
+    `;
+    const mapa: Record<string, string[]> = {};
+    for (const l of linhas) {
+      (mapa[l.staff_user_id] ??= []).push(l.location_id);
+    }
+    return mapa;
+  });
+}

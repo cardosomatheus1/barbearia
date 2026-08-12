@@ -26,13 +26,13 @@ import {
   transferenciasRecentes,
   transferirEntreContas,
 } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   cancelamentoDeContaSchema,
   categoriaAtivaSchema,
@@ -99,10 +99,8 @@ function toHttp(erro: unknown): never {
 @Controller('v1/admin/financeiro')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class FinanceiroController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   @Exige('finance.view')
@@ -114,7 +112,7 @@ export class FinanceiroController {
       fechadas?: 'true' | 'false';
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return agendaDoFinanceiro({
       tenantId: staff.tenantId,
       locationId: local.id,
@@ -138,7 +136,7 @@ export class FinanceiroController {
       observacao?: string | null;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await criarContaDoFinanceiro({
         tenantId: staff.tenantId,
@@ -163,7 +161,7 @@ export class FinanceiroController {
       pelaGaveta: boolean;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       await quitarContaDoFinanceiro({
         tenantId: staff.tenantId,
@@ -186,7 +184,7 @@ export class FinanceiroController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(cancelamentoDeContaSchema)) body: { motivo: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       await cancelarContaDoFinanceiro({
         tenantId: staff.tenantId,
@@ -269,7 +267,7 @@ export class FinanceiroController {
   @Exige('finance.view')
   @Get('transferencias')
   async transferencias(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return {
       transferencias: await transferenciasRecentes({
         tenantId: staff.tenantId,
@@ -295,7 +293,7 @@ export class FinanceiroController {
       throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
     }
 
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await transferirEntreContas({
         tenantId: staff.tenantId,

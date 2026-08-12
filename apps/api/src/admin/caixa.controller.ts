@@ -21,7 +21,6 @@ import {
   receberFiado,
   removerItem,
 } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
 import {
   diaNaUnidade,
   type DescontoDaComanda,
@@ -35,6 +34,7 @@ import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   abrirCaixaSchema,
   abrirComandaSchema,
@@ -112,10 +112,8 @@ function toHttp(error: unknown): never {
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class CaixaController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   // -- Caixa ------------------------------------------------------------------
@@ -123,7 +121,7 @@ export class CaixaController {
   @Exige('cashier.open')
   @Get('cash')
   async caixa(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return {
       // O fuso vai junto: a hora de cada movimento é da barbearia, não do
       // aparelho de quem abriu a tela (defeito D2).
@@ -139,7 +137,7 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(abrirCaixaSchema)) body: { openingCents: number },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await abrirCaixa({
         tenantId: staff.tenantId,
@@ -160,7 +158,7 @@ export class CaixaController {
     @Body(new ZodValidationPipe(movimentoSchema))
     body: { kind: 'withdrawal' | 'supply'; amountCents: number; reason: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       await movimentarCaixa({
         tenantId: staff.tenantId,
@@ -189,7 +187,7 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(fecharCaixaSchema)) body: { countedCents: number; notes?: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await fecharCaixaDaUnidade({
         tenantId: staff.tenantId,
@@ -231,7 +229,7 @@ export class CaixaController {
       throw badRequest('invalid_request', 'Idempotency-Key com tamanho inválido');
     }
 
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await abrirComanda({
         tenantId: staff.tenantId,
@@ -264,7 +262,7 @@ export class CaixaController {
       packageId?: string;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await adicionarItem({
         tenantId: staff.tenantId,
@@ -354,7 +352,7 @@ export class CaixaController {
       throw badRequest('invalid_request', 'Idempotency-Key com tamanho inválido');
     }
 
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await fecharComanda({
         tenantId: staff.tenantId,
@@ -394,7 +392,7 @@ export class CaixaController {
     @Body(new ZodValidationPipe(receberFiadoSchema))
     body: { customerId: string; amountCents: number; forma: 'cash' | 'debit' | 'credit' | 'pix' },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await receberFiado({
         tenantId: staff.tenantId,
@@ -458,7 +456,7 @@ export class CaixaController {
       throw badRequest('invalid_request', 'Idempotency-Key é obrigatória para cobrar');
     }
 
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await criarCobrancaDaComanda({
         tenantId: staff.tenantId,
@@ -509,7 +507,7 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     const janela = diaNaUnidade(query.dia ?? null, local.timezone, new Date());
 
     return {

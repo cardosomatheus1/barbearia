@@ -18,7 +18,6 @@ import {
   getCounterCatalog,
   getDayBoard,
   MAX_RANGE_DAYS,
-  primaryLocation,
   searchCustomers,
 } from '@barbearia/scheduling';
 import { pode, type AttendanceAction } from '@barbearia/core';
@@ -28,6 +27,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { appointmentIdSchema } from '../booking/booking.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   attendanceSchema,
   counterBookingSchema,
@@ -111,8 +111,7 @@ export class BoardController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(daySchema)) query: { date?: string; professionalId?: string },
   ) {
-    const unidade = await primaryLocation(staff.tenantId);
-    if (!unidade) throw notFound('unknown_location', 'Unidade não encontrada');
+    const unidade = await unidadeDoBalcao(staff);
 
     const board = await getDayBoard({
       tenantId: staff.tenantId,
@@ -175,8 +174,7 @@ export class BoardController {
   @Exige('appointments.create')
   @Get('catalog')
   async catalog(@Staff() staff: AuthenticatedStaff) {
-    const unidade = await primaryLocation(staff.tenantId);
-    if (!unidade) throw notFound('unknown_location', 'Unidade não encontrada');
+    const unidade = await unidadeDoBalcao(staff);
     return { ...(await getCounterCatalog(staff.tenantId, unidade.id)), timezone: unidade.timezone };
   }
 
@@ -205,8 +203,7 @@ export class BoardController {
     @Query(new ZodValidationPipe(counterRangeSchema))
     query: { serviceIds: string[]; professionalId?: string; dateFrom: string; dateTo?: string },
   ) {
-    const unidade = await primaryLocation(staff.tenantId);
-    if (!unidade) throw notFound('unknown_location', 'Unidade não encontrada');
+    const unidade = await unidadeDoBalcao(staff);
 
     try {
       const range = await getAvailabilityRange({
@@ -262,8 +259,7 @@ export class BoardController {
       throw badRequest('invalid_request', 'Idempotency-Key com tamanho inválido');
     }
 
-    const unidade = await primaryLocation(staff.tenantId);
-    if (!unidade) throw notFound('unknown_location', 'Unidade não encontrada');
+    const unidade = await unidadeDoBalcao(staff);
 
     try {
       const customerId = await this.identificar(staff.tenantId, body);

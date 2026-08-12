@@ -11,7 +11,6 @@ import {
   salvarConfiguracaoDeComissao,
   salvarRegraDeComissao,
 } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
 import {
   diaNaUnidade,
   type BaseDeComissao,
@@ -26,6 +25,7 @@ import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   aliquotaDoAdquirenteSchema,
   configuracaoDeComissaoSchema,
@@ -89,9 +89,8 @@ export class ComissaoController {
     return staff.professionalId ?? '00000000-0000-0000-0000-000000000000';
   }
 
-  private async periodoPadrao(tenantId: string, query: { de?: string; ate?: string }) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
+  private async periodoPadrao(staff: AuthenticatedStaff, query: { de?: string; ate?: string }) {
+    const local = await unidadeDoBalcao(staff);
 
     // Sem período informado, o mês corrente **da unidade**. Vindo do aparelho,
     // a barbearia com relógio torto veria o mês trocado na virada (defeito D2).
@@ -108,7 +107,7 @@ export class ComissaoController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoSchema)) query: { de?: string; ate?: string },
   ) {
-    const { de, ate } = await this.periodoPadrao(staff.tenantId, query);
+    const { de, ate } = await this.periodoPadrao(staff, query);
     return extratoDeComissao({
       tenantId: staff.tenantId,
       de,
@@ -135,7 +134,7 @@ export class ComissaoController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoSchema)) query: { de?: string; ate?: string },
   ) {
-    const { de, ate } = await this.periodoPadrao(staff.tenantId, query);
+    const { de, ate } = await this.periodoPadrao(staff, query);
     return extratoDeComissao({ tenantId: staff.tenantId, de, ate });
   }
 

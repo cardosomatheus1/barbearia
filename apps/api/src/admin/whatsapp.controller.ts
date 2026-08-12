@@ -7,13 +7,13 @@ import {
   templatesDaUnidade,
 } from '@barbearia/crm';
 import { FakeWhatsAppProvider, type TipoDeNotificacao } from '@barbearia/core';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { cadastroDoWhatsAppSchema, templateSchema } from './whatsapp.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * O canal de WhatsApp da casa (bloco 55, SPEC §4.12).
@@ -63,16 +63,14 @@ const PROVEDOR = new FakeWhatsAppProvider();
 @Controller('v1/admin/whatsapp')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class WhatsAppController {
-  private async unidade(tenantId: string) {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
-    return local;
+  private async unidade(staff: AuthenticatedStaff) {
+    return unidadeDoBalcao(staff);
   }
 
   @Exige('whatsapp.manage')
   @Get('cadastro')
   async cadastro(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return { cadastro: await cadastroDoWhatsApp(staff.tenantId, local.id) };
   }
 
@@ -87,7 +85,7 @@ export class WhatsAppController {
       token?: string;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await salvarCadastroDoWhatsApp({
         tenantId: staff.tenantId,
@@ -108,7 +106,7 @@ export class WhatsAppController {
   @Exige('whatsapp.manage')
   @Get('templates')
   async templates(@Staff() staff: AuthenticatedStaff) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     return { templates: await templatesDaUnidade(staff.tenantId, local.id) };
   }
 
@@ -122,7 +120,7 @@ export class WhatsAppController {
       corpo: string;
     },
   ) {
-    const local = await this.unidade(staff.tenantId);
+    const local = await this.unidade(staff);
     try {
       return await submeterTemplate({
         tenantId: staff.tenantId,

@@ -339,13 +339,22 @@ export async function moverEstoque(
   `;
 }
 
-/** O movimento lançado à mão pelo balcão: entrada, perda, ajuste. */
+/**
+ * O movimento lançado à mão pelo balcão: entrada, perda, ajuste.
+ *
+ * A unidade passou a ser obrigatória no bloco 58, e o motivo é que ela estava
+ * faltando: venda, consumo e estorno sempre gravaram `location_id`, e a entrada
+ * — que é por onde o produto **chega** — gravava nulo. Numa rede, o saldo por
+ * loja somava zero em toda parte e a transferência entre lojas não teria de
+ * onde tirar nada.
+ */
 export async function lancarMovimento(entrada: {
   readonly tenantId: string;
   readonly produtoId: string;
   readonly tipo: TipoDeMovimentoDeEstoque;
   readonly quantidade: number;
   readonly diaDaUnidade: string;
+  readonly locationId: string;
   readonly motivo?: string | null;
   readonly ator: Ator;
 }): Promise<{ readonly lancado: true }> {
@@ -355,6 +364,7 @@ export async function lancarMovimento(entrada: {
       tipo: entrada.tipo,
       quantidade: entrada.quantidade,
       diaDaUnidade: entrada.diaDaUnidade,
+      locationId: entrada.locationId,
       motivo: entrada.motivo ?? null,
       staffUserId: entrada.ator.id,
     });

@@ -10,7 +10,6 @@ import {
   salvarFicha,
   salvarProduto,
 } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
 import { diaNaUnidade } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
@@ -20,6 +19,7 @@ import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
 import { diaSchema } from './painel.schemas.js';
 import { fichaSchema, movimentoSchema, produtoSchema } from './estoque.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * Produtos, estoque, ficha técnica e CMV (bloco 44, SPEC §3.7 e §3.8).
@@ -57,9 +57,8 @@ function toHttp(erro: unknown): never {
 @Controller('v1/admin/estoque')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class EstoqueController {
-  private async hoje(tenantId: string): Promise<string> {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw new DomainError('unknown_location', 404, 'Unidade não encontrada.');
+  private async hoje(staff: AuthenticatedStaff): Promise<string> {
+    const local = await unidadeDoBalcao(staff);
     // O dia da unidade, nunca o do aparelho: às 22h de Salvador o UTC já virou,
     // e a baixa cairia no dia seguinte do relatório.
     return diaNaUnidade(null, local.timezone, new Date()).dia;
@@ -156,13 +155,20 @@ export class EstoqueController {
       motivo?: string;
     },
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       return await lancarMovimento({
         tenantId: staff.tenantId,
         produtoId: body.produtoId,
         tipo: body.tipo,
         quantidade: body.quantidade,
-        diaDaUnidade: await this.hoje(staff.tenantId),
+        // O dia da unidade, nunca o do aparelho: às 22h de Salvador o UTC já
+        // virou, e a baixa cairia no dia seguinte do relatório.
+        diaDaUnidade: diaNaUnidade(null, local.timezone, new Date()).dia,
+        // A unidade em que o balcão está: o produto chega numa loja, não na
+        // rede. Sem ela o saldo por loja seria zero em toda parte, e o bloco 58
+        // não teria de onde transferir nada.
+        locationId: local.id,
         ...(body.motivo ? { motivo: body.motivo } : {}),
         ator: { id: staff.staffUserId, name: staff.name },
       });
@@ -219,7 +225,7 @@ export class EstoqueController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string },
   ) {
-    const hoje = query.dia ?? (await this.hoje(staff.tenantId));
+    const hoje = query.dia ?? (await this.hoje(staff));
     // Do primeiro dia do mês até o dia pedido: é a leitura que decide preço, e
     // um dia sozinho não diz nada sobre rentabilidade.
     const de = `${hoje.slice(0, 7)}-01`;

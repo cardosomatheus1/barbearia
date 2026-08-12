@@ -6,7 +6,6 @@ import {
   recadosDaCasa,
   responderRecado,
 } from '@barbearia/crm';
-import { primaryLocation } from '@barbearia/scheduling';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -14,6 +13,7 @@ import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
 import { filaDeRecadosSchema, respostaAoRecadoSchema } from '../booking/recado.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * A fila de triagem dos recados (bloco 40).
@@ -61,8 +61,7 @@ export class RecadoController {
     @Query(new ZodValidationPipe(filaDeRecadosSchema))
     query: { incluirEncerrados?: '0' | '1' },
   ) {
-    const local = await primaryLocation(staff.tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
+    const local = await unidadeDoBalcao(staff);
 
     const recados = await recadosDaCasa(staff.tenantId, {
       locationId: local.id,

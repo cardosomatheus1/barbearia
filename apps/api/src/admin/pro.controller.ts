@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
 import { MetaError, desempenhoDoProfissional, metasDoMes, salvarMeta } from '@barbearia/finance';
-import { primaryLocation } from '@barbearia/scheduling';
 import { mediaDoProfissional } from '@barbearia/crm';
 import { diaNaUnidade } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -9,6 +8,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { metaSchema } from './ficha.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 const STATUS: Record<string, number> = {
   profissional_nao_encontrado: 404,
@@ -51,9 +51,8 @@ export class ProController {
    * dispositivo, quem abrisse a tela às 21h de 30 de setembro em outro fuso
    * veria outubro — que é o defeito D2 aplicado a dinheiro.
    */
-  private async hoje(tenantId: string): Promise<string> {
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('unknown_location', 'Unidade não encontrada');
+  private async hoje(staff: AuthenticatedStaff): Promise<string> {
+    const local = await unidadeDoBalcao(staff);
     return diaNaUnidade(null, local.timezone, new Date()).dia;
   }
 
@@ -75,7 +74,7 @@ export class ProController {
     }
 
     try {
-      const hoje = await this.hoje(staff.tenantId);
+      const hoje = await this.hoje(staff);
       const numeros = await desempenhoDoProfissional({
         tenantId: staff.tenantId,
         professionalId: eu,
@@ -110,7 +109,7 @@ export class ProController {
   @Exige('settings.manage')
   @Get('goals')
   async metas(@Staff() staff: AuthenticatedStaff) {
-    const hoje = await this.hoje(staff.tenantId);
+    const hoje = await this.hoje(staff);
     return { mes: `${hoje.slice(0, 7)}-01`, metas: await metasDoMes({ tenantId: staff.tenantId, mes: hoje }) };
   }
 
