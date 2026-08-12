@@ -250,6 +250,13 @@ export interface PacoteNaTela {
   readonly valorDaUnidadeCents: number;
   readonly precoCents: number;
   readonly reembolsadoCents: number | null;
+  /**
+   * Congelado na compra (bloco 42), e por isso na projeção (bloco 52): a tela
+   * só mostra "passar adiante" para o que **foi vendido** transferível. Ler o
+   * catálogo aqui faria o botão aparecer num pacote comprado quando a opção
+   * estava desligada.
+   */
+  readonly transferivel: boolean;
 }
 
 function paraTela(linha: LinhaDoPacote, agora: Date): PacoteNaTela {
@@ -267,6 +274,7 @@ function paraTela(linha: LinhaDoPacote, agora: Date): PacoteNaTela {
     valorDaUnidadeCents: pacote.valorDaUnidadeCents,
     precoCents: linha.price_cents,
     reembolsadoCents: linha.refunded_cents,
+    transferivel: pacote.transferivel,
   };
 }
 

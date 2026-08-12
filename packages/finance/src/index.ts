@@ -12,3 +12,6 @@ export * from './split.js';
 export * from './estoque.js';
 export * from './pacote.js';
 export * from './financeiro.js';
+export * from './vale.js';
+export * from './estorno.js';
+export * from './dre.js';

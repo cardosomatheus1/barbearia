@@ -448,7 +448,8 @@ export async function extratoDeComissao(params: {
  * o lançamento por conta própria, o modelo do clube valeria numa e não na outra
  * — e o barbeiro veria um número na tela e receberia outro no acerto.
  */
-const paraLancamento = (l: LinhaBruta): LancamentoNoPeriodo => ({
+/** Exportados no bloco 52: o vale usa a mesma conta do extrato e do fechamento. */
+export const paraLancamento = (l: LinhaBruta): LancamentoNoPeriodo => ({
   itemId: l.id,
   professionalId: l.professional_id,
   regraId: l.rule_id ?? 'sem-regra',
@@ -476,7 +477,7 @@ interface LinhaBruta {
   subscription_fee_cents: number | null;
 }
 
-async function lancamentosAbertos(
+export async function lancamentosAbertos(
   tx: TransactionClient,
   params: { readonly de: string; readonly ate: string; readonly somenteProfessionalId?: string | null },
 ): Promise<LinhaBruta[]> {
@@ -535,6 +536,73 @@ async function itensSemRegra(
  * entrando na conta do mês seguinte também — o barbeiro receberia duas vezes
  * pelo mesmo corte. Carimbar sem congelar deixaria o valor pago sem registro.
  */
+/**
+ * Consome os vales abertos do período no fechamento da comissão.
+ *
+ * Roda **dentro** da transação que cria o fechamento, e devolve quanto cada
+ * profissional tinha a descontar. Fora dela existiria a janela em que a folha
+ * foi fechada e os vales continuam abertos — e o mês seguinte os descontaria de
+ * novo, cobrando duas vezes o mesmo adiantamento.
+ *
+ * O recorte é `granted_on <= ate` e não `BETWEEN`: um vale de um período que
+ * ficou sem fechar precisa ser descontado no primeiro fechamento que o alcance,
+ * senão ele fica órfão para sempre.
+ *
+ * ## Só quem entra numa linha do fechamento
+ *
+ * O filtro por profissional é o achado mais importante da `/security-review`
+ * deste bloco. Sem ele, o fechamento consumia **todo** vale aberto — inclusive o
+ * de quem não teve comissão nenhuma no período. O vale virava `descontado`,
+ * ficava imutável pelo gatilho, e nenhuma linha de fechamento registrava o
+ * desconto: a dívida era destruída em silêncio.
+ *
+ * O caso não precisa de má-fé para acontecer. Ruan pega vale em julho, tira
+ * agosto de férias, e o fechamento de agosto — que não tem nenhum atendimento
+ * dele — apagava o adiantamento de julho. Quando julho fechasse depois, ele
+ * receberia a comissão cheia e ficaria com o dinheiro do vale.
+ *
+ * Deixado aberto, o vale é descontado pelo primeiro fechamento que **de fato**
+ * paga aquela pessoa, e enquanto isso aparece como "a descontar" na tela.
+ */
+export async function descontarValesNoFechamento(
+  tx: TransactionClient,
+  params: {
+    readonly ate: string;
+    readonly closureId: string;
+    /** Só quem entra numa linha do fechamento. Ver o parágrafo acima. */
+    readonly professionalIds: readonly string[];
+  },
+): Promise<ReadonlyMap<string, number>> {
+  if (params.professionalIds.length === 0) return new Map();
+
+  const linhas = await tx.$queryRaw<{ id: string; professional_id: string; amount_cents: number }[]>`
+    SELECT id, professional_id, amount_cents FROM professional_advances
+     WHERE status = 'aberto'
+       AND granted_on <= ${params.ate}::date
+       AND professional_id = ANY(${params.professionalIds}::uuid[])
+     FOR UPDATE
+  `;
+
+  const porProfissional = new Map<string, number>();
+  for (const linha of linhas) {
+    porProfissional.set(
+      linha.professional_id,
+      (porProfissional.get(linha.professional_id) ?? 0) + linha.amount_cents,
+    );
+  }
+
+  if (linhas.length > 0) {
+    const ids = linhas.map((l) => l.id);
+    await tx.$executeRaw`
+      UPDATE professional_advances
+         SET status = 'descontado', closure_id = ${params.closureId}::uuid
+       WHERE id = ANY(${ids}::uuid[])
+    `;
+  }
+
+  return porProfissional;
+}
+
 export async function fecharPeriodoDeComissao(params: {
   readonly tenantId: string;
   readonly de: string;
@@ -582,15 +650,30 @@ export async function fecharPeriodoDeComissao(params: {
     const id = criado[0]?.id;
     if (!id) throw new ComissaoError('nada_a_fechar', 'Não foi possível fechar o período.');
 
+    /**
+     * Os vales abertos do período viram desconto **nesta transação** (bloco 52).
+     *
+     * Fora dela existiria a janela em que a folha foi fechada e os vales
+     * continuam abertos — e o mês seguinte os descontaria de novo, cobrando duas
+     * vezes o mesmo adiantamento.
+     */
+    const valePorProfissional = await descontarValesNoFechamento(tx, {
+      ate: params.ate,
+      closureId: id,
+      professionalIds: contas.map((c) => c.professionalId),
+    });
+
     for (const conta of contas) {
       await tx.$executeRaw`
         INSERT INTO commission_closure_lines
-          (tenant_id, closure_id, professional_id, professional_name, base_cents, amount_cents)
+          (tenant_id, closure_id, professional_id, professional_name, base_cents,
+           amount_cents, advance_cents)
         VALUES (
           NULLIF(current_setting('app.tenant_id', true), '')::uuid,
           ${id}::uuid, ${conta.professionalId}::uuid,
           ${nomes.get(conta.professionalId) ?? 'Profissional'},
-          ${conta.baseCents}, ${conta.comissaoCents}
+          ${conta.baseCents}, ${conta.comissaoCents},
+          ${valePorProfissional.get(conta.professionalId) ?? 0}
         )
       `;
     }

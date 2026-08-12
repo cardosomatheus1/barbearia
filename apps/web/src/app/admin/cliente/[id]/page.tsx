@@ -50,6 +50,7 @@ import {
   acaoIncluirDependente,
   acaoRemoverDependente,
   acaoReembolsarPacote,
+  acaoTransferirPacote,
   acaoDefinirLimiteDeFiado,
   acaoLancarSaldoInicialDeFiado,
   acaoSair,
@@ -495,10 +496,12 @@ function Pacotes({
   pacotes,
   customerId,
   podeReembolsar,
+  podeTransferir,
 }: {
   readonly pacotes: readonly PacoteDoCliente[];
   readonly customerId: string;
   readonly podeReembolsar: boolean;
+  readonly podeTransferir: boolean;
 }) {
   return (
     <section aria-labelledby="pacotes" className="secao">
@@ -538,6 +541,57 @@ function Pacotes({
                   Devolver R$ {reaisDoCampo(proporcional)}
                 </button>
               </form>
+            ) : null}
+
+            {/*
+              Passar adiante (bloco 52, SPEC §4.7). Só aparece no que foi
+              **vendido** transferível: a coluna é congelada na compra, e ligar a
+              opção no catálogo hoje não torna transferível o que o cliente
+              comprou ontem sabendo que não era.
+            */}
+            {podeTransferir && devolve && pacote.transferivel ? (
+              <details className="dobra">
+                <summary className="dobra__titulo">Passar para outra pessoa</summary>
+                <form action={acaoTransferirPacote} className="formulario">
+                  <input name="customerPackageId" type="hidden" value={pacote.id} />
+                  <input name="customerId" type="hidden" value={customerId} />
+
+                  <div className="ui-field">
+                    <label className="ui-field__label" htmlFor={`para-${pacote.id}`}>
+                      Id do cliente que vai receber
+                    </label>
+                    <input
+                      className="ui-field__input"
+                      id={`para-${pacote.id}`}
+                      name="paraCustomerId"
+                      placeholder="cole aqui o id da ficha da pessoa"
+                      required
+                    />
+                    <p className="ui-field__hint">
+                      Vão as {pacote.restam} unidades que sobram. O que já foi usado fica no
+                      histórico de quem usou — a receita reconhecida não muda de dono.
+                    </p>
+                  </div>
+
+                  <div className="ui-field">
+                    <label className="ui-field__label" htmlFor={`motivo-t-${pacote.id}`}>
+                      Por quê
+                    </label>
+                    <input
+                      className="ui-field__input"
+                      id={`motivo-t-${pacote.id}`}
+                      minLength={3}
+                      name="motivo"
+                      placeholder="Presente do pai para o filho"
+                      required
+                    />
+                  </div>
+
+                  <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+                    Passar adiante
+                  </button>
+                </form>
+              </details>
             ) : null}
           </div>
         );
@@ -1091,6 +1145,12 @@ export default async function FichaPage({ params, searchParams }: Props) {
         </div>
       ) : null}
 
+      {salvoFiado === 'pacote-transferido' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Pacote passado adiante. As unidades que sobravam agora são da outra pessoa.
+        </div>
+      ) : null}
+
       {salvoFiado === 'saldo-inicial' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Saldo lançado no extrato, com o motivo. Ele aparece em{' '}
@@ -1268,6 +1328,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
           customerId={ficha.dados.customerId}
           pacotes={pacotes.dados.pacotes}
           podeReembolsar={estado.staff.permissions.includes('finance.package_refund')}
+          podeTransferir={estado.staff.permissions.includes('finance.package_transfer')}
         />
       ) : null}
 

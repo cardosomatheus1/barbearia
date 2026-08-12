@@ -45,6 +45,13 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'account.transferred': 'transferiu dinheiro entre contas',
   'debt.limit_changed': 'mudou o limite de fiado de um cliente',
   'debt.opening_balance': 'lançou o saldo de fiado herdado de um cliente',
+  // Vale, estorno e transferência de pacote (bloco 52). "Adiantou" é a palavra
+  // do balcão; "desfez a venda" diz o que aconteceu melhor que "estornou", que
+  // é jargão de quem trabalha com dinheiro e não de quem opera a cadeira.
+  'advance.granted': 'adiantou dinheiro a um profissional',
+  'advance.cancelled': 'cancelou o vale de um profissional',
+  'order.refunded': 'desfez uma venda já fechada',
+  'package.transferred': 'passou um pacote para outra pessoa',
   'order.charge_created': 'gerou uma cobrança online',
   // "Cancelou" e não "encerrou": quem lê a trilha quer saber que alguém tomou a
   // decisão, e o cliente pode estar com o código na mão nesse instante.

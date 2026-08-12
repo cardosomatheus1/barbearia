@@ -1043,7 +1043,8 @@ export interface ItemDaComandaNaTela {
 
 export interface Comanda {
   id: string;
-  status: 'open' | 'paid' | 'cancelled';
+  /** `refunded` entrou no bloco 52: cobrada, e o dinheiro voltou. */
+  status: 'open' | 'paid' | 'cancelled' | 'refunded';
   customerId: string | null;
   customerName: string | null;
   appointmentId: string | null;
@@ -2020,6 +2021,8 @@ export interface PacoteDoCliente {
   valorDaUnidadeCents: number;
   precoCents: number;
   reembolsadoCents: number | null;
+  /** Congelado na compra: só o que foi vendido transferível passa adiante. */
+  transferivel: boolean;
 }
 
 export interface ReceitaDePacotes {
@@ -2734,5 +2737,115 @@ export const fiadoDoClienteNaApi = (token: string, customerId: string) =>
     'GET',
     `/v1/admin/financeiro/clientes/${customerId}/fiado`,
     undefined,
+    token,
+  );
+
+// -- DRE, vale, estorno e transferência de pacote (bloco 52) ------------------
+
+export interface VariacaoDaLinha {
+  atualCents: number;
+  anteriorCents: number;
+  deltaCents: number;
+  variacaoBps: number | null;
+  sentido: 'melhorou' | 'piorou' | 'igual';
+}
+
+export interface LinhaDoDre extends VariacaoDaLinha {
+  campo: string;
+  rotulo: string;
+  natureza: 'receita' | 'custo';
+}
+
+export interface DreNaTela {
+  de: string;
+  ate: string;
+  comparadoDe: string;
+  comparadoAte: string;
+  atual: {
+    receitaBrutaCents: number;
+    custoTotalCents: number;
+    resultadoCents: number;
+    margemBps: number | null;
+  };
+  anterior: { resultadoCents: number; margemBps: number | null };
+  linhas: LinhaDoDre[];
+  receitaBruta: VariacaoDaLinha;
+  resultado: VariacaoDaLinha;
+}
+
+export const dreNaApi = (token: string, de?: string, ate?: string) =>
+  chamar<DreNaTela>(
+    'GET',
+    de && ate ? `/v1/admin/dre?de=${de}&ate=${ate}` : '/v1/admin/dre',
+    undefined,
+    token,
+  );
+
+export interface ValeNaTela {
+  id: string;
+  professionalId: string;
+  professionalName: string;
+  valorCents: number;
+  concedidoEm: string;
+  motivo: string | null;
+  estado: 'aberto' | 'descontado' | 'cancelado';
+  pelaGaveta: boolean;
+  criadoPor: string;
+}
+
+export const valesNaApi = (token: string, de: string, ate: string) =>
+  chamar<{ vales: ValeNaTela[] }>(
+    'GET',
+    `/v1/admin/vales?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+export const tetoDoValeNaApi = (
+  token: string,
+  professionalId: string,
+  de: string,
+  ate: string,
+) =>
+  chamar<{ comissaoAcumuladaCents: number; jaAdiantadoCents: number; disponivelCents: number }>(
+    'GET',
+    `/v1/admin/vales/teto/${professionalId}?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+export const adiantarNaApi = (
+  token: string,
+  dados: {
+    professionalId: string;
+    valorCents: number;
+    de: string;
+    ate: string;
+    motivo?: string | null;
+    pelaGaveta: boolean;
+  },
+  idempotencyKey?: string,
+) => chamar<{ id: string }>('POST', '/v1/admin/vales', dados, token, idempotencyKey);
+
+export const cancelarValeNaApi = (token: string, valeId: string, motivo: string) =>
+  chamar<{ ok: true }>('POST', `/v1/admin/vales/${valeId}/cancelar`, { motivo }, token);
+
+export const estornarVendaNaApi = (token: string, orderId: string, motivo: string) =>
+  chamar<{ orderId: string; totalCents: number }>(
+    'POST',
+    `/v1/admin/comandas/${orderId}/estornar`,
+    { motivo },
+    token,
+  );
+
+export const transferirPacoteNaApi = (
+  token: string,
+  customerPackageId: string,
+  dados: { paraCustomerId: string; motivo: string },
+) =>
+  chamar<{ unidadesMovidas: number }>(
+    'POST',
+    `/v1/admin/pacotes/${customerPackageId}/transferir`,
+    dados,
     token,
   );

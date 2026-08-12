@@ -38,6 +38,10 @@ import {
   criarProfissional,
   entrarNaFila,
   ajustarSaldoDeFidelidade,
+  adiantarNaApi,
+  cancelarValeNaApi,
+  estornarVendaNaApi,
+  transferirPacoteNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
   cancelarContaDoFinanceiro as cancelarContaDoFinanceiroApi,
@@ -2457,4 +2461,63 @@ export async function acaoLancarSaldoInicialDeFiado(form: FormData): Promise<voi
   });
   if (!resultado.ok) falhar(rota, resultado.code);
   redirect(`${rota}?salvo=saldo-inicial`);
+}
+
+// -- Vale, estorno e transferência de pacote (bloco 52) -----------------------
+
+export async function acaoAdiantarVale(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const rota = '/admin/comissao';
+  const resultado = await adiantarNaApi(
+    token,
+    {
+      professionalId: texto(form, 'professionalId'),
+      valorCents: centavos(form, 'valorCents', rota),
+      de: texto(form, 'de'),
+      ate: texto(form, 'ate'),
+      motivo: texto(form, 'motivo') || null,
+      pelaGaveta: texto(form, 'pelaGaveta') === '1',
+    },
+    // A chave nasce com a página e viaja no formulário: o segundo toque manda a
+    // mesma, e a API devolve o vale já lançado em vez de lançar o segundo.
+    texto(form, 'chave') || undefined,
+  );
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?feito=vale`);
+}
+
+export async function acaoCancelarVale(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const rota = '/admin/comissao';
+  const resultado = await cancelarValeNaApi(token, texto(form, 'valeId'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?feito=vale-cancelado`);
+}
+
+/**
+ * O estorno volta para a comanda, e não para a lista.
+ *
+ * É onde a pessoa estava, e é onde ela confere o que aconteceu: a tela da
+ * comanda estornada mostra o que foi desfeito. Mandá-la para a lista deixaria a
+ * operação com mais consequências do produto sem nenhuma confirmação visível.
+ */
+export async function acaoEstornarVenda(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const orderId = texto(form, 'orderId');
+  const rota = `/admin/comanda/${orderId}`;
+  const resultado = await estornarVendaNaApi(token, orderId, texto(form, 'motivo'));
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?feito=estornada`);
+}
+
+export async function acaoTransferirPacote(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const rota = `/admin/cliente/${customerId}`;
+  const resultado = await transferirPacoteNaApi(token, texto(form, 'customerPackageId'), {
+    paraCustomerId: texto(form, 'paraCustomerId'),
+    motivo: texto(form, 'motivo'),
+  });
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?salvo=pacote-transferido`);
 }

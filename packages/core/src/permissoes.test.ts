@@ -117,6 +117,7 @@ describe('permissões de dinheiro', () => {
       // As duas entraram no bloco 51 e caem aqui pelo prefixo, que é o que se
       // quer: quitar uma conta pela gaveta tira dinheiro dela, e levantar o
       // limite de fiado autoriza alguém a levar serviço sem pagar.
+      'finance.advance',
       'finance.bills_manage',
       'finance.credit_limit',
       // `finance.deposit` entrou no bloco 37 e cai aqui pelo prefixo, que é o
@@ -129,11 +130,15 @@ describe('permissões de dinheiro', () => {
       // saldo de fidelidade **é** criar dinheiro — ele vira forma de pagamento
       // no balcão da operação seguinte.
       'finance.loyalty_adjust',
+      // As três do bloco 52: adiantar, desfazer venda e passar pacote adiante.
+      // As três movem dinheiro, e o prefixo é o que deriva o segundo fator.
+      'finance.order_refund',
       // `finance.package_refund` entrou no bloco 42, e pelo prefixo: o reembolso
       // proporcional devolve como crédito no razão, gastável no balcão da
       // operação seguinte. Editar o catálogo de pacotes é `settings.manage` e
       // não cai aqui — cadastrar "5 cortes por R$ 250" não move centavo nenhum.
       'finance.package_refund',
+      'finance.package_transfer',
       // `finance.subscription_manage` entrou no bloco 45, e pelo prefixo:
       // assinar liga **receita recorrente**, cancelar a desliga. Montar o
       // cadastro do plano é `settings.manage`; dizer que um cliente passa a

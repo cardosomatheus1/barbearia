@@ -1265,6 +1265,54 @@ function prepararFinanceiro(slug) {
   );
 }
 
+/**
+ * Vale concedido e uma venda estornada (bloco 52).
+ *
+ * Pelo banco, como o resto: o que a medição precisa é do **estado**. O DRE sem
+ * despesa e sem vale mostraria três linhas zeradas, e linha zerada é o layout
+ * que não quebra — nome composto de barbeiro e valor de cinco dígitos são o que
+ * estoura a grade de quatro colunas.
+ */
+function prepararValeEEstorno(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  const barbeiro = primeiraLinha(
+    psql(`select id from professionals where tenant_id = '${tenant}' limit 1`),
+  );
+  if (!local || !barbeiro) return;
+
+  psql(
+    `INSERT INTO professional_advances
+       (tenant_id, location_id, professional_id, amount_cents, granted_on, reason,
+        created_by_name)
+     VALUES ('${tenant}', '${local}', '${barbeiro}', 25000, current_date,
+             'Adiantamento pedido no meio do mês', 'Maria Recepção')`,
+  );
+
+  /**
+   * Uma conta **paga**, para a linha de despesa do DRE ter conteúdo.
+   *
+   * As contas do bloco 51 nascem em aberto na demonstração, e despesa zerada é
+   * justamente o layout que não quebra — o que estoura a grade de quatro colunas
+   * é o valor de cinco dígitos com o comparativo ao lado.
+   *
+   * A venda estornada **não** é semeada aqui, e a razão está escrita: a
+   * demonstração tem uma comanda fechada só, e desfazê-la esvaziaria o DRE
+   * inteiro — o relatório apareceria zerado na única tela que ele existe para
+   * mostrar. Estornar por `UPDATE` seria pior ainda: produziria um estado que o
+   * produto não produz, com a venda desfeita e a comissão de pé.
+   */
+  psql(
+    `UPDATE bills
+        SET status = 'paga', paid_on = current_date - 2, paid_cents = amount_cents
+      WHERE tenant_id = '${tenant}' AND direction = 'pagar'
+        AND description LIKE 'Contabilidade%'`,
+  );
+}
+
 async function prepararCaixa(token, catalogo) {
   const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
   const { codigoDoPasso, passoAgora } = require('../packages/identity/dist/mfa.js');
@@ -1594,6 +1642,7 @@ async function main() {
   const caixa = await prepararCaixa(token, catalogo);
   prepararSplit(slug);
   prepararFinanceiro(slug);
+  prepararValeEEstorno(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -1677,6 +1726,7 @@ async function main() {
     { nome: 'fiado', url: '/admin/fiado', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'contas', url: '/admin/financeiro', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'resultado', url: '/admin/dre', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recados', url: '/admin/recados', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

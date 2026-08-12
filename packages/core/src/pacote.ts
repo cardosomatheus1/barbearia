@@ -66,7 +66,12 @@ export function estadoDoPacote(pacote: PacoteDoCliente, agora: Date): EstadoDoPa
   return 'ativo';
 }
 
-export function restamNoPacote(pacote: PacoteDoCliente): number {
+/**
+ * Assinatura mínima de propósito: o estorno e a transferência do bloco 52
+ * perguntam quantas sobram com o que carregaram do banco, e exigir o objeto
+ * inteiro obrigaria as duas a buscar campos que não usam.
+ */
+export function restamNoPacote(pacote: Pick<PacoteDoCliente, 'total' | 'usados'>): number {
   return Math.max(0, pacote.total - pacote.usados);
 }
 

@@ -55,6 +55,7 @@ export const MODULOS = [
       { href: '/admin/fiado', nome: 'Pendências', secao: 'fiado', nota: 'valores em aberto de clientes' },
       { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', nota: 'o que a casa deve e tem a receber' },
       { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', nota: 'o que a casa precisa pagar' },
+      { href: '/admin/dre', nome: 'Resultado', secao: 'dre', nota: 'o que sobrou depois de tudo' },
       { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', nota: 'pontos, visitas ou cashback' },
     ],
     dentro: ['meus-numeros'],

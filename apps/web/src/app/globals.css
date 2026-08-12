@@ -4054,6 +4054,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
 .casco:has([data-secao='financeiro']) .contexto__link[data-para='financeiro'],
 .casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
+.casco:has([data-secao='dre']) .contexto__link[data-para='dre'],
 .casco:has([data-secao='fidelidade']) .contexto__link[data-para='fidelidade'],
 .casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
 .casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
@@ -6776,3 +6777,71 @@ main { padding-bottom: var(--space-8); }
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
 }
+
+/* -- Resultado / DRE (bloco 52) --------------------------------------------
+   Quatro colunas quando há espaço, duas no celular: no aparelho pequeno o que
+   importa é a linha e o valor do período, e o anterior refluí para baixo em vez
+   de sumir — esconder conteúdo no celular é decidir que ele não importava.
+
+   Quem responde é o **recipiente**: o `container-type` fica na `<ul>`, e a
+   regra casa nos `<li>`, que são os descendentes. Um elemento não responde
+   sobre si mesmo. */
+.dre {
+  container-type: inline-size;
+  list-style: none;
+  margin: var(--space-3) 0 var(--space-6);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.dre__linha {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.dre > li:last-child { border-bottom: 0; }
+.dre__rotulo { min-width: 0; }
+.dre__valor {
+  font-weight: var(--font-weight-medium);
+  text-align: right;
+  white-space: nowrap;
+}
+.dre__antes,
+.dre__variacao {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.dre__variacao--melhorou { color: var(--color-success); }
+.dre__variacao--piorou { color: var(--color-danger); }
+@container (min-width: 34rem) {
+  .dre__linha {
+    grid-template-columns: 1fr 8rem 9rem 7rem;
+    text-align: right;
+  }
+  .dre__rotulo { text-align: left; }
+}
+
+/* O período é um formulário de três campos: dois lado a lado e o botão
+   embaixo no celular, tudo numa linha quando cabe. */
+.dre__periodo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  align-items: end;
+  margin-block: var(--space-4);
+}
+.dre__periodo > button { grid-column: 1 / -1; min-height: 44px; }
+@media (min-width: 40rem) {
+  .dre__periodo { grid-template-columns: 1fr 1fr auto; }
+  .dre__periodo > button { grid-column: auto; }
+}
+
+/* Resultado negativo é o único número desta tela que muda de cor: ele é a
+   resposta que faz o dono agir, e a cor aqui é o último recurso e não o
+   primeiro — o tamanho já o destaca. */
+.gaveta--risco .gaveta__valor { color: var(--color-danger); }

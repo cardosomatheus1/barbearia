@@ -6,6 +6,7 @@ import {
   ROTULO_DA_PARTE,
   ROTULO_DO_KYC,
   ROTULO_DO_SPLIT,
+  ROTULO_DO_VALE,
 } from '@barbearia/core';
 import {
   comissaoDoPeriodo,
@@ -15,6 +16,8 @@ import {
   meusRepassesNaApi,
   recebedoresNaApi,
   splitDoPeriodoNaApi,
+  valesNaApi,
+  type ValeNaTela,
   type ConfiguracaoDoSplitNaTela,
   type RepasseNaTela,
 } from '@/lib/admin-api';
@@ -22,11 +25,14 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import {
+  acaoAdiantarVale,
   acaoCadastrarRecebedor,
+  acaoCancelarVale,
   acaoFecharComissao,
   acaoSair,
   acaoSalvarSplit,
 } from '../acoes';
+import { randomUUID } from 'node:crypto';
 import { secao } from '../secoes';
 
 /**
@@ -114,6 +120,186 @@ function Fechado({ fechamento }: { readonly fechamento: FechamentoDeComissao }) 
   );
 }
 
+/**
+ * Vale / adiantamento (bloco 52, SPEC §3.10).
+ *
+ * Fica na tela de comissão e não numa própria pela mesma razão do repasse
+ * direto: é a **mesma pergunta** — quanto a casa deve a quem. O vale muda o
+ * número que o barbeiro recebe no acerto, e ver as duas coisas em telas
+ * separadas faria a recepção somar errado.
+ *
+ * O teto não aparece aqui de propósito: quem decide se cabe é a API, dentro da
+ * transação, com a comissão acumulada lida do banco. Um número calculado na tela
+ * ficaria velho entre carregar a página e clicar.
+ */
+function Vales({
+  vales,
+  linhas,
+  de,
+  ate,
+  chave,
+  podeAdiantar,
+}: {
+  readonly vales: readonly ValeNaTela[];
+  readonly linhas: readonly LinhaDeComissao[];
+  readonly de: string;
+  readonly ate: string;
+  readonly chave: string;
+  readonly podeAdiantar: boolean;
+}) {
+  const abertos = vales.filter((v) => v.estado === 'aberto');
+  const totalAberto = abertos.reduce((soma, v) => soma + v.valorCents, 0);
+
+  return (
+    <section className="cartao-balcao">
+      <h2 className="cartao-balcao__titulo">Vales</h2>
+
+      {vales.length === 0 ? (
+        <p className="vazio">
+          Nenhum adiantamento neste período. O vale sai da gaveta hoje e é descontado no
+          fechamento — ele não é despesa, é empréstimo.
+        </p>
+      ) : (
+        <ul className="lista-cadastro">
+          {vales.map((vale) => (
+            <li key={vale.id}>
+              <article
+                className={`item-cadastro${vale.estado === 'aberto' ? '' : ' item-cadastro--fora'}`}
+              >
+                <div className="item-cadastro__cabeca">
+                  <div className="item-cadastro__quem">
+                    <h3 className="item-cadastro__nome">{vale.professionalName}</h3>
+                    <p className="item-cadastro__linha">
+                      {vale.concedidoEm.slice(8, 10)}/{vale.concedidoEm.slice(5, 7)} ·{' '}
+                      {ROTULO_DO_VALE[vale.estado]}
+                      {vale.pelaGaveta ? ' · saiu da gaveta' : ''}
+                      {vale.motivo ? ` · ${vale.motivo}` : ''}
+                    </p>
+                  </div>
+                  <span className="conta__valor tabular">{reais(vale.valorCents)}</span>
+                </div>
+
+                {podeAdiantar && vale.estado === 'aberto' ? (
+                  <details className="dobra">
+                    <summary className="dobra__titulo">Cancelar</summary>
+                    <form action={acaoCancelarVale} className="formulario">
+                      <input name="valeId" type="hidden" value={vale.id} />
+                      <div className="ui-field">
+                        <label className="ui-field__label" htmlFor={`motivo-${vale.id}`}>
+                          Por quê
+                        </label>
+                        <input
+                          className="ui-field__input"
+                          id={`motivo-${vale.id}`}
+                          name="motivo"
+                          placeholder="Lançado no profissional errado"
+                          required
+                        />
+                        <p className="ui-field__hint">
+                          {vale.pelaGaveta
+                            ? 'O dinheiro volta para a gaveta na mesma hora. Precisa de caixa aberto.'
+                            : 'A dívida some do próximo acerto.'}
+                        </p>
+                      </div>
+                      <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+                        Cancelar este vale
+                      </button>
+                    </form>
+                  </details>
+                ) : null}
+              </article>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {abertos.length > 0 ? (
+        <p className="painel__nota">
+          {reais(totalAberto)} a descontar no próximo fechamento.
+        </p>
+      ) : null}
+
+      {podeAdiantar && linhas.length > 0 ? (
+        <details className="dobra">
+          <summary className="dobra__titulo">Adiantar</summary>
+          <form action={acaoAdiantarVale} className="formulario">
+            {/* A chave nasce com a página: o segundo toque no botão manda a
+                mesma, e a API devolve o vale já lançado. */}
+            <input name="chave" type="hidden" value={chave} />
+            <input name="de" type="hidden" value={de} />
+            <input name="ate" type="hidden" value={ate} />
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="vale-quem">
+                Para quem
+              </label>
+              <select className="ui-field__input" id="vale-quem" name="professionalId">
+                {linhas.map((linha) => (
+                  <option key={linha.professionalId} value={linha.professionalId}>
+                    {linha.professionalName} — {reais(linha.comissaoCents)} acumulado
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="vale-valor">
+                Quanto
+              </label>
+              <input
+                className="ui-field__input"
+                id="vale-valor"
+                inputMode="decimal"
+                name="valorCents"
+                placeholder="200,00"
+                required
+              />
+              {/* Sem campo de data: o vale é sempre de hoje, e o dia é o da
+                  unidade — decidido pela API, não pelo aparelho. */}
+            </div>
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="vale-gaveta">
+                Por onde
+              </label>
+              <select
+                className="ui-field__input"
+                defaultValue="1"
+                id="vale-gaveta"
+                name="pelaGaveta"
+              >
+                <option value="1">Pela gaveta do caixa</option>
+                <option value="0">Por fora da gaveta (Pix, transferência)</option>
+              </select>
+              <p className="ui-field__hint">
+                Não dá para adiantar mais do que o profissional já fez no período — o vale é
+                descontado inteiro no fechamento, e a diferença ficaria sem como ser cobrada.
+              </p>
+            </div>
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="vale-motivo">
+                Motivo <span className="ui-field__opcional">(opcional)</span>
+              </label>
+              <input
+                className="ui-field__input"
+                id="vale-motivo"
+                maxLength={300}
+                name="motivo"
+                placeholder="Pediu adiantamento"
+              />
+            </div>
+
+            <button className="ui-button ui-button--primary ui-button--block" type="submit">
+              Adiantar
+            </button>
+          </form>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function ComissaoPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -140,7 +326,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
   const ate = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0))
     .toISOString().slice(0, 10);
 
-  const [extrato, historico, repasses, contas] = await Promise.all([
+  const [extrato, historico, repasses, contas, vales] = await Promise.all([
     comissaoDoPeriodo(token, { daCasa: veTodos }),
     fechamentosDeComissao(token, veTodos),
     // A rota da casa exige `commission.view_all`; a do próprio, `view_own`. Quem
@@ -149,6 +335,9 @@ export default async function ComissaoPage({ searchParams }: Props) {
     // Quem já pode receber direto, e quanto está retido esperando cadastro. É
     // dinheiro por profissional, como o extrato: `commission.view_all`.
     veTodos ? recebedoresNaApi(token) : Promise.resolve(null),
+    // Ler quanto cada um adiantou é a mesma informação da folha, vista pelo
+    // outro lado: a rota exige `commission.view_all`, como o extrato da casa.
+    veTodos ? valesNaApi(token, de, ate) : Promise.resolve(null),
   ]);
 
   const podeMexerNoSplit = podeNaTela(estado, 'finance.split_manage');
@@ -166,6 +355,16 @@ export default async function ComissaoPage({ searchParams }: Props) {
   const plataformaPercent = (configuracao?.plataformaBps ?? 0) / 100;
   const listaDeRepasses: readonly RepasseNaTela[] = dadosDoSplit?.repasses ?? [];
   const listaDeContas = contas?.ok ? contas.dados.recebedores : [];
+  const listaDeVales = vales?.ok ? vales.dados.vales : [];
+  const podeAdiantarVale = podeNaTela(estado, 'finance.advance');
+  /**
+   * Uma chave por montagem da página, gerada no servidor.
+   *
+   * Ela precisa ser diferente a cada abertura da tela e a mesma dentro de uma:
+   * um valor derivado do formulário faria dois vales legítimos iguais no mesmo
+   * dia colidirem, e eles acontecem — R$ 100 de manhã e R$ 100 à tarde.
+   */
+  const chaveDoVale = randomUUID();
 
   const topo = (
     <header className="painel__topo">
@@ -311,6 +510,22 @@ export default async function ComissaoPage({ searchParams }: Props) {
             </button>
           </form>
         </details>
+      ) : null}
+
+      {/*
+        Os vales (bloco 52, SPEC §3.10). Ficam antes do repasse porque mudam o
+        número que o barbeiro recebe **no acerto**, e o repasse é sobre o que já
+        saiu direto do adquirente.
+      */}
+      {veTodos ? (
+        <Vales
+          ate={conta.ate}
+          chave={chaveDoVale}
+          de={conta.de}
+          linhas={conta.linhas}
+          podeAdiantar={podeAdiantarVale}
+          vales={listaDeVales}
+        />
       ) : null}
 
       {/*

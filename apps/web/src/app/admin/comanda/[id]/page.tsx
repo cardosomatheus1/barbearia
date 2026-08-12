@@ -24,6 +24,7 @@ import {
   acaoAjustarComanda,
   acaoCancelarCobranca,
   acaoCobrarComanda,
+  acaoEstornarVenda,
   acaoFecharComanda,
   acaoRemoverItem,
   acaoSair,
@@ -339,6 +340,8 @@ export default async function ComandaPage({ params, searchParams }: Props) {
 
   const conta = comanda.dados;
   const fechada = conta.status !== 'open';
+  const estornada = first(query['feito']) === 'estornada';
+  const podeEstornar = podeNaTela(estado, 'finance.order_refund');
   const podeFiar = fiadoCabe(conta);
 
   /**
@@ -472,6 +475,26 @@ export default async function ComandaPage({ params, searchParams }: Props) {
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Comanda paga.
           {conta.trocoCents > 0 ? ` Troco: ${reais(conta.trocoCents)}.` : ''}
+        </div>
+      ) : null}
+
+      {estornada ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Venda desfeita. A comissão foi estornada no período aberto, o produto voltou ao estoque,
+          o crédito de fidelidade foi desfeito e o dinheiro saiu da gaveta.
+        </div>
+      ) : null}
+
+      {/*
+        A venda desfeita (bloco 52). O aviso fica no topo e é permanente: a
+        comanda estornada continua encontrável pelo id — ela é prova de que o
+        dinheiro entrou e voltou —, e quem abre precisa saber disso antes de ler
+        qualquer número dela.
+      */}
+      {conta.status === 'refunded' ? (
+        <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+          <strong>Esta venda foi desfeita.</strong> Ela não conta no faturamento, no resultado
+          nem na comissão.
         </div>
       ) : null}
 
@@ -863,6 +886,43 @@ export default async function ComandaPage({ params, searchParams }: Props) {
           )}
         </>
       )}
+
+      {/*
+        Desfazer a venda (bloco 52). Fica no fim e dobrada de propósito: é a
+        operação com mais consequências do produto — mexe em comissão, repasse,
+        estoque, fidelidade, fiado e caixa numa transação só — e não pode
+        disputar espaço com o que a recepção faz trinta vezes por dia.
+      */}
+      {conta.status === 'paid' && podeEstornar ? (
+        <details className="dobra">
+          <summary className="dobra__titulo">Desfazer esta venda</summary>
+          <form action={acaoEstornarVenda} className="formulario">
+            <input name="orderId" type="hidden" value={conta.id} />
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="motivo-estorno">
+                Por quê
+              </label>
+              <input
+                className="ui-field__input"
+                id="motivo-estorno"
+                minLength={3}
+                name="motivo"
+                placeholder="Cliente devolveu o produto"
+                required
+              />
+              <p className="ui-field__hint">
+                Vai estornar {reais(conta.totalCents)}: a comissão vira lançamento negativo no
+                período aberto, o produto volta ao estoque, o crédito de fidelidade é desfeito, o
+                fiado é abatido e o dinheiro sai da gaveta. A unidade de pacote consumida{' '}
+                <strong>não</strong> volta — o serviço foi prestado.
+              </p>
+            </div>
+            <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+              Desfazer a venda
+            </button>
+          </form>
+        </details>
+      ) : null}
     </main>
   );
 }

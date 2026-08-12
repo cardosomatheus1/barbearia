@@ -394,15 +394,53 @@ describe('as rotas do painel', () => {
       }
     }
     /*
-      Segunda passada: uma interface que **estende** outra de lucro também é de
-      lucro, e `RentabilidadeNaTela extends RentabilidadeDoAssinante` é o caso.
-      A herança entra e a composição não: um tipo que só **cita** outro num
-      campo pode estar citando para outra coisa, e a varancia viral acusava a
-      comanda inteira.
+      Segunda passada, até o ponto fixo: **herança e composição**.
+
+      A herança sempre esteve aqui — `RentabilidadeNaTela extends
+      RentabilidadeDoAssinante`. A composição entrou no bloco 52, e o motivo é o
+      defeito que a revisão dele achou: `DreComparado` **contém** um `Dre`, que
+      carrega `margemBps`, e `DreDoPeriodo extends DreComparado`. Sem a
+      composição a varredura não alcançava o relatório de resultado inteiro — a
+      rota mais óbvia do produto para `finance.view_profit` era justamente a que
+      o teste não enxergava.
+
+      A versão anterior deste comentário dizia que composição acusaria a comanda
+      inteira. Era verdade quando a checagem era por **menção** em qualquer
+      lugar do bloco; aqui ela é por **tipo declarado de um campo**, ancorado no
+      `:` que abre a declaração. Um campo `readonly atual: Dre` casa; uma menção
+      dentro de um genérico de lista, de um comentário ou de um parâmetro, não.
+      O laço vai até parar de crescer porque a cadeia pode ter mais de um elo:
+      `Dre` → `DreComparado` → `DreDoPeriodo`.
     */
+    const corpoDaInterface = new Map<string, string>();
+    const paiDaInterface = new Map<string, string>();
     for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
+        corpoDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
+      }
       for (const bloco of fonte.matchAll(/export interface (\w+) extends (\w+)/g)) {
-        if (tiposDeLucro.has(bloco[2] ?? '')) tiposDeLucro.add(bloco[1] ?? '');
+        paiDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
+      }
+    }
+
+    let cresceu = true;
+    while (cresceu) {
+      cresceu = false;
+      for (const [filho, pai] of paiDaInterface) {
+        if (tiposDeLucro.has(pai) && !tiposDeLucro.has(filho)) {
+          tiposDeLucro.add(filho);
+          cresceu = true;
+        }
+      }
+      for (const [nome, corpo] of corpoDaInterface) {
+        if (tiposDeLucro.has(nome)) continue;
+        const compoe = [...tiposDeLucro].some((t) =>
+          new RegExp(`:\\s*(readonly\\s+)?${t}\\b`).test(corpo),
+        );
+        if (compoe) {
+          tiposDeLucro.add(nome);
+          cresceu = true;
+        }
       }
     }
     for (const fonte of fontes) {

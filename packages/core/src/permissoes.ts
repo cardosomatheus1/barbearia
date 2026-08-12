@@ -142,6 +142,32 @@ export const PERMISSOES = [
    * score.
    */
   'finance.credit_limit',
+  /**
+   * Adiantar dinheiro ao profissional (bloco 52).
+   *
+   * O vale sai da gaveta hoje e volta como desconto na folha. Prefixo
+   * `finance.` pela razão mais literal de todas: é dinheiro saindo, e quem
+   * adianta R$ 800 no fim do expediente está sozinho no balcão.
+   */
+  'finance.advance',
+  /**
+   * Desfazer uma venda já fechada (bloco 52).
+   *
+   * Própria, e não `finance.discount`: desconto tira uma parte antes de cobrar;
+   * estorno devolve tudo depois de receber, e desfaz comissão, repasse,
+   * estoque, fidelidade e fiado de uma vez. É a operação com mais consequências
+   * do produto, e a única que mexe em cinco subsistemas numa transação.
+   */
+  'finance.order_refund',
+  /**
+   * Passar um pacote para outra pessoa (bloco 52).
+   *
+   * Prefixo `finance.` porque um pacote transferível é um vale ao portador: as
+   * unidades restantes valem dinheiro e mudam de dono. Separada de
+   * `finance.package_refund` porque são decisões diferentes — devolver dinheiro
+   * e passar crédito adiante —, e quem pode uma não precisa poder a outra.
+   */
+  'finance.package_transfer',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -322,6 +348,14 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
      * É a mesma separação de `customers.anonymize`.
      */
     'finance.bills_manage',
+    /**
+     * O vale e o estorno são rotina de quem gerencia: o barbeiro pede
+     * adiantamento na quarta e a recepção erra a comanda na sexta. Um financeiro
+     * em que só o dono conserta é um financeiro que fica errado até ele chegar.
+     */
+    'finance.advance',
+    'finance.order_refund',
+    'finance.package_transfer',
     'commission.view_all',
     'customers.view',
     'customers.edit',

@@ -96,6 +96,17 @@ export type AuditAction =
   | 'debt.limit_changed'
   | 'debt.opening_balance'
   /**
+   * Vale, estorno e transferência de pacote (bloco 52).
+   *
+   * As quatro carregam centavo. O vale é dinheiro que sai da gaveta hoje e volta
+   * como desconto na folha; o estorno devolve dinheiro que já entrou; a
+   * transferência de pacote move um vale ao portador de uma pessoa para outra.
+   */
+  | 'advance.granted'
+  | 'advance.cancelled'
+  | 'order.refunded'
+  | 'package.transferred'
+  /**
    * Estoque (bloco 44).
    *
    * `stock.adjusted` cobre perda e ajuste — os dois movimentos em que o número
@@ -289,6 +300,10 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'account.transferred',
   'debt.limit_changed',
   'debt.opening_balance',
+  'advance.granted',
+  'advance.cancelled',
+  'order.refunded',
+  'package.transferred',
   'commission.closed',
   'commission.rule_changed',
 ];
