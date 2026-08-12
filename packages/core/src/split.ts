@@ -175,6 +175,8 @@ export function liquidoDaCasa(params: {
 
 export const ESTADOS_DO_SPLIT = [
   'pendente',
+  /** A chamada ao adquirente saiu e ainda não voltou. Ver a migração 0053. */
+  'liquidando',
   'retido',
   'liquidado',
   'falhou',
@@ -191,6 +193,7 @@ export type EstadoDoSplit = (typeof ESTADOS_DO_SPLIT)[number];
  */
 export const ROTULO_DO_SPLIT: Readonly<Record<EstadoDoSplit, string>> = {
   pendente: 'A repassar',
+  liquidando: 'Repassando',
   retido: 'Ficou com a casa',
   liquidado: 'Repassado',
   falhou: 'Falhou no repasse',
@@ -199,6 +202,7 @@ export const ROTULO_DO_SPLIT: Readonly<Record<EstadoDoSplit, string>> = {
 
 export const EXPLICACAO_DO_SPLIT: Readonly<Record<EstadoDoSplit, string>> = {
   pendente: 'O adquirente ainda não transferiu esta parte.',
+  liquidando: 'A transferência saiu e o adquirente ainda não respondeu.',
   retido:
     'O profissional ainda não tem cadastro aprovado no adquirente, então o valor caiu inteiro na '
     + 'conta da barbearia. A comissão dele é paga no fechamento, como sempre foi.',
@@ -213,3 +217,132 @@ export const ESTADOS_QUE_FICARAM_NA_CASA: readonly EstadoDoSplit[] = [
   'falhou',
   'estornado',
 ];
+
+// ---------------------------------------------------------------------------
+// KYC, liquidação e estorno (bloco 50, SPEC §3.5)
+// ---------------------------------------------------------------------------
+
+export const ESTADOS_DO_KYC = ['ausente', 'pendente', 'aprovado', 'recusado'] as const;
+export type EstadoDoKyc = (typeof ESTADOS_DO_KYC)[number];
+
+export const ROTULO_DO_KYC: Readonly<Record<EstadoDoKyc, string>> = {
+  ausente: 'Sem cadastro',
+  pendente: 'Em análise',
+  aprovado: 'Aprovado',
+  recusado: 'Recusado',
+};
+
+/**
+ * O que cada estado significa para quem opera — e a frase que evita a pergunta.
+ *
+ * A mais importante é `ausente`: quem lê "sem cadastro" numa tela de dinheiro
+ * assume que alguma coisa está quebrada. Não está — é o estado de fábrica, e a
+ * comissão continua saindo pelo fechamento como sempre saiu.
+ */
+export const EXPLICACAO_DO_KYC: Readonly<Record<EstadoDoKyc, string>> = {
+  ausente:
+    'Ele recebe a comissão no fechamento do período, como sempre. O cadastro no adquirente só '
+    + 'muda por onde o dinheiro chega — não muda quanto, nem se a venda acontece.',
+  pendente:
+    'O adquirente está conferindo os documentos. Enquanto isso a parte dele fica com a casa, e a '
+    + 'comissão sai no fechamento.',
+  aprovado: 'O adquirente repassa direto para a conta dele, no momento do pagamento.',
+  recusado:
+    'O adquirente não aprovou o cadastro. A comissão continua saindo no fechamento, e ele pode '
+    + 'tentar de novo com os documentos corrigidos.',
+};
+
+/** Só quem está aprovado recebe direto. */
+export function recebeDireto(estado: EstadoDoKyc, recebedorId: string | null): boolean {
+  return estado === 'aprovado' && recebedorId !== null;
+}
+
+/**
+ * Quantas vezes tentar o repasse antes de desistir.
+ *
+ * Três, e é bem menos que a escada de uma cobrança — a diferença é a direção do
+ * dinheiro. Cobrar de novo um cartão que falhou é apostar que o cliente
+ * depositou; **repassar** de novo é apostar que o adquirente estava fora do ar,
+ * e isso ou é verdade na segunda tentativa ou é um problema de cadastro que
+ * tentar mais vezes não conserta.
+ */
+export const TENTATIVAS_DE_REPASSE = 3;
+
+export const PASSOS_DA_LIQUIDACAO = ['nada', 'reter', 'repassar', 'desistir'] as const;
+export type PassoDaLiquidacao = (typeof PASSOS_DA_LIQUIDACAO)[number];
+
+export interface ParteALiquidar {
+  readonly estado: EstadoDoSplit;
+  readonly valorCents: number;
+  readonly tentativas: number;
+  /** O KYC de quem vai receber. A parte da casa e a da plataforma não têm. */
+  readonly kyc: EstadoDoKyc | null;
+  readonly recebedorId: string | null;
+}
+
+/**
+ * O que fazer com uma parte que ainda não foi repassada.
+ *
+ * A ordem responde à frase da SPEC: *"enquanto pendente, o pagamento cai
+ * integralmente na barbearia e a comissão é paga fora, **sem bloquear a
+ * venda**"*. Por isso `reter` vem antes de tudo e não é falha — é o caminho
+ * normal de quem ainda não tem cadastro, e a esmagadora maioria não tem.
+ */
+export function proximoPassoDaLiquidacao(parte: ParteALiquidar): PassoDaLiquidacao {
+  /**
+   * `liquidando` **não** é retentável por esta função.
+   *
+   * A parte nesse estado tem uma chamada em voo. Quem a resgata é a conciliação,
+   * que pergunta ao adquirente o que aconteceu — retentar às cegas é o que paga
+   * o barbeiro duas vezes.
+   */
+  if (parte.estado !== 'pendente' && parte.estado !== 'falhou') return 'nada';
+  if (parte.valorCents <= 0) return 'nada';
+
+  // Sem cadastro aprovado não há para onde mandar. Não é erro: é o estado de
+  // fábrica, e a comissão sai no fechamento como sempre saiu.
+  if (parte.kyc !== null && !recebeDireto(parte.kyc, parte.recebedorId)) return 'reter';
+
+  if (parte.tentativas >= TENTATIVAS_DE_REPASSE) return 'desistir';
+  return 'repassar';
+}
+
+/**
+ * O estorno de um repasse **já liquidado**.
+ *
+ * *"Estorno com split já liquidado exige política explícita de recuperação."* —
+ * e a política é esta, escrita:
+ *
+ * - **Não liquidado**: a parte vira `estornado` e ninguém deve nada. O dinheiro
+ *   ainda estava com a plataforma.
+ * - **Liquidado**: o dinheiro entrou na conta do profissional, e nenhum
+ *   adquirente deixa a plataforma sacar de um recebedor. Vira **dívida**,
+ *   lançada como comissão negativa no período aberto — que é exatamente o que a
+ *   SPEC §3.4 já manda para estorno de venda.
+ *
+ * Inventar um mecanismo novo de cobrança seria pior de duas formas: o barbeiro
+ * teria que aprender uma segunda linguagem para a mesma coisa, e o valor ficaria
+ * fora do fechamento, que é onde ele confere o mês.
+ */
+export type DesfechoDoEstornoDeRepasse = 'nada' | 'cancelar' | 'cobrar_do_profissional';
+
+export function desfechoDoEstornoDeRepasse(parte: {
+  readonly estado: EstadoDoSplit;
+  readonly parte: ParteDoSplit;
+}): DesfechoDoEstornoDeRepasse {
+  if (parte.estado === 'estornado') return 'nada';
+  /**
+   * `liquidando` conta como saiu, e a escolha é conservadora de propósito.
+   *
+   * A chamada está em voo: o dinheiro pode ter chegado à conta do barbeiro. Ler
+   * isso como "não saiu" é o caminho pelo qual o cliente é reembolsado, o
+   * barbeiro fica com o dinheiro e ninguém deve nada — o achado da revisão deste
+   * bloco. Cobrar de quem não recebeu é conserto de um lançamento; não cobrar de
+   * quem recebeu é dinheiro que ninguém procura.
+   */
+  if (parte.estado !== 'liquidado' && parte.estado !== 'liquidando') return 'cancelar';
+  // A parte da casa "liquidada" nunca saiu de lá: o dinheiro do estorno volta
+  // da conta dela pelo próprio adquirente, e não há de quem cobrar.
+  if (parte.parte !== 'profissional') return 'cancelar';
+  return 'cobrar_do_profissional';
+}

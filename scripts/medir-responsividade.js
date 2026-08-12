@@ -1163,9 +1163,18 @@ function prepararSplit(slug) {
   );
   if (!cobranca) return;
 
+  // Um barbeiro aprovado e outro sem cadastro (bloco 50): são os dois estados
+  // que a tela precisa mostrar lado a lado, e o segundo é o que traz o valor
+  // retido — o número que faz o cadastro acontecer.
+  psql(
+    `UPDATE professionals SET psp_recipient_id = 'rec_medicao', psp_kyc_status = 'aprovado',
+            psp_kyc_updated_at = now()
+      WHERE id = '${barbeiro}'`,
+  );
+
   const partes = [
     ['barbearia', 'NULL', 5500, 'liquidado', 'now()'],
-    ['profissional', `'${barbeiro}'`, 4000, 'pendente', 'NULL'],
+    ['profissional', `'${barbeiro}'`, 4000, 'liquidado', 'now()'],
     ['plataforma', 'NULL', 500, 'liquidado', 'now()'],
   ];
   for (const [parte, dono, valor, estado, quando] of partes) {

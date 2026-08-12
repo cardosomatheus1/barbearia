@@ -11,7 +11,11 @@ import { marcarFalta } from './faltas.js';
 import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
 import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
 import { agendarAlertasDeTodas, alertaPendente } from './alerta-agendado.js';
-import { agendarCobrancaDoClubeDeTodas, cobrancaDoClubePendente } from './clube.js';
+import {
+  agendarCobrancaDoClubeDeTodas,
+  agendarLiquidacaoDeTodas,
+  cobrancaDoClubePendente,
+} from './clube.js';
 import { alertasDaBarbearia } from './alertas.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
@@ -154,6 +158,19 @@ export interface Contexto {
    * desatado. A tarefa conclui, porque não há o que repetir.
    */
   readonly responderRecadoDoCliente: (tenantId: string, recadoId: string) => Promise<boolean>;
+  /**
+   * Uma volta da liquidação de repasses (bloco 50), injetada.
+   *
+   * Mesma razão de todas as outras: ela vive em `packages/finance` e conhece o
+   * adquirente, e `jobs` não conhece nenhum dos dois. Obrigatória no tipo — a
+   * opcional é a que é esquecida no primeiro worker novo, e o barbeiro deixaria
+   * de receber sem nada ficar vermelho.
+   */
+  readonly liquidarRepasses: (
+    tenantId: string,
+    agora: Date,
+  ) => Promise<{ readonly repassados: number; readonly retidos: number }>;
+
   /**
    * Uma volta da régua de cobrança do clube (bloco 47), injetada.
    *
@@ -434,6 +451,19 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   },
 
   /**
+   * A liquidação dos repasses (bloco 50).
+   *
+   * Uma tarefa por barbearia pelo mesmo motivo da cobrança do clube:
+   * `payment_splits` tem RLS `FORCE`, e um processo sem tenant enxerga zero
+   * linhas. Ela roda **junto** com a cobrança, na mesma volta e no mesmo
+   * horário: as duas falam com o adquirente, e empilhá-las de madrugada é o que
+   * mantém o expediente livre de espera de rede.
+   */
+  'split.liquidar': async (tarefa, contexto) => {
+    await contexto.liquidarRepasses(tarefa.tenantId, contexto.relogio.agora());
+  },
+
+  /**
    * A régua de cobrança do clube (bloco 47).
    *
    * Uma tarefa por barbearia, ao contrário da régua da plataforma: `club_invoices`
@@ -609,6 +639,9 @@ export async function rodarWorker(
     if (clube.dia !== ultimoClube) {
       ultimoClube = clube.dia;
       await agendarCobrancaDoClubeDeTodas(clube);
+      // Na mesma volta: as duas falam com o adquirente, e é de madrugada que
+      // isso não disputa rede com o balcão.
+      await agendarLiquidacaoDeTodas(clube);
     }
 
     const resultado = await rodada(contexto);

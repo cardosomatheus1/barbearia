@@ -3,6 +3,8 @@ import { respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
 import {
   aplicarReguaDoClube,
   conciliarCobrancas,
+  conciliarRecebedores,
+  liquidarRepasses,
   montarAvisoDoClube,
 } from '@barbearia/finance';
 import {
@@ -13,10 +15,12 @@ import {
 } from '@barbearia/scheduling';
 import {
   FakeCobrancaDoClubeProvider,
+  FakeSplitProvider,
   MINUTOS_DE_JANELA_EXCLUSIVA,
   diaNaUnidade,
   type CobrancaDoClubeProvider,
   type MotivoDoAvisoDoClube,
+  type SplitProvider,
 } from '@barbearia/core';
 import {
   avisarDaOperacao,
@@ -122,6 +126,18 @@ const provider = new ConsoleNotificationProvider();
 let clubeProvider: CobrancaDoClubeProvider | null = null;
 const cobrancaDoClube = (): CobrancaDoClubeProvider =>
   (clubeProvider ??= new FakeCobrancaDoClubeProvider());
+
+/**
+ * O adquirente do split — hoje, o de mentira (bloco 50).
+ *
+ * Ele deixa o cadastro **pendente** e recusa o repasse, e as duas escolhas são o
+ * estado real do produto sem conta contratada. Sem cadastro aprovado a parte do
+ * barbeiro fica retida, o dinheiro cai inteiro na casa e a comissão sai no
+ * fechamento — que é como toda barbearia do país paga o barbeiro hoje, e é o
+ * caminho que a SPEC §3.5 manda não bloquear.
+ */
+let splitProvider: SplitProvider | null = null;
+const adquirenteDoSplit = (): SplitProvider => (splitProvider ??= new FakeSplitProvider());
 
 async function main(): Promise<void> {
   // Mesma guarda da API: se a conexão ignora RLS, o isolamento entre barbearias
@@ -321,6 +337,26 @@ async function main(): Promise<void> {
        * provedor entra por uma função só, para que ligar a Stripe de verdade
        * ligue este caminho junto.
        */
+      /**
+       * A liquidação dos repasses (bloco 50).
+       *
+       * A conciliação do cadastro vem **antes**, e a ordem é decisão: descobrir
+       * que o barbeiro foi aprovado depois de reter a parte dele faria o dinheiro
+       * dele passar mais um dia pela casa por um webhook que se perdeu.
+       */
+      liquidarRepasses: async (tenantId, agora) => {
+        const provider = adquirenteDoSplit();
+        const cadastros = await conciliarRecebedores({ tenantId, provider, agora });
+        if (cadastros.aprovados > 0) {
+          console.log('[split] cadastros aprovados', { tenantId, ...cadastros });
+        }
+
+        const resultado = await liquidarRepasses({ tenantId, provider, agora });
+        const mexeu = Object.values(resultado).some((n) => n > 0);
+        if (mexeu) console.log('[split] liquidação do dia', { tenantId, ...resultado });
+        return { repassados: resultado.repassados, retidos: resultado.retidos };
+      },
+
       rodarCobrancaDoClube: async (tenantId, agora) => {
         const resultado = await aplicarReguaDoClube({
           tenantId,

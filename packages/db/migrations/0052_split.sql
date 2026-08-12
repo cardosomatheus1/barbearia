@@ -108,8 +108,17 @@ CREATE TABLE payment_splits (
   CONSTRAINT payment_splits_dono_coerente CHECK (
     (party = 'profissional') = (professional_id IS NOT NULL)
   ),
+  /**
+   * Liquidado tem data — mas a recíproca **não** vale.
+   *
+   * A primeira versão era uma equivalência, e ela quebrava no estorno: uma parte
+   * repassada que depois é desfeita vira `estornado` e continua tendo a data em
+   * que o dinheiro saiu. Esse fato não deixa de ser verdade porque a venda foi
+   * desfeita — pelo contrário, é exatamente o que a dívida do bloco 50 precisa
+   * saber ("saiu no dia 12"). Foi o teste do estorno que pegou.
+   */
   CONSTRAINT payment_splits_liquidacao_coerente CHECK (
-    (status = 'liquidado') = (settled_at IS NOT NULL)
+    status <> 'liquidado' OR settled_at IS NOT NULL
   ),
   CONSTRAINT payment_splits_transferencia_nao_vazia CHECK (
     psp_transfer_id IS NULL OR length(btrim(psp_transfer_id)) > 0

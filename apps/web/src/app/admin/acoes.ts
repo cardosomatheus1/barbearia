@@ -52,6 +52,7 @@ import {
   desfazerCancelamentoNaApi,
   pagarFaturaNaApi,
   salvarModeloDaAssinaturaNaApi,
+  cadastrarRecebedorNaApi,
   salvarSplitNaApi,
   incluirDependenteNaApi,
   removerDependenteNaApi,
@@ -2186,6 +2187,25 @@ export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
   const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
   if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
   redirect(`/admin/cliente/${customerId}?feito=cancelou`);
+}
+
+/**
+ * Cadastra a conta de recebimento de um profissional no adquirente (bloco 50).
+ *
+ * Documento, banco, agência e conta **atravessam** para o adquirente e não são
+ * gravados no produto — quem tem obrigação regulatória de guardá-los é ele.
+ * Deste lado fica a referência opaca, pela mesma razão do token do cartão.
+ */
+export async function acaoCadastrarRecebedor(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await cadastrarRecebedorNaApi(token, texto(form, 'professionalId'), {
+    documento: texto(form, 'documento').replace(/\D/g, ''),
+    banco: texto(form, 'banco'),
+    agencia: texto(form, 'agencia'),
+    conta: texto(form, 'conta'),
+  });
+  if (!resultado.ok) falhar('/admin/comissao', resultado.code);
+  redirect('/admin/comissao?feito=recebedor');
 }
 
 /**

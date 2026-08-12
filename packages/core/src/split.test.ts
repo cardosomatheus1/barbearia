@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { calcularSplit, liquidoDaCasa, splitFecha } from './split.js';
+import {
+  calcularSplit,
+  desfechoDoEstornoDeRepasse,
+  liquidoDaCasa,
+  proximoPassoDaLiquidacao,
+  splitFecha,
+} from './split.js';
 
 /**
  * Split de pagamento (bloco 49, SPEC §3.5).
@@ -145,5 +151,119 @@ describe('a taxa do adquirente sai do pedaço da casa', () => {
 
     expect(liquidoDaCasa({ fatias, taxaDoAdquirenteCents: 319 })).toBe(5500 - 319);
     expect(valorDe(fatias, 'profissional')).toBe(4000);
+  });
+});
+
+describe('KYC, liquidação e estorno (bloco 50)', () => {
+  const pendente = (extra: Partial<Parameters<typeof proximoPassoDaLiquidacao>[0]> = {}) => ({
+    estado: 'pendente' as const,
+    valorCents: 4000,
+    tentativas: 0,
+    kyc: 'aprovado' as const,
+    recebedorId: 'rec_1',
+    ...extra,
+  });
+
+  it('sem cadastro aprovado, a parte é retida — e isso não é falha', () => {
+    /**
+     * *"Enquanto pendente, o pagamento cai integralmente na barbearia e a
+     * comissão é paga fora, **sem bloquear a venda**."* É a frase mais
+     * importante da seção, e vai contra o instinto: o caminho óbvio seria
+     * recusar a venda até o barbeiro estar aprovado, e o que isso produz é a
+     * barbearia descobrindo no balcão que não consegue cobrar.
+     */
+    for (const kyc of ['ausente', 'pendente', 'recusado'] as const) {
+      expect(proximoPassoDaLiquidacao(pendente({ kyc }))).toBe('reter');
+    }
+  });
+
+  it('aprovado sem id de recebedor também é retido', () => {
+    // O `CHECK` do banco impede o par, e esta é a segunda camada: se um dia a
+    // linha existir, a falha aparece aqui e não na chamada ao adquirente.
+    expect(proximoPassoDaLiquidacao(pendente({ recebedorId: null }))).toBe('reter');
+  });
+
+  it('aprovado com recebedor, repassa', () => {
+    expect(proximoPassoDaLiquidacao(pendente())).toBe('repassar');
+  });
+
+  it('depois de três tentativas, desiste', () => {
+    /**
+     * Bem menos degraus que a escada de uma cobrança, e a diferença é a direção
+     * do dinheiro: repassar de novo é apostar que o adquirente estava fora do
+     * ar, e isso ou é verdade na segunda tentativa ou é problema de cadastro que
+     * tentar mais vezes não conserta.
+     */
+    expect(proximoPassoDaLiquidacao(pendente({ estado: 'falhou', tentativas: 2 }))).toBe('repassar');
+    expect(proximoPassoDaLiquidacao(pendente({ estado: 'falhou', tentativas: 3 }))).toBe('desistir');
+  });
+
+  it('parte em voo não é tentada de novo pela régua', () => {
+    /**
+     * `liquidando` tem uma chamada no ar. Quem a resgata é a volta seguinte, que
+     * a devolve a `falhou` depois de uma hora — e só então a régua a retenta, com
+     * a chave estável que faz o adquirente devolver o resultado da primeira.
+     * Retentar às cegas é o que paga o barbeiro duas vezes.
+     */
+    expect(proximoPassoDaLiquidacao(pendente({ estado: 'liquidando' }))).toBe('nada');
+  });
+
+  it('estorno de parte em voo cobra, porque o dinheiro pode ter saído', () => {
+    /**
+     * A escolha conservadora, e ela é o achado da revisão deste bloco: ler
+     * `liquidando` como "não saiu" é o caminho pelo qual o cliente é reembolsado,
+     * o barbeiro fica com o dinheiro e ninguém deve nada. Cobrar de quem não
+     * recebeu é conserto de um lançamento; não cobrar de quem recebeu é dinheiro
+     * que ninguém procura.
+     */
+    expect(desfechoDoEstornoDeRepasse({ estado: 'liquidando', parte: 'profissional' }))
+      .toBe('cobrar_do_profissional');
+  });
+
+  it('parte já liquidada ou retida não é tentada de novo', () => {
+    expect(proximoPassoDaLiquidacao(pendente({ estado: 'liquidado' }))).toBe('nada');
+    expect(proximoPassoDaLiquidacao(pendente({ estado: 'retido' }))).toBe('nada');
+    expect(proximoPassoDaLiquidacao(pendente({ estado: 'estornado' }))).toBe('nada');
+  });
+
+  it('a parte da casa e a da plataforma não passam por KYC', () => {
+    // Elas não têm recebedor: a conta da casa **é** para onde o adquirente manda
+    // por padrão, e a da plataforma é a nossa.
+    expect(proximoPassoDaLiquidacao(pendente({ kyc: null, recebedorId: null })))
+      .toBe('repassar');
+  });
+
+  it('estorno antes da liquidação apenas cancela a parte', () => {
+    // O dinheiro ainda estava com a plataforma: ninguém deve nada.
+    expect(desfechoDoEstornoDeRepasse({ estado: 'pendente', parte: 'profissional' }))
+      .toBe('cancelar');
+    expect(desfechoDoEstornoDeRepasse({ estado: 'retido', parte: 'profissional' }))
+      .toBe('cancelar');
+  });
+
+  it('estorno de repasse já liquidado vira dívida do profissional', () => {
+    /**
+     * *"Estorno com split já liquidado exige política explícita de
+     * recuperação."* O dinheiro entrou na conta dele e nenhum adquirente deixa a
+     * plataforma sacar de um recebedor. A política é lançar comissão negativa no
+     * período aberto — o mesmo mecanismo que o estorno de venda já usa, e que o
+     * barbeiro já entende.
+     */
+    expect(desfechoDoEstornoDeRepasse({ estado: 'liquidado', parte: 'profissional' }))
+      .toBe('cobrar_do_profissional');
+  });
+
+  it('a parte da casa liquidada não vira dívida de ninguém', () => {
+    // O dinheiro nunca saiu de lá: o estorno volta da conta dela pelo próprio
+    // adquirente, e não há de quem cobrar.
+    expect(desfechoDoEstornoDeRepasse({ estado: 'liquidado', parte: 'barbearia' }))
+      .toBe('cancelar');
+    expect(desfechoDoEstornoDeRepasse({ estado: 'liquidado', parte: 'plataforma' }))
+      .toBe('cancelar');
+  });
+
+  it('estornar duas vezes não faz nada na segunda', () => {
+    expect(desfechoDoEstornoDeRepasse({ estado: 'estornado', parte: 'profissional' }))
+      .toBe('nada');
   });
 });

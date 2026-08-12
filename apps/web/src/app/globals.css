@@ -6706,3 +6706,39 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-muted);
   font-weight: var(--font-weight-semibold);
 }
+
+/* ---------------------------------------------------------------------------
+   Quem recebe direto do adquirente (bloco 50)
+
+   A frase de estado vem antes do formulário, e o valor retido tem cor: o
+   cadastro no adquirente é burocracia que ninguém faz por gosto, e "R$ 1.240
+   passaram pela casa porque ele não terminou o cadastro" é o que a faz
+   acontecer.
+   --------------------------------------------------------------------------- */
+.recebedores {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.recebedor {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.recebedor__nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.recebedor__frase {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.recebedor__retido {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+}

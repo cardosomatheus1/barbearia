@@ -133,11 +133,16 @@ BEGIN
 END $$;
 
 -- ----------------------------------------------------------------------------
--- 4 — parte liquidada tem data, e o contrário também
+-- 4 — parte liquidada tem data; parte estornada **mantém** a dela
 --
 -- "Repassado" sem data é uma linha que responde "sim" para "o Ruan recebeu?" e
 -- nada para "quando?" — que é a pergunta que chega quando ele não achou no
 -- extrato do banco.
+--
+-- A recíproca não vale, e é decisão: uma parte repassada que depois é desfeita
+-- continua tendo a data em que o dinheiro saiu. Esse fato não deixa de ser
+-- verdade porque a venda foi desfeita — é justamente o que a dívida do bloco 50
+-- precisa saber.
 -- ----------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -146,8 +151,14 @@ BEGIN
      WHERE charge_id = '52525252-8888-0000-0000-000000000001';
     RAISE EXCEPTION 'aceitou repasse liquidado sem data';
   EXCEPTION WHEN check_violation THEN
-    RAISE NOTICE 'OK 4 — repasse liquidado tem data';
+    RAISE NOTICE 'OK 4a — repasse liquidado tem data';
   END;
+
+  UPDATE payment_splits SET status = 'liquidado', settled_at = now()
+   WHERE charge_id = '52525252-8888-0000-0000-000000000001';
+  UPDATE payment_splits SET status = 'estornado'
+   WHERE charge_id = '52525252-8888-0000-0000-000000000001';
+  RAISE NOTICE 'OK 4b — a parte estornada mantém a data em que o dinheiro saiu';
 END $$;
 
 -- ----------------------------------------------------------------------------

@@ -1,12 +1,19 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { EXPLICACAO_DO_SPLIT, ROTULO_DA_PARTE, ROTULO_DO_SPLIT } from '@barbearia/core';
+import {
+  EXPLICACAO_DO_KYC,
+  EXPLICACAO_DO_SPLIT,
+  ROTULO_DA_PARTE,
+  ROTULO_DO_KYC,
+  ROTULO_DO_SPLIT,
+} from '@barbearia/core';
 import {
   comissaoDoPeriodo,
   fechamentosDeComissao,
   type FechamentoDeComissao,
   type LinhaDeComissao,
   meusRepassesNaApi,
+  recebedoresNaApi,
   splitDoPeriodoNaApi,
   type ConfiguracaoDoSplitNaTela,
   type RepasseNaTela,
@@ -14,7 +21,12 @@ import {
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
-import { acaoFecharComissao, acaoSair, acaoSalvarSplit } from '../acoes';
+import {
+  acaoCadastrarRecebedor,
+  acaoFecharComissao,
+  acaoSair,
+  acaoSalvarSplit,
+} from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -111,6 +123,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
 
   const erro = first(query['erro']);
   const fechou = first(query['fechado']) === '1';
+  const feito = first(query['feito']);
   const podeFechar = podeNaTela(estado, 'commission.edit_rules');
   // A mesma pergunta que a API faz, e ela decide **qual rota** chamar: a folha
   // inteira exige segundo fator, o próprio holerite não.
@@ -127,12 +140,15 @@ export default async function ComissaoPage({ searchParams }: Props) {
   const ate = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0))
     .toISOString().slice(0, 10);
 
-  const [extrato, historico, repasses] = await Promise.all([
+  const [extrato, historico, repasses, contas] = await Promise.all([
     comissaoDoPeriodo(token, { daCasa: veTodos }),
     fechamentosDeComissao(token, veTodos),
     // A rota da casa exige `commission.view_all`; a do próprio, `view_own`. Quem
     // decide qual chamar é a mesma pergunta que a API faz.
     veTodos ? splitDoPeriodoNaApi(token, de, ate) : meusRepassesNaApi(token, de, ate),
+    // Quem já pode receber direto, e quanto está retido esperando cadastro. É
+    // dinheiro por profissional, como o extrato: `commission.view_all`.
+    veTodos ? recebedoresNaApi(token) : Promise.resolve(null),
   ]);
 
   const podeMexerNoSplit = podeNaTela(estado, 'finance.split_manage');
@@ -149,6 +165,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
   const ligado = configuracao?.ligado ?? false;
   const plataformaPercent = (configuracao?.plataformaBps ?? 0) / 100;
   const listaDeRepasses: readonly RepasseNaTela[] = dadosDoSplit?.repasses ?? [];
+  const listaDeContas = contas?.ok ? contas.dados.recebedores : [];
 
   const topo = (
     <header className="painel__topo">
@@ -209,6 +226,17 @@ export default async function ComissaoPage({ searchParams }: Props) {
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Período fechado. Os valores estão congelados — ajuste a partir de agora vira lançamento
           novo no período seguinte.
+        </div>
+      ) : null}
+      {feito === 'split' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Repasse direto salvo.
+        </div>
+      ) : null}
+      {feito === 'recebedor' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Dados enviados ao adquirente. A análise costuma levar de algumas horas a alguns dias — o
+          estado aparece aqui quando ele responder.
         </div>
       ) : null}
 
@@ -340,6 +368,134 @@ export default async function ComissaoPage({ searchParams }: Props) {
             </table>
           </div>
         )}
+
+        {/*
+          Quem já pode receber direto (bloco 50).
+
+          `retidoCents` é o número que move o dono: o cadastro no adquirente é
+          burocracia que ninguém faz por gosto, e "R$ 40 do Ruan passaram pela
+          casa porque ele não terminou o cadastro" é o que faz o cadastro
+          acontecer.
+        */}
+        {ligado && listaDeContas.length > 0 ? (
+          <details className="dobra">
+            <summary className="dobra__titulo">
+              Quem recebe direto ({listaDeContas.filter((c) => c.kyc === 'aprovado').length} de{' '}
+              {listaDeContas.length})
+            </summary>
+
+            <ul className="recebedores">
+              {listaDeContas.map((conta) => (
+                <li className="recebedor" key={conta.professionalId}>
+                  <div className="recebedor__quem">
+                    <p className="recebedor__nome">
+                      {conta.nome}
+                      <span className="item-cadastro__selo">{ROTULO_DO_KYC[conta.kyc]}</span>
+                    </p>
+                    <p className="recebedor__frase">{EXPLICACAO_DO_KYC[conta.kyc]}</p>
+                    {conta.retidoCents > 0 ? (
+                      <p className="recebedor__retido">
+                        R$ {reaisDoCampo(conta.retidoCents)} passaram pela casa neste período por
+                        falta de cadastro. A comissão dele sai no fechamento, como sempre.
+                      </p>
+                    ) : null}
+                    {conta.motivo ? (
+                      <p className="recebedor__frase">O adquirente disse: {conta.motivo}</p>
+                    ) : null}
+                  </div>
+
+                  {podeMexerNoSplit && conta.kyc !== 'aprovado' ? (
+                    <details className="dobra">
+                      <summary className="dobra__titulo">
+                        {conta.kyc === 'ausente' ? 'Cadastrar a conta dele' : 'Tentar de novo'}
+                      </summary>
+                      <form action={acaoCadastrarRecebedor} className="formulario">
+                        <input
+                          name="professionalId"
+                          type="hidden"
+                          value={conta.professionalId}
+                        />
+                        <div className="ui-field">
+                          <label
+                            className="ui-field__label"
+                            htmlFor={`doc-${conta.professionalId}`}
+                          >
+                            CPF ou CNPJ dele
+                          </label>
+                          <input
+                            className="ui-field__input"
+                            id={`doc-${conta.professionalId}`}
+                            inputMode="numeric"
+                            name="documento"
+                            required
+                            type="text"
+                          />
+                        </div>
+                        <div className="campos-lado">
+                          <div className="ui-field">
+                            <label
+                              className="ui-field__label"
+                              htmlFor={`banco-${conta.professionalId}`}
+                            >
+                              Banco
+                            </label>
+                            <input
+                              className="ui-field__input"
+                              id={`banco-${conta.professionalId}`}
+                              name="banco"
+                              placeholder="260"
+                              required
+                              type="text"
+                            />
+                          </div>
+                          <div className="ui-field">
+                            <label
+                              className="ui-field__label"
+                              htmlFor={`ag-${conta.professionalId}`}
+                            >
+                              Agência
+                            </label>
+                            <input
+                              className="ui-field__input"
+                              id={`ag-${conta.professionalId}`}
+                              name="agencia"
+                              required
+                              type="text"
+                            />
+                          </div>
+                          <div className="ui-field">
+                            <label
+                              className="ui-field__label"
+                              htmlFor={`cc-${conta.professionalId}`}
+                            >
+                              Conta
+                            </label>
+                            <input
+                              className="ui-field__input"
+                              id={`cc-${conta.professionalId}`}
+                              name="conta"
+                              required
+                              type="text"
+                            />
+                          </div>
+                        </div>
+                        <p className="ui-field__hint">
+                          Estes dados vão para o adquirente e <strong>não ficam guardados
+                          aqui</strong>. O que fica é a referência dele. A análise costuma levar de
+                          algumas horas a alguns dias — enquanto isso a comissão sai no fechamento,
+                          como sempre.
+                        </p>
+                        <button className="ui-button ui-button--secondary" type="submit">
+                          Enviar ao adquirente
+                        </button>
+                      </form>
+                    </details>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
 
         {podeMexerNoSplit ? (
           <details className="dobra">

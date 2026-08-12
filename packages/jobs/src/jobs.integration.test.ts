@@ -82,6 +82,7 @@ const alertasEntregues: { tenantId: string; quantos: number }[] = [];
 const conciliacoesRodadas: { tenantId: string; agora: Date }[] = [];
 
 const cobrancasDoClube: { tenantId: string; agora: Date }[] = [];
+const liquidacoesRodadas: { tenantId: string; agora: Date }[] = [];
 const avisosDoClube: { tenantId: string; assinaturaId: string; motivo: string }[] = [];
 
 const ligacoesDaPlataforma = () => ({
@@ -128,6 +129,10 @@ const ligacoesDaPlataforma = () => ({
   conciliarCobrancas: async (tenantId: string, agora: Date) => {
     conciliacoesRodadas.push({ tenantId, agora });
     return { pagas: 0, encerradas: 0 };
+  },
+  liquidarRepasses: async (tenantId: string, agora: Date) => {
+    liquidacoesRodadas.push({ tenantId, agora });
+    return { repassados: 0, retidos: 0 };
   },
   rodarCobrancaDoClube: async (tenantId: string, agora: Date) => {
     cobrancasDoClube.push({ tenantId, agora });
@@ -187,6 +192,7 @@ describeIfDb('fila de trabalho', () => {
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
     cobrancasDoClube.length = 0;
+    liquidacoesRodadas.length = 0;
     avisosDoClube.length = 0;
     contexto = {
       provider,
@@ -639,6 +645,25 @@ describeIfDb('fila de trabalho', () => {
         motivo: 'inadimplente',
       },
     ]);
+  });
+
+  it('a liquidação de repasses chega a quem sabe repassar', async () => {
+    // O handler não sabe o que é um repasse: `jobs` não conhece `finance` nem o
+    // adquirente. Uma tarefa por barbearia, porque `payment_splits` tem RLS.
+    await enfileirarNoTenant({
+      kind: 'split.liquidar',
+      idempotencyKey: 'split:tenant:2026-11-01',
+    });
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+    expect(liquidacoesRodadas).toEqual([{ tenantId: TENANT, agora: COMECA_EM }]);
   });
 
   it('provedor fora do ar devolve a tarefa à fila', async () => {

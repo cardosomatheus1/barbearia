@@ -2526,3 +2526,41 @@ export const meusRepassesNaApi = (token: string, de: string, ate: string) =>
  */
 export const salvarSplitNaApi = (token: string, ligado: boolean) =>
   chamar<{ salvo: boolean }>('PUT', '/v1/admin/split/configuracao', { ligado }, token);
+
+
+/**
+ * Quem já pode receber direto do adquirente (bloco 50).
+ *
+ * `retidoCents` é o número que move o dono: o cadastro no adquirente é
+ * burocracia que ninguém faz por gosto, e "R$ 1.240 do Ruan passaram pela casa
+ * porque ele não terminou o cadastro" é o que faz o cadastro acontecer.
+ */
+export interface RecebedorNaTelaAdmin {
+  professionalId: string;
+  nome: string;
+  kyc: 'ausente' | 'pendente' | 'aprovado' | 'recusado';
+  temRecebedor: boolean;
+  motivo: string | null;
+  atualizadoEm: string | null;
+  retidoCents: number;
+}
+
+export const recebedoresNaApi = (token: string) =>
+  chamar<{ recebedores: RecebedorNaTelaAdmin[] }>(
+    'GET',
+    '/v1/admin/split/recebedores',
+    undefined,
+    token,
+  );
+
+export const cadastrarRecebedorNaApi = (
+  token: string,
+  professionalId: string,
+  dados: { documento: string; banco: string; agencia: string; conta: string },
+) =>
+  chamar<{ estado: string }>(
+    'PUT',
+    `/v1/admin/split/recebedores/${professionalId}`,
+    dados,
+    token,
+  );

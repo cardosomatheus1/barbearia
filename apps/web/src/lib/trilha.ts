@@ -94,6 +94,9 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   // O split (bloco 49). Ligado, o adquirente manda a comissão direto para a
   // conta do barbeiro — é a configuração com a maior consequência do produto.
   'split.changed': 'mexeu no repasse direto ao barbeiro',
+  // Aprovado, ele passa a receber direto na conta dele. O dado bancário não
+  // está aqui: ele atravessa para o adquirente e não é gravado neste lado.
+  'split.recipient_changed': 'cadastrou a conta de recebimento de',
 
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a

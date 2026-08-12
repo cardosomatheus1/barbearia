@@ -1,3 +1,4 @@
+import { FakeSplitProvider, type SplitProvider } from '@barbearia/core';
 import { FakePaymentProvider, type PaymentProvider } from '@barbearia/core';
 import { FakePspProvider, type PspProvider } from './psp.js';
 import { StripeCliente } from './stripe.js';
@@ -76,4 +77,19 @@ export function adquirenteDaComanda(modo = modoDoAdquirente()): PaymentProvider 
   return modo === 'stripe'
     ? new StripePaymentProvider(new StripeCliente())
     : new FakePaymentProvider();
+}
+
+/**
+ * O adquirente do **split** (bloco 50).
+ *
+ * Aqui pela mesma razão dos outros três: quem escolhe implementação é quem monta
+ * o processo, e `packages/platform` é onde as credenciais e o cliente HTTP já
+ * moram. Hoje devolve o de mentira — não há conta contratada, e é lacuna
+ * declarada — e a escolha do fake é o que faz o caminho real ser exercido: sem
+ * cadastro aprovado a parte fica retida, e a comissão sai no fechamento.
+ */
+let doSplit: SplitProvider | null = null;
+
+export function adquirenteDoSplit(): SplitProvider {
+  return (doSplit ??= new FakeSplitProvider());
 }

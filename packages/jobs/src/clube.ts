@@ -61,3 +61,29 @@ export function cobrancaDoClubePendente(agora: Date): {
   );
   return { dia: quando.toISOString().slice(0, 10), quando };
 }
+
+/**
+ * O agendamento da liquidação de repasses (bloco 50).
+ *
+ * Ao lado da cobrança do clube e no mesmo horário, de propósito: as duas falam
+ * com o adquirente, e empilhá-las de madrugada é o que mantém o expediente livre
+ * de espera de rede. Uma tarefa por barbearia porque `payment_splits` tem RLS
+ * `FORCE` — um processo sem tenant no contexto enxerga zero linhas.
+ */
+export async function agendarLiquidacaoDeTodas(params: {
+  readonly dia: string;
+  readonly quando?: Date;
+}): Promise<number> {
+  return semTenant(async (tx) =>
+    tx.$executeRaw`
+      INSERT INTO jobs (tenant_id, kind, payload, run_after, idempotency_key, max_attempts)
+      SELECT tp.tenant_id, 'split.liquidar', '{}'::jsonb,
+             ${params.quando ?? new Date()},
+             'split:' || tp.tenant_id::text || ':' || ${params.dia},
+             3
+      FROM tenant_platform tp
+      WHERE tp.blocked_at IS NULL
+      ON CONFLICT DO NOTHING
+    `,
+  );
+}

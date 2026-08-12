@@ -310,3 +310,149 @@ export class FakeCobrancaDoClubeProvider implements CobrancaDoClubeProvider {
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// O repasse e o cadastro do recebedor (bloco 50, SPEC §3.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * O que o adquirente faz **depois** do pagamento: mover dinheiro entre contas.
+ *
+ * Contrato próprio, e é o quarto deste arquivo. A régua vale de novo: as
+ * perguntas são outras. `PaymentProvider` cria uma cobrança e devolve um QR
+ * Code; este pega dinheiro que já entrou e o manda para a conta de outra pessoa,
+ * e a única coisa que interessa é "saiu ou não saiu, e para onde".
+ *
+ * O cadastro do recebedor mora aqui pelo mesmo motivo: ele é a **condição** do
+ * repasse, e separá-lo num quinto contrato faria quem implementa ter que ligar
+ * dois adquirentes que na prática são o mesmo.
+ */
+export interface SplitProvider {
+  /**
+   * Começa o cadastro de um profissional como recebedor.
+   *
+   * Devolve o id e o estado — que quase nunca é `aprovado` na primeira chamada:
+   * *"o onboarding disso é assíncrono"*, e o adquirente confere documento em
+   * horas ou dias. Quem descobre o resultado é o webhook ou a conciliação.
+   */
+  cadastrarRecebedor(pedido: PedidoDeRecebedor): Promise<RecebedorCriado>;
+  /** Pergunta o estado do cadastro. É a rede de segurança da conciliação. */
+  consultarRecebedor(recebedorId: string): Promise<EstadoDoRecebedor>;
+  transferir(pedido: PedidoDeRepasse): Promise<ResultadoDoRepasse>;
+}
+
+export interface PedidoDeRecebedor {
+  readonly tenantId: string;
+  readonly professionalId: string;
+  readonly nome: string;
+  /**
+   * O documento e a conta viajam para o adquirente e **não** são guardados aqui.
+   *
+   * Quem tem obrigação regulatória de guardá-los é ele. Deste lado fica a
+   * referência opaca — é a mesma razão do token do cartão, e há invariante que
+   * reprova quem criar coluna para eles em `professionals`.
+   */
+  readonly documento: string;
+  readonly banco: string;
+  readonly agencia: string;
+  readonly conta: string;
+}
+
+export type EstadoDoRecebedor = 'pendente' | 'aprovado' | 'recusado';
+
+export interface RecebedorCriado {
+  readonly recebedorId: string;
+  readonly estado: EstadoDoRecebedor;
+  readonly motivo?: string | undefined;
+}
+
+export interface PedidoDeRepasse {
+  readonly tenantId: string;
+  /** A parte do split. É por ela que a retentativa reencontra o mesmo repasse. */
+  readonly fatiaId: string;
+  /**
+   * A chave de idempotência, **obrigatória** e derivada da fatia.
+   *
+   * Obrigatória no tipo e não montada pelo provedor: quem implementa contra um
+   * adquirente de verdade não pode esquecer de mandá-la, e esquecer aqui é pagar
+   * o barbeiro duas vezes.
+   */
+  readonly idempotencyKey: string;
+  readonly recebedorId: string;
+  readonly valorCents: number;
+  /** O pagamento de onde o dinheiro veio, para o adquirente amarrar os dois. */
+  readonly pagamentoId: string;
+}
+
+export type ResultadoDoRepasse =
+  | { readonly ok: true; readonly transferenciaId: string }
+  | { readonly ok: false; readonly codigo: string; readonly motivo: string };
+
+/**
+ * A chave que vai ao adquirente, escopada aqui como as outras três.
+ *
+ * **Estável por fatia**, e é o oposto da chave da cobrança do clube — a
+ * diferença é a direção do dinheiro. Lá a chave varia por tentativa porque
+ * retentar um cartão recusado precisa ser uma cobrança nova; aqui, retentar
+ * significa que a primeira chamada terminou em desfecho ambíguo, e uma chave
+ * nova faria o adquirente executar a **segunda transferência**.
+ *
+ * Com a chave estável, a retentativa depois de um tempo limite devolve o
+ * resultado original em vez de pagar o barbeiro duas vezes. É o achado da
+ * `/security-review` do bloco 50, e é a mesma escolha que a convenção do estorno
+ * já fazia: indisponibilidade é ambígua, e o que se faz com ambiguidade é
+ * perguntar de novo pela mesma coisa, nunca pedir outra.
+ */
+export function chaveDoRepasse(pedido: PedidoDeRepasse): string {
+  return `repasse:${pedido.tenantId}:${pedido.fatiaId}`;
+}
+
+/**
+ * O provedor de mentira: **recusa** o repasse e deixa o cadastro pendente.
+ *
+ * As duas escolhas são o estado real do produto sem conta contratada, e as duas
+ * são o que faz o caminho de verdade ser exercido: sem cadastro aprovado a parte
+ * fica retida, e a comissão sai no fechamento — que é como toda barbearia do
+ * país paga o barbeiro hoje.
+ */
+export class FakeSplitProvider implements SplitProvider {
+  readonly recebedores: PedidoDeRecebedor[] = [];
+  readonly repasses: PedidoDeRepasse[] = [];
+  proximoEstadoDoRecebedor: EstadoDoRecebedor = 'pendente';
+  proximoResultado: ResultadoDoRepasse = {
+    ok: false,
+    codigo: 'sem_adquirente',
+    motivo: 'sem adquirente configurado',
+  };
+  private contador = 0;
+
+  async cadastrarRecebedor(pedido: PedidoDeRecebedor): Promise<RecebedorCriado> {
+    this.recebedores.push(pedido);
+    this.contador += 1;
+    return {
+      recebedorId: `fake_rec_${this.contador}`,
+      estado: this.proximoEstadoDoRecebedor,
+    };
+  }
+
+  async consultarRecebedor(): Promise<EstadoDoRecebedor> {
+    return this.proximoEstadoDoRecebedor;
+  }
+
+  async transferir(pedido: PedidoDeRepasse): Promise<ResultadoDoRepasse> {
+    this.repasses.push(pedido);
+    return this.proximoResultado;
+  }
+
+  clear(): void {
+    this.recebedores.length = 0;
+    this.repasses.length = 0;
+    this.contador = 0;
+    this.proximoEstadoDoRecebedor = 'pendente';
+    this.proximoResultado = {
+      ok: false,
+      codigo: 'sem_adquirente',
+      motivo: 'sem adquirente configurado',
+    };
+  }
+}

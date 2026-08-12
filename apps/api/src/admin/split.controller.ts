@@ -1,11 +1,16 @@
 import { Body, Controller, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import {
+  SplitError,
+  cadastrarRecebedor,
   configuracaoDoSplit,
+  recebedores,
   repassesDoPeriodo,
   salvarConfiguracaoDoSplit,
   splitDaVenda,
 } from '@barbearia/finance';
+import { adquirenteDoSplit } from '@barbearia/platform';
+import { DomainError } from '../common/errors.js';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
@@ -37,6 +42,35 @@ import { uuidSchema } from './caixa.schemas.js';
 const configuracaoSchema = z.object({
   ligado: z.boolean(),
 });
+
+/**
+ * O cadastro do profissional como recebedor.
+ *
+ * Documento, banco, agência e conta **atravessam** para o adquirente e não são
+ * gravados — quem tem obrigação regulatória de guardá-los é ele. Deste lado fica
+ * a referência opaca, e há invariante no banco que reprova quem criar coluna
+ * para eles em `professionals`.
+ */
+const recebedorSchema = z.object({
+  documento: z.string().trim().regex(/^[0-9]{11}$|^[0-9]{14}$/),
+  banco: z.string().trim().min(2).max(10),
+  agencia: z.string().trim().min(1).max(10),
+  conta: z.string().trim().min(3).max(20),
+});
+
+const STATUS: Record<string, number> = {
+  profissional_nao_encontrado: 404,
+  ja_aprovado: 409,
+  dados_invalidos: 400,
+  aliquota_invalida: 400,
+};
+
+function toHttp(erro: unknown): never {
+  if (erro instanceof SplitError) {
+    throw new DomainError(erro.code, STATUS[erro.code] ?? 400, erro.message);
+  }
+  throw erro;
+}
 
 const periodoSchema = z.object({
   de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -93,6 +127,49 @@ export class SplitController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
     return { split: await splitDaVenda(staff.tenantId, id) };
+  }
+
+  /**
+   * Quem já pode receber direto, e quanto está retido esperando cadastro.
+   *
+   * `commission.view_all` porque a lista é de dinheiro por profissional — a
+   * mesma sensibilidade do extrato de comissão, e o mesmo motivo: barbeiro que
+   * vê o valor retido do colega é a briga que a separação das duas permissões
+   * existe para evitar.
+   */
+  @Exige('commission.view_all')
+  @Get('recebedores')
+  async listaDeRecebedores(@Staff() staff: AuthenticatedStaff) {
+    return { recebedores: await recebedores(staff.tenantId) };
+  }
+
+  /**
+   * Cadastra um profissional como recebedor no adquirente.
+   *
+   * `finance.split_manage` pelo mesmo motivo da rota do interruptor, e aqui ele
+   * é literal: o que esta rota decide é **para qual conta bancária** o dinheiro
+   * do barbeiro vai. O prefixo `finance.` traz o segundo fator derivado.
+   */
+  @Exige('finance.split_manage')
+  @Put('recebedores/:id')
+  async cadastrar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(recebedorSchema))
+    body: { documento: string; banco: string; agencia: string; conta: string },
+  ) {
+    try {
+      return await cadastrarRecebedor({
+        tenantId: staff.tenantId,
+        professionalId: id,
+        ...body,
+        provider: adquirenteDoSplit(),
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+      });
+    } catch (erro) {
+      return toHttp(erro);
+    }
   }
 
   @Exige('finance.split_manage')

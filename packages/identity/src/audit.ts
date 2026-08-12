@@ -136,6 +136,16 @@ export type AuditAction =
    */
   | 'split.changed'
   /**
+   * O cadastro de um profissional como recebedor no adquirente (bloco 50).
+   *
+   * De dinheiro: aprovado, ele passa a receber **direto na conta dele**, e a
+   * pergunta do dia seguinte é "quem cadastrou essa conta bancária?". O que
+   * **não** vai na trilha é o dado bancário: documento, agência e conta
+   * atravessam para o adquirente e não são gravados aqui — trilha não é lugar de
+   * dado bancário de terceiro.
+   */
+  | 'split.recipient_changed'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -251,6 +261,7 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'subscription.invoice_voided',
   'subscription.cancel_scheduled',
   'split.changed',
+  'split.recipient_changed',
   'package.changed',
   'package.refunded',
   'commission.closed',

@@ -1,12 +1,20 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { FakePaymentProvider } from '@barbearia/core';
+import { FakePaymentProvider, FakeSplitProvider } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem } from './comanda.js';
 import { confirmarCobranca, criarCobrancaDaComanda } from './cobranca-online.js';
 import { salvarRegraDeComissao } from './comissao.js';
-import { repassesDoPeriodo, splitDaVenda } from './split.js';
+import {
+  cadastrarRecebedor,
+  conciliarRecebedores,
+  estornarSplitDaVenda,
+  liquidarRepasses,
+  recebedores,
+  repassesDoPeriodo,
+  splitDaVenda,
+} from './split.js';
 
 /**
  * Split de pagamento contra Postgres real (bloco 49, SPEC §3.5).
@@ -290,6 +298,337 @@ describeIfDb('split de pagamento', () => {
 
     const soDoBruno = await repassesDoPeriodo({ ...periodo, somenteProfessionalId: BRUNO });
     expect(soDoBruno).toHaveLength(0);
+  });
+
+  // -- KYC, liquidação e estorno (bloco 50) ------------------------------------
+
+  const cadastro = (provider: FakeSplitProvider, professionalId = RUAN) =>
+    cadastrarRecebedor({
+      tenantId: TENANT,
+      professionalId,
+      documento: '12345678900',
+      banco: '260',
+      agencia: '0001',
+      conta: '1234567-8',
+      provider,
+      ...operador,
+      agora: AGORA,
+    });
+
+  it('o cadastro no adquirente nasce pendente, e nada do banco é gravado aqui', async () => {
+    /**
+     * *"O onboarding disso é assíncrono."* Documento, banco, agência e conta
+     * atravessam para o adquirente — quem tem obrigação regulatória de
+     * guardá-los é ele. Deste lado fica a referência opaca, pela mesma razão do
+     * token do cartão do clube.
+     */
+    const provider = new FakeSplitProvider();
+    const { estado } = await cadastro(provider);
+
+    expect(estado).toBe('pendente');
+    expect(provider.recebedores[0]?.documento).toBe('12345678900');
+
+    const lista = await recebedores(TENANT);
+    const ruan = lista.find((r) => r.professionalId === RUAN);
+    expect(ruan).toMatchObject({ kyc: 'pendente', temRecebedor: true });
+  });
+
+  it('a trilha do cadastro não guarda dado bancário', async () => {
+    // Trilha não é lugar de conta bancária de terceiro. O que entra é o estado.
+    const provider = new FakeSplitProvider();
+    await cadastro(provider);
+
+    const [linha] = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ after: unknown }[]>`
+        SELECT after FROM audit_log WHERE action = 'split.recipient_changed' LIMIT 1
+      `,
+    );
+    expect(JSON.stringify(linha?.after)).not.toContain('12345678900');
+    expect(JSON.stringify(linha?.after)).not.toContain('1234567-8');
+  });
+
+  it('sem cadastro aprovado a parte é retida, e a venda não é bloqueada', async () => {
+    /**
+     * A frase mais importante da seção: *"enquanto pendente, o pagamento cai
+     * integralmente na barbearia e a comissão é paga fora, **sem bloquear a
+     * venda**"*. O caminho óbvio — recusar a venda até o barbeiro estar
+     * aprovado — produziria a barbearia descobrindo no balcão, com o cliente na
+     * frente, que não consegue cobrar.
+     */
+    await ligarSplit(500);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    const resultado = await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+
+    expect(resultado.retidos).toBe(1);
+    expect(provider.repasses).toHaveLength(1); // só a da plataforma
+    const split = await splitDaVenda(TENANT, orderId);
+    expect(split?.fatias.find((f) => f.parte === 'profissional')?.estado).toBe('retido');
+  });
+
+  it('aprovado, o repasse sai e a parte fica liquidada', async () => {
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+    provider.proximoResultado = { ok: true, transferenciaId: 'tr_1' };
+
+    const resultado = await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+    expect(resultado.repassados).toBe(1);
+
+    const split = await splitDaVenda(TENANT, orderId);
+    const doRuan = split?.fatias.find((f) => f.parte === 'profissional');
+    expect(doRuan).toMatchObject({ estado: 'liquidado', valorCents: 4000 });
+  });
+
+  it('depois de três recusas, desiste e retém — e cada tentativa fica registrada', async () => {
+    /**
+     * O contador entra no `WHERE` do `UPDATE` que reivindica a tentativa, e é
+     * ele que impede dois workers de mandarem o mesmo repasse duas vezes. A
+     * pergunta que chega é "por que o Ruan não recebeu?", e a resposta é o motivo
+     * da terceira tentativa — não o número três.
+     */
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+    provider.proximoResultado = { ok: false, codigo: 'conta_invalida', motivo: 'conta inválida' };
+
+    for (let i = 0; i < 3; i += 1) {
+      await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+    }
+    const ultima = await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+    expect(ultima.desistidos).toBe(1);
+    expect(provider.repasses).toHaveLength(3);
+
+    const tentativas = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM split_transfers`,
+    );
+    expect(Number(tentativas[0]?.n)).toBe(3);
+
+    const split = await splitDaVenda(TENANT, orderId);
+    expect(split?.fatias.find((f) => f.parte === 'profissional')?.estado).toBe('retido');
+  });
+
+  it('a conciliação descobre a aprovação que o webhook perdeu', async () => {
+    // Rede de segurança, pelo mesmo desenho da conciliação de cobranças do bloco
+    // 35: webhook perdido não pode deixar um barbeiro aprovado recebendo pelo
+    // fechamento para sempre.
+    const provider = new FakeSplitProvider();
+    await cadastro(provider);
+
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    const conciliado = await conciliarRecebedores({ tenantId: TENANT, provider, agora: AGORA });
+    expect(conciliado).toMatchObject({ conferidos: 1, aprovados: 1 });
+
+    const lista = await recebedores(TENANT);
+    expect(lista.find((r) => r.professionalId === RUAN)?.kyc).toBe('aprovado');
+  });
+
+  it('a tela mostra quanto está retido por falta de cadastro', async () => {
+    /**
+     * O cadastro no adquirente é burocracia que ninguém faz por gosto. A coluna
+     * que diz "R$ 40 do Ruan passaram pela casa porque ele não terminou o
+     * cadastro" é o que faz o cadastro acontecer.
+     */
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+    await liquidarRepasses({ tenantId: TENANT, provider: new FakeSplitProvider(), agora: AGORA });
+
+    const lista = await recebedores(TENANT);
+    expect(lista.find((r) => r.professionalId === RUAN)?.retidoCents).toBe(4000);
+  });
+
+  it('estorno antes da liquidação cancela a parte, e ninguém deve nada', async () => {
+    await ligarSplit(500);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const desfeito = await withTenant(TENANT, (tx) =>
+      estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }),
+    );
+    expect(desfeito.cobrados).toBe(0);
+    expect(desfeito.cancelados).toBeGreaterThan(0);
+
+    const split = await splitDaVenda(TENANT, orderId);
+    expect(split?.fatias.every((f) => f.estado === 'estornado')).toBe(true);
+  });
+
+  it('estorno de repasse já liquidado vira dívida do profissional', async () => {
+    /**
+     * *"Estorno com split já liquidado exige política explícita de
+     * recuperação."* O dinheiro entrou na conta dele e nenhum adquirente deixa a
+     * plataforma sacar de um recebedor. A política é comissão negativa no
+     * período aberto — o mesmo mecanismo do estorno de venda desde o bloco 19, e
+     * o que o barbeiro já entende.
+     */
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+    provider.proximoResultado = { ok: true, transferenciaId: 'tr_1' };
+    await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+
+    const desfeito = await withTenant(TENANT, (tx) =>
+      estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }),
+    );
+    expect(desfeito.cobrados).toBe(1);
+
+    const [divida] = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ value: number; sign: number; professional_id: string }[]>`
+        SELECT value, sign, professional_id FROM commission_entries WHERE sign = -1
+      `,
+    );
+    expect(divida).toMatchObject({ value: 4000, sign: -1, professional_id: RUAN });
+  });
+
+  it('a parte da casa liquidada não vira dívida de ninguém', async () => {
+    // O dinheiro nunca saiu de lá: o estorno volta da conta dela pelo próprio
+    // adquirente, e não há de quem cobrar.
+    await ligarSplit(500);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    await withTenant(TENANT, (tx) => estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }));
+
+    const negativas = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ n: bigint }[]>`
+        SELECT count(*)::bigint AS n FROM commission_entries WHERE sign = -1
+      `,
+    );
+    expect(Number(negativas[0]?.n)).toBe(0);
+  });
+
+  it('estornar duas vezes não cria duas dívidas', async () => {
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+    provider.proximoResultado = { ok: true, transferenciaId: 'tr_1' };
+    await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+
+    await withTenant(TENANT, (tx) => estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }));
+    const segundo = await withTenant(TENANT, (tx) =>
+      estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }),
+    );
+    expect(segundo).toMatchObject({ cancelados: 0, cobrados: 0 });
+  });
+
+  it('estorno no meio da chamada ao adquirente cobra do profissional', async () => {
+    /**
+     * O achado da `/security-review` deste bloco, e ele era caro.
+     *
+     * `FOR UPDATE` sem escrita não separa nada: a liquidação solta a linha antes
+     * de falar com o adquirente, e o estorno entrava exatamente nessa janela,
+     * lia `pendente`, marcava `estornado` e concluía que ninguém devia nada.
+     * Segundos depois o adquirente confirmava a transferência — cliente
+     * reembolsado, barbeiro com o dinheiro, dívida nunca criada.
+     *
+     * O conserto é o estado `liquidando`, e este teste o exercita pelo meio: o
+     * estorno roda **enquanto** o provedor está respondendo.
+     */
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+
+    // O provedor "demora", e é durante a demora que a venda é estornada.
+    const lento: typeof provider = Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+      transferir: async (pedido: { fatiaId: string }) => {
+        await withTenant(TENANT, (tx) => estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }));
+        return { ok: true as const, transferenciaId: `tr_${pedido.fatiaId}` };
+      },
+    });
+
+    const resultado = await liquidarRepasses({ tenantId: TENANT, provider: lento, agora: AGORA });
+
+    // O repasse saiu de verdade, e o produto sabe disso: não foi contado como
+    // sucesso silencioso, e a dívida do profissional existe.
+    expect(resultado.divergentes).toBeGreaterThan(0);
+
+    const [divida] = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ value: number; professional_id: string }[]>`
+        SELECT value, professional_id FROM commission_entries WHERE sign = -1
+      `,
+    );
+    expect(divida).toMatchObject({ value: 4000, professional_id: RUAN });
+
+    const tentativas = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ ok: boolean }[]>`SELECT ok FROM split_transfers`,
+    );
+    expect(tentativas.some((t) => t.ok)).toBe(true);
+  });
+
+  it('a chamada que não responde não vira segundo repasse', async () => {
+    /**
+     * Um tempo limite é o caso em que o adquirente **executou** a transferência
+     * e a resposta se perdeu. A parte fica em `liquidando`, e a régua não a
+     * retenta às cegas — quem a resgata é a volta seguinte, e ela vai com a mesma
+     * chave de idempotência, que faz o adquirente devolver o resultado da
+     * primeira em vez de pagar de novo.
+     */
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+
+    const mudo: typeof provider = Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+      transferir: async () => { throw new Error('tempo limite'); },
+    });
+
+    await liquidarRepasses({ tenantId: TENANT, provider: mudo, agora: AGORA });
+    // A volta seguinte, ainda dentro da hora: a parte continua em espera.
+    const segunda = await liquidarRepasses({ tenantId: TENANT, provider: mudo, agora: AGORA });
+    expect(segunda.repassados).toBe(0);
+
+    const split = await splitDaVenda(TENANT, orderId);
+    const doRuan = split?.fatias.find((f) => f.parte === 'profissional');
+    expect(doRuan?.estado).toBe('falhou');
+  });
+
+  it('a chave que vai ao adquirente é estável entre tentativas', async () => {
+    /**
+     * O oposto da chave da cobrança do clube, e a diferença é a direção do
+     * dinheiro: lá ela varia por tentativa porque retentar um cartão recusado é
+     * uma cobrança nova; aqui, uma chave nova faria o adquirente executar a
+     * **segunda transferência**.
+     */
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+    provider.proximoResultado = { ok: false, codigo: 'indisponivel', motivo: 'fora do ar' };
+
+    await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+    await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
+
+    const doProfissional = provider.repasses.filter((r) => r.recebedorId !== '');
+    expect(doProfissional.length).toBeGreaterThan(1);
+    expect(new Set(doProfissional.map((r) => r.idempotencyKey)).size).toBe(1);
   });
 
   it('venda paga na maquininha da casa não tem split', async () => {
