@@ -7,6 +7,8 @@ import {
   notaDaVenda,
   notasDoPeriodo,
   pedirNota,
+  salvarDocumentoDoCliente,
+  tomadorDaVenda,
 } from '@barbearia/finance';
 import { FakeFiscalProvider, type RegimeFiscal } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
@@ -20,6 +22,7 @@ import { uuidSchema } from './caixa.schemas.js';
 import {
   cancelamentoDeNotaSchema,
   configuracaoFiscalSchema,
+  documentoDoTomadorSchema,
   periodoDasNotasSchema,
 } from './fiscal.schemas.js';
 
@@ -63,6 +66,8 @@ const STATUS: Record<string, number> = {
   motivo_obrigatorio: 400,
   venda_nao_encontrada: 404,
   nao_emite: 409,
+  documento_invalido: 400,
+  cliente_nao_encontrado: 404,
 };
 
 function toHttp(erro: unknown): never {
@@ -169,13 +174,71 @@ export class FiscalController {
     };
   }
 
-  @Exige('fiscal.view')
+  /**
+   * A nota desta venda, e quem é o tomador dela.
+   *
+   * Os dois juntos porque a tela é uma só e a pergunta do balcão também: "esta
+   * venda tem nota, e ela vai sair no CPF de quem?". Duas rotas fariam a tela
+   * pedir duas vezes a mesma coisa.
+   *
+   * O documento vem do **cadastro**, não da nota: é o que o balcão edita. O da
+   * nota já emitida está congelado e não muda mais.
+   *
+   * E é por isso que ela declara `customers.view` **junto**: o que sai daqui é
+   * nome e CPF lidos do cadastro vivo, não da nota. Rota que agrega declara
+   * todas as permissões do que devolve — foi o achado do bloco 31, e a
+   * `/security-review` deste bloco encontrou a mesma forma aqui. Sem a segunda,
+   * um papel "Contador" com `fiscal.view` e sem `customers.*` — configuração
+   * natural, e a razão de os papéis serem editáveis desde o bloco 30 — colhia
+   * nome e CPF de todo cliente que já pediu nota, percorrendo os ids da
+   * listagem. O CPF é o identificador que atravessa qualquer outra base.
+   *
+   * Repare que a projeção da nota (`NotaNaTela`) **não** traz o
+   * `customer_document` congelado, de propósito. Era só o cadastro vivo que
+   * vazava, pela rota que ninguém olharia.
+   */
+  @Exige('fiscal.view', 'customers.view')
   @Get('notas/comanda/:id')
   async daComanda(
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    return { nota: await notaDaVenda(staff.tenantId, id) };
+    return {
+      nota: await notaDaVenda(staff.tenantId, id),
+      tomador: await tomadorDaVenda(staff.tenantId, id),
+    };
+  }
+
+  /**
+   * O CPF do tomador, digitado no balcão.
+   *
+   * `customers.edit` e não uma permissão própria: é edição de cadastro, não
+   * decisão de dinheiro nem de risco — a diferença do limite de fiado e do
+   * override de score, que ganharam permissão separada justamente por moverem
+   * valor. Quem digita é a recepção, que já cadastra e corrige cliente.
+   *
+   * A rota mora **aqui** e não na ficha do cliente por causa de quem usa: a
+   * ficha exige `customers.view_notes`, que a recepção não tem por padrão, e é
+   * a recepção quem ouve "põe meu CPF na nota" com a maquininha na mão.
+   */
+  @Exige('customers.edit')
+  @Put('tomador/:id')
+  async documento(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(documentoDoTomadorSchema)) body: { documento: string | null },
+  ) {
+    try {
+      return await salvarDocumentoDoCliente({
+        tenantId: staff.tenantId,
+        customerId: id,
+        documento: body.documento,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+      });
+    } catch (erro) {
+      return toHttp(erro);
+    }
   }
 
   /**

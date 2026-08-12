@@ -13,6 +13,12 @@ import {
   cnpjValido,
   motivoParaNaoEmitir,
   normalizarCnpj,
+  EXPLICACAO_DE_NAO_ENTREGAR,
+  cpfValido,
+  decisaoDaEntregaDaNota,
+  documentoBonito,
+  documentoDoTomadorValido,
+  normalizarDocumento,
   notaEmCurso,
   parteDoParceiro,
   vendaAceitaNota,
@@ -329,3 +335,158 @@ function pedido(invoiceId: string, tenantId = 'barbearia-a') {
     municipioIbge: '2927408',
   };
 }
+
+describe('o documento do tomador (bloco 54)', () => {
+  // CPFs válidos de teste, com dígito verificador que fecha.
+  const VALIDO = '52998224725';
+
+  it('CPF com dígito verificador certo passa', () => {
+    expect(cpfValido(VALIDO)).toBe(true);
+    expect(cpfValido('529.982.247-25')).toBe(true);
+  });
+
+  it('CPF com um dígito trocado é recusado', () => {
+    expect(cpfValido('52998224726')).toBe(false);
+  });
+
+  it('CPF de dígitos repetidos é recusado', () => {
+    // Todos passam na conta dos verificadores, e é o que sai de teclado travado
+    // ou de quem digita qualquer coisa para o balcão parar de perguntar.
+    for (const n of ['00000000000', '11111111111', '99999999999']) {
+      expect(cpfValido(n)).toBe(false);
+    }
+  });
+
+  it('CPF de tamanho errado é recusado', () => {
+    expect(cpfValido('5299822472')).toBe(false);
+    expect(cpfValido('529982247251')).toBe(false);
+  });
+
+  it('o mesmo campo aceita CPF e CNPJ, e é o tamanho que decide', () => {
+    expect(documentoDoTomadorValido(VALIDO)).toBe(true);
+    expect(documentoDoTomadorValido('11.222.333/0001-81')).toBe(true);
+    expect(documentoDoTomadorValido('11222333000182')).toBe(false);
+  });
+
+  it('sem documento é resposta legítima — nota ao consumidor', () => {
+    expect(documentoDoTomadorValido(null)).toBe(true);
+    expect(documentoDoTomadorValido('')).toBe(true);
+    expect(documentoDoTomadorValido('   ')).toBe(true);
+    expect(normalizarDocumento('  ')).toBeNull();
+    expect(normalizarDocumento(undefined)).toBeNull();
+  });
+
+  it('documento com quantidade de dígitos que não é nem CPF nem CNPJ é recusado', () => {
+    expect(documentoDoTomadorValido('123456789012')).toBe(false);
+  });
+
+  it('o que vai ao emissor são só os dígitos', () => {
+    expect(normalizarDocumento('529.982.247-25')).toBe(VALIDO);
+  });
+});
+
+describe('a nota chegando ao cliente (bloco 54)', () => {
+  const BASE = {
+    estado: 'autorizada' as const,
+    linkPdf: 'https://nfse.exemplo/1043.pdf',
+    entregueEm: null,
+    telefone: '+5571988887777',
+    timeZone: 'America/Bahia',
+  };
+  // 14h em Salvador (UTC-3), bem dentro da janela.
+  const TARDE = new Date('2026-11-25T17:00:00Z');
+
+  it('autorizada, com link e com telefone: sai agora', () => {
+    const decisao = decisaoDaEntregaDaNota({ ...BASE, agora: TARDE });
+    expect(decisao.entregar).toBe(true);
+    expect(decisao.quando?.toISOString()).toBe(TARDE.toISOString());
+  });
+
+  it('nota já entregue não é entregue de novo', () => {
+    const decisao = decisaoDaEntregaDaNota({
+      ...BASE,
+      entregueEm: new Date('2026-11-20T12:00:00Z'),
+      agora: TARDE,
+    });
+    expect(decisao).toMatchObject({ entregar: false, motivo: 'ja_entregue' });
+  });
+
+  it('nota que a prefeitura ainda não autorizou não vira mensagem', () => {
+    const decisao = decisaoDaEntregaDaNota({ ...BASE, estado: 'processando', agora: TARDE });
+    expect(decisao).toMatchObject({ entregar: false, motivo: 'nao_autorizada' });
+  });
+
+  it('autorizada sem documento não manda link vazio', () => {
+    // Acontece: o emissor confirma o número antes de o PDF ficar disponível.
+    const decisao = decisaoDaEntregaDaNota({ ...BASE, linkPdf: null, agora: TARDE });
+    expect(decisao).toMatchObject({ entregar: false, motivo: 'sem_link' });
+  });
+
+  it('venda sem cliente com telefone não tem para onde mandar', () => {
+    // Comanda avulsa é o caso comum na barbearia, e não é erro: o link fica na
+    // tela para a recepção mostrar ou mandar por outro caminho.
+    const decisao = decisaoDaEntregaDaNota({ ...BASE, telefone: null, agora: TARDE });
+    expect(decisao).toMatchObject({ entregar: false, motivo: 'sem_telefone' });
+  });
+
+  it('nota autorizada às 22h47 espera as 8h', () => {
+    // 22h47 em Salvador. A nota é transacional e o cliente acabou de sair — a
+    // tentação é mandar na hora. O que chega é uma mensagem da barbearia no
+    // celular de quem foi dormir, pelo mesmo número que manda o lembrete.
+    const noite = new Date('2026-11-26T01:47:00Z');
+    const decisao = decisaoDaEntregaDaNota({ ...BASE, agora: noite });
+    expect(decisao.entregar).toBe(true);
+    // 8h em Salvador é 11h UTC, no dia seguinte ao horário local.
+    expect(decisao.quando?.toISOString()).toBe('2026-11-26T11:00:00.000Z');
+  });
+
+  it('nota autorizada às 6h espera as 8h do mesmo dia', () => {
+    const madrugada = new Date('2026-11-25T09:00:00Z');
+    const decisao = decisaoDaEntregaDaNota({ ...BASE, agora: madrugada });
+    expect(decisao.quando?.toISOString()).toBe('2026-11-25T11:00:00.000Z');
+  });
+
+  it('o fuso é o da unidade, não o do processo', () => {
+    // Mesma nota, mesmo instante, duas barbearias: 20h em Salvador ainda é hora
+    // de mandar; no Acre são 18h, e também. O que muda é a hora local, e é ela
+    // que a regra lê — nunca o relógio de quem roda o worker.
+    const instante = new Date('2026-11-25T23:30:00Z');
+    const bahia = decisaoDaEntregaDaNota({ ...BASE, agora: instante });
+    const acre = decisaoDaEntregaDaNota({ ...BASE, timeZone: 'America/Rio_Branco', agora: instante });
+    // 20h30 na Bahia: dentro. 17h30 no Acre: dentro.
+    expect(bahia.quando?.toISOString()).toBe(instante.toISOString());
+    expect(acre.quando?.toISOString()).toBe(instante.toISOString());
+
+    // Uma hora depois: 21h30 na Bahia empurra, 18h30 no Acre não.
+    const maisTarde = new Date('2026-11-26T00:30:00Z');
+    expect(decisaoDaEntregaDaNota({ ...BASE, agora: maisTarde }).quando?.toISOString()).toBe(
+      '2026-11-26T11:00:00.000Z',
+    );
+    expect(
+      decisaoDaEntregaDaNota({ ...BASE, timeZone: 'America/Rio_Branco', agora: maisTarde })
+        .quando?.toISOString(),
+    ).toBe(maisTarde.toISOString());
+  });
+
+  it('todo motivo de não entregar tem explicação para a tela', () => {
+    for (const motivo of ['nao_autorizada', 'sem_link', 'ja_entregue', 'sem_telefone'] as const) {
+      expect(EXPLICACAO_DE_NAO_ENTREGAR[motivo]).toBeTruthy();
+    }
+  });
+});
+
+describe('o documento como a pessoa lê', () => {
+  it('CPF e CNPJ saem pontuados, que é como o cliente os tem na mão', () => {
+    expect(documentoBonito('52998224725')).toBe('529.982.247-25');
+    expect(documentoBonito('11222333000181')).toBe('11.222.333/0001-81');
+  });
+
+  it('sem documento, campo vazio', () => {
+    expect(documentoBonito(null)).toBe('');
+  });
+
+  it('tamanho fora do previsto volta como veio', () => {
+    // Um formatador que inventa pontuação sobre lixo esconde o lixo.
+    expect(documentoBonito('123')).toBe('123');
+  });
+});

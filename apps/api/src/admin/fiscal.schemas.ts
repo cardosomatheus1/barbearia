@@ -34,3 +34,24 @@ export const periodoDasNotasSchema = z
     (p) => Date.parse(`${p.ate}T00:00:00Z`) - Date.parse(`${p.de}T00:00:00Z`) <= 400 * 86_400_000,
     { message: 'O período não passa de um ano.' },
   );
+
+/**
+ * O documento do tomador, como o balcão digita.
+ *
+ * Aceita pontuação e vazio: o campo é opcional na tela, e limpar é uma operação
+ * legítima — o cliente pode pedir que o CPF saia do cadastro. O que a borda
+ * garante é tamanho e forma; o dígito verificador é conferido no domínio, com
+ * a conta que mora em `packages/core`.
+ *
+ * `null` e string vazia significam a mesma coisa e viram `null`: um formulário
+ * HTML manda campo vazio como `""`, e tratar os dois diferente faria "apagar o
+ * CPF" funcionar pela API e não pela tela.
+ */
+export const documentoDoTomadorSchema = z.object({
+  documento: z
+    .string()
+    .trim()
+    .max(20)
+    .nullable()
+    .transform((valor) => (valor && valor.length > 0 ? valor : null)),
+});

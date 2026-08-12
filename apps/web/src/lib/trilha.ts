@@ -91,6 +91,12 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
    */
   'fiscal.settings_changed': 'mexeu no cadastro fiscal da casa',
   'fiscal.invoice_cancelled': 'cancelou uma nota fiscal',
+  /**
+   * Bloco 54. A frase diz que **mudou**, nunca para quê — a trilha guarda
+   * `{ tinha: true }`, e é essa a decisão: o CPF numa tabela append-only seria
+   * uma segunda cópia que a anonimização não alcança.
+   */
+  'customers.tax_id_changed': 'mudou o CPF de um cliente',
 
   // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
   // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em

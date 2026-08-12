@@ -109,12 +109,29 @@ export interface MensagemDoClube {
   readonly texto: string;
 }
 
+/**
+ * A nota fiscal chegando ao cliente (bloco 54).
+ *
+ * `link` é o documento na prefeitura, e é o conteúdo inteiro da mensagem: não
+ * existe "sua nota está pronta" sem o link, porque a única coisa que a pessoa
+ * faz com esse aviso é abrir o PDF. `numero` viaja ao lado porque é o que o
+ * contador do cliente pede, e porque o WhatsApp oficial exige um template
+ * aprovado por tipo de mensagem — com o número como variável, não no corpo.
+ */
+export interface MensagemDeNota {
+  readonly phoneE164: string;
+  readonly barbearia: string;
+  readonly numero: string | null;
+  readonly link: string;
+}
+
 export interface NotificationProvider {
   enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void>;
   enviarDeFila(mensagem: MensagemDeFila): Promise<void>;
   enviarDeVaga(mensagem: MensagemDeVaga): Promise<void>;
   enviarDeRecado(mensagem: MensagemDeRecado): Promise<void>;
   enviarDoClube(mensagem: MensagemDoClube): Promise<void>;
+  enviarDeNota(mensagem: MensagemDeNota): Promise<void>;
 }
 
 export class FakeNotificationProvider implements NotificationProvider {
@@ -123,6 +140,7 @@ export class FakeNotificationProvider implements NotificationProvider {
   readonly vagas: MensagemDeVaga[] = [];
   readonly recados: MensagemDeRecado[] = [];
   readonly avisosDoClube: MensagemDoClube[] = [];
+  readonly notas: MensagemDeNota[] = [];
   /** Para provar o caminho de falha sem depender de rede fora do ar. */
   falharProxima = false;
 
@@ -151,6 +169,11 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.avisosDoClube.push(mensagem);
   }
 
+  async enviarDeNota(mensagem: MensagemDeNota): Promise<void> {
+    this.derrubarSePedido();
+    this.notas.push(mensagem);
+  }
+
   private derrubarSePedido(): void {
     if (this.falharProxima) {
       this.falharProxima = false;
@@ -163,6 +186,8 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.filas.length = 0;
     this.vagas.length = 0;
     this.recados.length = 0;
+    this.avisosDoClube.length = 0;
+    this.notas.length = 0;
   }
 }
 
@@ -225,6 +250,21 @@ export class ConsoleNotificationProvider implements NotificationProvider {
     this.log(
       `[aviso] clube_${mensagem.motivo} para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia})`,
+    );
+  }
+
+  /**
+   * O link da nota **não** vai para o log, ao contrário do link da vaga.
+   *
+   * O da vaga é credencial e está lá por necessidade: sem ele não há como
+   * exercitar o aceite numa máquina local. O da nota é um documento público na
+   * prefeitura, e o que ele identifica é uma pessoa e o que ela comprou — o log
+   * costuma ir para lugares que a política de dado pessoal não cobre.
+   */
+  async enviarDeNota(mensagem: MensagemDeNota): Promise<void> {
+    this.log(
+      `[aviso] nota_fiscal para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia}${mensagem.numero ? `, nota ${mensagem.numero}` : ''})`,
     );
   }
 }

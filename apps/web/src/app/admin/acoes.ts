@@ -44,6 +44,7 @@ import {
   transferirPacoteNaApi,
   salvarFiscalNaApi,
   emitirNotaNaApi,
+  salvarDocumentoDoTomadorNaApi,
   cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
@@ -2567,6 +2568,25 @@ export async function acaoEmitirNota(form: FormData): Promise<void> {
   const resultado = await emitirNotaNaApi(token, orderId);
   if (!resultado.ok) falhar(rota, resultado.code);
   redirect(`${rota}?feito=nota`);
+}
+
+/**
+ * O CPF do tomador, digitado no balcão.
+ *
+ * Volta para a comanda e não para a tela de nota fiscal: é ali que a recepção
+ * está quando o cliente pede, com a maquininha na mão.
+ */
+export async function acaoSalvarDocumentoDoTomador(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const orderId = texto(form, 'orderId');
+  const rota = `/admin/comanda/${orderId}`;
+  const resultado = await salvarDocumentoDoTomadorNaApi(
+    token,
+    texto(form, 'customerId'),
+    texto(form, 'documento') || null,
+  );
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?feito=documento`);
 }
 
 export async function acaoCancelarNota(form: FormData): Promise<void> {

@@ -12,8 +12,10 @@ import {
   enviarNota,
   notaDaVenda,
   notasDoPeriodo,
+  entregarNotasAutorizadas,
   pedirNota,
   salvarConfiguracaoFiscal,
+  salvarDocumentoDoCliente,
 } from './fiscal.js';
 
 /**
@@ -466,6 +468,242 @@ describeIfDb('fiscal', () => {
     );
     expect(segunda?.id).toBeTruthy();
     expect(segunda?.id).not.toBe(primeira!.id);
+  });
+
+
+  // -------------------------------------------------------------------------
+  // O tomador e a entrega (bloco 54)
+  // -------------------------------------------------------------------------
+
+  it('o CPF do cadastro é congelado na nota, e corrigi-lo depois não a reescreve', async () => {
+    await salvarDocumentoDoCliente({
+      tenantId: TENANT,
+      customerId: CARLOS,
+      documento: '529.982.247-25',
+      ...operador,
+    });
+    await cadastrar();
+    const orderId = await venderCorte();
+
+    const nota = await notaDaVenda(TENANT, orderId);
+    const gravado = await admin.$queryRawUnsafe<{ customer_document: string | null }[]>(
+      `SELECT customer_document FROM fiscal_invoices WHERE id = '${nota!.id}'`,
+    );
+    // Só os dígitos, que é como o emissor recebe.
+    expect(gravado[0]?.customer_document).toBe('52998224725');
+
+    // O cliente corrige o próprio documento depois. A nota de ontem não muda:
+    // ela é o documento que foi à prefeitura.
+    await salvarDocumentoDoCliente({
+      tenantId: TENANT,
+      customerId: CARLOS,
+      documento: '11222333000181',
+      ...operador,
+    });
+    const depois = await admin.$queryRawUnsafe<{ customer_document: string | null }[]>(
+      `SELECT customer_document FROM fiscal_invoices WHERE id = '${nota!.id}'`,
+    );
+    expect(depois[0]?.customer_document).toBe('52998224725');
+  });
+
+  it('CPF com dígito verificador errado é recusado antes do banco', async () => {
+    await expect(
+      salvarDocumentoDoCliente({
+        tenantId: TENANT,
+        customerId: CARLOS,
+        documento: '52998224726',
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'documento_invalido' });
+  });
+
+  it('apagar o documento é operação legítima', async () => {
+    await salvarDocumentoDoCliente({
+      tenantId: TENANT,
+      customerId: CARLOS,
+      documento: '52998224725',
+      ...operador,
+    });
+    const limpo = await salvarDocumentoDoCliente({
+      tenantId: TENANT,
+      customerId: CARLOS,
+      documento: null,
+      ...operador,
+    });
+    expect(limpo.documento).toBeNull();
+  });
+
+  it('a trilha registra que o documento mudou, e nunca qual é', async () => {
+    /**
+     * `audit_log` é append-only e legível por quem administra a barbearia. O CPF
+     * ali seria uma segunda cópia do dado — numa tabela que a anonimização não
+     * alcança, e que a exportação do titular deixa de fora por trazer nome de
+     * terceiros.
+     */
+    await salvarDocumentoDoCliente({
+      tenantId: TENANT,
+      customerId: CARLOS,
+      documento: '52998224725',
+      ...operador,
+    });
+    const trilha = await admin.$queryRawUnsafe<{ before: unknown; after: unknown }[]>(
+      `SELECT before, after FROM audit_log WHERE action = 'customers.tax_id_changed'`,
+    );
+    expect(trilha).toHaveLength(1);
+    expect(JSON.stringify(trilha[0])).not.toContain('52998224725');
+    expect(trilha[0]?.after).toMatchObject({ tinha: true });
+  });
+
+  it('o cliente de outra barbearia não recebe documento por esta', async () => {
+    const alheio = 'c3535353-0000-0000-0000-0000000000ff';
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('${alheio}', '${RIVAL}', 'Cliente deles', '+5571900000099');
+    `);
+    await expect(
+      salvarDocumentoDoCliente({
+        tenantId: TENANT,
+        customerId: alheio,
+        documento: '52998224725',
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'cliente_nao_encontrado' });
+  });
+
+  it('a nota autorizada entra na fila de entrega, e sai dela quando é entregue', async () => {
+    await cadastrar();
+    const orderId = await venderCorte();
+    const emissor = new FakeFiscalProvider();
+    await autorizar(orderId, emissor);
+
+    const enviadas: { phoneE164: string; link: string }[] = [];
+    const primeira = await entregarNotasAutorizadas({
+      tenantId: TENANT,
+      // 14h em Salvador: dentro da janela.
+      agora: new Date('2026-11-25T17:00:00Z'),
+      enviar: async (m) => {
+        enviadas.push({ phoneE164: m.phoneE164, link: m.link });
+      },
+    });
+    expect(primeira.enviadas).toBe(1);
+    expect(enviadas[0]?.phoneE164).toBe('+5571988887777');
+    expect(enviadas[0]?.link).toContain('http');
+
+    // A volta seguinte não remanda: o carimbo tirou a nota da fila.
+    const segunda = await entregarNotasAutorizadas({
+      tenantId: TENANT,
+      agora: new Date('2026-11-25T18:00:00Z'),
+      enviar: async () => {
+        throw new Error('não deveria mandar de novo');
+      },
+    });
+    expect(segunda.enviadas).toBe(0);
+  });
+
+  it('de madrugada a nota espera, e continua na fila', async () => {
+    await cadastrar();
+    const orderId = await venderCorte();
+    await autorizar(orderId, new FakeFiscalProvider());
+
+    // 23h30 em Salvador.
+    const noite = await entregarNotasAutorizadas({
+      tenantId: TENANT,
+      agora: new Date('2026-11-26T02:30:00Z'),
+      enviar: async () => {
+        throw new Error('nada sai entre 21h e 8h');
+      },
+    });
+    expect(noite).toMatchObject({ enviadas: 0, adiadas: 1 });
+
+    // De manhã ela sai — e é a **mesma** nota, que continuou na fila.
+    const manha = await entregarNotasAutorizadas({
+      tenantId: TENANT,
+      agora: new Date('2026-11-26T12:00:00Z'),
+      enviar: async () => {},
+    });
+    expect(manha.enviadas).toBe(1);
+  });
+
+  it('a nota de uma barbearia não é entregue pela varredura da outra', async () => {
+    await cadastrar();
+    const orderId = await venderCorte();
+    await autorizar(orderId, new FakeFiscalProvider());
+
+    const doRival = await entregarNotasAutorizadas({
+      tenantId: RIVAL,
+      agora: new Date('2026-11-25T17:00:00Z'),
+      enviar: async () => {
+        throw new Error('a nota é da outra barbearia');
+      },
+    });
+    expect(doRival.enviadas).toBe(0);
+  });
+
+  it('nota autorizada sem PDF não vira mensagem com link vazio', async () => {
+    await cadastrar();
+    const orderId = await venderCorte();
+    const nota = await notaDaVenda(TENANT, orderId);
+    // O emissor confirma o número antes de o documento ficar disponível.
+    await exec(
+      `UPDATE fiscal_invoices
+          SET status = 'autorizada', number = '2026/1', authorized_at = now(), pdf_url = NULL
+        WHERE id = '${nota!.id}'`,
+    );
+
+    const resultado = await entregarNotasAutorizadas({
+      tenantId: TENANT,
+      agora: new Date('2026-11-25T17:00:00Z'),
+      enviar: async () => {
+        throw new Error('sem link não se manda nada');
+      },
+    });
+    expect(resultado.enviadas).toBe(0);
+  });
+
+  it('mensagem que falha não é repetida na volta seguinte', async () => {
+    /**
+     * O carimbo é gravado **antes** de a mensagem sair, e é a decisão que este
+     * teste prende. A alternativa — mandar e depois carimbar — perde o carimbo
+     * se o processo cair no meio, e a volta seguinte remanda a mesma nota.
+     *
+     * Entre repetir e não mandar, o produto escolhe não mandar: o link continua
+     * na comanda e a recepção manda quando o cliente pedir. A escolha inversa
+     * transforma uma queda do worker em vinte mensagens iguais no celular do
+     * cliente, pelo mesmo número que manda o lembrete que reduz falta.
+     *
+     * Provado com o provedor falhando, e não com duas voltas simultâneas: a
+     * corrida entre duas transações não é determinística, e um teste que passa
+     * com e sem o conserto não prova nada.
+     */
+    await cadastrar();
+    const orderId = await venderCorte();
+    await autorizar(orderId, new FakeFiscalProvider());
+
+    const agora = new Date('2026-11-25T17:00:00Z');
+    await expect(
+      entregarNotasAutorizadas({
+        tenantId: TENANT,
+        agora,
+        enviar: async () => {
+          throw new Error('provedor fora do ar');
+        },
+      }),
+    ).rejects.toThrow('provedor fora do ar');
+
+    const segunda = await entregarNotasAutorizadas({
+      tenantId: TENANT,
+      agora,
+      enviar: async () => {
+        throw new Error('não deveria tentar de novo');
+      },
+    });
+    expect(segunda.enviadas).toBe(0);
+
+    const nota = await notaDaVenda(TENANT, orderId);
+    const carimbo = await admin.$queryRawUnsafe<{ customer_notified_at: Date | null }[]>(
+      `SELECT customer_notified_at FROM fiscal_invoices WHERE id = '${nota!.id}'`,
+    );
+    expect(carimbo[0]?.customer_notified_at).not.toBeNull();
   });
 
   // -------------------------------------------------------------------------

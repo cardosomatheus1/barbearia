@@ -15,7 +15,12 @@ import {
 } from '@/lib/admin-api';
 import { resgateSugerido, saldoPorExtenso, valorDoResgate } from '@barbearia/core';
 import { qrCodeSvg } from '@/lib/qrcode';
-import { ROTULO_DA_NOTA, EXPLICACAO_DA_NOTA, vendaAceitaNota } from '@barbearia/core';
+import {
+  ROTULO_DA_NOTA,
+  EXPLICACAO_DA_NOTA,
+  documentoBonito,
+  vendaAceitaNota,
+} from '@barbearia/core';
 import { notaDaComandaNaApi } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -28,6 +33,7 @@ import {
   acaoCobrarComanda,
   acaoEstornarVenda,
   acaoEmitirNota,
+  acaoSalvarDocumentoDoTomador,
   acaoFecharComanda,
   acaoRemoverItem,
   acaoSair,
@@ -353,10 +359,18 @@ export default async function ComandaPage({ params, searchParams }: Props) {
    * devolveria 403 em toda abertura de comanda. E só quando a venda foi paga —
    * antes disso não existe nota a mostrar.
    */
-  const veNota = podeNaTela(estado, 'fiscal.view');
+  /**
+   * As duas permissões, porque a rota exige as duas: ela devolve a nota **e** o
+   * tomador lido do cadastro vivo. Pedir com só uma devolveria 403 em toda
+   * abertura de comanda paga — a permissão exibida na tela sai da mesma função
+   * que a API aplica, e aqui isso quer dizer repetir a mesma conjunção.
+   */
+  const veNota = podeNaTela(estado, 'fiscal.view') && podeNaTela(estado, 'customers.view');
   const notaResposta =
     veNota && conta.status !== 'open' ? await notaDaComandaNaApi(token, conta.id) : null;
   const nota = notaResposta?.ok ? notaResposta.dados.nota : null;
+  const tomador = notaResposta?.ok ? notaResposta.dados.tomador : null;
+  const documentoPedido = first(query['feito']) === 'documento';
   const podeFiar = fiadoCabe(conta);
 
   /**
@@ -493,6 +507,11 @@ export default async function ComandaPage({ params, searchParams }: Props) {
         </div>
       ) : null}
 
+      {documentoPedido ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Documento salvo. A próxima nota sai com ele.
+        </div>
+      ) : null}
       {notaPedida ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Nota pedida. Ela vai para a prefeitura em alguns minutos.
@@ -916,6 +935,50 @@ export default async function ComandaPage({ params, searchParams }: Props) {
       {veNota && conta.status === 'paid' ? (
         <section className="cartao-balcao">
           <h2 className="cartao-balcao__titulo">Nota fiscal</h2>
+
+          {/*
+            O CPF do tomador (bloco 54).
+            
+            Fica **acima** do botão de emitir e não escondido numa dobra: a
+            pergunta "põe meu CPF?" vem antes de a nota sair, e depois de
+            emitida o documento está congelado — mudar o cadastro não muda a
+            nota que já foi à prefeitura. Quem chega aqui com a nota pronta e o
+            CPF errado tem o caminho escrito: cancelar e emitir de novo.
+          */}
+          {tomador?.customerId && podeNaTela(estado, 'customers.edit') ? (
+            <form action={acaoSalvarDocumentoDoTomador} className="formulario">
+              <input name="orderId" type="hidden" value={conta.id} />
+              <input name="customerId" type="hidden" value={tomador.customerId} />
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="documento-tomador">
+                  CPF ou CNPJ na nota (opcional)
+                </label>
+                <input
+                  className="ui-field__input"
+                  defaultValue={documentoBonito(tomador.documento)}
+                  id="documento-tomador"
+                  inputMode="numeric"
+                  maxLength={20}
+                  name="documento"
+                  placeholder="Sem CPF sai ao consumidor"
+                />
+                <p className="ui-field__hint">
+                  Fica no cadastro de {tomador.nome ?? 'cliente'} e vale para as próximas. A
+                  nota já emitida não muda.
+                </p>
+              </div>
+              <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+                Salvar o documento
+              </button>
+            </form>
+          ) : null}
+
+          {tomador && !tomador.customerId ? (
+            <p className="cartao-balcao__texto">
+              Comanda sem cliente — a nota sai ao consumidor. Para sair no CPF, a venda precisa
+              estar num cadastro.
+            </p>
+          ) : null}
 
           {nota ? (
             <>

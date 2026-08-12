@@ -1,0 +1,66 @@
+import { semTenant } from '@barbearia/db';
+
+/**
+ * O agendamento da entrega da nota ao cliente (bloco 54).
+ *
+ * ## Por que uma tarefa por barbearia
+ *
+ * Mesma razão da varredura de retenção: `fiscal_invoices` tem RLS, e um
+ * processo sem tenant no contexto enxerga zero linhas — sempre, e em silêncio.
+ * "Quais notas ainda não chegaram ao cliente?" não é uma consulta global: é uma
+ * por barbearia, com `withTenant`.
+ *
+ * ## Por que existe, se o `fiscal.emitir` já se reprograma
+ *
+ * Porque as duas perguntas são diferentes. `fiscal.emitir` acompanha **uma**
+ * nota até ela ter desfecho, e morre junto com ela; a entrega é sobre o
+ * conjunto, e precisa alcançar a nota cuja tarefa se perdeu — processo morto no
+ * meio da volta, banco reiniciado, fila truncada numa manutenção. Sem ela, a
+ * nota autorizada de uma tarefa perdida fica com o link no banco e nunca sai,
+ * e ninguém descobre: não há erro, não há alerta, há uma mensagem que não
+ * aconteceu.
+ *
+ * ## O que ela **não** faz
+ *
+ * Não decide nada. Se aquela nota vai sair agora, mais tarde ou nunca é
+ * `decisaoDaEntregaDaNota`, em `packages/core`; a leitura do banco é de
+ * `packages/finance`. Aqui só se enfileira.
+ */
+export async function agendarEntregaDeNotasDeTodas(params: {
+  readonly hora: string;
+  readonly quando?: Date;
+}): Promise<number> {
+  return semTenant(async (tx) =>
+    tx.$executeRaw`
+      INSERT INTO jobs (tenant_id, kind, payload, run_after, idempotency_key, max_attempts)
+      SELECT tp.tenant_id, 'fiscal.entregar', '{}'::jsonb,
+             ${params.quando ?? new Date()},
+             'nota-entrega:' || tp.tenant_id::text || ':' || ${params.hora},
+             3
+      FROM tenant_platform tp
+      WHERE tp.blocked_at IS NULL
+      ON CONFLICT DO NOTHING
+    `,
+  );
+}
+
+/**
+ * De hora em hora, e não uma vez por dia.
+ *
+ * A retenção varre de madrugada porque o que ela faz é irreversível e pesado. A
+ * entrega é o contrário: é uma mensagem sobre uma venda que **acabou de
+ * acontecer**, e um cliente que corta às 10h não pode receber a nota no dia
+ * seguinte. A janela de silêncio é quem segura o que cai de madrugada, e ela é
+ * decidida por nota, com o fuso da unidade — não pelo horário do laço, que é
+ * UTC e valeria a mesma hora para Salvador e para Rio Branco.
+ *
+ * A chave carrega a hora: duas voltas do laço dentro do mesmo minuto não
+ * enfileiram duas tarefas, e a hora seguinte enfileira a dela.
+ */
+export function entregaDeNotasPendente(agora: Date): {
+  readonly hora: string;
+  readonly quando: Date;
+} {
+  const hora = agora.toISOString().slice(0, 13);
+  return { hora, quando: agora };
+}

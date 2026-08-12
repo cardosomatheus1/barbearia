@@ -9,3 +9,4 @@ export * from './retencao.js';
 export * from './alerta-agendado.js';
 export * from './espera.js';
 export * from './clube.js';
+export * from './fiscal.js';

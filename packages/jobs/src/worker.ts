@@ -11,6 +11,7 @@ import {
 import { marcarFalta } from './faltas.js';
 import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
 import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
+import { agendarEntregaDeNotasDeTodas, entregaDeNotasPendente } from './fiscal.js';
 import { agendarAlertasDeTodas, alertaPendente } from './alerta-agendado.js';
 import {
   agendarCobrancaDoClubeDeTodas,
@@ -103,6 +104,15 @@ export interface Contexto {
    * Devolve quantos foram avisados e quantos saíram, só para o log — a decisão
    * de avisar ou anonimizar é tomada lá dentro, sobre a regra pura de `core`.
    */
+  /**
+   * A entrega das notas autorizadas de uma barbearia (bloco 54), injetada.
+   *
+   * Mesma razão de `varrerRetencao`: ela vive em `packages/finance`, decide com
+   * `packages/core` e manda pelo provedor de mensagem. Obrigatória e não
+   * opcional no tipo — opcional, ela seria esquecida no primeiro worker novo, e
+   * a nota deixaria de chegar ao cliente sem nada ficar vermelho.
+   */
+  readonly entregarNotas: (tenantId: string, agora: Date) => Promise<void>;
   readonly varrerRetencao: (
     tenantId: string,
     agora: Date,
@@ -298,6 +308,22 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotencyKey: `fiscal:${invoiceId}:${tarefa.attempts + 1}`,
       });
     });
+  },
+
+  /**
+   * A nota autorizada chegando ao cliente (bloco 54).
+   *
+   * Uma tarefa por barbearia, por hora, porque `fiscal_invoices` tem RLS — a
+   * mesma razão de `lgpd.retencao`. O que ela alcança e o `fiscal.emitir` não
+   * alcança é a nota cuja tarefa se perdeu: aquela ficaria com o link gravado e
+   * nunca sairia, sem erro e sem alerta.
+   *
+   * Quem decide se cada nota sai agora, mais tarde ou nunca é
+   * `entregarNotas`, injetada — `jobs` não conhece `finance`, e é a mesma seta
+   * de `varrerRetencao`.
+   */
+  'fiscal.entregar': async (tarefa, contexto) => {
+    await contexto.entregarNotas(tarefa.tenantId, contexto.relogio.agora());
   },
 
   'notificacao.confirmacao': avisoDeAgendamento('confirmacao'),
@@ -644,6 +670,7 @@ export async function rodarWorker(
   let ultimaRegua: string | null = null;
   /** O último dia em que este processo enfileirou a varredura de retenção. */
   let ultimaRetencao: string | null = null;
+  let ultimaEntregaDeNotas: string | null = null;
   /** E a de alerta, que roda de manhã em vez de de madrugada. */
   let ultimoAlerta: string | null = null;
   /** E a da cobrança do clube, que roda de madrugada e fala com o adquirente. */
@@ -675,6 +702,20 @@ export async function rodarWorker(
     if (retencao.dia !== ultimaRetencao) {
       ultimaRetencao = retencao.dia;
       await agendarRetencaoDeTodas(retencao);
+    }
+
+    /**
+     * A entrega da nota é de hora em hora, e não diária como as outras.
+     *
+     * É mensagem sobre uma venda que acabou de acontecer: quem corta às 10h não
+     * recebe a nota no dia seguinte. O que segura o que cai de madrugada é a
+     * janela de silêncio, decidida **por nota** com o fuso da unidade — o
+     * horário do laço é UTC e valeria a mesma hora para Salvador e Rio Branco.
+     */
+    const entrega = entregaDeNotasPendente(contexto.relogio.agora());
+    if (entrega.hora !== ultimaEntregaDeNotas) {
+      ultimaEntregaDeNotas = entrega.hora;
+      await agendarEntregaDeNotasDeTodas(entrega);
     }
 
     const alerta = alertaPendente(contexto.relogio.agora());

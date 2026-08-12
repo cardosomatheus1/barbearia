@@ -117,6 +117,15 @@ export type AuditAction =
   | 'fiscal.settings_changed'
   | 'fiscal.invoice_cancelled'
   /**
+   * O CPF do tomador entrando ou saindo do cadastro (bloco 54).
+   *
+   * A trilha guarda **se** havia documento, nunca qual era: pôr o CPF aqui
+   * criaria uma segunda cópia do dado numa tabela append-only, que a
+   * anonimização não alcança e que a exportação do titular deixa de fora de
+   * propósito.
+   */
+  | 'customers.tax_id_changed'
+  /**
    * Estoque (bloco 44).
    *
    * `stock.adjusted` cobre perda e ajuste — os dois movimentos em que o número
@@ -343,6 +352,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'slug.added',
   'fiscal.settings_changed',
   'fiscal.invoice_cancelled',
+  'customers.tax_id_changed',
   // O override não carrega centavo: guarda o score de antes, o de depois e o
   // motivo. A pergunta que responde — "quem dispensou este cliente do sinal?" —
   // é de quem administra a casa.

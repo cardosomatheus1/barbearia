@@ -1337,13 +1337,32 @@ function prepararFiscal(slug) {
      ON CONFLICT (location_id) DO NOTHING`,
   );
 
+  // Com cliente na frente das avulsas: é a venda com cadastro que desenha o
+  // campo de CPF do bloco 54, e a avulsa desenha só a frase que o substitui.
+  // Medir a avulsa deixaria o campo novo fora da foto.
   const venda = primeiraLinha(
     psql(
       `select id from orders where tenant_id = '${tenant}' and status = 'paid'
-        order by closed_at limit 1`,
+        order by (customer_id is null), closed_at limit 1`,
     ),
   );
   if (!venda) return null;
+
+  /**
+   * A venda medida ganha cliente e CPF.
+   *
+   * O balcão fecha comanda avulsa o tempo todo, e é o que a semente produz — mas
+   * a avulsa desenha a frase que **substitui** o campo de CPF, e não o campo. A
+   * tela que precisa ser vista é a com cadastro: é ela que tem rótulo, campo,
+   * dica e botão, e é ela que pode estourar a linha em 360px.
+   */
+  const cliente = primeiraLinha(
+    psql(`select id from customers where tenant_id = '${tenant}' order by created_at limit 1`),
+  );
+  if (cliente) {
+    psql(`UPDATE orders SET customer_id = '${cliente}' WHERE id = '${venda}'`);
+    psql(`UPDATE customers SET tax_id = '52998224725' WHERE id = '${cliente}'`);
+  }
 
   // Uma autorizada e uma rejeitada: são os dois estados que a tela precisa
   // mostrar lado a lado, e o segundo é o que traz o texto longo da prefeitura.

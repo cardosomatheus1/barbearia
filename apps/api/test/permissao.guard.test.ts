@@ -499,3 +499,46 @@ describe('as rotas do painel', () => {
     ).resolves.toBe(true);
   });
 });
+
+/**
+ * Rota que devolve dado do cadastro do cliente declara `customers.view`.
+ *
+ * Regra escrita do projeto — *"permissão de rota que agrega declara **todas** as
+ * permissões do que ela devolve, e não a mais próxima do nome"* — e ela já foi
+ * quebrada duas vezes: na exportação do titular (bloco 31) e aqui, na rota que
+ * devolve a nota **e** o tomador.
+ *
+ * A varredura procura o sintoma que os dois casos tiveram em comum: o handler
+ * chama uma função cujo nome diz que ela lê cadastro de cliente, e a rota
+ * declara só a permissão do próprio assunto. O papel "Contador" — `fiscal.view`
+ * sem `customers.*`, configuração natural desde que os papéis viraram
+ * editáveis — colhia nome e CPF de todo cliente que já pediu nota.
+ *
+ * A lista de funções é escrita, e é o desenho certo aqui: o que se quer prender
+ * é *"esta leitura devolve pessoa"*, que é uma decisão, não uma forma de tipo.
+ * Ela cresce quando alguém acrescentar outra — e o comentário diz isso.
+ */
+const LEITURAS_DE_CADASTRO = ['tomadorDaVenda'];
+
+describe('rota que devolve cadastro de cliente', () => {
+  it('declara customers.view junto da permissão do próprio assunto', () => {
+    const faltando: string[] = [];
+
+    for (const { arquivo, corpo } of controllers()) {
+      for (const leitura of LEITURAS_DE_CADASTRO) {
+        if (!corpo.includes(leitura)) continue;
+
+        // O `@Exige` mais próximo acima de cada método que chama a leitura.
+        for (const uso of [...corpo.matchAll(new RegExp(`${leitura}\\(`, 'g'))]) {
+          const antes = corpo.slice(0, uso.index ?? 0);
+          const exige = [...antes.matchAll(/@Exige\(([^)]*)\)/g)].pop();
+          if (!exige?.[1]?.includes("'customers.view'")) {
+            faltando.push(`${arquivo}: ${leitura} sob ${exige?.[1] ?? 'nenhum @Exige'}`);
+          }
+        }
+      }
+    }
+
+    expect(faltando).toEqual([]);
+  });
+});

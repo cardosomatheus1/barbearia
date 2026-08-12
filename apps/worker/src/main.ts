@@ -3,6 +3,7 @@ import { respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
 import {
   aplicarReguaDoClube,
   conciliarCobrancas,
+  entregarNotasAutorizadas,
   conciliarRecebedores,
   liquidarRepasses,
   montarAvisoDoClube,
@@ -211,6 +212,25 @@ async function main(): Promise<void> {
        */
       processarNota: (tenantId, invoiceId) =>
         enviarNota({ tenantId, invoiceId, provider: EMISSOR_FISCAL }),
+      /**
+       * A nota autorizada chegando ao cliente (bloco 54), ligada aqui pelo mesmo
+       * motivo da retenção: ela mora em `packages/finance`, decide com
+       * `packages/core` e manda pelo **mesmo** `provider` de todo o resto —
+       * instanciar um aqui faria deste o único caminho que não troca junto
+       * quando o WhatsApp oficial entrar.
+       */
+      entregarNotas: async (tenantId, agora) => {
+        const resultado = await entregarNotasAutorizadas({
+          tenantId,
+          agora,
+          enviar: (mensagem) => provider.enviarDeNota(mensagem),
+        });
+        if (resultado.enviadas > 0) {
+          // Só a contagem: o link é documento público, mas o que ele identifica
+          // é uma pessoa e o que ela comprou.
+          console.log('[fiscal] notas entregues', { tenantId, enviadas: resultado.enviadas });
+        }
+      },
       /**
        * A retenção de dado pessoal (bloco 32), ligada aqui pelo mesmo motivo
        * da cobrança: ela mora em `packages/crm`, e `jobs` não conhece a camada

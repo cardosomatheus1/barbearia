@@ -2917,11 +2917,29 @@ export const notasNaApi = (token: string, de: string, ate: string) =>
     token,
   );
 
+export interface TomadorNaTela {
+  readonly customerId: string | null;
+  readonly nome: string | null;
+  readonly documento: string | null;
+}
+
 export const notaDaComandaNaApi = (token: string, orderId: string) =>
-  chamar<{ nota: NotaNaTela | null }>(
+  chamar<{ nota: NotaNaTela | null; tomador: TomadorNaTela | null }>(
     'GET',
     `/v1/admin/fiscal/notas/comanda/${orderId}`,
     undefined,
+    token,
+  );
+
+export const salvarDocumentoDoTomadorNaApi = (
+  token: string,
+  customerId: string,
+  documento: string | null,
+) =>
+  chamar<{ documento: string | null }>(
+    'PUT',
+    `/v1/admin/fiscal/tomador/${customerId}`,
+    { documento },
     token,
   );
 

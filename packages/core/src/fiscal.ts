@@ -27,6 +27,8 @@
  * reprova uma coluna de certificado ou senha em `fiscal_settings`.
  */
 
+import { foraDoSilencio } from './notificacao.js';
+
 // ---------------------------------------------------------------------------
 // Estado da nota
 // ---------------------------------------------------------------------------
@@ -175,6 +177,72 @@ export function cnpjValido(cnpj: string): boolean {
 /** Só os dígitos: é assim que o emissor recebe, e é a chave de comparação. */
 export function normalizarCnpj(cnpj: string): string {
   return cnpj.replace(/\D/g, '');
+}
+
+/**
+ * CPF, com os dois dígitos verificadores (bloco 54).
+ *
+ * Mesma razão do CNPJ, e o custo do erro é maior: o CNPJ errado é da barbearia
+ * e ela descobre na primeira nota, o CPF errado é **de um cliente entre mil** e
+ * a rejeição chega dias depois, sobre uma nota que ninguém lembra de qual venda
+ * era. Conferir no balcão é onde a pessoa ainda está na cadeira para corrigir.
+ */
+export function cpfValido(cpf: string): boolean {
+  const digitos = cpf.replace(/\D/g, '');
+  if (digitos.length !== 11) return false;
+  // Todos iguais passam na conta dos dígitos — `11111111111` inclusive — e são
+  // o que sai de um campo preenchido por teclado travado ou por preguiça.
+  if (/^(\d)\1{10}$/.test(digitos)) return false;
+
+  const verificador = (ate: number): number => {
+    let soma = 0;
+    for (let i = 0; i < ate; i += 1) soma += Number(digitos[i]) * (ate + 1 - i);
+    const resto = (soma * 10) % 11;
+    return resto === 10 ? 0 : resto;
+  };
+
+  return verificador(9) === Number(digitos[9]) && verificador(10) === Number(digitos[10]);
+}
+
+/**
+ * O documento do tomador: CPF, CNPJ, ou nada.
+ *
+ * Uma função e não duas do lado de fora, porque quem chama é o balcão digitando
+ * num campo só — a pessoa informa o que tem, e é o **tamanho** que diz qual é.
+ * Nulo é resposta legítima e o caso comum: nota ao consumidor.
+ */
+export function documentoDoTomadorValido(documento: string | null): boolean {
+  if (documento === null) return true;
+  const digitos = documento.replace(/\D/g, '');
+  if (digitos.length === 0) return true;
+  if (digitos.length === 11) return cpfValido(digitos);
+  if (digitos.length === 14) return cnpjValido(digitos);
+  return false;
+}
+
+/**
+ * O documento como a pessoa lê: `529.982.247-25`, `11.222.333/0001-81`.
+ *
+ * O que vai ao emissor são os dígitos, e o que aparece na tela é isto. Não é
+ * enfeite: quem digita no balcão está conferindo contra um documento
+ * **pontuado** na mão do cliente, e comparar onze dígitos corridos com um RG na
+ * mesa é onde o erro de um algarismo passa. Tamanho fora do previsto volta como
+ * veio, porque um formatador que inventa pontuação sobre lixo esconde o lixo.
+ */
+export function documentoBonito(documento: string | null): string {
+  if (!documento) return '';
+  const d = documento.replace(/\D/g, '');
+  if (d.length === 11) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  if (d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  return documento;
+}
+
+/** Só os dígitos, ou nulo se não sobrou nenhum. Nulo é "ao consumidor". */
+export function normalizarDocumento(documento: string | null | undefined): string | null {
+  const digitos = (documento ?? '').replace(/\D/g, '');
+  return digitos.length > 0 ? digitos : null;
 }
 
 export interface ConfiguracaoFiscal {
@@ -442,3 +510,72 @@ export const EXPLICACAO_DE_NAO_EMITIR: Readonly<Record<MotivoDeNaoEmitir, string
   venda_nao_paga: 'A nota sai quando a comanda é paga.',
   ja_tem_nota: 'Esta venda já tem nota.',
 };
+
+// ---------------------------------------------------------------------------
+// A nota chegando ao cliente (bloco 54)
+// ---------------------------------------------------------------------------
+
+/**
+ * "O cliente já pode receber o link."
+ *
+ * É o que a tela diz sobre a nota autorizada desde o bloco 53, e durante um
+ * bloco inteiro nada mandava link nenhum — frase descrevendo uma capacidade que
+ * não existia, que é o mesmo defeito de campo que ninguém preenche.
+ *
+ * A decisão mora aqui e não na consulta por duas razões. A janela de silêncio é
+ * regra de negócio com fuso da **unidade**, e o teste dela precisa rodar sem
+ * banco; e o motivo de não enviar é o que a tela mostra ao lado da nota — "sem
+ * telefone" e "ainda não saiu da prefeitura" mandam a recepção fazer coisas
+ * diferentes, e um `false` sozinho não distingue as duas.
+ */
+export type MotivoDeNaoEntregar =
+  | 'nao_autorizada'
+  | 'sem_link'
+  | 'ja_entregue'
+  | 'sem_telefone';
+
+export const EXPLICACAO_DE_NAO_ENTREGAR: Readonly<Record<MotivoDeNaoEntregar, string>> = {
+  nao_autorizada: 'A nota ainda não foi autorizada pela prefeitura.',
+  sem_link: 'A prefeitura autorizou mas ainda não devolveu o documento.',
+  ja_entregue: 'O link já foi enviado para o cliente.',
+  sem_telefone: 'Esta venda não tem cliente com telefone — o link fica aqui na tela.',
+};
+
+export interface DecisaoDeEntrega {
+  readonly entregar: boolean;
+  /** Quando mandar. Pode ser depois de agora: a janela de silêncio empurra. */
+  readonly quando: Date | null;
+  readonly motivo: MotivoDeNaoEntregar | null;
+}
+
+/**
+ * A nota vai para o cliente agora?
+ *
+ * A janela de silêncio vale **também aqui**, e é a parte contra-intuitiva: a
+ * nota é transacional, o cliente acabou de sair da cadeira, e é tentador mandar
+ * na hora. Mas o que chega às 22h47 é uma mensagem da barbearia no celular de
+ * quem já foi dormir, por um documento que ninguém abre de madrugada — e o
+ * número que paga por isso é o mesmo que manda o lembrete que reduz falta em
+ * 40%. Empurrada para as 8h, ela chega quando serve.
+ */
+export function decisaoDaEntregaDaNota(params: {
+  readonly estado: EstadoDaNota;
+  readonly linkPdf: string | null;
+  readonly entregueEm: Date | null;
+  readonly telefone: string | null;
+  readonly agora: Date;
+  readonly timeZone: string;
+}): DecisaoDeEntrega {
+  const nao = (motivo: MotivoDeNaoEntregar): DecisaoDeEntrega => ({
+    entregar: false,
+    quando: null,
+    motivo,
+  });
+
+  if (params.entregueEm !== null) return nao('ja_entregue');
+  if (params.estado !== 'autorizada') return nao('nao_autorizada');
+  if (!params.linkPdf) return nao('sem_link');
+  if (!params.telefone) return nao('sem_telefone');
+
+  return { entregar: true, quando: foraDoSilencio(params.agora, params.timeZone), motivo: null };
+}
