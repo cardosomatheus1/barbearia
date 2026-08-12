@@ -45,3 +45,4 @@ export * from './financeiro.js';
 export * from './dre.js';
 export * from './vale.js';
 export * from './fiscal.js';
+export * from './whatsapp.js';

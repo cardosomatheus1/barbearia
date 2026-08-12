@@ -113,6 +113,20 @@ export interface Contexto {
    * a nota deixaria de chegar ao cliente sem nada ficar vermelho.
    */
   readonly entregarNotas: (tenantId: string, agora: Date) => Promise<void>;
+  /**
+   * O toque no botão da mensagem virando ação (bloco 55), injetado.
+   *
+   * Mesma razão de `varrerRetencao` e de `entregarNotas`: ela lê em
+   * `packages/crm`, decide com `packages/core` e mexe na agenda por
+   * `packages/scheduling` — três pacotes que `jobs` não conhece. Obrigatória no
+   * tipo: opcional, o primeiro worker novo esqueceria dela e o botão de
+   * cancelar viraria um toque que não faz nada.
+   */
+  readonly responderWhatsApp: (
+    tenantId: string,
+    inboundId: string,
+    agora: Date,
+  ) => Promise<void>;
   readonly varrerRetencao: (
     tenantId: string,
     agora: Date,
@@ -322,6 +336,22 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    * `entregarNotas`, injetada — `jobs` não conhece `finance`, e é a mesma seta
    * de `varrerRetencao`.
    */
+  /**
+   * O cliente tocou um botão da mensagem (bloco 55).
+   *
+   * A tarefa nasce **dentro** da transação que grava a resposta, e o webhook
+   * devolve 200 sem esperar: a Meta desiste da entrega se demorarmos, e
+   * reentrega — o que faria o mesmo cancelamento chegar duas vezes.
+   *
+   * Quem mexe na agenda é `packages/scheduling`, pela função injetada. `jobs`
+   * não sabe cancelar horário nenhum, e é o mesmo desenho de `varrerRetencao`.
+   */
+  'whatsapp.responder': async (tarefa, contexto) => {
+    const inboundId = String(tarefa.payload['inboundId'] ?? '');
+    if (!inboundId) throw new Error('resposta de WhatsApp sem id');
+    await contexto.responderWhatsApp(tarefa.tenantId, inboundId, contexto.relogio.agora());
+  },
+
   'fiscal.entregar': async (tarefa, contexto) => {
     await contexto.entregarNotas(tarefa.tenantId, contexto.relogio.agora());
   },

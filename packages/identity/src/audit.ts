@@ -126,6 +126,15 @@ export type AuditAction =
    */
   | 'customers.tax_id_changed'
   /**
+   * O canal de WhatsApp da casa (bloco 55).
+   *
+   * A trilha guarda **se** o token mudou, nunca o token — mesmo precedente do
+   * CPF: uma credencial numa tabela append-only é segredo em repouso que
+   * nenhuma limpeza alcança.
+   */
+  | 'whatsapp.settings_changed'
+  | 'whatsapp.template_submitted'
+  /**
    * Estoque (bloco 44).
    *
    * `stock.adjusted` cobre perda e ajuste — os dois movimentos em que o número
@@ -353,6 +362,8 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'fiscal.settings_changed',
   'fiscal.invoice_cancelled',
   'customers.tax_id_changed',
+  'whatsapp.settings_changed',
+  'whatsapp.template_submitted',
   // O override não carrega centavo: guarda o score de antes, o de depois e o
   // motivo. A pergunta que responde — "quem dispensou este cliente do sinal?" —
   // é de quem administra a casa.

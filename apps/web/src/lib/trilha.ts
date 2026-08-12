@@ -97,6 +97,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
    * uma segunda cópia que a anonimização não alcança.
    */
   'customers.tax_id_changed': 'mudou o CPF de um cliente',
+  // Bloco 55. "Mexeu no" e não "configurou": a frase serve para quem cadastrou
+  // pela primeira vez e para quem trocou o token depois.
+  'whatsapp.settings_changed': 'mexeu no WhatsApp da casa',
+  'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
 
   // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
   // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em

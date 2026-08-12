@@ -103,6 +103,7 @@ const avisosDoClube: { tenantId: string; assinaturaId: string; motivo: string }[
 
 let notasProcessadas: { tenantId: string; invoiceId: string }[] = [];
 let entregasDeNota: { tenantId: string; agora: Date }[] = [];
+let respostasDeWhatsApp: { tenantId: string; inboundId: string }[] = [];
 let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' =
   'autorizada';
 
@@ -113,6 +114,9 @@ const ligacoesDaPlataforma = () => ({
   },
   entregarNotas: async (tenantId: string, agora: Date) => {
     entregasDeNota.push({ tenantId, agora });
+  },
+  responderWhatsApp: async (tenantId: string, inboundId: string) => {
+    respostasDeWhatsApp.push({ tenantId, inboundId });
   },
   avisarDeCobranca: async (aviso: {
     readonly tenantId: string;

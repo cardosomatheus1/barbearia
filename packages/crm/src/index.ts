@@ -6,3 +6,4 @@ export * from './anonimizacao.js';
 export * from './confianca.js';
 export * from './avaliacao.js';
 export * from './recado.js';
+export * from './whatsapp.js';
