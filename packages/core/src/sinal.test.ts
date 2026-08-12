@@ -212,3 +212,88 @@ describe('o sinal volta ou fica', () => {
     }
   });
 });
+
+describe('o quarto termo: cliente novo em horário de pico (bloco 57)', () => {
+  const POLITICA = {
+    modalidade: 'fixo' as const,
+    valorFixoCents: 2000,
+    percentualBps: 0,
+    limiarDeScore: 60,
+    tetoSemSinalCents: 0,
+    horasParaReembolso: 24,
+  };
+  const NOVO = { score: 100, considerados: 0, temEfeito: false, ajustadoAMao: false };
+  const CONHECIDO = { score: 100, considerados: 9, temEfeito: true, ajustadoAMao: false };
+
+  it('cliente novo em hora cheia paga sinal', () => {
+    /**
+     * Era lacuna declarada desde o bloco 39 — o termo existia na SPEC §2.12 e
+     * não no produto, porque não havia horário de pico. Agora ele é derivado do
+     * movimento medido, pelo heatmap.
+     */
+    const decisao = decidirSinal({
+      politica: POLITICA,
+      confianca: NOVO,
+      ticketCents: 5000,
+      servicoSempreExige: false,
+      clienteNovoEmPico: true,
+    });
+    expect(decisao).toMatchObject({ exigido: true, motivo: 'pico' });
+  });
+
+  it('cliente com histórico não paga por causa da hora', () => {
+    // Ele já provou que aparece. O termo é sobre risco desconhecido, não sobre
+    // a hora ser disputada.
+    expect(
+      decidirSinal({
+        politica: POLITICA,
+        confianca: CONHECIDO,
+        ticketCents: 5000,
+        servicoSempreExige: false,
+        clienteNovoEmPico: true,
+      }).exigido,
+    ).toBe(false);
+  });
+
+  it('cliente novo fora do pico não paga', () => {
+    expect(
+      decidirSinal({
+        politica: POLITICA,
+        confianca: NOVO,
+        ticketCents: 5000,
+        servicoSempreExige: false,
+        clienteNovoEmPico: false,
+      }).exigido,
+    ).toBe(false);
+  });
+
+  it('ausente significa o comportamento anterior', () => {
+    /**
+     * Padrão de configuração que mexe em dinheiro é sempre o que já valia: um
+     * caminho que ainda não passa a grade não pode começar a cobrar sinal de
+     * quem não pagava.
+     */
+    expect(
+      decidirSinal({
+        politica: POLITICA,
+        confianca: NOVO,
+        ticketCents: 5000,
+        servicoSempreExige: false,
+      }).exigido,
+    ).toBe(false);
+  });
+
+  it('o pico é o último motivo: qualquer outro explica melhor', () => {
+    // A ordem do motivo é a ordem da explicação no balcão, e "é seu primeiro
+    // horário e a sexta está cheia" é a frase mais difícil de dizer.
+    expect(
+      decidirSinal({
+        politica: POLITICA,
+        confianca: NOVO,
+        ticketCents: 5000,
+        servicoSempreExige: true,
+        clienteNovoEmPico: true,
+      }).motivo,
+    ).toBe('servico');
+  });
+});

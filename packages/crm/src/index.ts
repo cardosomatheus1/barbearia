@@ -8,3 +8,4 @@ export * from './avaliacao.js';
 export * from './recado.js';
 export * from './whatsapp.js';
 export * from './automacao.js';
+export * from './campanha.js';

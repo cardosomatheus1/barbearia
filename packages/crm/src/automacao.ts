@@ -279,14 +279,136 @@ async function candidatos(
     }));
   }
 
+  const simples = async (sql: string, ...args: unknown[]) =>
+    (
+      await tx.$queryRawUnsafe<
+        {
+          customer_id: string;
+          referencia: string;
+          fato_em: Date;
+          tem_telefone: boolean;
+          aceita: boolean;
+        }[]
+      >(sql, ...args)
+    ).map((l) => ({
+      customerId: l.customer_id,
+      referencia: l.referencia,
+      fatoEm: l.fato_em,
+      temTelefone: l.tem_telefone,
+      aceitaPromocional: l.aceita,
+    }));
+
   /**
-   * Os demais gatilhos ainda não têm consulta.
+   * Os oito que faltavam (bloco 57).
    *
-   * Vazio e não exceção: uma automação ligada sobre um gatilho sem consulta não
-   * pode derrubar a varredura das outras. A tela avisa quais já funcionam, e a
-   * lacuna declara em qual bloco os outros entram — é melhor que escondê-los da
-   * lista, porque escondê-los faria a SPEC §4.11 parecer entregue.
+   * Todos têm a mesma forma — quem é, quando o fato aconteceu, qual a chave — e
+   * todos olham só o passado recente: a varredura roda de hora em hora, e uma
+   * consulta sem recorte de tempo reprocessaria a base inteira toda volta para
+   * descobrir que já disparou. A unicidade por fato garante a corretude; o
+   * recorte garante que ela não custe a base inteira.
    */
+  if (gatilho === 'cancelamento') {
+    return simples(
+      `SELECT c.id AS customer_id, a.id::text AS referencia, a.cancelled_at AS fato_em, ${comum}
+         FROM appointments a
+         JOIN customers c ON c.id = a.customer_id
+        WHERE a.status = 'cancelled_customer'
+          AND a.cancelled_at > $1::timestamptz - interval '2 days'
+          AND c.anonymized_at IS NULL`,
+      agora,
+    );
+  }
+
+  if (gatilho === 'avaliacao_positiva' || gatilho === 'avaliacao_negativa') {
+    /**
+     * O limiar é em estrelas, e o sentido muda com o gatilho: "a partir de
+     * quantas" para a boa, "até quantas" para a ruim. É o mesmo campo com dois
+     * significados — a razão de o rótulo morar em `core` e não na tela.
+     */
+    const positiva = gatilho === 'avaliacao_positiva';
+    const estrelas = limiar ?? (positiva ? 4 : 3);
+    return simples(
+      `SELECT c.id AS customer_id, r.id::text AS referencia, r.created_at AS fato_em, ${comum}
+         FROM reviews r
+         JOIN customers c ON c.id = r.customer_id
+        WHERE r.created_at > $1::timestamptz - interval '2 days'
+          AND r.rating ${positiva ? '>=' : '<='} $2::int
+          AND c.anonymized_at IS NULL`,
+      agora,
+      estrelas,
+    );
+  }
+
+  if (gatilho === 'servico_realizado' || gatilho === 'produto_comprado') {
+    const tipo = gatilho === 'servico_realizado' ? 'service' : 'product';
+    return simples(
+      `SELECT c.id AS customer_id, o.id::text AS referencia, o.closed_at AS fato_em, ${comum}
+         FROM orders o
+         JOIN customers c ON c.id = o.customer_id
+        WHERE o.status = 'paid'
+          AND o.closed_at > $1::timestamptz - interval '2 days'
+          AND c.anonymized_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM order_items i
+             WHERE i.order_id = o.id AND i.kind = $2::order_item_kind
+          )`,
+      agora,
+      tipo,
+    );
+  }
+
+  if (gatilho === 'pacote_acabando') {
+    /**
+     * "Faltam quantas unidades" — e o saldo é **derivado**, como manda a
+     * convenção do produto: comprado menos consumido. Um contador responderia
+     * mais rápido e estaria errado no dia em que alguém estornasse uma venda.
+     */
+    const restantes = limiar ?? 1;
+    return simples(
+      `SELECT c.id AS customer_id, p.id::text AS referencia, now() AS fato_em, ${comum}
+         FROM customer_packages p
+         JOIN customers c ON c.id = p.customer_id
+        WHERE c.anonymized_at IS NULL
+          AND p.status = 'active'
+          AND p.quantity - (
+                SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
+              ) <= $2::int
+          AND p.quantity - (
+                SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
+              ) > 0`,
+      agora,
+      restantes,
+    );
+  }
+
+  if (gatilho === 'assinatura_vencendo') {
+    const dias = limiar ?? 3;
+    return simples(
+      `SELECT c.id AS customer_id,
+              to_char(f.due_at, 'YYYY-MM-DD') AS referencia, f.due_at AS fato_em, ${comum}
+         FROM club_invoices f
+         JOIN club_subscriptions s ON s.id = f.subscription_id
+         JOIN customers c ON c.id = s.customer_id
+        WHERE c.anonymized_at IS NULL
+          AND f.status = 'aberta'
+          AND f.due_at BETWEEN $1::timestamptz AND $1::timestamptz + ($2::int * interval '1 day')`,
+      agora,
+      dias,
+    );
+  }
+
+  if (gatilho === 'vaga_na_espera') {
+    return simples(
+      `SELECT c.id AS customer_id, o.id::text AS referencia, o.created_at AS fato_em, ${comum}
+         FROM waitlist_offers o
+         JOIN waitlist_entries e ON e.id = o.entry_id
+         JOIN customers c ON c.id = e.customer_id
+        WHERE c.anonymized_at IS NULL
+          AND o.created_at > $1::timestamptz - interval '1 day'`,
+      agora,
+    );
+  }
+
   return [];
 }
 

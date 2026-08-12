@@ -15,6 +15,7 @@ import {
   type LinhaDoDia,
   type PainelDoDia,
 } from '@/lib/admin-api';
+import type { MotivoDoSinal } from '@barbearia/core';
 import { addDays, localTime, weekdayShort } from '@/lib/date';
 import { painelDoBalcaoOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -77,10 +78,13 @@ const AÇÃO = VERBO_DA_ACAO;
  * CLAUDE.md §6 manda a mesma coisa ter o mesmo nome em todo lugar. Quando a
  * mesma frase aparecer na página do cliente, ela sai daqui.
  */
-const MOTIVO_DO_SINAL: Readonly<Record<'servico' | 'score' | 'ticket', string>> = {
+const MOTIVO_DO_SINAL: Readonly<Record<MotivoDoSinal, string>> = {
   servico: 'este serviço sempre pede',
   score: 'pelo histórico de faltas',
   ticket: 'pelo tamanho da reserva',
+  // Bloco 57. A frase fala da pessoa **e** da casa, e é a mais difícil de dizer
+  // no balcão — por isso ela é o último motivo a se aplicar.
+  pico: 'primeira vez, em horário cheio',
 };
 
 /** O verbo da decisão de reembolso, um só para toda a interface. */

@@ -84,11 +84,7 @@ export const LIMIAR_DO_GATILHO: Readonly<Record<Gatilho, string | null>> = {
  *
  * A lista cresce quando cada consulta entra, e a lacuna declara em qual bloco.
  */
-export const GATILHOS_COM_VARREDURA: readonly Gatilho[] = [
-  'sem_retorno',
-  'aniversario',
-  'primeiro_atendimento',
-];
+export const GATILHOS_COM_VARREDURA: readonly Gatilho[] = [...GATILHOS];
 
 export function gatilhoDispara(gatilho: Gatilho): boolean {
   return GATILHOS_COM_VARREDURA.includes(gatilho);

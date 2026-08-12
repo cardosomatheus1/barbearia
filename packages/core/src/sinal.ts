@@ -92,9 +92,28 @@ export interface PedidoDeSinal {
   readonly ticketCents: number;
   /** Algum dos serviços marcados sempre exige sinal. */
   readonly servicoSempreExige: boolean;
+  /**
+   * O quarto termo da SPEC §2.12: cliente novo em horário de pico (bloco 57).
+   *
+   * Ficou lacuna declarada desde o bloco 39 porque **não existia horário de
+   * pico no produto** — nem coluna, nem cálculo, nem tela onde a barbearia
+   * dissesse quais são as horas cheias. Criar o parâmetro teria sido mais um
+   * campo que ninguém preenche.
+   *
+   * Agora ele é **derivado do movimento medido**, pelo heatmap de ocupação: a
+   * hora é de pico quando as células daquele dia e hora passam de 75% vendidos.
+   * O dono não adivinha nada, e a definição não é burlável por engano.
+   *
+   * Opcional porque nem todo caminho que decide sinal tem a grade em mãos — o
+   * balcão marcando de dentro do sistema tem, o motor de reserva do site tem, e
+   * um teste de política pura não precisa ter. Ausente é `false`, e é o
+   * comportamento anterior: padrão de configuração que mexe em dinheiro é
+   * sempre o que já valia.
+   */
+  readonly clienteNovoEmPico?: boolean;
 }
 
-export type MotivoDoSinal = 'servico' | 'score' | 'ticket';
+export type MotivoDoSinal = 'servico' | 'score' | 'ticket' | 'pico';
 
 export interface DecisaoDeSinal {
   readonly exigido: boolean;
@@ -168,6 +187,19 @@ export function decidirSinal(pedido: PedidoDeSinal): DecisaoDeSinal {
   // 100 por presunção e não pode exigir nada.
   if (confianca.temEfeito && confianca.score < politica.limiarDeScore) return sim('score');
   if (acimaDoTeto) return sim('ticket');
+  /**
+   * O quarto termo, e ele vem **por último** de propósito.
+   *
+   * A ordem do motivo é a ordem da explicação no balcão, e "é seu primeiro
+   * horário e a sexta às sete está cheia" é a frase mais difícil de dizer: ela
+   * fala da pessoa **e** da casa ao mesmo tempo. Se houver outra razão
+   * verdadeira antes, é ela que a recepção usa.
+   *
+   * `!temEfeito` é o que significa "cliente novo" neste produto desde o bloco
+   * 38: menos de três agendamentos, score 100 por presunção. Um cliente com
+   * histórico numa hora cheia não paga por isso — ele já provou que aparece.
+   */
+  if (pedido.clienteNovoEmPico === true && !confianca.temEfeito) return sim('pico');
 
   return nao;
 }

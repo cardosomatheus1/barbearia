@@ -1393,6 +1393,105 @@ function prepararAutomacoes(slug) {
   );
 }
 
+/**
+ * Uma campanha já enviada, com receita atribuída (bloco 57).
+ *
+ * O heatmap se desenha sozinho a partir da agenda que a carga já monta. O que
+ * precisa de semente é a **linha da campanha**: é ela que carrega as seis
+ * colunas da SPEC §4.13 numa linha só, e é ela que pode estourar a largura.
+ */
+function prepararCampanha(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  /**
+   * Movimento **passado**, que é o que o heatmap lê.
+   *
+   * A carga do `/availability` monta agenda para os próximos sete dias, e a
+   * grade olha as oito semanas anteriores: sem esta semente a tela mostra o
+   * estado vazio — que é honesto e não é o que precisa ser fotografado.
+   *
+   * As horas variam de propósito: uma grade em que todas as células têm o mesmo
+   * valor não mostra o que a tela existe para mostrar.
+   */
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  const profissionais = psql(
+    `select id from professionals where tenant_id = '${tenant}' order by created_at limit 4`,
+  )
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const cliente = primeiraLinha(
+    psql(`select id from customers where tenant_id = '${tenant}' limit 1`),
+  );
+  if (local && profissionais.length > 0 && cliente) {
+    /**
+     * Uma instrução só, com `generate_series`.
+     *
+     * A primeira versão fazia um `psql` por agendamento — seiscentas chamadas de
+     * processo, e a medição não chegava nem às telas. O que se quer aqui é a
+     * grade preenchida, não um laço em JavaScript.
+     *
+     * A tarde é mais cheia que a manhã de propósito: uma grade em que todas as
+     * células têm o mesmo valor não mostra o que a tela existe para mostrar.
+     *
+     * Cada repetição vai para **um profissional diferente**, e não para o mesmo
+     * com sete minutos de diferença: a constraint anti-overbooking recusa dois
+     * atendimentos que se sobrepõem na mesma cadeira, e ela está certa. É assim
+     * que uma hora cheia acontece de verdade — várias cadeiras ocupadas ao
+     * mesmo tempo.
+     */
+    for (const [indice, profissional] of profissionais.entries()) {
+      psql(
+        `INSERT INTO appointments
+           (tenant_id, location_id, professional_id, customer_id, status,
+            starts_at, ends_at, service_starts_at, service_ends_at)
+         SELECT '${tenant}', '${local}', '${profissional}', '${cliente}', 'completed',
+                inicio, inicio + interval '30 minutes', inicio, inicio + interval '30 minutes'
+           FROM (
+             SELECT date_trunc('week', now())
+                    - semana * interval '1 week'
+                    + dia * interval '1 day'
+                    + hora * interval '1 hour' AS inicio
+               FROM generate_series(1, 6) AS semana,
+                    generate_series(1, 6) AS dia,
+                    generate_series(9, 19) AS hora
+              WHERE ${indice + 1} <= CASE WHEN hora >= 17 THEN 4 WHEN hora >= 13 THEN 2 ELSE 1 END
+           ) t
+          ON CONFLICT DO NOTHING`,
+      );
+    }
+  }
+
+  const campanha = primeiraLinha(
+    psql(
+      `INSERT INTO campaigns (tenant_id, name, filter, filter_value, filter_weekday, kind, status, sent_at)
+       VALUES ('${tenant}', 'Encher a terça das 14h', 'celula_fria', 14, 2, 'retorno', 'enviada', now())
+       RETURNING id`,
+    ),
+  );
+  if (!campanha) return;
+
+  const clientes = psql(
+    `select id from customers where tenant_id = '${tenant}' order by created_at limit 12`,
+  )
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (const [i, cliente] of clientes.entries()) {
+    const objetivo = i < 3 ? `now(), NULL, ${4500 + i * 900}` : 'NULL, NULL, NULL';
+    psql(
+      `INSERT INTO campaign_targets
+         (tenant_id, campaign_id, customer_id, sent_at, goal_met_at, goal_ref, goal_amount_cents)
+       VALUES ('${tenant}', '${campanha}', '${cliente}', now(), ${objetivo})
+       ON CONFLICT DO NOTHING`,
+    );
+  }
+}
+
 function prepararFiscal(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -1801,6 +1900,7 @@ async function main() {
   const vendaComNota = prepararFiscal(slug);
   prepararWhatsApp(slug);
   prepararAutomacoes(slug);
+  prepararCampanha(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -1905,6 +2005,7 @@ async function main() {
     { nome: 'nota fiscal', url: '/admin/fiscal', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'whatsapp', url: '/admin/whatsapp', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'automações', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'campanhas', url: '/admin/campanhas', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

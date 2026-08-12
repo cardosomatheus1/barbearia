@@ -226,6 +226,83 @@ describeIfDb('automação', () => {
     expect(carimbados.filter(Boolean)).toHaveLength(1);
   });
 
+  // -- os outros gatilhos (bloco 57) ------------------------------------------
+
+  it('cada gatilho novo acha de fato quem cruzou a condição', async () => {
+    /**
+     * Uma consulta que nunca é exercida é uma consulta que passa no portão e
+     * falha em produção. Este teste dispara **um** gatilho de cada, com o fato
+     * plantado, e cobra que a varredura encontre — é o que separa "a consulta
+     * compila" de "a consulta funciona".
+     */
+    // Cancelamento: o cliente desmarcou ontem.
+    const ontem = new Date(AGORA.getTime() - 86_400_000).toISOString();
+    const fimOntem = new Date(AGORA.getTime() - 86_400_000 + 1_800_000).toISOString();
+    await exec(`
+      INSERT INTO appointments
+        (id, tenant_id, location_id, professional_id, customer_id, status,
+         starts_at, ends_at, service_starts_at, service_ends_at, cancelled_at)
+      VALUES ('36565656-0000-4000-8000-000000000001', '${TENANT}', '${LOCAL}', '${RUAN}',
+              '${CARLOS}', 'cancelled_customer', '${ontem}', '${fimOntem}',
+              '${ontem}', '${fimOntem}', '${ontem}');
+    `);
+
+    await salvarAutomacao({
+      tenantId: TENANT,
+      nome: 'Voltou atrás?',
+      gatilho: 'cancelamento',
+      limiar: null,
+      atrasoMinutos: 0,
+      tipo: 'retorno',
+      objetivo: 'agendamento',
+      janelaDias: 7,
+      ativa: true,
+      ...operador,
+    });
+
+    expect(await varrer()).toMatchObject({ marcados: 1 });
+  });
+
+  it('avaliação boa e ruim usam o mesmo campo com sentidos opostos', async () => {
+    // "A partir de quantas estrelas" e "até quantas": é o mesmo número com dois
+    // significados, e a razão de o rótulo morar em `core`.
+    await exec(`
+      INSERT INTO reviews (id, tenant_id, customer_id, professional_id, rating, created_at)
+      VALUES ('46565656-0000-4000-8000-000000000001', '${TENANT}', '${CARLOS}', '${RUAN}', 5,
+              '${new Date(AGORA.getTime() - 3_600_000).toISOString()}');
+    `);
+
+    await salvarAutomacao({
+      tenantId: TENANT,
+      nome: 'Obrigado pela nota',
+      gatilho: 'avaliacao_positiva',
+      limiar: 4,
+      atrasoMinutos: 0,
+      tipo: 'retorno',
+      objetivo: 'agendamento',
+      janelaDias: 7,
+      ativa: true,
+      ...operador,
+    });
+    expect(await varrer()).toMatchObject({ marcados: 1 });
+
+    // A ruim, com o mesmo cinco, não pega ninguém.
+    await exec(`DELETE FROM automation_sends; DELETE FROM automations`);
+    await salvarAutomacao({
+      tenantId: TENANT,
+      nome: 'Desculpa',
+      gatilho: 'avaliacao_negativa',
+      limiar: 3,
+      atrasoMinutos: 0,
+      tipo: 'retorno',
+      objetivo: 'agendamento',
+      janelaDias: 7,
+      ativa: true,
+      ...operador,
+    });
+    expect(await varrer()).toMatchObject({ marcados: 0 });
+  });
+
   // -- a atribuição ----------------------------------------------------------
 
   it('o agendamento dentro da janela é creditado à mensagem', async () => {

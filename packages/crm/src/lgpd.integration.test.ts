@@ -267,6 +267,16 @@ describeIfDb('direitos do titular', () => {
        * o que separa esta linha de uma cópia de dado pessoal.
        */
       ['automation_sends', 'registro de desempenho da casa; a mensagem entra por whatsapp_messages'],
+      /**
+       * O alvo de campanha, pela mesma razão do disparo de automação (bloco 57).
+       *
+       * Ele responde "esta campanha valeu o que custou" — público, enviados,
+       * receita atribuída —, e o que guarda sobre a pessoa é o vínculo e a
+       * hora. A mensagem que ela recebeu entra na exportação por
+       * `whatsapp_messages`, que é onde a mensagem de verdade está, e o vínculo
+       * some na anonimização pela chave estrangeira `SET NULL`.
+       */
+      ['campaign_targets', 'registro de desempenho da casa; a mensagem entra por whatsapp_messages'],
       // Token de sessão é credencial, não dado pessoal: exportá-lo entregaria um
       // acesso vivo num arquivo que o titular recebe por e-mail.
       ['customer_sessions', 'credencial, não dado do titular'],

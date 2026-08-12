@@ -47,3 +47,4 @@ export * from './vale.js';
 export * from './fiscal.js';
 export * from './whatsapp.js';
 export * from './automacao.js';
+export * from './ocupacao.js';

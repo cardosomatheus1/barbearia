@@ -3042,3 +3042,50 @@ export const salvarAutomacaoNaApi = (
     ativa: boolean;
   },
 ) => chamar<{ id: string }>('PUT', '/v1/admin/automacoes', corpo, token);
+
+// -- campanhas e heatmap (bloco 57) ------------------------------------------
+
+export interface CelulaNaTelaDoAdmin {
+  readonly diaDaSemana: number;
+  readonly hora: number;
+  readonly minutosVendidos: number;
+  readonly minutosDeJornada: number;
+  readonly ocupacaoBps: number | null;
+  readonly faixa: 'fechado' | 'fria' | 'morna' | 'cheia';
+}
+
+export interface CampanhaNaTelaDoAdmin {
+  readonly id: string;
+  readonly nome: string;
+  readonly filtro: string;
+  readonly valorDoFiltro: number | null;
+  readonly diaDaSemana: number | null;
+  readonly tipo: string;
+  readonly estado: string;
+  readonly criadaEm: string;
+  readonly publico: number;
+  readonly enviados: number;
+  readonly entregues: number;
+  readonly lidos: number;
+  readonly cliques: number;
+  readonly agendamentos: number;
+  readonly receitaCents: number;
+}
+
+export const campanhasNaApi = (token: string) =>
+  chamar<{
+    campanhas: readonly CampanhaNaTelaDoAdmin[];
+    grade: readonly CelulaNaTelaDoAdmin[];
+  }>('GET', '/v1/admin/campanhas', undefined, token);
+
+export const criarCampanhaNaApi = (
+  token: string,
+  corpo: {
+    nome: string;
+    filtro: string;
+    valorDoFiltro: number | null;
+    diaDaSemana: number | null;
+    tipo: string;
+    janelaDias: number;
+  },
+) => chamar<{ id: string; publico: number }>('POST', '/v1/admin/campanhas', corpo, token);

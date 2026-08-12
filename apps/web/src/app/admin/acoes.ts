@@ -48,6 +48,7 @@ import {
   salvarCadastroDoWhatsAppNaApi,
   submeterTemplateNaApi,
   salvarAutomacaoNaApi,
+  criarCampanhaNaApi,
   cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
@@ -2594,6 +2595,24 @@ export async function acaoSalvarDocumentoDoTomador(form: FormData): Promise<void
 
 const ROTA_WHATSAPP = '/admin/whatsapp';
 const ROTA_AUTOMACOES = '/admin/automacoes';
+const ROTA_CAMPANHAS = '/admin/campanhas';
+
+export async function acaoCriarCampanha(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const valor = texto(form, 'valorDoFiltro');
+  const dia = texto(form, 'diaDaSemana');
+  const resultado = await criarCampanhaNaApi(token, {
+    nome: texto(form, 'nome'),
+    filtro: texto(form, 'filtro'),
+    valorDoFiltro: valor ? Number(valor) : null,
+    diaDaSemana: dia ? Number(dia) : null,
+    tipo: texto(form, 'tipo'),
+    janelaDias: Number(texto(form, 'janelaDias') || '7'),
+  });
+  if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
+  redirect(`${ROTA_CAMPANHAS}?feito=criada&publico=${resultado.dados.publico}`);
+}
+
 
 export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
   const token = await exigirSessao();

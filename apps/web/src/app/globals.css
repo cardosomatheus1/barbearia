@@ -4104,6 +4104,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='fiscal']) .contexto__link[data-para='fiscal'],
 .casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp'],
 .casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes'],
+.casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas'],
 .casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
 .casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);
@@ -6877,3 +6878,59 @@ main { padding-bottom: var(--space-8); }
    resposta que faz o dono agir, e a cor aqui é o último recurso e não o
    primeiro — o tamanho já o destaca. */
 .gaveta--risco .gaveta__valor { color: var(--color-danger); }
+
+/* ---------------------------------------------------------------------------
+   O heatmap de ocupação (bloco 57)
+
+   Grade de sete colunas que **rola dentro do próprio recipiente**, nunca
+   levando a página junto: é a regra mais antiga deste CSS, e uma tabela de
+   sete dias em 360px é exatamente o conteúdo que a quebra.
+
+   A cor diz a faixa, e o número diz o valor — cor sozinha não serve a quem tem
+   baixa visão, e é por isso que cada célula escreve o percentual.
+   --------------------------------------------------------------------------- */
+.heatmap {
+  display: grid;
+  grid-template-columns: auto repeat(7, minmax(3rem, 1fr));
+  gap: var(--space-1);
+  min-inline-size: max-content;
+}
+
+.heatmap__canto,
+.heatmap__dia,
+.heatmap__hora {
+  padding: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.heatmap__hora { text-align: end; }
+
+.heatmap__celula {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--size-touch);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap__celula--fechado {
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-border) 25%, transparent);
+}
+.heatmap__celula--fria {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.heatmap__celula--morna {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.heatmap__celula--cheia {
+  color: var(--color-text-on-accent);
+  background: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}

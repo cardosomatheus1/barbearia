@@ -1,3 +1,4 @@
+import { horaCheia } from './ocupacao.js';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   MESES_DA_JANELA,
@@ -201,6 +202,14 @@ export interface PedidoDeAvaliacaoDeSinal {
   readonly serviceIds: readonly string[];
   readonly ticketCents: number;
   readonly now: Date;
+  /**
+   * O instante em que o serviço começa, para saber se a hora é de pico.
+   *
+   * Opcional porque nem todo caminho o tem em mãos — e ausente significa "não
+   * consulte o pico", que é o comportamento anterior. Padrão de configuração
+   * que mexe em dinheiro é sempre o que já valia.
+   */
+  readonly comecaEm?: Date;
 }
 
 export interface SinalDoAgendamento extends DecisaoDeSinal {
@@ -253,11 +262,25 @@ export async function avaliarSinalEm(
     algumServicoSempreExige(tx, pedido.serviceIds),
   ]);
 
+  /**
+   * O pico só é consultado quando pode mudar a resposta.
+   *
+   * A grade custa uma consulta de agregação sobre a agenda, e ela é inútil se o
+   * cliente já tem histórico: o quarto termo só vale para cliente **novo**.
+   * Perguntá-la sempre poria peso no caminho de reserva — que é o mais chamado
+   * do produto — em troca de nada na maior parte das vezes.
+   */
+  const clienteNovoEmPico =
+    !confianca.temEfeito && pedido.comecaEm
+      ? await horaCheia(tx, pedido.locationId, pedido.comecaEm)
+      : false;
+
   const decisao = decidirSinal({
     politica,
     confianca,
     ticketCents: pedido.ticketCents,
     servicoSempreExige: sempreExige,
+    clienteNovoEmPico,
   });
 
   return { ...decisao, confianca };

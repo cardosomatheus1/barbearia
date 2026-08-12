@@ -102,6 +102,7 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'whatsapp.settings_changed': 'mexeu no WhatsApp da casa',
   'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
   'automation.changed': 'mexeu numa automação de mensagem',
+  'campaign.created': 'criou uma campanha',
 
   // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
   // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em
