@@ -4048,6 +4048,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='fila']) .contexto__link[data-para='fila'],
 .casco:has([data-secao='avisos']) .contexto__link[data-para='avisos'],
 .casco:has([data-secao='recados']) .contexto__link[data-para='recados'],
+.casco:has([data-secao='avaliacoes']) .contexto__link[data-para='avaliacoes'],
 .casco:has([data-secao='caixa']) .contexto__link[data-para='caixa'],
 .casco:has([data-secao='comanda']) .contexto__link[data-para='comanda'],
 .casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
@@ -6241,3 +6242,156 @@ main { padding-bottom: var(--space-8); }
   background: var(--color-accent);
 }
 .pacote-cliente__acao { flex: none; }
+
+/* ---------------------------------------------------------------------------
+   Avaliações (bloco 43)
+
+   O cartão de alerta tem borda de atenção e o prazo em destaque, porque ele tem
+   validade — e é a única parte do painel que tem. As outras avaliações são
+   histórico e ficam quietas.
+
+   `@container` e não largura de janela: o mesmo cartão aparece na tela cheia de
+   Avaliações e dentro da ficha do cliente, que é bem mais estreita.
+   --------------------------------------------------------------------------- */
+.avaliacao {
+  container-type: inline-size;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.avaliacao + .avaliacao { margin-top: var(--space-3); }
+.avaliacao--alerta {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface-raised));
+}
+.avaliacao__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.avaliacao__estrelas {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+}
+.avaliacao__prazo {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.avaliacao--alerta .avaliacao__prazo {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-semibold);
+}
+.avaliacao__quem {
+  margin: var(--space-2) 0 0;
+  font-weight: var(--font-weight-semibold);
+}
+.avaliacao__quando {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+/* A citação é o que a pessoa escreveu, e é o que se lê primeiro no cartão. */
+.avaliacao__texto {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border-strong);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+.avaliacao__texto--vazio { color: var(--color-text-muted); font-style: italic; }
+.avaliacao__categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.avaliacao__tratada {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.avaliacao__form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+@container (min-width: 32rem) {
+  .avaliacao__form { grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); align-items: start; }
+  .avaliacao__form button { grid-column: 2; justify-self: start; }
+}
+
+/* O formulário que o cliente vê, na página dele. */
+.dar-nota { container-type: inline-size; }
+/* Cinco colunas iguais, e não `flex-wrap`.
+   Com as estrelas acumuladas (★ ★★ ★★★…) os botões têm larguras diferentes e
+   quebravam em duas linhas a partir de 390px — a nota 5 sozinha embaixo parecia
+   outra coisa. Em grade eles cabem numa linha até no piso de 360px, e cada um
+   continua com 44px de alvo. */
+.dar-nota__estrelas {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  border: 0;
+}
+.dar-nota__estrelas legend { grid-column: 1 / -1; }
+/* Alvo de 44px em qualquer largura: o rádio nativo é pequeno demais para o
+   polegar, e esta é a única interação da tela. */
+.dar-nota__estrela {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-touch);
+  min-height: var(--size-touch);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+}
+.dar-nota__estrela input { position: absolute; opacity: 0; pointer-events: none; }
+.dar-nota__estrela:has(input:checked) {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+}
+.dar-nota__estrela:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.dar-nota__item {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.dar-nota__item + .dar-nota__item { margin-top: var(--space-3); }
+.dar-nota__quem { margin: 0 0 var(--space-3); font-weight: var(--font-weight-semibold); }
+
+/* A reputação na página pública. */
+.reputacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+}
+.reputacao__nota {
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+.reputacao__quantas { font-size: var(--font-size-sm); color: var(--color-text-muted); }

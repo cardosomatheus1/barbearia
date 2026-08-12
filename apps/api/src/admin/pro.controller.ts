@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
 import { MetaError, desempenhoDoProfissional, metasDoMes, salvarMeta } from '@barbearia/finance';
 import { primaryLocation } from '@barbearia/scheduling';
+import { mediaDoProfissional } from '@barbearia/crm';
 import { diaNaUnidade } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError, notFound } from '../common/errors.js';
@@ -74,11 +75,33 @@ export class ProController {
     }
 
     try {
-      return await desempenhoDoProfissional({
+      const hoje = await this.hoje(staff.tenantId);
+      const numeros = await desempenhoDoProfissional({
         tenantId: staff.tenantId,
         professionalId: eu,
-        hoje: await this.hoje(staff.tenantId),
+        hoje,
       });
+
+      /**
+       * A nota do barbeiro entra aqui, e não numa rota de avaliações (bloco 43).
+       *
+       * `commission.view_own` é a permissão que já significa "os **meus**
+       * números", e é a única que cabe: `reviews.view` dá as avaliações da casa
+       * inteira, e a nota de um colega na tela do outro é a briga que
+       * `commission.view_own` existe para evitar. A SPEC §4.21 manda comparar
+       * com o próprio passado, nunca com o colega — daí os dois meses, e nenhum
+       * ranking.
+       */
+      const mes = new Date(`${hoje.slice(0, 7)}-01T00:00:00Z`);
+      const mesQueVem = new Date(Date.UTC(mes.getUTCFullYear(), mes.getUTCMonth() + 1, 1));
+      const mesPassado = new Date(Date.UTC(mes.getUTCFullYear(), mes.getUTCMonth() - 1, 1));
+
+      const [nota, notaAnterior] = await Promise.all([
+        mediaDoProfissional(staff.tenantId, eu, mes, mesQueVem),
+        mediaDoProfissional(staff.tenantId, eu, mesPassado, mes),
+      ]);
+
+      return { ...numeros, nota, notaAnterior };
     } catch (error) {
       return toHttp(error);
     }

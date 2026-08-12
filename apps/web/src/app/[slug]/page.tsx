@@ -6,7 +6,7 @@ import {
   imagemPublica,
   PROPORCAO,
 } from '@barbearia/core';
-import { getProfile, getToday, type PublicProfile } from '@/lib/api';
+import { getAvaliacoesPublicas, getProfile, getToday, type PublicProfile } from '@/lib/api';
 import { localDate } from '@/lib/date';
 import { jsonLd, jsonLdScript } from '@/lib/json-ld';
 import { regraDeCancelamento } from '@/lib/politica';
@@ -58,9 +58,17 @@ export default async function BarbershopPage({ params }: Params) {
 
   const today = localDate(profile.location.timezone);
   const firstService = profile.categories[0]?.services[0];
-  const availability = firstService
-    ? await getToday(slug, profile.location.id, firstService.id, today)
-    : null;
+
+  /**
+   * A grade e a reputação juntas.
+   *
+   * As duas dependem do perfil e de mais nada uma da outra: encadeá-las somaria
+   * a latência de uma na outra numa página cujo alvo de LCP é 2,5s em 4G.
+   */
+  const [availability, reputacao] = await Promise.all([
+    firstService ? getToday(slug, profile.location.id, firstService.id, today) : null,
+    getAvaliacoesPublicas(slug),
+  ]);
 
   /**
    * Seis cartões espalhados pelo dia, não os seis primeiros da fila.
@@ -292,6 +300,55 @@ export default async function BarbershopPage({ params }: Params) {
                   );
                 })}
               </ul>
+            </div>
+          </section>
+        ) : null}
+
+        {/*
+          A reputação (bloco 43, SPEC §4.10).
+
+          Fica ao lado de "quem atende" porque responde a mesma pergunta do
+          cliente novo — "posso confiar nessa casa?" —, e vem **depois** dela:
+          rosto convence antes de número. Só aparece a partir de três
+          avaliações; "5,0 de uma avaliação" é ruído estatístico com cara de
+          excelência, e o visitante lê isso como propaganda.
+
+          Só o primeiro nome de quem escreveu: esta página é indexada.
+        */}
+        {reputacao && reputacao.media !== null ? (
+          <section className="secao" aria-labelledby="notas-titulo">
+            <div>
+              <h2 className="rotulo" id="notas-titulo">
+                O que dizem
+              </h2>
+              <p className="reputacao">
+                <span className="reputacao__nota tabular">
+                  {reputacao.media.toFixed(1)}
+                </span>
+                <span aria-hidden="true">
+                  {'\u2605'.repeat(Math.round(reputacao.media))}
+                </span>
+                <span className="reputacao__quantas">
+                  {reputacao.total} {reputacao.total === 1 ? 'avaliação' : 'avaliações'} de quem
+                  foi atendido aqui
+                </span>
+              </p>
+
+              {reputacao.avaliacoes
+                .filter((a) => a.comentario)
+                .slice(0, 3)
+                .map((a, i) => (
+                  <article className="avaliacao" key={`${a.quando}-${i}`}>
+                    <p className="avaliacao__estrelas" aria-label={`Nota ${a.nota} de 5`}>
+                      {a.estrelas}
+                    </p>
+                    <blockquote className="avaliacao__texto">{a.comentario}</blockquote>
+                    <p className="avaliacao__quando">
+                      {a.primeiroNome}
+                      {a.profissionalNome ? ` · atendido por ${a.profissionalNome}` : ''}
+                    </p>
+                  </article>
+                ))}
             </div>
           </section>
         ) : null}

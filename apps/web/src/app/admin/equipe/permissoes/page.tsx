@@ -98,6 +98,8 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   // vira pagamento no balcão.
   'finance.loyalty_adjust': 'Ajustar o saldo de fidelidade de um cliente',
   'finance.package_refund': 'Reembolsar um pacote pela parte não usada',
+  'reviews.view': 'Ver as avaliações dos atendimentos',
+  'reviews.recover': 'Tratar uma nota baixa dentro da janela de 48h',
   // Ler o que os clientes escreveram, e responder em nome da casa. Duas caixas
   // porque são duas coisas: o barbeiro pode precisar da primeira sem a segunda.
   'feedback.view': 'Ler os recados dos clientes',
@@ -111,6 +113,20 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'team.manage': 'Criar contas e mudar permissões',
 };
 
+/**
+ * Os grupos, e a garantia de que ninguém fica de fora.
+ *
+ * Os filtros são por prefixo, e é isso que faz uma permissão nova aparecer
+ * sozinha — desde que o prefixo dela caiba em algum grupo. Quando não cabe, a
+ * caixa simplesmente **não existe** na tela, e a permissão vira algo que só um
+ * `UPDATE` no banco concede.
+ *
+ * Foi o que aconteceu com `feedback.view` e `feedback.manage`: entraram no
+ * catálogo no bloco 40, não casaram com nenhum prefixo, e ficaram três blocos
+ * invisíveis com a tela verde. É o mesmo defeito de `lgpd` e `plano` no CSS do
+ * casco, e a correção é a mesma — há teste que deriva do catálogo e reprova a
+ * permissão órfã.
+ */
 const GRUPOS: readonly Grupo[] = [
   {
     titulo: 'Agenda',
@@ -128,6 +144,13 @@ const GRUPOS: readonly Grupo[] = [
     titulo: 'Clientes',
     sobre: 'Cadastro, ficha e a base inteira.',
     permissoes: PERMISSOES.filter((p) => p.startsWith('customers.')),
+  },
+  {
+    titulo: 'O que os clientes dizem',
+    sobre: 'Recados, reclamações e as notas dos atendimentos.',
+    permissoes: PERMISSOES.filter(
+      (p) => p.startsWith('feedback.') || p.startsWith('reviews.'),
+    ),
   },
   {
     titulo: 'A casa',

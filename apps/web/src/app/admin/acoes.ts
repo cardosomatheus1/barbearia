@@ -40,6 +40,7 @@ import {
   ajustarSaldoDeFidelidade,
   salvarPacoteNaApi,
   reembolsarPacoteNaApi,
+  tratarAvaliacaoNaApi,
   assumirRecadoNaApi,
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
@@ -1976,4 +1977,28 @@ export async function acaoVenderPacote(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
   redirect(`/admin/comanda/${id}`);
+}
+
+// -- Avaliações (bloco 43) ----------------------------------------------------
+
+/**
+ * Registra o que a casa fez a respeito de uma nota baixa.
+ *
+ * "Tratar", e não "resolver": a avaliação publica de qualquer forma passadas as
+ * 48 horas, e a segunda palavra sugeriria que o registro faz a nota sumir. O
+ * vocabulário é o mesmo na tela, na trilha e no domínio.
+ */
+export async function acaoTratarAvaliacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const desfecho = texto(form, 'desfecho');
+  if (!['contato', 'retrabalho', 'credito', 'sem_retorno'].includes(desfecho)) {
+    falhar('/admin/avaliacoes', 'invalid_request');
+  }
+
+  const resultado = await tratarAvaliacaoNaApi(token, texto(form, 'id'), {
+    desfecho: desfecho as 'contato' | 'retrabalho' | 'credito' | 'sem_retorno',
+    nota: texto(form, 'nota'),
+  });
+  if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
+  redirect('/admin/avaliacoes?tratada=1');
 }

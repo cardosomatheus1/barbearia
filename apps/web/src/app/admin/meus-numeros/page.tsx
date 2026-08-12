@@ -105,7 +105,7 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
     );
   }
 
-  const { meta, mesAtual, hoje, variacaoDoFaturamento } = numeros.dados;
+  const { meta, mesAtual, hoje, variacaoDoFaturamento, nota, notaAnterior } = numeros.dados;
   const nomeDoMes = MES.format(new Date(`${numeros.dados.mes}T12:00:00Z`));
   const minha = comissao.ok ? comissao.dados : null;
   const meuTotal = minha?.linhas.find((l) => l.professionalId === numeros.dados.professionalId);
@@ -175,6 +175,23 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
           nota="de quem você atendeu"
         />
         <Numero rotulo="Produtos vendidos" valor={String(mesAtual.produtosVendidos)} />
+        {/*
+          A sua nota (bloco 43, SPEC §4.21: comparada com o **seu** passado,
+          nunca com a do colega). Sem avaliação nenhuma o número é `—`, e a nota
+          diz por quê — um indicador que fica em `—` sem explicação é o que
+          ensina a não olhar.
+        */}
+        <Numero
+          rotulo="Sua nota"
+          valor={nota.media === null ? '—' : nota.media.toFixed(1)}
+          nota={
+            nota.media === null
+              ? 'ninguém avaliou ainda este mês'
+              : notaAnterior.media === null
+                ? `${nota.total} ${nota.total === 1 ? 'avaliação' : 'avaliações'}`
+                : `mês passado: ${notaAnterior.media.toFixed(1)}`
+          }
+        />
       </dl>
 
       {meuTotal ? (

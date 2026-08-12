@@ -159,6 +159,20 @@ export const PERMISSOES = [
    * desta lista: o role da aplicação não tem `DELETE` na tabela.
    */
   'feedback.manage',
+  /**
+   * As avaliações (bloco 43).
+   *
+   * Ler e agir são coisas diferentes, como `feedback.view` e `feedback.manage`:
+   * o barbeiro precisa ver o que dizem do trabalho dele — é o indicador que a
+   * SPEC §4.21 manda comparar com o próprio passado —, e falar em nome da casa
+   * dentro da janela de recuperação é do balcão.
+   *
+   * Não existe uma terceira que apague. A SPEC §4.10 proíbe o produto de
+   * oferecer "apagar avaliação ruim", e a ausência aqui é essa frase escrita
+   * onde não depende de ninguém lembrar — junto do `REVOKE DELETE` do banco.
+   */
+  'reviews.view',
+  'reviews.recover',
   'reports.finance',
   'reports.operational',
   'inventory.view',
@@ -260,6 +274,8 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'customers.reliability_override',
     'feedback.view',
     'feedback.manage',
+    'reviews.view',
+    'reviews.recover',
     'reports.operational',
     'inventory.view',
     'inventory.adjust',
@@ -286,6 +302,13 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
      */
     'feedback.view',
     'feedback.manage',
+    /**
+     * A avaliação também, e pela mesma razão: a janela de recuperação é de 48
+     * horas, e um alerta que só o dono consegue tratar é um alerta que vence
+     * sozinho no fim de semana — publicando a nota sem ninguém ter ligado.
+     */
+    'reviews.view',
+    'reviews.recover',
     'inventory.view',
   ],
 
@@ -313,6 +336,15 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
      * transforma um canal de melhoria em fofoca com endereço. O dono concede
      * quando quiser — a tela de permissões existe desde o bloco 30 —, e aí é
      * uma decisão tomada, não um padrão herdado.
+     */
+    /**
+     * **Sem `reviews.view` por padrão**, e pelo mesmo motivo (bloco 43).
+     *
+     * A permissão dá as avaliações da casa inteira, e a nota de um colega na
+     * tela do outro é a briga que `commission.view_own` existe para evitar. O
+     * barbeiro vê a **própria** média em *Meus números*, onde ela é comparada
+     * com o passado dele — que é o que a SPEC §4.21 manda, e o contrário de
+     * ranking.
      */
   ],
 };

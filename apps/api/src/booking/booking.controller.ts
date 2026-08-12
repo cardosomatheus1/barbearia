@@ -3,6 +3,7 @@ import { getAvailabilityRange, getPublicProfile, MAX_RANGE_DAYS } from '@barbear
 import { notFound, badRequest } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
+import { avaliacoesPublicas } from '@barbearia/crm';
 import { availabilityQuerySchema, slugSchema, type AvailabilityQuery } from './booking.schemas.js';
 
 /**
@@ -27,6 +28,24 @@ export class BookingController {
     const profile = await getPublicProfile(tenantId, slug);
     if (!profile) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
     return profile;
+  }
+
+  /**
+   * A reputação da casa, sem autenticação (bloco 43, SPEC §4.10).
+   *
+   * Rota própria e não parte do perfil porque `getPublicProfile` mora em
+   * `scheduling`, e a seta de dependência não volta: quem sabe de avaliação é
+   * `crm`. A API é a camada que conhece as duas.
+   *
+   * Devolve só o **publicado** — nota boa entra na hora, nota baixa depois da
+   * janela de 48h — e só o primeiro nome de quem escreveu: a página é indexada
+   * pelo Google, e o sobrenome do cliente não precisa estar nela.
+   */
+  @Get('avaliacoes')
+  async avaliacoes(@Param('slug', new ZodValidationPipe(slugSchema)) slug: string) {
+    const tenantId = await this.tenants.resolve(slug);
+    if (!tenantId) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
+    return avaliacoesPublicas(tenantId);
   }
 
   @Get('availability')

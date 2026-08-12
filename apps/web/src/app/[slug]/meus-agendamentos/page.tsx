@@ -7,6 +7,7 @@ import {
   listarEsperas,
   meuSaldoDeFidelidade,
   meusPacotes,
+  meusAtendimentosAAvaliar,
   type AgendamentoDoCliente,
   type EsperaDoCliente,
 } from '@/lib/api';
@@ -16,6 +17,7 @@ import { lerSessao } from '@/lib/sessao';
 import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
 import {
   aceitarVaga,
+  avaliar,
   cancelar,
   decidirMarketing,
   pedirDados,
@@ -54,6 +56,9 @@ const FALHA: Record<string, string> = {
   appointment_not_found: 'Este agendamento não está mais ativo.',
   slot_taken: 'O horário novo acabou de ser ocupado. Escolha outro.',
   slot_not_available: 'O horário novo já não está disponível. Escolha outro.',
+  atendimento_nao_concluido: 'Só dá para avaliar um atendimento que aconteceu.',
+  ja_avaliado: 'Você já avaliou este atendimento.',
+  prazo_vencido: 'O prazo para avaliar este atendimento passou.',
 };
 
 const FEITO: Record<string, string> = {
@@ -67,6 +72,7 @@ const FEITO: Record<string, string> = {
   recusou: 'Pronto — você não recebe mais promoção. O aviso do seu horário continua.',
   espera: 'Você saiu da lista de espera.',
   vaga: 'Horário confirmado. Ele já está aqui em cima, nos seus agendamentos.',
+  avaliado: 'Obrigado. A barbearia lê todas.',
 };
 
 /**
@@ -181,6 +187,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
   const esperas = await listarEsperas(slug, token);
   const fidelidade = await meuSaldoDeFidelidade(slug, token);
   const pacotes = await meusPacotes(slug, token);
+  const aAvaliar = await meusAtendimentosAAvaliar(slug, token);
   // Só os que ainda servem: esgotado e vencido viram histórico, e histórico aqui
   // empurra para baixo o que a pessoa abriu a página para ver.
   const pacotesUteis = pacotes.filter((p) => p.estado === 'ativo' && p.restam > 0);
@@ -313,6 +320,75 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
                   : `Faltam ${fidelidade.faltaParaPremio} para o corte grátis.`}
             </p>
           </div>
+        </section>
+      ) : null}
+
+      {/*
+        Dar a nota do atendimento (bloco 43, SPEC §4.10).
+
+        Fica **acima** dos pacotes e do saldo porque tem prazo e porque é a única
+        coisa nesta página que a barbearia está esperando desta pessoa. As
+        quatro categorias da SPEC ficam de fora do formulário de propósito: um
+        formulário que pede cinco notas para elogiar um corte é um formulário
+        que ninguém preenche, e a nota geral é a que entra na média.
+
+        Cada estrela é um alvo de 44px em qualquer largura — o rádio nativo é
+        pequeno demais para o polegar, e esta é a única interação da tela.
+      */}
+      {aAvaliar.length > 0 ? (
+        <section aria-labelledby="avaliar" className="dar-nota">
+          <h2 className="rotulo" id="avaliar">
+            Como foi seu atendimento?
+          </h2>
+          {aAvaliar.map((atendimento) => (
+            <form action={avaliar} className="dar-nota__item" key={atendimento.id}>
+              <input name="slug" type="hidden" value={slug} />
+              <input name="appointmentId" type="hidden" value={atendimento.id} />
+
+              <p className="dar-nota__quem">
+                {atendimento.servico ?? 'Atendimento'}
+                {atendimento.profissional ? ` com ${atendimento.profissional}` : ''} ·{' '}
+                {new Date(atendimento.quando).toLocaleDateString('pt-BR')}
+              </p>
+
+              <fieldset className="dar-nota__estrelas">
+                <legend className="ui-field__label">Sua nota</legend>
+                {[1, 2, 3, 4, 5].map((nota) => (
+                  <label className="dar-nota__estrela" key={nota}>
+                    <input name="nota" required type="radio" value={nota} />
+                    {/* O número e uma estrela: as estrelas acumuladas davam
+                        botões de larguras diferentes, e a escala fica igual de
+                        legível com "3 ★". */}
+                    <span aria-label={`${nota} de 5`}>
+                      {nota}
+                      <span aria-hidden="true"> ★</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+
+              <label className="ui-field">
+                <span className="ui-field__label">
+                  Quer contar alguma coisa? <span className="ui-field__opcional">(opcional)</span>
+                </span>
+                <textarea
+                  className="ui-field__input"
+                  maxLength={1000}
+                  name="comentario"
+                  placeholder="O que foi bom, o que dava para melhorar."
+                  rows={2}
+                />
+              </label>
+
+              <button className="ui-button ui-button--primary ui-button--block" type="submit">
+                Enviar
+              </button>
+            </form>
+          ))}
+          <p className="politica">
+            A barbearia lê todas. Nota baixa abre um aviso interno para ela falar com você antes
+            de a avaliação ir para o perfil público.
+          </p>
         </section>
       ) : null}
 

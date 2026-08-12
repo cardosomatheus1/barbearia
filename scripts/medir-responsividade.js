@@ -514,6 +514,106 @@ async function prepararFila(token) {
 }
 
 /**
+ * Avaliações, uma delas dentro da janela de recuperação (bloco 43).
+ *
+ * Pelo banco, como os recados: a nota nasce da página do cliente, e reproduzir
+ * o fluxo aqui custaria mais que o que se mede. O que a medição precisa é do
+ * **estado** — o cartão de alerta com prazo, comentário longo de verdade, e uma
+ * avaliação já tratada, que é a que tem mais texto empilhado.
+ */
+async function prepararAvaliacoes(slug, clienteDaFicha) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant || !clienteDaFicha) return;
+
+  /**
+   * Qualquer atendimento da casa, e não só os da ficha.
+   *
+   * A primeira versão filtrava pelo cliente da ficha e achava **um**: a tela
+   * ficava com o cartão de alerta e nada na lista, que é o estado mais fácil de
+   * medir e o menos parecido com a barbearia de verdade.
+   */
+  const agendamentos = psql(
+    `select id from appointments where tenant_id = '${tenant}' order by starts_at limit 4`,
+  )
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (agendamentos.length === 0) return;
+
+
+
+  // Texto longo de propósito: é o que estoura o cartão, e só aparece com
+  // conteúdo verdadeiro.
+  const notas = [
+    [2, 'Esperei quarenta minutos mesmo com horario marcado e ninguem da recepcao veio falar comigo. O corte ficou bom mas sai com pressa e atrasado pro trabalho.', null],
+    [5, 'Melhor degrade que ja fiz na vida, o Ruan caprichou demais e ainda me deu dica de produto.', null],
+    [3, 'Corte ok mas a musica estava altissima e nao deu pra conversar.',
+      'Liguei no dia seguinte, ele contou do volume. Baixamos e ele voltou na semana passada.'],
+    // A quarta existe para o bloco de reputação da página pública aparecer: ele
+    // só mostra a média a partir de três **publicadas**, e a nota 2 está
+    // segurada pela janela de 48h.
+    [5, 'Atendimento impecavel do comeco ao fim, marquei pelo site em dois minutos.', null],
+  ];
+
+  /**
+   * Um atendimento concluído e **sem** avaliação para o cliente logado.
+   *
+   * Sem ele o formulário de dar nota não aparece na página do cliente — que é a
+   * porta de entrada do bloco inteiro —, e a medição diria "passou" sobre uma
+   * tela que nunca desenhou a coisa nova. O cliente da medição só tem horário
+   * futuro, porque é assim que `prepararCliente` o cria.
+   */
+  const carlos = psql(
+    `select id from customers where tenant_id = '${tenant}' and phone_e164 = '+5571988887777' limit 1`,
+  );
+  const cadeira = psql(`select id from professionals where tenant_id = '${tenant}' limit 1`);
+  const servico = psql(`select id from services where tenant_id = '${tenant}' and active limit 1`);
+  if (carlos && cadeira && servico) {
+    const feito = primeiraLinha(
+      psql(
+        `INSERT INTO appointments
+           (tenant_id, location_id, customer_id, professional_id,
+            starts_at, ends_at, service_starts_at, service_ends_at, price_cents, status)
+         SELECT '${tenant}', l.id, '${carlos}', '${cadeira}',
+                now() - interval '3 days', now() - interval '3 days' + interval '30 minutes',
+                now() - interval '3 days', now() - interval '3 days' + interval '30 minutes',
+                5000, 'completed'
+           FROM locations l WHERE l.tenant_id = '${tenant}' LIMIT 1
+         RETURNING id`,
+      ),
+    );
+    if (feito) {
+      psql(
+        `INSERT INTO appointment_services
+           (appointment_id, service_id, tenant_id, position, price_cents, duration_minutes)
+         VALUES ('${feito}', '${servico}', '${tenant}', 0, 5000, 30)`,
+      );
+    }
+  }
+
+  agendamentos.forEach((agendamento, i) => {
+    const linha = notas[i];
+    if (!linha) return;
+    const [nota, texto, tratamento] = linha;
+    const criada = i === 0 ? "now() - interval '6 hours'" : "now() - interval '20 days'";
+    const resolucao = tratamento
+      ? `now() - interval '19 days', 'contato', '${tratamento.replace(/'/g, "''")}'`
+      : 'NULL, NULL, NULL';
+    // Cliente e profissional saem do próprio agendamento: pendurá-los à mão
+    // faria a avaliação apontar para quem não atendeu.
+    psql(
+      `INSERT INTO reviews
+         (tenant_id, appointment_id, customer_id, professional_id, rating, comment,
+          created_at, resolved_at, outcome, resolution_note)
+       SELECT '${tenant}', a.id, a.customer_id, a.professional_id, ${nota},
+              '${texto.replace(/'/g, "''")}', ${criada}, ${resolucao}
+         FROM appointments a WHERE a.id = '${agendamento}'
+       ON CONFLICT DO NOTHING`,
+    );
+  });
+}
+
+/**
  * Pacotes no catálogo e um comprado pelo cliente (bloco 42).
  *
  * Pelo banco, como os recados: a venda nasce do fechamento de uma comanda, e
@@ -1038,6 +1138,7 @@ async function main() {
   const convitePreparado = await prepararConvite(slug);
   await prepararRecadosEFidelidade(slug);
   await prepararPacotes(slug, balcao.clienteId);
+  await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },
@@ -1128,6 +1229,7 @@ async function main() {
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recados', url: '/admin/recados', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'avaliações', url: '/admin/avaliacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fidelidade', url: '/admin/fidelidade', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'pacotes', url: '/admin/pacotes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },

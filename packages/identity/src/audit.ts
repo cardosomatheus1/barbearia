@@ -124,6 +124,16 @@ export type AuditAction =
   | 'feedback.assigned'
   | 'feedback.answered'
   | 'feedback.closed'
+  /**
+   * A recuperação de uma nota baixa (bloco 43).
+   *
+   * A trilha existe porque a janela de 48 horas é o ponto do produto em que mais
+   * dá vontade de fazer a coisa errada: registrar "resolvido" sem ter falado com
+   * ninguém não esconde a nota — ela publica de qualquer forma —, mas mente para
+   * o dono sobre o que a equipe fez. Apagar a avaliação não entra na lista
+   * porque não existe operação para isso.
+   */
+  | 'review.recovered'
   | 'lgpd.request_fulfilled'
   | 'lgpd.request_refused'
   /**
@@ -227,6 +237,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'feedback.assigned',
   'feedback.answered',
   'feedback.closed',
+  'review.recovered',
   'lgpd.request_fulfilled',
   'lgpd.request_refused',
   'customer.anonymized',

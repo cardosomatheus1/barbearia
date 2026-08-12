@@ -66,6 +66,13 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'feedback.answered': 'respondeu um recado de cliente',
   'feedback.closed': 'encerrou um recado de cliente',
 
+  /**
+   * A recuperação de nota baixa (bloco 43). "Tratou", e não "resolveu": a
+   * avaliação publica de qualquer forma passadas as 48 horas, e a palavra
+   * resolvida sugeriria que o registro faz a nota sumir.
+   */
+  'review.recovered': 'tratou uma avaliação de nota baixa',
+
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a
   // imprimi-lo.

@@ -73,6 +73,29 @@ async function get<T>(path: string, revalidate: number): Promise<T | null> {
  */
 export const getProfile = (slug: string) => get<PublicProfile>(`/v1/b/${slug}`, 30);
 
+/**
+ * A reputação que a página pública mostra (bloco 43).
+ *
+ * Cache curto, como o perfil: uma avaliação nova não precisa aparecer no
+ * segundo seguinte, mas uma nota que venceu a janela de 48h precisa aparecer no
+ * mesmo dia — e é o TTL que garante isso sem varredura nenhuma.
+ */
+export const getAvaliacoesPublicas = (slug: string) =>
+  get<ReputacaoPublica>(`/v1/b/${slug}/avaliacoes`, 30);
+
+export interface ReputacaoPublica {
+  media: number | null;
+  total: number;
+  avaliacoes: {
+    nota: number;
+    estrelas: string;
+    comentario: string | null;
+    primeiroNome: string;
+    profissionalNome: string | null;
+    quando: string;
+  }[];
+}
+
 export interface AvailabilityQuery {
   locationId: string;
   serviceIds: string[];
@@ -377,6 +400,53 @@ export interface MeuPacote {
   valorDaUnidadeCents: number;
   precoCents: number;
   reembolsadoCents: number | null;
+}
+
+/**
+ * Os atendimentos que esta pessoa ainda pode avaliar (bloco 43).
+ *
+ * Lista vazia numa falha, como a lista de espera: quem já está autenticado não
+ * pode ser mandado para a tela de entrar porque um bloco secundário não
+ * carregou.
+ */
+export async function meusAtendimentosAAvaliar(
+  slug: string,
+  token: string,
+): Promise<AtendimentoAAvaliar[]> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/reviews/pendentes`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!response.ok) return [];
+  const corpo = (await response.json()) as { atendimentos: AtendimentoAAvaliar[] };
+  return corpo.atendimentos;
+}
+
+export interface AtendimentoAAvaliar {
+  id: string;
+  servico: string | null;
+  profissional: string | null;
+  quando: string;
+}
+
+export async function avaliarNaApi(
+  slug: string,
+  token: string,
+  dados: {
+    appointmentId: string;
+    nota: number;
+    comentario?: string;
+  },
+): Promise<{ ok: true } | { ok: false; code: string }> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/reviews`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(dados),
+    cache: 'no-store',
+  });
+  if (response.ok) return { ok: true };
+  const corpo = (await response.json().catch(() => ({}))) as { code?: string };
+  return { ok: false, code: corpo.code ?? 'request_failed' };
 }
 
 export async function listarEsperas(

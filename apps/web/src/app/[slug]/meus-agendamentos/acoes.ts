@@ -10,6 +10,7 @@ import {
   pedirMeusDados,
   remarcarAgendamento,
   sairDaEsperaNaApi,
+  avaliarNaApi,
 } from '@/lib/api';
 import { VERSAO_DO_CONSENTIMENTO } from '@/lib/politica';
 import { apagarSessao, lerSessao } from '@/lib/sessao';
@@ -165,6 +166,35 @@ export async function aceitarVaga(form: FormData): Promise<void> {
   redirect(
     resultado.ok
       ? `/${slug}/meus-agendamentos?feito=vaga`
+      : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
+  );
+}
+
+/**
+ * O cliente dá a nota do atendimento dele (bloco 43).
+ *
+ * O `appointmentId` vem do formulário e é palpite fácil de manipular — quem
+ * autoriza é o token, e a API confere que aquele atendimento é desta pessoa.
+ * A tela não decide nada, como no cancelar e no remarcar.
+ */
+export async function avaliar(form: FormData): Promise<void> {
+  const slug = String(form.get('slug') ?? '');
+  const token = await lerSessao(slug);
+  if (!token) redirect(`/${slug}/entrar`);
+
+  const nota = Number(form.get('nota') ?? 0);
+  const comentario = String(form.get('comentario') ?? '').trim();
+
+  const resultado = await avaliarNaApi(slug, token, {
+    appointmentId: String(form.get('appointmentId') ?? ''),
+    nota,
+    ...(comentario.length > 0 ? { comentario } : {}),
+  });
+
+  revalidatePath(`/${slug}/meus-agendamentos`);
+  redirect(
+    resultado.ok
+      ? `/${slug}/meus-agendamentos?feito=avaliado`
       : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
   );
 }

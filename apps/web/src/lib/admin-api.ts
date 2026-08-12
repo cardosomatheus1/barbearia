@@ -1550,6 +1550,9 @@ export interface MeusNumeros {
     noRitmo: boolean;
     porDiaRestanteCents: number;
   };
+  /** A nota do mês e a do mês passado (bloco 43). Comparada com o próprio passado. */
+  nota: { media: number | null; total: number };
+  notaAnterior: { media: number | null; total: number };
 }
 
 export const meusNumeros = (token: string) =>
@@ -2062,3 +2065,51 @@ export const reembolsarPacoteNaApi = (token: string, id: string) =>
 
 export const receitaDePacotesNaApi = (token: string) =>
   chamar<ReceitaDePacotes>('GET', '/v1/admin/pacotes/receita', undefined, token);
+
+// -- Avaliações (bloco 43) ----------------------------------------------------
+
+export type DesfechoDaRecuperacao = 'contato' | 'retrabalho' | 'credito' | 'sem_retorno';
+
+export interface AvaliacaoNaTela {
+  id: string;
+  nota: number;
+  estrelas: string;
+  comentario: string | null;
+  clienteNome: string;
+  profissionalNome: string | null;
+  servicoNome: string | null;
+  atendidoEm: string | null;
+  criadaEm: string;
+  publicada: boolean;
+  horasRestantes: number;
+  precisaDeAtitude: boolean;
+  resolvidaEm: string | null;
+  desfecho: DesfechoDaRecuperacao | null;
+  resolucao: string | null;
+  categorias: Partial<Record<'atendimento' | 'qualidade' | 'pontualidade' | 'ambiente', number>>;
+}
+
+export interface PainelDeAvaliacoes {
+  media: number | null;
+  total: number;
+  mediaPublica: number | null;
+  aRecuperar: AvaliacaoNaTela[];
+  ultimas: AvaliacaoNaTela[];
+}
+
+export const painelDeAvaliacoesNaApi = (token: string) =>
+  chamar<PainelDeAvaliacoes>('GET', '/v1/admin/avaliacoes', undefined, token);
+
+export const avaliacoesDoClienteNaApi = (token: string, customerId: string) =>
+  chamar<{ avaliacoes: AvaliacaoNaTela[] }>(
+    'GET',
+    `/v1/admin/avaliacoes/clientes/${customerId}`,
+    undefined,
+    token,
+  );
+
+export const tratarAvaliacaoNaApi = (
+  token: string,
+  id: string,
+  dados: { desfecho: DesfechoDaRecuperacao; nota: string },
+) => chamar<{ resolvida: boolean }>('POST', `/v1/admin/avaliacoes/${id}/tratar`, dados, token);

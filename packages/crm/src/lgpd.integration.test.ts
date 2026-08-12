@@ -233,6 +233,9 @@ describeIfDb('direitos do titular', () => {
       // Os pacotes (bloco 42). "Eu comprei cinco cortes e vocês dizem que só
       // restam dois" é a pergunta, e o consumo unidade a unidade é a resposta.
       'customer_packages',
+      // As avaliações (bloco 43). O texto que a pessoa escreveu sobre um
+      // atendimento é dado dela tanto quanto a anotação da ficha.
+      'reviews',
     ]);
 
     const EXCECOES = new Map([

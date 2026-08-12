@@ -367,6 +367,23 @@ export async function exportarDadosDoTitular(
        ORDER BY cp.purchased_at
     `;
 
+    /**
+     * As avaliações que a pessoa escreveu (bloco 43).
+     *
+     * "O que vocês guardam sobre mim" inclui a nota que eu dei e o texto que eu
+     * escrevi — e é justamente o texto que pode voltar contra alguém. Vai sem o
+     * nome do profissional: a exportação é do titular, e o nome de um terceiro
+     * não entra num arquivo que ele leva embora, pela mesma razão que a trilha
+     * fica de fora.
+     */
+    const avaliacoes = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT rating AS nota, comment AS comentario, created_at,
+             rating_service, rating_quality, rating_punctual, rating_ambience,
+             resolved_at AS tratada_em
+        FROM reviews WHERE customer_id = ${customerId}::uuid
+       ORDER BY created_at
+    `;
+
     const preferencia = preferencias[0] ?? null;
 
     return {
@@ -395,6 +412,7 @@ export async function exportarDadosDoTitular(
       recados,
       fidelidade,
       pacotes,
+      avaliacoes,
     };
   });
 }

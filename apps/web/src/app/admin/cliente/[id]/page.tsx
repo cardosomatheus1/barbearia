@@ -6,6 +6,7 @@ import {
   fichaEstaVazia,
   fraseDaConversa,
   podeTudo,
+  ESTADO_TRATADA,
   ROTULO_DO_PACOTE,
   saldoPorExtenso,
 } from '@barbearia/core';
@@ -13,6 +14,8 @@ import {
   confiancaDoCliente,
   saldoDeFidelidade,
   pacotesDoClienteNaApi,
+  avaliacoesDoClienteNaApi,
+  type AvaliacaoNaTela,
   type PacoteDoCliente,
   type SaldoDeFidelidade,
   consentimentosDaFicha,
@@ -428,6 +431,50 @@ function Pacotes({
   );
 }
 
+/**
+ * As avaliações que este cliente deu (bloco 43, SPEC §4.10).
+ *
+ * Fica na ficha porque é o que o barbeiro lê **antes** de atender: quem deu
+ * nota 2 no mês passado e voltou merece saber que a casa lembra. A nota é
+ * mostrada como o cliente a deu — não há caminho para editá-la aqui, nem em
+ * lugar nenhum.
+ */
+function Avaliacoes({ avaliacoes }: { readonly avaliacoes: readonly AvaliacaoNaTela[] }) {
+  return (
+    <section aria-labelledby="avaliacoes" className="secao">
+      <h2 className="rotulo" id="avaliacoes">
+        O que ele achou
+      </h2>
+      {avaliacoes.map((a) => (
+        <article className="avaliacao" key={a.id}>
+          <div className="avaliacao__topo">
+            <p className="avaliacao__estrelas" aria-label={`Nota ${a.nota} de 5`}>
+              {a.estrelas}
+            </p>
+            <p className="avaliacao__prazo">
+              {new Date(a.criadaEm).toLocaleDateString('pt-BR')}
+            </p>
+          </div>
+          {a.servicoNome || a.profissionalNome ? (
+            <p className="avaliacao__quando">
+              {a.servicoNome ?? 'Atendimento'}
+              {a.profissionalNome ? ` com ${a.profissionalNome}` : ''}
+            </p>
+          ) : null}
+          {a.comentario ? (
+            <blockquote className="avaliacao__texto">{a.comentario}</blockquote>
+          ) : null}
+          {a.resolucao ? (
+            <p className="avaliacao__tratada">
+              <strong>{ESTADO_TRATADA}</strong> — {a.resolucao}
+            </p>
+          ) : null}
+        </article>
+      ))}
+    </section>
+  );
+}
+
 function Confianca({
   confianca,
   customerId,
@@ -576,7 +623,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const veSaldo =
     estado.staff.permissions.includes('finance.view') &&
     estado.staff.permissions.includes('customers.view');
-  const [ficha, consentimentos, confianca, fidelidade, pacotes] = await Promise.all([
+  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes] = await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
     // Só quem pode mexer em sinal pergunta: a rota exige `finance.deposit`, e
@@ -586,6 +633,11 @@ export default async function FichaPage({ params, searchParams }: Props) {
     // A rota devolve o que foi pago e o valor da unidade: são centavos, e ela
     // exige `customers.view` + `finance.view`. Mesma dupla do saldo.
     veSaldo ? pacotesDoClienteNaApi(token, id) : Promise.resolve(null),
+    // A rota devolve o nome do cliente junto, e por isso exige `customers.view`
+    // ao lado de `reviews.view` — rota que agrega declara tudo que devolve.
+    estado.staff.permissions.includes('reviews.view')
+      ? avaliacoesDoClienteNaApi(token, id)
+      : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -823,6 +875,10 @@ export default async function FichaPage({ params, searchParams }: Props) {
           pacotes={pacotes.dados.pacotes}
           podeReembolsar={estado.staff.permissions.includes('finance.package_refund')}
         />
+      ) : null}
+
+      {avaliacoes?.ok && avaliacoes.dados.avaliacoes.length > 0 ? (
+        <Avaliacoes avaliacoes={avaliacoes.dados.avaliacoes} />
       ) : null}
 
       {confianca?.ok && !ficha.dados.anonimizado ? (

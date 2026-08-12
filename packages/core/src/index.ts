@@ -35,4 +35,5 @@ export * from './espera.js';
 export * from './prioridade.js';
 export * from './recado.js';
 export * from './fidelidade.js';
+export * from './avaliacao.js';
 export * from './pacote.js';
