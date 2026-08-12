@@ -85,6 +85,12 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'subscription.cancelled': 'cancelou a assinatura de um cliente',
   'subscription.dependent_changed': 'mexeu em quem usa a cota de uma assinatura',
 
+  // A cobrança recorrente (bloco 47). Dar baixa à mão é a única testemunha de
+  // dinheiro que entrou por fora do caixa; cancelar fatura é perdoar dívida.
+  'subscription.invoice_paid': 'deu baixa numa mensalidade do clube',
+  'subscription.invoice_voided': 'cancelou uma mensalidade do clube',
+  'subscription.cancel_scheduled': 'agendou o fim de uma assinatura',
+
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a
   // imprimi-lo.

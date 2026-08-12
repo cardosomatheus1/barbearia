@@ -11,6 +11,7 @@ import { marcarFalta } from './faltas.js';
 import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from './metricas.js';
 import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
 import { agendarAlertasDeTodas, alertaPendente } from './alerta-agendado.js';
+import { agendarCobrancaDoClubeDeTodas, cobrancaDoClubePendente } from './clube.js';
 import { alertasDaBarbearia } from './alertas.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
@@ -153,6 +154,34 @@ export interface Contexto {
    * desatado. A tarefa conclui, porque não há o que repetir.
    */
   readonly responderRecadoDoCliente: (tenantId: string, recadoId: string) => Promise<boolean>;
+  /**
+   * Uma volta da régua de cobrança do clube (bloco 47), injetada.
+   *
+   * Mesma razão da varredura de retenção e da oferta de vaga: ela vive em
+   * `packages/finance`, que é camada de cima, e conhece o adquirente — `jobs`
+   * não conhece nenhum dos dois. Quem liga as pontas é `apps/worker`.
+   *
+   * **Obrigatória no tipo**, não opcional. Opcional, ela seria esquecida no
+   * primeiro worker novo e o clube pararia de cobrar sem nada ficar vermelho —
+   * é o mesmo critério de `varrerRetencao`.
+   */
+  readonly rodarCobrancaDoClube: (
+    tenantId: string,
+    agora: Date,
+  ) => Promise<{ readonly cobradas: number; readonly suspensas: number }>;
+  /**
+   * O aviso do clube entregue ao assinante (bloco 47), injetado.
+   *
+   * Devolve `false` quando não há mais a quem avisar — entre o enfileiramento e
+   * o envio a pessoa pode ter pedido exclusão, e aí não há telefone. A tarefa
+   * conclui, porque não há o que repetir.
+   */
+  readonly avisarDoClube: (
+    tenantId: string,
+    assinaturaId: string,
+    motivo: string,
+    agora: Date,
+  ) => Promise<boolean>;
   /**
    * O alerta operacional saindo pelo canal do gestor (bloco 33), injetado.
    *
@@ -404,6 +433,42 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     await contexto.vencerOfertasDaEspera(tarefa.tenantId, contexto.relogio.agora());
   },
 
+  /**
+   * A régua de cobrança do clube (bloco 47).
+   *
+   * Uma tarefa por barbearia, ao contrário da régua da plataforma: `club_invoices`
+   * tem RLS `FORCE`, e um processo sem tenant no contexto enxerga zero linhas.
+   */
+  'clube.cobranca': async (tarefa, contexto) => {
+    await contexto.rodarCobrancaDoClube(tarefa.tenantId, contexto.relogio.agora());
+  },
+
+  /**
+   * O aviso ao assinante: cobrança recusada, atraso, pausa, cartão vencendo.
+   *
+   * A tarefa nasce **dentro da transação** que muda o estado da fatura —
+   * enfileirar depois do commit abre a janela em que o plano foi pausado e
+   * ninguém soube, que é exatamente a janela que a suspensão "avisada" da SPEC
+   * §4.6 existe para fechar.
+   *
+   * Respeita o interruptor de avisos, como todo aviso ao cliente. O custo está
+   * escrito: quem desligou as mensagens avisa pelo próprio WhatsApp, e o estado
+   * gravado continua sendo o registro do que aconteceu.
+   */
+  'clube.aviso': async (tarefa, contexto) => {
+    const subscriptionId = String(tarefa.payload['subscriptionId'] ?? '');
+    const motivo = String(tarefa.payload['motivo'] ?? '');
+    if (!subscriptionId || !motivo) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+
+    await contexto.avisarDoClube(
+      tarefa.tenantId,
+      subscriptionId,
+      motivo,
+      contexto.relogio.agora(),
+    );
+  },
+
   'agendamento.marcar_falta': async (tarefa, contexto) => {
     const appointmentId = String(tarefa.payload['appointmentId'] ?? '');
     if (!appointmentId) throw new Error('tarefa de falta sem agendamento');
@@ -500,6 +565,8 @@ export async function rodarWorker(
   let ultimaRetencao: string | null = null;
   /** E a de alerta, que roda de manhã em vez de de madrugada. */
   let ultimoAlerta: string | null = null;
+  /** E a da cobrança do clube, que roda de madrugada e fala com o adquirente. */
+  let ultimoClube: string | null = null;
 
   while (!parar()) {
     await soltarOrfas(15, contexto.relogio.agora());
@@ -533,6 +600,15 @@ export async function rodarWorker(
     if (alerta.dia !== ultimoAlerta) {
       ultimoAlerta = alerta.dia;
       await agendarAlertasDeTodas(alerta);
+    }
+
+    // A cobrança do clube, pelo mesmo motivo das duas acima: alguém precisa
+    // enfileirar a primeira. Ela é a única das três que fala com o adquirente,
+    // e por isso roda de madrugada e sozinha na volta.
+    const clube = cobrancaDoClubePendente(contexto.relogio.agora());
+    if (clube.dia !== ultimoClube) {
+      ultimoClube = clube.dia;
+      await agendarCobrancaDoClubeDeTodas(clube);
     }
 
     const resultado = await rodada(contexto);

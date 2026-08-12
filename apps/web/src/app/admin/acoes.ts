@@ -46,7 +46,11 @@ import {
   salvarFichaNaApi,
   salvarPlanoNaApi,
   assinarNaApi,
+  agendarCancelamentoNaApi,
   cancelarAssinaturaNaApi,
+  cancelarFaturaNaApi,
+  desfazerCancelamentoNaApi,
+  pagarFaturaNaApi,
   incluirDependenteNaApi,
   removerDependenteNaApi,
   assumirRecadoNaApi,
@@ -2180,6 +2184,53 @@ export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
   const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
   if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
   redirect(`/admin/cliente/${customerId}?feito=cancelou`);
+}
+
+// -- as mensalidades do clube (bloco 47) --------------------------------------
+
+/**
+ * O balcão dá baixa numa mensalidade.
+ *
+ * É o caminho que de fato acontece numa casa pequena: o assinante paga o plano
+ * no Pix e alguém registra. Auditado, porque quem digita "recebi R$ 149" é a
+ * única testemunha de dinheiro que entrou por fora da gaveta.
+ */
+export async function acaoPagarFatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await pagarFaturaNaApi(token, texto(form, 'id'), texto(form, 'metodo'));
+  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  redirect('/admin/clube?feito=pagou');
+}
+
+/** Cancelar uma fatura é perdoar uma dívida — e por isso tem motivo escrito. */
+export async function acaoCancelarFatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await cancelarFaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  redirect('/admin/clube?feito=cancelou_fatura');
+}
+
+/**
+ * O balcão agenda a saída para o fim do ciclo pago.
+ *
+ * Diferente de cancelar na hora: o cliente pagou o mês e corta até o fim dele.
+ * Cortar no dia do pedido seria ficar com o dinheiro e não entregar o serviço.
+ */
+export async function acaoAgendarCancelamento(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await agendarCancelamentoNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=agendou_saida`);
+}
+
+/** O cliente mudou de ideia antes de o ciclo acabar. */
+export async function acaoDesfazerCancelamento(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await desfazerCancelamentoNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  redirect(`/admin/cliente/${customerId}?feito=manteve`);
 }
 
 /** `HH:mm` para minutos desde a meia-noite. Vazio devolve nulo. */

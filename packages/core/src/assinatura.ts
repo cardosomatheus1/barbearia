@@ -373,3 +373,205 @@ export function quemConsome(
 ): readonly string[] {
   return [titularId, ...dependentes];
 }
+
+// ---------------------------------------------------------------------------
+// Cobrança recorrente e suspensão gradual (bloco 47, SPEC §4.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * A régua de retentativa: D+1, D+3, D+7.
+ *
+ * É a da SPEC, literal. Índices e não intervalos: `tentativas` conta cobranças
+ * **feitas**, e a primeira é a do vencimento — ela não é retentativa, é o débito
+ * na hora. Foi assim que a régua da plataforma errou no bloco 29, adiando a
+ * escada inteira em um degrau, e o mesmo desenho volta aqui de propósito.
+ */
+export const RETENTATIVAS_DO_CLUBE: readonly number[] = [1, 3, 7];
+
+/**
+ * Quantos dias de atraso até o benefício parar.
+ *
+ * Quinze, e o número é uma decisão de negócio escrita: *"Suspensão de benefício
+ * é gradual e avisada — cortar o acesso no primeiro erro de cartão gera
+ * cancelamento por raiva, não por preço."* Duas semanas cobrem o cartão trocado,
+ * a fatura que virou e a viagem — e ainda assim não deixam a casa entregar dois
+ * meses de corte de graça.
+ */
+export const DIAS_ATE_SUSPENDER = 15;
+
+/** Quantos dias antes do vencimento do cartão o aviso sai (SPEC §4.6). */
+export const ANTECEDENCIA_DO_AVISO_DE_CARTAO = 15;
+
+export const PASSOS_DA_COBRANCA = [
+  'nada',
+  'cobrar',
+  'retentar',
+  'marcar_inadimplente',
+  'suspender',
+] as const;
+export type PassoDaCobranca = (typeof PASSOS_DA_COBRANCA)[number];
+
+export interface FaturaDoClube {
+  readonly status: 'aberta' | 'paga' | 'cancelada';
+  readonly vencimento: Date;
+  /** Cobranças **feitas**, contando a do vencimento. */
+  readonly tentativas: number;
+  readonly marcadaInadimplenteEm: Date | null;
+  /**
+   * A última recusa foi definitiva? (cartão cancelado, conta encerrada)
+   *
+   * Existe para **parar** a escada, não para acelerá-la. Contra um cartão que
+   * não existe mais, D+1, D+3 e D+7 são três chamadas ao adquirente que já
+   * sabem a resposta — e cada recusa registrada piora a taxa de aprovação da
+   * conta da barbearia, que é o número pelo qual o adquirente a precifica.
+   */
+  readonly recusaDefinitiva: boolean;
+}
+
+const diasEntre = (de: Date, ate: Date): number =>
+  Math.floor((ate.getTime() - de.getTime()) / 86_400_000);
+
+/**
+ * O que fazer com uma fatura do clube agora.
+ *
+ * Um passo por chamada, como a régua da plataforma: cada passo escreve estado, e
+ * devolver uma lista obrigaria quem chama a decidir a ordem — que é exatamente a
+ * decisão que esta função existe para tomar.
+ *
+ * A ordem é do mais grave para o menos: suspender vence retentar, que vence
+ * marcar inadimplente. Uma fatura de trinta dias que ninguém processou — worker
+ * parado — não fica presa tentando cobrar: ela suspende.
+ */
+export function proximoPassoDaCobranca(fatura: FaturaDoClube, agora: Date): PassoDaCobranca {
+  if (fatura.status !== 'aberta') return 'nada';
+
+  const dias = diasEntre(fatura.vencimento, agora);
+  if (dias < 0) return 'nada';
+
+  if (dias >= DIAS_ATE_SUSPENDER) return 'suspender';
+
+  // A cobrança do dia do vencimento: o débito na hora, fora da escada.
+  if (fatura.tentativas === 0) return 'cobrar';
+
+  if (fatura.marcadaInadimplenteEm === null) return 'marcar_inadimplente';
+
+  /**
+   * Recusa definitiva não retenta — mas continua andando para a suspensão.
+   *
+   * Parar a escada não é perdoar a dívida: o cartão cancelado precisa ser
+   * trocado pelo cliente, e o que o faz trocar é o aviso, não a quarta recusa.
+   * O relógio dos quinze dias continua correndo acima.
+   */
+  if (fatura.recusaDefinitiva) return 'nada';
+
+  const proxima = RETENTATIVAS_DO_CLUBE[fatura.tentativas - 1];
+  if (proxima !== undefined && dias >= proxima) return 'retentar';
+
+  return 'nada';
+}
+
+/**
+ * Quanto falta para o benefício parar, em dias.
+ *
+ * É o número que o aviso carrega e que a tela do cliente mostra. Negativo não
+ * existe: passado o prazo, a resposta é zero — "hoje", e não "faz três dias que
+ * devia".
+ */
+export function diasAteSuspender(vencimento: Date, agora: Date): number {
+  return Math.max(0, DIAS_ATE_SUSPENDER - diasEntre(vencimento, agora));
+}
+
+/**
+ * O cartão está para vencer?
+ *
+ * A SPEC pede o aviso quinze dias antes, e ele existe por uma razão de retenção:
+ * o cartão vencido é o motivo nº 1 de cancelamento involuntário, e é o único que
+ * o cliente conserta em trinta segundos se souber a tempo.
+ */
+export function cartaoVaiVencer(
+  validade: { readonly mes: number; readonly ano: number } | null,
+  agora: Date,
+): boolean {
+  if (!validade) return false;
+  // O cartão vale até o **último dia** do mês da validade.
+  const vence = new Date(Date.UTC(validade.ano, validade.mes, 1));
+  const falta = diasEntre(agora, vence);
+  return falta >= 0 && falta <= ANTECEDENCIA_DO_AVISO_DE_CARTAO;
+}
+
+/**
+ * O cancelamento vale a partir de quando.
+ *
+ * **Do fim do ciclo pago**, nunca na hora. O cliente pagou o mês inteiro, e
+ * cortar o benefício no dia do pedido seria ficar com o dinheiro e não entregar
+ * o serviço — que é o oposto do que o cancelamento self-service da SPEC §4.6
+ * existe para permitir.
+ *
+ * Ele também não é retroativo: quem cancela no dia 20 de um ciclo que vai até o
+ * dia 30 continua cortando até lá, e não é cobrado de novo.
+ */
+export function cancelamentoValeAPartirDe(fimDoCicloPago: Date): Date {
+  return fimDoCicloPago;
+}
+
+/**
+ * O que o clube diz ao assinante, e onde essa frase mora.
+ *
+ * Em `core`, como o vocabulário de transição da fila (§6 do CLAUDE.md): a mesma
+ * cobrança recusada aparece na mensagem que sai, na tela do cliente e na lista
+ * do balcão, e três textos diferentes para o mesmo fato é como o treinamento
+ * vira folclore — a recepção diz "está suspenso" e o cliente leu "em atraso".
+ *
+ * O tom é decisão de produto e vale ser lido: nenhuma frase acusa. *"Cortar o
+ * acesso no primeiro erro de cartão gera cancelamento por raiva, não por
+ * preço"*, e a mensagem que trata o cliente como caloteiro produz o mesmo
+ * resultado que cortar o acesso.
+ */
+export const MOTIVOS_DO_AVISO_DO_CLUBE = [
+  'cobranca_recusada',
+  'inadimplente',
+  'suspenso',
+  'cartao_vencendo',
+  'cancelamento_agendado',
+] as const;
+export type MotivoDoAvisoDoClube = (typeof MOTIVOS_DO_AVISO_DO_CLUBE)[number];
+
+export function fraseDoAvisoDoClube(
+  motivo: MotivoDoAvisoDoClube,
+  dados: {
+    readonly plano: string;
+    readonly barbearia: string;
+    /** Quantos dias até o benefício parar. Só o atraso usa. */
+    readonly diasAteSuspender?: number;
+    /** Até quando o plano ainda vale. Só o cancelamento agendado usa. */
+    readonly valeAte?: string;
+  },
+): string {
+  switch (motivo) {
+    case 'cobranca_recusada':
+      return (
+        `Não conseguimos cobrar o seu plano ${dados.plano} na ${dados.barbearia}. `
+        + 'Seu benefício continua valendo — é só atualizar o pagamento quando puder.'
+      );
+    case 'inadimplente':
+      return (
+        `O pagamento do seu plano ${dados.plano} está pendente na ${dados.barbearia}. `
+        + `Você continua cortando por mais ${dados.diasAteSuspender ?? DIAS_ATE_SUSPENDER} dias.`
+      );
+    case 'suspenso':
+      return (
+        `Seu plano ${dados.plano} está pausado na ${dados.barbearia} até o pagamento. `
+        + 'Você continua atendido normalmente pelo preço de tabela.'
+      );
+    case 'cartao_vencendo':
+      return (
+        `O cartão do seu plano ${dados.plano} vence este mês. `
+        + `Atualize com a ${dados.barbearia} para não perder o benefício.`
+      );
+    case 'cancelamento_agendado':
+      return (
+        `Seu plano ${dados.plano} foi cancelado na ${dados.barbearia}. `
+        + `Ele continua valendo até ${dados.valeAte ?? 'o fim do ciclo pago'} — nada muda até lá.`
+      );
+  }
+}

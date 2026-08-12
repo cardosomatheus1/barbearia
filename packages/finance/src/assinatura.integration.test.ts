@@ -296,7 +296,12 @@ describeIfDb('clube de assinatura', () => {
     await expect(usarPlano()).resolves.toBeUndefined();
 
     await withTenant(TENANT, (tx) =>
-      tx.$executeRaw`UPDATE club_subscriptions SET status = 'suspensa' WHERE id = ${id}::uuid`,
+      // `suspended_at` junto: desde o bloco 47 a `CHECK` do banco exige coerência
+      // — suspensão sem data seria um benefício cortado sem "desde quando".
+      tx.$executeRaw`
+        UPDATE club_subscriptions SET status = 'suspensa', suspended_at = now()
+         WHERE id = ${id}::uuid
+      `,
     );
     await expect(usarPlano()).rejects.toMatchObject({ code: 'pagamento_invalido' });
   });

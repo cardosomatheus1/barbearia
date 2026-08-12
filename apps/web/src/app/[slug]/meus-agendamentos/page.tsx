@@ -6,6 +6,7 @@ import {
   listarAgendamentos,
   listarEsperas,
   meuSaldoDeFidelidade,
+  meuPlano,
   meusPacotes,
   meusAtendimentosAAvaliar,
   type AgendamentoDoCliente,
@@ -19,6 +20,8 @@ import {
   aceitarVaga,
   avaliar,
   cancelar,
+  cancelarPlano,
+  manterPlano,
   decidirMarketing,
   pedirDados,
   sair,
@@ -46,6 +49,14 @@ export const metadata: Metadata = {
 const first = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
 
+/** "15/08" — a data que a pessoa lê de relance, sem o ano que ela já sabe. */
+const dataCurta = (iso: string): string =>
+  new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'UTC',
+  });
+
 const money = (cents: number): string =>
   (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
@@ -59,6 +70,7 @@ const FALHA: Record<string, string> = {
   atendimento_nao_concluido: 'Só dá para avaliar um atendimento que aconteceu.',
   ja_avaliado: 'Você já avaliou este atendimento.',
   prazo_vencido: 'O prazo para avaliar este atendimento passou.',
+  assinatura_nao_encontrada: 'Você não tem um plano ativo aqui.',
 };
 
 const FEITO: Record<string, string> = {
@@ -73,6 +85,9 @@ const FEITO: Record<string, string> = {
   espera: 'Você saiu da lista de espera.',
   vaga: 'Horário confirmado. Ele já está aqui em cima, nos seus agendamentos.',
   avaliado: 'Obrigado. A barbearia lê todas.',
+  plano_cancelado:
+    'Plano cancelado. Ele continua valendo até o fim do ciclo que você já pagou — nada muda até lá.',
+  plano_mantido: 'Pronto, seu plano continua. Nada foi cobrado a mais.',
 };
 
 /**
@@ -187,10 +202,22 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
   const esperas = await listarEsperas(slug, token);
   const fidelidade = await meuSaldoDeFidelidade(slug, token);
   const pacotes = await meusPacotes(slug, token);
+  const plano = await meuPlano(slug, token);
   const aAvaliar = await meusAtendimentosAAvaliar(slug, token);
   // Só os que ainda servem: esgotado e vencido viram histórico, e histórico aqui
   // empurra para baixo o que a pessoa abriu a página para ver.
   const pacotesUteis = pacotes.filter((p) => p.estado === 'ativo' && p.restam > 0);
+
+  /**
+   * A mensalidade em atraso, quando existe.
+   *
+   * Uma só e a mais urgente: duas frases de cobrança na mesma tela é o que faz o
+   * cliente parar de ler as duas.
+   */
+  const atrasada = (plano?.faturas ?? []).find(
+    (f) => f.estado === 'aberta' && f.diasAteSuspender !== null,
+  );
+  const mensalidades = (plano?.faturas ?? []).slice(0, 12);
 
   const proximos = agendamentos.filter((a) => a.state === 'active');
   const anteriores = agendamentos.filter((a) => a.state !== 'active');
@@ -403,6 +430,118 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
         A frase vem do domínio, a mesma que o balcão lê — quando a recepção diz
         "resta um", o cliente já leu a mesma coisa aqui.
       */}
+      {plano?.assinatura ? (
+        <section aria-labelledby="meu-plano">
+          <h2 className="rotulo" id="meu-plano">
+            Meu plano
+          </h2>
+
+          <div className="plano-cliente">
+            <p className="plano-cliente__nome">{plano.assinatura.planoNome}</p>
+            <p className="plano-cliente__frase">
+              R$ {(plano.assinatura.precoCents / 100).toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+              })}{' '}
+              por mês · ciclo até {dataCurta(plano.assinatura.cicloAte)}
+            </p>
+
+            <ul className="plano-cliente__usos">
+              {plano.assinatura.beneficios.map((b) => (
+                <li key={b.serviceId}>
+                  {b.quantidade === null
+                    ? `${b.servicoNome} ilimitado`
+                    : `${b.servicoNome}: ${b.usados} de ${b.quantidade} usados neste ciclo`}
+                </li>
+              ))}
+            </ul>
+
+            {atrasada ? (
+              /*
+                A frase não acusa, e é decisão de produto: cortar o acesso — ou
+                tratar o cliente como caloteiro — no primeiro erro de cartão gera
+                cancelamento por raiva, não por preço.
+              */
+              <p className="plano-cliente__aviso">
+                Um pagamento não passou.{' '}
+                {atrasada.diasAteSuspender === 0
+                  ? 'Seu plano pausa hoje.'
+                  : `Você continua cortando por mais ${atrasada.diasAteSuspender} dias.`}{' '}
+                Fale com a barbearia para acertar.
+              </p>
+            ) : null}
+
+            {plano.assinatura.pausadoDesde ? (
+              <p className="plano-cliente__aviso">
+                Seu plano está pausado desde {dataCurta(plano.assinatura.pausadoDesde)}. Você
+                continua sendo atendido normalmente, pelo preço de tabela.
+              </p>
+            ) : null}
+
+            {plano.assinatura.valeAte ? (
+              <>
+                <p className="plano-cliente__frase">
+                  Você pediu para sair. O plano vale até {dataCurta(plano.assinatura.valeAte)} —
+                  nada muda até lá, e não haverá nova cobrança.
+                </p>
+                <form action={manterPlano}>
+                  <input name="slug" type="hidden" value={slug} />
+                  <button className="ui-button ui-button--primary" type="submit">
+                    Quero continuar no plano
+                  </button>
+                </form>
+              </>
+            ) : (
+              <details className="dobra">
+                <summary className="dobra__titulo">Cancelar meu plano</summary>
+                <form action={cancelarPlano} className="plano-cliente__cancelar">
+                  <input name="slug" type="hidden" value={slug} />
+                  <p className="plano-cliente__frase">
+                    Você continua cortando até {dataCurta(plano.assinatura.cicloAte)}, que é o mês
+                    que já está pago. Depois disso o plano acaba e não há nova cobrança.
+                  </p>
+                  <div className="ui-field">
+                    <label className="ui-field__label" htmlFor="motivo-plano">
+                      Quer contar por quê? (opcional)
+                    </label>
+                    <input
+                      className="ui-field__input"
+                      id="motivo-plano"
+                      maxLength={300}
+                      name="motivo"
+                      type="text"
+                    />
+                  </div>
+                  <button className="ui-button ui-button--secondary" type="submit">
+                    Cancelar plano
+                  </button>
+                </form>
+              </details>
+            )}
+          </div>
+
+          {mensalidades.length > 0 ? (
+            <details className="dobra">
+              <summary className="dobra__titulo">Minhas mensalidades</summary>
+              <ul className="plano-cliente__extrato">
+                {mensalidades.map((f) => (
+                  <li key={f.id}>
+                    <span>{dataCurta(f.periodoDe)}</span>
+                    <span className="tabular">
+                      R$ {(f.valorCents / 100).toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                      })}
+                    </span>
+                    <span>
+                      {f.estado === 'paga' ? 'Paga' : f.estado === 'aberta' ? 'Em aberto' : 'Cancelada'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
+
       {pacotesUteis.length > 0 ? (
         <section aria-labelledby="pacotes">
           <h2 className="rotulo" id="pacotes">

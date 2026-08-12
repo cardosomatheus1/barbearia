@@ -11,6 +11,8 @@ import {
   remarcarAgendamento,
   sairDaEsperaNaApi,
   avaliarNaApi,
+  cancelarMeuPlano,
+  manterMeuPlano,
 } from '@/lib/api';
 import { VERSAO_DO_CONSENTIMENTO } from '@/lib/politica';
 import { apagarSessao, lerSessao } from '@/lib/sessao';
@@ -195,6 +197,49 @@ export async function avaliar(form: FormData): Promise<void> {
   redirect(
     resultado.ok
       ? `/${slug}/meus-agendamentos?feito=avaliado`
+      : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
+  );
+}
+
+/**
+ * O cliente cancela o próprio plano (bloco 47, SPEC §4.6).
+ *
+ * *"Cancelamento self-service obrigatório."* Não é gentileza: o clube que só
+ * cancela por telefone é o que vira reclamação no Procon e estorno no cartão —
+ * e o estorno custa mais caro que o mês que ele tentou segurar.
+ *
+ * O motivo é opcional. Exigir que a pessoa se justifique para poder sair é o
+ * mesmo telefone com outro nome.
+ *
+ * A tela não decide nada, como no cancelar e no avaliar: quem autoriza é o
+ * token, e a API filtra por `customer_id` porque a RLS não separa clientes
+ * dentro de uma barbearia.
+ */
+export async function cancelarPlano(form: FormData): Promise<void> {
+  const slug = String(form.get('slug') ?? '');
+  const token = await lerSessao(slug);
+  if (!token) redirect(`/${slug}/entrar`);
+
+  const resultado = await cancelarMeuPlano(slug, token, String(form.get('motivo') ?? '').trim());
+  revalidatePath(`/${slug}/meus-agendamentos`);
+  redirect(
+    resultado.ok
+      ? `/${slug}/meus-agendamentos?feito=plano_cancelado`
+      : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
+  );
+}
+
+/** Mudei de ideia. É o estado que mais vale ter saída, e ela é um botão. */
+export async function manterPlano(form: FormData): Promise<void> {
+  const slug = String(form.get('slug') ?? '');
+  const token = await lerSessao(slug);
+  if (!token) redirect(`/${slug}/entrar`);
+
+  const resultado = await manterMeuPlano(slug, token);
+  revalidatePath(`/${slug}/meus-agendamentos`);
+  redirect(
+    resultado.ok
+      ? `/${slug}/meus-agendamentos?feito=plano_mantido`
       : `/${slug}/meus-agendamentos?erro=${resultado.code}`,
   );
 }

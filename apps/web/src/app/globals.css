@@ -6509,3 +6509,117 @@ main { padding-bottom: var(--space-8); }
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
 }
+
+/* -- Clube: as mensalidades (bloco 47) --------------------------------------
+   A baixa manual é o caminho que de fato acontece numa casa pequena: o
+   assinante paga no Pix e alguém registra. Por isso o seletor de forma e o
+   botão ficam **na linha**, e não atrás de um clique — a recepção faz isso com
+   o cliente na frente.
+
+   `@container` e não largura de janela: a mesma linha aparece na tela cheia do
+   Clube e caberia numa coluna estreita. O recipiente é `.fatura__acoes`, que é
+   o **ancestral** de quem responde — sem `container-type` no pai a regra nunca
+   casa e o bloco fica na versão estreita em qualquer largura, sem nada ficar
+   vermelho.
+   --------------------------------------------------------------------------- */
+.fatura__acoes {
+  container-type: inline-size;
+  margin-top: var(--space-3);
+}
+.fatura__baixa {
+  display: grid;
+  gap: var(--space-2);
+  align-items: end;
+}
+@container (min-width: 26rem) {
+  .fatura__baixa { grid-template-columns: minmax(0, 1fr) auto; }
+}
+/* O botão acompanha a altura do campo ao lado quando há largura para os dois. */
+.fatura__baixa .ui-button { min-height: 44px; }
+
+.clube-faturas {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  /* Cliente, ciclo e valor não quebram em duas linhas: a tabela rola dentro do
+     `.ui-scroll-x`, que é o recipiente, e nunca leva a página junto. */
+  white-space: nowrap;
+}
+.clube-faturas th,
+.clube-faturas td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.clube-faturas th {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---------------------------------------------------------------------------
+   Meu plano, na tela do cliente (bloco 47)
+
+   O cartão responde três perguntas, nesta ordem: o que eu tenho, quanto já usei
+   e como eu saio. A terceira é a que a SPEC §4.6 torna obrigatória — e ela fica
+   atrás de um `<details>` de propósito: quem abre esta tela quase sempre quer a
+   segunda, não a terceira. Atrás de um clique, não escondida.
+   --------------------------------------------------------------------------- */
+.plano-cliente {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.plano-cliente__nome {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+.plano-cliente__frase {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.plano-cliente__usos {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+.plano-cliente__usos li + li { margin-top: var(--space-1); }
+/* Aviso e não alarme: a frase que trata o cliente como caloteiro produz o mesmo
+   cancelamento por raiva que cortar o acesso no primeiro erro de cartão. */
+.plano-cliente__aviso {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+}
+.plano-cliente__cancelar { margin-top: var(--space-3); }
+.plano-cliente__cancelar .ui-field { margin-top: var(--space-3); }
+.plano-cliente__cancelar .ui-button { margin-top: var(--space-3); }
+
+.plano-cliente__extrato {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+}
+.plano-cliente__extrato li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* A saída agendada, na ficha do cliente (bloco 47). Destacada porque quem
+   atende no balcão precisa saber que aquele plano termina — e porque desfazer
+   é o botão mais valioso da tela: é receita já contada como perdida. */
+.assinatura__saida {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  border-radius: var(--radius-md);
+}

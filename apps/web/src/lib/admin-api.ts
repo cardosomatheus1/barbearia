@@ -2264,6 +2264,10 @@ export interface AssinaturaDoCliente {
   cicloAte: string;
   descontoEmProdutoBps: number;
   janelaDeAgendamentoDias: number;
+  /** Até quando o plano vale, quando o cliente já pediu para sair (bloco 47). */
+  valeAte: string | null;
+  /** Desde quando o benefício está pausado por falta de pagamento. */
+  pausadoDesde: string | null;
   bloqueios: JanelaBloqueada[];
   beneficios: {
     serviceId: string;
@@ -2322,6 +2326,61 @@ export const salvarPlanoNaApi = (
 
 export const clubeNaApi = (token: string) =>
   chamar<ClubeDaCasa>('GET', '/v1/admin/clube', undefined, token);
+
+/**
+ * As mensalidades do clube (bloco 47).
+ *
+ * A rota exige `finance.view` **e** `customers.view`: a lista traz nome de gente
+ * ao lado de valor, e rota que agrega declara todas as permissões do que devolve.
+ */
+export interface FaturaDoClubeNaTela {
+  id: string;
+  assinaturaId: string;
+  cliente: string;
+  clienteId: string;
+  plano: string | null;
+  valorCents: number;
+  estado: 'aberta' | 'paga' | 'cancelada';
+  periodoDe: string;
+  periodoAte: string;
+  vencimento: string;
+  tentativas: number;
+  ultimoErro: string | null;
+  pagaEm: string | null;
+  metodo: string | null;
+  marcadaInadimplenteEm: string | null;
+  diasAteSuspender: number | null;
+}
+
+export const faturasDoClubeNaApi = (token: string) =>
+  chamar<{ faturas: FaturaDoClubeNaTela[] }>('GET', '/v1/admin/clube/faturas', undefined, token);
+
+export const pagarFaturaNaApi = (token: string, id: string, metodo: string) =>
+  chamar<{ pago: boolean }>('POST', `/v1/admin/clube/faturas/${id}/pagar`, { metodo }, token);
+
+export const cancelarFaturaNaApi = (token: string, id: string, motivo: string) =>
+  chamar<{ cancelada: boolean }>(
+    'POST',
+    `/v1/admin/clube/faturas/${id}/cancelar`,
+    { motivo },
+    token,
+  );
+
+export const agendarCancelamentoNaApi = (token: string, id: string, motivo: string) =>
+  chamar<{ valeAte: string }>(
+    'POST',
+    `/v1/admin/clube/${id}/agendar-cancelamento`,
+    { motivo },
+    token,
+  );
+
+export const desfazerCancelamentoNaApi = (token: string, id: string) =>
+  chamar<{ desfeito: boolean }>(
+    'POST',
+    `/v1/admin/clube/${id}/desfazer-cancelamento`,
+    {},
+    token,
+  );
 
 export const assinaturaDoClienteNaApi = (token: string, customerId: string) =>
   chamar<{ assinatura: AssinaturaDoCliente | null }>(

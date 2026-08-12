@@ -39,7 +39,11 @@ export type AssinaturaFailure =
   | 'dentro_do_cooldown'
   | 'e_o_titular'
   | 'ja_e_dependente'
-  | 'fora_do_horario_do_plano';
+  | 'fora_do_horario_do_plano'
+  // A cobrança recorrente (bloco 47).
+  | 'fatura_nao_encontrada'
+  | 'motivo_obrigatorio'
+  | 'cartao_invalido';
 
 export class AssinaturaError extends Error {
   constructor(readonly code: AssinaturaFailure, message: string) {
@@ -62,6 +66,9 @@ const MENSAGEM: Readonly<Record<AssinaturaFailure, string>> = {
   e_o_titular: 'Ele já é o titular desta assinatura.',
   ja_e_dependente: 'Esta pessoa já está em outra assinatura.',
   fora_do_horario_do_plano: 'O plano dele não vale neste horário.',
+  fatura_nao_encontrada: 'Esta fatura não está aberta.',
+  motivo_obrigatorio: 'Escreva o motivo.',
+  cartao_invalido: 'Confira os dados do cartão.',
 };
 
 function recusar(code: AssinaturaFailure): never {
@@ -333,6 +340,16 @@ export interface AssinaturaNaTela {
   readonly cicloAte: string;
   readonly descontoEmProdutoBps: number;
   readonly janelaDeAgendamentoDias: number;
+  /**
+   * Até quando o plano ainda vale, quando o cliente já pediu para sair (bloco 47).
+   *
+   * Congelada no pedido, e não derivada aqui: a pessoa vai ler a mesma data
+   * amanhã, e recalculá-la faria "seu plano vale até 30/08" mudar se alguém
+   * mexesse na adesão.
+   */
+  readonly valeAte: string | null;
+  /** Desde quando o benefício está pausado por falta de pagamento. */
+  readonly pausadoDesde: string | null;
   readonly bloqueios: readonly JanelaBloqueada[];
   readonly beneficios: readonly {
     readonly serviceId: string;
@@ -356,6 +373,8 @@ interface LinhaDaAssinatura {
   janela: number | null;
   bloqueios: unknown;
   plan_id: string | null;
+  cancel_effective_at: Date | null;
+  suspended_at: Date | null;
 }
 
 const SELECT_DA_ASSINATURA = `
@@ -367,7 +386,7 @@ const SELECT_DA_ASSINATURA = `
                    'inicio', bl.start_minute,
                    'fim', bl.end_minute))
             FROM club_plan_blackouts bl WHERE bl.plan_id = p.id) AS bloqueios,
-         s.plan_id
+         s.plan_id, s.cancel_effective_at, s.suspended_at
     FROM club_subscriptions s
     LEFT JOIN club_plans p ON p.id = s.plan_id
 `;
@@ -428,6 +447,8 @@ export async function assinaturaDoCliente(
       cicloAte: ciclo.ate.toISOString(),
       descontoEmProdutoBps: assinatura.desconto ?? 0,
       janelaDeAgendamentoDias: assinatura.janela ?? 0,
+      valeAte: assinatura.cancel_effective_at?.toISOString() ?? null,
+      pausadoDesde: assinatura.suspended_at?.toISOString() ?? null,
       bloqueios: (assinatura.bloqueios ?? []) as readonly JanelaBloqueada[],
       beneficios: beneficios.map((b) => ({
         serviceId: b.service_id,
@@ -535,7 +556,12 @@ export async function cancelarAssinatura(entrada: {
       ? await tx.$executeRaw`
           UPDATE club_subscriptions
              SET status = 'cancelada', cancelled_at = ${agora},
-                 cancel_reason = ${entrada.motivo.trim()}, updated_at = now()
+                 cancel_reason = ${entrada.motivo.trim()},
+                 -- O cartão salvo sai junto: assinatura cancelada não guarda
+                 -- credencial cobrável (achado da revisão do bloco 47).
+                 payment_token = NULL, card_brand = NULL, card_last4 = NULL,
+                 card_exp_month = NULL, card_exp_year = NULL, card_warned_at = NULL,
+                 updated_at = now()
            WHERE id = ${entrada.assinaturaId}::uuid
              AND customer_id = ${entrada.customerId}::uuid
              AND status <> 'cancelada'
@@ -543,7 +569,10 @@ export async function cancelarAssinatura(entrada: {
       : await tx.$executeRaw`
           UPDATE club_subscriptions
              SET status = 'cancelada', cancelled_at = ${agora},
-                 cancel_reason = ${entrada.motivo.trim()}, updated_at = now()
+                 cancel_reason = ${entrada.motivo.trim()},
+                 payment_token = NULL, card_brand = NULL, card_last4 = NULL,
+                 card_exp_month = NULL, card_exp_year = NULL, card_warned_at = NULL,
+                 updated_at = now()
            WHERE id = ${entrada.assinaturaId}::uuid AND status <> 'cancelada'
         `;
     if (afetadas === 0) recusar('assinatura_nao_encontrada');

@@ -203,3 +203,110 @@ export class FakePaymentProvider implements PaymentProvider {
     this.expiraEm = undefined;
   }
 }
+
+// ---------------------------------------------------------------------------
+// A terceira direção de dinheiro: o clube (bloco 47, SPEC §4.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * A cobrança recorrente do clube.
+ *
+ * É o **terceiro** contrato de pagamento do produto, e o cabeçalho deste arquivo
+ * já explica por que dois não bastavam. O terceiro entra pela mesma régua: as
+ * perguntas são outras.
+ *
+ * - `PspProvider` (bloco 29): a plataforma cobra a barbearia.
+ * - `PaymentProvider` (bloco 34): a barbearia cobra o cliente **presente**, e o
+ *   que interessa é o que aparece na tela agora — QR Code, link, aprovação.
+ * - este: a barbearia cobra o cliente **ausente**, num cartão salvo, às cinco da
+ *   manhã, sem ninguém olhando.
+ *
+ * Aqui não existe QR Code para mostrar nem tela para atualizar: existe "passou
+ * ou não passou, e o que eu escrevo na fatura". Reaproveitar `PaymentProvider`
+ * traria `pixCopiaECola` e `url` para um caminho que nunca os usa — o defeito
+ * de campo que o motor aceita e ninguém preenche, com o agravante de ser em
+ * dinheiro.
+ *
+ * A distinção que **importa** é a última: recusa definitiva (cartão cancelado,
+ * conta encerrada) e indisponibilidade (rede fora, adquirente instável) não são
+ * a mesma coisa. Tratar a segunda como a primeira gastaria um degrau da escada
+ * por um problema que não é do cliente — e, quinze dias depois, suspenderia o
+ * benefício de quem tinha limite no cartão o tempo todo.
+ */
+export interface CobrancaDoClubeProvider {
+  cobrar(pedido: PedidoDoClube): Promise<ResultadoDoClube>;
+}
+
+export interface PedidoDoClube {
+  readonly tenantId: string;
+  /** A fatura do ciclo. É por ela que a retentativa reencontra a cobrança. */
+  readonly faturaId: string;
+  /** O token do cartão salvo, do provedor. Nunca o número. */
+  readonly token: string;
+  readonly valorCents: number;
+  /** Cobranças já feitas nesta fatura, contando a do vencimento. */
+  readonly tentativa: number;
+  readonly descricao: string;
+}
+
+export type ResultadoDoClube =
+  | { readonly pago: true; readonly cobrancaId: string }
+  | {
+      readonly pago: false;
+      readonly motivo: string;
+      /**
+       * A recusa é definitiva?
+       *
+       * `true` para cartão cancelado ou conta encerrada — retentar não muda
+       * nada, e o caminho é avisar o cliente para trocar o cartão. `false` para
+       * saldo insuficiente e para o adquirente fora do ar: o cartão que falhou
+       * na terça costuma passar na quinta, e é essa a aposta que a régua faz.
+       */
+      readonly definitiva: boolean;
+    };
+
+/**
+ * A chave que vai ao adquirente, escopada aqui pelo mesmo motivo de
+ * `chaveDoAdquirente`: o espaço de idempotência dele é o da **conta**, que é uma
+ * só para todas as barbearias.
+ *
+ * A tentativa entra na chave de propósito. Sem ela, a retentativa de D+3 mandaria
+ * a mesma chave da cobrança de D+0 e receberia de volta a **recusa** guardada —
+ * a régua veria o cartão falhar para sempre, mesmo depois de o cliente pagar a
+ * fatura dele.
+ */
+export function chaveDoClube(pedido: PedidoDoClube): string {
+  return `clube:${pedido.tenantId}:${pedido.faturaId}:${pedido.tentativa}`;
+}
+
+/**
+ * O provedor de mentira: **recusa por padrão**, e não paga.
+ *
+ * É a escolha certa pelo mesmo motivo do `FakePaymentProvider` nascer
+ * `aguardando`: o produto sai de fábrica sem cartão salvo, e o caminho que de
+ * fato acontece é a fatura ficar em aberto até o balcão registrar o pagamento
+ * que viu no extrato. Um fake que aprovasse tudo faria a régua inteira — marcar
+ * inadimplente, retentar, suspender — nunca ser exercida pelo caminho real.
+ */
+export class FakeCobrancaDoClubeProvider implements CobrancaDoClubeProvider {
+  readonly pedidos: PedidoDoClube[] = [];
+  proximoResultado: ResultadoDoClube = {
+    pago: false,
+    motivo: 'sem adquirente configurado',
+    definitiva: false,
+  };
+
+  async cobrar(pedido: PedidoDoClube): Promise<ResultadoDoClube> {
+    this.pedidos.push(pedido);
+    return this.proximoResultado;
+  }
+
+  clear(): void {
+    this.pedidos.length = 0;
+    this.proximoResultado = {
+      pago: false,
+      motivo: 'sem adquirente configurado',
+      definitiva: false,
+    };
+  }
+}

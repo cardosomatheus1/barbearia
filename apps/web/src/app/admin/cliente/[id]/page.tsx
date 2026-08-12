@@ -43,7 +43,9 @@ import {
   acaoConsentimentoNoBalcao,
   acaoPreferencias,
   acaoAssinar,
+  acaoAgendarCancelamento,
   acaoCancelarAssinatura,
+  acaoDesfazerCancelamento,
   acaoIncluirDependente,
   acaoRemoverDependente,
   acaoReembolsarPacote,
@@ -87,6 +89,11 @@ const FALHA: Record<string, string> = {
   preferencia_invalida: 'Escolha uma das opções de conversa.',
   forbidden: 'Sua conta não vê as anotações dos clientes.',
   invalid_request: 'Confira os campos: alguma anotação ficou longa demais.',
+  // A assinatura (blocos 45 a 47).
+  assinatura_nao_encontrada: 'Esta assinatura já foi cancelada ou não tem saída agendada.',
+  ja_assina: 'Este cliente já tem um plano. Cancele o atual para trocar.',
+  e_o_titular: 'Ele já é o titular deste plano.',
+  ja_e_dependente: 'Esta pessoa já usa a cota de outro plano.',
   request_failed: 'Não deu para carregar. Tente de novo.',
 };
 
@@ -616,12 +623,46 @@ function Assinatura({
             </div>
           ) : null}
 
-          {podeMexer ? (
-            <form action={acaoCancelarAssinatura} className="assinatura__cancelar">
+          {/*
+            O cancelamento agendado precisa aparecer **aqui**, com saída.
+
+            O cliente pode pedir para sair sozinho pela tela dele — é exigência
+            da SPEC §4.6 —, e sem esta parte a recepção atenderia alguém cujo
+            plano vence em duas semanas sem saber disso, e não teria como
+            desfazer o pedido de quem mudou de ideia no balcão. Estado sem saída
+            na interface é o terceiro defeito do §6 do CLAUDE.md.
+          */}
+          {assinatura.valeAte ? (
+            <div className="assinatura__saida">
+              <p className="assinatura__ciclo">
+                Pediu para sair. O plano vale até <strong>{dia(assinatura.valeAte)}</strong> — até
+                lá ele corta normalmente, e não há nova cobrança.
+              </p>
+              {podeMexer ? (
+                <form action={acaoDesfazerCancelamento}>
+                  <input name="id" type="hidden" value={assinatura.id} />
+                  <input name="customerId" type="hidden" value={customerId} />
+                  <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                    Manter o plano
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
+
+          {assinatura.pausadoDesde ? (
+            <p className="assinatura__ciclo">
+              Pausado desde <strong>{dia(assinatura.pausadoDesde)}</strong> por falta de pagamento.
+              Dar baixa na mensalidade em <a href="/admin/clube">Clube</a> devolve o benefício.
+            </p>
+          ) : null}
+
+          {podeMexer && !assinatura.valeAte ? (
+            <form action={acaoAgendarCancelamento} className="assinatura__cancelar">
               <input name="id" type="hidden" value={assinatura.id} />
               <input name="customerId" type="hidden" value={customerId} />
               <label className="ui-field">
-                <span className="ui-field__label">Cancelar — por quê</span>
+                <span className="ui-field__label">Encerrar no fim do ciclo — por quê</span>
                 <input
                   className="ui-field__input"
                   maxLength={300}
@@ -630,11 +671,43 @@ function Assinatura({
                   placeholder="Pediu para cancelar no balcão"
                   required
                 />
+                <span className="ui-field__hint">
+                  Ele continua cortando até {dia(assinatura.cicloAte)}, que é o mês já pago, e não
+                  é cobrado de novo. É o caminho normal.
+                </span>
               </label>
               <button className="ui-button ui-button--ghost recado__acao" type="submit">
-                Cancelar assinatura
+                Encerrar no fim do ciclo
               </button>
             </form>
+          ) : null}
+
+          {podeMexer ? (
+            <details className="dobra">
+              <summary className="dobra__titulo">Cancelar agora, sem esperar o ciclo</summary>
+              <form action={acaoCancelarAssinatura} className="assinatura__cancelar">
+                <input name="id" type="hidden" value={assinatura.id} />
+                <input name="customerId" type="hidden" value={customerId} />
+                <label className="ui-field">
+                  <span className="ui-field__label">Cancelar — por quê</span>
+                  <input
+                    className="ui-field__input"
+                    maxLength={300}
+                    minLength={3}
+                    name="motivo"
+                    placeholder="Desfazendo uma venda feita por engano"
+                    required
+                  />
+                  <span className="ui-field__hint">
+                    Corta o benefício na hora e o cliente perde o resto do mês que pagou. É para
+                    desfazer venda errada, não para atender quem pediu para sair.
+                  </span>
+                </label>
+                <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                  Cancelar assinatura agora
+                </button>
+              </form>
+            </details>
           ) : null}
         </div>
       ) : podeMexer && planos.length > 0 ? (

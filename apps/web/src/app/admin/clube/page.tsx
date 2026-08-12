@@ -4,15 +4,17 @@ import { fraseDoBloqueio } from '@barbearia/core';
 import {
   catalogoDeServicos,
   clubeNaApi,
+  faturasDoClubeNaApi,
   planosContadosNaApi,
   planosNaApi,
+  type FaturaDoClubeNaTela,
   type PlanoNaTela,
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
-import { acaoSair, acaoSalvarPlano } from '../acoes';
+import { acaoCancelarFatura, acaoPagarFatura, acaoSair, acaoSalvarPlano } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -48,9 +50,16 @@ const FALHA: Record<string, string> = {
   plano_invalido: 'Confira os números: preço acima de zero e cota positiva.',
   servico_nao_encontrado: 'Um dos serviços não existe mais no catálogo.',
   plano_nao_encontrado: 'Este plano não existe mais.',
+  fatura_nao_encontrada: 'Esta mensalidade já foi baixada ou cancelada.',
+  motivo_obrigatorio: 'Escreva o motivo do cancelamento.',
   forbidden: 'Sua conta não mexe no clube.',
   invalid_request: 'Confira os dados e tente de novo.',
   request_failed: 'Não deu para salvar. Tente de novo.',
+};
+
+const FEITO: Record<string, string> = {
+  pagou: 'Pagamento registrado. O plano voltou a valer.',
+  cancelou_fatura: 'Mensalidade cancelada. A linha continua no histórico.',
 };
 
 const dinheiro = (cents: number) => `R$ ${reaisDoCampo(cents)}`;
@@ -361,6 +370,115 @@ function Plano({
   );
 }
 
+const dia = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+
+const METODOS = [
+  ['pix', 'Pix'],
+  ['dinheiro', 'Dinheiro'],
+  ['cartao', 'Cartão'],
+  ['transferencia', 'Transferência'],
+] as const;
+
+/**
+ * Uma mensalidade em aberto.
+ *
+ * A linha diz três coisas, nesta ordem: **de quem**, **quanto** e **quanto falta
+ * para o plano pausar**. A terceira é o que a recepção usa para escolher a quem
+ * ligar hoje — um indicador que fica sempre em branco é pior que indicador
+ * nenhum, e este só existe quando há atraso de verdade.
+ */
+function Fatura({
+  fatura,
+  podeMexer,
+}: {
+  readonly fatura: FaturaDoClubeNaTela;
+  readonly podeMexer: boolean;
+}) {
+  const atrasada = fatura.diasAteSuspender !== null;
+
+  return (
+    <li className="item-cadastro">
+      <div className="item-cadastro__cabeca">
+        <div className="item-cadastro__quem">
+          <h3 className="item-cadastro__nome">
+            {fatura.cliente}
+            {atrasada ? <span className="item-cadastro__selo">em atraso</span> : null}
+          </h3>
+          <p className="item-cadastro__linha">
+            <span className="tabular">{dinheiro(fatura.valorCents)}</span> ·{' '}
+            {fatura.plano ?? 'plano removido'} · venceu {dia(fatura.vencimento)}
+          </p>
+          {atrasada ? (
+            <p className="item-cadastro__linha">
+              {fatura.diasAteSuspender === 0
+                ? 'O plano pausa hoje.'
+                : `O plano pausa em ${fatura.diasAteSuspender} dias — até lá ele continua cortando.`}
+            </p>
+          ) : null}
+          {fatura.tentativas > 0 ? (
+            <p className="item-cadastro__linha">
+              <span className="tabular">{fatura.tentativas}</span>{' '}
+              {fatura.tentativas === 1 ? 'tentativa' : 'tentativas'} no cartão
+              {fatura.ultimoErro ? `: ${fatura.ultimoErro}` : ''}.
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {podeMexer ? (
+        <div className="fatura__acoes">
+          <form action={acaoPagarFatura} className="fatura__baixa">
+            <input name="id" type="hidden" value={fatura.id} />
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor={`m-${fatura.id}`}>
+                Recebeu como
+              </label>
+              <select className="ui-field__input" id={`m-${fatura.id}`} name="metodo">
+                {METODOS.map(([valor, nome]) => (
+                  <option key={valor} value={valor}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="ui-button ui-button--primary" type="submit">
+              Registrar pagamento
+            </button>
+          </form>
+
+          <details className="dobra">
+            <summary className="dobra__titulo">Cancelar esta mensalidade</summary>
+            <form action={acaoCancelarFatura} className="formulario">
+              <input name="id" type="hidden" value={fatura.id} />
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor={`mot-${fatura.id}`}>
+                  Por quê
+                </label>
+                <input
+                  className="ui-field__input"
+                  id={`mot-${fatura.id}`}
+                  maxLength={300}
+                  name="motivo"
+                  placeholder="ex.: cliente saiu antes do ciclo"
+                  required
+                  type="text"
+                />
+                <p className="ui-field__hint">
+                  Cancelar é perdoar a dívida do mês. A linha continua no histórico com o valor.
+                </p>
+              </div>
+              <button className="ui-button ui-button--secondary" type="submit">
+                Cancelar mensalidade
+              </button>
+            </form>
+          </details>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
 export default async function ClubePage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -369,7 +487,7 @@ export default async function ClubePage({ searchParams }: Props) {
   const podeMexer = podeNaTela(estado, 'finance.subscription_manage');
   const veDinheiro = podeMexer && podeNaTela(estado, 'finance.view');
 
-  const [resposta, catalogo, clube] = await Promise.all([
+  const [resposta, catalogo, clube, cobrancas] = await Promise.all([
     // Com a contagem só para quem pode ver o MRR: ela × preço é o faturamento
     // recorrente da casa, e a rota aberta devolve zero de propósito.
     veDinheiro ? planosContadosNaApi(token, true) : planosNaApi(token, true),
@@ -377,10 +495,19 @@ export default async function ClubePage({ searchParams }: Props) {
     // A rota exige as duas permissões que ela devolve; pedir sem elas produziria
     // um erro por um número que a conta não deveria nem saber que existe.
     veDinheiro ? clubeNaApi(token) : Promise.resolve(null),
+    /**
+     * As mensalidades exigem `finance.view` **e** `customers.view`: a lista traz
+     * nome de gente ao lado de valor. Pedir sem as duas produziria um erro por
+     * dado que a conta não deveria nem saber que existe.
+     */
+    veDinheiro && podeNaTela(estado, 'customers.view')
+      ? faturasDoClubeNaApi(token)
+      : Promise.resolve(null),
   ]);
 
   const query = await searchParams;
   const erro = first(query['erro']);
+  const feito = first(query['feito']);
   const salvo = first(query['salvo']) === '1';
 
   const topo = (
@@ -411,6 +538,10 @@ export default async function ClubePage({ searchParams }: Props) {
   }
 
   const lista = resposta.dados.planos;
+  const faturas = cobrancas?.ok ? cobrancas.dados.faturas : null;
+  const emAberto = (faturas ?? []).filter((f) => f.estado === 'aberta');
+  const fechadas = (faturas ?? []).filter((f) => f.estado !== 'aberta');
+  const totalEmAberto = emAberto.reduce((soma, f) => soma + f.valorCents, 0);
   const servicos = catalogo.ok ? catalogo.dados.services.filter((s) => s.active) : [];
   const numeros = clube?.ok ? clube.dados : null;
 
@@ -432,6 +563,11 @@ export default async function ClubePage({ searchParams }: Props) {
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Plano salvo.
+        </div>
+      ) : null}
+      {feito && FEITO[feito] ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          {FEITO[feito]}
         </div>
       ) : null}
 
@@ -457,6 +593,72 @@ export default async function ClubePage({ searchParams }: Props) {
               </p>
             </div>
           </dl>
+        </section>
+      ) : null}
+
+      {faturas ? (
+        <section className="painel__grupo">
+          <h2 className="rotulo">Mensalidades a receber</h2>
+
+          {emAberto.length === 0 ? (
+            <div className="ui-card vazio">
+              <p className="vazio__titulo">Nenhuma mensalidade em aberto</p>
+              <p className="vazio__saida">
+                Todo mundo está em dia. A cobrança do ciclo novo é emitida de madrugada, no dia em
+                que o ciclo de cada assinante vira.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="painel__sub">
+                <span className="tabular">{dinheiro(totalEmAberto)}</span> em{' '}
+                <span className="tabular">{emAberto.length}</span>{' '}
+                {emAberto.length === 1 ? 'mensalidade' : 'mensalidades'}. Quem está em atraso
+                continua cortando — o plano só pausa depois de quinze dias, e sempre avisado.
+              </p>
+              <ul className="lista-cadastro">
+                {emAberto.map((fatura) => (
+                  <Fatura fatura={fatura} key={fatura.id} podeMexer={podeMexer} />
+                ))}
+              </ul>
+            </>
+          )}
+
+          {fechadas.length > 0 ? (
+            <details className="dobra">
+              <summary className="dobra__titulo">
+                Histórico ({fechadas.length})
+              </summary>
+              <div className="ui-scroll-x">
+                <table className="clube-faturas">
+                  <thead>
+                    <tr>
+                      <th scope="col">Cliente</th>
+                      <th scope="col">Ciclo</th>
+                      <th scope="col">Valor</th>
+                      <th scope="col">Como ficou</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fechadas.map((f) => (
+                      <tr key={f.id}>
+                        <td>{f.cliente}</td>
+                        <td className="tabular">{dia(f.periodoDe)}</td>
+                        <td className="tabular">{dinheiro(f.valorCents)}</td>
+                        <td>
+                          {f.estado === 'paga'
+                            ? `Paga em ${f.pagaEm ? dia(f.pagaEm) : '—'}${
+                                f.metodo ? ` (${f.metodo})` : ''
+                              }`
+                            : 'Cancelada'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
         </section>
       ) : null}
 

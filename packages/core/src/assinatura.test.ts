@@ -7,7 +7,13 @@ import {
   eAssinante,
   fraseDoBeneficio,
   mrrDasAssinaturas,
+  DIAS_ATE_SUSPENDER,
   antecedenciaDoAssinante,
+  cancelamentoValeAPartirDe,
+  cartaoVaiVencer,
+  diasAteSuspender,
+  proximoPassoDaCobranca,
+  type FaturaDoClube,
   fraseDoBloqueio,
   planoValeNoHorario,
   podeSerDependente,
@@ -332,5 +338,134 @@ describe('os dependentes', () => {
      * é o que faz o plano ter preço.
      */
     expect(quemConsome('pai', ['filho', 'filha'])).toEqual(['pai', 'filho', 'filha']);
+  });
+});
+
+describe('a régua de cobrança do clube', () => {
+  const vencimento = new Date('2026-11-01T12:00:00Z');
+  const emDias = (n: number) => new Date(vencimento.getTime() + n * 86_400_000);
+  const fatura = (extra: Partial<FaturaDoClube> = {}): FaturaDoClube => ({
+    status: 'aberta',
+    vencimento,
+    tentativas: 0,
+    marcadaInadimplenteEm: null,
+    recusaDefinitiva: false,
+    ...extra,
+  });
+
+  it('antes de vencer não faz nada', () => {
+    expect(proximoPassoDaCobranca(fatura(), emDias(-1))).toBe('nada');
+  });
+
+  it('no vencimento cobra', () => {
+    expect(proximoPassoDaCobranca(fatura(), vencimento)).toBe('cobrar');
+  });
+
+  it('cobrada e não paga, marca inadimplente', () => {
+    // E `inadimplente` **continua usando** o benefício: é o degrau que existe
+    // para não perder o cliente por um cartão que passa na quinta.
+    expect(proximoPassoDaCobranca(fatura({ tentativas: 1 }), vencimento)).toBe(
+      'marcar_inadimplente',
+    );
+  });
+
+  it('a escada é D+1, D+3, D+7 — e não escorrega um degrau', () => {
+    /**
+     * `tentativas` conta cobranças **feitas**, e a primeira é a do vencimento —
+     * ela não é retentativa. Indexar pelo contador cru adiaria a escada inteira,
+     * que foi como a régua da plataforma errou no bloco 29.
+     */
+    const jaMarcada = { tentativas: 1, marcadaInadimplenteEm: vencimento };
+    expect(proximoPassoDaCobranca(fatura(jaMarcada), emDias(1))).toBe('retentar');
+    expect(proximoPassoDaCobranca(fatura(jaMarcada), emDias(0))).toBe('nada');
+
+    expect(proximoPassoDaCobranca(fatura({ ...jaMarcada, tentativas: 2 }), emDias(3))).toBe(
+      'retentar',
+    );
+    expect(proximoPassoDaCobranca(fatura({ ...jaMarcada, tentativas: 3 }), emDias(7))).toBe(
+      'retentar',
+    );
+    // Esgotada a escada, espera o prazo da suspensão.
+    expect(proximoPassoDaCobranca(fatura({ ...jaMarcada, tentativas: 4 }), emDias(10))).toBe(
+      'nada',
+    );
+  });
+
+  it('passados quinze dias, suspende', () => {
+    expect(
+      proximoPassoDaCobranca(
+        fatura({ tentativas: 4, marcadaInadimplenteEm: vencimento }),
+        emDias(DIAS_ATE_SUSPENDER),
+      ),
+    ).toBe('suspender');
+  });
+
+  it('a fatura esquecida suspende em vez de ficar presa cobrando', () => {
+    // Worker parado por um mês: ela não fica tentando a escada de trás.
+    expect(proximoPassoDaCobranca(fatura({ tentativas: 1 }), emDias(40))).toBe('suspender');
+  });
+
+  it('fatura paga ou cancelada não tem passo', () => {
+    expect(proximoPassoDaCobranca(fatura({ status: 'paga' }), emDias(30))).toBe('nada');
+    expect(proximoPassoDaCobranca(fatura({ status: 'cancelada' }), emDias(30))).toBe('nada');
+  });
+
+  it('recusa definitiva para a escada, e ainda assim suspende no prazo', () => {
+    /**
+     * Contra um cartão cancelado, D+1, D+3 e D+7 são três chamadas que já sabem
+     * a resposta — e cada recusa registrada piora a taxa de aprovação da conta
+     * da barbearia, que é o número pelo qual o adquirente a precifica.
+     *
+     * Parar a escada não é perdoar a dívida: o relógio dos quinze dias continua.
+     */
+    const morta = {
+      tentativas: 1,
+      marcadaInadimplenteEm: vencimento,
+      recusaDefinitiva: true,
+    };
+    expect(proximoPassoDaCobranca(fatura(morta), emDias(1))).toBe('nada');
+    expect(proximoPassoDaCobranca(fatura(morta), emDias(7))).toBe('nada');
+    expect(proximoPassoDaCobranca(fatura(morta), emDias(DIAS_ATE_SUSPENDER))).toBe('suspender');
+  });
+
+  it('conta quanto falta para o benefício parar, e nunca negativo', () => {
+    expect(diasAteSuspender(vencimento, emDias(5))).toBe(10);
+    expect(diasAteSuspender(vencimento, emDias(40))).toBe(0);
+  });
+});
+
+describe('o aviso de cartão vencendo', () => {
+  const agora = new Date('2026-11-20T12:00:00Z');
+
+  it('avisa quinze dias antes', () => {
+    /**
+     * Cartão vencido é o motivo nº 1 de cancelamento involuntário, e é o único
+     * que o cliente conserta em trinta segundos se souber a tempo.
+     */
+    expect(cartaoVaiVencer({ mes: 11, ano: 2026 }, agora)).toBe(true);
+  });
+
+  it('não avisa o que vence longe', () => {
+    expect(cartaoVaiVencer({ mes: 12, ano: 2026 }, agora)).toBe(false);
+  });
+
+  it('não avisa o que já venceu — aí é outra conversa', () => {
+    expect(cartaoVaiVencer({ mes: 10, ano: 2026 }, agora)).toBe(false);
+  });
+
+  it('sem cartão cadastrado não há o que avisar', () => {
+    expect(cartaoVaiVencer(null, agora)).toBe(false);
+  });
+});
+
+describe('o cancelamento self-service', () => {
+  it('vale do fim do ciclo pago, nunca na hora', () => {
+    /**
+     * O cliente pagou o mês inteiro. Cortar o benefício no dia do pedido seria
+     * ficar com o dinheiro e não entregar o serviço — o oposto do que o
+     * cancelamento self-service da SPEC §4.6 existe para permitir.
+     */
+    const fimDoCiclo = new Date('2026-11-30T10:00:00Z');
+    expect(cancelamentoValeAPartirDe(fimDoCiclo)).toEqual(fimDoCiclo);
   });
 });

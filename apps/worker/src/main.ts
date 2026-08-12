@@ -1,13 +1,23 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import { respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
-import { conciliarCobrancas } from '@barbearia/finance';
+import {
+  aplicarReguaDoClube,
+  conciliarCobrancas,
+  montarAvisoDoClube,
+} from '@barbearia/finance';
 import {
   expirarEsperas,
   oferecerProximaVaga,
   primaryLocation,
   vencerOfertas as vencerOfertasDaEspera,
 } from '@barbearia/scheduling';
-import { MINUTOS_DE_JANELA_EXCLUSIVA, diaNaUnidade } from '@barbearia/core';
+import {
+  FakeCobrancaDoClubeProvider,
+  MINUTOS_DE_JANELA_EXCLUSIVA,
+  diaNaUnidade,
+  type CobrancaDoClubeProvider,
+  type MotivoDoAvisoDoClube,
+} from '@barbearia/core';
 import {
   avisarDaOperacao,
   CODIGO_DA_RETENCAO,
@@ -95,6 +105,23 @@ const { psp, cobranca } = ligarAdquirente();
  * revisão de segurança do bloco 39.
  */
 const provider = new ConsoleNotificationProvider();
+
+/**
+ * O adquirente do clube — hoje, o de mentira.
+ *
+ * Ele **recusa** toda cobrança, e isso é o comportamento correto do produto como
+ * ele está: não existe ainda por onde a barbearia tokenizar o cartão do
+ * assinante (lacuna declarada, bloco 51). Sem token salvo a régua nem chega a
+ * chamá-lo — ela pula a cobrança sem gastar degrau —, e o caminho que de fato
+ * quita a mensalidade é o balcão registrando o Pix que viu no extrato.
+ *
+ * Está aqui, e não dentro de `finance`, pelo mesmo motivo de todos os outros
+ * provedores: quem escolhe implementação é quem monta o processo. No dia em que
+ * a tokenização entrar, troca-se esta linha e nada mais.
+ */
+let clubeProvider: CobrancaDoClubeProvider | null = null;
+const cobrancaDoClube = (): CobrancaDoClubeProvider =>
+  (clubeProvider ??= new FakeCobrancaDoClubeProvider());
 
 async function main(): Promise<void> {
   // Mesma guarda da API: se a conexão ignora RLS, o isolamento entre barbearias
@@ -282,6 +309,51 @@ async function main(): Promise<void> {
           clienteNome: resposta.clienteNome,
           barbearia: resposta.barbearia,
           resposta: resposta.resposta,
+        });
+        return true;
+      },
+
+      /**
+       * A régua de cobrança do clube (bloco 47).
+       *
+       * Duas pontas que `jobs` não conhece: `finance`, que sabe o que é uma
+       * fatura, e o adquirente. Mesmo desenho da conciliação de cobranças — e o
+       * provedor entra por uma função só, para que ligar a Stripe de verdade
+       * ligue este caminho junto.
+       */
+      rodarCobrancaDoClube: async (tenantId, agora) => {
+        const resultado = await aplicarReguaDoClube({
+          tenantId,
+          provider: cobrancaDoClube(),
+          agora,
+        });
+        const mexeu = Object.values(resultado).some((n) => n > 0);
+        if (mexeu) console.log('[clube] régua do dia', { tenantId, ...resultado });
+        return { cobradas: resultado.cobradas, suspensas: resultado.suspensas };
+      },
+
+      /**
+       * O aviso do clube, pelo **mesmo** provedor de tudo o mais.
+       *
+       * Não uma instância nova: instanciar o de console dentro de um caminho faz
+       * daquele caminho o único que não troca junto quando o WhatsApp de verdade
+       * entrar — e este carrega a frase que diz ao cliente que o plano dele
+       * parou.
+       */
+      avisarDoClube: async (tenantId, assinaturaId, motivo, agora) => {
+        const aviso = await montarAvisoDoClube({
+          tenantId,
+          assinaturaId,
+          motivo: motivo as MotivoDoAvisoDoClube,
+          agora,
+        });
+        if (!aviso) return false;
+
+        await provider.enviarDoClube({
+          phoneE164: aviso.telefone,
+          barbearia: aviso.barbearia,
+          motivo,
+          texto: aviso.texto,
         });
         return true;
       },

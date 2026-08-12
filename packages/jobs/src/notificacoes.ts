@@ -93,11 +93,28 @@ export interface MensagemDeRecado {
  * ela sai inline por `MessagingProvider` em `packages/identity`, porque a fila é
  * durável e guardar credencial viva num `payload` é criar segredo em repouso.
  */
+/**
+ * O aviso do clube: cobrança recusada, atraso, pausa, cartão vencendo (bloco 47).
+ *
+ * `texto` já vem pronto de `packages/core` — é a mesma frase que a tela do
+ * cliente e a lista do balcão leem, e três textos para o mesmo fato é como o
+ * treinamento vira folclore. `motivo` viaja ao lado porque o WhatsApp oficial
+ * exige **um template aprovado por tipo de mensagem**, e é por ele que a
+ * implementação de verdade escolhe qual usar.
+ */
+export interface MensagemDoClube {
+  readonly phoneE164: string;
+  readonly barbearia: string;
+  readonly motivo: string;
+  readonly texto: string;
+}
+
 export interface NotificationProvider {
   enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void>;
   enviarDeFila(mensagem: MensagemDeFila): Promise<void>;
   enviarDeVaga(mensagem: MensagemDeVaga): Promise<void>;
   enviarDeRecado(mensagem: MensagemDeRecado): Promise<void>;
+  enviarDoClube(mensagem: MensagemDoClube): Promise<void>;
 }
 
 export class FakeNotificationProvider implements NotificationProvider {
@@ -105,6 +122,7 @@ export class FakeNotificationProvider implements NotificationProvider {
   readonly filas: MensagemDeFila[] = [];
   readonly vagas: MensagemDeVaga[] = [];
   readonly recados: MensagemDeRecado[] = [];
+  readonly avisosDoClube: MensagemDoClube[] = [];
   /** Para provar o caminho de falha sem depender de rede fora do ar. */
   falharProxima = false;
 
@@ -126,6 +144,11 @@ export class FakeNotificationProvider implements NotificationProvider {
   async enviarDeRecado(mensagem: MensagemDeRecado): Promise<void> {
     this.derrubarSePedido();
     this.recados.push(mensagem);
+  }
+
+  async enviarDoClube(mensagem: MensagemDoClube): Promise<void> {
+    this.derrubarSePedido();
+    this.avisosDoClube.push(mensagem);
   }
 
   private derrubarSePedido(): void {
@@ -195,6 +218,13 @@ export class ConsoleNotificationProvider implements NotificationProvider {
     this.log(
       `[aviso] resposta_recado para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}, ${mensagem.resposta.length} caracteres)`,
+    );
+  }
+
+  async enviarDoClube(mensagem: MensagemDoClube): Promise<void> {
+    this.log(
+      `[aviso] clube_${mensagem.motivo} para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia})`,
     );
   }
 }

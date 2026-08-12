@@ -56,3 +56,51 @@ export const cancelarSchema = z.object({
 export const dependenteSchema = z.object({
   customerId: z.string().uuid(),
 });
+
+// ---------------------------------------------------------------------------
+// A cobrança recorrente (bloco 47)
+// ---------------------------------------------------------------------------
+
+/**
+ * A baixa manual de uma mensalidade.
+ *
+ * Enum fechado e não texto livre: o meio de pagamento é lido depois para saber
+ * de onde o dinheiro veio, e "PIX", "pix " e "Pix" seriam três colunas no
+ * relatório do mês.
+ */
+export const baixaDaFaturaSchema = z.object({
+  metodo: z.enum(['dinheiro', 'pix', 'cartao', 'transferencia']),
+});
+
+/**
+ * Cancelar uma fatura é perdoar uma dívida — e dívida perdoada tem motivo
+ * escrito, como o desconto do bloco 30 e o ajuste de saldo do bloco 41.
+ */
+export const cancelarFaturaSchema = z.object({
+  motivo: z.string().trim().min(3).max(300),
+});
+
+/**
+ * O cartão salvo da assinatura.
+ *
+ * Token, bandeira, quatro últimos e validade. **Não existe campo para número nem
+ * para CVV** — a borda recusa antes do banco, e o banco não tem coluna para eles.
+ */
+export const cartaoDaAssinaturaSchema = z.object({
+  token: z.string().trim().min(1).max(200),
+  bandeira: z.string().trim().min(2).max(30),
+  ultimosQuatro: z.string().regex(/^[0-9]{4}$/),
+  mes: z.number().int().min(1).max(12),
+  ano: z.number().int().min(2020).max(2100),
+});
+
+/**
+ * O cancelamento self-service.
+ *
+ * O motivo é **opcional** aqui, ao contrário do cancelamento pelo balcão: exigir
+ * que a pessoa justifique para poder sair é o atrito que a SPEC §4.6 manda tirar,
+ * e o clube que o pratica vira reclamação no Procon.
+ */
+export const meuCancelamentoSchema = z.object({
+  motivo: z.string().trim().max(300).optional(),
+});

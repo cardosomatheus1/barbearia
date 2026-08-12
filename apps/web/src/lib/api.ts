@@ -756,3 +756,64 @@ export async function getToday(
   );
   return result?.days[0] ?? null;
 }
+
+/**
+ * O plano do próprio cliente, e o extrato das mensalidades (bloco 47).
+ *
+ * O id vem da sessão, nunca do endereço: a RLS separa barbearias e **não**
+ * separa clientes dentro de uma. `null` numa falha, como o saldo de fidelidade —
+ * um plano que não carregou não pode mandar quem já está autenticado para a tela
+ * de entrar, e o resto da página continua útil.
+ */
+export interface MeuPlano {
+  assinatura: {
+    id: string;
+    planoNome: string;
+    estado: 'ativa' | 'pendente' | 'inadimplente' | 'suspensa' | 'cancelada';
+    precoCents: number;
+    cicloDe: string;
+    cicloAte: string;
+    valeAte: string | null;
+    pausadoDesde: string | null;
+    beneficios: {
+      serviceId: string;
+      servicoNome: string;
+      quantidade: number | null;
+      usados: number;
+      liberaEm: string | null;
+    }[];
+  } | null;
+  faturas: {
+    id: string;
+    valorCents: number;
+    estado: 'aberta' | 'paga' | 'cancelada';
+    periodoDe: string;
+    vencimento: string;
+    pagaEm: string | null;
+    diasAteSuspender: number | null;
+  }[];
+}
+
+export async function meuPlano(slug: string, token: string): Promise<MeuPlano | null> {
+  const response = await fetch(`${BASE}/v1/b/${slug}/plano`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!response.ok) return null;
+  return (await response.json()) as MeuPlano;
+}
+
+export async function cancelarMeuPlano(
+  slug: string,
+  token: string,
+  motivo: string,
+): Promise<Resultado<{ valeAte: string }>> {
+  return post(`/v1/b/${slug}/plano/cancelar`, motivo.length > 0 ? { motivo } : {}, token);
+}
+
+export async function manterMeuPlano(
+  slug: string,
+  token: string,
+): Promise<Resultado<{ desfeito: boolean }>> {
+  return post(`/v1/b/${slug}/plano/manter`, {}, token);
+}

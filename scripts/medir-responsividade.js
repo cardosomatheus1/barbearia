@@ -584,6 +584,123 @@ async function prepararClube(slug, clienteDaFicha) {
          VALUES ('${assinatura}', '${outro}', '${tenant}') ON CONFLICT DO NOTHING`,
       );
     }
+
+    /**
+     * As mensalidades (bloco 47).
+     *
+     * Três estados, porque são três larguras de texto diferentes no cartão: uma
+     * em atraso com tentativa de cartão registrada — que é a linha mais alta, e
+     * a única que o balcão precisa ler rápido —, uma paga e uma cancelada com
+     * anotação, para o histórico não ficar vazio.
+     */
+    if (assinatura) {
+      psql(
+        `INSERT INTO club_invoices (tenant_id, subscription_id, period_start, period_end,
+                                    amount_cents, due_at, attempts, last_error,
+                                    marked_delinquent_at)
+         VALUES ('${tenant}', '${assinatura}', date_trunc('day', now() - interval '9 days'),
+                 date_trunc('day', now() + interval '21 days'), 14900,
+                 date_trunc('day', now() - interval '9 days'), 2,
+                 'cartão sem limite disponível', now() - interval '8 days')`,
+      );
+      /*
+        O estado da assinatura acompanha, porque é o que a régua faz na mesma
+        transação. Sem isto o quadro de cima diz "0 em atraso" enquanto a lista
+        logo abaixo mostra um — duas telas mostrando o mesmo fato e discordando,
+        que é a sexta pergunta do §6 do CLAUDE.md.
+      */
+      psql(`UPDATE club_subscriptions SET status = 'inadimplente' WHERE id = '${assinatura}'`);
+      psql(
+        `INSERT INTO club_invoices (tenant_id, subscription_id, period_start, period_end,
+                                    amount_cents, due_at, status, paid_at, paid_method)
+         VALUES ('${tenant}', '${assinatura}', date_trunc('day', now() - interval '39 days'),
+                 date_trunc('day', now() - interval '9 days'), 14900,
+                 date_trunc('day', now() - interval '39 days'), 'paga',
+                 now() - interval '38 days', 'pix')`,
+      );
+      psql(
+        `INSERT INTO club_invoices (tenant_id, subscription_id, period_start, period_end,
+                                    amount_cents, due_at, status, void_reason)
+         VALUES ('${tenant}', '${assinatura}', date_trunc('day', now() - interval '69 days'),
+                 date_trunc('day', now() - interval '39 days'), 14900,
+                 date_trunc('day', now() - interval '69 days'), 'cancelada',
+                 'primeiro mês de cortesia combinado na adesão')`,
+      );
+    }
+  }
+}
+
+/**
+ * A assinatura de **quem tem sessão** no navegador (bloco 47).
+ *
+ * Separada de `prepararClube`, que assina o cliente da ficha do admin: são duas
+ * pessoas diferentes, e "uma assinatura viva por cliente" impede reaproveitar a
+ * mesma. Sem esta, a tela do cliente mede o estado sem plano — que também
+ * importa, mas não é o que este bloco entregou.
+ */
+function prepararPlanoDoCliente(slug, telefone) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  const cliente = primeiraLinha(
+    psql(
+      `select id from customers where tenant_id = '${tenant}'
+         and phone_e164 = '${telefone}' limit 1`,
+    ),
+  );
+  const plano = primeiraLinha(
+    psql(`select id from club_plans where tenant_id = '${tenant}' and name = 'Essencial' limit 1`),
+  );
+  if (!cliente || !plano) return;
+
+  const servico = primeiraLinha(
+    psql(
+      `select id from services where tenant_id = '${tenant}' and active
+        order by price_cents desc limit 1`,
+    ),
+  );
+  if (servico) {
+    psql(
+      `INSERT INTO club_plan_benefits (plan_id, service_id, tenant_id, quantity, cooldown_days)
+       VALUES ('${plano}', '${servico}', '${tenant}', 2, 7) ON CONFLICT DO NOTHING`,
+    );
+  }
+
+  const assinatura = primeiraLinha(
+    psql(
+      `INSERT INTO club_subscriptions (tenant_id, customer_id, plan_id, price_cents, status,
+                                       started_at)
+       VALUES ('${tenant}', '${cliente}', '${plano}', 8900, 'ativa',
+               now() - interval '70 days')
+       ON CONFLICT DO NOTHING RETURNING id`,
+    ),
+  );
+  if (!assinatura) return;
+
+  /*
+    Assinatura em atraso, como a régua a deixaria: a fatura de dez dias atrás
+    ainda aberta **e** o estado `inadimplente`. Os dois juntos porque a régua os
+    grava na mesma transação — e porque o quadro do topo conta estado enquanto a
+    lista lê vencimento: deixá-los discordando no ensaio faria a tela mentir
+    sobre si mesma (§6 do CLAUDE.md, sexta pergunta).
+  */
+  psql(`UPDATE club_subscriptions SET status = 'inadimplente' WHERE id = '${assinatura}'`);
+
+  // Duas pagas e uma em aberto: é o extrato que a pessoa abre para conferir se
+  // aquele desconto no cartão era o plano.
+  for (const [meses, estado] of [[70, 'paga'], [40, 'paga'], [10, 'aberta']]) {
+    const pago = estado === 'paga';
+    psql(
+      `INSERT INTO club_invoices (tenant_id, subscription_id, period_start, period_end,
+                                  amount_cents, due_at, status, paid_at, paid_method)
+       VALUES ('${tenant}', '${assinatura}',
+               date_trunc('day', now() - interval '${meses} days'),
+               date_trunc('day', now() - interval '${meses - 30} days'), 8900,
+               date_trunc('day', now() - interval '${meses} days'),
+               '${estado}',
+               ${pago ? `now() - interval '${meses - 1} days'` : 'NULL'},
+               ${pago ? "'pix'" : 'NULL'})`,
+    );
   }
 }
 
@@ -1277,6 +1394,7 @@ async function main() {
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);
   await prepararClube(slug, balcao.clienteId);
+  prepararPlanoDoCliente(slug, '+5571988887777');
   await prepararAgenda(token, balcao.dia);
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, {
     headers: { authorization: `Bearer ${token}` },

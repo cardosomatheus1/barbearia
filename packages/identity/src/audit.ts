@@ -113,6 +113,20 @@ export type AuditAction =
    */
   | 'subscription.dependent_changed'
   /**
+   * A cobrança recorrente do clube (bloco 47).
+   *
+   * As três são de dinheiro, e cada uma responde uma pergunta que chega no dia
+   * seguinte. `invoice_paid`: "quem deu baixa na mensalidade que eu não paguei?"
+   * — o pagamento manual é a única testemunha de dinheiro que entrou por fora do
+   * caixa. `invoice_voided`: cancelar uma fatura é perdoar uma dívida, e perdoar
+   * dívida é dar desconto com outro nome. `cancel_scheduled`: desligar receita
+   * recorrente, pela mesma razão de `subscription.cancelled` — e aqui o ator
+   * pode ser o **próprio cliente**, o que a trilha registra com `actor_id` nulo.
+   */
+  | 'subscription.invoice_paid'
+  | 'subscription.invoice_voided'
+  | 'subscription.cancel_scheduled'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -224,6 +238,9 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'subscription.started',
   'subscription.cancelled',
   'subscription.dependent_changed',
+  'subscription.invoice_paid',
+  'subscription.invoice_voided',
+  'subscription.cancel_scheduled',
   'package.changed',
   'package.refunded',
   'commission.closed',

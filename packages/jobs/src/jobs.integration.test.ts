@@ -81,6 +81,9 @@ const alertasEntregues: { tenantId: string; quantos: number }[] = [];
 /** As conferências de cobrança online que o worker mandou rodar (bloco 35). */
 const conciliacoesRodadas: { tenantId: string; agora: Date }[] = [];
 
+const cobrancasDoClube: { tenantId: string; agora: Date }[] = [];
+const avisosDoClube: { tenantId: string; assinaturaId: string; motivo: string }[] = [];
+
 const ligacoesDaPlataforma = () => ({
   avisarDeCobranca: async (aviso: {
     readonly tenantId: string;
@@ -125,6 +128,14 @@ const ligacoesDaPlataforma = () => ({
   conciliarCobrancas: async (tenantId: string, agora: Date) => {
     conciliacoesRodadas.push({ tenantId, agora });
     return { pagas: 0, encerradas: 0 };
+  },
+  rodarCobrancaDoClube: async (tenantId: string, agora: Date) => {
+    cobrancasDoClube.push({ tenantId, agora });
+    return { cobradas: 0, suspensas: 0 };
+  },
+  avisarDoClube: async (tenantId: string, assinaturaId: string, motivo: string) => {
+    avisosDoClube.push({ tenantId, assinaturaId, motivo });
+    return true;
   },
 });
 
@@ -175,6 +186,8 @@ describeIfDb('fila de trabalho', () => {
     recadosRespondidos.length = 0;
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
+    cobrancasDoClube.length = 0;
+    avisosDoClube.length = 0;
     contexto = {
       provider,
       relogio: { agora: () => AGORA },
@@ -548,6 +561,84 @@ describeIfDb('fila de trabalho', () => {
     } finally {
       recursosLigados = true;
     }
+  });
+
+  it('a régua do clube chega a quem sabe cobrar', async () => {
+    // O handler não sabe o que é uma fatura: `jobs` não conhece `finance` nem o
+    // adquirente. Uma tarefa por barbearia, porque `club_invoices` tem RLS.
+    await enfileirarNoTenant({
+      kind: 'clube.cobranca',
+      idempotencyKey: 'clube:tenant:2026-11-01',
+    });
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+    expect(cobrancasDoClube).toEqual([{ tenantId: TENANT, agora: COMECA_EM }]);
+  });
+
+  it('com avisos desligados, o aviso do clube não sai — mas a régua continua', async () => {
+    /**
+     * A distinção é do produto e não do canal: cobrar é obrigação contratual e
+     * roda de qualquer jeito; **avisar** passa pelo interruptor de mensagens,
+     * como toda mensagem ao cliente. Quem desligou avisa pelo próprio WhatsApp,
+     * e o estado gravado continua sendo o registro do que aconteceu.
+     */
+    await enfileirarNoTenant({
+      kind: 'clube.aviso',
+      payload: { subscriptionId: 'c1c1c1c1-0000-0000-0000-000000000001', motivo: 'suspenso' },
+      idempotencyKey: 'clube.aviso:c1c1:suspenso:1',
+    });
+    await enfileirarNoTenant({
+      kind: 'clube.cobranca',
+      idempotencyKey: 'clube:tenant:2026-11-02',
+    });
+
+    recursosLigados = false;
+    try {
+      const resultado = await rodada({
+        provider,
+        relogio: { agora: () => COMECA_EM },
+        recursoLigado: async () => recursosLigados,
+        ...ligacoesDaPlataforma(),
+      });
+      expect(resultado).toMatchObject({ tomadas: 2, concluidas: 2, falhadas: 0 });
+      expect(avisosDoClube).toHaveLength(0);
+      expect(cobrancasDoClube).toHaveLength(1);
+    } finally {
+      recursosLigados = true;
+    }
+  });
+
+  it('o aviso do clube carrega só o id e o motivo', async () => {
+    // `jobs` não tem RLS: o payload guarda id, nunca conteúdo. O texto da
+    // mensagem é montado do outro lado, com tenant no contexto.
+    await enfileirarNoTenant({
+      kind: 'clube.aviso',
+      payload: { subscriptionId: 'c1c1c1c1-0000-0000-0000-000000000002', motivo: 'inadimplente' },
+      idempotencyKey: 'clube.aviso:c1c1-2:inadimplente:1',
+    });
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+    expect(avisosDoClube).toEqual([
+      {
+        tenantId: TENANT,
+        assinaturaId: 'c1c1c1c1-0000-0000-0000-000000000002',
+        motivo: 'inadimplente',
+      },
+    ]);
   });
 
   it('provedor fora do ar devolve a tarefa à fila', async () => {

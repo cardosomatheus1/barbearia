@@ -423,6 +423,26 @@ export async function exportarDadosDoTitular(
        ORDER BY u.used_at
     `;
 
+    /**
+     * As mensalidades do clube (bloco 47).
+     *
+     * "Quanto vocês me cobraram, quando e se eu paguei" é dado do titular tanto
+     * quanto o extrato de fiado — e é a pergunta que a exportação existe para
+     * responder sem depender de alguém do balcão procurar.
+     *
+     * O que **não** entra é o cartão: `payment_token` é credencial viva, e os
+     * quatro últimos são dado de instrumento de pagamento num arquivo que o
+     * titular recebe por e-mail. É o mesmo critério de `customer_sessions`.
+     */
+    const mensalidades = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT f.period_start, f.period_end, f.amount_cents, f.status::text AS estado,
+             f.due_at AS vencimento, f.paid_at AS paga_em, f.paid_method AS forma
+        FROM club_invoices f
+        JOIN club_subscriptions s ON s.id = f.subscription_id
+       WHERE s.customer_id = ${customerId}::uuid
+       ORDER BY f.period_start
+    `;
+
     const coberturaPorOutro = await tx.$queryRaw<Record<string, unknown>[]>`
       SELECT p.name AS plano, d.created_at AS desde
         FROM club_dependents d

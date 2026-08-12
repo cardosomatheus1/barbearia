@@ -41,6 +41,7 @@ import { EstoqueController } from './admin/estoque.controller.js';
 import { AssinaturaController } from './admin/assinatura.controller.js';
 import { FidelidadeDoClienteController } from './booking/fidelidade.controller.js';
 import { PacoteDoClienteController } from './booking/pacote.controller.js';
+import { AssinaturaDoClienteController } from './booking/assinatura.controller.js';
 import { AvaliacaoDoClienteController } from './booking/avaliacao.controller.js';
 import { MeController, TeamController } from './admin/team.controller.js';
 import {
@@ -99,6 +100,7 @@ import { TenantService } from './tenant/tenant.service.js';
     AssinaturaController,
     FidelidadeDoClienteController,
     PacoteDoClienteController,
+    AssinaturaDoClienteController,
     AvaliacaoDoClienteController,
     FilaPublicaController,
     TeamController,
