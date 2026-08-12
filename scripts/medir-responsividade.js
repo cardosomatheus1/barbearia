@@ -1189,6 +1189,82 @@ function prepararSplit(slug) {
   }
 }
 
+/**
+ * Contas a pagar e a receber, com conteúdo de verdade (bloco 51).
+ *
+ * Pelo banco, como o split: o que a medição precisa é do **estado**. Nome de
+ * fornecedor longo, valor de quatro dígitos e uma conta vencida são o que
+ * estoura a grade — a tela vazia é justamente o layout que não quebra.
+ */
+function prepararFinanceiro(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  if (!local) return;
+
+  const categorias = [
+    ['Aluguel e condomínio', 'pagar'],
+    ['Produtos e insumos', 'pagar'],
+    ['Aluguel de cadeira', 'receber'],
+  ];
+  for (const [nome, direcao] of categorias) {
+    psql(
+      `INSERT INTO financial_categories (tenant_id, name, direction)
+       VALUES ('${tenant}', '${nome}', '${direcao}') ON CONFLICT DO NOTHING`,
+    );
+  }
+
+  psql(
+    `INSERT INTO financial_accounts (tenant_id, location_id, name, is_cash)
+     VALUES ('${tenant}', '${local}', 'Gaveta da Matriz', true) ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO financial_accounts (tenant_id, location_id, name, is_cash)
+     VALUES ('${tenant}', NULL, 'Banco do Brasil — conta PJ', false) ON CONFLICT DO NOTHING`,
+  );
+
+  const contas = [
+    ['pagar', 'Aluguel e condomínio do salão', 'Aluguel e condomínio', 285000, "current_date + 5"],
+    ['pagar', 'Distribuidora São Paulo Cosméticos', 'Produtos e insumos', 148790, "current_date - 3"],
+    ['pagar', 'Contabilidade Ferreira & Associados', null, 62000, "current_date"],
+    ['receber', 'Aluguel da cadeira 3 — Bruno Nascimento', 'Aluguel de cadeira', 90000, "current_date + 12"],
+    ['receber', 'Reembolso da distribuidora (lote trocado)', null, 24500, "current_date - 8"],
+  ];
+  for (const [direcao, descricao, categoria, valor, vence] of contas) {
+    const cat = categoria
+      ? `(SELECT id FROM financial_categories WHERE tenant_id = '${tenant}' AND name = '${categoria}')`
+      : 'NULL';
+    psql(
+      `INSERT INTO bills
+         (tenant_id, location_id, direction, description, category_id, amount_cents,
+          due_on, created_by_name)
+       VALUES ('${tenant}', '${local}', '${direcao}', '${descricao}', ${cat}, ${valor},
+               ${vence}, 'Maria Recepção')
+       ON CONFLICT DO NOTHING`,
+    );
+  }
+
+  psql(
+    `INSERT INTO account_transfers
+       (tenant_id, location_id, from_account_id, to_account_id, amount_cents,
+        happened_on, created_by_name)
+     SELECT '${tenant}', '${local}',
+            (SELECT id FROM financial_accounts WHERE tenant_id = '${tenant}' AND is_cash),
+            (SELECT id FROM financial_accounts WHERE tenant_id = '${tenant}' AND NOT is_cash),
+            70000, current_date - 1, 'Maria Recepção'
+      WHERE EXISTS (SELECT 1 FROM financial_accounts WHERE tenant_id = '${tenant}' AND is_cash)`,
+  );
+
+  // O limite de fiado, que é a origem de dado que este bloco entrega: sem ele a
+  // ficha do cliente mostraria "sem limite" para todo mundo na medição.
+  psql(
+    `UPDATE customers SET credit_limit_cents = 15000
+      WHERE tenant_id = '${tenant}' AND balance_cents < 0`,
+  );
+}
+
 async function prepararCaixa(token, catalogo) {
   const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
   const { codigoDoPasso, passoAgora } = require('../packages/identity/dist/mfa.js');
@@ -1517,6 +1593,7 @@ async function main() {
   })).json();
   const caixa = await prepararCaixa(token, catalogo);
   prepararSplit(slug);
+  prepararFinanceiro(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -1598,6 +1675,7 @@ async function main() {
       ? [{ nome: 'comanda — Pix em curso', url: `/admin/comanda/${caixa.comPix}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
     { nome: 'fiado', url: '/admin/fiado', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'contas', url: '/admin/financeiro', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

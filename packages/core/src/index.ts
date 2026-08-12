@@ -41,3 +41,4 @@ export * from './avaliacao.js';
 export * from './assinatura.js';
 export * from './estoque.js';
 export * from './pacote.js';
+export * from './financeiro.js';

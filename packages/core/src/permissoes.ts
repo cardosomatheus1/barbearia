@@ -115,6 +115,33 @@ export const PERMISSOES = [
    * o mínimo.
    */
   'finance.split_manage',
+  /**
+   * Contas a pagar e a receber, transferências entre contas (bloco 51).
+   *
+   * Quitar uma conta pela gaveta tira dinheiro dela de verdade, e transferir
+   * decide para onde ele vai. É a mesma natureza de `cashier.withdraw`, e o
+   * prefixo `finance.` derivado do segundo fator é o mínimo — quem paga
+   * "Distribuidora São Paulo" R$ 4.000 no fim do expediente é quem estava
+   * sozinho no balcão.
+   *
+   * **Ler** o que a barbearia deve continua sendo `finance.view`: é a mesma
+   * pergunta do faturamento vista pelo outro lado, e o gerente que fecha o mês
+   * precisa dela sem poder pagar nada.
+   */
+  'finance.bills_manage',
+  /**
+   * Levantar o limite de fiado de um cliente e lançar o saldo em aberto
+   * herdado do sistema antigo (bloco 51).
+   *
+   * Prefixo `finance.` pela mesma razão de `finance.loyalty_adjust`, e é
+   * literalmente a mesma coisa vista pelo outro lado: um cria crédito que o
+   * cliente gasta no balcão; este cria a **permissão** de gastar sem pagar.
+   * Separada de `customers.edit` porque com ela o limite viraria edição de
+   * cadastro qualquer, sem passar por dinheiro e portanto sem segundo fator —
+   * que foi exatamente o defeito que a revisão do bloco 37 achou no override do
+   * score.
+   */
+  'finance.credit_limit',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -285,6 +312,16 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'finance.view',
     'finance.discount',
     'finance.deposit',
+    /**
+     * Pagar fornecedor é a rotina de quem gerencia, e um financeiro que só o
+     * dono opera é um financeiro que fica desatualizado — foi o que aconteceu
+     * com a agenda de contas do sistema analisado em campo.
+     *
+     * `finance.credit_limit` **não** vem junto: pagar o que a casa deve é
+     * operação; decidir quem leva corte sem pagar é risco, e risco é do dono.
+     * É a mesma separação de `customers.anonymize`.
+     */
+    'finance.bills_manage',
     'commission.view_all',
     'customers.view',
     'customers.edit',

@@ -2564,3 +2564,175 @@ export const cadastrarRecebedorNaApi = (
     dados,
     token,
   );
+
+// -- Financeiro (bloco 51) ----------------------------------------------------
+
+export type DirecaoDaConta = 'pagar' | 'receber';
+
+export interface ContaDoFinanceiro {
+  id: string;
+  direcao: DirecaoDaConta;
+  descricao: string;
+  valorCents: number;
+  vencimentoEm: string;
+  estado: 'aberta' | 'paga' | 'cancelada';
+  pagaEm: string | null;
+  valorPagoCents: number | null;
+  categoriaId: string | null;
+  categoriaNome: string | null;
+  contaId: string | null;
+  contaNome: string | null;
+  observacao: string | null;
+  pagaPelaGaveta: boolean;
+  vencida: boolean;
+  prazo: string;
+  criadaPor: string;
+}
+
+export interface AgendaDoFinanceiro {
+  contas: ContaDoFinanceiro[];
+  resumo: {
+    aPagarCents: number;
+    aReceberCents: number;
+    vencidoAPagarCents: number;
+    vencidoAReceberCents: number;
+    saldoProjetadoCents: number;
+  };
+  hoje: string;
+}
+
+export interface CategoriaFinanceira {
+  id: string;
+  nome: string;
+  direcao: DirecaoDaConta;
+  ativa: boolean;
+}
+
+export interface ContaBancaria {
+  id: string;
+  nome: string;
+  ehGaveta: boolean;
+  locationId: string | null;
+  ativa: boolean;
+}
+
+export interface TransferenciaDoFinanceiro {
+  id: string;
+  deNome: string;
+  paraNome: string;
+  valorCents: number;
+  quandoEm: string;
+  observacao: string | null;
+  criadaPor: string;
+}
+
+export const agendaDoFinanceiro = (token: string, fechadas = false) =>
+  chamar<AgendaDoFinanceiro>(
+    'GET',
+    `/v1/admin/financeiro/contas${fechadas ? '?fechadas=true' : ''}`,
+    undefined,
+    token,
+  );
+
+export const criarContaDoFinanceiro = (
+  token: string,
+  dados: {
+    direcao: DirecaoDaConta;
+    descricao: string;
+    valorCents: number;
+    vencimentoEm: string;
+    categoriaId?: string | null;
+    contaId?: string | null;
+    observacao?: string | null;
+  },
+) => chamar<{ id: string }>('POST', '/v1/admin/financeiro/contas', dados, token);
+
+export const quitarContaDoFinanceiro = (
+  token: string,
+  contaId: string,
+  dados: { valorPagoCents: number; pagaEm: string; pelaGaveta: boolean },
+) => chamar<{ ok: true }>('POST', `/v1/admin/financeiro/contas/${contaId}/quitar`, dados, token);
+
+export const cancelarContaDoFinanceiro = (token: string, contaId: string, motivo: string) =>
+  chamar<{ ok: true }>('POST', `/v1/admin/financeiro/contas/${contaId}/cancelar`, { motivo }, token);
+
+export const categoriasDoFinanceiro = (token: string) =>
+  chamar<{ categorias: CategoriaFinanceira[] }>(
+    'GET',
+    '/v1/admin/financeiro/categorias',
+    undefined,
+    token,
+  );
+
+export const criarCategoriaDoFinanceiro = (
+  token: string,
+  dados: { nome: string; direcao: DirecaoDaConta },
+) => chamar<CategoriaFinanceira>('POST', '/v1/admin/financeiro/categorias', dados, token);
+
+export const contasBancarias = (token: string) =>
+  chamar<{ contas: ContaBancaria[] }>(
+    'GET',
+    '/v1/admin/financeiro/contas-bancarias',
+    undefined,
+    token,
+  );
+
+export const criarContaBancaria = (
+  token: string,
+  dados: { nome: string; locationId?: string | null; ehGaveta?: boolean },
+) => chamar<ContaBancaria>('POST', '/v1/admin/financeiro/contas-bancarias', dados, token);
+
+export const transferenciasDoFinanceiro = (token: string) =>
+  chamar<{ transferencias: TransferenciaDoFinanceiro[] }>(
+    'GET',
+    '/v1/admin/financeiro/transferencias',
+    undefined,
+    token,
+  );
+
+export const transferirEntreContas = (
+  token: string,
+  dados: {
+    deContaId: string;
+    paraContaId: string;
+    valorCents: number;
+    quandoEm: string;
+    observacao?: string | null;
+  },
+  idempotencyKey?: string,
+) =>
+  chamar<{ id: string }>(
+    'POST',
+    '/v1/admin/financeiro/transferencias',
+    dados,
+    token,
+    idempotencyKey,
+  );
+
+export const definirLimiteDeFiado = (token: string, customerId: string, limiteCents: number) =>
+  chamar<{ limiteCents: number }>(
+    'PUT',
+    `/v1/admin/financeiro/clientes/${customerId}/limite`,
+    { limiteCents },
+    token,
+  );
+
+export const lancarSaldoInicialDeFiado = (
+  token: string,
+  customerId: string,
+  dados: { deveCents: number; motivo: string },
+) =>
+  chamar<{ saldoCents: number }>(
+    'POST',
+    `/v1/admin/financeiro/clientes/${customerId}/saldo-inicial`,
+    dados,
+    token,
+  );
+
+export const fiadoDoClienteNaApi = (token: string, customerId: string) =>
+  chamar<{ saldoCents: number; limiteCents: number }>(
+    'GET',
+    `/v1/admin/financeiro/clientes/${customerId}/fiado`,
+    undefined,
+    token,
+  );

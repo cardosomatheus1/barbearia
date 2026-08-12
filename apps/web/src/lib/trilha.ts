@@ -27,6 +27,24 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'order.closed': 'fechou a comanda',
   'order.discount': 'deu desconto na comanda',
   'debt.received': 'recebeu um fiado',
+  // Financeiro (bloco 51). "Lançou" e não "criou": é a palavra do balcão para
+  // pôr uma conta na lista, e vocabulário de ação é um só em todo o produto.
+  'bill.created': 'lançou uma conta',
+  /**
+   * Duas ações, uma por direção, e as frases são as **dos botões**.
+   *
+   * A primeira versão tinha uma ação só, com a frase "quitou uma conta" — e
+   * "quitar" era a terceira palavra para a mesma transição, ao lado de "Pagar"
+   * na tela e "Registrar pagamento" no botão. Quando a recepção diz "já paguei
+   * a distribuidora" e a trilha diz "quitou", o treinamento vira folclore
+   * (CLAUDE.md §6).
+   */
+  'bill.paid': 'registrou o pagamento de uma conta',
+  'bill.received': 'registrou o recebimento de uma conta',
+  'bill.cancelled': 'cancelou uma conta',
+  'account.transferred': 'transferiu dinheiro entre contas',
+  'debt.limit_changed': 'mudou o limite de fiado de um cliente',
+  'debt.opening_balance': 'lançou o saldo de fiado herdado de um cliente',
   'order.charge_created': 'gerou uma cobrança online',
   // "Cancelou" e não "encerrou": quem lê a trilha quer saber que alguém tomou a
   // decisão, e o cliente pode estar com o código na mão nesse instante.

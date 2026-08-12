@@ -15,6 +15,7 @@ import {
   confiancaDoCliente,
   saldoDeFidelidade,
   pacotesDoClienteNaApi,
+  fiadoDoClienteNaApi,
   avaliacoesDoClienteNaApi,
   assinaturaDoClienteNaApi,
   planosNaApi,
@@ -49,6 +50,8 @@ import {
   acaoIncluirDependente,
   acaoRemoverDependente,
   acaoReembolsarPacote,
+  acaoDefinirLimiteDeFiado,
+  acaoLancarSaldoInicialDeFiado,
   acaoSair,
 } from '../../acoes';
 import { secao } from '../../secoes';
@@ -377,6 +380,100 @@ function Fidelidade({
               Ajustar saldo
             </button>
           </form>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Fiado: o que a pessoa deve e até quanto a casa deixa levar (bloco 51).
+ *
+ * A coluna `credit_limit_cents` existe desde o bloco 18 e **nasceu em zero sem
+ * nenhuma tela que a escrevesse**: toda venda fiada era recusada por estourar
+ * um limite que ninguém conseguia levantar. Este é o formulário que faltava, e
+ * ele fica na ficha porque fiar é decisão sobre **esta** pessoa — não uma
+ * configuração da barbearia.
+ *
+ * O saldo inicial é como se traz o caderno do sistema antigo, uma pessoa por
+ * vez e com o motivo escrito. Só aparece para quem ainda não deve nada: quem já
+ * tem movimento no razão não tem "saldo inicial", tem extrato.
+ */
+function Fiado({
+  fiado,
+  customerId,
+  podeMexer,
+}: {
+  readonly fiado: { readonly saldoCents: number; readonly limiteCents: number };
+  readonly customerId: string;
+  readonly podeMexer: boolean;
+}) {
+  const divida = -Math.min(0, fiado.saldoCents);
+
+  return (
+    <section aria-labelledby="fiado" className="secao">
+      <h2 className="rotulo" id="fiado">
+        Fiado
+      </h2>
+
+      <div className="saldo-fidelidade">
+        <p className="saldo-fidelidade__numero tabular">
+          {divida > 0 ? `Deve R$ ${reaisDoCampo(divida)}` : 'Nada em aberto'}
+        </p>
+        <p className="saldo-fidelidade__nota">
+          {fiado.limiteCents > 0
+            ? `Pode levar até R$ ${reaisDoCampo(fiado.limiteCents)} sem pagar na hora.`
+            : 'Sem limite: hoje esta pessoa não leva fiado.'}
+        </p>
+
+        {podeMexer ? (
+          <>
+            <form action={acaoDefinirLimiteDeFiado} className="saldo-fidelidade__ajuste">
+              <input name="customerId" type="hidden" value={customerId} />
+              <label className="fidelidade__campo">
+                <span>Até quanto pode levar</span>
+                <input
+                  className="ui-field__input"
+                  defaultValue={reaisDoCampo(fiado.limiteCents)}
+                  inputMode="decimal"
+                  name="limiteCents"
+                  type="text"
+                />
+              </label>
+              <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                Salvar limite
+              </button>
+            </form>
+
+            {fiado.saldoCents === 0 ? (
+              <form action={acaoLancarSaldoInicialDeFiado} className="saldo-fidelidade__ajuste">
+                <input name="customerId" type="hidden" value={customerId} />
+                <label className="fidelidade__campo">
+                  <span>Já devia (do sistema antigo)</span>
+                  <input
+                    className="ui-field__input"
+                    inputMode="decimal"
+                    name="deveCents"
+                    placeholder="85,00"
+                    type="text"
+                  />
+                </label>
+                <label className="fidelidade__campo">
+                  <span>Por quê</span>
+                  <input
+                    className="ui-field__input"
+                    minLength={3}
+                    name="motivo"
+                    placeholder="Saldo em aberto no caderno"
+                    type="text"
+                  />
+                </label>
+                <button className="ui-button ui-button--ghost recado__acao" type="submit">
+                  Lançar no extrato
+                </button>
+              </form>
+            ) : null}
+          </>
         ) : null}
       </div>
     </section>
@@ -874,6 +971,9 @@ export default async function FichaPage({ params, searchParams }: Props) {
   // salva" depois de ajustar quem paga sinal. Aviso que fala de outra coisa é o
   // mesmo defeito de duas telas discordando (CLAUDE.md §6).
   const ajustou = first(query['ajuste']) === '1';
+  // Sinal próprio pelo mesmo motivo do ajuste de sinal: "Anotação salva" depois
+  // de mexer no limite de fiado é a tela falando de outra coisa.
+  const salvoFiado = first(query['salvo']);
 
   // As duas leituras juntas: são independentes, e encadeá-las somaria a
   // latência de uma na outra numa tela que o barbeiro abre com o cliente
@@ -884,7 +984,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
     estado.staff.permissions.includes('finance.view') &&
     estado.staff.permissions.includes('customers.view');
   const veClube = estado.staff.permissions.includes('finance.subscription_manage');
-  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube] =
+  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube, fiado] =
     await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
@@ -904,6 +1004,9 @@ export default async function FichaPage({ params, searchParams }: Props) {
     // a mesma dupla do saldo e dos pacotes.
     veSaldo ? assinaturaDoClienteNaApi(token, id) : Promise.resolve(null),
     veClube ? planosNaApi(token) : Promise.resolve(null),
+    // Saldo e limite de fiado (bloco 51). Mesma dupla de sempre: é dinheiro de
+    // uma pessoa identificada.
+    veSaldo ? fiadoDoClienteNaApi(token, id) : Promise.resolve(null),
   ]);
 
   /**
@@ -979,6 +1082,19 @@ export default async function FichaPage({ params, searchParams }: Props) {
       {ajustou ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Ajuste salvo. O motivo ficou na trilha.
+        </div>
+      ) : null}
+
+      {salvoFiado === 'limite' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Limite salvo. A partir de agora a comanda deixa fiar até esse valor.
+        </div>
+      ) : null}
+
+      {salvoFiado === 'saldo-inicial' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Saldo lançado no extrato, com o motivo. Ele aparece em{' '}
+          <a href="/admin/fiado">Pendências</a>.
         </div>
       ) : null}
 
@@ -1152,6 +1268,16 @@ export default async function FichaPage({ params, searchParams }: Props) {
           customerId={ficha.dados.customerId}
           pacotes={pacotes.dados.pacotes}
           podeReembolsar={estado.staff.permissions.includes('finance.package_refund')}
+        />
+      ) : null}
+
+      {/* Fiado (bloco 51). Fica ao lado do saldo e dos pacotes: é a mesma
+          pergunta — o que esta pessoa já tem com a casa antes de cobrar. */}
+      {fiado?.ok && !ficha.dados.anonimizado ? (
+        <Fiado
+          customerId={ficha.dados.customerId}
+          fiado={fiado.dados}
+          podeMexer={estado.staff.permissions.includes('finance.credit_limit')}
         />
       ) : null}
 

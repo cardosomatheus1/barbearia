@@ -78,6 +78,24 @@ export type AuditAction =
   | 'package.changed'
   | 'package.refunded'
   /**
+   * Financeiro (bloco 51).
+   *
+   * As quatro carregam centavo. Quitar uma conta pela gaveta tira dinheiro dela
+   * e o fechamento do dia vai acusar; transferir decide para onde o dinheiro
+   * foi. A pergunta do dia seguinte — "quem pagou a distribuidora duas vezes?"
+   * — é de dinheiro, e quem precisa respondê-la é quem lê a trilha de dinheiro.
+   *
+   * O limite de fiado entra aqui por ser o mais direto de todos: ele autoriza
+   * alguém a levar serviço sem pagar, e o `after` guarda quanto.
+   */
+  | 'bill.created'
+  | 'bill.paid'
+  | 'bill.received'
+  | 'bill.cancelled'
+  | 'account.transferred'
+  | 'debt.limit_changed'
+  | 'debt.opening_balance'
+  /**
    * Estoque (bloco 44).
    *
    * `stock.adjusted` cobre perda e ajuste — os dois movimentos em que o número
@@ -264,6 +282,13 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'split.recipient_changed',
   'package.changed',
   'package.refunded',
+  'bill.created',
+  'bill.paid',
+  'bill.received',
+  'bill.cancelled',
+  'account.transferred',
+  'debt.limit_changed',
+  'debt.opening_balance',
   'commission.closed',
   'commission.rule_changed',
 ];

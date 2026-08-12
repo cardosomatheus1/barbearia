@@ -74,8 +74,14 @@ describe('partição do vocabulário da trilha', () => {
     // adquirente manda a comissão **direto para a conta do barbeiro**, e a casa
     // deixa de receber o valor cheio. É a configuração que decide para onde o
     // dinheiro vai.
+    // `bill.` e `account.` entraram no bloco 51: a conta paga carrega o valor
+    // pago e a transferência carrega quanto mudou de lugar. O limite de fiado
+    // ficou em `debt.`, e não em `customer.`, exatamente por causa desta
+    // partição — `customer.reliability_override` guarda um score e é de gestão,
+    // enquanto o limite guarda centavos. Um prefixo que servisse aos dois
+    // deixaria a pergunta única sem resposta.
     const deDinheiro =
-      /^(cash|order|debt|commission|deposit|loyalty|package|subscription|split)\./;
+      /^(cash|order|debt|bill|account|commission|deposit|loyalty|package|subscription|split)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

@@ -36,6 +36,7 @@ import { RecadoPublicoController } from './booking/recado.controller.js';
 import { RecadoController } from './admin/recado.controller.js';
 import { FidelidadeController } from './admin/fidelidade.controller.js';
 import { PacoteController } from './admin/pacote.controller.js';
+import { FinanceiroController } from './admin/financeiro.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
 import { AssinaturaController } from './admin/assinatura.controller.js';
@@ -96,6 +97,7 @@ import { TenantService } from './tenant/tenant.service.js';
     RecadoController,
     FidelidadeController,
     PacoteController,
+    FinanceiroController,
     AvaliacaoController,
     EstoqueController,
     AssinaturaController,

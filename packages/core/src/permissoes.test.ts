@@ -114,6 +114,11 @@ describe('permissões de dinheiro', () => {
       'cashier.withdraw',
       'commission.edit_rules',
       'commission.view_all',
+      // As duas entraram no bloco 51 e caem aqui pelo prefixo, que é o que se
+      // quer: quitar uma conta pela gaveta tira dinheiro dela, e levantar o
+      // limite de fiado autoriza alguém a levar serviço sem pagar.
+      'finance.bills_manage',
+      'finance.credit_limit',
       // `finance.deposit` entrou no bloco 37 e cai aqui pelo prefixo, que é o
       // que se quer: dizer "recebi o sinal" é mover dinheiro que ninguém mais
       // viu entrar.

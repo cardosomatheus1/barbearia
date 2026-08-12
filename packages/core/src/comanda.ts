@@ -369,7 +369,39 @@ export function entraNaGaveta(params: {
 
 // -- Caixa --------------------------------------------------------------------
 
-export type TipoDeMovimento = 'opening' | 'sale' | 'withdrawal' | 'supply' | 'adjustment';
+export const TIPOS_DE_MOVIMENTO_DE_CAIXA = [
+  'opening',
+  'sale',
+  'withdrawal',
+  'supply',
+  'adjustment',
+  'debt_payment',
+  'bill_payment',
+  'bill_receipt',
+] as const;
+
+export type TipoDeMovimento = (typeof TIPOS_DE_MOVIMENTO_DE_CAIXA)[number];
+
+/**
+ * Como cada movimento se chama no extrato da gaveta.
+ *
+ * Estava escrito na tela do caixa, e ficar lá era o defeito que a §6 do
+ * `CLAUDE.md` nomeia: um tipo novo no domínio aparecia para quem confere como
+ * o literal cru do banco. `bill_payment` e `bill_receipt` são separados de
+ * sangria e suprimento justamente porque significam outra coisa para quem
+ * confere o dia — e um mapa escrito na tela seria o lugar onde essa distinção
+ * se perderia.
+ */
+export const ROTULO_DO_MOVIMENTO_DE_CAIXA: Readonly<Record<TipoDeMovimento, string>> = {
+  opening: 'Abertura',
+  sale: 'Venda',
+  withdrawal: 'Sangria',
+  supply: 'Suprimento',
+  adjustment: 'Ajuste',
+  debt_payment: 'Fiado recebido',
+  bill_payment: 'Conta paga',
+  bill_receipt: 'Conta recebida',
+};
 
 export interface MovimentoDeCaixa {
   readonly tipo: TipoDeMovimento;

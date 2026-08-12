@@ -38,6 +38,14 @@ import {
   criarProfissional,
   entrarNaFila,
   ajustarSaldoDeFidelidade,
+  criarContaDoFinanceiro as criarContaDoFinanceiroApi,
+  quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
+  cancelarContaDoFinanceiro as cancelarContaDoFinanceiroApi,
+  criarCategoriaDoFinanceiro as criarCategoriaDoFinanceiroApi,
+  criarContaBancaria as criarContaBancariaApi,
+  transferirEntreContas as transferirEntreContasApi,
+  definirLimiteDeFiado as definirLimiteDeFiadoApi,
+  lancarSaldoInicialDeFiado as lancarSaldoInicialDeFiadoApi,
   salvarPacoteNaApi,
   reembolsarPacoteNaApi,
   tratarAvaliacaoNaApi,
@@ -2321,4 +2329,132 @@ export async function acaoRemoverDependente(form: FormData): Promise<void> {
   );
   if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
   redirect(`/admin/cliente/${customerId}?feito=dependente`);
+}
+
+// -- Financeiro (bloco 51) ----------------------------------------------------
+
+const ROTA_FINANCEIRO = '/admin/financeiro';
+
+/**
+ * A direção chega de um campo escondido, que é entrada externa como qualquer
+ * outra. A API valida de novo — esta guarda existe para o erro ser o da tela.
+ */
+function direcaoDaConta(form: FormData, rota: string): 'pagar' | 'receber' {
+  const valor = texto(form, 'direcao');
+  if (valor !== 'pagar' && valor !== 'receber') falhar(rota, 'invalid_request');
+  return valor;
+}
+
+export async function acaoCriarContaDoFinanceiro(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const direcao = direcaoDaConta(form, ROTA_FINANCEIRO);
+  const categoriaId = texto(form, 'categoriaId');
+  const contaId = texto(form, 'contaId');
+
+  const resultado = await criarContaDoFinanceiroApi(token, {
+    direcao,
+    descricao: texto(form, 'descricao'),
+    valorCents: centavos(form, 'valorCents', ROTA_FINANCEIRO),
+    vencimentoEm: texto(form, 'vencimentoEm'),
+    categoriaId: categoriaId || null,
+    contaId: contaId || null,
+    observacao: texto(form, 'observacao') || null,
+  });
+  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  redirect(`${ROTA_FINANCEIRO}?salvo=criada`);
+}
+
+export async function acaoQuitarContaDoFinanceiro(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await quitarContaDoFinanceiroApi(token, texto(form, 'contaId'), {
+    valorPagoCents: centavos(form, 'valorPagoCents', ROTA_FINANCEIRO),
+    pagaEm: texto(form, 'pagaEm'),
+    pelaGaveta: texto(form, 'pelaGaveta') === '1',
+  });
+  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  redirect(`${ROTA_FINANCEIRO}?salvo=quitada`);
+}
+
+export async function acaoCancelarContaDoFinanceiro(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await cancelarContaDoFinanceiroApi(
+    token,
+    texto(form, 'contaId'),
+    texto(form, 'motivo'),
+  );
+  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  redirect(`${ROTA_FINANCEIRO}?salvo=cancelada`);
+}
+
+export async function acaoCriarCategoriaDoFinanceiro(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await criarCategoriaDoFinanceiroApi(token, {
+    nome: texto(form, 'nome'),
+    direcao: direcaoDaConta(form, ROTA_FINANCEIRO),
+  });
+  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  redirect(`${ROTA_FINANCEIRO}?salvo=categoria`);
+}
+
+export async function acaoCriarContaBancaria(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await criarContaBancariaApi(token, { nome: texto(form, 'nome') });
+  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  redirect(`${ROTA_FINANCEIRO}?salvo=conta`);
+}
+
+export async function acaoTransferirEntreContas(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  /**
+   * A chave é do **formulário**, não do envio.
+   *
+   * Ela nasce no servidor quando a tela é montada e viaja num campo escondido:
+   * o segundo toque no botão manda a mesma, e a API devolve a transferência já
+   * feita em vez de fazer a segunda. Gerá-la aqui daria uma chave nova por
+   * envio, que é exatamente o que não protege nada.
+   */
+  const resultado = await transferirEntreContasApi(
+    token,
+    {
+      deContaId: texto(form, 'deContaId'),
+      paraContaId: texto(form, 'paraContaId'),
+      valorCents: centavos(form, 'valorCents', ROTA_FINANCEIRO),
+      quandoEm: texto(form, 'quandoEm'),
+      observacao: texto(form, 'observacao') || null,
+    },
+    texto(form, 'chave') || undefined,
+  );
+  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  redirect(`${ROTA_FINANCEIRO}?salvo=transferida`);
+}
+
+/**
+ * O limite de fiado mora na ficha do cliente, e é lá que ele volta.
+ *
+ * Zero é valor legítimo e significa "não vende fiado para esta pessoa" — por
+ * isso `centavosOpcionais`, que aceita o campo vazio, e não `centavos`.
+ */
+export async function acaoDefinirLimiteDeFiado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const rota = `/admin/cliente/${customerId}`;
+  const resultado = await definirLimiteDeFiadoApi(
+    token,
+    customerId,
+    centavosOpcionais(form, 'limiteCents', rota),
+  );
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?salvo=limite`);
+}
+
+export async function acaoLancarSaldoInicialDeFiado(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const rota = `/admin/cliente/${customerId}`;
+  const resultado = await lancarSaldoInicialDeFiadoApi(token, customerId, {
+    deveCents: centavos(form, 'deveCents', rota),
+    motivo: texto(form, 'motivo'),
+  });
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?salvo=saldo-inicial`);
 }

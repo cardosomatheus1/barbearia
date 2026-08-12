@@ -4052,6 +4052,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='caixa']) .contexto__link[data-para='caixa'],
 .casco:has([data-secao='comanda']) .contexto__link[data-para='comanda'],
 .casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
+.casco:has([data-secao='financeiro']) .contexto__link[data-para='financeiro'],
 .casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
 .casco:has([data-secao='fidelidade']) .contexto__link[data-para='fidelidade'],
 .casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
@@ -6741,4 +6742,37 @@ main { padding-bottom: var(--space-8); }
   margin: var(--space-2) 0 0;
   font-size: var(--font-size-sm);
   color: var(--color-warning);
+}
+
+/* -- Contas a pagar e a receber (bloco 51) ---------------------------------
+   Três números lado a lado quando há espaço, empilhados no celular. Quem
+   responde é o **recipiente**, não a janela: a mesma seção aparece na largura
+   inteira da tela de contas e poderia aparecer estreita dentro do painel, e um
+   `@media` a deixaria larga nos dois casos.
+
+   O `container-type` fica no ancestral porque um elemento não responde sobre si
+   mesmo — sem ele a regra nunca casa e os três números ficam empilhados em
+   qualquer largura, sem nada ficar vermelho. */
+.resumo-contas {
+  container-type: inline-size;
+  margin-block: var(--space-5);
+}
+.resumo-contas__numeros {
+  display: grid;
+  gap: var(--space-3);
+}
+@container (min-width: 34rem) {
+  .resumo-contas__numeros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* O valor de uma conta **não** é `.item-cadastro__selo`.
+   Aquela classe é de selo de estado — "ativo", "5 unidades" — e por isso é
+   apagada, miúda e `text-transform: lowercase`. Reaproveitá-la aqui produziu
+   `r$ 1487,90` em corpo de nota de rodapé para o número que é a única coisa que
+   a pessoa veio ler. Hierarquia por tamanho e peso, antes de cor. */
+.conta__valor {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }

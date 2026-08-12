@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { caixaDaUnidade, faturamentoDeHoje, type MovimentoDoCaixa, type SessaoDeCaixa } from '@/lib/admin-api';
+import { ROTULO_DO_MOVIMENTO_DE_CAIXA } from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
@@ -44,14 +45,15 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const NOME_DO_MOVIMENTO: Record<string, string> = {
-  opening: 'Abertura',
-  sale: 'Venda',
-  debt_payment: 'Fiado recebido',
-  withdrawal: 'Sangria',
-  supply: 'Suprimento',
-  adjustment: 'Ajuste',
-};
+/**
+ * O rótulo sai de `packages/core`, não de um mapa escrito aqui.
+ *
+ * Escrito na tela, ele ficava para trás: `bill_payment` e `bill_receipt`
+ * entraram no bloco 51 e apareceriam no extrato da gaveta como o literal cru do
+ * banco, para quem está conferindo o dinheiro do dia. Vocabulário de transição
+ * mora num lugar só (CLAUDE.md §6).
+ */
+const NOME_DO_MOVIMENTO: Record<string, string> = ROTULO_DO_MOVIMENTO_DE_CAIXA;
 
 const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 

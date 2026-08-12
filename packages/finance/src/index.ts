@@ -11,3 +11,4 @@ export * from './cobranca-do-clube.js';
 export * from './split.js';
 export * from './estoque.js';
 export * from './pacote.js';
+export * from './financeiro.js';
