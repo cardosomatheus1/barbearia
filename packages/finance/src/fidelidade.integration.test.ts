@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { ProgramaDeFidelidade } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
@@ -80,7 +81,17 @@ describeIfDb('fidelidade', () => {
     await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 20000, ...operador });
   });
 
-  const ligar = (extra: Record<string, unknown> = {}) =>
+  /**
+   * `Partial<ProgramaDeFidelidade>` e não `Record<string, unknown>` com `as
+   * never`.
+   *
+   * O `as never` desligava o compilador, e foi assim que `escopo` — campo novo e
+   * obrigatório do bloco 59 — chegou ao banco como nulo: a coluna tem
+   * `DEFAULT 'empresa'`, mas um `NULL` explícito passa por cima do padrão. O
+   * tipo é a guarda de que um campo novo aparece aqui em vez de virar erro de
+   * `NOT NULL` em dezenove testes.
+   */
+  const ligar = (extra: Partial<ProgramaDeFidelidade> = {}) =>
     salvarPrograma({
       tenantId: TENANT,
       ator,
@@ -91,8 +102,9 @@ describeIfDb('fidelidade', () => {
         visitasParaPremio: 10,
         cashbackBps: 500,
         validadeDias: null,
+        escopo: 'empresa',
         ...extra,
-      } as never,
+      },
     });
 
   /** Uma comanda com um corte, pronta para fechar. */

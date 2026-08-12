@@ -2,11 +2,15 @@ import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   PROGRAMA_DESLIGADO,
   acumuloDaVenda,
+  dividirResgate,
+  escopoDoLancamento,
+  separarPorBolso,
   podeResgatar,
   quantidadeAExpirar,
   saldoDisponivel,
   valorDoResgate,
   vencimentoDoAcumulo,
+  type EscopoMultiunidade,
   type LancamentoDeFidelidade,
   type ModoDeFidelidade,
   type ProgramaDeFidelidade,
@@ -75,6 +79,7 @@ interface LinhaDoPrograma {
   visits_goal: number;
   cashback_bps: number;
   expires_days: number | null;
+  scope: EscopoMultiunidade;
 }
 
 const doBanco = (linha: LinhaDoPrograma): ProgramaDeFidelidade => ({
@@ -84,6 +89,7 @@ const doBanco = (linha: LinhaDoPrograma): ProgramaDeFidelidade => ({
   visitasParaPremio: linha.visits_goal,
   cashbackBps: linha.cashback_bps,
   validadeDias: linha.expires_days,
+  escopo: linha.scope,
 });
 
 /**
@@ -96,7 +102,8 @@ export async function programaDaCasa(
   tx: TransactionClient,
 ): Promise<ProgramaDeFidelidade> {
   const linhas = await tx.$queryRaw<LinhaDoPrograma[]>`
-    SELECT mode, points_per_real, point_value_cents, visits_goal, cashback_bps, expires_days
+    SELECT mode, points_per_real, point_value_cents, visits_goal, cashback_bps,
+           expires_days, scope
       FROM loyalty_programs
   `;
   const linha = linhas[0];
@@ -137,11 +144,11 @@ export async function salvarPrograma(entrada: {
     await tx.$executeRaw`
       INSERT INTO loyalty_programs
         (tenant_id, mode, points_per_real, point_value_cents, visits_goal,
-         cashback_bps, expires_days)
+         cashback_bps, expires_days, scope)
       VALUES (
         ${entrada.tenantId}::uuid, ${p.modo}::loyalty_mode, ${p.pontosPorReal},
         ${p.valorDoPontoCents}, ${p.visitasParaPremio}, ${p.cashbackBps},
-        ${p.validadeDias}
+        ${p.validadeDias}, ${p.escopo}::escopo_multiunidade
       )
       ON CONFLICT (tenant_id) DO UPDATE SET
         mode = EXCLUDED.mode,
@@ -150,6 +157,7 @@ export async function salvarPrograma(entrada: {
         visits_goal = EXCLUDED.visits_goal,
         cashback_bps = EXCLUDED.cashback_bps,
         expires_days = EXCLUDED.expires_days,
+        scope = EXCLUDED.scope,
         updated_at = now()
     `;
 
@@ -159,8 +167,8 @@ export async function salvarPrograma(entrada: {
       action: 'loyalty.program_changed',
       entity: 'loyalty_programs',
       entityId: entrada.tenantId,
-      before: { modo: anterior.modo },
-      after: { modo: p.modo, validadeDias: p.validadeDias },
+      before: { modo: anterior.modo, escopo: anterior.escopo },
+      after: { modo: p.modo, validadeDias: p.validadeDias, escopo: p.escopo },
     });
 
     return programaDaCasa(tx);
@@ -175,11 +183,37 @@ export interface LancamentoNaTela {
   readonly venceEm: string | null;
   readonly nota: string | null;
   readonly baseCents: number | null;
+  readonly escopo: EscopoMultiunidade;
+  readonly unidadeId: string | null;
+  /** O nome da loja, para o extrato responder "onde eu ganhei isso?". */
+  readonly unidade: string | null;
+}
+
+/**
+ * O saldo separado nos dois bolsos daquela loja (bloco 59).
+ *
+ * O FIFO de vencimento roda **dentro de cada bolso**: uma saída da loja não pode
+ * consumir um lote compartilhado sem que a linha diga que consumiu, senão o
+ * mesmo ponto sai duas vezes — uma no bolso que encolheu e outra no que ficou.
+ */
+export function saldoNosBolsos(
+  extrato: readonly (LancamentoDeFidelidade & LancamentoNaTela)[],
+  unidadeId: string | null,
+  agora: Date,
+): { readonly compartilhado: number; readonly daUnidade: number; readonly total: number } {
+  const bolsos = separarPorBolso(extrato, unidadeId);
+  const compartilhado = saldoDisponivel(bolsos.compartilhado, agora);
+  const daUnidade = saldoDisponivel(bolsos.daUnidade, agora);
+  return { compartilhado, daUnidade, total: compartilhado + daUnidade };
 }
 
 export interface SaldoDoCliente {
   readonly modo: ModoDeFidelidade;
+  readonly escopo: EscopoMultiunidade;
+  /** O saldo desta loja: o bolso compartilhado mais o dela. */
   readonly saldo: number;
+  /** Quanto do saldo vale em qualquer loja. Igual ao total sob `empresa`. */
+  readonly saldoCompartilhado: number;
   /** Quanto falta para o prêmio. Só faz sentido no modo `visitas`. */
   readonly faltaParaPremio: number | null;
   readonly extrato: readonly LancamentoNaTela[];
@@ -198,12 +232,17 @@ async function extratoDe(
       created_at: Date;
       note: string | null;
       base_cents: number | null;
+      scope: EscopoMultiunidade;
+      location_id: string | null;
+      location_name: string | null;
     }[]
   >`
-    SELECT id, kind, amount, expires_at, created_at, note, base_cents
-      FROM loyalty_entries
-     WHERE customer_id = ${customerId}::uuid
-     ORDER BY created_at
+    SELECT e.id, e.kind, e.amount, e.expires_at, e.created_at, e.note, e.base_cents,
+           e.scope, e.location_id, l.name AS location_name
+      FROM loyalty_entries e
+      LEFT JOIN locations l ON l.id = e.location_id
+     WHERE e.customer_id = ${customerId}::uuid
+     ORDER BY e.created_at
   `;
 
   return linhas.map((linha) => ({
@@ -215,6 +254,9 @@ async function extratoDe(
     quando: linha.created_at.toISOString(),
     nota: linha.note,
     baseCents: linha.base_cents,
+    escopo: linha.scope,
+    unidadeId: linha.location_id,
+    unidade: linha.location_name,
   })) as unknown as readonly (LancamentoDeFidelidade & LancamentoNaTela)[];
 }
 
@@ -232,15 +274,19 @@ export async function saldoDoCliente(
   tenantId: string,
   customerId: string,
   agora: Date = new Date(),
+  unidadeId: string | null = null,
 ): Promise<SaldoDoCliente> {
   return withTenant(tenantId, async (tx) => {
     const p = await programaDaCasa(tx);
     const extrato = await extratoDe(tx, customerId);
-    const saldo = saldoDisponivel(extrato, agora);
+    const bolsos = saldoNosBolsos(extrato, unidadeId, agora);
+    const saldo = bolsos.total;
 
     return {
       modo: p.modo,
+      escopo: p.escopo,
       saldo,
+      saldoCompartilhado: bolsos.compartilhado,
       faltaParaPremio:
         p.modo === 'visitas' ? Math.max(0, p.visitasParaPremio - saldo) : null,
       extrato: extrato.map((l) => ({
@@ -251,6 +297,9 @@ export async function saldoDoCliente(
         venceEm: l.venceEm ? new Date(l.venceEm).toISOString() : null,
         nota: l.nota,
         baseCents: l.baseCents,
+        escopo: l.escopo,
+        unidadeId: l.unidadeId,
+        unidade: l.unidade,
       })),
     };
   });
@@ -269,6 +318,8 @@ export async function conferirResgate(params: {
   readonly quantidade: number;
   readonly tetoCents: number;
   readonly agora?: Date;
+  /** A loja da venda: com fidelidade por unidade, o saldo é o dos dois bolsos dela. */
+  readonly locationId?: string | null;
   readonly tx?: TransactionClient;
 }): Promise<{ readonly valorCents: number; readonly quantidade: number }> {
   const agora = params.agora ?? new Date();
@@ -278,7 +329,7 @@ export async function conferirResgate(params: {
 
     const p = await programaDaCasa(tx);
     const extrato = await extratoDe(tx, params.customerId);
-    const saldo = saldoDisponivel(extrato, agora);
+    const saldo = saldoNosBolsos(extrato, params.locationId ?? null, agora).total;
 
     const decisao = podeResgatar({
       programa: p,
@@ -315,16 +366,44 @@ export async function registrarResgate(
     readonly orderId: string;
     readonly quantidade: number;
     readonly modo: ModoDeFidelidade;
+    readonly locationId?: string | null;
+    readonly agora?: Date;
   },
 ): Promise<void> {
-  await tx.$executeRaw`
-    INSERT INTO loyalty_entries (tenant_id, customer_id, order_id, kind, mode, amount)
-    VALUES (
-      NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-      ${params.customerId}::uuid, ${params.orderId}::uuid, 'resgate',
-      ${params.modo}::loyalty_mode, ${-Math.abs(params.quantidade)}
-    )
-  `;
+  /**
+   * O resgate sai do bolso compartilhado primeiro, e pode virar **duas** linhas.
+   *
+   * É o que impede o mesmo ponto de ser gasto duas vezes: com uma linha só no
+   * bolso da loja, um saldo compartilhado de 300 seria gasto na matriz — o bolso
+   * da matriz iria a −300 — e continuaria inteiro para gastar na filial.
+   */
+  const extrato = await extratoDe(tx, params.customerId);
+  const bolsos = saldoNosBolsos(extrato, params.locationId ?? null, params.agora ?? new Date());
+  const divisao = dividirResgate({
+    quantidade: Math.abs(params.quantidade),
+    saldoCompartilhado: bolsos.compartilhado,
+    saldoDaUnidade: bolsos.daUnidade,
+  });
+  if (!divisao) recusar('saldo_insuficiente');
+
+  for (const [escopo, quantidade, unidade] of [
+    ['empresa', divisao.doCompartilhado, null],
+    ['unidade', divisao.daUnidade, params.locationId ?? null],
+  ] as const) {
+    // Linha de zero não entra: extrato com movimento nulo é extrato que ninguém
+    // consegue ler.
+    if (quantidade <= 0) continue;
+    await tx.$executeRaw`
+      INSERT INTO loyalty_entries
+        (tenant_id, customer_id, order_id, kind, mode, amount, scope, location_id)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        ${params.customerId}::uuid, ${params.orderId}::uuid, 'resgate',
+        ${params.modo}::loyalty_mode, ${-quantidade},
+        ${escopo}::escopo_multiunidade, ${unidade}::uuid
+      )
+    `;
+  }
 }
 
 /**
@@ -346,6 +425,7 @@ export async function creditarDaVenda(
     readonly totalCents: number;
     readonly resgatadoCents: number;
     readonly agora: Date;
+    readonly locationId?: string | null;
   },
 ): Promise<number> {
   if (!params.customerId) return 0;
@@ -358,14 +438,26 @@ export async function creditarDaVenda(
   });
   if (!acumulo) return 0;
 
+  /**
+   * O escopo é congelado aqui, como o modo.
+   *
+   * Lido do cadastro **no momento da gravação** e nunca mais: toda pergunta
+   * posterior — saldo, extrato, expiração — lê o escopo da linha. É o que faz a
+   * barbearia trocar o interruptor em maio sem os pontos de abril sumirem.
+   */
+  const unidade = params.locationId ?? null;
+  const escopo = escopoDoLancamento(p.escopo, unidade);
+
   await tx.$executeRaw`
     INSERT INTO loyalty_entries
-      (tenant_id, customer_id, order_id, kind, mode, amount, base_cents, expires_at)
+      (tenant_id, customer_id, order_id, kind, mode, amount, base_cents, expires_at,
+       scope, location_id)
     VALUES (
       NULLIF(current_setting('app.tenant_id', true), '')::uuid,
       ${params.customerId}::uuid, ${params.orderId}::uuid, 'acumulo',
       ${p.modo}::loyalty_mode, ${acumulo.quantidade}, ${acumulo.baseCents},
-      ${vencimentoDoAcumulo(p, params.agora)}
+      ${vencimentoDoAcumulo(p, params.agora)},
+      ${escopo}::escopo_multiunidade, ${unidade}::uuid
     )
     ON CONFLICT DO NOTHING
   `;

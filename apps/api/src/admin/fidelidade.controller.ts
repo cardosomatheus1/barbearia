@@ -13,6 +13,7 @@ import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
 import { ajusteDeSaldoSchema, programaSchema } from './fidelidade.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * O programa de fidelidade e o saldo do cliente (bloco 41, SPEC §4.8).
@@ -87,7 +88,10 @@ export class FidelidadeController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    return saldoDoCliente(staff.tenantId, id);
+    // A unidade do balcão: com fidelidade por unidade, o saldo que a recepção
+    // pode oferecer é o desta loja, não o da rede (bloco 59).
+    const local = await unidadeDoBalcao(staff);
+    return saldoDoCliente(staff.tenantId, id, new Date(), local.id);
   }
 
   @Exige('finance.loyalty_adjust')

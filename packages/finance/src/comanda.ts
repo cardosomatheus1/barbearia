@@ -1028,6 +1028,7 @@ export async function fecharComanda(params: {
         customerId: comanda.customerId,
         quantidade: params.resgateQuantidade ?? 0,
         tetoCents: comanda.totalCents,
+        locationId: params.locationId,
         tx,
       });
       if (conferido.valorCents !== resgatadoCents) {
@@ -1041,6 +1042,9 @@ export async function fecharComanda(params: {
         orderId: params.orderId,
         quantidade: conferido.quantidade,
         modo: programaDaVenda.modo,
+        // A loja em que a venda aconteceu: é ela que decide de qual bolso o
+        // saldo sai quando a fidelidade é por unidade (bloco 59).
+        locationId: params.locationId,
       });
     }
 
@@ -1263,6 +1267,8 @@ export async function fecharComanda(params: {
       totalCents: comanda.totalCents - comanda.gorjetaCents,
       resgatadoCents,
       agora: new Date(),
+      // O bolso em que o saldo nasce, congelado com o lançamento (bloco 59).
+      locationId: params.locationId,
     });
 
     /**

@@ -280,6 +280,7 @@ describeIfDb('vale, estorno e DRE', () => {
         visitasParaPremio: 10,
         cashbackBps: 1000,
         validadeDias: null,
+        escopo: 'empresa',
       },
       ator,
     });

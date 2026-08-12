@@ -29,6 +29,8 @@
  * para evitar.
  */
 
+import type { EscopoMultiunidade } from './compartilhado.js';
+
 export const MODOS_DE_FIDELIDADE = ['nenhum', 'pontos', 'visitas', 'cashback'] as const;
 export type ModoDeFidelidade = (typeof MODOS_DE_FIDELIDADE)[number];
 
@@ -65,6 +67,15 @@ export interface ProgramaDeFidelidade {
   readonly cashbackBps: number;
   /** Dias até vencer. Nulo é "não vence", e é uma escolha legítima. */
   readonly validadeDias: number | null;
+  /**
+   * Onde o saldo vale (bloco 59).
+   *
+   * `empresa` é o comportamento anterior e o padrão — a regra deste projeto para
+   * configuração que mexe em dinheiro. Ele decide apenas sob qual escopo os
+   * lançamentos **novos** nascem: o saldo já ganho lê o escopo da própria linha,
+   * e por isso trocar o interruptor não faz ponto nenhum sumir.
+   */
+  readonly escopo: EscopoMultiunidade;
 }
 
 export const PROGRAMA_DESLIGADO: ProgramaDeFidelidade = {
@@ -74,6 +85,7 @@ export const PROGRAMA_DESLIGADO: ProgramaDeFidelidade = {
   visitasParaPremio: 10,
   cashbackBps: 500,
   validadeDias: null,
+  escopo: 'empresa',
 };
 
 export type TipoDeLancamento = 'acumulo' | 'resgate' | 'expiracao' | 'ajuste';

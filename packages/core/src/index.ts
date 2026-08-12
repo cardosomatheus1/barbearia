@@ -49,4 +49,5 @@ export * from './whatsapp.js';
 export * from './automacao.js';
 export * from './ocupacao.js';
 export * from './fusos.js';
+export * from './compartilhado.js';
 export * from './multiunidade.js';
