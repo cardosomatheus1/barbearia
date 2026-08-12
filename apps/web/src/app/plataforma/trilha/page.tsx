@@ -22,6 +22,8 @@ export const metadata: Metadata = {
 
 const ACAO: Record<string, string> = {
   'tenant.blocked': 'bloqueou',
+  // A alíquota do split (bloco 49): termo comercial nosso, mudado por nós.
+  'tenant.split_fee_changed': 'mudou a taxa de split de',
   'tenant.unblocked': 'reativou',
   'tenant.plan_changed': 'mudou o plano de',
   'platform.login': 'entrou na plataforma',

@@ -522,3 +522,49 @@ export async function trilhaDaPlataforma(limite = 100): Promise<readonly EventoD
     }));
   });
 }
+
+/**
+ * A alíquota do split que a plataforma cobra desta barbearia (bloco 49).
+ *
+ * Aqui e não na rota do painel da barbearia, e a distinção é de princípio:
+ * quem decide **se** o adquirente paga o barbeiro direto é a barbearia — é o
+ * dinheiro dela —, mas **quanto o produto cobra por transação** é termo
+ * comercial nosso, como o plano e o bloqueio. A primeira versão pôs a coluna em
+ * `tenants`, editável pela rota do painel: o cliente definia o preço que paga, e
+ * zerá-la desligava a receita sem nada falhar. Achado da `/security-review` do
+ * bloco 49.
+ *
+ * `semTenant` como todo o resto deste arquivo: `tenant_platform` é da
+ * plataforma, e a barbearia nem a enxerga.
+ */
+export async function definirTaxaDoSplit(entrada: {
+  readonly adminId: string;
+  readonly tenantId: string;
+  readonly pontosBase: number;
+}): Promise<void> {
+  if (
+    !Number.isInteger(entrada.pontosBase)
+    || entrada.pontosBase < 0
+    || entrada.pontosBase > 3000
+  ) {
+    throw new PlataformaError('invalid_fee', 'A alíquota do split vai de 0% a 30%');
+  }
+
+  await semTenant(async (tx) => {
+    const antes = await tx.$queryRaw<{ taxa: number }[]>`
+      SELECT platform_fee_bps AS taxa FROM tenant_platform
+       WHERE tenant_id = ${entrada.tenantId}::uuid
+    `;
+    if (!antes[0]) throw new PlataformaError('not_found', 'Barbearia inexistente');
+
+    await tx.$executeRaw`
+      UPDATE tenant_platform
+         SET platform_fee_bps = ${entrada.pontosBase}, updated_at = now()
+       WHERE tenant_id = ${entrada.tenantId}::uuid
+    `;
+    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'tenant.split_fee_changed', {
+      de: antes[0].taxa,
+      para: entrada.pontosBase,
+    });
+  });
+}

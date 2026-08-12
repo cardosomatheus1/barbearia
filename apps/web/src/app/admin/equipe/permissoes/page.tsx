@@ -79,6 +79,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'finance.export': 'Exportar relatório financeiro',
   'finance.discount': 'Dar desconto na comanda',
   'finance.deposit': 'Registrar e devolver o sinal do horário',
+  'finance.split_manage': 'Ligar o repasse direto ao barbeiro',
   'commission.view_own': 'Ver a própria comissão',
   'commission.view_all': 'Ver a comissão de todo mundo',
   'commission.edit_rules': 'Mudar as regras de comissão',

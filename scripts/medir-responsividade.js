@@ -1121,6 +1121,65 @@ async function prepararAgenda(token, dia) {
  * nome longo e preço de quatro dígitos são o que estoura grade, e só aparecem
  * com conteúdo de verdade (CLAUDE.md §5).
  */
+/**
+ * Split ligado, com repasses de verdade (bloco 49).
+ *
+ * Pelo banco, como o resto: o que a medição precisa é do **estado** — a tabela
+ * de repasses com as três partes, uma delas retida, que é a linha mais alta e a
+ * única que o balcão precisa ler devagar.
+ */
+function prepararSplit(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  psql(`UPDATE tenants SET split_enabled = true WHERE id = '${tenant}'`);
+  psql(
+    `UPDATE tenant_platform SET platform_fee_bps = 500 WHERE tenant_id = '${tenant}'`,
+  );
+
+  const venda = primeiraLinha(
+    psql(
+      `select id from orders where tenant_id = '${tenant}' and status = 'paid'
+        order by closed_at desc limit 1`,
+    ),
+  );
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  const barbeiro = primeiraLinha(
+    psql(`select id from professionals where tenant_id = '${tenant}' limit 1`),
+  );
+  if (!venda || !local || !barbeiro) return;
+
+  const cobranca = primeiraLinha(
+    psql(
+      `INSERT INTO order_charges
+         (tenant_id, location_id, order_id, method, amount_cents, status,
+          created_by_name, paid_at, psp_payment_id)
+       VALUES ('${tenant}', '${local}', '${venda}', 'pix', 10000, 'pago',
+               'Maria Recepção', now(), 'pay_medicao_49')
+       RETURNING id`,
+    ),
+  );
+  if (!cobranca) return;
+
+  const partes = [
+    ['barbearia', 'NULL', 5500, 'liquidado', 'now()'],
+    ['profissional', `'${barbeiro}'`, 4000, 'pendente', 'NULL'],
+    ['plataforma', 'NULL', 500, 'liquidado', 'now()'],
+  ];
+  for (const [parte, dono, valor, estado, quando] of partes) {
+    psql(
+      `INSERT INTO payment_splits
+         (tenant_id, order_id, charge_id, party, professional_id, amount_cents,
+          status, settled_at)
+       VALUES ('${tenant}', '${venda}', '${cobranca}', '${parte}', ${dono}, ${valor},
+               '${estado}', ${quando})
+       ON CONFLICT DO NOTHING`,
+    );
+  }
+}
+
 async function prepararCaixa(token, catalogo) {
   const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
   const { codigoDoPasso, passoAgora } = require('../packages/identity/dist/mfa.js');
@@ -1448,6 +1507,7 @@ async function main() {
     headers: { authorization: `Bearer ${token}` },
   })).json();
   const caixa = await prepararCaixa(token, catalogo);
+  prepararSplit(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;

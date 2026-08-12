@@ -133,6 +133,13 @@ describe('permissões de dinheiro', () => {
       // assinar liga **receita recorrente**, cancelar a desliga. Montar o
       // cadastro do plano é `settings.manage`; dizer que um cliente passa a
       // pagar R$ 149 por mês é mexer em dinheiro.
+      /**
+       * `finance.split_manage` entrou no bloco 49, e pelo prefixo — aqui ele é
+       * mais literal que em qualquer outra: ligar o split faz o adquirente
+       * mandar dinheiro **direto para a conta do barbeiro**, sem passar pela da
+       * casa. É a permissão que decide para onde o dinheiro vai.
+       */
+      'finance.split_manage',
       'finance.subscription_manage',
       'finance.view',
       'finance.view_profit',

@@ -52,6 +52,7 @@ import {
   desfazerCancelamentoNaApi,
   pagarFaturaNaApi,
   salvarModeloDaAssinaturaNaApi,
+  salvarSplitNaApi,
   incluirDependenteNaApi,
   removerDependenteNaApi,
   assumirRecadoNaApi,
@@ -2185,6 +2186,21 @@ export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
   const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
   if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
   redirect(`/admin/cliente/${customerId}?feito=cancelou`);
+}
+
+/**
+ * Liga o repasse direto ao barbeiro (bloco 49).
+ *
+ * Muda **para onde o dinheiro vai**: ligado, o adquirente manda a comissão
+ * direto para a conta do profissional, e a casa deixa de receber o valor cheio.
+ * `finance.split_manage` cai no grupo de dinheiro pelo prefixo e traz o segundo
+ * fator derivado junto.
+ */
+export async function acaoSalvarSplit(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await salvarSplitNaApi(token, form.get('ligado') === 'on');
+  if (!resultado.ok) falhar('/admin/comissao', resultado.code);
+  redirect('/admin/comissao?feito=split');
 }
 
 /**

@@ -70,7 +70,12 @@ describe('partição do vocabulário da trilha', () => {
     // cancelar a desliga, e o plano define quanto a casa cobra por mês de todo
     // assinante novo. É o clube da barbearia, não a assinatura da plataforma —
     // aquela tem trilha própria, do outro lado do produto.
-    const deDinheiro = /^(cash|order|debt|commission|deposit|loyalty|package|subscription)\./;
+    // `split.` entrou no bloco 49, e é a mais literal de todas: ligada, o
+    // adquirente manda a comissão **direto para a conta do barbeiro**, e a casa
+    // deixa de receber o valor cheio. É a configuração que decide para onde o
+    // dinheiro vai.
+    const deDinheiro =
+      /^(cash|order|debt|commission|deposit|loyalty|package|subscription|split)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

@@ -8,6 +8,7 @@ import type {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { fecharComanda, type Comanda } from './comanda.js';
+import { derivarSplitDaVenda } from './split.js';
 
 /**
  * A cobrança online da comanda (blocos 35 e 36, SPEC §3.3).
@@ -520,6 +521,23 @@ export async function confirmarCobranca(params: {
       await encerrarEvento(tx, params.eventoId, cobranca.id, 'pago_com_divergencia');
       return { desfecho: 'pago_com_divergencia' as const, comanda: null };
     }
+
+    /**
+     * O split, **depois** de a comanda fechar (bloco 49).
+     *
+     * Depois porque é `fecharComanda` quem cria os lançamentos de comissão, e o
+     * split é derivado deles. Antes, ele repartiria uma venda sem comissão
+     * nenhuma e mandaria tudo para a casa.
+     *
+     * `derivarSplitDaVenda` nunca lança por motivo que não seja de pagamento —
+     * é a lição do bloco 35, e ela vale aqui com força: esta é literalmente a
+     * transação do webhook do Pix.
+     */
+    await derivarSplitDaVenda(tx, {
+      orderId: cobranca.order_id,
+      chargeId: cobranca.id,
+      pagamentoCents: cobranca.amount_cents,
+    });
 
     await encerrarEvento(tx, params.eventoId, cobranca.id, 'pago');
     return { desfecho: 'pago' as const, comanda };

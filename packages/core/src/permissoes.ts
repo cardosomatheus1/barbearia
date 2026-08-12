@@ -105,6 +105,16 @@ export const PERMISSOES = [
    * prefixo.
    */
   'finance.subscription_manage',
+  /**
+   * Ligar o split e definir a alíquota da plataforma (bloco 49).
+   *
+   * Prefixo `finance.` pelo mesmo motivo das duas acima, e aqui ele é mais
+   * literal que em qualquer outra: ligar o split faz o adquirente mandar dinheiro
+   * **direto para a conta do barbeiro**, sem passar pela da casa. É a permissão
+   * que decide para onde o dinheiro vai, e o segundo fator derivado do prefixo é
+   * o mínimo.
+   */
+  'finance.split_manage',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',

@@ -1,15 +1,20 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { EXPLICACAO_DO_SPLIT, ROTULO_DA_PARTE, ROTULO_DO_SPLIT } from '@barbearia/core';
 import {
   comissaoDoPeriodo,
   fechamentosDeComissao,
   type FechamentoDeComissao,
   type LinhaDeComissao,
+  meusRepassesNaApi,
+  splitDoPeriodoNaApi,
+  type ConfiguracaoDoSplitNaTela,
+  type RepasseNaTela,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
-import { acaoFecharComissao, acaoSair } from '../acoes';
+import { acaoFecharComissao, acaoSair, acaoSalvarSplit } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -111,10 +116,39 @@ export default async function ComissaoPage({ searchParams }: Props) {
   // inteira exige segundo fator, o próprio holerite não.
   const veTodos = podeNaTela(estado, 'commission.view_all');
 
-  const [extrato, historico] = await Promise.all([
+  /*
+    O mesmo período do extrato: o mês corrente. Repasse é a comissão saindo para
+    a conta de alguém, e ler os dois em janelas diferentes faria a soma de um
+    nunca bater com a do outro.
+  */
+  const agora = new Date();
+  const de = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1))
+    .toISOString().slice(0, 10);
+  const ate = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0))
+    .toISOString().slice(0, 10);
+
+  const [extrato, historico, repasses] = await Promise.all([
     comissaoDoPeriodo(token, { daCasa: veTodos }),
     fechamentosDeComissao(token, veTodos),
+    // A rota da casa exige `commission.view_all`; a do próprio, `view_own`. Quem
+    // decide qual chamar é a mesma pergunta que a API faz.
+    veTodos ? splitDoPeriodoNaApi(token, de, ate) : meusRepassesNaApi(token, de, ate),
   ]);
+
+  const podeMexerNoSplit = podeNaTela(estado, 'finance.split_manage');
+  const dadosDoSplit = repasses.ok ? repasses.dados : null;
+  /*
+    O barbeiro chama a rota do próprio holerite, que não devolve configuração —
+    ele não decide se o split está ligado, e a rota que decide exige uma
+    permissão que ele não tem. A leitura estreita é o que garante isso no tipo.
+  */
+  const configuracao: ConfiguracaoDoSplitNaTela | null =
+    dadosDoSplit && 'configuracao' in dadosDoSplit
+      ? (dadosDoSplit.configuracao as ConfiguracaoDoSplitNaTela)
+      : null;
+  const ligado = configuracao?.ligado ?? false;
+  const plataformaPercent = (configuracao?.plataformaBps ?? 0) / 100;
+  const listaDeRepasses: readonly RepasseNaTela[] = dadosDoSplit?.repasses ?? [];
 
   const topo = (
     <header className="painel__topo">
@@ -250,6 +284,95 @@ export default async function ComissaoPage({ searchParams }: Props) {
           </form>
         </details>
       ) : null}
+
+      {/*
+        O repasse direto (bloco 49, SPEC §3.5).
+
+        Fica na tela de comissão e não numa própria porque é a **mesma
+        pergunta**: quanto a casa deve a quem. A diferença é só se o adquirente
+        já pagou direto ou se o acerto sai no fechamento — e ver as duas coisas
+        em telas separadas faria a recepção somar duas vezes.
+      */}
+      <section className="cartao-balcao">
+        <h2 className="cartao-balcao__titulo">Repasse direto</h2>
+
+        {!ligado ? (
+          <>
+            <p className="vazio">
+              Desligado. O cliente paga a barbearia, e a comissão sai no fechamento do período,
+              como sempre.
+            </p>
+            {podeMexerNoSplit ? (
+              <p className="painel__nota">
+                Ligado, o adquirente manda a parte de cada barbeiro <strong>direto para a conta
+                dele</strong> no momento do pagamento. Exige que cada profissional tenha cadastro
+                aprovado no adquirente — enquanto não tiver, a parte dele fica com a casa e o
+                acerto continua no fechamento.
+              </p>
+            ) : null}
+          </>
+        ) : listaDeRepasses.length === 0 ? (
+          <p className="vazio">
+            Ligado, e nenhuma venda paga pelo nosso adquirente neste período ainda. O repasse
+            aparece quando o cliente pagar pelo Pix ou pelo link.
+          </p>
+        ) : (
+          <div className="ui-scroll-x">
+            <table className="repasses">
+              <thead>
+                <tr>
+                  <th scope="col">Dia</th>
+                  <th scope="col">Para quem</th>
+                  <th scope="col">Valor</th>
+                  <th scope="col">Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaDeRepasses.map((r) => (
+                  <tr key={r.id}>
+                    <td className="tabular">{r.quando.slice(8, 10)}/{r.quando.slice(5, 7)}</td>
+                    <td>{r.profissional ?? ROTULO_DA_PARTE[r.parte]}</td>
+                    <td className="tabular">R$ {reaisDoCampo(r.valorCents)}</td>
+                    <td title={EXPLICACAO_DO_SPLIT[r.estado]}>{ROTULO_DO_SPLIT[r.estado]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {podeMexerNoSplit ? (
+          <details className="dobra">
+            <summary className="dobra__titulo">
+              {ligado ? 'Mexer no repasse direto' : 'Ligar o repasse direto'}
+            </summary>
+            <form action={acaoSalvarSplit} className="formulario">
+              <label className="opcao-simples">
+                <input defaultChecked={ligado} name="ligado" type="checkbox" />
+                <span>
+                  <span className="opcao-simples__nome">Repassar direto ao barbeiro</span>
+                  <span className="opcao-simples__sobre">
+                    O adquirente divide o pagamento no ato. A comissão continua sendo a mesma —
+                    ela só chega antes, e na conta dele.
+                  </span>
+                </span>
+              </label>
+
+              {plataformaPercent > 0 ? (
+                <p className="ui-field__hint">
+                  A taxa do produto sobre cada venda paga pelo nosso adquirente é de{' '}
+                  <strong>{plataformaPercent}%</strong>, combinada no seu contrato. Ela não é
+                  editável por aqui.
+                </p>
+              ) : null}
+
+              <button className="ui-button ui-button--secondary" type="submit">
+                Salvar
+              </button>
+            </form>
+          </details>
+        ) : null}
+      </section>
 
       <section className="cartao-balcao">
         <h2 className="cartao-balcao__titulo">Fechamentos anteriores</h2>

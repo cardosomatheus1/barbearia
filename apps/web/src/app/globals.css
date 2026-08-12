@@ -6681,3 +6681,28 @@ main { padding-bottom: var(--space-8); }
 /* Margem negativa é informação, não alarme: um plano que enche a terça pode
    valer a pena. A cor diz "olhe aqui", não "conserte isto". */
 .modelo__negativo { color: var(--color-warning); }
+
+/* ---------------------------------------------------------------------------
+   Repasse direto (bloco 49)
+
+   A tabela mora na tela de comissão porque é a mesma pergunta — quanto a casa
+   deve a quem —, e ver as duas coisas separadas faria a recepção somar duas
+   vezes. Rola dentro do próprio recipiente, nunca leva a página junto.
+   --------------------------------------------------------------------------- */
+.repasses {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  white-space: nowrap;
+}
+.repasses th,
+.repasses td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.repasses th {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}

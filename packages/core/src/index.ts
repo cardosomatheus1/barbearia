@@ -18,6 +18,7 @@ export * from './excecao.js';
 export * from './comanda.js';
 export * from './comissao.js';
 export * from './comissao-da-assinatura.js';
+export * from './split.js';
 export * from './desempenho.js';
 export * from './validador.js';
 export * from './meu-dia.js';

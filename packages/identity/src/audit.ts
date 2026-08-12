@@ -127,6 +127,15 @@ export type AuditAction =
   | 'subscription.invoice_voided'
   | 'subscription.cancel_scheduled'
   /**
+   * Ligar ou desligar o split, e mexer na alíquota da plataforma (bloco 49).
+   *
+   * De dinheiro, e é a mudança de configuração com a maior consequência do
+   * produto: ligada, o adquirente manda a comissão **direto para a conta do
+   * barbeiro**, e a casa deixa de receber o valor cheio. A pergunta do mês
+   * seguinte — "por que entrou menos na conta?" — não teria resposta sem isto.
+   */
+  | 'split.changed'
+  /**
    * O override do score de confiabilidade (bloco 37).
    *
    * A SPEC §2.13 pede "justificativa auditada" — e é literal: o motivo escrito
@@ -241,6 +250,7 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'subscription.invoice_paid',
   'subscription.invoice_voided',
   'subscription.cancel_scheduled',
+  'split.changed',
   'package.changed',
   'package.refunded',
   'commission.closed',

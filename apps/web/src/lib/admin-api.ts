@@ -2476,3 +2476,53 @@ export const removerDependenteNaApi = (token: string, subscriptionId: string, cu
     { customerId },
     token,
   );
+
+
+/**
+ * Split de pagamento (bloco 49, SPEC §3.5).
+ *
+ * `commission.view_all` para a lista da casa, `commission.view_own` para o
+ * próprio — e o recorte por profissional é imposto pela API a partir da sessão,
+ * nunca por parâmetro. Barbeiro que vê o repasse do colega é a mesma briga que
+ * a separação das duas permissões existe para evitar.
+ */
+export interface RepasseNaTela {
+  id: string;
+  orderId: string;
+  parte: 'barbearia' | 'profissional' | 'plataforma';
+  professionalId: string | null;
+  profissional: string | null;
+  valorCents: number;
+  estado: 'pendente' | 'retido' | 'liquidado' | 'falhou' | 'estornado';
+  liquidadoEm: string | null;
+  ultimoErro: string | null;
+  quando: string;
+}
+
+export interface ConfiguracaoDoSplitNaTela {
+  ligado: boolean;
+  plataformaBps: number;
+}
+
+export const splitDoPeriodoNaApi = (token: string, de: string, ate: string) =>
+  chamar<{ configuracao: ConfiguracaoDoSplitNaTela; repasses: RepasseNaTela[] }>(
+    'GET',
+    `/v1/admin/split?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+export const meusRepassesNaApi = (token: string, de: string, ate: string) =>
+  chamar<{ repasses: RepasseNaTela[] }>(
+    'GET',
+    `/v1/admin/split/meus?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+/**
+ * Só o interruptor: a alíquota da plataforma é termo comercial do produto e é
+ * definida pelo Super Admin, nunca pela barbearia.
+ */
+export const salvarSplitNaApi = (token: string, ligado: boolean) =>
+  chamar<{ salvo: boolean }>('PUT', '/v1/admin/split/configuracao', { ligado }, token);

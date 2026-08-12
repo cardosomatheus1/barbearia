@@ -91,6 +91,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'subscription.invoice_voided': 'cancelou uma mensalidade do clube',
   'subscription.cancel_scheduled': 'agendou o fim de uma assinatura',
 
+  // O split (bloco 49). Ligado, o adquirente manda a comissão direto para a
+  // conta do barbeiro — é a configuração com a maior consequência do produto.
+  'split.changed': 'mexeu no repasse direto ao barbeiro',
+
   // Fidelidade (bloco 41). As duas são de dinheiro: o ajuste **cria** saldo
   // gastável, e mudar o programa define a alíquota com que a casa passa a
   // imprimi-lo.

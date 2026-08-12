@@ -8,5 +8,6 @@ export * from './sinal.js';
 export * from './fidelidade.js';
 export * from './assinatura.js';
 export * from './cobranca-do-clube.js';
+export * from './split.js';
 export * from './estoque.js';
 export * from './pacote.js';
