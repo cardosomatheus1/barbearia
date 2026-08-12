@@ -15,6 +15,8 @@ import {
 } from '@/lib/admin-api';
 import { resgateSugerido, saldoPorExtenso, valorDoResgate } from '@barbearia/core';
 import { qrCodeSvg } from '@/lib/qrcode';
+import { ROTULO_DA_NOTA, EXPLICACAO_DA_NOTA, vendaAceitaNota } from '@barbearia/core';
+import { notaDaComandaNaApi } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
@@ -25,6 +27,7 @@ import {
   acaoCancelarCobranca,
   acaoCobrarComanda,
   acaoEstornarVenda,
+  acaoEmitirNota,
   acaoFecharComanda,
   acaoRemoverItem,
   acaoSair,
@@ -341,7 +344,19 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   const conta = comanda.dados;
   const fechada = conta.status !== 'open';
   const estornada = first(query['feito']) === 'estornada';
+  const notaPedida = first(query['feito']) === 'nota';
   const podeEstornar = podeNaTela(estado, 'finance.order_refund');
+  /**
+   * A nota desta venda (bloco 53).
+   *
+   * Só quem pode ver pergunta: a rota exige `fiscal.view`, e pedir sem ela
+   * devolveria 403 em toda abertura de comanda. E só quando a venda foi paga —
+   * antes disso não existe nota a mostrar.
+   */
+  const veNota = podeNaTela(estado, 'fiscal.view');
+  const notaResposta =
+    veNota && conta.status !== 'open' ? await notaDaComandaNaApi(token, conta.id) : null;
+  const nota = notaResposta?.ok ? notaResposta.dados.nota : null;
   const podeFiar = fiadoCabe(conta);
 
   /**
@@ -475,6 +490,12 @@ export default async function ComandaPage({ params, searchParams }: Props) {
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Comanda paga.
           {conta.trocoCents > 0 ? ` Troco: ${reais(conta.trocoCents)}.` : ''}
+        </div>
+      ) : null}
+
+      {notaPedida ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Nota pedida. Ela vai para a prefeitura em alguns minutos.
         </div>
       ) : null}
 
@@ -886,6 +907,61 @@ export default async function ComandaPage({ params, searchParams }: Props) {
           )}
         </>
       )}
+
+      {/*
+        A nota fiscal (bloco 53). Fica na comanda porque é aqui que o cliente
+        pede — "manda a nota no meu e-mail" é dito no balcão, com a maquininha
+        ainda na mão.
+      */}
+      {veNota && conta.status === 'paid' ? (
+        <section className="cartao-balcao">
+          <h2 className="cartao-balcao__titulo">Nota fiscal</h2>
+
+          {nota ? (
+            <>
+              <p className="cartao-balcao__texto">
+                {nota.numero ? `Nota ${nota.numero} · ` : ''}
+                {ROTULO_DA_NOTA[nota.estado]}. {EXPLICACAO_DA_NOTA[nota.estado]}
+              </p>
+              {nota.motivoDaRecusa ? (
+                <p className="cartao-balcao__texto item-cadastro__risco">{nota.motivoDaRecusa}</p>
+              ) : null}
+              {nota.linkPdf ? (
+                <a className="ui-button ui-button--ghost ui-button--block" href={nota.linkPdf}>
+                  Abrir o PDF
+                </a>
+              ) : null}
+            </>
+          ) : (
+            <p className="cartao-balcao__texto">Esta venda ainda não tem nota.</p>
+          )}
+
+          {/*
+            O botão sai da mesma pergunta que o domínio faz: **existe nota em
+            curso para esta venda?** Rejeitada e cancelada não estão em curso, e
+            `pedirNota` aceita a próxima — mas a tela dizia "corrija e emita de
+            novo" logo acima de nenhum botão, que é estado sem saída na
+            interface (§6, pergunta 3). Derivar de `vendaAceitaNota` em vez de
+            escrever "se não tem nota" faz o estado novo de amanhã nascer com o
+            botão certo — e é a mesma lista que o índice parcial impõe, então o
+            botão nunca aparece para levar a um erro de constraint.
+          */}
+          {vendaAceitaNota(nota?.estado ?? null) && podeNaTela(estado, 'fiscal.issue') ? (
+            <form action={acaoEmitirNota}>
+              <input name="orderId" type="hidden" value={conta.id} />
+              {/*
+                O rótulo é o mesmo depois de uma recusa. "Emitir outra nota"
+                seria um segundo nome para a mesma transição, e o que a recepção
+                repete no balcão é "emite a nota" — a explicação de que esta é a
+                segunda tentativa está na linha acima, que é onde ela cabe.
+              */}
+              <button className="ui-button ui-button--secondary ui-button--block" type="submit">
+                Emitir nota
+              </button>
+            </form>
+          ) : null}
+        </section>
+      ) : null}
 
       {/*
         Desfazer a venda (bloco 52). Fica no fim e dobrada de propósito: é a

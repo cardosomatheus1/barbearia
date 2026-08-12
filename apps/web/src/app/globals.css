@@ -1313,7 +1313,15 @@ main { padding-bottom: var(--space-8); }
 .item-cadastro__aviso { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-warning); }
 .item-cadastro__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
 .item-cadastro__risco { color: var(--color-danger); }
-.item-cadastro__acao { margin: var(--space-3) 0 0; }
+/* Flex com quebra porque a nota fiscal pôs dois botões lado a lado aqui: em
+   360px eles não cabem na mesma linha, e sem a quebra o segundo empurra a
+   página para o lado. */
+.item-cadastro__acao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+}
 
 /* `<details>` é o único jeito de esconder e revelar sem JavaScript, e este
    produto não manda JavaScript de painel para o navegador. */
@@ -4072,6 +4080,7 @@ main { padding-bottom: var(--space-8); }
 /* `lgpd` e `plano` entraram no registro e ficaram fora desta lista: duas telas
    em que o gestor não sabia onde estava, com o teste verde porque ele também
    tinha uma lista escrita à mão. O teste agora deriva do registro. */
+.casco:has([data-secao='fiscal']) .contexto__link[data-para='fiscal'],
 .casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
 .casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);

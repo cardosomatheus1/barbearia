@@ -38,6 +38,7 @@ import { FidelidadeController } from './admin/fidelidade.controller.js';
 import { PacoteController } from './admin/pacote.controller.js';
 import { FinanceiroController } from './admin/financeiro.controller.js';
 import { DreController } from './admin/dre.controller.js';
+import { FiscalController } from './admin/fiscal.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
 import { AssinaturaController } from './admin/assinatura.controller.js';
@@ -100,6 +101,7 @@ import { TenantService } from './tenant/tenant.service.js';
     PacoteController,
     FinanceiroController,
     DreController,
+    FiscalController,
     AvaliacaoController,
     EstoqueController,
     AssinaturaController,

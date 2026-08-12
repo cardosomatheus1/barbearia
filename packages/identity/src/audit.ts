@@ -107,6 +107,16 @@ export type AuditAction =
   | 'order.refunded'
   | 'package.transferred'
   /**
+   * Fiscal (bloco 53).
+   *
+   * Nenhuma das duas carrega centavo, e por isso ficam na trilha de **gestão**:
+   * o que elas guardam é CNPJ, regime, alíquota e o número da nota. As perguntas
+   * que respondem — "quem mudou o regime para MEI?", "quem cancelou a nota do
+   * cliente?" — são de quem administra a casa, não de quem tem `finance.view`.
+   */
+  | 'fiscal.settings_changed'
+  | 'fiscal.invoice_cancelled'
+  /**
    * Estoque (bloco 44).
    *
    * `stock.adjusted` cobre perda e ajuste — os dois movimentos em que o número
@@ -331,6 +341,8 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'import.applied',
   'import.reverted',
   'slug.added',
+  'fiscal.settings_changed',
+  'fiscal.invoice_cancelled',
   // O override não carrega centavo: guarda o score de antes, o de depois e o
   // motivo. A pergunta que responde — "quem dispensou este cliente do sinal?" —
   // é de quem administra a casa.

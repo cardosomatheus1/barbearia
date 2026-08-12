@@ -53,10 +53,26 @@ const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 const COMECA_EM = new Date('2026-09-11T18:00:00Z');
 const AGORA = new Date('2026-09-10T13:00:00Z'); // 10h em Salvador
 
+/**
+ * A semente inteira numa transação só.
+ *
+ * Statement a statement, a limpeza e os `INSERT` eram passos independentes: se
+ * um deles confirmasse e a chamada fosse repetida — o cliente repete quando a
+ * conexão hesita, e o portão roda dez suítes contra o mesmo Postgres —, a
+ * repetição encontrava a linha gravada e estourava chave duplicada. A falha
+ * caía em duas execuções de cada três, ora num pacote ora noutro, sempre em
+ * testes diferentes: retrato de corrida, não de regra errada.
+ *
+ * Atômica, a repetição recomeça do banco limpo.
+ */
 async function exec(client: PrismaClient, sql: string): Promise<void> {
-  for (const parte of sql.split(';').map((p) => p.trim()).filter(Boolean)) {
-    await client.$executeRawUnsafe(parte);
-  }
+  await client.$transaction(
+    sql
+      .split(';')
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((parte) => client.$executeRawUnsafe(parte)),
+  );
 }
 
 
@@ -85,7 +101,15 @@ const cobrancasDoClube: { tenantId: string; agora: Date }[] = [];
 const liquidacoesRodadas: { tenantId: string; agora: Date }[] = [];
 const avisosDoClube: { tenantId: string; assinaturaId: string; motivo: string }[] = [];
 
+let notasProcessadas: { tenantId: string; invoiceId: string }[] = [];
+let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' =
+  'autorizada';
+
 const ligacoesDaPlataforma = () => ({
+  processarNota: async (tenantId: string, invoiceId: string) => {
+    notasProcessadas.push({ tenantId, invoiceId });
+    return estadoDaNotaDoFake;
+  },
   avisarDeCobranca: async (aviso: {
     readonly tenantId: string;
     readonly faturaId: string;
@@ -160,9 +184,9 @@ describeIfDb('fila de trabalho', () => {
   });
 
   beforeEach(async () => {
-    await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
-    await admin.$executeRawUnsafe('TRUNCATE jobs');
     await exec(admin, `
+      TRUNCATE tenants CASCADE;
+      TRUNCATE jobs;
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari'), ('${RIVAL}', 'Rival');
 
       INSERT INTO locations (id, tenant_id, name, timezone, no_show_after_minutes)
@@ -664,6 +688,67 @@ describeIfDb('fila de trabalho', () => {
 
     expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
     expect(liquidacoesRodadas).toEqual([{ tenantId: TENANT, agora: COMECA_EM }]);
+  });
+
+  it('a nota vai ao emissor pela fila, fora da transação da comanda', async () => {
+    /**
+     * A prefeitura pode levar minutos e pode estar fora do ar, e o cliente está
+     * esperando o troco. Pendurá-la na frente do balcão é o defeito que a SPEC
+     * §3.11 evita ao delegar a um emissor — e que o bloco 50 já aprendeu com o
+     * KYC do profissional.
+     */
+    notasProcessadas = [];
+    estadoDaNotaDoFake = 'autorizada';
+    await enfileirarNoTenant({
+      kind: 'fiscal.emitir',
+      payload: { invoiceId: 'ff000000-0000-0000-0000-000000000001' },
+      idempotencyKey: 'fiscal:ff1',
+    });
+
+    const resultado = await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
+    expect(notasProcessadas).toEqual([
+      { tenantId: TENANT, invoiceId: 'ff000000-0000-0000-0000-000000000001' },
+    ]);
+  });
+
+  it('nota ainda na prefeitura reprograma a própria tarefa', async () => {
+    /**
+     * A tarefa se reprograma enquanto a nota não tem desfecho, como a varredura
+     * de retorno do bloco 22. É por isso que não existe varredura de plataforma
+     * para notas pendentes: `fiscal_invoices` tem RLS, e um processo sem tenant
+     * no contexto enxergaria zero linhas — sempre.
+     */
+    notasProcessadas = [];
+    estadoDaNotaDoFake = 'processando';
+    await enfileirarNoTenant({
+      kind: 'fiscal.emitir',
+      payload: { invoiceId: 'ff000000-0000-0000-0000-000000000002' },
+      idempotencyKey: 'fiscal:ff2',
+    });
+
+    await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      ...ligacoesDaPlataforma(),
+    });
+
+    const proximas = await admin.$queryRawUnsafe<{ kind: string; run_after: Date }[]>(
+      `SELECT kind, run_after FROM jobs
+        WHERE kind = 'fiscal.emitir' AND status = 'pending'`,
+    );
+    expect(proximas).toHaveLength(1);
+    // Cinco minutos: é a ordem de grandeza da resposta municipal, e o emissor
+    // cobra por chamada.
+    expect(proximas[0]!.run_after.getTime()).toBe(COMECA_EM.getTime() + 5 * 60_000);
+    estadoDaNotaDoFake = 'autorizada';
   });
 
   it('provedor fora do ar devolve a tarefa à fila', async () => {

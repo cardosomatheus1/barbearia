@@ -44,3 +44,4 @@ export * from './pacote.js';
 export * from './financeiro.js';
 export * from './dre.js';
 export * from './vale.js';
+export * from './fiscal.js';

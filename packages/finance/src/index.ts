@@ -15,3 +15,4 @@ export * from './financeiro.js';
 export * from './vale.js';
 export * from './estorno.js';
 export * from './dre.js';
+export * from './fiscal.js';

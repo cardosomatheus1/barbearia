@@ -33,6 +33,18 @@ import {
   rodarWorker,
   type ResultadoDaRodada,
 } from '@barbearia/jobs';
+import { FakeFiscalProvider } from '@barbearia/core';
+import { enviarNota } from '@barbearia/finance';
+
+/**
+ * O emissor de nota do processo — **um só**.
+ *
+ * Enquanto não há contrato com emissor terceirizado, é o de mentira. Ele nasce
+ * respondendo `processando`, que é o estado real de uma NFS-e recém-enviada: um
+ * fake otimista faria a cadeia de conciliação nunca ser exercida pelo caminho
+ * que ela percorre na vida real.
+ */
+const EMISSOR_FISCAL = new FakeFiscalProvider();
 import {
   CobrancaManualProvider,
   ConsoleGestorProvider,
@@ -185,6 +197,20 @@ async function main(): Promise<void> {
           provider: new ConsoleGestorProvider(),
           agora: aviso.agora,
         }),
+      /**
+       * O emissor de nota (bloco 53), ligado aqui pelo mesmo motivo.
+       *
+       * **Um só, criado onde o processo é montado** — é a lição do bloco 39 com
+       * o provedor de mensagem: instanciar um dentro de um caminho faz daquele
+       * caminho o único que não troca junto quando o emissor de verdade entrar.
+       *
+       * Enquanto não há contrato com emissor, é o de mentira, e ele responde
+       * `processando` por padrão: a cadeia de conciliação — a tarefa se
+       * reprogramando, a tela saindo de "na prefeitura" — é exercida pelo
+       * caminho real, e não pulada por um fake otimista.
+       */
+      processarNota: (tenantId, invoiceId) =>
+        enviarNota({ tenantId, invoiceId, provider: EMISSOR_FISCAL }),
       /**
        * A retenção de dado pessoal (bloco 32), ligada aqui pelo mesmo motivo
        * da cobrança: ela mora em `packages/crm`, e `jobs` não conhece a camada

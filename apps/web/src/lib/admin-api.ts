@@ -2849,3 +2849,84 @@ export const transferirPacoteNaApi = (
     dados,
     token,
   );
+
+// -- Fiscal (bloco 53) --------------------------------------------------------
+
+export type RegimeFiscal = 'simples' | 'mei' | 'salao_parceiro';
+export type EstadoDaNota =
+  | 'pendente'
+  | 'processando'
+  | 'autorizada'
+  | 'rejeitada'
+  | 'cancelada';
+
+export interface ConfiguracaoFiscalNaTela {
+  cnpj: string;
+  regime: RegimeFiscal;
+  codigoDeServico: string;
+  issBps: number;
+  municipioIbge: string;
+  inscricaoMunicipal: string | null;
+  emitirAutomaticamente: boolean;
+}
+
+export interface NotaNaTela {
+  id: string;
+  orderId: string;
+  estado: EstadoDaNota;
+  numero: string | null;
+  linkPdf: string | null;
+  motivoDaRecusa: string | null;
+  regime: RegimeFiscal;
+  servicoCents: number;
+  /** Só chega para quem tem `commission.view_all`: é a comissão daquela venda. */
+  parceiroCents?: number;
+  casaCents?: number;
+  issBps: number;
+  clienteNome: string | null;
+  pedidaEm: string;
+  criadaPor: string;
+}
+
+export const configuracaoFiscalNaApi = (token: string) =>
+  chamar<{ configuracao: ConfiguracaoFiscalNaTela | null }>(
+    'GET',
+    '/v1/admin/fiscal/configuracao',
+    undefined,
+    token,
+  );
+
+export const salvarFiscalNaApi = (
+  token: string,
+  dados: {
+    cnpj: string;
+    regime: RegimeFiscal;
+    codigoDeServico: string;
+    issBps: number;
+    municipioIbge: string;
+    inscricaoMunicipal?: string | null;
+    emitirAutomaticamente: boolean;
+  },
+) => chamar<ConfiguracaoFiscalNaTela>('PUT', '/v1/admin/fiscal/configuracao', dados, token);
+
+export const notasNaApi = (token: string, de: string, ate: string) =>
+  chamar<{ notas: NotaNaTela[] }>(
+    'GET',
+    `/v1/admin/fiscal/notas?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+export const notaDaComandaNaApi = (token: string, orderId: string) =>
+  chamar<{ nota: NotaNaTela | null }>(
+    'GET',
+    `/v1/admin/fiscal/notas/comanda/${orderId}`,
+    undefined,
+    token,
+  );
+
+export const emitirNotaNaApi = (token: string, orderId: string) =>
+  chamar<{ id: string | null }>('POST', `/v1/admin/fiscal/notas/comanda/${orderId}`, {}, token);
+
+export const cancelarNotaNaApi = (token: string, notaId: string, motivo: string) =>
+  chamar<{ ok: true }>('POST', `/v1/admin/fiscal/notas/${notaId}/cancelar`, { motivo }, token);

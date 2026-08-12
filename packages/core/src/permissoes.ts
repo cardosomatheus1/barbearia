@@ -168,6 +168,34 @@ export const PERMISSOES = [
    * e passar crédito adiante —, e quem pode uma não precisa poder a outra.
    */
   'finance.package_transfer',
+  /**
+   * Ver as notas emitidas (bloco 53).
+   *
+   * Prefixo próprio e **não** `finance.`: a nota não move centavo nenhum, e
+   * derivar segundo fator dela obrigaria a recepção a confirmar TOTP para
+   * conferir se a nota do cliente saiu — trinta vezes por dia, por uma leitura
+   * que não revela faturamento. O que a nota revela é o valor de **uma** venda,
+   * que quem fechou a comanda já viu.
+   */
+  'fiscal.view',
+  /**
+   * Emitir e cancelar nota (bloco 53).
+   *
+   * Também sem `finance.`, e a razão é a mesma — mas com uma diferença que vale
+   * escrever: cancelar nota é ato perante a prefeitura, não movimento de
+   * dinheiro. O que ele mexe é em obrigação acessória, e quem responde por ela é
+   * a barbearia com o contador dela.
+   */
+  'fiscal.issue',
+  /**
+   * Cadastrar CNPJ, regime e alíquota (bloco 53).
+   *
+   * Separada de `settings.manage` porque errar aqui não é errar uma preferência:
+   * é emitir nota com imposto errado, na cidade errada, em nome de um CNPJ que
+   * não é o da casa. O dono decide quem mexe nisso — na prática, ele e o
+   * contador.
+   */
+  'fiscal.settings',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',
@@ -356,6 +384,10 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
     'finance.advance',
     'finance.order_refund',
     'finance.package_transfer',
+    // Ver e emitir nota é rotina de quem gerencia; **cadastrar** o fiscal não —
+    // errar o CNPJ ou a alíquota é emitir imposto errado em nome da casa.
+    'fiscal.view',
+    'fiscal.issue',
     'commission.view_all',
     'customers.view',
     'customers.edit',
@@ -392,6 +424,12 @@ const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
      * É a recepção que responde WhatsApp o dia todo, e um canal de reclamação
      * que só o dono consegue responder é um canal que ninguém responde.
      */
+    /**
+     * A nota, sim: é a recepção que o cliente pede quando está indo embora, e
+     * uma nota que só o dono emite é uma nota que sai no dia seguinte.
+     */
+    'fiscal.view',
+    'fiscal.issue',
     'feedback.view',
     'feedback.manage',
     /**

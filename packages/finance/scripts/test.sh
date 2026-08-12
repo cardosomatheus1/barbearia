@@ -25,4 +25,4 @@ DATABASE_URL="$(../../scripts/url-do-app.sh "$ADMIN_URL" "$APP_DB_PASSWORD" "$DB
 export DATABASE_URL
 export APP_DATABASE_URL="$DATABASE_URL"
 export SEED_DATABASE_URL="$BASE/$DB_NAME"
-exec vitest run
+exec vitest run "$@"

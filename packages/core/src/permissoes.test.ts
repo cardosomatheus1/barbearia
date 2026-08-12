@@ -101,6 +101,25 @@ describe('padrão de fábrica dos papéis', () => {
   });
 });
 
+describe('o fiscal não é dinheiro', () => {
+  it('`fiscal.*` fica fora do grupo que exige segundo fator', () => {
+    /**
+     * Decisão do bloco 53, e ela é deliberada. A nota não move centavo: derivar
+     * segundo fator dela obrigaria a recepção a confirmar TOTP para conferir se
+     * a nota do cliente saiu — trinta vezes por dia, por uma leitura que não
+     * revela faturamento. O que a nota mostra é o valor de **uma** venda, que
+     * quem fechou a comanda já viu.
+     *
+     * Cancelar nota é ato perante a prefeitura, não movimento de dinheiro.
+     */
+    const fiscais = PERMISSOES.filter((p) => p.startsWith('fiscal.'));
+    expect(fiscais.length).toBeGreaterThan(0);
+    for (const permissao of fiscais) {
+      expect(PERMISSOES_DE_DINHEIRO as readonly string[]).not.toContain(permissao);
+    }
+  });
+});
+
 describe('permissões de dinheiro', () => {
   it('agrupa o que revela dinheiro e o que o move', () => {
     // O `CLAUDE.md` exige MFA para quem as tem. Uma regra que depende de

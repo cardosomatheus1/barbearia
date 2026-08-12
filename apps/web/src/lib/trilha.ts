@@ -84,6 +84,14 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'customer.anonymized': 'apagou os dados de',
   'slug.added': 'cadastrou um endereço antigo da barbearia',
 
+  /**
+   * Fiscal (bloco 53). "Mexeu no cadastro fiscal" e não "alterou fiscal_settings":
+   * quem lê a trilha é o dono procurando por que a nota saiu errada, e o nome da
+   * tabela não responde nada para ele.
+   */
+  'fiscal.settings_changed': 'mexeu no cadastro fiscal da casa',
+  'fiscal.invoice_cancelled': 'cancelou uma nota fiscal',
+
   // Recados (bloco 40). A trilha é o que sustenta o limite ético pelo outro
   // lado: ninguém apaga reclamação — o banco não deixa — e ninguém responde em
   // nome da casa sem deixar registro de quem foi.

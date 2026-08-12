@@ -42,6 +42,9 @@ import {
   cancelarValeNaApi,
   estornarVendaNaApi,
   transferirPacoteNaApi,
+  salvarFiscalNaApi,
+  emitirNotaNaApi,
+  cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
   cancelarContaDoFinanceiro as cancelarContaDoFinanceiroApi,
@@ -2520,4 +2523,55 @@ export async function acaoTransferirPacote(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar(rota, resultado.code);
   redirect(`${rota}?salvo=pacote-transferido`);
+}
+
+// -- Fiscal (bloco 53) --------------------------------------------------------
+
+const ROTA_FISCAL = '/admin/fiscal';
+
+export async function acaoSalvarFiscal(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const regime = texto(form, 'regime');
+  if (regime !== 'simples' && regime !== 'mei' && regime !== 'salao_parceiro') {
+    falhar(ROTA_FISCAL, 'invalid_request');
+  }
+
+  /**
+   * O ISS chega como "2,5" e vai em pontos-base.
+   *
+   * Reaproveitar `centavos` seria acidente esperando acontecer: ele existe para
+   * dinheiro, e a coincidência de as duas escalas serem centésimos é o tipo de
+   * coisa que deixa de valer no dia em que uma delas muda.
+   */
+  const iss = texto(form, 'issPercent').replace(',', '.');
+  const issBps = Math.round(Number(iss || '0') * 100);
+  if (!Number.isFinite(issBps)) falhar(ROTA_FISCAL, 'aliquota_invalida');
+
+  const resultado = await salvarFiscalNaApi(token, {
+    cnpj: texto(form, 'cnpj'),
+    regime,
+    codigoDeServico: texto(form, 'codigoDeServico'),
+    issBps,
+    municipioIbge: texto(form, 'municipioIbge'),
+    inscricaoMunicipal: texto(form, 'inscricaoMunicipal') || null,
+    emitirAutomaticamente: texto(form, 'emitirAutomaticamente') === '1',
+  });
+  if (!resultado.ok) falhar(ROTA_FISCAL, resultado.code);
+  redirect(`${ROTA_FISCAL}?salvo=1`);
+}
+
+export async function acaoEmitirNota(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const orderId = texto(form, 'orderId');
+  const rota = texto(form, 'de') === 'fiscal' ? ROTA_FISCAL : `/admin/comanda/${orderId}`;
+  const resultado = await emitirNotaNaApi(token, orderId);
+  if (!resultado.ok) falhar(rota, resultado.code);
+  redirect(`${rota}?feito=nota`);
+}
+
+export async function acaoCancelarNota(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await cancelarNotaNaApi(token, texto(form, 'notaId'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar(ROTA_FISCAL, resultado.code);
+  redirect(`${ROTA_FISCAL}?feito=nota-cancelada`);
 }

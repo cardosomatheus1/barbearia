@@ -85,6 +85,9 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'finance.advance': 'Adiantar dinheiro ao profissional (vale)',
   'finance.order_refund': 'Desfazer uma venda já fechada',
   'finance.package_transfer': 'Passar um pacote para outra pessoa',
+  'fiscal.view': 'Ver as notas fiscais emitidas',
+  'fiscal.issue': 'Emitir e cancelar nota fiscal',
+  'fiscal.settings': 'Cadastrar CNPJ, regime e alíquota',
   'commission.view_own': 'Ver a própria comissão',
   'commission.view_all': 'Ver a comissão de todo mundo',
   'commission.edit_rules': 'Mudar as regras de comissão',
@@ -158,6 +161,18 @@ const GRUPOS: readonly Grupo[] = [
     permissoes: PERMISSOES.filter(
       (p) => p.startsWith('feedback.') || p.startsWith('reviews.'),
     ),
+  },
+  {
+    /**
+     * Grupo próprio, e não dentro de "Dinheiro".
+     *
+     * A caixa de dinheiro diz "tudo aqui pede segundo fator", e `fiscal.*` não
+     * pede — de propósito. Enfiá-las lá faria a tela mentir sobre a única coisa
+     * que ela promete em letras.
+     */
+    titulo: 'Nota fiscal',
+    sobre: 'Emitir, cancelar e cadastrar o fiscal da casa. Não pede segundo fator.',
+    permissoes: PERMISSOES.filter((p) => p.startsWith('fiscal.')),
   },
   {
     titulo: 'A casa',

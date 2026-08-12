@@ -1313,6 +1313,69 @@ function prepararValeEEstorno(slug) {
   );
 }
 
+/**
+ * Cadastro fiscal e uma nota por venda (bloco 53).
+ *
+ * Pelo banco, como o resto. Sem cadastro a tela mostra só o formulário vazio, e
+ * formulário vazio é o layout que não quebra — o que estoura a grade é a linha
+ * de nota com número, motivo de recusa e a repartição do Salão-Parceiro juntos.
+ */
+function prepararFiscal(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return null;
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  if (!local) return null;
+
+  psql(
+    `INSERT INTO fiscal_settings
+       (location_id, tenant_id, cnpj, regime, service_code, iss_bps,
+        municipality_ibge, municipal_registration, auto_issue)
+     VALUES ('${local}', '${tenant}', '11222333000181', 'salao_parceiro', '14.01', 200,
+             '2927408', '123456-7', true)
+     ON CONFLICT (location_id) DO NOTHING`,
+  );
+
+  const venda = primeiraLinha(
+    psql(
+      `select id from orders where tenant_id = '${tenant}' and status = 'paid'
+        order by closed_at limit 1`,
+    ),
+  );
+  if (!venda) return null;
+
+  // Uma autorizada e uma rejeitada: são os dois estados que a tela precisa
+  // mostrar lado a lado, e o segundo é o que traz o texto longo da prefeitura.
+  psql(
+    `INSERT INTO fiscal_invoices
+       (tenant_id, location_id, order_id, status, provider_invoice_id, number, pdf_url,
+        regime, service_cents, partner_cents, iss_bps, service_code, municipality_ibge,
+        customer_name, authorized_at, created_by_name)
+     VALUES ('${tenant}', '${local}', '${venda}', 'autorizada', 'nf_demo_1', '2026/1043',
+             'https://nfse.exemplo/2026-1043.pdf', 'salao_parceiro', 129000, 51600, 200,
+             '14.01', '2927408', 'Carlos Eduardo Nascimento', now(), 'Maria Recepção')
+     ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO fiscal_invoices
+       (tenant_id, location_id, order_id, status, rejection_reason,
+        regime, service_cents, partner_cents, iss_bps, service_code, municipality_ibge,
+        customer_name, created_by_name)
+     VALUES ('${tenant}', '${local}', '${venda}', 'rejeitada',
+             'Código de serviço 14.01 não habilitado para o CNPJ informado na inscrição municipal',
+             'salao_parceiro', 129000, 51600, 200, '14.01', '2927408',
+             'Carlos Eduardo Nascimento', 'Maria Recepção')
+     ON CONFLICT DO NOTHING`,
+  );
+
+  // A venda paga volta porque o bloco da nota **só desenha em comanda fechada**,
+  // e a comanda medida até aqui era a aberta. Sem esta linha, a seção que este
+  // bloco acrescentou à tela do balcão não é medida nem fotografada — e é ela
+  // que carrega o motivo de recusa da prefeitura, que é o texto longo.
+  return venda;
+}
+
 async function prepararCaixa(token, catalogo) {
   const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
   const { codigoDoPasso, passoAgora } = require('../packages/identity/dist/mfa.js');
@@ -1643,6 +1706,7 @@ async function main() {
   prepararSplit(slug);
   prepararFinanceiro(slug);
   prepararValeEEstorno(slug);
+  const vendaComNota = prepararFiscal(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -1723,6 +1787,9 @@ async function main() {
     ...(caixa.comPix
       ? [{ nome: 'comanda — Pix em curso', url: `/admin/comanda/${caixa.comPix}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
+    ...(vendaComNota
+      ? [{ nome: 'comanda paga — nota', url: `/admin/comanda/${vendaComNota}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
+      : []),
     { nome: 'fiado', url: '/admin/fiado', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'contas', url: '/admin/financeiro', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
@@ -1741,6 +1808,7 @@ async function main() {
     // a versão sem faturamento mediria a tela mais fácil.
     { nome: 'painel', url: '/admin/painel', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'diagnóstico do catálogo', url: '/admin/catalogo/diagnostico', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'nota fiscal', url: '/admin/fiscal', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

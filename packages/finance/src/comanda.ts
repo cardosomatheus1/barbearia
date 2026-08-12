@@ -20,6 +20,7 @@ import { conferirResgate, creditarDaVenda, programaDaCasa, registrarResgate } fr
 import { consumirPacote, consumoDisponivel, venderPacote } from './pacote.js';
 import { baixarVendas, consumirFicha } from './estoque.js';
 import { consumirAssinatura, usoDisponivel } from './assinatura.js';
+import { pedirNota } from './fiscal.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -1275,6 +1276,30 @@ export async function fecharComanda(params: {
     await lancarComissaoDaComanda(tx, {
       orderId: params.orderId,
       quandoISO: params.hojeNaUnidade,
+    });
+
+    /**
+     * A nota fiscal (bloco 53), quando a barbearia ligou a emissão automática.
+     *
+     * Ela nasce `pendente` **nesta transação**, e a tarefa que a envia nasce
+     * junto: enfileirar depois do commit abriria a janela em que a venda foi
+     * fechada e nada está marcado para emitir. Quem fala com a prefeitura é a
+     * fila, nunca este caminho — ela pode levar minutos e pode estar fora do ar,
+     * e o cliente está esperando o troco.
+     *
+     * Silenciosa quando não há configuração, quando a emissão automática está
+     * desligada ou quando a comanda só tem produto: os três são normais, e
+     * nenhum é erro. Nada aqui pode lançar exceção por motivo fiscal — esta
+     * função roda na transação do webhook do Pix, e a lição do bloco 44 é que
+     * uma exceção ali volta atrás com o dinheiro sem registro nenhum.
+     */
+    await pedirNota(tx, {
+      tenantId: params.tenantId,
+      locationId: params.locationId,
+      orderId: params.orderId,
+      staffId: params.staffId,
+      staffName: params.staffName,
+      automatica: true,
     });
 
     await audit(tx, {

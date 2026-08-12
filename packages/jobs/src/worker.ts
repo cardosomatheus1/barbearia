@@ -1,7 +1,8 @@
 import { withTenant } from '@barbearia/db';
-import type { Alerta, TipoDeNotificacao } from '@barbearia/core';
+import { notaEmCurso, type Alerta, type EstadoDaNota, type TipoDeNotificacao } from '@barbearia/core';
 import {
   concluirTarefa,
+  enfileirar,
   falharTarefa,
   soltarOrfas,
   tomarTarefas,
@@ -127,6 +128,18 @@ export interface Contexto {
    * Devolve se alguém foi convidado, só para o log — a decisão de a quem
    * oferecer é da fórmula de `packages/core`.
    */
+  /**
+   * Manda a nota ao emissor e devolve o estado que ele respondeu (bloco 53).
+   *
+   * Injetada pela razão de sempre: ela vive em `packages/finance`, que é camada
+   * de cima, e `jobs` não pode conhecê-la sem inverter a seta. O que chega aqui
+   * é a função pronta; quem a liga é `apps/worker`.
+   *
+   * **Obrigatória no tipo.** Opcional, ela seria esquecida no primeiro worker
+   * novo e as notas ficariam paradas em `pendente` sem nada ficar vermelho — é o
+   * mesmo critério de `varrerRetencao` e de `expirarEsperas`.
+   */
+  readonly processarNota: (tenantId: string, invoiceId: string) => Promise<EstadoDaNota>;
   readonly oferecerVagaDaEspera: (
     tenantId: string,
     vaga: {
@@ -249,6 +262,44 @@ const avisoDeAgendamento =
   };
 
 export const HANDLERS: Readonly<Record<string, Handler>> = {
+  /**
+   * A nota vai ao emissor **fora** da transação que fechou a comanda.
+   *
+   * A prefeitura pode levar minutos e pode estar fora do ar, e o cliente está
+   * esperando o troco: pendurá-la na frente do balcão é o defeito que a SPEC
+   * §3.11 evita ao delegar a um emissor, e que o bloco 50 já aprendeu com o KYC.
+   *
+   * A tarefa **se reprograma** enquanto a nota não tem desfecho, como a
+   * varredura de retorno do bloco 22. É por isso que não existe varredura de
+   * plataforma para notas pendentes: `fiscal_invoices` tem RLS, e um processo
+   * sem tenant no contexto enxergaria zero linhas — sempre.
+   */
+  'fiscal.emitir': async (tarefa, contexto) => {
+    const invoiceId = String(tarefa.payload['invoiceId'] ?? '');
+    if (!invoiceId) throw new Error('tarefa fiscal sem nota');
+
+    const estado = await contexto.processarNota(tarefa.tenantId, invoiceId);
+    if (!notaEmCurso(estado)) return;
+
+    /**
+     * Ainda na prefeitura: pergunta de novo daqui a pouco.
+     *
+     * Cinco minutos porque é a ordem de grandeza da resposta municipal — um
+     * intervalo curto viraria dezenas de consultas por nota, e o emissor cobra
+     * por chamada. A chave carrega a tentativa para a próxima não colidir com
+     * esta.
+     */
+    const proxima = new Date(contexto.relogio.agora().getTime() + 5 * 60_000);
+    await withTenant(tarefa.tenantId, async (tx) => {
+      await enfileirar(tx, {
+        kind: 'fiscal.emitir',
+        payload: { invoiceId },
+        rodarApos: proxima,
+        idempotencyKey: `fiscal:${invoiceId}:${tarefa.attempts + 1}`,
+      });
+    });
+  },
+
   'notificacao.confirmacao': avisoDeAgendamento('confirmacao'),
   'notificacao.lembrete_24h': avisoDeAgendamento('lembrete_24h'),
   'notificacao.lembrete_2h': avisoDeAgendamento('lembrete_2h'),
