@@ -1335,3 +1335,39 @@ export async function bookingPolicy(
     return row ? { requireOtpForBooking: row.require_otp_for_booking } : null;
   });
 }
+
+/**
+ * O cliente confirmando presença (bloco 55).
+ *
+ * Nasce com o botão "Confirmar" da mensagem, e não existia antes: até aqui
+ * `confirmed` era estado que só o balcão escrevia. O que ele muda é a leitura
+ * do dia — a recepção vê quem respondeu — e não a grade: `pending` e `confirmed`
+ * ocupam o horário igualmente, então confirmar nunca libera nem toma vaga de
+ * ninguém.
+ *
+ * `customerId` é **obrigatório**, ao contrário do cancelamento, em que ele é
+ * opcional porque a barbearia também cancela. Aqui quem confirma é sempre a
+ * pessoa: a RLS separa barbearias e não separa clientes dentro de uma, e o
+ * toque no botão chega por um endereço público.
+ *
+ * Só avança a partir de `pending`. Um horário já cancelado, atendido ou
+ * remarcado não volta a `confirmed` porque alguém tocou num botão de uma
+ * mensagem antiga — e a contagem de linhas é o que separa "confirmei" de "não
+ * havia o que confirmar".
+ */
+export async function confirmAppointment(request: {
+  readonly tenantId: string;
+  readonly appointmentId: string;
+  readonly customerId: string;
+}): Promise<boolean> {
+  return withTenant(request.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      UPDATE appointments
+         SET status = 'confirmed', updated_at = now()
+       WHERE id = ${request.appointmentId}::uuid
+         AND customer_id = ${request.customerId}::uuid
+         AND status = 'pending'
+    `;
+    return afetadas === 1;
+  });
+}

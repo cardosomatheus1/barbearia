@@ -45,6 +45,8 @@ import {
   salvarFiscalNaApi,
   emitirNotaNaApi,
   salvarDocumentoDoTomadorNaApi,
+  salvarCadastroDoWhatsAppNaApi,
+  submeterTemplateNaApi,
   cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
@@ -2587,6 +2589,33 @@ export async function acaoSalvarDocumentoDoTomador(form: FormData): Promise<void
   );
   if (!resultado.ok) falhar(rota, resultado.code);
   redirect(`${rota}?feito=documento`);
+}
+
+const ROTA_WHATSAPP = '/admin/whatsapp';
+
+export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const novo = texto(form, 'token');
+  const resultado = await salvarCadastroDoWhatsAppNaApi(token, {
+    phoneNumberId: texto(form, 'phoneNumberId'),
+    wabaId: texto(form, 'wabaId'),
+    numeroVisivel: texto(form, 'numeroVisivel') || null,
+    // Campo vazio é "não mexa": mandar string vazia apagaria o token salvo.
+    ...(novo ? { token: novo } : {}),
+  });
+  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  redirect(`${ROTA_WHATSAPP}?feito=cadastro`);
+}
+
+export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await submeterTemplateNaApi(token, {
+    tipo: texto(form, 'tipo'),
+    nome: texto(form, 'nome'),
+    corpo: texto(form, 'corpo'),
+  });
+  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  redirect(`${ROTA_WHATSAPP}?feito=template`);
 }
 
 export async function acaoCancelarNota(form: FormData): Promise<void> {

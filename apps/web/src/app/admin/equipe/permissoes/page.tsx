@@ -88,6 +88,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'fiscal.view': 'Ver as notas fiscais emitidas',
   'fiscal.issue': 'Emitir e cancelar nota fiscal',
   'fiscal.settings': 'Cadastrar CNPJ, regime e alíquota',
+  'whatsapp.manage': 'Cadastrar o WhatsApp e os textos aprovados',
   'commission.view_own': 'Ver a própria comissão',
   'commission.view_all': 'Ver a comissão de todo mundo',
   'commission.edit_rules': 'Mudar as regras de comissão',
@@ -182,6 +183,7 @@ const GRUPOS: readonly Grupo[] = [
         p.startsWith('inventory.') ||
         p.startsWith('reports.') ||
         p.startsWith('marketing.') ||
+        p.startsWith('whatsapp.') ||
         p === 'settings.manage' ||
         p === 'team.manage',
     ),

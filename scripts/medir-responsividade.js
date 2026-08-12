@@ -1320,6 +1320,57 @@ function prepararValeEEstorno(slug) {
  * formulário vazio é o layout que não quebra — o que estoura a grade é a linha
  * de nota com número, motivo de recusa e a repartição do Salão-Parceiro juntos.
  */
+/**
+ * O WhatsApp cadastrado e dois textos (bloco 55).
+ *
+ * Pelo banco, como o resto. Sem cadastro a tela mostra só o estado inicial e o
+ * formulário vazio — e formulário vazio é o layout que não quebra. O que estoura
+ * a grade é a linha de template com nome longo, motivo de recusa e a lista de
+ * botões juntos.
+ */
+function prepararWhatsApp(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  if (!local) return;
+
+  psql(
+    `INSERT INTO whatsapp_settings
+       (location_id, tenant_id, status, phone_number_id, waba_id, display_phone,
+        access_token_cipher, verified_at)
+     VALUES ('${local}', '${tenant}', 'ativo', '109876543210987', '102030405060708',
+             '+55 71 3333-4444', 'nonce.tag.dados', now())
+     ON CONFLICT (location_id) DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO whatsapp_numbers (phone_number_id, tenant_id, location_id)
+     VALUES ('109876543210987', '${tenant}', '${local}')
+     ON CONFLICT (phone_number_id) DO NOTHING`,
+  );
+
+  // Um aprovado e um rejeitado: são os dois estados que a tela precisa mostrar
+  // lado a lado, e o segundo traz o texto longo da Meta.
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, status, body, buttons)
+     VALUES ('${tenant}', '${local}', 'lembrete_24h', 'lembrete_24h_v1', 'aprovado',
+             'Olá {{1}}, seu corte é amanhã às {{2}} com {{3}}. Até lá!',
+             '["confirmar","remarcar","cancelar"]'::jsonb)
+     ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, status, body, buttons, rejection_reason)
+     VALUES ('${tenant}', '${local}', 'retorno', 'convite_de_retorno_v2', 'rejeitado',
+             'Já faz 28 dias desde seu último corte. Quer reservar novamente?',
+             '["agendar_novamente"]'::jsonb,
+             'Conteúdo promocional em template de categoria utilitária — reenvie como marketing')
+     ON CONFLICT DO NOTHING`,
+  );
+}
+
 function prepararFiscal(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -1726,6 +1777,7 @@ async function main() {
   prepararFinanceiro(slug);
   prepararValeEEstorno(slug);
   const vendaComNota = prepararFiscal(slug);
+  prepararWhatsApp(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
@@ -1828,6 +1880,7 @@ async function main() {
     { nome: 'painel', url: '/admin/painel', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'diagnóstico do catálogo', url: '/admin/catalogo/diagnostico', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'nota fiscal', url: '/admin/fiscal', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'whatsapp', url: '/admin/whatsapp', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

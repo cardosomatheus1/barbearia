@@ -196,6 +196,19 @@ export const PERMISSOES = [
    * contador.
    */
   'fiscal.settings',
+  /**
+   * Cadastrar o número e os textos do WhatsApp (bloco 55).
+   *
+   * `settings.manage` daria conta, e a razão de ser separada é o que ela
+   * guarda: o **token da Meta**, que manda mensagem em nome da barbearia para a
+   * base inteira de clientes dela. É a credencial de maior alcance do produto
+   * depois da senha do dono, e quem mexe nela não é quem ajusta o horário de
+   * funcionamento.
+   *
+   * Não deriva segundo fator: não move centavo. O que ela não dá é **ler** as
+   * mensagens — quem chegou e quem leu é dado de cliente.
+   */
+  'whatsapp.manage',
   'commission.view_own',
   'commission.view_all',
   'commission.edit_rules',

@@ -39,6 +39,7 @@ import { PacoteController } from './admin/pacote.controller.js';
 import { FinanceiroController } from './admin/financeiro.controller.js';
 import { DreController } from './admin/dre.controller.js';
 import { FiscalController } from './admin/fiscal.controller.js';
+import { WhatsAppController } from './admin/whatsapp.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
 import { AssinaturaController } from './admin/assinatura.controller.js';
@@ -54,6 +55,7 @@ import {
 } from './plataforma/plataforma.controller.js';
 import { WebhookDoPspController } from './plataforma/webhook.controller.js';
 import { StripeWebhookController } from './plataforma/stripe-webhook.controller.js';
+import { WhatsAppWebhookController } from './plataforma/whatsapp-webhook.controller.js';
 import { PlataformaGuard } from './plataforma/plataforma.guard.js';
 import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
@@ -102,6 +104,7 @@ import { TenantService } from './tenant/tenant.service.js';
     FinanceiroController,
     DreController,
     FiscalController,
+    WhatsAppController,
     AvaliacaoController,
     EstoqueController,
     AssinaturaController,
@@ -119,6 +122,7 @@ import { TenantService } from './tenant/tenant.service.js';
     PlataformaController,
     WebhookDoPspController,
     StripeWebhookController,
+    WhatsAppWebhookController,
   ],
   providers: [
     TenantService,

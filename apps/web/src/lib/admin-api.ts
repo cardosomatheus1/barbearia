@@ -2948,3 +2948,58 @@ export const emitirNotaNaApi = (token: string, orderId: string) =>
 
 export const cancelarNotaNaApi = (token: string, notaId: string, motivo: string) =>
   chamar<{ ok: true }>('POST', `/v1/admin/fiscal/notas/${notaId}/cancelar`, { motivo }, token);
+
+// -- WhatsApp (bloco 55) -----------------------------------------------------
+
+export interface CadastroDoWhatsAppNaTela {
+  readonly estado: 'nao_configurado' | 'aguardando_verificacao' | 'ativo' | 'suspenso';
+  readonly phoneNumberId: string | null;
+  readonly wabaId: string | null;
+  readonly numeroVisivel: string | null;
+  readonly motivo: string | null;
+  readonly verificadoEm: string | null;
+  /** **Se** existe token, nunca qual é: a tela não recebe credencial viva. */
+  readonly temToken: boolean;
+}
+
+export interface TemplateNaTelaDoAdmin {
+  readonly id: string;
+  readonly tipo: string;
+  readonly nome: string;
+  readonly idioma: string;
+  readonly estado: 'rascunho' | 'pendente' | 'aprovado' | 'rejeitado' | 'pausado';
+  readonly corpo: string;
+  readonly botoes: readonly string[];
+  readonly motivoDaRecusa: string | null;
+}
+
+export const cadastroDoWhatsAppNaApi = (token: string) =>
+  chamar<{ cadastro: CadastroDoWhatsAppNaTela | null }>(
+    'GET',
+    '/v1/admin/whatsapp/cadastro',
+    undefined,
+    token,
+  );
+
+export const salvarCadastroDoWhatsAppNaApi = (
+  token: string,
+  corpo: {
+    phoneNumberId: string;
+    wabaId: string;
+    numeroVisivel: string | null;
+    token?: string;
+  },
+) => chamar<CadastroDoWhatsAppNaTela>('PUT', '/v1/admin/whatsapp/cadastro', corpo, token);
+
+export const templatesDoWhatsAppNaApi = (token: string) =>
+  chamar<{ templates: readonly TemplateNaTelaDoAdmin[] }>(
+    'GET',
+    '/v1/admin/whatsapp/templates',
+    undefined,
+    token,
+  );
+
+export const submeterTemplateNaApi = (
+  token: string,
+  corpo: { tipo: string; nome: string; corpo: string },
+) => chamar<TemplateNaTelaDoAdmin>('POST', '/v1/admin/whatsapp/templates', corpo, token);

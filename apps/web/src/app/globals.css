@@ -4081,6 +4081,7 @@ main { padding-bottom: var(--space-8); }
    em que o gestor não sabia onde estava, com o teste verde porque ele também
    tinha uma lista escrita à mão. O teste agora deriva do registro. */
 .casco:has([data-secao='fiscal']) .contexto__link[data-para='fiscal'],
+.casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp'],
 .casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
 .casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);

@@ -1,5 +1,5 @@
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
-import { respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
+import { executarResposta, respostaParaEnviar, varrerRetencao } from '@barbearia/crm';
 import {
   aplicarReguaDoClube,
   conciliarCobrancas,
@@ -9,6 +9,8 @@ import {
   montarAvisoDoClube,
 } from '@barbearia/finance';
 import {
+  cancelAppointment,
+  confirmAppointment,
   expirarEsperas,
   oferecerProximaVaga,
   primaryLocation,
@@ -219,6 +221,37 @@ async function main(): Promise<void> {
        * instanciar um aqui faria deste o único caminho que não troca junto
        * quando o WhatsApp oficial entrar.
        */
+      /**
+       * O botão da mensagem virando ação (bloco 55), ligado aqui pelo mesmo
+       * motivo da retenção: a decisão mora em `packages/crm`, e quem mexe na
+       * agenda é `packages/scheduling` — dois pacotes que `jobs` não conhece.
+       *
+       * `cancelAppointment` recebe `customerId` **sempre**: a RLS separa
+       * barbearias e não separa clientes dentro de uma, e o toque veio de fora.
+       * Sem ele, quem descobrisse um id cancelaria o horário de qualquer outro
+       * cliente da mesma casa.
+       */
+      responderWhatsApp: async (tenantId, inboundId, agora) => {
+        await executarResposta({
+          tenantId,
+          inboundId,
+          agora,
+          cancelar: async ({ appointmentId, customerId }) => {
+            await cancelAppointment({
+              tenantId,
+              appointmentId,
+              by: 'customer',
+              customerId,
+              reason: 'cancelado pelo WhatsApp',
+              now: agora,
+            });
+          },
+          confirmar: async ({ appointmentId, customerId }) => {
+            await confirmAppointment({ tenantId, appointmentId, customerId });
+          },
+        });
+      },
+
       entregarNotas: async (tenantId, agora) => {
         const resultado = await entregarNotasAutorizadas({
           tenantId,
