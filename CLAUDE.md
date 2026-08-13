@@ -23,6 +23,7 @@ cometido e corrigido neste repositório.
 | Repositório e query | integração — a query real, não um mock |
 | Endpoint | integração, incluindo caminho de erro e de autorização |
 | Interface | teste de comportamento, não de snapshot de markup |
+| Fluxo com tela | e2e da API cobrindo o caminho inteiro. **Ninguém clica nas telas hoje** — a medição as abre e mede, não as usa. É lacuna declarada, com dependência escrita no ROADMAP |
 
 ### Regras
 
@@ -43,6 +44,18 @@ cometido e corrigido neste repositório.
   negada, tenant errado, recurso inexistente.
 - **Nome de teste descreve a regra**, não a função. `"exceção do profissional
   vence o feriado da unidade"`, não `"resolveWorkingDay works"`.
+- **O `vitest` não faz typecheck.** Ele roda por esbuild, que apaga os tipos sem
+  conferi-los: um teste que monta o objeto com o nome de campo errado passa
+  verde, e às vezes **pelo motivo errado** — no bloco 60 um histórico montado com
+  `quando` no lugar de `comecariaEm` chegava vazio à janela, e a asserção sobre a
+  presunção de boa-fé estava na verdade provando que a janela descarta lixo. O
+  `pnpm verify` roda typecheck e a suíte; verde na suíte não quer dizer que os
+  tipos batem.
+- **SQL cru não é conferido por ninguém até rodar.** `$queryRaw` não sabe se a
+  coluna existe: o Prisma é introspectado, mas a string não passa por ele. Toda
+  consulta nova precisa de um teste que a **execute** — e é por isso que
+  `packages/db` e as suítes de integração existem. Coluna inventada numa consulta
+  só aparece em produção.
 - Cobertura não é meta. Regra sem teste é que é problema.
 
 ---
@@ -118,6 +131,21 @@ externa.** Na prática: quase todos.
 - `customers.export`, acesso a foto, impersonação e alteração de permissão são
   **sempre auditados**.
 - Log de auditoria é append-only.
+
+### Ler o código não é verificar o comportamento
+
+A `/security-review` lê. Ela acha muito — sete achados reais nos blocos 58 e 59 —
+e há uma classe que ela não pega: a que só aparece quando alguém **executa** o
+ataque. O produto tem duas barbearias em toda suíte de integração de propósito,
+e é isso que as torna úteis. Toda rota nova que recebe um id de outra entidade
+ganha o teste que manda **o id da vizinha** e espera recusa — não porque a RLS
+possa falhar, mas porque a checagem de integridade referencial do Postgres a
+ignora, e a chave estrangeira aceita o id alheio sem reclamar.
+
+**Entrada malformada que devolve 500 é defeito de borda, sempre.** O certo é 400
+com motivo. Já aconteceu aqui: `(71) 3333-4444` batia na `CHECK` de E.164 e a
+tela do onboarding dizia "Erro interno" sobre um telefone que a pessoa digitou
+do jeito que se digita telefone no Brasil.
 
 ### Sempre
 
@@ -781,6 +809,14 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Plano do clube por unidade | o escopo é do **plano**, não da barbearia: o clube da filial pode ser da loja e o Premium pode valer na rede, e um interruptor único obrigaria a escolher pelo pior dos dois. Assinatura anterior à coluna de unidade é coberta em toda parte — ela foi vendida quando loja não fazia parte da promessa |
 | Escopo do fiado | é da **barbearia**, ao contrário do clube: aqui não há dois produtos a distinguir. E o limite não é repartido entre as lojas — "pode levar R$ 300 sem pagar" é uma frase sobre a pessoa, e dividi-la faria abrir a segunda loja cortar pela metade o crédito de todo mundo |
 | `as never` num teste ou num controller | é o compilador desligado exatamente onde ele serve. Um campo novo e obrigatório chegou ao banco como nulo em dezenove testes por causa de um — e a coluna tinha `DEFAULT`, que um `NULL` explícito atropela. `Partial<T>` no teste e `z.infer` no controller fazem o campo novo aparecer em vez de sumir |
+| Semente de teste que produz o cenário | é de **outra gente** que não o sujeito do teste. A semente que enchia a hora de pico usava o cliente do próprio caso: os dezesseis comparecimentos dela levavam três faltas em vinte, score 85, e a recusa que o teste existia para provar nunca disparava. Semente produz **contexto**; o sujeito é separado |
+| Relógio dentro de uma leitura que decide dinheiro | por parâmetro, nunca `new Date()` no corpo. `horaCheia` lia o relógio do processo e a janela de oito semanas andava sozinha: o quarto termo do sinal ficou não-determinístico do bloco 57 ao 60, e o sintoma era um teste que passava hoje e falharia depois de amanhã |
+| Código de saída atrás de um `pipe` | é o do último comando, não o do primeiro. `pnpm typecheck 2>&1 \| tail` devolve zero com erro de tipo na tela, e foi assim que um commit entrou com typecheck vermelho. Portão desligado em silêncio é pior que portão lento |
+| `ON CONFLICT DO NOTHING` × `DO UPDATE` | é decisão de produto, não detalhe. `DO NOTHING` semeia padrão e **respeita quem já decidiu**; `DO UPDATE` corrige para todos e **sobrescreve escolha**. Escolher pelo que é mais fácil de escrever é como uma decisão do dono some sem ninguém saber |
+| Número de relatório que ignora parte do dado | diz isso **na tela**. Uma conta sem categoria fora do DRE, um CMV indisponível, uma janela sem movimento — o número sai completo, com cara de completo, e o dono decide em cima dele. Aviso silencioso é pior que erro visível: o erro visível alguém investiga |
+| Nome de indicador | é o que o número **é**, não o que soa melhor. "Margem de caixa" não é "margem líquida", e chamar errado leva a decisão errada com o número certo |
+| Trocar a senha | revoga **todas** as sessões abertas da conta, na mesma transação. Sem isso, quem roubou a sessão continua dentro depois da troca — e trocar a senha é justamente o que a pessoa faz quando desconfia |
+| `.gitignore` de diretório inteiro | ignora o que está dentro, e exceção lá dentro **não vale** — o git não entra no diretório para avaliá-la. Ignore o conteúdo (`.claude/*`) e libere o que precisa (`!.claude/skills/`), senão uma reorganização apaga arquivo novo sem aviso |
 | Semente de teste que limpa o banco | tem gancho com folga (`hookTimeout`), e não é tolerância a lentidão. O portão roda dez suítes contra o mesmo Postgres: o `TRUNCATE` espera pela trava e o gancho passa dos 10s do padrão. O estrago não é o gancho que estoura — é o que sobra dele, porque as instruções já enviadas caem **depois** do `TRUNCATE` seguinte e matam o teste de baixo com chave duplicada num id que ele nem escreveu. A falha aparecia ora num pacote ora noutro, sempre em testes diferentes: retrato de corrida, e a razão de o suspeito nunca ser o teste que ficou vermelho |
 
 ---
