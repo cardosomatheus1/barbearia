@@ -110,8 +110,20 @@ export async function horaCheia(
   tx: TransactionClient,
   locationId: string,
   comecaEm: Date,
+  /**
+   * O relógio entra por parâmetro, e o padrão existe só para os chamadores
+   * antigos.
+   *
+   * A primeira versão chamava `new Date()` aqui dentro. Isso torna a janela de
+   * oito semanas dependente do relógio do processo: um teste que semeia
+   * histórico ancorado no próprio instante que consulta perde as semanas mais
+   * antigas assim que o dia real avança, e a hora deixa de ser de pico sem nada
+   * ter mudado. É a regra do CLAUDE.md §1 — relógio por parâmetro —, e ela vale
+   * aqui porque este número decide se o cliente paga sinal.
+   */
+  agora: Date = new Date(),
 ): Promise<boolean> {
-  const celulas = await carregarCelulas(tx, locationId, new Date());
+  const celulas = await carregarCelulas(tx, locationId, agora);
   const grade = montarGrade(celulas, horasDaGrade(celulas));
 
   const local = await tx.$queryRaw<{ dia: number; hora: number }[]>`

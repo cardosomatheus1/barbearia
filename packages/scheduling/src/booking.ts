@@ -22,7 +22,7 @@ import {
 } from '@barbearia/core';
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
-import { avaliarSinalEm } from './confianca.js';
+import { avaliarSinalEm, conferirMarcacaoOnline, registrarRecusaOnline } from './confianca.js';
 import {
   fecharEsperasAtendidas,
   quemQuerAVagaLiberada,
@@ -57,13 +57,48 @@ export type BookingFailure =
   | 'hold_expired'
   | 'too_late'
   | 'too_many_reschedules'
-  | 'already_started';
+  | 'already_started'
+  /** Bloco 60: score baixo não marca sozinho em hora cheia. Só a recepção. */
+  | 'score_no_pico';
 
 /** Espelha o enum `appointment_source`. Valor fora da lista quebraria o INSERT
  *  com erro de banco em vez de recusa limpa. */
 export type AppointmentSource =
   | 'website' | 'app' | 'whatsapp' | 'instagram' | 'google' | 'marketplace'
   | 'reception' | 'professional' | 'api' | 'recurrence' | 'waitlist';
+
+/**
+ * Os canais em que quem marca é **a casa**, e não o cliente sozinho.
+ *
+ * A SPEC §2.13 escreve *"só recepção"*, e a lista existe para que um canal novo
+ * nasça do lado certo: quem for acrescentado sem pensar cai no lado do cliente,
+ * que é o conservador — a regra vale, e alguém repara.
+ *
+ * `recurrence` entra porque a recorrência foi criada por alguém do balcão uma
+ * vez e se repete sozinha; recusá-la faria a série morrer no meio sem que o
+ * cliente tenha feito nada. `waitlist` entra porque a vaga foi **oferecida**
+ * pela casa: convidar e depois recusar é o pior desfecho possível.
+ */
+const PELO_BALCAO = new Set<AppointmentSource>(['reception', 'professional', 'recurrence', 'waitlist']);
+
+/**
+ * A recusa carrega o score e o limiar para o registro ser feito depois.
+ *
+ * Fora da transação, porque a transação voltou atrás: `registrarRecusaOnline`
+ * abre a sua. Uma falha ao registrar não pode transformar uma recusa explicada
+ * num erro genérico na tela de quem está com o telefone na mão.
+ */
+export class BookingRecusadoPorScore extends Error {
+  readonly code = 'score_no_pico' as const;
+  constructor(
+    readonly score: number,
+    readonly limiar: number,
+    readonly comecaEm: Date,
+  ) {
+    super('Este horário só pode ser marcado pela recepção.');
+    this.name = 'BookingRecusadoPorScore';
+  }
+}
 
 export class BookingError extends Error {
   constructor(readonly code: BookingFailure, message: string) {
@@ -430,6 +465,40 @@ async function insertAppointment(
 export async function createAppointment(
   request: CreateAppointmentRequest,
 ): Promise<AppointmentRef> {
+  try {
+    return await criarDentroDaTransacao(request);
+  } catch (erro) {
+    /**
+     * O registro da recusa acontece **depois** da transação, e por isso o
+     * `catch` está aqui.
+     *
+     * A transação voltou atrás — foi ela que recusou —, então não há onde
+     * gravar de dentro. E uma falha no registro não pode virar erro genérico na
+     * tela de quem está com o telefone na mão: a recusa é explicada, e é isso
+     * que o cliente precisa ler.
+     */
+    if (erro instanceof BookingRecusadoPorScore && request.customerId) {
+      try {
+        await registrarRecusaOnline({
+          tenantId: request.tenantId,
+          locationId: request.locationId,
+          customerId: request.customerId,
+          score: erro.score,
+          limiar: erro.limiar,
+          comecaEm: erro.comecaEm,
+        });
+      } catch {
+        // O rastro é para o dono medir a regra; perdê-lo não muda a resposta ao
+        // cliente, e transformá-lo em 500 sim.
+      }
+    }
+    throw erro;
+  }
+}
+
+async function criarDentroDaTransacao(
+  request: CreateAppointmentRequest,
+): Promise<AppointmentRef> {
   return withTenant(request.tenantId, async (tx) => {
     const storedKey = request.idempotencyKey
       ? scopedIdempotencyKey(request.tenantId, request.customerId, request.idempotencyKey)
@@ -441,6 +510,33 @@ export async function createAppointment(
     }
 
     const slot = await resolveSlot(tx, request);
+
+    /**
+     * A recusa por score, **antes** do sinal e dentro da mesma transação
+     * (bloco 60, SPEC §2.13).
+     *
+     * Antes porque decidir o sinal de um agendamento que vai ser recusado é
+     * trabalho jogado fora; dentro da transação pela mesma razão do sinal — a
+     * grade de pico é derivada do movimento, e entre a leitura e o `INSERT` a
+     * hora pode virar de cheia.
+     *
+     * `PELO_BALCAO` é o que traduz *"só recepção"* da SPEC: o canal decide, e a
+     * pessoa continua sendo atendida por quem estiver no balcão.
+     */
+    const online = await conferirMarcacaoOnline(tx, {
+      locationId: request.locationId,
+      customerId: request.customerId ?? null,
+      comecaEm: slot.serviceStart,
+      peloBalcao: PELO_BALCAO.has(request.source ?? 'website'),
+      now: request.now ?? new Date(),
+    });
+    if (!online.pode) {
+      throw new BookingRecusadoPorScore(
+        online.score,
+        online.limiar,
+        slot.serviceStart,
+      );
+    }
 
     // O sinal é decidido com o ticket que acabou de ser resolvido, e não com o
     // que o cliente mandou: preço vem do catálogo, como duração e buffer.

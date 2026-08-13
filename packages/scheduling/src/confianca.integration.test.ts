@@ -1,6 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { avaliarSinal, confiancaDoCliente, historicoDoCliente } from './confianca.js';
+import {
+  avaliarSinal,
+  confiancaDoCliente,
+  conferirMarcacaoOnline,
+  historicoDoCliente,
+} from './confianca.js';
+import { horaCheia } from './ocupacao.js';
 import { withTenant } from '@barbearia/db';
 
 /**
@@ -371,5 +377,157 @@ describeIfDb('sinal seletivo', () => {
     // A unidade da vizinha não é visível sob a RLS desta barbearia: a política
     // não é encontrada, e o que não é encontrado não cobra.
     expect((await avaliar({ locationId: LOCATION_RIVAL })).exigido).toBe(false);
+  });
+
+  // -- a recusa de marcação online em hora cheia (bloco 60) --------------------
+
+  /**
+   * A semente sintética: oito semanas de movimento numa hora, para a grade de
+   * ocupação existir.
+   *
+   * Sem ela o heatmap não tem o que medir e **nenhuma hora é de pico** — a
+   * recusa nunca dispararia, e o teste ficaria verde provando nada. É o mesmo
+   * cuidado da medição, que precisa de conteúdo real para a tela dizer a
+   * verdade: aqui o conteúdo é histórico.
+   *
+   * Cada repetição vai para um profissional diferente, e não para o mesmo com
+   * minutos de diferença: a constraint anti-overbooking recusa dois
+   * atendimentos que se sobrepõem na mesma cadeira, e ela está certa. Hora cheia
+   * de verdade é várias cadeiras ocupadas ao mesmo tempo.
+   */
+  /**
+   * A multidão que enche a hora **não é o cliente do teste**.
+   *
+   * Usando CARLOS, os dezesseis comparecimentos da semente consertavam a
+   * reputação de quem o teste queria ver recusado: três faltas em vinte
+   * agendamentos dão score 85, e a recusa nunca disparava. A semente existe
+   * para produzir **ocupação**, e ocupação é de outra gente.
+   */
+  const MULTIDAO = 'cccccccc-0000-0000-0000-000000000009';
+
+  async function encherAHora(alvo: Date): Promise<void> {
+    await admin.$executeRawUnsafe(
+      `INSERT INTO customers (id, tenant_id, name, phone_e164)
+       VALUES ($1::uuid, $2::uuid, 'Gente que enche a hora', '+5571900000009')
+       ON CONFLICT DO NOTHING`,
+      MULTIDAO,
+      TENANT,
+    );
+    /**
+     * As oito semanas **anteriores ao mesmo instante**, e não uma data montada
+     * com dia da semana e hora.
+     *
+     * A primeira versão calculava `date_trunc('week') + dias + horas` em UTC e
+     * o produto lê a hora **no fuso da unidade**: a semente enchia as onze da
+     * manhã e o teste perguntava pelas duas da tarde. Subtraindo semanas do
+     * próprio instante que o teste consulta, não há aritmética de fuso para
+     * errar — e é o mesmo instante nos dois lados.
+     */
+    await admin.$executeRawUnsafe(
+      `INSERT INTO appointments
+         (tenant_id, location_id, professional_id, customer_id, status,
+          starts_at, ends_at, service_starts_at, service_ends_at)
+       SELECT $1::uuid, $2::uuid, p.id, $3::uuid, 'completed',
+              d.quando, d.quando + interval '50 minutes',
+              d.quando, d.quando + interval '50 minutes'
+         FROM generate_series(1, 8) AS semana,
+              LATERAL (SELECT $4::timestamptz - (semana || ' weeks')::interval AS quando) AS d,
+              LATERAL (
+                SELECT id FROM professionals
+                 WHERE location_id = $2::uuid AND active ORDER BY created_at
+              ) AS p`,
+      TENANT,
+      LOCATION,
+      MULTIDAO,
+      alvo,
+    );
+  }
+
+  /** Terça, duas da tarde no fuso da unidade. */
+  const TERCA_CHEIA = new Date('2026-08-11T17:00:00Z');
+
+  it('a hora só vira de pico depois de movimento medido, e não antes', async () => {
+    /**
+     * O pico é derivado do movimento (bloco 57), nunca cadastrado. Este teste
+     * prova que a semente sintética produz o que a regra do bloco 60 consome —
+     * sem ele, "nenhuma hora é de pico" faria toda a recusa passar verde sem
+     * nunca disparar.
+     */
+    expect(await withTenant(TENANT, (tx) => horaCheia(tx, LOCATION, TERCA_CHEIA, AGORA))).toBe(false);
+
+    await encherAHora(TERCA_CHEIA);
+    expect(await withTenant(TENANT, (tx) => horaCheia(tx, LOCATION, TERCA_CHEIA, AGORA))).toBe(true);
+  });
+
+  it('quem falta muito não marca sozinho na hora cheia, e o balcão marca', async () => {
+    await encherAHora(TERCA_CHEIA);
+    await exec(`UPDATE locations SET online_block_score = 40 WHERE id = '${LOCATION}'`);
+    await exec([
+      agendamento({ id: idDe(70), diasAtras: 3, status: 'no_show' }),
+      agendamento({ id: idDe(71), diasAtras: 4, status: 'no_show' }),
+      agendamento({ id: idDe(72), diasAtras: 5, status: 'no_show' }),
+      agendamento({ id: idDe(73), diasAtras: 6, status: 'completed' }),
+    ].join(';'));
+
+    const pedido = {
+      locationId: LOCATION,
+      customerId: CARLOS,
+      comecaEm: TERCA_CHEIA,
+      now: AGORA,
+    };
+
+    const online = await withTenant(TENANT, (tx) =>
+      conferirMarcacaoOnline(tx, { ...pedido, peloBalcao: false }),
+    );
+    expect(online.pode).toBe(false);
+
+    // "só recepção": o canal decide, e a pessoa continua sendo atendida.
+    const balcao = await withTenant(TENANT, (tx) =>
+      conferirMarcacaoOnline(tx, { ...pedido, peloBalcao: true }),
+    );
+    expect(balcao.pode).toBe(true);
+  });
+
+  it('fora da hora cheia a mesma pessoa marca sozinha', async () => {
+    await encherAHora(TERCA_CHEIA);
+    await exec(`UPDATE locations SET online_block_score = 40 WHERE id = '${LOCATION}'`);
+    await exec([
+      agendamento({ id: idDe(80), diasAtras: 3, status: 'no_show' }),
+      agendamento({ id: idDe(81), diasAtras: 4, status: 'no_show' }),
+      agendamento({ id: idDe(82), diasAtras: 5, status: 'no_show' }),
+    ].join(';'));
+
+    // Sete da manhã de terça: a semente encheu as duas da tarde.
+    const terca7h = new Date('2026-08-11T10:00:00Z');
+    const fora = await withTenant(TENANT, (tx) =>
+      conferirMarcacaoOnline(tx, {
+        locationId: LOCATION,
+        customerId: CARLOS,
+        comecaEm: terca7h,
+        peloBalcao: false,
+        now: AGORA,
+      }),
+    );
+    expect(fora.pode).toBe(true);
+  });
+
+  it('desligado é o padrão, e desligado não recusa ninguém', async () => {
+    await encherAHora(TERCA_CHEIA);
+    await exec([
+      agendamento({ id: idDe(90), diasAtras: 3, status: 'no_show' }),
+      agendamento({ id: idDe(91), diasAtras: 4, status: 'no_show' }),
+      agendamento({ id: idDe(92), diasAtras: 5, status: 'no_show' }),
+    ].join(';'));
+
+    const desligado = await withTenant(TENANT, (tx) =>
+      conferirMarcacaoOnline(tx, {
+        locationId: LOCATION,
+        customerId: CARLOS,
+        comecaEm: TERCA_CHEIA,
+        peloBalcao: false,
+        now: AGORA,
+      }),
+    );
+    expect(desligado.pode).toBe(true);
   });
 });

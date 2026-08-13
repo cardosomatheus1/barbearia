@@ -13,6 +13,7 @@ import {
 import type { Request } from 'express';
 import {
   BookingError,
+  BookingRecusadoPorScore,
   bookingPolicy,
   cancelAppointment,
   createAppointment,
@@ -60,6 +61,20 @@ const OTP_STATUS: Record<string, number> = {
 };
 
 function toHttp(error: unknown): never {
+  /**
+   * 409, e não 403 (bloco 60).
+   *
+   * 403 é "você não tem acesso a isto", e a pessoa **tem**: ela pode ser
+   * atendida, pelo balcão, naquela mesma hora. O que não cabe é marcar sozinha
+   * numa hora cheia — um conflito com o estado, que é o que 409 diz.
+   *
+   * E a mensagem nunca cita score: ele é interno por regra da SPEC §2.13, e
+   * "seu score é 32" no navegador do cliente é o constrangimento que a regra 5
+   * existe para impedir.
+   */
+  if (error instanceof BookingRecusadoPorScore) {
+    throw new DomainError(error.code, 409, error.message);
+  }
   if (error instanceof BookingError) {
     throw new DomainError(error.code, BOOKING_STATUS[error.code] ?? 400, error.message);
   }

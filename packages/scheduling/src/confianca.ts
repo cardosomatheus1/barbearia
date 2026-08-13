@@ -3,7 +3,9 @@ import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   MESES_DA_JANELA,
   POLITICA_SEM_SINAL,
+  SCORE_QUE_DISPENSA_SINAL,
   decidirSinal,
+  podeMarcarOnline,
   pontuacaoDeConfianca,
   type AgendamentoNoHistorico,
   type Confiabilidade,
@@ -272,7 +274,7 @@ export async function avaliarSinalEm(
    */
   const clienteNovoEmPico =
     !confianca.temEfeito && pedido.comecaEm
-      ? await horaCheia(tx, pedido.locationId, pedido.comecaEm)
+      ? await horaCheia(tx, pedido.locationId, pedido.comecaEm, pedido.now)
       : false;
 
   const decisao = decidirSinal({
@@ -300,4 +302,102 @@ async function algumServicoSempreExige(
     ) AS existe
   `;
   return linhas[0]?.existe ?? false;
+}
+
+// ---------------------------------------------------------------------------
+// A recusa de marcação online em hora cheia (bloco 60, SPEC §2.13)
+// ---------------------------------------------------------------------------
+
+/** Os dois limiares que a unidade guarda. Nulo no primeiro é desligado. */
+export async function limiaresDoScore(
+  tx: TransactionClient,
+  locationId: string,
+): Promise<{ readonly bloqueioOnline: number | null; readonly confiavelNaEspera: number }> {
+  const linhas = await tx.$queryRaw<
+    { online_block_score: number | null; waitlist_trusted_score: number }[]
+  >`
+    SELECT online_block_score, waitlist_trusted_score
+      FROM locations WHERE id = ${locationId}::uuid
+  `;
+  const linha = linhas[0];
+  // Unidade inexistente ou de outra barbearia cai no desligado, pela mesma razão
+  // de `politicaDeSinal`: quem chama está montando uma reserva, e ela não pode
+  // ser recusada porque a configuração não foi encontrada.
+  if (!linha) return { bloqueioOnline: null, confiavelNaEspera: SCORE_QUE_DISPENSA_SINAL };
+  return {
+    bloqueioOnline: linha.online_block_score,
+    confiavelNaEspera: linha.waitlist_trusted_score,
+  };
+}
+
+/**
+ * Esta pessoa pode marcar sozinha este horário?
+ *
+ * Roda **dentro da transação que cria o agendamento**, como o sinal e pelo mesmo
+ * motivo: entre a decisão e o `INSERT` o horário pode virar de pico — a grade é
+ * derivada do movimento e o movimento muda — e a recusa precisa valer sobre o
+ * que está sendo gravado, não sobre o que se leu antes.
+ *
+ * ## A leitura da grade é evitada quando não pode mudar a resposta
+ *
+ * A grade de ocupação é a consulta mais cara deste caminho, e ela só importa
+ * quando a regra está ligada **e** o score já decide alguma coisa **e** está
+ * abaixo do limiar. Nos outros casos a resposta é sim sem ir ao banco — é o
+ * mesmo cuidado de `horaCheia`, no caminho mais chamado do produto.
+ */
+export async function conferirMarcacaoOnline(
+  tx: TransactionClient,
+  pedido: {
+    readonly locationId: string;
+    readonly customerId: string | null;
+    readonly comecaEm: Date;
+    readonly peloBalcao: boolean;
+    readonly now: Date;
+  },
+): Promise<{ readonly pode: true } | { readonly pode: false; readonly score: number; readonly limiar: number }> {
+  if (pedido.peloBalcao || !pedido.customerId) return { pode: true };
+
+  const limiares = await limiaresDoScore(tx, pedido.locationId);
+  if (limiares.bloqueioOnline === null) return { pode: true };
+
+  const confianca = await confiancaDoCliente(tx, pedido.customerId, pedido.now);
+  if (!confianca.temEfeito || confianca.score >= limiares.bloqueioOnline) return { pode: true };
+
+  const decisao = podeMarcarOnline({
+    confianca,
+    limiar: limiares.bloqueioOnline,
+    ehHorarioDePico: await horaCheia(tx, pedido.locationId, pedido.comecaEm, pedido.now),
+    peloBalcao: false,
+  });
+  if (decisao.pode) return { pode: true };
+
+  return { pode: false, score: confianca.score, limiar: limiares.bloqueioOnline };
+}
+
+/**
+ * Registra a recusa, com o score congelado.
+ *
+ * Fora da transação da reserva de propósito: a reserva foi **recusada**, então
+ * não há transação para carregar isto — e uma falha ao registrar não pode
+ * transformar uma recusa explicada num erro genérico na tela do cliente.
+ */
+export async function registrarRecusaOnline(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly customerId: string;
+  readonly score: number;
+  readonly limiar: number;
+  readonly comecaEm: Date;
+}): Promise<void> {
+  await withTenant(params.tenantId, async (tx) => {
+    await tx.$executeRaw`
+      INSERT INTO online_blocks
+        (tenant_id, location_id, customer_id, score, threshold, wanted_at)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        ${params.locationId}::uuid, ${params.customerId}::uuid,
+        ${params.score}, ${params.limiar}, ${params.comecaEm}
+      )
+    `;
+  });
 }
