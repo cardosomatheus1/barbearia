@@ -435,6 +435,27 @@ export async function confiancaDeVarios(
      ORDER BY a.service_starts_at DESC
   `;
 
+  /**
+   * O override manual vale aqui também (SPEC §2.13 regra 7).
+   *
+   * Sem ele, o mesmo cliente tinha **dois scores** conforme a consequência: o
+   * gerente zerava a reputação de quem sumiu com a chave da barbearia, e a
+   * pessoa continuava furando a fila de espera porque o histórico calculado
+   * estava limpo. E o contrário — o override de 100 para quem faltou três vezes
+   * por internação dispensava o sinal e não dava prioridade nenhuma.
+   *
+   * Duas fontes de verdade para o mesmo número é o que este projeto proíbe em
+   * letras. Achado da `/security-review` do bloco 60.
+   */
+  const overrides = await tx.$queryRaw<{ id: string; reliability_override: number | null }[]>`
+    SELECT id, reliability_override FROM customers WHERE id = ANY(${ids}::uuid[])
+  `;
+  const forcados = new Map(
+    overrides
+      .filter((o) => o.reliability_override !== null)
+      .map((o) => [o.id, o.reliability_override as number]),
+  );
+
   const porCliente = new Map<string, AgendamentoNoHistorico[]>();
   for (const linha of linhas) {
     const desfecho = desfechoDe(linha);
@@ -451,15 +472,24 @@ export async function confiancaDeVarios(
   // Quem não tem nenhuma linha entra igual: a presunção de boa-fé vale para
   // quem nunca veio, e deixá-lo fora do mapa faria o chamador ter que repetir
   // a regra 1 da SPEC §2.13 por conta própria.
-  return new Map(ids.map((id) => [id, pontuacaoDeConfianca(porCliente.get(id) ?? [], agora)]));
+  return new Map(
+    ids.map((id) => {
+      const forcado = forcados.get(id);
+      // O override **substitui** e passa a ter efeito, mesmo abaixo do mínimo de
+      // três — é a mesma leitura de `confiancaDoCliente`, e ela é deliberada: o
+      // gerente escreveu um motivo auditado, e isso é história suficiente.
+      if (forcado !== undefined) {
+        return [id, { score: forcado, considerados: 0, temEfeito: true }] as const;
+      }
+      return [id, pontuacaoDeConfianca(porCliente.get(id) ?? [], agora)] as const;
+    }),
+  );
 }
 
 /** Uma recusa registrada, para a tela do dono medir a regra. */
 export interface RecusaNaTela {
   readonly id: string;
   readonly clienteNome: string | null;
-  readonly score: number;
-  readonly limiar: number;
   readonly quando: string;
   readonly queria: string;
 }
@@ -469,8 +499,12 @@ export interface RecusaNaTela {
  *
  * Existe para o dono **medir a regra que ligou**: sem ela, "abaixo de 40 não
  * marca online no pico" é um interruptor cujo efeito só aparece pela reclamação.
- * O score sai congelado da linha, não recalculado — a pergunta é "quem eu
- * recusei", não "quem eu recusaria hoje".
+ * **O score e o limiar não saem daqui.** A linha os guarda congelados — a
+ * pergunta é "quem eu recusei", não "quem eu recusaria hoje" —, mas devolvê-los
+ * na rota entregaria o número interno a quem tem `appointments.view` e
+ * `customers.view`, que é o barbeiro e a recepção. Ler o score é
+ * `finance.deposit` desde o bloco 37, e nenhuma tela mostra estes dois campos:
+ * eles estavam sendo enviados para ninguém. Achado da `/security-review`.
  */
 export async function recusasRecentes(
   tenantId: string,
@@ -481,13 +515,11 @@ export async function recusasRecentes(
       {
         id: string;
         nome: string | null;
-        score: number;
-        threshold: number;
         created_at: Date;
         wanted_at: Date;
       }[]
     >`
-      SELECT b.id, c.name AS nome, b.score, b.threshold, b.created_at, b.wanted_at
+      SELECT b.id, c.name AS nome, b.created_at, b.wanted_at
         FROM online_blocks b
         LEFT JOIN customers c ON c.id = b.customer_id
        ORDER BY b.created_at DESC
@@ -496,8 +528,6 @@ export async function recusasRecentes(
     return linhas.map((l) => ({
       id: l.id,
       clienteNome: l.nome,
-      score: l.score,
-      limiar: l.threshold,
       quando: l.created_at.toISOString(),
       queria: l.wanted_at.toISOString(),
     }));

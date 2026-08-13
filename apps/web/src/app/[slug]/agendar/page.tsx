@@ -50,6 +50,18 @@ const FALHA: Record<string, string> = {
   invalid_request: 'Confira os dados e tente de novo.',
   unknown_location: 'Esta unidade não está mais disponível.',
   otp_required: 'Esta barbearia pede validação do número. Entre com seu celular primeiro.',
+  /**
+   * A recusa por horário cheio (bloco 60).
+   *
+   * Sem esta entrada o cliente lia "Tente de novo" sobre uma ação que falharia
+   * sempre — estado sem saída na interface (§6, pergunta 3), no ponto mais caro
+   * do produto. E o texto **não fala em score**: a SPEC §2.13 regra 5 mantém o
+   * número interno, e "seu histórico" no navegador de quem está escolhendo
+   * horário é o constrangimento que ela existe para impedir. O que a pessoa
+   * precisa é do caminho que funciona.
+   */
+  so_recepcao:
+    'Este horário está muito procurado e a reserva dele é feita pela barbearia. Fale com a gente e a recepção marca para você.',
 };
 
 /**

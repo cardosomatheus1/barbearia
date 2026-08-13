@@ -3197,8 +3197,6 @@ export const definirUnidadeAtivaNaApi = (token: string, id: string, ativa: boole
 export interface RecusaOnlineNaTela {
   readonly id: string;
   readonly clienteNome: string | null;
-  readonly score: number;
-  readonly limiar: number;
   readonly quando: string;
   readonly queria: string;
 }

@@ -1074,6 +1074,36 @@ export async function rescheduleAppointment(
     `;
 
     /**
+     * A recusa por score vale **também na remarcação** (bloco 60).
+     *
+     * Sem isto, o interruptor não bloqueava nada: o cliente marcava uma hora
+     * vazia, remarcava para a cheia, e ficava com ela. Dois cliques pelo caminho
+     * normal da tela, sem requisição forjada — e a lista de recusas mostrava
+     * "duas" enquanto as mesmas pessoas ocupavam o pico.
+     *
+     * O raciocínio do sinal **não** transfere. Lá existe uma decisão congelada
+     * sendo carregada adiante; aqui não há nada a carregar — o controle
+     * simplesmente nunca rodava. Remarcar não é marcar de novo, mas ocupar a
+     * hora cheia é ocupar a hora cheia.
+     *
+     * `request.customerId` é o que esta função já usa para distinguir "o cliente
+     * fez" de "o balcão fez" — ausente é o balcão, e o balcão remarca para quem
+     * quiser.
+     *
+     * Achado da `/security-review` do bloco 60.
+     */
+    const online = await conferirMarcacaoOnline(tx, {
+      locationId: appointment.location_id,
+      customerId: request.customerId ?? null,
+      comecaEm: slot.serviceStart,
+      peloBalcao: !request.customerId || PELO_BALCAO.has(appointment.source as AppointmentSource),
+      now: request.now ?? new Date(),
+    });
+    if (!online.pode) {
+      throw new BookingRecusadoPorScore(online.score, online.limiar, slot.serviceStart);
+    }
+
+    /**
      * O sinal atravessa a remarcação inteiro, e **não** é recalculado.
      *
      * Recalcular seria errado nos dois sentidos. Se já foi pago, o novo

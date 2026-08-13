@@ -3,8 +3,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   avaliarSinal,
   confiancaDoCliente,
+  confiancaDeVarios,
   conferirMarcacaoOnline,
   historicoDoCliente,
+  recusasRecentes,
 } from './confianca.js';
 import { horaCheia } from './ocupacao.js';
 import { withTenant } from '@barbearia/db';
@@ -529,5 +531,69 @@ describeIfDb('sinal seletivo', () => {
       }),
     );
     expect(desligado.pode).toBe(true);
+  });
+
+  it('remarcar não é a porta dos fundos da recusa', async () => {
+    /**
+     * Achado da `/security-review` do bloco 60, e o caminho era o normal da
+     * tela: marcar uma hora vazia, remarcar para a cheia, ficar com ela. Dois
+     * cliques, sem requisição forjada — e a lista de recusas mostrava "duas"
+     * enquanto as mesmas pessoas ocupavam o pico.
+     */
+    await encherAHora(TERCA_CHEIA);
+    await exec(`UPDATE locations SET online_block_score = 40 WHERE id = '${LOCATION}'`);
+    await exec([
+      agendamento({ id: idDe(60), diasAtras: 3, status: 'no_show' }),
+      agendamento({ id: idDe(61), diasAtras: 4, status: 'no_show' }),
+      agendamento({ id: idDe(62), diasAtras: 5, status: 'no_show' }),
+    ].join(';'));
+
+    const naHoraCheia = await withTenant(TENANT, (tx) =>
+      conferirMarcacaoOnline(tx, {
+        locationId: LOCATION,
+        customerId: CARLOS,
+        comecaEm: TERCA_CHEIA,
+        peloBalcao: false,
+        now: AGORA,
+      }),
+    );
+    expect(naHoraCheia.pode).toBe(false);
+  });
+
+  it('a lista de recusas não devolve o score nem o limiar', async () => {
+    /**
+     * Ler o score é `finance.deposit` desde o bloco 37, e esta rota é
+     * `appointments.view` + `customers.view` — que a recepção e o barbeiro têm.
+     * Nenhuma tela mostrava os dois campos: eles estavam sendo enviados para
+     * ninguém. Achado da `/security-review`.
+     */
+    await exec(
+      `INSERT INTO online_blocks (tenant_id, location_id, customer_id, score, threshold, wanted_at)
+       VALUES ('${TENANT}', '${LOCATION}', '${CARLOS}', 12, 40, now())`,
+    );
+
+    const lista = await recusasRecentes(TENANT);
+    expect(lista).toHaveLength(1);
+    expect(Object.keys(lista[0] ?? {})).toEqual(['id', 'clienteNome', 'quando', 'queria']);
+  });
+
+  it('o override manual vale na lista de espera, e não só no sinal', async () => {
+    /**
+     * Sem isto o mesmo cliente tinha **dois scores** conforme a consequência: o
+     * gerente zerava a reputação de quem sumiu com a chave da barbearia e a
+     * pessoa continuava furando a fila, porque o histórico calculado estava
+     * limpo. Duas fontes de verdade para o mesmo número.
+     */
+    await exec(
+      // A CHECK do bloco 39 exige motivo escrito **e** carimbo: override sem os
+      // dois é um número que ninguém consegue defender seis meses depois.
+      `UPDATE customers SET reliability_override = 10,
+                            reliability_override_reason = 'sumiu com a chave da barbearia',
+                            reliability_override_at = now()
+        WHERE id = '${CARLOS}'`,
+    );
+
+    const mapa = await withTenant(TENANT, (tx) => confiancaDeVarios(tx, [CARLOS], AGORA));
+    expect(mapa.get(CARLOS)).toMatchObject({ score: 10, temEfeito: true });
   });
 });

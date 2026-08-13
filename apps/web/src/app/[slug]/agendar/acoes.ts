@@ -41,7 +41,16 @@ export async function criarAgendamento(form: FormData): Promise<void> {
   });
 
   if (!resultado.ok) {
-    retorno.set('erro', resultado.code);
+    /**
+     * O código que vai para a URL não cita o mecanismo (bloco 60).
+     *
+     * `?erro=score_no_pico` fica no histórico do navegador, no autocompletar e
+     * em qualquer referrer que a página gere — uma frase visível dizendo que um
+     * *score* julgou a pessoa numa hora de *pico*. O número não vazava; a
+     * existência do julgamento vazava, no único lugar em que o código teve o
+     * cuidado de não pô-lo. Achado da `/security-review` do bloco 60.
+     */
+    retorno.set('erro', resultado.code === 'score_no_pico' ? 'so_recepcao' : resultado.code);
     redirect(`/${slug}/agendar?${retorno.toString()}`);
   }
 
