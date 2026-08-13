@@ -13,6 +13,7 @@ import {
   type ItemDaComanda,
   type Pagamento,
   type TipoDeItem,
+  type EscopoMultiunidade,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { lancarComissaoDaComanda } from './comissao.js';
@@ -192,15 +193,50 @@ export async function getComanda(tenantId: string, orderId: string): Promise<Com
 async function saldoTravado(
   tx: TransactionClient,
   customerId: string,
+  locationId?: string | null,
 ): Promise<{ readonly saldoCents: number; readonly limiteCents: number }> {
-  const linhas = await tx.$queryRaw<{ balance_cents: number; credit_limit_cents: number }[]>`
-    SELECT balance_cents, credit_limit_cents FROM customers
-     WHERE id = ${customerId}::uuid
-     FOR UPDATE
+  const linhas = await tx.$queryRaw<
+    {
+      balance_cents: number;
+      credit_limit_cents: number;
+      credit_scope: EscopoMultiunidade;
+    }[]
+  >`
+    SELECT c.balance_cents, c.credit_limit_cents, t.credit_scope
+      FROM customers c
+      JOIN tenants t ON t.id = c.tenant_id
+     WHERE c.id = ${customerId}::uuid
+     FOR UPDATE OF c
   `;
   const linha = linhas[0];
   if (!linha) throw new ComandaError('cliente_nao_encontrado', 'Cliente não encontrado.');
-  return { saldoCents: linha.balance_cents, limiteCents: linha.credit_limit_cents };
+  if (linha.credit_scope === 'empresa' || !locationId) {
+    return { saldoCents: linha.balance_cents, limiteCents: linha.credit_limit_cents };
+  }
+
+  /**
+   * Com fiado por unidade, a dívida desta loja é **derivada do extrato** (bloco
+   * 59) — `customers.balance_cents` continua sendo o acumulado da barbearia, e é
+   * ele que a lista de cobrança lê.
+   *
+   * A trava continua sendo a da linha de `customers`, e é ela que serializa: em
+   * READ COMMITTED, duas comandas simultâneas leriam a mesma soma antiga e as
+   * duas concluiriam que cabe no limite.
+   *
+   * O limite é o mesmo em cada loja, não dividido: "pode levar R$ 300 sem pagar"
+   * é uma frase sobre a pessoa, e reparti-la entre as lojas faria a barbearia
+   * que abre a segunda loja cortar pela metade o crédito de todo mundo sem
+   * ninguém ter decidido nada.
+   */
+  const daLoja = await tx.$queryRaw<{ total: number | null }[]>`
+    SELECT sum(amount_cents)::int AS total FROM customer_ledger
+     WHERE customer_id = ${customerId}::uuid
+       AND (location_id IS NULL OR location_id = ${locationId}::uuid)
+  `;
+  return {
+    saldoCents: Number(daLoja[0]?.total ?? 0),
+    limiteCents: linha.credit_limit_cents,
+  };
 }
 
 /**
@@ -889,7 +925,7 @@ export async function fecharComanda(params: {
      * antes da outra, e a soma estourando o limite.
      */
     const conta = comanda.customerId
-      ? await saldoTravado(tx, comanda.customerId)
+      ? await saldoTravado(tx, comanda.customerId, params.locationId)
       : null;
 
     const conferido = conferirPagamento({
@@ -992,6 +1028,7 @@ export async function fecharComanda(params: {
         note: 'Fiado na comanda',
         staffId: params.staffId,
         staffName: params.staffName,
+        locationId: params.locationId,
       });
     }
 
@@ -1218,6 +1255,9 @@ export async function fecharComanda(params: {
         precoCents: naComanda.precoUnitarioCents,
         agora: agoraNoFechamento,
         ...(params.quandoLocal ? { quandoLocal: params.quandoLocal } : {}),
+        // A loja da venda: um plano de escopo `unidade` cobre só onde a pessoa
+        // assinou (bloco 59).
+        locationId: params.locationId,
         tx,
       });
 
@@ -1357,6 +1397,16 @@ export async function lancarNoExtrato(
     readonly note: string;
     readonly staffId: string;
     readonly staffName: string;
+    /**
+     * A loja em que a dívida nasceu ou foi paga (bloco 59).
+     *
+     * `customers.balance_cents` continua sendo o acumulado da barbearia — é ele
+     * que a lista de cobrança lê. O recorte por loja é derivado do extrato, como
+     * todo saldo deste produto, e por isso a coluna precisa estar preenchida em
+     * **todos** os caminhos: um preenchido e outro não faz o saldo por loja
+     * mentir com número, que é pior do que estar vazio.
+     */
+    readonly locationId?: string | null;
   },
 ): Promise<number> {
   const atualizados = await tx.$queryRaw<{ balance_cents: number }[]>`
@@ -1373,13 +1423,14 @@ export async function lancarNoExtrato(
   await tx.$executeRaw`
     INSERT INTO customer_ledger
       (tenant_id, customer_id, kind, amount_cents, balance_after_cents,
-       order_id, session_id, note, created_by, created_by_name)
+       order_id, session_id, note, created_by, created_by_name, location_id)
     VALUES (
       NULLIF(current_setting('app.tenant_id', true), '')::uuid,
       ${params.customerId}::uuid, ${params.kind}::customer_ledger_kind,
       ${params.amountCents}, ${saldo},
       ${params.orderId ?? null}::uuid, ${params.sessionId ?? null}::uuid,
-      ${params.note}, ${params.staffId}::uuid, ${params.staffName}
+      ${params.note}, ${params.staffId}::uuid, ${params.staffName},
+      ${params.locationId ?? null}::uuid
     )
   `;
 
@@ -1442,6 +1493,9 @@ export async function receberFiado(params: {
       note: `Pagamento de dívida (${params.forma})`,
       staffId: params.staffId,
       staffName: params.staffName,
+      // A loja em que a pessoa pagou: o abate cai no bolso daquela loja quando o
+      // fiado é por unidade (bloco 59).
+      locationId: params.locationId,
     });
 
     if (params.forma === 'cash') {

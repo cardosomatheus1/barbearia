@@ -4,9 +4,11 @@ import {
   cicloDaAssinatura,
   mrrDasAssinaturas,
   podeUsarBeneficio,
+  planoCobreNaUnidade,
   planoValeNoHorario,
   podeSerDependente,
   type BeneficioDoPlano,
+  type EscopoMultiunidade,
   type EstadoDaAssinatura,
   type JanelaBloqueada,
 } from '@barbearia/core';
@@ -40,6 +42,7 @@ export type AssinaturaFailure =
   | 'e_o_titular'
   | 'ja_e_dependente'
   | 'fora_do_horario_do_plano'
+  | 'fora_da_unidade_do_plano'
   // A cobrança recorrente (bloco 47).
   | 'fatura_nao_encontrada'
   | 'motivo_obrigatorio'
@@ -66,6 +69,7 @@ const MENSAGEM: Readonly<Record<AssinaturaFailure, string>> = {
   e_o_titular: 'Ele já é o titular desta assinatura.',
   ja_e_dependente: 'Esta pessoa já está em outra assinatura.',
   fora_do_horario_do_plano: 'O plano dele não vale neste horário.',
+  fora_da_unidade_do_plano: 'O plano dele vale só na unidade onde ele assinou.',
   fatura_nao_encontrada: 'Esta fatura não está aberta.',
   motivo_obrigatorio: 'Escreva o motivo.',
   cartao_invalido: 'Confira os dados do cartão.',
@@ -351,6 +355,10 @@ export interface AssinaturaNaTela {
   /** Desde quando o benefício está pausado por falta de pagamento. */
   readonly pausadoDesde: string | null;
   readonly bloqueios: readonly JanelaBloqueada[];
+  /** Onde o plano cobre: na rede ou só na unidade da adesão (bloco 59). */
+  readonly escopo: EscopoMultiunidade;
+  /** A unidade da adesão, congelada no bloco 58. Nula em assinatura anterior. */
+  readonly unidadeDaAdesao: string | null;
   readonly beneficios: readonly {
     readonly serviceId: string;
     readonly servicoNome: string;
@@ -375,6 +383,8 @@ interface LinhaDaAssinatura {
   plan_id: string | null;
   cancel_effective_at: Date | null;
   suspended_at: Date | null;
+  escopo: EscopoMultiunidade | null;
+  unidade_da_adesao: string | null;
 }
 
 const SELECT_DA_ASSINATURA = `
@@ -386,7 +396,8 @@ const SELECT_DA_ASSINATURA = `
                    'inicio', bl.start_minute,
                    'fim', bl.end_minute))
             FROM club_plan_blackouts bl WHERE bl.plan_id = p.id) AS bloqueios,
-         s.plan_id, s.cancel_effective_at, s.suspended_at
+         s.plan_id, s.cancel_effective_at, s.suspended_at,
+         p.scope AS escopo, s.location_id AS unidade_da_adesao
     FROM club_subscriptions s
     LEFT JOIN club_plans p ON p.id = s.plan_id
 `;
@@ -450,6 +461,10 @@ export async function assinaturaDoCliente(
       valeAte: assinatura.cancel_effective_at?.toISOString() ?? null,
       pausadoDesde: assinatura.suspended_at?.toISOString() ?? null,
       bloqueios: (assinatura.bloqueios ?? []) as readonly JanelaBloqueada[],
+      // Plano apagado deixa o `LEFT JOIN` nulo; `empresa` é o padrão e o
+      // comportamento anterior, nunca o mais restritivo.
+      escopo: assinatura.escopo ?? 'empresa',
+      unidadeDaAdesao: assinatura.unidade_da_adesao,
       beneficios: beneficios.map((b) => ({
         serviceId: b.service_id,
         servicoNome: b.nome,
@@ -636,6 +651,14 @@ export async function usoDisponivel(params: {
    * cliente por um horário que a própria casa concedeu.
    */
   readonly quandoLocal?: { readonly diaDaSemana: number; readonly minuto: number };
+  /**
+   * A unidade do atendimento, para a restrição de unidade do plano (bloco 59).
+   *
+   * Ausente significa "não confira a unidade", pelo mesmo motivo de
+   * `quandoLocal`: barrar uma comanda de um atendimento que já aconteceu seria
+   * punir o cliente por uma loja que a própria casa aceitou.
+   */
+  readonly locationId?: string | null;
   readonly tx?: TransactionClient;
 }): Promise<UsoDisponivel | { readonly recusa: AssinaturaFailure } | null> {
   const agora = params.agora ?? new Date();
@@ -692,6 +715,24 @@ export async function usoDisponivel(params: {
         params.quandoLocal.minuto,
       );
       if (!vale) return { recusa: 'fora_do_horario_do_plano' };
+    }
+
+    /**
+     * A restrição de unidade do plano (bloco 59, SPEC §1.1).
+     *
+     * Um plano de escopo `unidade` cobre só onde a pessoa assinou. Assinatura
+     * anterior ao bloco 58 tem unidade nula e é coberta em toda parte: ela foi
+     * vendida quando loja não fazia parte da promessa, e recortá-la agora seria
+     * tirar do assinante algo que ele já pagou.
+     */
+    if (
+      !planoCobreNaUnidade({
+        escopoDoPlano: assinatura.escopo,
+        unidadeDaAdesao: assinatura.unidadeDaAdesao,
+        unidadeDoAtendimento: params.locationId ?? null,
+      })
+    ) {
+      return { recusa: 'fora_da_unidade_do_plano' };
     }
 
     /**

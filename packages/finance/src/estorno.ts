@@ -140,6 +140,7 @@ export async function estornarVenda(params: {
     const fiadoAbatidoCents = await abaterFiado(tx, {
       orderId: params.orderId,
       customerId: venda.customer_id,
+      locationId: venda.location_id,
       staffId: params.staffId,
       staffName: params.staffName,
     });
@@ -303,6 +304,7 @@ async function abaterFiado(
   params: {
     readonly orderId: string;
     readonly customerId: string | null;
+    readonly locationId: string;
     readonly staffId: string;
     readonly staffName: string;
   },
@@ -324,6 +326,10 @@ async function abaterFiado(
     note: 'Venda estornada',
     staffId: params.staffId,
     staffName: params.staffName,
+    // A mesma loja da venda: o estorno tem que abater no bolso em que a dívida
+    // nasceu, senão a loja de origem fica devendo para sempre e a outra fica com
+    // crédito que ninguém criou (bloco 59).
+    locationId: params.locationId,
   });
 
   return fiadoCents;
