@@ -18,3 +18,15 @@ export const perguntaSchema = z.object({
   de: z.string().min(1).max(10),
   ate: z.string().min(1).max(10),
 });
+
+/**
+ * O texto da pergunta em português (bloco 64).
+ *
+ * Teto de 200 caracteres: uma pergunta do balcão não passa disso, e o que passa
+ * é colagem — que não vira nada útil e só dá trabalho ao tradutor. O texto **não**
+ * é sanitizado aqui de propósito: ele não chega perto de SQL nem de HTML, e o
+ * que sai do tradutor é uma chave de união fechada.
+ */
+export const conversaSchema = z.object({
+  texto: z.string().min(1).max(200),
+});

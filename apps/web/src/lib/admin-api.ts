@@ -3289,3 +3289,37 @@ export const crescimentoNaApi = (token: string, de: string, ate: string) =>
     undefined,
     token,
   );
+
+// -- Assistente do gestor (blocos 63 e 64) ------------------------------------
+
+export interface FatiaNaTela {
+  readonly rotulo: string | null;
+  readonly valor: number | null;
+  readonly formatado: string;
+}
+
+export interface RespostaDoAssistente {
+  readonly entendi: boolean;
+  readonly confianca?: number;
+  readonly metrica?: string;
+  readonly rotulo?: string;
+  readonly significado?: string;
+  readonly de?: string;
+  readonly ate?: string;
+  readonly dimensao?: string;
+  readonly subirEBom?: boolean;
+  readonly tela?: string;
+  readonly total?: number | null;
+  readonly totalFormatado?: string;
+  readonly fatias?: readonly FatiaNaTela[];
+  readonly sugestoes?: readonly { readonly texto: string; readonly metrica: string }[];
+}
+
+export const conversarNaApi = (token: string, texto: string) =>
+  chamar<RespostaDoAssistente>('POST', '/v1/admin/metricas/conversar', { texto }, token);
+
+export const catalogoDeMetricasNaApi = (token: string) =>
+  chamar<{
+    metricas: readonly { readonly chave: string; readonly rotulo: string }[];
+    sugestoes: readonly { readonly texto: string; readonly metrica: string }[];
+  }>('GET', '/v1/admin/metricas', undefined, token);

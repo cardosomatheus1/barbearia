@@ -237,6 +237,50 @@ describeIfDb('o schema semântico pela HTTP', () => {
     expect(doDono).toContain('margem_por_servico');
   });
 
+  it('a pergunta em português chega ao número pelo mesmo caminho', async () => {
+    /**
+     * O tradutor produz um palpite e nada mais. Daí para o número o caminho é
+     * exatamente o de `perguntar`: a mesma validação, a mesma permissão, o mesmo
+     * executor — é isso que faz o tradutor não ser a fronteira de segurança.
+     */
+    const dono = await abrirBarbearia();
+    const r = await com(dono)(
+      http().post('/v1/admin/metricas/conversar').send({ texto: 'quanto faturei este mês' }),
+    ).expect(201);
+
+    expect(r.body.entendi).toBe(true);
+    expect(r.body.metrica).toBe('faturamento');
+    expect(r.body.tela).toMatch(/^\/admin\//);
+    // O período que ele usou vem escrito: sem isso a resposta seria um número
+    // sem recorte, e o dono compararia com outro de outro lugar.
+    expect(r.body.de).toBeTruthy();
+    expect(r.body.ate).toBeTruthy();
+  });
+
+  it('a recepção pergunta o faturamento em português e leva 403 igual', async () => {
+    // O caminho conversacional não é uma porta lateral: ele passa pela mesma
+    // conferência de permissão da métrica.
+    const dono = await abrirBarbearia();
+    const maria = await recepcao(dono);
+    const recusa = await com(maria)(
+      http().post('/v1/admin/metricas/conversar').send({ texto: 'quanto faturei' }),
+    ).expect(403);
+    expect(recusa.body.error.code).toBe('sem_permissao');
+  });
+
+  it('pergunta que ele não entende devolve as sugestões, não um palpite', async () => {
+    /**
+     * Um número que parece certo para a pergunta errada é o pior desfecho
+     * possível aqui — pior que "não entendi", porque o dono decide em cima dele.
+     */
+    const dono = await abrirBarbearia();
+    const r = await com(dono)(
+      http().post('/v1/admin/metricas/conversar').send({ texto: 'oi, tudo bem?' }),
+    ).expect(201);
+    expect(r.body.entendi).toBe(false);
+    expect(r.body.sugestoes.length).toBeGreaterThan(0);
+  });
+
   it('a sugestão que a tela oferece nunca é uma pergunta que seria recusada', async () => {
     // Botão que só dá erro é pior que botão ausente — e aqui ele ensinaria a
     // recepção a achar que o produto está quebrado.

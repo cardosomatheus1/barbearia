@@ -48,7 +48,18 @@ describe('arquitetura — packages/core', () => {
     const offenders: string[] = [];
 
     for (const file of sourceFiles()) {
-      const source = readFileSync(file, 'utf8');
+      /**
+       * Comentário fora **antes** de varrer.
+       *
+       * Sem isto a guarda reprova a **explicação** do motivo: o comentário que
+       * diz "um `new Date()` aqui tornaria o resultado impossível de testar" é
+       * exatamente a frase que documenta a regra, e ela contém o padrão
+       * proibido. Guarda que proíbe documentar o próprio motivo é guarda que
+       * alguém apaga — é a mesma lição de `vocabulario.test.ts`.
+       */
+      const source = readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
       // `zone.ts` é a fronteira de fuso: recebe o instante por parâmetro e usa
       // Intl para converter. Ele não pode chamar Date.now() nem new Date() sem
       // argumento, mas legitimamente manipula Date.

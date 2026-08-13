@@ -863,6 +863,14 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Mensagem de recusa por permissão | é diferente da de entrada inválida. "Não entendi a pergunta" manda a pessoa reformular para sempre um número que ela nunca poderá ver — 403 com "você não tem acesso a este número", 400 para o resto |
 | Catálogo devolvido a uma tela | já recortado pelo que aquela pessoa pode. Mandar a lista inteira e esconder na view é a permissão recalculada na tela, e diz à recepção que existe um número que ela não pode ver — o que é informação por si |
 | `Record<string, T>` num mapa de erro | é `Record<Uniao, T>`. Com a chave larga o acesso devolve `undefined`, e o mapa parcial vira uma caixa de erro em branco no balcão; com a união, o compilador cobra a frase no dia em que a falha nova existir |
+| Tradutor de linguagem natural | produz um **palpite**, nunca um acesso. Ele pode errar, ser enganado por um texto malicioso ou um dia virar um modelo: a saída é uma chave de conjunto fechado que ainda passa por validação e por permissão. Modelo não é fronteira de segurança |
+| Integração de IA sem provedor contratado | entra como **contrato** com implementação local, igual a `PaymentProvider` e `WhatsAppProvider`. Escrever a chamada ao modelo antes de existir a conta seria o `blocks` de novo — parâmetro aceito que ninguém preenche |
+| "Não entendi" | é resposta legítima, e melhor que um palpite. Um número que parece certo para a pergunta errada é o pior desfecho de um assistente, porque o dono decide em cima dele |
+| Pista de palavra-chave | a mais específica vem antes da mais genérica. "Quanto perdi com falta" contém "falta" e é sobre dinheiro — na ordem errada, a resposta é a contagem em vez do prejuízo |
+| Texto que o balcão digita | é comparado sem acento e sem caixa. No celular, com uma mão, ninguém digita acento — responder só a quem digita é o produto funcionando no teste e não no balcão |
+| Isenção numa varredura de permissão | é **conquistada**, nunca declarada. A do assistente é "o handler chama `validarPergunta`" — quem compuser métricas sem passar por ela continua reprovado. Uma isenção por nome de arquivo seria a lista que ninguém revisa |
+| Guarda que varre código-fonte | tira comentário antes de casar. A guarda de pureza do `core` reprovava a **frase que explica a regra**, porque ela cita ``new Date()`` — e guarda que proíbe documentar o próprio motivo é guarda que alguém apaga |
+| `typecheck` e `build` num pacote | não são a mesma conferência. Uma colisão de nome no barril e um genérico estreito demais passaram pelo `tsc -p tsconfig.json` e só apareceram no `tsconfig.build.json` — o `pnpm verify` roda os dois, e é por isso que ele fecha bloco e o `--rapido` não |
 
 ---
 

@@ -4135,6 +4135,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes'],
 .casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas'],
 .casco:has([data-secao='retencao']) .contexto__link[data-para='retencao'],
+.casco:has([data-secao='assistente']) .contexto__link[data-para='assistente'],
 .casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
 .casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);
@@ -7329,3 +7330,47 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-on-accent);
   font-weight: var(--font-weight-medium);
 }
+
+/* ---------------------------------------------------------------------------
+   O assistente (bloco 64). Sem chat: um campo, uma resposta e o link de conferir.
+--------------------------------------------------------------------------- */
+
+.pergunta { margin-bottom: var(--space-4); }
+/* Empilha no celular e fica lado a lado quando há espaço — `min-width` como
+   toda media query de layout deste arquivo. */
+.pergunta__linha { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+@media (min-width: 480px) {
+  .pergunta__linha { grid-template-columns: 1fr auto; align-items: start; }
+}
+
+.resposta__rotulo {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.resposta__numero {
+  margin: var(--space-1) 0;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.resposta__periodo {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.resposta__fatias { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-1); }
+.resposta__fatia {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.sugestoes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+/* O alvo é o cartão inteiro, com o piso de toque: sugestão é destino sozinho na
+   linha, e a isenção da WCAG 2.5.8 vale só para link dentro de frase. */
+.sugestoes__item { display: flex; min-height: 44px; align-items: center; text-align: left; }

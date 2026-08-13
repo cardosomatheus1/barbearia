@@ -132,6 +132,22 @@ describe('o período', () => {
 });
 
 describe('toda resposta pode se explicar', () => {
+  it('toda métrica declara unidade, e ela é uma das conhecidas', () => {
+    /**
+     * O `satisfies` do catálogo **não** pegou isto: `rentabilidade_do_clube`
+     * entrou sem `unidade` e o typecheck do pacote passou verde — o erro só
+     * apareceu no consumidor, como "propriedade não existe na união".
+     *
+     * Uma métrica sem unidade formata como `undefined` e a tela mostra o número
+     * cru. O teste é barato e não depende de o compilador ter opinião.
+     */
+    const conhecidas = ['centavos', 'contagem', 'pontos_base', 'minutos', 'dias'];
+    for (const m of METRICAS) {
+      expect(conhecidas, `${m.chave} declara "${m.unidade}"`).toContain(m.unidade);
+      expect(formatarMetrica(100, m.unidade), m.chave).not.toContain('undefined');
+    }
+  });
+
   it('toda métrica diz o que é e onde conferir', () => {
     /**
      * *"Toda resposta traz o número, o período, a fonte e um link para a tela

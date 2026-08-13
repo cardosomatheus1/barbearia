@@ -1,21 +1,24 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import {
+  CONFIANCA_MINIMA,
   definicaoDaMetrica,
   formatarMetrica,
   METRICAS,
   PERGUNTAS_SUGERIDAS,
+  interpretadorLocal,
+  periodoDaInterpretacao,
   validarPergunta,
   type ChaveDeMetrica,
   type FalhaDaPergunta,
 } from '@barbearia/core';
-import { medir } from '@barbearia/finance';
+import { medir, rentabilidadeDoClube } from '@barbearia/finance';
 import { churnDaBase } from '@barbearia/crm';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
-import { perguntaSchema } from './metrica.schemas.js';
+import { conversaSchema, perguntaSchema } from './metrica.schemas.js';
 import { unidadeDoBalcao } from './unidade.js';
 
 /**
@@ -57,8 +60,7 @@ export class MetricaController {
    * recalculada na view, que este código proíbe desde o bloco 30 — e diria à
    * recepção que existe um número de faturamento que ela não pode ver, que é
    * informação por si.
-   */
-  /**
+   *
    * O piso é `appointments.view`, e é de propósito o mais baixo que existe.
    *
    * A tentação é `reports.operational`, que soa como "quem lê relatório" — e ela
@@ -96,6 +98,49 @@ export class MetricaController {
       })),
       sugestoes: PERGUNTAS_SUGERIDAS.filter((s) => posso(s.metrica)),
     };
+  }
+
+  /**
+   * A pergunta em português (bloco 64, SPEC §4.15).
+   *
+   * O tradutor só produz um **palpite**: métrica, dimensão e período. O caminho
+   * dali para o número é exatamente o mesmo de `perguntar` — a mesma validação,
+   * a mesma permissão, o mesmo executor. É isso que faz o tradutor não ser a
+   * fronteira de segurança: ele pode errar, ser enganado por um texto malicioso
+   * ou um dia ser um modelo de linguagem, e nada disso alcança o banco.
+   *
+   * Não entendeu? Responde as sugestões, e não um palpite. Um número que parece
+   * certo para a pergunta errada é o pior desfecho possível aqui.
+   */
+  @Exige('appointments.view')
+  @Post('conversar')
+  async conversar(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(conversaSchema)) body: { texto: string },
+  ) {
+    const palpite = interpretadorLocal.interpretar(body.texto);
+    if (!palpite || palpite.confianca < CONFIANCA_MINIMA) {
+      return {
+        entendi: false as const,
+        /**
+         * As sugestões saem recortadas pelo que a pessoa pode, como o catálogo.
+         *
+         * Oferecer "quanto faturei" a quem levaria 403 é o botão que só dá erro
+         * — e aqui ele ensinaria a recepção a achar que o produto está quebrado.
+         */
+        sugestoes: PERGUNTAS_SUGERIDAS.filter((s) =>
+          definicaoDaMetrica(s.metrica).exige.every((p) => staff.permissions.includes(p)),
+        ),
+      };
+    }
+
+    const periodo = periodoDaInterpretacao(palpite, new Date());
+    const resposta = await this.perguntar(staff, {
+      metrica: palpite.metrica,
+      dimensao: palpite.dimensao,
+      ...periodo,
+    });
+    return { entendi: true as const, confianca: palpite.confianca, ...resposta };
   }
 
   @Exige('appointments.view')
@@ -184,6 +229,24 @@ async function responder(
   pergunta: { metrica: ChaveDeMetrica; dimensao: string; de: string; ate: string },
   locationId: string,
 ): Promise<{ total: number | null; fatias: readonly { rotulo: string | null; valor: number | null }[] }> {
+  if (pergunta.metrica === 'rentabilidade_do_clube') {
+    /**
+     * A margem do clube em pontos-base, sobre a receita do período.
+     *
+     * O cálculo é o de `rentabilidadeDoClube` — comissão do modelo escolhido e
+     * insumo congelado no movimento —, e ele **não** é refeito aqui: o
+     * assistente e a tela do clube precisam responder o mesmo número.
+     */
+    const clube = await rentabilidadeDoClube({ tenantId, de: pergunta.de, ate: pergunta.ate });
+    return {
+      total:
+        clube.receitaCents > 0
+          ? Math.round((clube.margemCents / clube.receitaCents) * 10_000)
+          : null,
+      fatias: [],
+    };
+  }
+
   if (pergunta.metrica === 'clientes_em_risco') {
     const todos = await churnDaBase(tenantId);
     return { total: todos.filter((c) => c.faixa !== 'baixo').length, fatias: [] };

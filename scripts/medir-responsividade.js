@@ -2230,6 +2230,10 @@ async function main() {
       ? [{ nome: 'ficha do cliente', url: `/admin/cliente/${balcao.clienteId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
     { nome: 'retenção', url: '/admin/retencao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    // O assistente com resposta na tela, e não o campo vazio: o vazio mede a
+    // versão fácil, e o que estoura layout é o número grande com as fatias.
+    { nome: 'assistente', url: '/admin/assistente', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'assistente — respondendo', url: `/admin/assistente?p=${encodeURIComponent('quanto faturei por barbeiro este mês')}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A ficha de quem tem ritmo (bloco 61). A do balcão tem uma visita só, e
     // sem ciclo a linha do ritmo não é escrita — mediria a tela sem o elemento
     // que o bloco acrescentou.

@@ -166,6 +166,24 @@ export const METRICAS = [
     subirEBom: true,
   },
   {
+    chave: 'rentabilidade_do_clube',
+    rotulo: 'Margem do clube',
+    significado: 'Quanto sobra da mensalidade dos assinantes depois da comissão e do insumo.',
+    unidade: 'pontos_base',
+    /**
+     * `finance.view_profit`, pela mesma razão da margem por serviço — e a
+     * pergunta está na SPEC §4.15 em letras: *"minha assinatura é rentável?"*.
+     *
+     * Ela é a única do catálogo que responde sobre o clube, e não tem dimensão:
+     * quebrar por profissional aqui seria a comissão da assinatura, que é outra
+     * pergunta e tem tela própria.
+     */
+    exige: ['finance.view_profit'],
+    dimensoes: ['nenhuma'],
+    tela: '/admin/clube',
+    subirEBom: true,
+  },
+  {
     chave: 'margem_por_servico',
     rotulo: 'Margem por serviço',
     significado: 'Quanto sobra de cada serviço depois da comissão e do insumo.',

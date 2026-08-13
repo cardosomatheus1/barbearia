@@ -2774,3 +2774,15 @@ export async function acaoDefinirUnidadeAtiva(form: FormData): Promise<void> {
   if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
   redirect(`${ROTA_UNIDADES}?feito=${texto(form, 'ativa') === 'sim' ? 'reaberta' : 'fechada'}`);
 }
+
+/**
+ * A pergunta do assistente (bloco 64).
+ *
+ * Ela volta pela URL de propósito: assim a resposta é compartilhável, o botão de
+ * voltar funciona e a tela continua sem uma linha de JavaScript. O que **não**
+ * vai para a URL é o resultado — só o texto que a pessoa escreveu.
+ */
+export async function acaoPerguntarAoAssistente(form: FormData): Promise<void> {
+  const texto = String(form.get('p') ?? '').slice(0, 200);
+  redirect(`/admin/assistente?p=${encodeURIComponent(texto)}`);
+}

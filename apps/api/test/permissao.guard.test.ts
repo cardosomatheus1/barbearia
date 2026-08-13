@@ -483,6 +483,22 @@ describe('as rotas do painel', () => {
         const chamada = [...funcoesDeLucro].find((f) => new RegExp(`\\b${f}\\s*\\(`).test(codigo));
         if (!chamada) continue;
         if (permissoes.includes('finance.view_profit')) continue;
+        /**
+         * A exceção do schema semântico, e ela é **conquistada**, não declarada.
+         *
+         * O assistente é uma rota só que responde dezenas de perguntas: ela chama
+         * `medir` e `rentabilidadeDoClube`, que devolvem receita e margem, e não
+         * pode declarar `finance.view` — declarar cobraria a permissão de todo
+         * mundo, inclusive de quem só quer saber quantos faltaram hoje.
+         *
+         * O que a torna segura é a permissão viajar com a **métrica**, conferida
+         * em `validarPergunta` contra o que a pessoa tem no banco. Por isso a
+         * isenção é exatamente essa: o handler tem que chamar `validarPergunta`.
+         * Uma rota nova que compuser métricas sem passar por ela continua sendo
+         * reprovada — e o e2e do bloco 63 executa o ataque para provar que a
+         * conferência de fato acontece.
+         */
+        if (/\bvalidarPergunta\s*\(/.test(codigo)) continue;
         faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
       }
     }
@@ -621,6 +637,22 @@ describe('as rotas do painel', () => {
          * essa. Reprovar o certo é o que faz alguém desligar a guarda.
          */
         if (permissoes.includes("'commission.view_own'")) continue;
+        /**
+         * A exceção do schema semântico, e ela é **conquistada**, não declarada.
+         *
+         * O assistente é uma rota só que responde dezenas de perguntas: ela chama
+         * `medir` e `rentabilidadeDoClube`, que devolvem receita e margem, e não
+         * pode declarar `finance.view` — declarar cobraria a permissão de todo
+         * mundo, inclusive de quem só quer saber quantos faltaram hoje.
+         *
+         * O que a torna segura é a permissão viajar com a **métrica**, conferida
+         * em `validarPergunta` contra o que a pessoa tem no banco. Por isso a
+         * isenção é exatamente essa: o handler tem que chamar `validarPergunta`.
+         * Uma rota nova que compuser métricas sem passar por ela continua sendo
+         * reprovada — e o e2e do bloco 63 executa o ataque para provar que a
+         * conferência de fato acontece.
+         */
+        if (/\bvalidarPergunta\s*\(/.test(codigo)) continue;
         faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
       }
     }
