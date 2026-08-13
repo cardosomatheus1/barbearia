@@ -1587,6 +1587,88 @@ function prepararCampanha(slug) {
   }
 }
 
+/**
+ * Três ritmos diferentes, para o cartão de segmentos ter o que mostrar (bloco 61).
+ *
+ * Sem esta semente a base inteira cai em "novo" — quem tem menos de três visitas
+ * não tem ciclo —, e o cartão fotografado seria sete zeros e uma lista vazia.
+ * Zero é honesto e não é o que precisa ser olhado: a pergunta que a tela existe
+ * para responder é *"quem passou do próprio ritmo?"*, e ela só aparece quando
+ * alguém passou.
+ *
+ * **Gente própria, nunca a do balcão.** A ficha do cliente e a fila medem outra
+ * coisa sobre os clientes que já existem, e pendurar um histórico neles muda o
+ * que aquelas telas mostram — foi assim que uma semente do bloco 60 consertou a
+ * reputação do cliente que o teste queria ver recusado.
+ *
+ * As horas ficam antes das 9h porque a semente do heatmap ocupa das 9h às 19h, e
+ * `appointments_no_overlap` recusa dois atendimentos sobrepostos na mesma
+ * cadeira — ela está certa, e a semente é que precisa caber.
+ */
+function prepararSegmentos(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return null;
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' limit 1`),
+  );
+  const profissional = primeiraLinha(
+    psql(`select id from professionals where tenant_id = '${tenant}' order by created_at limit 1`),
+  );
+  if (!local || !profissional) return null;
+
+  /**
+   * Nome, telefone, hora, ciclo em dias e dias desde a última visita.
+   *
+   * Os números não são livres: com intervalos todos iguais o desvio é zero e a
+   * folga cai no piso de um dia, então "em risco" é a faixa `ciclo + 1 <
+   * ausência <= 2 × ciclo`. Quarenta e cinco dias sobre um ciclo de vinte e um
+   * já passou do dobro e cai em **perdido** — foi o que a primeira versão desta
+   * semente produziu, com o cartão fotografado mostrando zero em risco.
+   */
+  const gente = [
+    ['Reinaldo Estêvão de Farias', '+5571977001101', 6, 21, 30],
+    ['Domingos Sávio da Conceição', '+5571977001102', 7, 14, 60],
+    ['Otávio Bezerra Lins', '+5571977001103', 8, 30, 12],
+    ["Maria das Graças Sant'Anna", '+5571977001104', 5, 35, 50],
+  ];
+
+  let emRisco = null;
+  for (const [nome, telefone, hora, ciclo, ultima] of gente) {
+    const cliente = primeiraLinha(
+      psql(
+        `INSERT INTO customers (tenant_id, name, phone_e164, accepts_marketing)
+         VALUES ('${tenant}', '${nome.replace(/'/g, "''")}', '${telefone}', true)
+         -- Apóstrofo dobrado: "Sant'Anna" é nome real e é exatamente o tipo de
+         -- conteúdo que quebra uma semente escrita com interpolação ingênua.
+         ON CONFLICT (tenant_id, phone_e164) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+      ),
+    );
+    if (!cliente) continue;
+
+    // Quatro visitas: três é o mínimo para existir ciclo, e a quarta é o que
+    // torna a mediana diferente do único intervalo.
+    psql(
+      `INSERT INTO appointments
+         (tenant_id, location_id, professional_id, customer_id, status,
+          starts_at, ends_at, service_starts_at, service_ends_at)
+       SELECT '${tenant}', '${local}', '${profissional}', '${cliente}', 'completed',
+              inicio, inicio + interval '30 minutes', inicio, inicio + interval '30 minutes'
+         FROM (
+           SELECT date_trunc('day', now())
+                  - (${ultima} + n * ${ciclo}) * interval '1 day'
+                  + ${hora} * interval '1 hour' AS inicio
+             FROM generate_series(0, 3) AS n
+         ) t
+        ON CONFLICT DO NOTHING`,
+    );
+    // O primeiro é o que está em risco, e é a ficha dele que a medição
+    // fotografa: a do balcão tem uma visita só e nunca mostra a linha do ritmo.
+    if (!emRisco) emRisco = cliente;
+  }
+  return emRisco;
+}
+
 function prepararFiscal(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -1996,6 +2078,7 @@ async function main() {
   prepararWhatsApp(slug);
   prepararAutomacoes(slug);
   prepararCampanha(slug);
+  const emRisco = prepararSegmentos(slug);
   prepararUnidades(slug);
   prepararRecusaOnline(slug);
   const tokenBarbeiro = balcao.profissionalLivre
@@ -2120,6 +2203,12 @@ async function main() {
     // o que se mede aqui é o layout.
     ...(balcao.clienteId
       ? [{ nome: 'ficha do cliente', url: `/admin/cliente/${balcao.clienteId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
+      : []),
+    // A ficha de quem tem ritmo (bloco 61). A do balcão tem uma visita só, e
+    // sem ciclo a linha do ritmo não é escrita — mediria a tela sem o elemento
+    // que o bloco acrescentou.
+    ...(emRisco
+      ? [{ nome: 'ficha — em risco', url: `/admin/cliente/${emRisco}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
     ...(tokenBarbeiro
       ? [

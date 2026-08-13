@@ -1168,8 +1168,12 @@ export default async function FichaPage({ params, searchParams }: Props) {
           {ficha.dados.cicloDias !== null
             ? ` Costuma voltar a cada ${ficha.dados.cicloDias} dias`
             : ''}
+          {/* "Faz 0 dias que não vem" é o que sai da conta e não é português.
+              Quem cortou hoje é o caso mais comum da ficha aberta no balcão. */}
           {ficha.dados.cicloDias !== null && ficha.dados.diasSemVir !== null
-            ? `, e faz ${ficha.dados.diasSemVir} ${ficha.dados.diasSemVir === 1 ? 'dia' : 'dias'} que não vem.`
+            ? ficha.dados.diasSemVir === 0
+              ? ', e veio hoje.'
+              : `, e faz ${ficha.dados.diasSemVir} ${ficha.dados.diasSemVir === 1 ? 'dia' : 'dias'} que não vem.`
             : ''}
         </span>
       </p>

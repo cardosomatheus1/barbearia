@@ -191,7 +191,8 @@ function Segmentos({
                 <a className="item-cadastro item-cadastro--link" href={`/admin/cliente/${c.customerId}`}>
                   <span className="item-cadastro__nome">{c.nome}</span>
                   <span className="item-cadastro__linha">
-                    Corta a cada {c.cicloDias} dias · faz {c.diasSemVir} que não vem
+                    Corta a cada {c.cicloDias} dias · faz {c.diasSemVir}{' '}
+                    {c.diasSemVir === 1 ? 'dia' : 'dias'} que não vem
                   </span>
                 </a>
               </li>
