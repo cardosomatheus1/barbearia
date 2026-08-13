@@ -276,12 +276,7 @@ describe('recusar marcação online em hora cheia', () => {
   const comScore = (score: number, temEfeito = true): Confiabilidade => ({
     score,
     temEfeito,
-    total: temEfeito ? 10 : 1,
-    comparecimentos: 0,
-    faltas: 0,
-    cancelamentosTardios: 0,
-    cancelamentosAntecipados: 0,
-    atrasos: 0,
+    considerados: temEfeito ? 10 : 1,
   });
 
   const pedido = (extra: Partial<Parameters<typeof podeMarcarOnline>[0]> = {}) =>
@@ -325,8 +320,8 @@ describe('recusar marcação online em hora cheia', () => {
      */
     const duasFaltas = pontuacaoDeConfianca(
       [
-        { desfecho: 'faltou', quando: new Date('2026-10-01T10:00:00Z'), atrasoMinutos: null },
-        { desfecho: 'faltou', quando: new Date('2026-10-08T10:00:00Z'), atrasoMinutos: null },
+        { desfecho: 'faltou', comecariaEm: new Date('2026-10-01T10:00:00Z'), atrasoMinutos: null },
+        { desfecho: 'faltou', comecariaEm: new Date('2026-10-08T10:00:00Z'), atrasoMinutos: null },
       ],
       new Date('2026-11-01T10:00:00Z'),
     );
@@ -351,12 +346,7 @@ describe('prioridade na lista de espera', () => {
   const comScore = (score: number, temEfeito = true): Confiabilidade => ({
     score,
     temEfeito,
-    total: temEfeito ? 10 : 1,
-    comparecimentos: 0,
-    faltas: 0,
-    cancelamentosTardios: 0,
-    cancelamentosAntecipados: 0,
-    atrasos: 0,
+    considerados: temEfeito ? 10 : 1,
   });
 
   it('quem sempre aparece passa na frente entre iguais', () => {
