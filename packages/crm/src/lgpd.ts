@@ -469,6 +469,25 @@ export async function exportarDadosDoTitular(
        ORDER BY received_at
     `;
 
+    /**
+     * As vezes em que o site recusou a marcação desta pessoa (bloco 60).
+     *
+     * É decisão **sobre** o titular, tomada a partir do histórico dele, e ele
+     * tem direito de saber que aconteceu — sem isso o arquivo diria que a
+     * barbearia nunca lhe negou nada.
+     *
+     * O que **não** sai é o score nem o limiar. A SPEC §2.13 regra 5 é explícita
+     * — o score é interno e nunca chega ao cliente —, e o critério é o mesmo do
+     * `wamid` logo acima: o arquivo entrega o que é da pessoa, não o
+     * encanamento. O fato é dela; a fórmula é da casa.
+     */
+    const recusasOnline = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT created_at AS recusada_em, wanted_at AS horario_pedido
+        FROM online_blocks
+       WHERE customer_id = ${customerId}::uuid
+       ORDER BY created_at
+    `;
+
     const mensagensEnviadas = await tx.$queryRaw<Record<string, unknown>[]>`
       SELECT sent_at AS enviada_em, status::text AS estado,
              delivered_at AS entregue_em, read_at AS lida_em
@@ -511,6 +530,7 @@ export async function exportarDadosDoTitular(
       assinaturas,
       usosDoPlano,
       coberturaPorOutro,
+      recusasOnline,
     };
   });
 }

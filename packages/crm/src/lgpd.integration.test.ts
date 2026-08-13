@@ -252,6 +252,10 @@ describeIfDb('direitos do titular', () => {
       // inclui saber se a mensagem que vocês mandaram chegou.
       'whatsapp_inbound',
       'whatsapp_messages',
+      // A recusa de marcação online (bloco 60). É decisão sobre o titular,
+      // tomada a partir do histórico dele: o fato sai, o score e o limiar não —
+      // eles são internos por regra da SPEC §2.13.
+      'online_blocks',
     ]);
 
     const EXCECOES = new Map([

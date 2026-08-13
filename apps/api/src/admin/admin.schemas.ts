@@ -138,6 +138,14 @@ export const changeWindowSchema = z.object({
   /** Onde o fiado vale (bloco 59). Ausente é "não mexa". */
   creditScope: z.enum(['empresa', 'unidade'] as const).optional(),
   /**
+   * Abaixo deste score não marca online em hora de pico (bloco 60).
+   *
+   * `nullable` é o desligado, e é uma decisão legítima que a tela precisa poder
+   * mandar: sem ele, ligar a regra seria reversível só por SQL.
+   */
+  onlineBlockScore: z.number().int().min(0).max(100).nullable().optional(),
+  waitlistTrustedScore: z.number().int().min(0).max(100).optional(),
+  /**
    * O encarregado de dados (bloco 31).
    *
    * O formato do e-mail é conferido aqui **e** por CHECK no banco. Duas vezes

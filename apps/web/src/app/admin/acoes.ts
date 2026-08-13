@@ -389,6 +389,18 @@ export async function acaoJanela(form: FormData): Promise<void> {
     ...(texto(form, 'creditScope') === 'unidade'
       ? { creditScope: 'unidade' as const }
       : { creditScope: 'empresa' as const }),
+    /**
+     * O limiar de recusa (bloco 60). Campo vazio é **desligar**, não "não
+     * mexa": o seletor está sempre na tela, então o que ele traz é sempre uma
+     * decisão de quem salvou.
+     */
+    onlineBlockScore: (() => {
+      const bruto = texto(form, 'onlineBlockFaltas');
+      if (!bruto) return null;
+      // Faltas em dez → limiar de score, pela mesma tradução do sinal. A tela
+      // nunca fala em score, e a conversão fica num lugar só.
+      return limiarDeFaltas(Number(bruto));
+    })(),
     ...(texto(form, 'cancellationPolicy')
       ? { cancellationPolicy: texto(form, 'cancellationPolicy') }
       : {}),

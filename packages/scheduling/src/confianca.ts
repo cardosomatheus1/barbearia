@@ -453,3 +453,53 @@ export async function confiancaDeVarios(
   // a regra 1 da SPEC §2.13 por conta própria.
   return new Map(ids.map((id) => [id, pontuacaoDeConfianca(porCliente.get(id) ?? [], agora)]));
 }
+
+/** Uma recusa registrada, para a tela do dono medir a regra. */
+export interface RecusaNaTela {
+  readonly id: string;
+  readonly clienteNome: string | null;
+  readonly score: number;
+  readonly limiar: number;
+  readonly quando: string;
+  readonly queria: string;
+}
+
+/**
+ * As recusas recentes.
+ *
+ * Existe para o dono **medir a regra que ligou**: sem ela, "abaixo de 40 não
+ * marca online no pico" é um interruptor cujo efeito só aparece pela reclamação.
+ * O score sai congelado da linha, não recalculado — a pergunta é "quem eu
+ * recusei", não "quem eu recusaria hoje".
+ */
+export async function recusasRecentes(
+  tenantId: string,
+  limite = 30,
+): Promise<readonly RecusaNaTela[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        id: string;
+        nome: string | null;
+        score: number;
+        threshold: number;
+        created_at: Date;
+        wanted_at: Date;
+      }[]
+    >`
+      SELECT b.id, c.name AS nome, b.score, b.threshold, b.created_at, b.wanted_at
+        FROM online_blocks b
+        LEFT JOIN customers c ON c.id = b.customer_id
+       ORDER BY b.created_at DESC
+       LIMIT ${limite}
+    `;
+    return linhas.map((l) => ({
+      id: l.id,
+      clienteNome: l.nome,
+      score: l.score,
+      limiar: l.threshold,
+      quando: l.created_at.toISOString(),
+      queria: l.wanted_at.toISOString(),
+    }));
+  });
+}

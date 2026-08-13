@@ -124,6 +124,8 @@ export const salvarJanela = (
     cancellationPolicy?: string;
     maxDiscountBps?: number;
     creditScope?: 'empresa' | 'unidade';
+    onlineBlockScore?: number | null;
+    waitlistTrustedScore?: number;
     dpoName?: string;
     dpoEmail?: string;
     deposit?: PoliticaDeSinal;
@@ -194,6 +196,8 @@ export interface PoliticasDaCasa {
   cancellationPolicy: string | null;
   maxDiscountBps: number;
   creditScope: 'empresa' | 'unidade';
+  onlineBlockScore: number | null;
+  waitlistTrustedScore: number;
   dpoName: string | null;
   dpoEmail: string | null;
   deposit: PoliticaDeSinal;
@@ -3189,3 +3193,20 @@ export const abrirUnidadeNaApi = (
 
 export const definirUnidadeAtivaNaApi = (token: string, id: string, ativa: boolean) =>
   chamar<{ ok: boolean }>('POST', `/v1/admin/unidades/cadastro/${id}`, { ativa }, token);
+
+export interface RecusaOnlineNaTela {
+  readonly id: string;
+  readonly clienteNome: string | null;
+  readonly score: number;
+  readonly limiar: number;
+  readonly quando: string;
+  readonly queria: string;
+}
+
+export const recusasOnlineNaApi = (token: string) =>
+  chamar<{ recusas: readonly RecusaOnlineNaTela[] }>(
+    'GET',
+    '/v1/admin/recusas-online',
+    undefined,
+    token,
+  );

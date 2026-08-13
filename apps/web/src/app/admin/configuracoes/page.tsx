@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { painelOuDesvio } from '@/lib/painel';
 import { getProfile } from '@/lib/api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { politicasDaCasa } from '@/lib/admin-api';
+import { politicasDaCasa, recusasOnlineNaApi } from '@/lib/admin-api';
 import { acaoJanela, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { faltasDoLimiar } from '@/lib/sinal';
@@ -36,6 +36,18 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
    */
   const resposta = await politicasDaCasa(token);
   const politicas = resposta.ok ? resposta.dados : null;
+
+  /**
+   * As recusas só são buscadas quando a regra está ligada (bloco 60).
+   *
+   * Desligada, a lista é sempre vazia e o cartão seria um "nenhuma recusa" que
+   * não quer dizer nada — indicador que nunca preenche é pior que indicador
+   * ausente, e ele ocupa espaço prometendo uma resposta que não vem.
+   */
+  const recusas =
+    politicas?.onlineBlockScore !== null && politicas?.onlineBlockScore !== undefined
+      ? await recusasOnlineNaApi(token)
+      : null;
   const query = await searchParams;
   const salvo = (Array.isArray(query['salvo']) ? query['salvo'][0] : query['salvo']) === '1';
   const erro = Array.isArray(query['erro']) ? query['erro'][0] : query['erro'];
@@ -160,6 +172,46 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           <p className="ui-field__hint">
             O limite não é repartido: ele vale inteiro em cada loja. Com uma unidade só, os
             dois significam a mesma coisa.
+          </p>
+        </div>
+
+        {/*
+          A recusa de marcação online em hora cheia (bloco 60, SPEC §2.13).
+
+          Fica ao lado do sinal porque é a mesma escada: o sinal é o degrau que
+          cobra, este é o que recusa. Vazio é desligado, e é o padrão — recusar
+          um cliente é a coisa mais cara que este produto faz, e nenhuma
+          barbearia já instalada decidiu isso.
+        */}
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="onlineBlockFaltas">
+            Não deixar marcar sozinho no horário cheio quem faltou quantas vezes em dez
+          </label>
+          <input
+            className="ui-field__input tabular"
+            defaultValue={
+              politicas?.onlineBlockScore === null || politicas?.onlineBlockScore === undefined
+                ? ''
+                : faltasDoLimiar(politicas.onlineBlockScore)
+            }
+            id="onlineBlockFaltas"
+            inputMode="numeric"
+            max={10}
+            min={1}
+            name="onlineBlockFaltas"
+            placeholder="desligado"
+            type="number"
+          />
+          {/*
+            Faltas em dez, e não score — a mesma tradução do sinal, pelo mesmo
+            motivo. O score é interno (SPEC §2.13, regra 5) e o dono não
+            conseguiria explicar no balcão por que 39 recusa e 41 não. Dois
+            campos da mesma tela falando escalas diferentes seria pior ainda.
+          */}
+          <p className="ui-field__hint">
+            Vazio desliga — e desligado é como a barbearia começa. A recepção continua marcando
+            para qualquer um, em qualquer horário; o que muda é o site. Quem tem menos de três
+            atendimentos nunca é recusado.
           </p>
         </div>
 
@@ -314,6 +366,59 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           Salvar
         </button>
       </form>
+
+      {/*
+        O efeito da regra, para o dono poder medi-la (bloco 60).
+
+        Sem esta lista, "abaixo de 40 não marca online no pico" é um interruptor
+        cujo resultado só aparece pela reclamação — o dono não teria como saber
+        se barrou dois clientes ou duzentos, nem quais. O score é o **congelado
+        no momento**: a pergunta é "quem eu recusei", não "quem eu recusaria
+        hoje".
+      */}
+      {recusas?.ok ? (
+        <section className="cartao-balcao">
+          <h2 className="cartao-balcao__titulo">Quem a regra recusou</h2>
+          {recusas.dados.recusas.length === 0 ? (
+            <p className="cartao-balcao__texto">
+              Ninguém até agora. A regra está ligada e ainda não barrou nenhuma marcação.
+            </p>
+          ) : (
+            <>
+              <p className="cartao-balcao__texto">
+                Estas pessoas tentaram marcar sozinhas num horário cheio. A recepção pode marcar
+                para elas normalmente.
+              </p>
+              <ul className="lista-cadastro">
+                {recusas.dados.recusas.map((r) => (
+                  <li key={r.id}>
+                    <article className="item-cadastro">
+                      <div className="item-cadastro__cabeca">
+                        <div className="item-cadastro__quem">
+                          <h3 className="item-cadastro__nome">{r.clienteNome ?? 'Cliente'}</h3>
+                          <p className="item-cadastro__linha">
+                            Queria {quando(r.queria)} · recusado em {quando(r.quando)}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      ) : null}
     </main>
   );
+}
+
+/** Dia e hora curtos, no fuso do navegador de quem administra. */
+function quando(iso: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
 }

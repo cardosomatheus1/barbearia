@@ -453,6 +453,11 @@ export interface ChangeWindowInput {
    */
   readonly creditScope?: 'empresa' | 'unidade';
 
+  /** Abaixo disso não marca online em hora de pico. Nulo é desligado (bloco 60). */
+  readonly onlineBlockScore?: number | null;
+  /** A partir disso, passa na frente entre iguais na lista de espera. */
+  readonly waitlistTrustedScore?: number;
+
   /**
    * O encarregado de dados (bloco 31).
    *
@@ -503,6 +508,26 @@ export async function saveChangeWindow(
         cancellation_policy = ${input.cancellationPolicy ?? null},
         updated_at = now()
     `;
+
+    /**
+     * Os dois limiares do score (bloco 60), cada um só quando vem.
+     *
+     * `onlineBlockScore` aceita nulo **explícito** como valor — nulo é
+     * desligado, e desligar precisa ser possível pela tela. Por isso o teste é
+     * `!== undefined` e não uma checagem de veracidade: `?? null` aqui apagaria
+     * a regra toda vez que a tela de janela salvasse sem tocar nela.
+     */
+    if (input.onlineBlockScore !== undefined) {
+      await tx.$executeRaw`
+        UPDATE locations SET online_block_score = ${input.onlineBlockScore}, updated_at = now()
+      `;
+    }
+    if (input.waitlistTrustedScore !== undefined) {
+      await tx.$executeRaw`
+        UPDATE locations SET waitlist_trusted_score = ${input.waitlistTrustedScore},
+                             updated_at = now()
+      `;
+    }
 
     // Só quando vem: `COALESCE` manteria o valor atual de qualquer jeito, mas
     // o `UPDATE` separado deixa explícito que não mandar é "não mexa nisso", e
@@ -571,6 +596,8 @@ export async function getPolicies(tenantId: string): Promise<{
   readonly cancellationPolicy: string | null;
   readonly maxDiscountBps: number;
   readonly creditScope: 'empresa' | 'unidade';
+  readonly onlineBlockScore: number | null;
+  readonly waitlistTrustedScore: number;
   readonly dpoName: string | null;
   readonly dpoEmail: string | null;
   readonly deposit: DepositPolicyInput;
@@ -584,6 +611,8 @@ export async function getPolicies(tenantId: string): Promise<{
         cancellation_policy: string | null;
         max_discount_bps: number;
         credit_scope: 'empresa' | 'unidade';
+        online_block_score: number | null;
+        waitlist_trusted_score: number;
         dpo_name: string | null;
         dpo_email: string | null;
         deposit_mode: DepositPolicyInput['mode'];
@@ -596,6 +625,7 @@ export async function getPolicies(tenantId: string): Promise<{
     >`
       SELECT l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules,
              l.cancellation_policy, t.max_discount_bps, t.credit_scope,
+             l.online_block_score, l.waitlist_trusted_score,
              t.dpo_name, t.dpo_email,
              l.deposit_mode, l.deposit_fixed_cents, l.deposit_percent_bps,
              l.deposit_score_threshold, l.deposit_ticket_over_cents,
@@ -614,6 +644,8 @@ export async function getPolicies(tenantId: string): Promise<{
       cancellationPolicy: linha.cancellation_policy,
       maxDiscountBps: linha.max_discount_bps,
       creditScope: linha.credit_scope,
+      onlineBlockScore: linha.online_block_score,
+      waitlistTrustedScore: linha.waitlist_trusted_score,
       dpoName: linha.dpo_name,
       dpoEmail: linha.dpo_email,
       deposit: {

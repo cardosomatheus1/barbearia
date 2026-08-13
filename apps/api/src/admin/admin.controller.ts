@@ -23,6 +23,7 @@ import {
   templatesForOnboarding,
 } from '@barbearia/onboarding';
 import { BloqueioDeLogin } from '@barbearia/identity';
+import { recusasRecentes } from '@barbearia/scheduling';
 import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -370,5 +371,19 @@ export class OnboardingController {
   ) {
     await saveChangeWindow(staff.tenantId, body);
     return { saved: true };
+  }
+
+  /**
+   * As recusas que a regra do score produziu (bloco 60).
+   *
+   * `appointments.view` **e** `customers.view`: a lista devolve o nome de quem
+   * foi recusado. Uma rota que agrega declara todas as permissões do que
+   * devolve, e não a mais próxima do nome — é a regra que este projeto já
+   * quebrou três vezes.
+   */
+  @Exige('appointments.view', 'customers.view')
+  @Get('recusas-online')
+  async recusas(@Staff() staff: AuthenticatedStaff) {
+    return { recusas: await recusasRecentes(staff.tenantId) };
   }
 }
