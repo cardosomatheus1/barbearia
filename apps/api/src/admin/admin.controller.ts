@@ -24,6 +24,7 @@ import {
 } from '@barbearia/onboarding';
 import { BloqueioDeLogin } from '@barbearia/identity';
 import { recusasRecentes } from '@barbearia/scheduling';
+import { atualizarVitrineDaCasa, definirVitrine, lerVitrine } from '@barbearia/platform';
 import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -31,6 +32,7 @@ import { contaBloqueada, Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
   businessSchema,
+  vitrineSchema,
   changeWindowSchema,
   loginSchema,
   paymentsSchema,
@@ -223,9 +225,14 @@ export class OnboardingController {
     @Body(new ZodValidationPipe(businessSchema)) body: Record<string, unknown>,
   ) {
     try {
-      return await saveBusiness({ tenantId: staff.tenantId, ...body } as Parameters<
+      const salvo = await saveBusiness({ tenantId: staff.tenantId, ...body } as Parameters<
         typeof saveBusiness
       >[0]);
+      // Endereço, coordenada, comodidade e a opção de sair da vitrine mudam
+      // aqui: sem esta chamada, o card do marketplace ficaria com o endereço
+      // antigo até a varredura da madrugada.
+      await atualizarVitrineDaCasa(staff.tenantId);
+      return salvo;
     } catch (error) {
       return toHttp(error);
     }
@@ -271,12 +278,44 @@ export class OnboardingController {
     return { saved: true };
   }
 
+  /**
+   * O interruptor da vitrine (bloco 70).
+   *
+   * Rota própria, e não um campo em `PUT /business`: aquela grava o cadastro
+   * inteiro, e mexer num interruptor por ela exigiria reenviar endereço,
+   * telefone e comodidades — o caminho em que um campo vazio apaga o que
+   * ninguém queria apagar.
+   */
+  @Exige('settings.manage')
+  @Get('vitrine')
+  async lerNaVitrine(@Staff() staff: AuthenticatedStaff) {
+    return lerVitrine(staff.tenantId);
+  }
+
+  @Exige('settings.manage')
+  @Put('vitrine')
+  async definirNaVitrine(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(vitrineSchema)) corpo: { ligado: boolean },
+  ) {
+    return definirVitrine({ tenantId: staff.tenantId, ligado: corpo.ligado });
+  }
+
   @Exige('settings.manage')
   @Post('publish')
   async publicar(@Staff() staff: AuthenticatedStaff) {
     try {
       const publicado = await publish(staff.tenantId);
       this.tenants.forget(publicado.slug);
+      /**
+       * A vitrine é refeita aqui porque publicar é o evento (bloco 70).
+       *
+       * Cache invalidado por evento, nunca só por TTL — a regra do bloco 8. A
+       * varredura diária existe como rede para o que muda sem passar por aqui
+       * (preço, nota, clube); o que não pode é a barbearia publicar e não
+       * aparecer na busca até amanhã.
+       */
+      await atualizarVitrineDaCasa(staff.tenantId);
       return publicado;
     } catch (error) {
       return toHttp(error);

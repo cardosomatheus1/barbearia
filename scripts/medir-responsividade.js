@@ -266,7 +266,23 @@ async function preparar() {
   const sessao = await json(await post('/v1/admin/login', { email: conta.email, password: conta.password }));
   const t = sessao.token;
 
-  await put('/v1/admin/business', { name: conta.businessName, city: 'Salvador', timezone: 'America/Bahia' }, t);
+  // Endereço com coordenada: sem latitude e longitude a barbearia não entra na
+  // vitrine do marketplace (bloco 70), e a busca seria fotografada vazia.
+  await put(
+    '/v1/admin/business',
+    {
+      name: conta.businessName,
+      street: 'Rua da Paciência, 240',
+      district: 'Rio Vermelho',
+      city: 'Salvador',
+      state: 'BA',
+      latitude: -12.9899,
+      longitude: -38.4767,
+      timezone: 'America/Bahia',
+      amenities: ['wifi', 'parking', 'accessible'],
+    },
+    t,
+  );
   const { templates } = await json(await fetch(`${API}/v1/admin/templates`, { headers: { authorization: `Bearer ${t}` } }));
   await put('/v1/admin/services', { services: templates }, t);
   await put(
@@ -2368,6 +2384,7 @@ async function main() {
     { nome: 'estoque', url: '/admin/estoque', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'clube', url: '/admin/clube', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },
+    { nome: 'buscar barbearia', url: '/buscar' },
     // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
     // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir
     // a versão sem faturamento mediria a tela mais fácil.

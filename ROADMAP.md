@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 69 de 80 blocos.**
+**Status: 70 de 80 blocos.**
 
 ---
 
@@ -108,6 +108,8 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Exportação do titular em PDF | o arquivo sai em JSON, completo, com nove consultas nomeadas e teste que reprova quando uma tabela com dado de cliente fica de fora | o PDF que a SPEC §1.8 regra 4 cita ao lado do JSON | sem bloco definido: exigiria a primeira dependência de geração de documento do produto, e a mesma decisão volta nos blocos 53 e 54 (nota fiscal) e na fatura em PDF da plataforma. As três devem escolher o mesmo caminho de uma vez, não três vezes. O JSON já é legível e é o formato que a ANPD aceita para portabilidade; o PDF é conforto de leitura, não o direito |
 | Teto de requisição compartilhado entre processos | teto por IP em duas janelas, e — desde o bloco 33 — escada de espera **por conta** no login, esta guardada no banco e portanto compartilhada por todos os processos | o teto por IP num armazenamento comum: hoje ele é a memória do processo, então dois servidores dobram o limite efetivo | sem bloco definido: exigiria Redis, que é a primeira dependência de infraestrutura fora do Postgres, e a decisão de tê-lo vale junto com o CD e o ambiente que ainda não existem. O que protegia senha era a escada por conta, e essa **já** é compartilhada; o teto por IP protege custo de endpoint, e dobrá-lo com dois processos não abre nada |
 | Formas de pagamento na recepção digital | o assunto é reconhecido e a pergunta vira lacuna contada, com a tela dizendo em letras que ainda não há onde cadastrar | o **cadastro**: uma lista de meios aceitos na tela de Configurações, para a recepção responder "aceitamos Pix, débito e crédito" em vez de escalar | sem bloco definido: é uma coluna e um campo de formulário, e entra no primeiro bloco que abrir a tela de Configurações. Deixá-lo marcado é decisão — escondê-lo faria a SPEC §4.17 parecer entregue, e inventar a resposta é exatamente o que "respostas vêm **exclusivamente** dos dados configurados" proíbe. A pergunta não some enquanto isso: ela é contada, e a contagem é o que justifica o campo |
+| "Perto de mim" com a coordenada do aparelho | a busca inteira: vitrine sem RLS, raio, caixa de coordenada indexada, filtros de nota, preço, comodidade e clube, e a cidade escolhida com o centro derivado das próprias barbearias listadas | ler a **geolocalização do navegador**, que é o que a SPEC §5.2 chama de "perto de mim" | sem bloco definido: exige o **primeiro componente de cliente do produto**, hoje 100% renderizado no servidor — a mesma dependência do arraste na agenda, da atualização automática do balcão e da resolução de conflito de telefone, e as quatro devem entrar juntas com medição de pacote. Escolher a cidade não é consolo: ela resolve o caso de quem busca do computador, e o centro sai do cadastro em vez de uma tabela de municípios que alguém teria que manter |
+| Filtros "disponível hoje" e "disponível agora" | os outros seis filtros da SPEC §5.2, e o motor de disponibilidade que responderia por eles | rodar o motor **em lote** sobre a lista de resultados | 71 (próximo horário em lote), que existe separado por isso. A tela mostra os dois marcados como o que ainda não funciona, nunca escondidos |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -324,7 +326,7 @@ Só faz sentido com centenas de barbearias na base.
 
 | # | Bloco |
 |---|---|
-| 70 | Marketplace: busca geográfica e filtros |
+| 70 | Marketplace: busca geográfica e filtros | ✅ |
 | 71 | Marketplace: "próximo horário" em lote (exige `/availability` rápido) |
 | 72 | Marketplace: atribuição de cliente novo e comissão |
 | 73 | Perfil público do barbeiro |

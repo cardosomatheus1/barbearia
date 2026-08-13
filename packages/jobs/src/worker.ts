@@ -145,6 +145,18 @@ export interface Contexto {
     agora: Date,
   ) => Promise<{ readonly avisados: number; readonly anonimizados: number }>;
   /**
+   * A vitrine do marketplace refeita (bloco 70), injetada.
+   *
+   * Mesma razão da retenção: ela vive em `packages/platform`, que é camada de
+   * cima, e `jobs` não pode conhecê-la sem inverter a seta.
+   *
+   * **Obrigatória no tipo.** Opcional, ela seria esquecida no primeiro worker
+   * novo, e o card do marketplace passaria a mostrar preço e nota de meses atrás
+   * sem nada ficar vermelho — que é exatamente o que a revisão deste bloco
+   * apontou quando ela ainda não tinha chamador nenhum.
+   */
+  readonly atualizarVitrine: (tenantId: string, agora: Date) => Promise<number>;
+  /**
    * A expiração da lista de espera (bloco 38), injetada.
    *
    * Mesma razão da varredura de retenção: ela vive em `packages/scheduling`,
@@ -481,6 +493,20 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    */
   'lgpd.retencao': async (tarefa, contexto) => {
     await contexto.varrerRetencao(tarefa.tenantId, contexto.relogio.agora());
+
+    /**
+     * A vitrine do marketplace é refeita na mesma volta (bloco 70).
+     *
+     * Preço, nota e clube mudam por caminhos que não conhecem a vitrine — um
+     * serviço editado no catálogo, uma avaliação que completa 48 horas e entra
+     * na média, um plano desativado. Chamar a atualização de dentro de cada um
+     * espalharia a vitrine por cinco pacotes que não a conhecem, e o primeiro
+     * caminho novo esqueceria dela.
+     *
+     * Aqui, e não numa tarefa própria, pela mesma razão da lista de espera: é a
+     * mesma natureza — varredura diária, uma por barbearia, de madrugada.
+     */
+    await contexto.atualizarVitrine(tarefa.tenantId, contexto.relogio.agora());
 
     /**
      * A lista de espera vencida sai na mesma volta (bloco 38).

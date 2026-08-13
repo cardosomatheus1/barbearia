@@ -1809,6 +1809,105 @@ main { padding-bottom: var(--space-8); }
   .recado__responder { grid-column: 2; }
 }
 
+.vitrine-config { margin-bottom: var(--space-5); }
+/* `quadro__topo` é uma linha, e aqui os dois lados são longos: no celular o
+   botão sobrava numa coluna de 60px e "Sair da busca" quebrava em três linhas.
+   Empilha por padrão e vira linha quando há largura — `min-width`, nunca
+   `max-width`. */
+.vitrine-config .quadro__topo { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.vitrine-config__acao { min-height: 44px; width: 100%; }
+
+@media (min-width: 40em) {
+  .vitrine-config .quadro__topo {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .vitrine-config__acao { width: auto; }
+}
+/* A seção que vem depois da vitrine precisa de ar: sem isso ela encosta no
+   quadro e as duas leem como uma coisa só. */
+.configuracoes__secao { margin-top: var(--space-6); }
+
+/* -- Busca do marketplace (bloco 70) --------------------------------------- */
+
+.buscar { padding-bottom: var(--space-8); }
+.buscar__topo { margin-bottom: var(--space-5); }
+.buscar__titulo { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); }
+.buscar__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+
+.buscar__form {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+}
+.buscar__campo { margin: 0; }
+/* Caixa de selecao com 44px, como todo alvo de toque: o padrao do navegador da
+   13px, e a medicao reprova. */
+.buscar__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
+.buscar__marca input { width: 24px; height: 24px; }
+.buscar__acao { min-height: 44px; }
+
+.buscar__pendente {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.buscar__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+/* O recipiente e o **ancestral**, nunca o proprio cartao: um elemento nao
+   responde sobre si mesmo, e sem esta linha a regra abaixo nunca casa — o card
+   fica na versao estreita em 1280px, com a foto virando uma tira no topo. */
+.buscar__lista > li { container-type: inline-size; }
+
+.casa {
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.casa__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+.casa__foto--vazia {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+}
+.casa__inicial {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+.casa__corpo { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.casa__topo { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.casa__nome { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.casa__nota { margin: 0 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
+.casa__nota--sem { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.casa__avaliacoes { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.casa__linha { margin: 0; color: var(--color-text-muted); }
+.casa__acao { min-height: 44px; justify-self: start; }
+
+/* Espaco sobra: a foto vai para o lado e o card para de ser uma coluna. */
+@container (min-width: 34rem) {
+  .casa { display: grid; grid-template-columns: 15rem 1fr; align-items: stretch; }
+  .casa__foto { height: 100%; aspect-ratio: auto; }
+}
+@media (min-width: 768px) {
+  .buscar__form { grid-template-columns: 2fr 1fr 1fr auto auto; align-items: end; }
+}
+
 /* -- Preço por faixa de horário (bloco 68) --------------------------------- */
 
 .precos { padding-bottom: var(--space-8); }

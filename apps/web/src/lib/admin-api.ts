@@ -868,6 +868,19 @@ export const responderRecadoNaApi = (token: string, id: string, resposta: string
 export const encerrarRecadoNaApi = (token: string, id: string) =>
   chamar<{ encerrado: boolean }>('POST', `/v1/admin/recados/${id}/encerrar`, {}, token);
 
+// -- Vitrine do marketplace (bloco 70) ---------------------------------------
+
+export interface VitrineDaCasa {
+  ligado: boolean;
+  naVitrine: number;
+}
+
+export const vitrineDaCasa = (token: string) =>
+  chamar<VitrineDaCasa>('GET', '/v1/admin/vitrine', undefined, token);
+
+export const definirVitrineNaApi = (token: string, ligado: boolean) =>
+  chamar<{ ligado: boolean; unidades: number }>('PUT', '/v1/admin/vitrine', { ligado }, token);
+
 // -- Preço por faixa de horário (bloco 68) -----------------------------------
 
 export interface FaixaNaTela {

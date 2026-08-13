@@ -212,3 +212,12 @@ export const photosSchema = z.object({
     .max(80)
     .optional(),
 });
+
+/**
+ * O interruptor da vitrine do marketplace (bloco 70, SPEC §5.2).
+ *
+ * Um campo só, obrigatório: quem chama esta rota está tomando a decisão, e um
+ * booleano ausente aqui não é "não mexa" — é um formulário que não enviou o que
+ * a rota existe para receber.
+ */
+export const vitrineSchema = z.object({ ligado: z.boolean() });

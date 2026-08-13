@@ -38,6 +38,7 @@ import {
   avisarDaOperacao,
   CODIGO_DA_RETENCAO,
   ConsoleOperacaoProvider,
+  atualizarVitrineDaCasa,
 } from '@barbearia/platform';
 import {
   ConsoleNotificationProvider,
@@ -314,6 +315,12 @@ async function main(): Promise<void> {
        * da cobrança: ela mora em `packages/crm`, e `jobs` não conhece a camada
        * de cima.
        */
+      /**
+       * A vitrine do marketplace (bloco 70), ligada aqui pelo mesmo motivo da
+       * retenção: ela mora em `packages/platform`, e `jobs` não conhece a camada
+       * de cima.
+       */
+      atualizarVitrine: async (tenantId, agora) => atualizarVitrineDaCasa(tenantId, agora),
       varrerRetencao: async (tenantId, agora) => {
         /**
          * O texto cru das perguntas anônimas vence junto (bloco 66).

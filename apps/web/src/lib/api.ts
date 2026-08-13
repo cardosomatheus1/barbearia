@@ -817,3 +817,44 @@ export async function manterMeuPlano(
 ): Promise<Resultado<{ desfeito: boolean }>> {
   return post(`/v1/b/${slug}/plano/manter`, {}, token);
 }
+
+// -- Marketplace: a busca (bloco 70) -----------------------------------------
+
+export interface CidadeNaVitrine {
+  cidade: string;
+  estado: string;
+  latitude: number;
+  longitude: number;
+  casas: number;
+}
+
+export interface CasaNaBusca {
+  slug: string;
+  nome: string;
+  cidade: string | null;
+  estado: string | null;
+  fotoUrl: string | null;
+  precoDeCents: number | null;
+  notaBps: number | null;
+  avaliacoes: number;
+  comodidades: string[];
+  temClube: boolean;
+  distanciaKm: number;
+}
+
+export async function cidadesDaVitrine(): Promise<readonly CidadeNaVitrine[]> {
+  const resposta = await fetch(`${BASE}/v1/marketplace/cidades`, { cache: 'no-store' });
+  if (!resposta.ok) return [];
+  const corpo = (await resposta.json()) as { cidades: CidadeNaVitrine[] };
+  return corpo.cidades;
+}
+
+export async function buscarBarbearias(
+  parametros: Record<string, string>,
+): Promise<readonly CasaNaBusca[]> {
+  const query = new URLSearchParams(parametros).toString();
+  const resposta = await fetch(`${BASE}/v1/marketplace/busca?${query}`, { cache: 'no-store' });
+  if (!resposta.ok) return [];
+  const corpo = (await resposta.json()) as { resultados: CasaNaBusca[] };
+  return corpo.resultados;
+}

@@ -2,8 +2,8 @@ import { redirect } from 'next/navigation';
 import { painelOuDesvio } from '@/lib/painel';
 import { getProfile } from '@/lib/api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { politicasDaCasa, recusasOnlineNaApi } from '@/lib/admin-api';
-import { acaoJanela, acaoSair } from '../acoes';
+import { politicasDaCasa, recusasOnlineNaApi, vitrineDaCasa } from '@/lib/admin-api';
+import { acaoDefinirVitrine, acaoJanela, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { faltasDoLimiar } from '@/lib/sinal';
 
@@ -35,6 +35,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
    * vazio a cada visita, e o dono acha que a configuração dele se perdeu.
    */
   const resposta = await politicasDaCasa(token);
+  const vitrine = await vitrineDaCasa(token);
   const politicas = resposta.ok ? resposta.dados : null;
 
   /**
@@ -61,7 +62,53 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         </form>
       </header>
 
-      <h1 className="painel__titulo">Cancelamento e remarcação</h1>
+      {/**
+        * O título da página é "Configurações", como o trilho ao lado a chama.
+        *
+        * Ele dizia "Cancelamento e remarcação" — o nome da primeira seção — e
+        * era o único `h1` da tela, com a vitrine desenhada acima dele. Duas
+        * coisas erradas de uma vez: a mesma tela com dois nomes (§6, pergunta
+        * 2), e uma seção fora do sumário do documento, que é o que faz um
+        * quadro no topo ler como aviso do sistema em vez de configuração.
+        */}
+      <h1 className="painel__titulo">Configurações</h1>
+
+      {/**
+        * A vitrine vem antes do resto, e é uma seção curta de propósito.
+        *
+        * É a única configuração desta tela que decide se pessoas que nunca
+        * ouviram falar da barbearia a encontram. Enterrá-la depois de cinco
+        * campos de prazo seria escondê-la de quem ela mais interessa.
+        */}
+      <section className="quadro vitrine-config">
+        <div className="quadro__topo">
+          <div>
+            <p className="quadro__titulo">
+              {vitrine.ok && vitrine.dados.ligado
+                ? 'Sua barbearia aparece na busca'
+                : 'Sua barbearia está fora da busca'}
+            </p>
+            <p className="quadro__sub">
+              {vitrine.ok && vitrine.dados.ligado
+                ? 'Quem procurar barbearia na sua cidade vê seu nome, sua nota e o preço de entrada — o mesmo que já está na sua página.'
+                : 'Ninguém encontra sua barbearia pela busca. Quem tiver o link da sua página continua chegando normalmente.'}
+            </p>
+          </div>
+          {vitrine.ok ? (
+            <form action={acaoDefinirVitrine}>
+              <input name="ligado" type="hidden" value={vitrine.dados.ligado ? '0' : '1'} />
+              <button
+                className={`ui-button ${vitrine.dados.ligado ? 'ui-button--ghost' : 'ui-button--primary'} vitrine-config__acao`}
+                type="submit"
+              >
+                {vitrine.dados.ligado ? 'Sair da busca' : 'Aparecer na busca'}
+              </button>
+            </form>
+          ) : null}
+        </div>
+      </section>
+
+      <h2 className="painel__titulo configuracoes__secao">Cancelamento e remarcação</h2>
       <p className="painel__sub">
         O prazo que você escolher é o que a página do cliente escreve — e o que a API aplica.
       </p>

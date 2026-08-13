@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
 import { AgenteController, AgenteDoClienteController } from './booking/agente.controller.js';
+import { VitrineController } from './booking/vitrine.controller.js';
 import {
   AppointmentsController,
   GuestAppointmentsController,
@@ -85,6 +86,7 @@ import { TenantService } from './tenant/tenant.service.js';
     BookingController,
     AgenteController,
     AgenteDoClienteController,
+    VitrineController,
     AuthController,
     SessionController,
     StaffAuthController,

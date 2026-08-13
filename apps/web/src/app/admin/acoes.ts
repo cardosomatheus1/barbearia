@@ -88,6 +88,7 @@ import {
   apagarFaixaNaApi,
   criarFaixaNaApi,
   ligarPrecoPorFaixaNaApi,
+  definirVitrineNaApi,
   moverNaFila,
   responderRecadoNaApi,
   sentarDaFila,
@@ -1023,6 +1024,19 @@ export async function acaoEncerrarRecado(form: FormData): Promise<void> {
  * direito — e apagar a pergunta sem resposta seria apagar exatamente o dado que
  * esta lista existe para produzir.
  */
+/**
+ * Entra ou sai da vitrine do marketplace (bloco 70).
+ *
+ * Aparecer na busca nasce ligado — é o benefício que a plataforma vende, e o
+ * dado exibido já é o da própria página pública. Sair é decisão, e é esta ação.
+ */
+export async function acaoDefinirVitrine(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await definirVitrineNaApi(token, texto(form, 'ligado') === '1');
+  if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
+  redirect('/admin/configuracoes?salvo=1');
+}
+
 /**
  * Liga ou desliga o preço por faixa (bloco 68).
  *

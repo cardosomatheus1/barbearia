@@ -86,6 +86,7 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
  */
 const avisosDeCobranca: { tenantId: string; faturaId: string; assunto: string }[] = [];
 let reguasRodadas = 0;
+const vitrinesRefeitas: { tenantId: string; agora: Date }[] = [];
 /** As varreduras de retenção que o worker mandou rodar, por barbearia. */
 const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
 const esperasExpiradas: { tenantId: string; agora: Date }[] = [];
@@ -139,6 +140,10 @@ const ligacoesDaPlataforma = () => ({
   varrerRetencao: async (tenantId: string, agora: Date) => {
     retencoesRodadas.push({ tenantId, agora });
     return { avisados: 0, anonimizados: 0 };
+  },
+  atualizarVitrine: async (tenantId: string, agora: Date) => {
+    vitrinesRefeitas.push({ tenantId, agora });
+    return 0;
   },
   expirarEsperas: async (tenantId: string, agora: Date) => {
     esperasExpiradas.push({ tenantId, agora });
@@ -991,6 +996,15 @@ describeIfDb('fila de trabalho', () => {
     expect(resultado.concluidas).toBe(1);
     expect(retencoesRodadas).toHaveLength(1);
     expect(esperasExpiradas.map((e) => e.tenantId)).toEqual([TENANT]);
+    /**
+     * E a vitrine do marketplace na mesma volta (bloco 70).
+     *
+     * A revisão de segurança daquele bloco apontou que a varredura prometida
+     * pelo cabeçalho da migração **não tinha chamador nenhum** — preço e nota do
+     * card só se atualizariam quando alguém publicasse de novo. Isto é o
+     * chamador, e este teste é o que impede que ele se perca outra vez.
+     */
+    expect(vitrinesRefeitas.map((v) => v.tenantId)).toEqual([TENANT]);
   });
 
   it('a falta entra na fila como tarefa da própria barbearia', async () => {
