@@ -40,6 +40,32 @@ function carregarPlaywright() {
 }
 
 const { chromium } = carregarPlaywright();
+/**
+ * Uma tentativa a mais quando o socket ocioso morre.
+ *
+ * A semeadura faz dezenas de requisições intercaladas com `psql`, e um trecho de
+ * banco mais lento deixa a conexão do pool parada. O `keepAliveTimeout` padrão
+ * do servidor Node é de 5s: passado isso ele fecha, o `fetch` reaproveita o
+ * socket morto e a medição inteira morre com `UND_ERR_SOCKET · other side
+ * closed` — duas execuções perdidas, as duas no mesmo ponto, sempre logo depois
+ * de uma etapa longa.
+ *
+ * Repetir é seguro **aqui**, e a razão é o que a torna aceitável: o erro é a
+ * conexão fechada antes de a resposta chegar, o banco é descartável e nasce
+ * vazio a cada execução, e nada nesta semeadura move dinheiro de verdade. Numa
+ * rota de produção a resposta certa seria outra — desfecho ambíguo conta como
+ * "saiu", que é a regra do repasse do bloco 50.
+ */
+const fetchDireto = globalThis.fetch;
+globalThis.fetch = async (...args) => {
+  try {
+    return await fetchDireto(...args);
+  } catch (erro) {
+    if (erro?.cause?.code !== 'UND_ERR_SOCKET') throw erro;
+    return fetchDireto(...args);
+  }
+};
+
 const { execFileSync } = require('node:child_process');
 const { mkdirSync } = require('node:fs');
 

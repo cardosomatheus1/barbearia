@@ -47,6 +47,7 @@ import { CampanhaController } from './admin/campanha.controller.js';
 import { SegmentoController } from './admin/segmento.controller.js';
 import { ChurnController } from './admin/churn.controller.js';
 import { MetricaController } from './admin/metrica.controller.js';
+import { InsightController } from './admin/insight.controller.js';
 import { MultiunidadeController } from './admin/multiunidade.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
@@ -121,6 +122,7 @@ import { TenantService } from './tenant/tenant.service.js';
     SegmentoController,
     ChurnController,
     MetricaController,
+    InsightController,
     MultiunidadeController,
     AvaliacaoController,
     EstoqueController,

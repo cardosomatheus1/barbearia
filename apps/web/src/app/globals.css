@@ -1809,6 +1809,74 @@ main { padding-bottom: var(--space-8); }
   .recado__responder { grid-column: 2; }
 }
 
+/* -- Insights proativos no painel (bloco 67) ------------------------------- */
+
+/**
+ * A nota do cabeçalho começa **embaixo** do título.
+ *
+ * O `space-between` do cabeçalho põe as duas na mesma linha, e no celular o
+ * print mostrou "O que fazer / primeiro" ao lado de "no máximo três, do mais /
+ * caro" — quatro linhas quebradas se disputando. Ela sobe para a linha do título
+ * quando há largura para as duas.
+ */
+.painel-secao__nota {
+  flex-basis: 100%;
+  order: 2;
+  margin-top: calc(var(--space-2) * -1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.painel-secao__cabeca:has(.painel-secao__nota) { flex-wrap: wrap; }
+
+@media (min-width: 480px) {
+  .painel-secao__nota { flex-basis: auto; order: 0; margin-top: 0; }
+}
+.painel-insights { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-3); }
+.painel-insights__vazio {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+}
+
+.painel-insight {
+  /* Recipiente da `@container`: a declaração mora no ancestral, senão a regra
+     nunca casa e o cartão fica na versão estreita em qualquer largura. */
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+.painel-insight__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.painel-insight__texto { margin: 0; color: var(--color-text-muted); }
+.painel-insight__pe { display: grid; gap: var(--space-3); align-items: center; }
+.painel-insight__impacto {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+.painel-insight__impacto-nota {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.painel-insight__acao { min-height: 44px; }
+
+/* Espaço sobra: o valor e o botão dividem a linha em vez de empilhar. */
+@container (min-width: 30rem) {
+  .painel-insight__pe { grid-template-columns: 1fr auto; }
+}
+
 /* -- Recepção: as perguntas sem resposta (bloco 66) ------------------------ */
 
 .recepcao { padding-bottom: var(--space-8); }

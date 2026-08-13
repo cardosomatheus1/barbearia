@@ -3,12 +3,15 @@ import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import {
   diagnosticoDoCatalogo,
+  insightsDoPainel,
   painelDeDinheiro,
   painelOperacional,
   type Comparado,
+  type InsightNaTela,
   type PainelDeDinheiro,
   type PeriodoPainel,
 } from '@/lib/admin-api';
+import type { DestinoDoInsight } from '@barbearia/core';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
@@ -114,6 +117,50 @@ function GraficoFaturamento({ dinheiro, periodo }: { readonly dinheiro: PainelDe
   );
 }
 
+/**
+ * Onde cada insight leva.
+ *
+ * `Record` sobre a união dos destinos que `core` declara: destino novo lá faz o
+ * compilador cobrar o caminho aqui, em vez de a tela desenhar um botão que não
+ * vai a lugar nenhum — que é a primeira das seis perguntas da §6.
+ *
+ * O parâmetro é usado de verdade nos dois: a campanha abre já no público que o
+ * cartão contou, e a jornada abre na pessoa de quem o cartão falou.
+ */
+const CAMINHO_DO_INSIGHT: Readonly<
+  Record<DestinoDoInsight, (p: Record<string, string>) => string>
+> = {
+  campanha: (p) => `/admin/campanhas?filtro=${p['filtro'] ?? 'em_risco'}`,
+  jornada_do_profissional: (p) => `/admin/profissionais?pessoa=${p['profissionalId'] ?? ''}`,
+};
+
+function Oportunidade({ insight }: { readonly insight: InsightNaTela }) {
+  const caminhoDe = CAMINHO_DO_INSIGHT[insight.acao.destino as DestinoDoInsight];
+  return (
+    <article className="painel-insight">
+      <div className="painel-insight__corpo">
+        <p className="painel-insight__titulo">{insight.titulo}</p>
+        <p className="painel-insight__texto">{insight.texto}</p>
+      </div>
+      <div className="painel-insight__pe">
+        {/* "Até", e nunca "vai render": o número é o teto do que está sendo
+            deixado na mesa, não uma previsão. Anunciar teto como previsão é o
+            produto prometendo faturamento que ele não controla. */}
+        <p className="painel-insight__impacto tabular">
+          até {reais(insight.impactoCents)}
+          <span className="painel-insight__impacto-nota">deixados na mesa</span>
+        </p>
+        <a
+          className="ui-button ui-button--secondary painel-insight__acao"
+          href={caminhoDe ? caminhoDe(insight.acao.parametros) : '/admin/painel'}
+        >
+          {insight.acao.rotulo}
+        </a>
+      </div>
+    </article>
+  );
+}
+
 function Numero({ rotulo, valor, nota, classe = '' }: {
   readonly rotulo: string;
   readonly valor: string;
@@ -139,11 +186,19 @@ export default async function PainelPage({ searchParams }: Props) {
   const query = await searchParams;
   const periodo = periodoSeguro(primeiro(query['periodo']));
 
-  const [operacao, hoje, dinheiro, diagnostico] = await Promise.all([
+  /**
+   * Os insights entram sob a mesma condição do faturamento (bloco 67).
+   *
+   * A rota exige `finance.view` porque o cartão traz dinheiro; pedi-la sem a
+   * permissão devolveria 403 em toda abertura do painel da recepção, e o bloco
+   * "O que fazer primeiro" apareceria vazio para quem nunca poderá vê-lo.
+   */
+  const [operacao, hoje, dinheiro, diagnostico, insights] = await Promise.all([
     painelOperacional(token, undefined, periodo),
     periodo === 'dia' ? Promise.resolve(null) : painelOperacional(token, undefined, 'dia'),
     podeVerDinheiro ? painelDeDinheiro(token, undefined, periodo) : Promise.resolve(null),
     podeCadastro ? diagnosticoDoCatalogo(token) : Promise.resolve(null),
+    podeVerDinheiro ? insightsDoPainel(token) : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -176,17 +231,18 @@ export default async function PainelPage({ searchParams }: Props) {
   const achados = diagnostico?.ok ? diagnostico.dados.achados : [];
   const urgentes = achados.filter((a) => a.severidade !== 'aviso');
 
+  const oportunidades = insights?.ok ? insights.dados.insights : [];
+
+  /**
+   * O alerta de "ainda há capacidade" saiu daqui no bloco 67.
+   *
+   * Ele dizia a mesma coisa que o insight de hora ociosa e dizia pior: sobre
+   * hoje — quando já não dá para encher —, sem público, sem valor e com um botão
+   * que só abria a agenda. Dois cartões afirmando "sua agenda tem espaço", em
+   * ordens diferentes, na mesma tela, é o defeito de coerência da §6: quem opera
+   * não sabe qual dos dois responder primeiro.
+   */
   const alertas: Array<{ selo: string; titulo: string; texto: string; href: string; acao: string; tom: 'aviso' | 'grave' | 'ok' }> = [];
-  if (operacaoHoje.ocupacao.valor < 75) {
-    alertas.push({
-      selo: 'Oportunidade',
-      titulo: `Agenda de hoje está com ${operacaoHoje.ocupacao.valor}% de ocupação`,
-      texto: 'Ainda há capacidade disponível. Vale priorizar encaixes, retorno de clientes e divulgação dos horários.',
-      href: '/admin/agenda',
-      acao: 'Ver agenda',
-      tom: 'aviso',
-    });
-  }
   if (operacao.dados.noShow.valor >= 7) {
     alertas.push({
       selo: 'Atenção',
@@ -211,7 +267,15 @@ export default async function PainelPage({ searchParams }: Props) {
     alertas.push({
       selo: 'Tudo certo',
       titulo: 'Operação sem alerta crítico agora',
-      texto: 'Ocupação, faltas e cadastro não apresentam um desvio que peça ação imediata.',
+      /**
+       * Sem citar ocupação — ela saiu daqui no bloco 67.
+       *
+       * O print mostrou este cartão dizendo "ocupação não apresenta desvio" logo
+       * abaixo de um insight anunciando 121 horários vagos amanhã. Duas seções
+       * afirmando o contrário sobre o mesmo fato é a §6 pergunta 6, e o texto
+       * era a metade errada: quem fala de agenda vazia agora é o cartão de cima.
+       */
+      texto: 'Faltas e cadastro não apresentam um desvio que peça ação imediata.',
       href: '/admin/dia',
       acao: 'Ver o dia',
       tom: 'ok',
@@ -306,6 +370,32 @@ export default async function PainelPage({ searchParams }: Props) {
         </dl>
       </section>
 
+      {podeVerDinheiro ? (
+        <>
+          <div className="painel-secao__cabeca">
+            <h2 className="avisos__titulo">O que fazer primeiro</h2>
+            {/* O limite de três é regra da SPEC §4.19, e a tela diz por quê:
+                sem a frase, "só três?" parece falta de dado. */}
+            <span className="painel-secao__nota">no máximo três, do mais caro</span>
+          </div>
+          {oportunidades.length === 0 ? (
+            /* Estado vazio desenhado, e aqui vazio é boa notícia. */
+            <p className="painel-insights__vazio">
+              Nada com dinheiro parado agora: a agenda de amanhã e a ocupação da equipe não
+              apontam nenhuma oportunidade que valha interromper o dia.
+            </p>
+          ) : (
+            <ul className="painel-insights">
+              {oportunidades.map((insight) => (
+                <li key={`${insight.tipo}-${insight.titulo}`}>
+                  <Oportunidade insight={insight} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+
       <div className="painel-secao__cabeca">
         <h2 className="avisos__titulo">Hoje</h2>
         <a className="quadro__acao" href="/admin/dia">Ver operação →</a>
@@ -318,7 +408,7 @@ export default async function PainelPage({ searchParams }: Props) {
       </section>
 
       <div className="painel-secao__cabeca">
-        <h2 className="avisos__titulo">Atenção e oportunidades</h2>
+        <h2 className="avisos__titulo">Sinais de hoje</h2>
         <a className="quadro__acao" href="/admin/dia">Ver operação →</a>
       </div>
       <ul className="defeitos painel-alertas">

@@ -140,3 +140,154 @@ export async function horaCheia(
     horaLocal: Number(quando.hora),
   });
 }
+
+/**
+ * A ocupação de cada cadeira, com quantos pedidos ela não conseguiu atender
+ * (bloco 67, SPEC §4.19).
+ *
+ * > *"João está com 97% de ocupação há 6 semanas e recusou 14 pedidos de
+ * > horário."*
+ *
+ * ## O denominador é a jornada cadastrada, nunca "horas × dias"
+ *
+ * É a mesma regra do bloco 59: um número fixo erra em toda barbearia que fecha
+ * na segunda, e todas fecham. A capacidade sai de `work_schedules`, com as
+ * pausas descontadas — quem trabalha meio período não aparece com metade da
+ * ocupação de quem trabalha o dia inteiro.
+ *
+ * ## "Recusou um pedido" é a lista de espera, não uma nova instrumentação
+ *
+ * `waitlist_entries` já é exatamente isto: *quem foi embora sem conseguir
+ * marcar*. Criar um contador de "tentativas recusadas" seria uma segunda fonte
+ * de verdade para o mesmo fato — e uma que ninguém preencheria nos caminhos que
+ * já existem. Só as entradas com **preferência por esta cadeira** contam: quem
+ * pediu "qualquer barbeiro" não estava sendo recusado por ninguém em especial.
+ */
+export interface AgendaDoProfissional {
+  readonly profissionalId: string;
+  readonly nome: string;
+  readonly ocupacaoBps: number;
+  readonly pedidosSemVaga: number;
+}
+
+export async function agendasApertadas(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly agora: Date;
+  /** A partir de quanta ocupação a agenda conta como apertada. */
+  readonly corteBps: number;
+  readonly tx?: TransactionClient;
+}): Promise<readonly AgendaDoProfissional[]> {
+  const dentro = async (tx: TransactionClient) => {
+    const semanas = Math.floor(JANELA_DO_HEATMAP_DIAS / 7);
+    const linhas = await tx.$queryRaw<
+      { id: string; name: string; vendidos: number; jornada: number; pedidos: number }[]
+    >`
+      WITH janela AS (
+        SELECT ${params.agora}::timestamptz - ${JANELA_DO_HEATMAP_DIAS} * interval '1 day' AS desde,
+               ${params.agora}::timestamptz AS ate
+      ),
+      -- A jornada de cada cadeira na janela: os minutos de cada dia da semana,
+      -- menos as pausas, vezes quantas vezes aquele dia passou.
+      jornada AS (
+        SELECT w.professional_id,
+               sum(
+                 (w.end_minute - w.start_minute)
+                 - COALESCE((
+                     SELECT sum((p->>'end')::int - (p->>'start')::int)
+                       FROM jsonb_array_elements(w.breaks) AS p
+                   ), 0)
+               )::int * ${semanas} AS minutos
+          FROM work_schedules w
+         GROUP BY w.professional_id
+      ),
+      vendidos AS (
+        SELECT a.professional_id,
+               sum(EXTRACT(EPOCH FROM (a.ends_at - a.starts_at)) / 60)::int AS minutos
+          FROM appointments a, janela j
+         WHERE a.location_id = ${params.locationId}::uuid
+           AND a.status IN ('completed', 'in_progress', 'checked_in', 'confirmed', 'pending')
+           AND a.starts_at >= j.desde AND a.starts_at < j.ate
+         GROUP BY a.professional_id
+      ),
+      pedidos AS (
+        SELECT e.professional_id, count(*)::int AS total
+          FROM waitlist_entries e, janela j
+         WHERE e.location_id = ${params.locationId}::uuid
+           AND e.professional_id IS NOT NULL
+           AND e.joined_at >= j.desde AND e.joined_at < j.ate
+         GROUP BY e.professional_id
+      )
+      SELECT p.id, p.name,
+             COALESCE(v.minutos, 0) AS vendidos,
+             COALESCE(jo.minutos, 0) AS jornada,
+             COALESCE(pe.total, 0) AS pedidos
+        FROM professionals p
+        LEFT JOIN jornada  jo ON jo.professional_id = p.id
+        LEFT JOIN vendidos v  ON v.professional_id  = p.id
+        LEFT JOIN pedidos  pe ON pe.professional_id = p.id
+       WHERE p.location_id = ${params.locationId}::uuid AND p.active
+    `;
+
+    return linhas
+      .map((l) => ({
+        profissionalId: l.id,
+        nome: l.name,
+        /**
+         * Jornada zero devolve zero, nunca `Infinity`.
+         *
+         * A cadeira recém-cadastrada e ainda sem grade tem denominador zero, e
+         * "ocupação de ∞%" apareceria justamente no dia em que o dono contrata
+         * alguém — que é quando ele abre o painel.
+         */
+        ocupacaoBps:
+          Number(l.jornada) > 0
+            ? Math.round((Number(l.vendidos) / Number(l.jornada)) * 10_000)
+            : 0,
+        pedidosSemVaga: Number(l.pedidos),
+      }))
+      .filter((p) => p.ocupacaoBps >= params.corteBps);
+  };
+
+  return params.tx ? dentro(params.tx) : withTenant(params.tenantId, dentro);
+}
+
+/**
+ * O serviço que a barbearia mais vende, para ancorar a contagem de vagas.
+ *
+ * O insight de hora ociosa precisa dizer *"há 23 horários vagos amanhã"*, e
+ * "horário vago" só existe em relação a uma duração: a mesma tarde cabe seis
+ * cortes ou dois pacotes de coloração. Perguntar pelo serviço mais vendido faz o
+ * número ser o que o cliente veria ao abrir a página escolhendo o de sempre —
+ * e ele sai do **motor**, não de uma segunda contagem de agenda.
+ *
+ * O desempate por duração e nome existe para a barbearia que ainda não vendeu
+ * nada: sem ele a resposta seria nula no primeiro mês, que é justamente quando
+ * há mais hora vazia para preencher.
+ */
+export async function servicoMaisVendido(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly agora: Date;
+  readonly tx?: TransactionClient;
+}): Promise<string | null> {
+  const dentro = async (tx: TransactionClient) => {
+    const linhas = await tx.$queryRaw<{ id: string }[]>`
+      SELECT s.id
+        FROM services s
+        LEFT JOIN appointment_services aps ON aps.service_id = s.id
+        LEFT JOIN appointments a
+               ON a.id = aps.appointment_id
+              AND a.location_id = ${params.locationId}::uuid
+              AND a.starts_at >= ${params.agora}::timestamptz
+                                 - ${JANELA_DO_HEATMAP_DIAS} * interval '1 day'
+              AND a.starts_at < ${params.agora}::timestamptz
+       WHERE s.active
+       GROUP BY s.id, s.duration_minutes, s.name
+       ORDER BY count(a.id) DESC, s.duration_minutes ASC, s.name ASC
+       LIMIT 1
+    `;
+    return linhas[0]?.id ?? null;
+  };
+  return params.tx ? dentro(params.tx) : withTenant(params.tenantId, dentro);
+}

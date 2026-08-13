@@ -868,6 +868,19 @@ export const responderRecadoNaApi = (token: string, id: string, resposta: string
 export const encerrarRecadoNaApi = (token: string, id: string) =>
   chamar<{ encerrado: boolean }>('POST', `/v1/admin/recados/${id}/encerrar`, {}, token);
 
+// -- Insights proativos (bloco 67) -------------------------------------------
+
+export interface InsightNaTela {
+  tipo: string;
+  titulo: string;
+  texto: string;
+  impactoCents: number;
+  acao: { rotulo: string; destino: string; parametros: Record<string, string> };
+}
+
+export const insightsDoPainel = (token: string) =>
+  chamar<{ insights: InsightNaTela[] }>('GET', '/v1/admin/insights', undefined, token);
+
 // -- Recepção digital: as perguntas sem resposta (bloco 66) -------------------
 
 export interface LacunaNaTela {

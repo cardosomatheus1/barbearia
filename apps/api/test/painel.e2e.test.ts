@@ -8,6 +8,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ConsoleMessagingProvider, codigoDoPasso, passoAgora } from '@barbearia/identity';
 import { PainelController } from '../src/admin/painel.controller.js';
+import { InsightController } from '../src/admin/insight.controller.js';
 import { MfaController } from '../src/admin/mfa.controller.js';
 import { MeController, TeamController } from '../src/admin/team.controller.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
@@ -74,6 +75,7 @@ describeIfDb('painel, diagnóstico e trilha pela HTTP', () => {
         StaffAuthController,
         OnboardingController,
         PainelController,
+        InsightController,
         MfaController,
         TeamController,
         MeController,
@@ -413,6 +415,44 @@ describeIfDb('painel, diagnóstico e trilha pela HTTP', () => {
         JSON.stringify(evento.after ?? {}).includes('maria@domari.com.br'),
       ),
     ).toBe(false);
+  });
+
+  // -- insights proativos (bloco 67, SPEC §4.19) ------------------------------
+
+  it('a recepção não recebe os insights, porque eles trazem dinheiro', async () => {
+    /**
+     * O ataque, executado. O cartão diz "até R$ 1.150 deixados na mesa", e esse
+     * número é o ticket médio da casa multiplicado por uma contagem — é
+     * faturamento por outro caminho, que é a regra que a revisão do bloco 46
+     * escreveu sobre a rota de assinantes por plano.
+     */
+    const dono = await abrirBarbearia();
+    const maria = await conta(dono, 'receptionist', 'Maria Recepção', 'maria@domari.com.br');
+    await com(maria)(http().get('/v1/admin/insights')).expect(403);
+  });
+
+  it('o dono lê os insights, e nunca mais de três', async () => {
+    // *"Painel com 20 alertas é painel ignorado."* O corte é da SPEC, e é o que
+    // separa um painel que se lê de manhã de uma lista que se ignora.
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+
+    const resposta = await com(dono)(http().get('/v1/admin/insights')).expect(200);
+    expect(Array.isArray(resposta.body.insights)).toBe(true);
+    expect(resposta.body.insights.length).toBeLessThanOrEqual(3);
+  });
+
+  it('barbearia recém-aberta não recebe cartão de impacto zero', async () => {
+    /**
+     * Mês um: nenhuma venda fechada, logo ticket médio zero, logo todo teto é
+     * zero. Um cartão de "até R$ 0,00" é o mesmo defeito do indicador que nunca
+     * sai de `—` — ocupa espaço prometendo uma resposta que não vem.
+     */
+    const dono = await abrirBarbearia();
+    await comSegundoFator(dono);
+
+    const resposta = await com(dono)(http().get('/v1/admin/insights')).expect(200);
+    expect(resposta.body.insights).toEqual([]);
   });
 
   it('o painel de uma barbearia não conta o movimento da outra', async () => {

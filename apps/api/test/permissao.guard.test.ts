@@ -527,13 +527,20 @@ describe('as rotas do painel', () => {
     const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
 
     /**
-     * `receita`, `faturamento`, `total...Cents` — e **não** `preco` nem `valor`.
+     * `receita`, `faturamento`, `total...Cents`, `impacto...Cents` — e **não**
+     * `preco` nem `valor`.
      *
      * Preço é catálogo, que a página pública mostra a qualquer visitante; valor
      * sozinho aparece em toda parte. O que `finance.view` separa é **quanto a
      * casa faturou**, e é isso que estes nomes descrevem.
+     *
+     * `impacto...Cents` entrou no bloco 67, e o motivo é o mesmo que a revisão
+     * do bloco 46 escreveu sobre assinantes por plano: uma **contagem
+     * multiplicada por ticket médio é faturamento por outro caminho**. O insight
+     * proativo diz "até R$ 1.150 sendo deixados na mesa", e esse número sai do
+     * ticket da casa — chamá-lo de impacto não o tira do grupo de dinheiro.
      */
-    const CAMPO_DE_RECEITA = /\b(receita\w*|faturamento\w*|total\w*Cents)\s*:/i;
+    const CAMPO_DE_RECEITA = /\b(receita\w*|faturamento\w*|total\w*Cents|impacto\w*Cents)\s*:/i;
 
     const tiposDeReceita = new Set<string>();
     const funcoesDeReceita = new Set<string>();
@@ -592,6 +599,25 @@ describe('as rotas do painel', () => {
        */
       for (const bloco of fonte.matchAll(
         /export async function (\w+)[\s\S]{0,3000}?Promise<([^>]+)>/g,
+      )) {
+        const retorno = bloco[2] ?? '';
+        if ([...tiposDeReceita].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
+          funcoesDeReceita.add(bloco[1] ?? '');
+        }
+      }
+
+      /**
+       * E a função **síncrona**, que é a de `packages/core`.
+       *
+       * A primeira versão só olhava `export async function ... Promise<...>`, e
+       * com isso não enxergava nada de `core`: lá a função é pura e devolve o
+       * tipo direto. `montarInsights` devolve `readonly Insight[]`, com o
+       * impacto em centavos dentro, e a rota que o serve passava pela varredura
+       * sem ser vista — o mesmo defeito da janela de 900 caracteres, um degrau
+       * acima. Foi só tirar `finance.view` da rota de propósito para descobrir.
+       */
+      for (const bloco of fonte.matchAll(
+        /export function (\w+)[\s\S]{0,3000}?\)\s*:\s*([^{;]+)\{/g,
       )) {
         const retorno = bloco[2] ?? '';
         if ([...tiposDeReceita].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
@@ -658,6 +684,110 @@ describe('as rotas do painel', () => {
     }
 
     expect(faltando, 'rota devolve receita sem nenhuma permissão de dinheiro').toEqual([]);
+  });
+
+  it('rota que nomeia o desempenho do colega declara appointments.view_all_professionals', () => {
+    /**
+     * A sexta vez que a regra da rota que agrega foi quebrada, virada em guarda.
+     *
+     * O insight proativo do bloco 67 devolvia, sob `appointments.view`, o nome de
+     * cada profissional com a ocupação dele e quantos pedidos ele não absorveu —
+     * *"João está com 97% de ocupação e catorze pessoas entraram na lista de
+     * espera"*. `board` e `agenda` recortam esse dado desde sempre pela permissão
+     * de ver a agenda da casa; a rota nova simplesmente não recortava, e como
+     * papel é editável desde o bloco 30 bastava um `finance.view` dado a um
+     * barbeiro sênior para ele ler a comparação entre colegas.
+     *
+     * A varredura **deriva** de `core` e `scheduling` quais tipos descrevem uma
+     * pessoa da equipe com número de desempenho ao lado — `profissionalId` **e**
+     * ocupação ou pedidos — e cobra a permissão em toda rota que os sirva. Lista
+     * escrita ao lado seria a que ninguém atualiza.
+     */
+    const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
+    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'scheduling', 'src')];
+
+    /** Quem é a pessoa, e um número que a compara com as outras. */
+    const CAMPO_DE_PESSOA = /\bprofissionalId\s*:/;
+    const CAMPO_DE_DESEMPENHO = /\b(ocupacao\w*|pedidos\w*)\s*:/i;
+
+    const tiposDeDesempenho = new Set<string>();
+    const corpoDaInterface = new Map<string, string>();
+    const fontes = PASTAS.flatMap((pasta) =>
+      readdirSync(pasta)
+        .filter((n) => n.endsWith('.ts') && !n.includes('.test.'))
+        .map((n) => readFileSync(join(pasta, n), 'utf8')),
+    );
+
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
+        const corpo = bloco[2] ?? '';
+        corpoDaInterface.set(bloco[1] ?? '', corpo);
+        if (CAMPO_DE_PESSOA.test(corpo) && CAMPO_DE_DESEMPENHO.test(corpo)) {
+          tiposDeDesempenho.add(bloco[1] ?? '');
+        }
+      }
+    }
+
+    // Composição até o ponto fixo: o cartão do painel **contém** a agenda
+    // apertada, e é o cartão que a rota devolve.
+    let cresceu = true;
+    while (cresceu) {
+      cresceu = false;
+      for (const [nome, corpo] of corpoDaInterface) {
+        if (tiposDeDesempenho.has(nome)) continue;
+        const compoe = [...tiposDeDesempenho].some((t) =>
+          new RegExp(`:\\s*(readonly\\s+)?${t}\\b`).test(corpo),
+        );
+        if (compoe) {
+          tiposDeDesempenho.add(nome);
+          cresceu = true;
+        }
+      }
+    }
+
+    const funcoes = new Set<string>();
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(
+        /export (?:async )?function (\w+)[\s\S]{0,3000}?(?:Promise<([^>]+)>|\)\s*:\s*([^{;]+)\{)/g,
+      )) {
+        const retorno = `${bloco[2] ?? ''} ${bloco[3] ?? ''}`;
+        if ([...tiposDeDesempenho].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
+          funcoes.add(bloco[1] ?? '');
+        }
+      }
+    }
+
+    expect(
+      tiposDeDesempenho.size,
+      'a varredura não achou nenhum tipo de desempenho — ela deixou de valer',
+    ).toBeGreaterThan(0);
+    expect(funcoes.size).toBeGreaterThan(0);
+
+    const faltando: string[] = [];
+    for (const { arquivo, classe, corpo, guardada } of controllers()) {
+      if (!guardada) continue;
+      for (const handler of corpo.matchAll(/@Exige\(([^)]*)\)([\s\S]*?)(?=@Exige\(|$)/g)) {
+        const permissoes = handler[1] ?? '';
+        const codigo = (handler[2] ?? '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/.*/g, '');
+        const chamada = [...funcoes].find((f) => new RegExp(`\\b${f}\\s*\\(`).test(codigo));
+        if (!chamada) continue;
+        if (permissoes.includes("'appointments.view_all_professionals'")) continue;
+        /**
+         * `commission.view_own` é a exceção de sempre: o barbeiro olhando os
+         * próprios números. É a mesma isenção da varredura de receita, e pela
+         * mesma razão — reprovar o certo é o que faz alguém desligar a guarda.
+         */
+        if (permissoes.includes("'commission.view_own'")) continue;
+        faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
+      }
+    }
+
+    expect(
+      faltando,
+      'rota nomeia o desempenho do colega sem declarar appointments.view_all_professionals',
+    ).toEqual([]);
   });
 
   it('rota marcada com @Recurso pergunta pelo recurso; rota sem @Recurso não', async () => {
