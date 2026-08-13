@@ -24,13 +24,15 @@ import { buscarBarbearias, cidadesDaVitrine, type CasaNaBusca } from '@/lib/api'
  *
  * *"Próximo horário como elemento principal do card é o que diferencia de
  * diretório."* Um diretório lista endereços; o que faz a pessoa agendar é ver
- * que dá para cortar hoje. Esse campo é o bloco 71 — ele exige rodar o motor de
- * disponibilidade em lote —, e até lá o card mostra o que sustenta a decisão:
- * distância, nota, preço de entrada e foto.
+ * que dá para cortar hoje — e desde o bloco 71 o card diz isso, com o motor de
+ * disponibilidade rodado em lote sobre a lista.
  *
- * Os dois filtros que faltam aparecem **marcados**, nunca escondidos: esconder
- * faria a SPEC parecer entregue, e a barbearia descobriria a ausência tentando
- * usar.
+ * ## O botão passa por uma porta, e ela existe por dinheiro
+ *
+ * "Agendar horário" leva a `/ir/{slug}`, que carimba a passagem pelo
+ * marketplace num cookie e só então manda para a página da barbearia (bloco
+ * 72). Sem esse carimbo, a comissão sobre cliente novo seria uma tabela que
+ * ninguém preenche — e ela é a promessa comercial do produto inteiro.
  *
  * ## Zero JavaScript de cliente, como o resto do produto
  *
@@ -316,7 +318,10 @@ function Card({ casa }: { readonly casa: CasaNaBusca }) {
             a mesma ação em duas telas seguidas do mesmo fluxo (§6, pergunta 2),
             e o mais fraco dos dois: agora que o card já mostra o horário, "ver"
             promete o que a pessoa acabou de ler. */}
-        <a className="ui-button ui-button--secondary casa__acao" href={`/${casa.slug}`}>
+        <a
+          className="ui-button ui-button--secondary casa__acao"
+          href={`/ir/${casa.slug}?c=${encodeURIComponent(casa.carimbo)}`}
+        >
           Agendar horário
         </a>
       </div>

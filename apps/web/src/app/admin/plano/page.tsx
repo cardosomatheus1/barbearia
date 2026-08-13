@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  clientesDoMarketplace,
   faturasDoPlano,
   opcoesDePlano,
   planoDaBarbearia,
@@ -11,7 +12,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoTrocarDePlano } from '../acoes';
+import { acaoContestarMarketplace, acaoTrocarDePlano } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -169,10 +170,11 @@ export default async function PlanoPage({
   // trocada; o retorno é o estado do painel, que esta tela não usa.
   await painelOuDesvio(token);
 
-  const [resposta, respostaOpcoes, respostaFaturas] = await Promise.all([
+  const [resposta, respostaOpcoes, respostaFaturas, respostaMarketplace] = await Promise.all([
     planoDaBarbearia(token),
     opcoesDePlano(token),
     faturasDoPlano(token),
+    clientesDoMarketplace(token),
   ]);
 
   if (!resposta.ok) {
@@ -191,6 +193,9 @@ export default async function PlanoPage({
   const cheio = teto !== null && p.cadeiras.emUso >= teto;
   const opcoes = respostaOpcoes.ok ? respostaOpcoes.dados : [];
   const faturas = respostaFaturas.ok ? respostaFaturas.dados : [];
+  const marketplace = respostaMarketplace.ok
+    ? respostaMarketplace.dados
+    : { clientes: [], pendenteCents: 0 };
   const emAberto = faturas.filter((f) => f.estado === 'open');
 
   return (
@@ -305,6 +310,99 @@ export default async function PlanoPage({
         )}
       </section>
 
+      {/**
+        * O que o marketplace trouxe (bloco 72, SPEC §5.2).
+        *
+        * A seção existe mesmo com a lista vazia, e essa é a decisão: o valor
+        * deste bloco é a frase que ela escreve quando não há nada a cobrar.
+        * *"Cobrar sobre base própria é a principal fonte de revolta contra
+        * Fresha e Booksy"* — a barbearia precisa poder abrir esta tela e ver,
+        * nome por nome, que a plataforma só cobra por quem ela trouxe.
+        *
+        * Um total sem nomes seria uma cobrança que não se confere, e um número
+        * que não se confere é o começo de não confiar em nenhum.
+        */}
+      <section className="painel__grupo">
+        <h2 className="painel__secao">Clientes que a busca trouxe</h2>
+        <p className="plano__nota">
+          A plataforma só cobra por <strong>cliente novo</strong> que chegou pela busca. Quem já
+          era da sua base nunca gera comissão, mesmo agendando por lá — e você pode contestar
+          qualquer linha antes de ela virar fatura.
+        </p>
+        {marketplace.clientes.length === 0 ? (
+          <p className="plano__vazio">
+            Nenhum cliente novo veio pela busca ainda. Quando vier, ele aparece aqui com o valor
+            do atendimento e a comissão calculada.
+          </p>
+        ) : (
+          <>
+            {marketplace.pendenteCents > 0 ? (
+              <p className="plano__aviso">
+                {reais(marketplace.pendenteCents)} a faturar no fechamento do mês.
+              </p>
+            ) : null}
+            <div className="ui-scroll-x">
+              <table className="plano-faturas">
+                <thead>
+                  <tr>
+                    <th scope="col">Cliente</th>
+                    <th scope="col">Atendimento</th>
+                    <th scope="col">Valor</th>
+                    <th scope="col">Comissão</th>
+                    <th scope="col">Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marketplace.clientes.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.cliente}</td>
+                      <td>{dia(c.quando)}</td>
+                      <td className="tabular">{reais(c.baseCents)}</td>
+                      <td className="tabular">
+                        {reais(c.feeCents)}{' '}
+                        <span className="plano__aliquota">({(c.feeBps / 100).toLocaleString('pt-BR')}%)</span>
+                      </td>
+                      <td>
+                        {c.estado === 'pendente' ? (
+                          /* O motivo é obrigatório na borda, no domínio e por
+                             `CHECK`: contestar renuncia à cobrança de forma
+                             permanente — aquele cliente nunca mais gera
+                             comissão —, e sem motivo escrito nada distingue
+                             discordância de evasão. */
+                          <form action={acaoContestarMarketplace} className="plano__contestacao">
+                            <input name="id" type="hidden" value={c.id} />
+                            <label className="ui-field__label" htmlFor={`motivo-${c.id}`}>
+                              Motivo
+                            </label>
+                            <input
+                              className="ui-field__input"
+                              id={`motivo-${c.id}`}
+                              maxLength={500}
+                              minLength={10}
+                              name="motivo"
+                              placeholder="Ex.: já era meu cliente há dois anos"
+                              required
+                              type="text"
+                            />
+                            <button className="ui-button ui-button--ghost plano__contestar" type="submit">
+                              Contestar
+                            </button>
+                          </form>
+                        ) : (
+                          <span className={`plano-fatura__estado plano-fatura__estado--${c.estado === 'faturada' ? 'paid' : 'void'}`}>
+                            {c.estado === 'faturada' ? 'Faturada' : 'Contestada'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
       <section className="painel__grupo">
         <h2 className="painel__secao">Faturas</h2>
         {faturas.length === 0 ? (
@@ -336,7 +434,9 @@ export default async function PlanoPage({
                       <td>
                         {f.tipo === 'proration'
                           ? 'Acerto da troca de plano'
-                          : `${dia(f.periodoDe)} a ${dia(f.periodoAte)}`}
+                          : f.tipo === 'marketplace'
+                            ? `Clientes da busca · ${dia(f.periodoDe)} a ${dia(f.periodoAte)}`
+                            : `${dia(f.periodoDe)} a ${dia(f.periodoAte)}`}
                       </td>
                       <td>{reais(f.valorCents)}</td>
                       <td>

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 71 de 80 blocos.**
+**Status: 72 de 80 blocos.**
 
 ---
 
@@ -110,6 +110,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Formas de pagamento na recepção digital | o assunto é reconhecido e a pergunta vira lacuna contada, com a tela dizendo em letras que ainda não há onde cadastrar | o **cadastro**: uma lista de meios aceitos na tela de Configurações, para a recepção responder "aceitamos Pix, débito e crédito" em vez de escalar | sem bloco definido: é uma coluna e um campo de formulário, e entra no primeiro bloco que abrir a tela de Configurações. Deixá-lo marcado é decisão — escondê-lo faria a SPEC §4.17 parecer entregue, e inventar a resposta é exatamente o que "respostas vêm **exclusivamente** dos dados configurados" proíbe. A pergunta não some enquanto isso: ela é contada, e a contagem é o que justifica o campo |
 | "Perto de mim" com a coordenada do aparelho | a busca inteira: vitrine sem RLS, raio, caixa de coordenada indexada, filtros de nota, preço, comodidade e clube, e a cidade escolhida com o centro derivado das próprias barbearias listadas | ler a **geolocalização do navegador**, que é o que a SPEC §5.2 chama de "perto de mim" | sem bloco definido: exige o **primeiro componente de cliente do produto**, hoje 100% renderizado no servidor — a mesma dependência do arraste na agenda, da atualização automática do balcão e da resolução de conflito de telefone, e as quatro devem entrar juntas com medição de pacote. Escolher a cidade não é consolo: ela resolve o caso de quem busca do computador, e o centro sai do cadastro em vez de uma tabela de municípios que alguém teria que manter |
 | Filtros por **serviço** e por **profissional** na busca | os outros sete filtros da SPEC §5.2, e o motor rodando em lote — desde o bloco 71 cada card traz a próxima vaga, e "disponível hoje" e "disponível agora" filtram por ela | escolher o serviço na busca. Hoje o horário do card é o do **serviço de entrada** da casa, o mesmo do "a partir de", para preço e horário falarem da mesma coisa: a casa cujo serviço mais barato está lotado some do filtro mesmo com a tarde livre para o resto do cardápio, e a tela diz isso em letras | 73 (perfil público do barbeiro), que é onde a dimensão "profissional" entra no marketplace e onde os dois filtros compartilham o mesmo desenho de seleção |
+| Revisão da contestação de comissão pela plataforma | a barbearia contesta com motivo escrito, a linha vira `cancelada`, a trilha registra autor e motivo, e a política de leitura deixa a plataforma **ver** todas as contestações sem tenant no contexto | a tela do Super Admin que lista as contestações e a rota que reverte uma indevida. Hoje a renúncia é definitiva do lado da barbearia: o índice único faz aquele cliente nunca mais gerar comissão | 75 (anúncios e destaque), que é o próximo bloco a mexer no painel da plataforma sobre o marketplace. Até lá o freio é o motivo escrito com piso na borda, no domínio e por `CHECK`, mais a trilha — o que torna a renúncia auditável, não impedida |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -328,7 +329,7 @@ Só faz sentido com centenas de barbearias na base.
 |---|---|
 | 70 | Marketplace: busca geográfica e filtros | ✅ |
 | 71 | Marketplace: "próximo horário" em lote (exige `/availability` rápido) | ✅ |
-| 72 | Marketplace: atribuição de cliente novo e comissão |
+| 72 | Marketplace: atribuição de cliente novo e comissão | ✅ |
 | 73 | Perfil público do barbeiro |
 | 74 | Portfólio e consentimento de uso público |
 | 75 | Anúncios e destaque |

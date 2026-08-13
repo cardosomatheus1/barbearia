@@ -143,3 +143,15 @@ export const estornoSchema = z.object({
 });
 
 export type EntradaDeEstorno = z.infer<typeof estornoSchema>;
+
+/**
+ * A alíquota do marketplace, em pontos-base (bloco 72, SPEC §5.2).
+ *
+ * Pontos-base inteiros como toda fração deste código — 2000 é 20%, que é o que
+ * a SPEC cita como referência do concorrente. O teto de 50% vive aqui, no
+ * domínio e numa `CHECK`: uma alíquota digitada com um zero a mais é o tipo de
+ * erro que só aparece na fatura do mês seguinte.
+ */
+export const comissaoDoMarketplaceSchema = z.object({
+  feeBps: z.number().int().min(0).max(5000),
+});

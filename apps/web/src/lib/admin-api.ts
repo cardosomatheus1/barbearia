@@ -1929,9 +1929,30 @@ export interface OpcaoDePlano {
 export const opcoesDePlano = (token: string) =>
   chamar<OpcaoDePlano[]>('GET', '/v1/admin/plano/opcoes', undefined, token);
 
+export interface ClienteDoMarketplace {
+  id: string;
+  cliente: string;
+  baseCents: number;
+  feeBps: number;
+  feeCents: number;
+  quando: string;
+  estado: 'pendente' | 'faturada' | 'cancelada';
+}
+
+export const clientesDoMarketplace = (token: string) =>
+  chamar<{ clientes: ClienteDoMarketplace[]; pendenteCents: number }>(
+    'GET',
+    '/v1/admin/plano/marketplace',
+    undefined,
+    token,
+  );
+
+export const contestarClienteDoMarketplace = (token: string, id: string, motivo: string) =>
+  chamar<{ ok: true }>('POST', `/v1/admin/plano/marketplace/${id}/contestar`, { motivo }, token);
+
 export interface FaturaDaBarbearia {
   id: string;
-  tipo: 'subscription' | 'proration';
+  tipo: 'subscription' | 'proration' | 'marketplace';
   estado: 'open' | 'paid' | 'void';
   planoCode: string;
   valorCents: number;

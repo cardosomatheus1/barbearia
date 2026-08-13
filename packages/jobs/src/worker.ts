@@ -157,6 +157,20 @@ export interface Contexto {
    */
   readonly atualizarVitrine: (tenantId: string, agora: Date) => Promise<number>;
   /**
+   * A comissão do marketplace (bloco 72), injetada pela mesma razão.
+   *
+   * Ela mora em `packages/platform`, e não pode nascer no fechamento do
+   * atendimento: `scheduling` precisaria da alíquota, que é de `platform`, e a
+   * seta voltaria. Vem em duas partes porque são dois fatos — atribuir o
+   * cliente novo, e cobrar o mês fechado.
+   *
+   * **Obrigatórias no tipo.** Opcionais, seriam esquecidas no primeiro worker
+   * novo, e a plataforma pararia de faturar a própria comissão sem nada ficar
+   * vermelho — o defeito que a revisão do bloco 70 apontou na vitrine.
+   */
+  readonly atribuirClientesNovos: (tenantId: string, agora: Date) => Promise<number>;
+  readonly cobrarComissaoDoMarketplace: (tenantId: string, agora: Date) => Promise<void>;
+  /**
    * A expiração da lista de espera (bloco 38), injetada.
    *
    * Mesma razão da varredura de retenção: ela vive em `packages/scheduling`,
@@ -507,6 +521,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
      * mesma natureza — varredura diária, uma por barbearia, de madrugada.
      */
     await contexto.atualizarVitrine(tarefa.tenantId, contexto.relogio.agora());
+
+    /**
+     * A comissão do marketplace sai na mesma volta (bloco 72).
+     *
+     * Atribuir primeiro, cobrar depois, e nesta ordem: a emissão do mês fechado
+     * precisa encontrar as linhas do último dia do mês já gravadas. Invertida,
+     * o atendimento do dia 31 só seria cobrado no mês seguinte, e a barbearia
+     * receberia uma fatura de agosto com um cliente de julho dentro.
+     */
+    await contexto.atribuirClientesNovos(tarefa.tenantId, contexto.relogio.agora());
+    await contexto.cobrarComissaoDoMarketplace(tarefa.tenantId, contexto.relogio.agora());
 
     /**
      * A lista de espera vencida sai na mesma volta (bloco 38).

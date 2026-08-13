@@ -287,6 +287,20 @@ describeIfDb('direitos do titular', () => {
       // A que barbearia o pedido pertence e quando vence. É registro do
       // processo, e vai na resposta do pedido, não dentro do pacote de dados.
       ['data_requests', 'registro do processo, não conteúdo'],
+      /**
+       * A comissão do marketplace é contrato entre **duas empresas** (bloco 72).
+       *
+       * O que a linha guarda sobre a pessoa é o vínculo e a hora; o resto —
+       * base, alíquota e fatura — é o termo comercial entre a plataforma e a
+       * barbearia, e é nome de terceiro num arquivo que o titular leva embora.
+       * É a mesma razão de a trilha ficar de fora e de o vínculo de dependente
+       * entrar sem o nome de quem banca.
+       *
+       * O que interessa ao titular já sai: o canal que o trouxe está em
+       * `customers.acquired_via`, e `customers` é a primeira consulta da
+       * exportação.
+       */
+      ['marketplace_attributions', 'termo comercial entre plataforma e barbearia; o canal sai por customers.acquired_via'],
     ]);
 
     const tabelas = await withTenant(TENANT, (tx) =>

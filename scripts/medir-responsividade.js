@@ -1123,6 +1123,62 @@ async function prepararConsumo(slug) {
   );
 }
 
+/**
+ * Um cliente novo trazido pela busca (bloco 72).
+ *
+ * A tela de plano tem uma seção que só existe quando há linha, e ela é o
+ * produto do bloco: *"a barbearia precisa poder abrir esta tela e ver, nome por
+ * nome, que a plataforma só cobra por quem ela trouxe"*. Sem semente, o print
+ * fotografa o estado vazio — que também é um estado que precisa passar, mas não
+ * é o que o bloco entrega.
+ *
+ * A varredura não roda aqui: quem grava é o worker, e a medição não o levanta.
+ * A linha é escrita direto, com os mesmos números que a varredura produziria.
+ */
+async function prepararMarketplace(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
+  if (!tenant || !local) return;
+
+  psql(`UPDATE tenant_platform SET marketplace_fee_bps = 2000 WHERE tenant_id = '${tenant}'`);
+
+  const cliente = psql(
+    `select id from customers where tenant_id = '${tenant}' order by created_at desc limit 1`,
+  );
+  const profissional = psql(`select id from professionals where tenant_id = '${tenant}' limit 1`);
+  if (!cliente || !profissional) return;
+
+  const agendamento = psql(
+    `INSERT INTO appointments
+       (tenant_id, location_id, customer_id, professional_id, status, source,
+        starts_at, ends_at, service_starts_at, service_ends_at, price_cents)
+     VALUES ('${tenant}', '${local}', '${cliente}', '${profissional}', 'completed', 'marketplace',
+             -- Hora fixa e fora do expediente: com o relogio, a linha colide
+             -- com o agendamento que outra semeadura ja criou para a mesma
+             -- cadeira, e a constraint anti-overbooking recusa tudo.
+             (current_date - 3) + time '06:15', (current_date - 3) + time '06:45',
+             (current_date - 3) + time '06:15', (current_date - 3) + time '06:45',
+             6500)
+     RETURNING id`,
+  ).split('\n')[0];
+  // O `psql` imprime a etiqueta do comando ("INSERT 0 1") depois da linha do
+  // `RETURNING`: sem a primeira linha, o id sai com o rótulo colado e o insert
+  // seguinte recusa o uuid.
+  if (!agendamento) return;
+
+  psql(
+    `INSERT INTO marketplace_attributions
+       (tenant_id, customer_id, appointment_id, base_cents, fee_bps, fee_cents, attributed_at)
+     VALUES ('${tenant}', '${cliente}', '${agendamento}', 6500, 2000, 1300,
+             (current_date - 3) + time '06:15')
+     ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `UPDATE customers SET acquired_via = 'marketplace', acquired_at = now() - interval '3 days'
+      WHERE id = '${cliente}' AND acquired_via IS NULL`,
+  );
+}
+
 async function prepararPrecos(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
@@ -2264,6 +2320,7 @@ async function main() {
   await prepararRecadosEFidelidade(slug);
   await prepararRecepcao(slug);
   await prepararPrecos(slug);
+  await prepararMarketplace(slug);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);

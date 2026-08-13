@@ -82,8 +82,12 @@ describe('partição do vocabulário da trilha', () => {
     // partição — `customer.reliability_override` guarda um score e é de gestão,
     // enquanto o limite guarda centavos. Um prefixo que servisse aos dois
     // deixaria a pergunta única sem resposta.
+    // `marketplace.` entrou no bloco 72: contestar uma comissão de cliente novo
+    // é renunciar a uma cobrança, e o `after` guarda o motivo de uma linha que
+    // carrega base, alíquota e centavos. A pergunta que ela responde é "por que
+    // a plataforma cobrou menos este mês", e quem a faz lê dinheiro.
     const deDinheiro =
-      /^(cash|order|debt|bill|account|advance|commission|deposit|loyalty|package|subscription|split)\./;
+      /^(cash|order|debt|bill|account|advance|commission|deposit|loyalty|package|subscription|split|marketplace)\./;
     expect(ACOES_DE_GESTAO.filter((acao) => deDinheiro.test(acao))).toEqual([]);
     expect(ACOES_DE_DINHEIRO.filter((acao) => !deDinheiro.test(acao))).toEqual([]);
   });

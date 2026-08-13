@@ -88,6 +88,7 @@ import {
   apagarFaixaNaApi,
   criarFaixaNaApi,
   ligarPrecoPorFaixaNaApi,
+  contestarClienteDoMarketplace,
   definirVitrineNaApi,
   moverNaFila,
   responderRecadoNaApi,
@@ -1035,6 +1036,24 @@ export async function acaoDefinirVitrine(form: FormData): Promise<void> {
   const resultado = await definirVitrineNaApi(token, texto(form, 'ligado') === '1');
   if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
   redirect('/admin/configuracoes?salvo=1');
+}
+
+/**
+ * A barbearia contesta uma cobrança de cliente novo (bloco 72).
+ *
+ * Contestar é **estado**, não apagar: a linha continua existindo para a
+ * conversa ter documento, e aquele cliente não volta a gerar comissão numa
+ * varredura seguinte.
+ */
+export async function acaoContestarMarketplace(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await contestarClienteDoMarketplace(
+    token,
+    texto(form, 'id'),
+    texto(form, 'motivo'),
+  );
+  if (!resultado.ok) falhar('/admin/plano', resultado.code);
+  redirect('/admin/plano?contestado=1');
 }
 
 /**

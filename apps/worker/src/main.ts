@@ -38,7 +38,9 @@ import {
   avisarDaOperacao,
   CODIGO_DA_RETENCAO,
   ConsoleOperacaoProvider,
+  atribuirDaBarbearia,
   atualizarVitrineDaCasa,
+  emitirComissaoDoMarketplace,
 } from '@barbearia/platform';
 import {
   ConsoleNotificationProvider,
@@ -321,6 +323,10 @@ async function main(): Promise<void> {
        * de cima.
        */
       atualizarVitrine: async (tenantId, agora) => atualizarVitrineDaCasa(tenantId, agora),
+      atribuirClientesNovos: async (tenantId, agora) => atribuirDaBarbearia(tenantId, agora),
+      cobrarComissaoDoMarketplace: async (tenantId, agora) => {
+        await emitirComissaoDoMarketplace({ tenantId, agora });
+      },
       varrerRetencao: async (tenantId, agora) => {
         /**
          * O texto cru das perguntas anônimas vence junto (bloco 66).

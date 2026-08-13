@@ -1,6 +1,8 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { COOKIE_DA_ORIGEM } from '@barbearia/core';
 import { criarAgendamentoNaApi, entrarNaEsperaNaApi } from '@/lib/api';
 
 /**
@@ -30,7 +32,22 @@ export async function criarAgendamento(form: FormData): Promise<void> {
     e: 'd',
   });
 
+  /**
+   * O carimbo da origem é lido do **cookie**, nunca do formulário.
+   *
+   * Um campo escondido no HTML seria escrito pela mesma página que o cliente
+   * controla, e ele decidiria sozinho que a barbearia deve comissão. O cookie é
+   * `httpOnly` e por caminho da barbearia: quem o coloca é a porta `/ir/{slug}`,
+   * do lado do servidor.
+   *
+   * O valor vai **inteiro** para a API, que é quem confere a assinatura. Esta
+   * camada não valida nada: um carimbo forjado aqui não seria detectado, e a
+   * checagem tem que estar na borda que decide dinheiro.
+   */
+  const origem = (await cookies()).get(`${COOKIE_DA_ORIGEM}_${slug}`)?.value;
+
   const resultado = await criarAgendamentoNaApi(slug, {
+    ...(origem ? { origem } : {}),
     locationId: String(form.get('locationId') ?? ''),
     professionalId,
     serviceIds,

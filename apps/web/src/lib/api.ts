@@ -140,6 +140,8 @@ export interface CriarAgendamento {
   start: string;
   name: string;
   phone: string;
+  /** Carimbo assinado da passagem pela busca do marketplace (bloco 72). */
+  origem?: string;
 }
 
 export type ResultadoAgendamento =
@@ -197,6 +199,10 @@ export async function criarAgendamentoNaApi(
       start: dados.start,
       name: dados.name,
       phone: dados.phone,
+      // Só quando o carimbo existe: mandar `undefined` seria o mesmo, mas
+      // mandar a chave sempre faria a borda validar um campo que a página
+      // pública normal não tem por que enviar.
+      ...(dados.origem ? { origem: dados.origem } : {}),
     }),
     cache: 'no-store',
   });
@@ -848,6 +854,8 @@ export interface CasaNaBusca {
    * pública vir montada.
    */
   proximoHorario: { startsAt: string; rotulo: string } | null;
+  /** Carimbo assinado de "veio pela busca" (bloco 72). A página só o carrega. */
+  carimbo: string;
 }
 
 export interface BuscaDeBarbearias {

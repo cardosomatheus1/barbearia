@@ -1,6 +1,9 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import {
   assinaturaDaBarbearia,
+  atribuicoesDaBarbearia,
+  contestarAtribuicao,
+  pendenteDoMarketplace,
   faturasDaBarbearia,
   meioDePagamento,
   PlataformaError,
@@ -8,12 +11,25 @@ import {
   recursosDaBarbearia,
   trocarPlanoPeloDono,
 } from '@barbearia/platform';
+import { z } from 'zod';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { trocaDePlanoSchema } from './plano.schemas.js';
+
+/** Id público é UUID, e a borda o confere antes de qualquer ida ao banco. */
+const idSchema = z.string().uuid();
+
+/**
+ * Contestar exige motivo escrito, e o piso é o mesmo do override do score.
+ *
+ * Na borda, no domínio e por `CHECK`: contestar renuncia a uma cobrança de
+ * forma **permanente** — aquele cliente nunca mais gera comissão —, e sem
+ * motivo nada distingue discordância de evasão.
+ */
+const contestacaoSchema = z.object({ motivo: z.string().trim().min(10).max(500) });
 
 /**
  * O plano, visto pela barbearia que paga por ele.
@@ -114,6 +130,79 @@ export class PlanoController {
       creditarCents: p.rateio.creditarCents,
       diasRestantes: p.rateio.diasRestantes,
     }));
+  }
+
+  /**
+   * O que o marketplace trouxe, cliente por cliente (bloco 72, SPEC §5.2).
+   *
+   * `customers.view` junto de `settings.manage`, e não só a segunda: esta rota
+   * devolve **nome de cliente** lido do cadastro vivo. É a regra da rota que
+   * agrega, quebrada sete vezes neste repositório — a última vez, a rota da
+   * nota fiscal virou o caminho mais curto para o CPF de quem já pediu nota.
+   *
+   * `finance.view` **não** entra, e a decisão é escrita: o que está aqui é o
+   * contrato com a plataforma, não o dinheiro da barbearia — o mesmo motivo de
+   * a tela de plano inteira viver sob `settings.manage`. Exigir a permissão de
+   * finanças cobraria segundo fator a cada 30 minutos para o dono conferir a
+   * própria conta.
+   *
+   * A lista é o produto: *"cobrar sobre base própria é a principal fonte de
+   * revolta contra Fresha e Booksy"*. Um total sem nomes seria uma cobrança que
+   * não se confere, e é exatamente contra isso que este bloco vende.
+   */
+  @Exige('settings.manage', 'customers.view')
+  @Get('marketplace')
+  async marketplace(@Staff() staff: AuthenticatedStaff) {
+    const linhas = await atribuicoesDaBarbearia(staff.tenantId);
+    return {
+      clientes: linhas.map((l) => ({
+        id: l.id,
+        cliente: l.clienteNome,
+        baseCents: l.baseCents,
+        feeBps: l.feeBps,
+        feeCents: l.feeCents,
+        quando: l.quando.toISOString(),
+        estado: l.status,
+      })),
+      /**
+       * O total sai do domínio, não da página.
+       *
+       * Somar a lista aqui daria um total menor que a fatura assim que a
+       * barbearia passasse de duzentos clientes novos — a leitura tem teto, e
+       * um total calculado sobre a página truncada é a tela prometendo um valor
+       * e a cobrança mandando outro.
+       */
+      pendenteCents: await pendenteDoMarketplace(staff.tenantId),
+    };
+  }
+
+  /**
+   * A barbearia contesta uma linha.
+   *
+   * Cancelar é estado, nunca `DELETE` — a tabela nem tem a permissão. Só o que
+   * ainda não foi faturado: depois da fatura emitida o caminho é o cancelamento
+   * dela, que já existe e tem trilha própria.
+   */
+  @Exige('settings.manage')
+  @Post('marketplace/:id/contestar')
+  async contestar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(contestacaoSchema)) corpo: { motivo: string },
+  ) {
+    try {
+      const feito = await contestarAtribuicao({
+        tenantId: staff.tenantId,
+        staffUserId: staff.staffUserId,
+        staffNome: staff.name,
+        atribuicaoId: id,
+        motivo: corpo.motivo,
+      });
+      if (!feito) throw notFound('unknown_attribution', 'Cobrança não encontrada ou já faturada');
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
   }
 
   /** O extrato da barbearia. A RLS de `invoices` já o limita ao próprio tenant. */

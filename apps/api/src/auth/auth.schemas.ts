@@ -24,6 +24,20 @@ export const createAppointmentSchema = z.object({
   holdId: z.string().uuid().optional(),
   // Teto explícito: campo livre sem limite vira armazenamento gratuito.
   notes: z.string().max(500).optional(),
+  /**
+   * O carimbo **assinado** de "veio pela busca" (bloco 72, SPEC §5.2).
+   *
+   * Não é o nome do canal: é um HMAC emitido pelo servidor, conferido no
+   * controller contra o slug e o prazo. A primeira versão aceitava o rótulo
+   * `marketplace` no corpo, e um `curl` bastava para fazer a barbearia dever
+   * comissão por um cliente que ela mesma trouxe — achado da
+   * `/security-review` deste bloco.
+   *
+   * O schema só dá o teto de tamanho. Quem decide se o carimbo vale é a
+   * assinatura, e um valor inválido não é erro: é "não veio pela busca", que é
+   * um desfecho legítimo de quem agenda pela página de sempre.
+   */
+  origem: z.string().max(200).optional(),
 });
 
 /**

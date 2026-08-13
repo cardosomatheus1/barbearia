@@ -256,10 +256,19 @@ DECLARE
   --   notes_updated_at         — quando a ficha mudou, sem o conteúdo
   --   credit_limit_cents       — teto de fiado; é controle de dinheiro, e um
   --                              número em centavos não identifica ninguém
+  --   acquired_via, acquired_at — o canal que trouxe a pessoa e quando (bloco
+  --                              72). É a base da comissão que a plataforma
+  --                              cobra da barbearia, e apagá-la na anonimização
+  --                              destruiria o documento de uma cobrança já
+  --                              feita. "Marketplace, em agosto" é um fato
+  --                              sobre a relação comercial entre duas empresas
+  --                              e não identifica ninguém — pela mesma razão
+  --                              que `import_id` fica
   permitidas text[] := ARRAY[
     'id', 'tenant_id', 'name', 'balance_cents', 'credit_limit_cents',
     'created_at', 'updated_at', 'anonymized_at', 'accepts_marketing',
-    'retention_warned_at', 'import_id', 'notes_updated_at'
+    'retention_warned_at', 'import_id', 'notes_updated_at',
+    'acquired_via', 'acquired_at'
   ];
 BEGIN
   FOR sobrevivente IN

@@ -5,6 +5,7 @@ import {
   type Disponibilidade,
   type FiltroDaBusca,
 } from '@barbearia/core';
+import { carimbarOrigem } from '@barbearia/identity';
 import { buscarComHorario, cidadesNaVitrine } from '@barbearia/platform';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { buscaNaVitrineSchema } from './vitrine.schemas.js';
@@ -78,7 +79,8 @@ export class VitrineController {
       somenteComClube: query.clube === true,
     };
 
-    const busca = await buscarComHorario(filtro, query.disponivel);
+    const agora = new Date();
+    const busca = await buscarComHorario(filtro, query.disponivel, agora);
 
     return {
       // Projeção pública, campo a campo. Ver o cabeçalho: o que o lote precisou
@@ -95,6 +97,21 @@ export class VitrineController {
         comodidades: casa.comodidades,
         temClube: casa.temClube,
         distanciaKm: casa.distanciaKm,
+        /**
+         * O carimbo de "veio pela busca" (bloco 72, SPEC §5.2).
+         *
+         * Emitido **aqui**, com o segredo do servidor, e conferido na borda do
+         * agendamento. A página só o carrega: ela não assina nada, porque a
+         * seta vai de `web` para `api` e trazer um pacote com acesso a banco
+         * para dentro do servidor de páginas seria abri-la ao contrário.
+         *
+         * Ele não é segredo — sai numa rota pública, como o resto do card. O
+         * que ele garante é que a origem gravada no agendamento foi emitida
+         * pelo servidor para **esta** barbearia e dentro do prazo: sem isso, um
+         * `curl` com a palavra "marketplace" no corpo fazia a casa dever
+         * comissão por um cliente que ela mesma trouxe.
+         */
+        carimbo: carimbarOrigem(casa.slug, agora),
         /**
          * A frase vai pronta, e o instante vai junto.
          *

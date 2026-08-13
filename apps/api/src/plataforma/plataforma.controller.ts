@@ -16,6 +16,7 @@ import {
   abrirSuporte,
   bloquearBarbearia,
   confirmarCadastroDoSegundoFator,
+  definirComissaoDoMarketplace,
   definirRecurso,
   encerrarSuporteDaBarbearia,
   iniciarCadastroDoSegundoFator,
@@ -59,6 +60,7 @@ import { AgeNaConta, Admin, PlataformaGuard, type RequisicaoDaPlataforma } from 
 import {
   bloqueioSchema,
   cancelamentoSchema,
+  comissaoDoMarketplaceSchema,
   estornoSchema,
   meioDePagamentoSchema,
   pagamentoSchema,
@@ -384,6 +386,29 @@ export class PlataformaController {
         criadoEm: e.criadoEm.toISOString(),
       })),
     };
+  }
+
+  /**
+   * A alíquota do marketplace desta barbearia (bloco 72, SPEC §5.2).
+   *
+   * `@AgeNaConta` porque isto **age**: muda quanto a barbearia paga. E mora do
+   * lado da plataforma porque é termo comercial do produto — numa rota do
+   * painel da barbearia, zerá-la desligaria a receita sem nada falhar, que é o
+   * achado da revisão do bloco 49.
+   */
+  @AgeNaConta()
+  @Put('barbearias/:tenantId/marketplace')
+  async definirComissao(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(comissaoDoMarketplaceSchema)) corpo: { feeBps: number },
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await definirComissaoDoMarketplace({ adminId: admin.id, tenantId, feeBps: corpo.feeBps });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
   }
 
   @AgeNaConta()

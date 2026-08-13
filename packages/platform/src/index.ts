@@ -14,3 +14,4 @@ export * from './stripe-pagamento.js';
 export * from './adquirente.js';
 export * from './serie.js';
 export * from './vitrine.js';
+export * from './atribuicao.js';

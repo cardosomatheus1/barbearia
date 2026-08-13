@@ -87,6 +87,8 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
 const avisosDeCobranca: { tenantId: string; faturaId: string; assunto: string }[] = [];
 let reguasRodadas = 0;
 const vitrinesRefeitas: { tenantId: string; agora: Date }[] = [];
+const atribuicoesRodadas: { tenantId: string; agora: Date }[] = [];
+const comissoesCobradas: { tenantId: string; agora: Date }[] = [];
 /** As varreduras de retenção que o worker mandou rodar, por barbearia. */
 const retencoesRodadas: { tenantId: string; agora: Date }[] = [];
 const esperasExpiradas: { tenantId: string; agora: Date }[] = [];
@@ -144,6 +146,13 @@ const ligacoesDaPlataforma = () => ({
   atualizarVitrine: async (tenantId: string, agora: Date) => {
     vitrinesRefeitas.push({ tenantId, agora });
     return 0;
+  },
+  atribuirClientesNovos: async (tenantId: string, agora: Date) => {
+    atribuicoesRodadas.push({ tenantId, agora });
+    return 0;
+  },
+  cobrarComissaoDoMarketplace: async (tenantId: string, agora: Date) => {
+    comissoesCobradas.push({ tenantId, agora });
   },
   expirarEsperas: async (tenantId: string, agora: Date) => {
     esperasExpiradas.push({ tenantId, agora });
@@ -1005,6 +1014,14 @@ describeIfDb('fila de trabalho', () => {
      * chamador, e este teste é o que impede que ele se perca outra vez.
      */
     expect(vitrinesRefeitas.map((v) => v.tenantId)).toEqual([TENANT]);
+    /**
+     * A comissão do marketplace sai na mesma volta, e nesta ordem (bloco 72):
+     * atribuir antes de cobrar, senão a emissão do mês fechado não encontra as
+     * linhas do último dia e a barbearia recebe a fatura de agosto com um
+     * cliente de julho dentro.
+     */
+    expect(atribuicoesRodadas.map((a) => a.tenantId)).toEqual([TENANT]);
+    expect(comissoesCobradas.map((c) => c.tenantId)).toEqual([TENANT]);
   });
 
   it('a falta entra na fila como tarefa da própria barbearia', async () => {

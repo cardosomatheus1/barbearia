@@ -35,6 +35,7 @@ export WEB_URL="${WEB_URL:-http://127.0.0.1:3001}"
 
 export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
 export STAFF_EMAIL_PEPPER="${STAFF_EMAIL_PEPPER:-pepper-da-medicao}"
+export MARKETPLACE_ORIGIN_SECRET="${MARKETPLACE_ORIGIN_SECRET:-origem-da-medicao-0123456789abcdef}"
 # Sorteada por execução: o banco é descartável e nada aqui sobrevive.
 export MFA_SECRET_KEY="${MFA_SECRET_KEY:-$(openssl rand -base64 32)}"
 

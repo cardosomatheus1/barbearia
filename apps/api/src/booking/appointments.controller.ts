@@ -25,6 +25,7 @@ import {
   rescheduleAppointment,
 } from '@barbearia/scheduling';
 import {
+  conferirOrigem,
   OtpError,
   resolveGuestCustomer,
   resolveSession,
@@ -94,6 +95,7 @@ interface CreateBody {
   start: string;
   holdId?: string;
   notes?: string;
+  origem?: string;
 }
 
 /**
@@ -145,7 +147,17 @@ export class GuestAppointmentsController {
         serviceIds: body.serviceIds,
         date: body.date,
         start: body.start,
-        source: 'website',
+        /**
+         * A origem é conferida **aqui**, na borda que decide dinheiro.
+         *
+         * `conferirOrigem` valida a assinatura contra este slug e o prazo de
+         * trinta dias. Carimbo ausente, expirado, de outra barbearia ou forjado
+         * cai em `website` — que é a verdade sobre quem agendou pela página de
+         * sempre, e não um erro a ser anunciado.
+         */
+        source: body.origem && conferirOrigem(body.origem, slug, new Date())
+          ? 'marketplace'
+          : 'website',
         ...(body.holdId ? { holdId: body.holdId } : {}),
         ...(body.notes ? { notes: body.notes } : {}),
         ...(idempotencyKey ? { idempotencyKey } : {}),

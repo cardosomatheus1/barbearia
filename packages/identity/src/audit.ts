@@ -24,6 +24,15 @@ export type AuditAction =
   | 'staff.reactivated'
   | 'staff.password_reset'
   | 'permissions.changed'
+  /**
+   * A barbearia contestou uma comissão de cliente novo (bloco 72).
+   *
+   * Contestar renuncia a uma cobrança da plataforma e o efeito é permanente:
+   * o índice único faz aquele cliente nunca mais gerar comissão. Sem trilha,
+   * um laço de cliques sobre a lista é evasão de receita indistinguível de
+   * discordância legítima.
+   */
+  | 'marketplace.attribution_contested'
   // Dinheiro. A SPEC pede sangria auditada por nome; o resto entrou junto pelo
   // mesmo motivo — a pergunta do dia seguinte nunca é só sobre a sangria, é
   // "quem mexeu na gaveta e o que fez".
@@ -307,6 +316,15 @@ export type AuditAction =
  * pergunta só: **o `before`/`after` dela contém valor em dinheiro?**
  */
 export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
+  /**
+   * A contestação de comissão do marketplace guarda **valor** (bloco 72).
+   *
+   * A pergunta que ela responde é "por que a plataforma cobrou menos este mês",
+   * e quem a faz é quem lê dinheiro. A linha contestada carrega base, alíquota
+   * e comissão; pô-la na trilha de gestão a entregaria a quem administra a
+   * equipe e não a conta.
+   */
+  'marketplace.attribution_contested',
   'cash.opened',
   'cash.closed',
   'cash.withdrawal',
