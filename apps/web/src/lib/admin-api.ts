@@ -868,6 +868,29 @@ export const responderRecadoNaApi = (token: string, id: string, resposta: string
 export const encerrarRecadoNaApi = (token: string, id: string) =>
   chamar<{ encerrado: boolean }>('POST', `/v1/admin/recados/${id}/encerrar`, {}, token);
 
+// -- Recepção digital: as perguntas sem resposta (bloco 66) -------------------
+
+export interface LacunaNaTela {
+  id: string;
+  /** Nulo quando o prazo de guarda do texto cru venceu — a linha continua. */
+  pergunta: string | null;
+  chave: string;
+  vezes: number;
+  primeiraVez: string;
+  ultimaVez: string;
+}
+
+export const lacunasDaRecepcaoNaApi = (token: string) =>
+  chamar<{ lacunas: LacunaNaTela[] }>('GET', '/v1/admin/recepcao/lacunas', undefined, token);
+
+export const resolverLacunaNaApi = (token: string, id: string) =>
+  chamar<{ resolvida: boolean }>(
+    'POST',
+    `/v1/admin/recepcao/lacunas/${id}/resolver`,
+    {},
+    token,
+  );
+
 // -- Fidelidade (bloco 41) ----------------------------------------------------
 
 export type ModoDeFidelidade = 'nenhum' | 'pontos' | 'visitas' | 'cashback';

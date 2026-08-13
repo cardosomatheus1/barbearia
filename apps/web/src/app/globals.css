@@ -1809,6 +1809,66 @@ main { padding-bottom: var(--space-8); }
   .recado__responder { grid-column: 2; }
 }
 
+/* -- Recepção: as perguntas sem resposta (bloco 66) ------------------------ */
+
+.recepcao { padding-bottom: var(--space-8); }
+.recepcao__topo { margin-bottom: var(--space-5); }
+.recepcao__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.recepcao__aviso { margin-bottom: var(--space-4); }
+.recepcao__resumo { margin: 0 0 var(--space-4); color: var(--color-text-muted); }
+.recepcao__resumo strong { color: var(--color-text-primary); font-size: var(--font-size-lg); }
+.recepcao__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+
+.lacuna {
+  /* Recipiente da `@container` deste cartão — a declaração mora no ancestral,
+     senão a regra nunca casa e o cartão fica estreito em qualquer largura. */
+  container-type: inline-size;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.lacuna__topo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* O contador é o que decide o que arrumar primeiro: hierarquia por tamanho e
+   peso, antes de cor. */
+.lacuna__vezes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  min-width: 3rem;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+}
+.lacuna__vezes-rotulo {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.lacuna__pergunta { margin: 0; font-size: var(--font-size-lg); }
+.lacuna__onde { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); }
+.lacuna__quando { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+/* Link de navegação dentro da frase que diz onde cadastrar: é a isenção da
+   WCAG 2.5.8, e esticá-lo abriria buraco no meio do texto. */
+.lacuna__link { text-decoration: underline; }
+.lacuna__acoes { margin-top: var(--space-4); }
+.lacuna__acao { min-height: 44px; }
+
+@container (min-width: 34rem) {
+  .lacuna__acoes { display: flex; justify-content: flex-end; }
+}
+
 @media (min-width: 768px) {
   .cadeiras { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
   .espera { grid-template-columns: auto 1fr auto; align-items: start; }
@@ -4105,6 +4165,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='fila']) .contexto__link[data-para='fila'],
 .casco:has([data-secao='avisos']) .contexto__link[data-para='avisos'],
 .casco:has([data-secao='recados']) .contexto__link[data-para='recados'],
+.casco:has([data-secao='recepcao']) .contexto__link[data-para='recepcao'],
 .casco:has([data-secao='avaliacoes']) .contexto__link[data-para='avaliacoes'],
 .casco:has([data-secao='caixa']) .contexto__link[data-para='caixa'],
 .casco:has([data-secao='comanda']) .contexto__link[data-para='comanda'],

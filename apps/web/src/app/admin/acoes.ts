@@ -84,6 +84,7 @@ import {
   assumirRecadoNaApi,
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
+  resolverLacunaNaApi,
   moverNaFila,
   responderRecadoNaApi,
   sentarDaFila,
@@ -1009,6 +1010,21 @@ export async function acaoEncerrarRecado(form: FormData): Promise<void> {
   const resultado = await encerrarRecadoNaApi(token, texto(form, 'id'));
   if (!resultado.ok) falhar('/admin/recados', resultado.code);
   redirect('/admin/recados?feito=encerrado');
+}
+
+/**
+ * Marca como resolvida a pergunta que a recepção não soube responder (bloco 66).
+ *
+ * Resolver é **estado**: a linha continua no banco, com o contador, e perguntar
+ * de novo reabre. A tela não tem botão de apagar porque a aplicação não tem o
+ * direito — e apagar a pergunta sem resposta seria apagar exatamente o dado que
+ * esta lista existe para produzir.
+ */
+export async function acaoResolverLacuna(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await resolverLacunaNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/recepcao', resultado.code);
+  redirect('/admin/recepcao?feito=resolvida');
 }
 
 export async function acaoMoverNaFila(form: FormData): Promise<void> {

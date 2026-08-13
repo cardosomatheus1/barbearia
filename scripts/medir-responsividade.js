@@ -1038,6 +1038,35 @@ async function prepararRecadosEFidelidade(slug) {
 }
 
 /**
+ * Perguntas que a recepção digital não soube responder (bloco 66).
+ *
+ * Pela rota pública, e não pelo banco: é ela que decide o que vira lacuna, e
+ * semear a tabela direto mediria uma tela sobre um estado que o produto talvez
+ * nunca produza. O que se mede é a lista real — inclusive a contagem, que é o
+ * que ordena os cartões.
+ *
+ * Perguntas de verdade, com abreviação e sem acento: é assim que chega no
+ * celular, e é isso que estoura o cartão.
+ */
+async function prepararRecepcao(slug) {
+  const perguntas = [
+    'vcs aceitam pix ou so dinheiro mesmo?',
+    'vcs aceitam pix?',
+    'aceitam pagamento no pix',
+    'posso levar meu filho de 4 anos junto no horario marcado?',
+    'posso levar meu filho',
+    'voces tem estacionamento proprio ou tem que deixar na rua?',
+  ];
+  for (const texto of perguntas) {
+    await fetch(`${API}/v1/b/${slug}/agente`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ texto }),
+    });
+  }
+}
+
+/**
  * Prepara um convite de vaga aberto, para medir a tela do bloco 39.
  *
  * Pelo banco, e não pela HTTP: o convite nasce no worker, e subir um worker só
@@ -2086,6 +2115,7 @@ async function main() {
   const filaPreparada = await prepararFila(token);
   const convitePreparado = await prepararConvite(slug);
   await prepararRecadosEFidelidade(slug);
+  await prepararRecepcao(slug);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);
@@ -2196,6 +2226,7 @@ async function main() {
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recados', url: '/admin/recados', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'recepção', url: '/admin/recepcao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avaliações', url: '/admin/avaliacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fidelidade', url: '/admin/fidelidade', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'pacotes', url: '/admin/pacotes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

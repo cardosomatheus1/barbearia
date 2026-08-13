@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 65 de 80 blocos.**
+**Status: 66 de 80 blocos.**
 
 ---
 
@@ -107,6 +107,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Foto do cliente só sai com o consentimento na mão | o aceite existe e é coletado: `photos` e `photos_public` são finalidades distintas no histórico append-only, com texto e versão próprios, registráveis na ficha pelo balcão e conferíveis por consulta | a **guarda** que impede subir a foto de quem não autorizou, a que separa "guardar na ficha" de "publicar nas redes", e o apagamento das fotos quando o aceite é revogado (SPEC §1.8 regra 2) | 74 (foto de cliente e antes/depois): não existe foto de cliente no produto — não há coluna, tela nem armazenamento. Escrever a guarda agora seria função que ninguém chama, e é o defeito de `blocks` outra vez. O aceite entra antes de propósito: consentimento é o que precede a coleta, então coletá-lo primeiro é a ordem certa, e é o oposto de campo vazio. A anonimização do bloco 32 já limpa tudo o que existe hoje; quando houver foto, ela entra na mesma função |
 | Exportação do titular em PDF | o arquivo sai em JSON, completo, com nove consultas nomeadas e teste que reprova quando uma tabela com dado de cliente fica de fora | o PDF que a SPEC §1.8 regra 4 cita ao lado do JSON | sem bloco definido: exigiria a primeira dependência de geração de documento do produto, e a mesma decisão volta nos blocos 53 e 54 (nota fiscal) e na fatura em PDF da plataforma. As três devem escolher o mesmo caminho de uma vez, não três vezes. O JSON já é legível e é o formato que a ANPD aceita para portabilidade; o PDF é conforto de leitura, não o direito |
 | Teto de requisição compartilhado entre processos | teto por IP em duas janelas, e — desde o bloco 33 — escada de espera **por conta** no login, esta guardada no banco e portanto compartilhada por todos os processos | o teto por IP num armazenamento comum: hoje ele é a memória do processo, então dois servidores dobram o limite efetivo | sem bloco definido: exigiria Redis, que é a primeira dependência de infraestrutura fora do Postgres, e a decisão de tê-lo vale junto com o CD e o ambiente que ainda não existem. O que protegia senha era a escada por conta, e essa **já** é compartilhada; o teto por IP protege custo de endpoint, e dobrá-lo com dois processos não abre nada |
+| Formas de pagamento na recepção digital | o assunto é reconhecido e a pergunta vira lacuna contada, com a tela dizendo em letras que ainda não há onde cadastrar | o **cadastro**: uma lista de meios aceitos na tela de Configurações, para a recepção responder "aceitamos Pix, débito e crédito" em vez de escalar | sem bloco definido: é uma coluna e um campo de formulário, e entra no primeiro bloco que abrir a tela de Configurações. Deixá-lo marcado é decisão — escondê-lo faria a SPEC §4.17 parecer entregue, e inventar a resposta é exatamente o que "respostas vêm **exclusivamente** dos dados configurados" proíbe. A pergunta não some enquanto isso: ela é contada, e a contagem é o que justifica o campo |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -310,7 +311,7 @@ Depende de histórico acumulado. Não antecipar.
 | 63 | Schema semântico de métricas (base do assistente) | ✅ |
 | 64 | Assistente do gestor: text-to-query | ✅ |
 | 65 | Agente de agendamento: intent, slots, confirmação | ✅ |
-| 66 | Agente: remarcação e recepção digital |
+| 66 | Agente: remarcação e recepção digital | ✅ |
 | 67 | Insights proativos |
 | 68 | Smart pricing com aprovação humana |
 | 69 | Previsão de consumo e sugestão de compra |

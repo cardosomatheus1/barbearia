@@ -36,6 +36,15 @@ export interface PublicProfessional {
   readonly name: string;
   readonly bio: string | null;
   readonly photoUrl: string | null;
+  /**
+   * Os dias da semana em que ele atende (bloco 66).
+   *
+   * Sai daqui porque a pergunta *"João trabalha sexta?"* é uma das quatro que a
+   * SPEC §4.17 lista, e o dado sempre esteve em `work_schedules` — o que faltava
+   * era o perfil público expô-lo. Sem isso a recepção digital registraria como
+   * lacuna uma pergunta que a barbearia **já respondeu** ao cadastrar a jornada.
+   */
+  readonly weekdays: readonly number[];
 }
 
 export interface OpeningDay {
@@ -242,9 +251,9 @@ export async function getPublicProfile(
     `;
 
     const scheduleRows = await tx.$queryRaw<
-      { weekday: number; start_minute: number; end_minute: number }[]
+      { professional_id: string; weekday: number; start_minute: number; end_minute: number }[]
     >`
-      SELECT w.weekday, w.start_minute, w.end_minute
+      SELECT w.professional_id::text AS professional_id, w.weekday, w.start_minute, w.end_minute
       FROM work_schedules w
       JOIN professionals p ON p.id = w.professional_id
       WHERE p.location_id = ${location.id}::uuid
@@ -340,6 +349,13 @@ export async function getPublicProfile(
         name: row.name,
         bio: row.bio,
         photoUrl: row.photo_url,
+        // Ordenados e sem repetição: a jornada pode ter mais de um intervalo no
+        // mesmo dia, e "atende terça, terça e sexta" é a frase que ninguém quer.
+        weekdays: [
+          ...new Set(
+            scheduleRows.filter((s) => s.professional_id === row.id).map((s) => s.weekday),
+          ),
+        ].sort((a, b) => a - b),
       })),
       hours,
       open: openState(hours, location.timezone, now),

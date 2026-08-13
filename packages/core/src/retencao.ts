@@ -29,6 +29,26 @@ export const RETENCAO_ANOS = 5;
 /** Trinta dias entre o aviso ao dono e a anonimização. */
 export const AVISO_DE_RETENCAO_DIAS = 30;
 
+/**
+ * Quanto tempo o texto cru de uma pergunta anônima pode ficar guardado (bloco 66).
+ *
+ * Noventa dias, e não cinco anos: são coisas diferentes. O prazo de cinco anos
+ * é sobre um **cadastro**, que existe para servir a pessoa e é alcançável por
+ * `anonimizar_cliente`; este é sobre uma frase digitada por alguém sem conta,
+ * que ninguém sabe de quem é e que a exportação do titular não alcança. Cópia de
+ * dado pessoal fora de `customers` vive com prazo — é a regra de
+ * `imports.payload`, aqui aplicada ao que o visitante escreve.
+ *
+ * O que **não** vence é a chave normalizada nem o contador: eles são o produto —
+ * "dezoito pessoas perguntaram se você abre no domingo" — e não identificam
+ * ninguém. Vence a redação original, que é onde um nome ou um telefone caberia.
+ *
+ * E noventa dias porque é o horizonte em que a redação ainda diz alguma coisa
+ * ao dono. Uma pergunta que ninguém repete há um trimestre já não descreve o
+ * público de hoje; guardá-la é risco sem contrapartida.
+ */
+export const RETENCAO_DO_TEXTO_DIAS = 90;
+
 const DIA_MS = 86_400_000;
 
 export type PassoDaRetencao = 'nada' | 'avisar' | 'anonimizar';

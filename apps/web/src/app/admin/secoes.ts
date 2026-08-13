@@ -42,6 +42,7 @@ export const MODULOS = [
       { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'clientes que chegaram sem marcar' },
       { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'retornos e pendências de clientes' },
       { href: '/admin/recados', nome: 'Recados', secao: 'recados', nota: 'sugestões e reclamações de clientes' },
+      { href: '/admin/recepcao', nome: 'Recepção', secao: 'recepcao', nota: 'perguntas que o site não soube responder' },
       { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', nota: 'notas dos atendimentos e nota baixa a tratar' },
     ],
     dentro: ['cliente', 'meu-dia'],

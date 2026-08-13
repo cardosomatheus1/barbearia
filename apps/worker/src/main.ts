@@ -7,6 +7,7 @@ import {
   respostaParaEnviar,
   varrerAutomacoes,
   varrerRetencao,
+  expirarTextoDaRecepcao,
 } from '@barbearia/crm';
 import {
   aplicarReguaDoClube,
@@ -314,6 +315,22 @@ async function main(): Promise<void> {
        * de cima.
        */
       varrerRetencao: async (tenantId, agora) => {
+        /**
+         * O texto cru das perguntas anônimas vence junto (bloco 66).
+         *
+         * Mora nesta volta e não numa tarefa própria porque é a mesma pergunta —
+         * "o que a barbearia já não pode guardar?" —, e uma segunda tarefa
+         * diária seria mais um lugar para alguém esquecer de ligar no worker
+         * seguinte. Antes da varredura de cadastro, porque não depende dela e
+         * uma exceção lá não pode deixar o texto para trás.
+         */
+        const expirados = await expirarTextoDaRecepcao({ tenantId, agora });
+        if (expirados > 0) {
+          // Só a contagem: o texto que está sendo apagado por ser possivelmente
+          // pessoal não pode sair no log ao ser apagado.
+          console.log('[lgpd] texto da recepção expirado', { tenantId, linhas: expirados });
+        }
+
         const resultado = await varrerRetencao({ tenantId, agora });
         if (resultado.avisados.length > 0 || resultado.anonimizados > 0) {
           console.log('[lgpd] retenção', {

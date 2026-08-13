@@ -3,7 +3,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
-import { AgenteController } from './booking/agente.controller.js';
+import { AgenteController, AgenteDoClienteController } from './booking/agente.controller.js';
 import {
   AppointmentsController,
   GuestAppointmentsController,
@@ -35,6 +35,7 @@ import {
 import { OfertaPublicaController } from './booking/oferta.controller.js';
 import { RecadoPublicoController } from './booking/recado.controller.js';
 import { RecadoController } from './admin/recado.controller.js';
+import { RecepcaoController } from './admin/recepcao.controller.js';
 import { FidelidadeController } from './admin/fidelidade.controller.js';
 import { PacoteController } from './admin/pacote.controller.js';
 import { FinanceiroController } from './admin/financeiro.controller.js';
@@ -81,6 +82,7 @@ import { TenantService } from './tenant/tenant.service.js';
     HealthController,
     BookingController,
     AgenteController,
+    AgenteDoClienteController,
     AuthController,
     SessionController,
     StaffAuthController,
@@ -107,6 +109,7 @@ import { TenantService } from './tenant/tenant.service.js';
     OfertaPublicaController,
     RecadoPublicoController,
     RecadoController,
+    RecepcaoController,
     FidelidadeController,
     PacoteController,
     FinanceiroController,
