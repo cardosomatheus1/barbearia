@@ -17,3 +17,4 @@ export * from './estorno.js';
 export * from './dre.js';
 export * from './fiscal.js';
 export * from './multiunidade.js';
+export * from './crescimento.js';
