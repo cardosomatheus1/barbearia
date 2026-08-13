@@ -228,3 +228,65 @@ export function corteDeVip(gastos: readonly number[]): number | null {
   const indice = Math.max(0, Math.ceil(ordenados.length / 10) - 1);
   return ordenados[indice] ?? null;
 }
+
+/**
+ * Os públicos de campanha, e o nome de cada um — aqui, e em nenhum outro lugar.
+ *
+ * Este mapa morava escrito à mão dentro da tela de campanhas **e** dentro de
+ * `packages/crm`. Duas listas para o mesmo vocabulário é a que ninguém atualiza:
+ * o bloco 61 acrescentou três públicos, e a tela teria continuado oferecendo os
+ * quatro antigos com a API aceitando sete, sem nada ficar vermelho.
+ *
+ * É a mesma decisão do vocabulário de transição da fila (§6, pergunta 2): a
+ * palavra que a recepção lê mora no domínio, e a tela a exibe.
+ */
+export const FILTROS_DE_CAMPANHA = [
+  'inativos',
+  'aniversariantes',
+  'todos',
+  'celula_fria',
+  'em_risco',
+  'perdido',
+  'vip',
+] as const;
+export type FiltroDeCampanha = (typeof FILTROS_DE_CAMPANHA)[number];
+
+export const ROTULO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string>> = {
+  inativos: 'Quem sumiu',
+  aniversariantes: 'Aniversariantes do mês',
+  todos: 'Toda a base',
+  celula_fria: 'Quem costuma vir naquele horário',
+  em_risco: 'Passou do ritmo dele',
+  perdido: 'Passou do dobro do ritmo dele',
+  vip: 'Quem mais gasta na casa',
+};
+
+/**
+ * Os três filtros que saem do segmento derivado, e não de uma condição em SQL.
+ *
+ * `novo`, `ativo`, `frequente` e `assinante` ficam de fora **de propósito**: são
+ * estados em que a casa não precisa fazer nada, e mandar mensagem para quem está
+ * voltando sozinho é como se queima o número da barbearia.
+ */
+export const SEGMENTO_DO_FILTRO: Readonly<Partial<Record<FiltroDeCampanha, Segmento>>> = {
+  em_risco: 'em_risco',
+  perdido: 'perdido',
+  vip: 'vip',
+};
+
+/**
+ * O que o campo "o número do filtro" quer dizer neste público.
+ *
+ * Vai **dentro da opção** e não numa dica abaixo, pela razão do bloco 56: uma
+ * dica teria que listar os sete significados de uma vez e vira parágrafo que
+ * ninguém lê. Nulo quando o público não usa número nenhum.
+ */
+export const NUMERO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string | null>> = {
+  inativos: 'dias sem vir',
+  aniversariantes: null,
+  todos: null,
+  celula_fria: 'a hora da célula',
+  em_risco: null,
+  perdido: null,
+  vip: null,
+};

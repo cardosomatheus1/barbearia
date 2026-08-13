@@ -1,0 +1,43 @@
+-- ============================================================================
+-- 0064 — segmento como público de campanha (bloco 61, SPEC §4.4)
+--
+-- > *"'Em risco' usa o **ciclo individual**, não um número fixo global. Cliente
+-- > que corta a cada 45 dias não está em risco no dia 30; cliente que corta a
+-- > cada 15 já está. Regra fixa de '60 dias sem voltar' — como fazem os
+-- > concorrentes — dispara campanha errada para metade da base."*
+--
+-- O bloco 57 entregou o filtro `inativos`, que é exatamente a regra que a frase
+-- condena: "quem não vem há N dias", com o N digitado no formulário. Ele
+-- continua existindo — é uma pergunta legítima, e às vezes é a que o dono quer
+-- fazer —, mas deixa de ser a única, e não é mais a que a retenção usa.
+--
+-- ## Por que só três valores de enum, e nenhuma tabela
+--
+-- Segmento é **derivado**, nunca coluna: mesma decisão do DRE, do saldo de
+-- estoque e do de fidelidade. Uma coluna `customers.segmento` estaria errada em
+-- todo minuto entre a visita e a varredura passar — e é justamente aí que
+-- alguém abre a ficha. A SPEC pede *"recalculada por evento, não por batch
+-- noturno"*, e derivar na leitura é mais forte que isso: não existe instante em
+-- que o rótulo esteja velho.
+--
+-- Por isso a migração inteira é o enum. O que se guarda continua sendo o
+-- **público congelado** em `campaign_targets`, como em todo filtro desde o
+-- bloco 57: o filtro é como se chegou ao público; o público é o fato.
+--
+-- ## Os três que produzem ação
+--
+-- `em_risco` é o da frase acima. `perdido` é a campanha de reconquista, que só
+-- faz sentido separada porque o texto é outro — quem passou do dobro do ritmo
+-- não recebe "senti sua falta", recebe uma oferta. `vip` é a outra metade de
+-- §4.4: o decil de gasto já está calculado, e premiar quem sustenta a casa é a
+-- campanha que o dono pede primeiro.
+--
+-- `novo`, `ativo`, `frequente` e `assinante` ficam de fora **de propósito**:
+-- são estados em que a casa não precisa fazer nada. Um filtro para eles seria
+-- mensagem para quem está voltando sozinho, que é como se queima o número da
+-- barbearia.
+-- ============================================================================
+
+ALTER TYPE campaign_filter ADD VALUE IF NOT EXISTS 'em_risco';
+ALTER TYPE campaign_filter ADD VALUE IF NOT EXISTS 'perdido';
+ALTER TYPE campaign_filter ADD VALUE IF NOT EXISTS 'vip';

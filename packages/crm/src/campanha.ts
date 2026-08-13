@@ -1,6 +1,15 @@
 import { withTenant } from '@barbearia/db';
-import { decidirDisparo, type TipoDeNotificacao } from '@barbearia/core';
+import {
+  decidirDisparo,
+  FILTROS_DE_CAMPANHA,
+  ROTULO_DO_FILTRO,
+  SEGMENTO_DO_FILTRO,
+  type FiltroDeCampanha,
+  type Segmento,
+  type TipoDeNotificacao,
+} from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import { segmentosDaBase } from './segmento.js';
 
 /**
  * Campanhas (bloco 57, SPEC §4.13).
@@ -24,15 +33,30 @@ import { audit } from '@barbearia/identity';
  * número da barbearia queima.
  */
 
-export const FILTROS = ['inativos', 'aniversariantes', 'todos', 'celula_fria'] as const;
-export type FiltroDeCampanha = (typeof FILTROS)[number];
+/**
+ * O vocabulário mora em `packages/core` desde o bloco 61 — aqui só se reexporta.
+ *
+ * Ele estava escrito duas vezes, aqui e dentro da tela de campanhas, e o bloco
+ * que acrescentou três públicos teria deixado a tela oferecendo quatro com a API
+ * aceitando sete. `FILTROS` continua com o nome antigo porque é o que a borda da
+ * API importa para montar o `z.enum`.
+ */
+export const FILTROS = FILTROS_DE_CAMPANHA;
+export type { FiltroDeCampanha };
+export { ROTULO_DO_FILTRO };
 
-export const ROTULO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string>> = {
-  inativos: 'Quem sumiu',
-  aniversariantes: 'Aniversariantes do mês',
-  todos: 'Toda a base',
-  celula_fria: 'Quem costuma vir naquele horário',
-};
+/**
+ * O segmento por trás do filtro, quando existe.
+ *
+ * O segmento depende da base inteira — "frequente" é ciclo abaixo da mediana
+ * dela, "VIP" é o topo do decil de gasto — e a mediana de uma base não cabe numa
+ * cláusula `WHERE` sobre uma linha. Escrevê-la em SQL seria regra de negócio na
+ * consulta, onde o teste não alcança, e é a mesma razão de o ciclo ser calculado
+ * em `packages/core`.
+ */
+function segmentoDoFiltro(filtro: FiltroDeCampanha): Segmento | null {
+  return SEGMENTO_DO_FILTRO[filtro] ?? null;
+}
 
 export type CampanhaFailure = 'nao_encontrada' | 'invalida' | 'ja_enviada';
 
@@ -170,6 +194,21 @@ export async function criarCampanha(params: {
     if (!campanha) throw new CampanhaError('invalida', 'Não deu para criar a campanha.');
 
     /**
+     * Quando o filtro é um segmento, quem escolhe é `packages/core`.
+     *
+     * A carga é uma só, dentro **desta** transação: o segmento depende da base
+     * inteira, e ler a base fora dela deixaria a janela em que alguém é
+     * cadastrado entre o cálculo e a gravação do público.
+     */
+    const segmento = segmentoDoFiltro(params.filtro);
+    const doSegmento =
+      segmento === null
+        ? []
+        : (await segmentosDaBase(params.tenantId, params.agora, tx))
+            .filter((c) => c.segmento === segmento)
+            .map((c) => c.customerId);
+
+    /**
      * O público, congelado agora.
      *
      * Todo filtro exclui quem foi anonimizado e quem não tem telefone: os dois
@@ -188,6 +227,7 @@ export async function criarCampanha(params: {
       params.agora,
       params.valorDoFiltro ?? 0,
       params.diaDaSemana ?? 0,
+      doSegmento,
     );
 
     await audit(tx, {
@@ -206,25 +246,50 @@ export async function criarCampanha(params: {
 /**
  * A condição de cada filtro, com os parâmetros na mesma ordem sempre.
  *
- * `$2` é o instante, `$3` o número do filtro, `$4` o dia da semana — sempre, em
- * todos os filtros, mesmo quando um deles não usa. Uma ordem que mudasse por
- * filtro faria o parâmetro certo chegar na posição errada, e o erro seria um
- * público silenciosamente diferente do pedido.
+ * `$2` é o instante, `$3` o número do filtro, `$4` o dia da semana, `$5` a lista
+ * do segmento — sempre, em todos os filtros, mesmo quando um deles não usa. Uma
+ * ordem que mudasse por filtro faria o parâmetro certo chegar na posição errada,
+ * e o erro seria um público silenciosamente diferente do pedido.
+ *
+ * Por isso todo caso menciona os quatro: um parâmetro que o Postgres nunca vê no
+ * texto é um parâmetro sem tipo inferido, e a instrução é recusada.
  */
 function condicaoDoFiltro(filtro: FiltroDeCampanha): string {
+  /**
+   * Todo caso menciona os quatro parâmetros, inclusive os que não usa.
+   *
+   * Não é adorno: a instrução vai com cinco valores sempre, e o Postgres recusa
+   * um `bind` com mais parâmetros do que o texto declara. Antes de `$5` existir
+   * isso já era assim para `$3` e `$4` — o que muda é que agora há uma frase
+   * explicando por quê.
+   */
+  const naoUsados = `$2::timestamptz IS NOT NULL AND $3::int IS NOT NULL
+                     AND $4::int IS NOT NULL AND $5::uuid[] IS NOT NULL`;
   switch (filtro) {
+    case 'em_risco':
+    case 'perdido':
+    case 'vip':
+      /**
+       * A lista já veio decidida por `packages/core`, e ela sai de uma consulta
+       * feita sob a RLS **desta** barbearia — ninguém de fora entra por aqui.
+       * As condições de anonimizado e telefone continuam valendo por cima, como
+       * em todo filtro.
+       */
+      return `c.id = ANY($5::uuid[]) AND $2::timestamptz IS NOT NULL
+              AND $3::int IS NOT NULL AND $4::int IS NOT NULL`;
     case 'todos':
-      return `($2::timestamptz IS NOT NULL AND $3::int IS NOT NULL AND $4::int IS NOT NULL)`;
+      return `(${naoUsados})`;
     case 'inativos':
       return `NOT EXISTS (
                 SELECT 1 FROM appointments a
                  WHERE a.customer_id = c.id
                    AND a.starts_at > $2::timestamptz - ($3::int * interval '1 day')
-              ) AND $4::int IS NOT NULL`;
+              ) AND $4::int IS NOT NULL AND $5::uuid[] IS NOT NULL`;
     case 'aniversariantes':
       return `c.birth_date IS NOT NULL
               AND EXTRACT(MONTH FROM c.birth_date) = EXTRACT(MONTH FROM $2::timestamptz)
-              AND $3::int IS NOT NULL AND $4::int IS NOT NULL`;
+              AND $3::int IS NOT NULL AND $4::int IS NOT NULL
+              AND $5::uuid[] IS NOT NULL`;
     case 'celula_fria':
       /**
        * Quem **costuma vir naquele horário** — e não quem já veio uma vez.
@@ -242,7 +307,7 @@ function condicaoDoFiltro(filtro: FiltroDeCampanha): string {
                    AND a.starts_at > $2::timestamptz - interval '180 days'
                    AND EXTRACT(DOW FROM a.starts_at AT TIME ZONE l.timezone)::int = $4::int
                    AND EXTRACT(HOUR FROM a.starts_at AT TIME ZONE l.timezone)::int = $3::int
-              )`;
+              ) AND $5::uuid[] IS NOT NULL`;
   }
 }
 

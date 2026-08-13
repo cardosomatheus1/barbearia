@@ -287,6 +287,73 @@ describeIfDb('campanhas', () => {
     expect(await atribuirReceita({ tenantId: TENANT, agora: AGORA })).toBe(0);
   });
 
+  /**
+   * A frase da SPEC §4.4 contra o banco, pelos dois caminhos.
+   *
+   * > *"Cliente que corta a cada 45 dias não está em risco no dia 30; cliente
+   * > que corta a cada 15 já está. Regra fixa de '60 dias sem voltar' dispara
+   * > campanha errada para metade da base."*
+   *
+   * Não basta provar que o público novo acerta: o teste roda o filtro antigo
+   * sobre a **mesma** base e mostra que ele erra os dois — pega quem nunca veio
+   * e deixa de fora quem está atrasado. É a diferença entre um filtro novo e o
+   * filtro certo.
+   */
+  const ritmos = async () => {
+    // Carlos corta a cada 45 dias, veio há 30: está no ritmo dele.
+    await atendimento(CARLOS, 30, 'f0000000-0000-0000-0000-000000000001');
+    await atendimento(CARLOS, 75, 'f0000000-0000-0000-0000-000000000002');
+    await atendimento(CARLOS, 120, 'f0000000-0000-0000-0000-000000000003');
+    await atendimento(CARLOS, 165, 'f0000000-0000-0000-0000-000000000004');
+    // João corta a cada 15 e sumiu há 28: quase o dobro do ritmo dele.
+    await atendimento(SUMIDO, 28, 'f0000000-0000-0000-0000-000000000011');
+    await atendimento(SUMIDO, 43, 'f0000000-0000-0000-0000-000000000012');
+    await atendimento(SUMIDO, 58, 'f0000000-0000-0000-0000-000000000013');
+    await atendimento(SUMIDO, 73, 'f0000000-0000-0000-0000-000000000014');
+    // Bruno nunca veio.
+  };
+
+  const publicoDe = async (campanhaId: string): Promise<readonly string[]> => {
+    const linhas = await admin.$queryRawUnsafe<{ customer_id: string }[]>(
+      `SELECT customer_id FROM campaign_targets WHERE campaign_id = '${campanhaId}'`,
+    );
+    return linhas.map((l) => l.customer_id);
+  };
+
+  it('o público "em risco" sai do ritmo de cada um', async () => {
+    await ritmos();
+
+    const criada = await campanha({ nome: 'Senti sua falta', filtro: 'em_risco' });
+    expect(await publicoDe(criada.id)).toEqual([SUMIDO]);
+  });
+
+  it('o filtro de dias fixos erra os dois na mesma base', async () => {
+    await ritmos();
+
+    // Sessenta dias, o número que a SPEC cita: pega quem nunca veio e deixa
+    // escapar exatamente quem está atrasado.
+    const fixo = await campanha({ nome: 'Sumiu há 60 dias', filtro: 'inativos', valorDoFiltro: 60 });
+    expect(await publicoDe(fixo.id)).toEqual([BRUNO]);
+  });
+
+  it('o público "quem mais gasta" precisa de base para existir', async () => {
+    /**
+     * Três clientes não têm decil superior — "o topo dos dez por cento" de três
+     * pessoas é uma frase sobre uma. Com a base pequena o corte é nulo, ninguém
+     * é VIP, e a campanha nasce com público zero em vez de nascer com o cliente
+     * mais rico de uma base que não dá para comparar.
+     */
+    await ritmos();
+    await exec(`
+      INSERT INTO orders (tenant_id, location_id, customer_id, status,
+                          subtotal_cents, total_cents, closed_at)
+      VALUES ('${TENANT}', '${LOCAL}', '${CARLOS}', 'paid', 90000, 90000, now())
+    `);
+
+    const criada = await campanha({ nome: 'Obrigado', filtro: 'vip' });
+    expect(criada.publico).toBe(0);
+  });
+
   it('crédito exige mensagem enviada — o banco recusa o contrário', async () => {
     const criada = await campanha();
     void criada;

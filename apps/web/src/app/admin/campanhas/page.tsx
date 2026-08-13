@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  FILTROS_DE_CAMPANHA,
   JANELA_MAXIMA_DIAS,
   NOME_DO_DIA,
+  NUMERO_DO_FILTRO,
   ROTULO_DA_FAIXA,
+  ROTULO_DO_FILTRO,
   TIPOS_DE_NOTIFICACAO,
   nomeDaCelula,
 } from '@barbearia/core';
@@ -65,12 +68,17 @@ const NOME_DO_AVISO: Record<string, string> = {
   retorno: 'Convite de retorno',
 };
 
-const NOME_DO_FILTRO: Record<string, string> = {
-  inativos: 'Quem sumiu',
-  aniversariantes: 'Aniversariantes do mês',
-  todos: 'Toda a base',
-  celula_fria: 'Quem costuma vir naquele horário',
-};
+/**
+ * O nome de cada público sai de `packages/core`, nunca escrito aqui.
+ *
+ * Ele estava escrito à mão nesta tela até o bloco 61, que acrescentou três
+ * públicos — a tela teria continuado oferecendo quatro com a API aceitando sete,
+ * e nada ficaria vermelho.
+ */
+const nomeDoFiltro = (filtro: string): string =>
+  filtro in ROTULO_DO_FILTRO
+    ? ROTULO_DO_FILTRO[filtro as keyof typeof ROTULO_DO_FILTRO]
+    : filtro;
 
 function Heatmap({ grade }: { readonly grade: readonly CelulaNaTelaDoAdmin[] }) {
   const horas = [...new Set(grade.map((c) => c.hora))].sort((a, b) => a - b);
@@ -139,7 +147,7 @@ function Campanha({ campanha }: { readonly campanha: CampanhaNaTelaDoAdmin }) {
           <div className="item-cadastro__quem">
             <h3 className="item-cadastro__nome">{campanha.nome}</h3>
             <p className="item-cadastro__linha">
-              {NOME_DO_FILTRO[campanha.filtro] ?? campanha.filtro}
+              {nomeDoFiltro(campanha.filtro)}
               {campanha.diaDaSemana !== null && campanha.valorDoFiltro !== null
                 ? ` · ${nomeDaCelula({ diaDaSemana: campanha.diaDaSemana, hora: campanha.valorDoFiltro })}`
                 : ''}{' '}
@@ -258,12 +266,17 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 id="filtro"
                 name="filtro"
               >
-                {Object.entries(NOME_DO_FILTRO).map(([valor, rotulo]) => (
+                {FILTROS_DE_CAMPANHA.map((valor) => (
                   <option key={valor} value={valor}>
-                    {rotulo}
+                    {ROTULO_DO_FILTRO[valor]}
+                    {NUMERO_DO_FILTRO[valor] ? ` · pede ${NUMERO_DO_FILTRO[valor]}` : ''}
                   </option>
                 ))}
               </select>
+              <p className="ui-field__hint">
+                Os três últimos saem do ritmo de cada cliente, não de um número que você digita:
+                quem corta a cada 45 dias não está atrasado no dia 30.
+              </p>
             </div>
 
             <div className="ui-field">
@@ -278,8 +291,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 name="valorDoFiltro"
               />
               <p className="ui-field__hint">
-                Para quem sumiu, é o número de dias. Para uma hora vazia, é a hora — e o dia vai
-                no campo abaixo.
+                Só os públicos marcados com &quot;pede&quot; usam este campo. Os outros ignoram o
+                que estiver aqui.
               </p>
             </div>
 
