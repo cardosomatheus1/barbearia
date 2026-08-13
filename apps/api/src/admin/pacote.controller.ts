@@ -137,10 +137,14 @@ export class PacoteController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    // A loja do balcão: um crédito sem loja é somado ao bolso de cada unidade
+    // (bloco 59).
+    const local = await unidadeDoBalcao(staff);
     try {
       return await reembolsarPacote({
         tenantId: staff.tenantId,
         customerPackageId: id,
+        locationId: local.id,
         ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (erro) {

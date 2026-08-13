@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MODOS_DE_FIDELIDADE } from '@barbearia/core';
+import { ESCOPOS, MODOS_DE_FIDELIDADE } from '@barbearia/core';
 
 /**
  * A borda do programa de fidelidade (bloco 41).
@@ -17,6 +17,15 @@ export const programaSchema = z.object({
   // mais no formulário.
   cashbackBps: z.number().int().min(0).max(5000),
   validadeDias: z.number().int().min(30).max(3650).nullable(),
+  /**
+   * Onde o saldo vale (bloco 59).
+   *
+   * Opcional na borda porque **campo que a tela não manda significa "não
+   * mexa"**, nunca "desligue": escrever o padrão por omissão faria corrigir o
+   * cashback numa tela antiga devolver o saldo de todo mundo para a rede sem
+   * ninguém ter decidido isso.
+   */
+  escopo: z.enum(ESCOPOS).optional(),
 });
 
 export const ajusteDeSaldoSchema = z.object({

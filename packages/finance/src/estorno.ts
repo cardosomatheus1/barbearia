@@ -264,13 +264,32 @@ async function desfazerAcumuloDeFidelidade(
   tx: TransactionClient,
   orderId: string,
 ): Promise<number> {
+  /**
+   * Agrupado **também por bolso** (bloco 59).
+   *
+   * O estorno tem que devolver o ponto ao bolso de onde ele saiu. Escrito no
+   * compartilhado, um estorno de acúmulo de unidade não encontra lote nenhum
+   * para consumir — `lotes()` só desconta uma saída contra as entradas que a
+   * precedem —, e a linha negativa é **descartada em silêncio**: o cliente fica
+   * com os pontos de uma venda que foi devolvida, e comprar-e-estornar vira
+   * máquina de fabricar crédito.
+   *
+   * Achado da `/security-review` do bloco 59.
+   */
   const linhas = await tx.$queryRaw<
-    { customer_id: string; mode: string; amount: number }[]
+    {
+      customer_id: string;
+      mode: string;
+      scope: string;
+      location_id: string | null;
+      amount: number;
+    }[]
   >`
-    SELECT customer_id, mode::text AS mode, sum(amount)::int AS amount
+    SELECT customer_id, mode::text AS mode, scope::text AS scope, location_id,
+           sum(amount)::int AS amount
       FROM loyalty_entries
      WHERE order_id = ${orderId}::uuid AND kind = 'acumulo'
-     GROUP BY customer_id, mode
+     GROUP BY customer_id, mode, scope, location_id
   `;
 
   let desfeito = 0;
@@ -278,12 +297,13 @@ async function desfazerAcumuloDeFidelidade(
     if (linha.amount <= 0) continue;
     await tx.$executeRaw`
       INSERT INTO loyalty_entries
-        (tenant_id, customer_id, order_id, kind, mode, amount, note)
+        (tenant_id, customer_id, order_id, kind, mode, amount, note, scope, location_id)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${linha.customer_id}::uuid, ${orderId}::uuid, 'ajuste',
         ${linha.mode}::loyalty_mode, ${-linha.amount},
-        'Estorno da venda'
+        'Estorno da venda',
+        ${linha.scope}::escopo_multiunidade, ${linha.location_id}::uuid
       )
     `;
     desfeito += linha.amount;

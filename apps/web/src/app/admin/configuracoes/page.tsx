@@ -134,6 +134,36 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         </div>
 
         {/*
+          Onde o fiado vale, numa rede (bloco 59).
+
+          Fica ao lado do teto de desconto porque é a mesma classe de decisão:
+          política da casa que a operação obedece. E é um seletor, não uma caixa
+          — "não marcado" significaria uma terceira coisa que não existe.
+
+          Nasce em "na rede toda", que é o comportamento de sempre: nenhuma
+          barbearia já instalada vê a dívida do cliente ser recortada por causa
+          de um deploy.
+        */}
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="creditScope">
+            Onde o fiado vale
+          </label>
+          <select
+            className="ui-field__input"
+            defaultValue={politicas?.creditScope ?? 'empresa'}
+            id="creditScope"
+            name="creditScope"
+          >
+            <option value="empresa">Na rede toda — uma dívida só</option>
+            <option value="unidade">Só na loja em que a dívida nasceu</option>
+          </select>
+          <p className="ui-field__hint">
+            O limite não é repartido: ele vale inteiro em cada loja. Com uma unidade só, os
+            dois significam a mesma coisa.
+          </p>
+        </div>
+
+        {/*
           O sinal seletivo (bloco 37).
 
           Fica ao lado da janela de cancelamento porque é a outra metade da

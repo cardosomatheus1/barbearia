@@ -13,6 +13,7 @@ import {
   type ItemDaComanda,
   type Pagamento,
   type TipoDeItem,
+  dividirPagamentoDeFiado,
   type EscopoMultiunidade,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
@@ -233,8 +234,16 @@ async function saldoTravado(
      WHERE customer_id = ${customerId}::uuid
        AND (location_id IS NULL OR location_id = ${locationId}::uuid)
   `;
+  /**
+   * O bolso da loja nunca mostra mais crédito do que a pessoa tem na empresa.
+   *
+   * Segunda camada, e ela existe porque a primeira — abater onde a dívida está —
+   * é uma cláusula perdível numa reescrita. A garantia de que ninguém leva fiado
+   * contra crédito que não existe é grande demais para depender disso.
+   */
+  const derivado = Number(daLoja[0]?.total ?? 0);
   return {
-    saldoCents: Number(daLoja[0]?.total ?? 0),
+    saldoCents: Math.min(derivado, Math.max(linha.balance_cents, 0)),
     limiteCents: linha.credit_limit_cents,
   };
 }
@@ -1485,18 +1494,45 @@ export async function receberFiado(params: {
       throw new ComandaError('caixa_fechado', 'Abra o caixa antes de receber.');
     }
 
-    const saldo = await lancarNoExtrato(tx, {
-      customerId: params.customerId,
-      kind: 'payment',
-      amountCents: params.amountCents,
-      sessionId: sessao.id,
-      note: `Pagamento de dívida (${params.forma})`,
-      staffId: params.staffId,
-      staffName: params.staffName,
-      // A loja em que a pessoa pagou: o abate cai no bolso daquela loja quando o
-      // fiado é por unidade (bloco 59).
-      locationId: params.locationId,
+    /**
+     * O pagamento abate **onde a dívida está**, não onde ele foi feito.
+     *
+     * Pagar no balcão de outra loja é normal: o cliente devia na matriz e passou
+     * na filial. Carimbando a linha com a loja do balcão, o bolso da filial
+     * ficava positivo e o limite lá passava a valer duas vezes — repetindo
+     * pegar-e-pagar, o crédito na filial não tinha teto. O dinheiro continua
+     * entrando na gaveta de onde foi pago; a dívida que ele quita é a de quem a
+     * tem, da mais antiga para a mais nova.
+     *
+     * Achado da `/security-review` do bloco 59.
+     */
+    const dividas = await tx.$queryRaw<{ location_id: string | null; total: number }[]>`
+      SELECT location_id, sum(amount_cents)::int AS total
+        FROM customer_ledger
+       WHERE customer_id = ${params.customerId}::uuid
+       GROUP BY location_id
+       HAVING sum(amount_cents) < 0
+       ORDER BY min(created_at)
+    `;
+
+    const partes = dividirPagamentoDeFiado({
+      pagamentoCents: params.amountCents,
+      dividas: dividas.map((d) => ({ unidadeId: d.location_id, saldoCents: Number(d.total) })),
     });
+
+    let saldo = cliente.saldoCents;
+    for (const parte of partes) {
+      saldo = await lancarNoExtrato(tx, {
+        customerId: params.customerId,
+        kind: 'payment',
+        amountCents: parte.valorCents,
+        sessionId: sessao.id,
+        note: `Pagamento de dívida (${params.forma})`,
+        staffId: params.staffId,
+        staffName: params.staffName,
+        locationId: parte.unidadeId,
+      });
+    }
 
     if (params.forma === 'cash') {
       await tx.$executeRaw`

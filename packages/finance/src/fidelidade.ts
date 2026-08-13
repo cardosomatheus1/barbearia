@@ -123,7 +123,18 @@ export async function programa(tenantId: string): Promise<ProgramaDeFidelidade> 
  */
 export async function salvarPrograma(entrada: {
   readonly tenantId: string;
-  readonly programa: ProgramaDeFidelidade;
+  /**
+   * `escopo` é opcional aqui, e é a regra do campo opcional na borda: ausente
+   * significa **não mexa**, nunca "volte para a rede". Escrever o padrão por
+   * omissão faria corrigir o cashback numa tela antiga devolver o saldo de todo
+   * mundo para a rede sem ninguém ter decidido isso.
+   */
+  readonly programa: Omit<ProgramaDeFidelidade, 'escopo'> & {
+    // `| undefined` explícito: com `exactOptionalPropertyTypes`, um corpo que
+    // traz a chave ausente e um que a traz como `undefined` são tipos
+    // diferentes, e o zod produz o segundo.
+    readonly escopo?: EscopoMultiunidade | undefined;
+  };
   readonly ator: { readonly id: string; readonly name: string };
 }): Promise<ProgramaDeFidelidade> {
   const p = entrada.programa;
@@ -148,7 +159,7 @@ export async function salvarPrograma(entrada: {
       VALUES (
         ${entrada.tenantId}::uuid, ${p.modo}::loyalty_mode, ${p.pontosPorReal},
         ${p.valorDoPontoCents}, ${p.visitasParaPremio}, ${p.cashbackBps},
-        ${p.validadeDias}, ${p.escopo}::escopo_multiunidade
+        ${p.validadeDias}, COALESCE(${p.escopo ?? null}::escopo_multiunidade, 'empresa')
       )
       ON CONFLICT (tenant_id) DO UPDATE SET
         mode = EXCLUDED.mode,
@@ -157,7 +168,9 @@ export async function salvarPrograma(entrada: {
         visits_goal = EXCLUDED.visits_goal,
         cashback_bps = EXCLUDED.cashback_bps,
         expires_days = EXCLUDED.expires_days,
-        scope = EXCLUDED.scope,
+        -- Ausente significa "não mexa": o COALESCE do VALUES ja resolveu o
+        -- padrao de quem nasce, e aqui ele preserva a decisao de quem ja existe.
+        scope = COALESCE(EXCLUDED.scope, loyalty_programs.scope),
         updated_at = now()
     `;
 
@@ -168,7 +181,11 @@ export async function salvarPrograma(entrada: {
       entity: 'loyalty_programs',
       entityId: entrada.tenantId,
       before: { modo: anterior.modo, escopo: anterior.escopo },
-      after: { modo: p.modo, validadeDias: p.validadeDias, escopo: p.escopo },
+      after: {
+        modo: p.modo,
+        validadeDias: p.validadeDias,
+        escopo: p.escopo ?? anterior.escopo,
+      },
     });
 
     return programaDaCasa(tx);
@@ -480,6 +497,8 @@ export async function ajustarSaldo(entrada: {
   readonly customerId: string;
   readonly quantidade: number;
   readonly motivo: string;
+  /** A unidade do balcão: é ela que decide de qual bolso o ajuste sai (bloco 59). */
+  readonly locationId?: string | null;
   readonly ator: { readonly id: string; readonly name: string };
   readonly agora?: Date;
 }): Promise<SaldoDoCliente> {
@@ -495,25 +514,75 @@ export async function ajustarSaldo(entrada: {
     const p = await programaDaCasa(tx);
     if (p.modo === 'nenhum') recusar('sem_programa');
 
-    // Tirar mais do que existe deixaria o saldo negativo, e saldo negativo é
-    // uma dívida que o produto não sabe cobrar — fiado tem tabela própria.
-    if (entrada.quantidade < 0) {
-      const extrato = await extratoDe(tx, entrada.customerId);
-      if (saldoDisponivel(extrato, agora) + entrada.quantidade < 0) {
-        recusar('saldo_insuficiente');
-      }
-    }
+    /**
+     * O ajuste também é **por bolso** (bloco 59).
+     *
+     * A primeira versão conferia o saldo misturado e escrevia a linha sempre no
+     * compartilhado. Numa barbearia com fidelidade por unidade isso produzia o
+     * pior desfecho possível desta rota, e sem nenhuma corrida: tirar 300
+     * passava na conferência, ia para um bolso sem lote e era **descartado em
+     * silêncio** por `lotes()`; devolver os 300 criava um lote vivo lá. Duas
+     * operações que somam zero deixavam o cliente com o dobro.
+     *
+     * Achado da `/security-review` do bloco 59.
+     */
+    const extrato = await extratoDe(tx, entrada.customerId);
+    const bolsos = saldoNosBolsos(extrato, entrada.locationId ?? null, agora);
 
-    await tx.$executeRaw`
-      INSERT INTO loyalty_entries
-        (tenant_id, customer_id, kind, mode, amount, note, created_by, expires_at)
-      VALUES (
-        ${entrada.tenantId}::uuid, ${entrada.customerId}::uuid, 'ajuste',
-        ${p.modo}::loyalty_mode, ${entrada.quantidade}, ${motivo},
-        ${entrada.ator.id}::uuid,
-        ${entrada.quantidade > 0 ? vencimentoDoAcumulo(p, agora) : null}
-      )
-    `;
+    const linhas: readonly {
+      readonly quantidade: number;
+      readonly escopo: EscopoMultiunidade;
+      readonly unidade: string | null;
+    }[] =
+      entrada.quantidade > 0
+        ? [
+            {
+              quantidade: entrada.quantidade,
+              escopo: escopoDoLancamento(p.escopo, entrada.locationId ?? null),
+              unidade:
+                escopoDoLancamento(p.escopo, entrada.locationId ?? null) === 'unidade'
+                  ? (entrada.locationId ?? null)
+                  : null,
+            },
+          ]
+        : (() => {
+            // Tirar mais do que existe deixaria o saldo negativo, e saldo
+            // negativo é uma dívida que o produto não sabe cobrar — fiado tem
+            // tabela própria. A divisão é a mesma do resgate: compartilhado
+            // primeiro, e recusa inteira quando não cabe.
+            const divisao = dividirResgate({
+              quantidade: -entrada.quantidade,
+              saldoCompartilhado: bolsos.compartilhado,
+              saldoDaUnidade: bolsos.daUnidade,
+            });
+            if (!divisao) recusar('saldo_insuficiente');
+            return [
+              { quantidade: -divisao.doCompartilhado, escopo: 'empresa' as const, unidade: null },
+              {
+                quantidade: -divisao.daUnidade,
+                escopo: 'unidade' as const,
+                unidade: entrada.locationId ?? null,
+              },
+            ];
+          })();
+
+    for (const linha of linhas) {
+      // Linha de zero não entra: extrato com movimento nulo é extrato que
+      // ninguém consegue ler.
+      if (linha.quantidade === 0) continue;
+      await tx.$executeRaw`
+        INSERT INTO loyalty_entries
+          (tenant_id, customer_id, kind, mode, amount, note, created_by, expires_at,
+           scope, location_id)
+        VALUES (
+          ${entrada.tenantId}::uuid, ${entrada.customerId}::uuid, 'ajuste',
+          ${p.modo}::loyalty_mode, ${linha.quantidade}, ${motivo},
+          ${entrada.ator.id}::uuid,
+          ${linha.quantidade > 0 ? vencimentoDoAcumulo(p, agora) : null},
+          ${linha.escopo}::escopo_multiunidade, ${linha.unidade}::uuid
+        )
+      `;
+    }
 
     await audit(tx, {
       actorId: entrada.ator.id,
@@ -525,7 +594,7 @@ export async function ajustarSaldo(entrada: {
     });
   });
 
-  return saldoDoCliente(entrada.tenantId, entrada.customerId, agora);
+  return saldoDoCliente(entrada.tenantId, entrada.customerId, agora, entrada.locationId ?? null);
 }
 
 /**
@@ -562,17 +631,43 @@ export async function expirarSaldos(tenantId: string, agora: Date): Promise<numb
     let expirados = 0;
     for (const cliente of clientes) {
       const extrato = await extratoDe(tx, cliente.customer_id);
-      const quanto = quantidadeAExpirar(extrato, agora);
-      if (quanto <= 0) continue;
 
-      await tx.$executeRaw`
-        INSERT INTO loyalty_entries (tenant_id, customer_id, kind, mode, amount, note)
-        VALUES (
-          ${tenantId}::uuid, ${cliente.customer_id}::uuid, 'expiracao',
-          ${cliente.mode}::loyalty_mode, ${-quanto}, 'Vencimento automático'
-        )
-      `;
-      expirados += 1;
+      /**
+       * A expiração é contada e gravada **dentro de cada bolso** (bloco 59).
+       *
+       * Escrita no compartilhado, a expiração de um lote de unidade consumia um
+       * lote compartilhado **vivo** — destruindo saldo que não tinha vencido,
+       * sem nada ficar vermelho. É o mesmo defeito do ajuste, com o sinal
+       * trocado. Achado da `/security-review` do bloco 59.
+       */
+      const unidades = new Set(
+        extrato.filter((l) => l.escopo === 'unidade').map((l) => l.unidadeId),
+      );
+      const bolsos: readonly { escopo: EscopoMultiunidade; unidade: string | null }[] = [
+        { escopo: 'empresa', unidade: null },
+        ...[...unidades].map((u) => ({ escopo: 'unidade' as const, unidade: u })),
+      ];
+
+      let algum = false;
+      for (const bolso of bolsos) {
+        const doBolso = extrato.filter(
+          (l) => l.escopo === bolso.escopo && (bolso.escopo === 'empresa' || l.unidadeId === bolso.unidade),
+        );
+        const quanto = quantidadeAExpirar(doBolso, agora);
+        if (quanto <= 0) continue;
+
+        await tx.$executeRaw`
+          INSERT INTO loyalty_entries
+            (tenant_id, customer_id, kind, mode, amount, note, scope, location_id)
+          VALUES (
+            ${tenantId}::uuid, ${cliente.customer_id}::uuid, 'expiracao',
+            ${cliente.mode}::loyalty_mode, ${-quanto}, 'Vencimento automático',
+            ${bolso.escopo}::escopo_multiunidade, ${bolso.unidade}::uuid
+          )
+        `;
+        algum = true;
+      }
+      if (algum) expirados += 1;
     }
 
     return expirados;

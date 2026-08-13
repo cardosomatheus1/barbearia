@@ -383,6 +383,12 @@ export async function acaoJanela(form: FormData): Promise<void> {
     // Por cento na tela, pontos-base no banco. A conversão fica aqui, num lugar
     // só — espalhá-la faria dois pontos do código discordarem sobre 12,5%.
     maxDiscountBps: Math.min(100, Math.max(0, numero(form, 'maxDiscountPercent', 20))) * 100,
+    // O escopo do fiado (bloco 59). Vai sempre que o formulário o traz, e o
+    // formulário sempre traz: é um seletor com as duas opções, não uma caixa —
+    // "não marcado" aqui significaria uma terceira coisa que não existe.
+    ...(texto(form, 'creditScope') === 'unidade'
+      ? { creditScope: 'unidade' as const }
+      : { creditScope: 'empresa' as const }),
     ...(texto(form, 'cancellationPolicy')
       ? { cancellationPolicy: texto(form, 'cancellationPolicy') }
       : {}),
@@ -930,6 +936,9 @@ export async function acaoSalvarFidelidade(form: FormData): Promise<void> {
     // A tela pede porcentagem; o produto guarda pontos-base, sempre inteiros.
     cashbackBps: Math.round(Number(form.get('cashbackPercent') ?? 5) * 100),
     validadeDias: validade > 0 ? validade : null,
+    // O seletor sempre traz um dos dois; "empresa" é o padrão e o comportamento
+    // anterior (bloco 59).
+    escopo: texto(form, 'escopo') === 'unidade' ? 'unidade' : 'empresa',
   });
   if (!resultado.ok) falhar('/admin/fidelidade', resultado.code);
   redirect('/admin/fidelidade?salvo=1');
@@ -2189,6 +2198,9 @@ export async function acaoSalvarPlano(form: FormData): Promise<void> {
       descontoEmProdutoBps: Math.round(desconto * 100),
       ativo: form.get('ativo') === 'on',
       janelaDeAgendamentoDias: Number(form.get('janelaDias') ?? 0),
+      // O seletor sempre traz um dos dois; "empresa" é o padrão e o
+      // comportamento anterior (bloco 59).
+      escopo: texto(form, 'escopo') === 'unidade' ? ('unidade' as const) : ('empresa' as const),
       beneficios,
       bloqueios,
     },

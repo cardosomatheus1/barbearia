@@ -123,6 +123,7 @@ export const salvarJanela = (
     maxReschedules: number;
     cancellationPolicy?: string;
     maxDiscountBps?: number;
+    creditScope?: 'empresa' | 'unidade';
     dpoName?: string;
     dpoEmail?: string;
     deposit?: PoliticaDeSinal;
@@ -192,6 +193,7 @@ export interface PoliticasDaCasa {
   maxReschedules: number;
   cancellationPolicy: string | null;
   maxDiscountBps: number;
+  creditScope: 'empresa' | 'unidade';
   dpoName: string | null;
   dpoEmail: string | null;
   deposit: PoliticaDeSinal;
@@ -873,12 +875,17 @@ export interface ProgramaDeFidelidade {
   visitasParaPremio: number;
   cashbackBps: number;
   validadeDias: number | null;
+  /** Onde o saldo vale: na rede ou só na loja em que foi ganho (bloco 59). */
+  escopo: 'empresa' | 'unidade';
 }
 
 export interface LancamentoDeFidelidade {
   id: string;
   tipo: 'acumulo' | 'resgate' | 'expiracao' | 'ajuste';
   quantidade: number;
+  escopo?: 'empresa' | 'unidade';
+  /** O nome da loja, para o extrato responder "onde eu ganhei isso?". */
+  unidade?: string | null;
   quando: string;
   venceEm: string | null;
   nota: string | null;
@@ -887,7 +894,10 @@ export interface LancamentoDeFidelidade {
 
 export interface SaldoDeFidelidade {
   modo: ModoDeFidelidade;
+  escopo: 'empresa' | 'unidade';
   saldo: number;
+  /** Quanto do saldo vale em qualquer loja (bloco 59). */
+  saldoCompartilhado: number;
   faltaParaPremio: number | null;
   extrato: LancamentoDeFidelidade[];
 }
@@ -1484,6 +1494,8 @@ export interface VisitaNaFicha {
   profissional: string;
   servicos: string[];
   precoCents: number;
+  /** A loja em que a visita aconteceu (bloco 59). Nula em base antiga. */
+  unidade: string | null;
 }
 
 export interface FichaDoCliente {
@@ -2255,6 +2267,8 @@ export interface PlanoNaTela {
   assinantes: number;
   janelaDeAgendamentoDias: number;
   bloqueios: JanelaBloqueada[];
+  /** Onde o plano cobre: na rede ou só na unidade da adesão (bloco 59). */
+  escopo: 'empresa' | 'unidade';
 }
 
 export interface AssinaturaDoCliente {

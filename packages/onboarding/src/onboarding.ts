@@ -446,6 +446,14 @@ export interface ChangeWindowInput {
   readonly maxDiscountBps?: number;
 
   /**
+   * Onde o fiado vale: na rede ou só na loja em que a dívida nasceu (bloco 59).
+   *
+   * Vive nesta tela pela mesma razão do teto de desconto: é política da casa que
+   * a operação obedece. Opcional pelo mesmo motivo — não mandar é "não mexa".
+   */
+  readonly creditScope?: 'empresa' | 'unidade';
+
+  /**
    * O encarregado de dados (bloco 31).
    *
    * Fica na mesma tela porque é do mesmo tipo: uma decisão da casa que a
@@ -506,6 +514,14 @@ export async function saveChangeWindow(
       `;
     }
 
+    if (input.creditScope !== undefined) {
+      await tx.$executeRaw`
+        UPDATE tenants SET credit_scope = ${input.creditScope}::escopo_multiunidade,
+                           updated_at = now()
+         WHERE id = ${tenantId}::uuid
+      `;
+    }
+
     /**
      * O sinal, e por que os valores são zerados quando a modalidade sai.
      *
@@ -554,6 +570,7 @@ export async function getPolicies(tenantId: string): Promise<{
   readonly maxReschedules: number;
   readonly cancellationPolicy: string | null;
   readonly maxDiscountBps: number;
+  readonly creditScope: 'empresa' | 'unidade';
   readonly dpoName: string | null;
   readonly dpoEmail: string | null;
   readonly deposit: DepositPolicyInput;
@@ -566,6 +583,7 @@ export async function getPolicies(tenantId: string): Promise<{
         max_reschedules: number;
         cancellation_policy: string | null;
         max_discount_bps: number;
+        credit_scope: 'empresa' | 'unidade';
         dpo_name: string | null;
         dpo_email: string | null;
         deposit_mode: DepositPolicyInput['mode'];
@@ -577,7 +595,8 @@ export async function getPolicies(tenantId: string): Promise<{
       }[]
     >`
       SELECT l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules,
-             l.cancellation_policy, t.max_discount_bps, t.dpo_name, t.dpo_email,
+             l.cancellation_policy, t.max_discount_bps, t.credit_scope,
+             t.dpo_name, t.dpo_email,
              l.deposit_mode, l.deposit_fixed_cents, l.deposit_percent_bps,
              l.deposit_score_threshold, l.deposit_ticket_over_cents,
              l.deposit_refund_hours
@@ -594,6 +613,7 @@ export async function getPolicies(tenantId: string): Promise<{
       maxReschedules: linha.max_reschedules,
       cancellationPolicy: linha.cancellation_policy,
       maxDiscountBps: linha.max_discount_bps,
+      creditScope: linha.credit_scope,
       dpoName: linha.dpo_name,
       dpoEmail: linha.dpo_email,
       deposit: {

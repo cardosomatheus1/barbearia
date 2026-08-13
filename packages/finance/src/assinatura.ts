@@ -106,6 +106,8 @@ export interface PlanoNaTela {
   readonly janelaDeAgendamentoDias: number;
   /** As faixas em que o plano **não** vale (bloco 46). */
   readonly bloqueios: readonly JanelaBloqueada[];
+  /** Onde o plano cobre: na rede ou só na unidade da adesão (bloco 59). */
+  readonly escopo: EscopoMultiunidade;
 }
 
 /**
@@ -145,10 +147,11 @@ export async function planos(
         assinantes: bigint;
         beneficios: unknown;
         bloqueios: unknown;
+        scope: EscopoMultiunidade;
       }[]
     >(
       `SELECT p.id, p.name, p.description, p.price_cents, p.product_discount_bps, p.active,
-              p.booking_window_days,
+              p.booking_window_days, p.scope,
               (SELECT jsonb_agg(jsonb_build_object(
                         'diaDaSemana', bl.weekday,
                         'inicio', bl.start_minute,
@@ -185,6 +188,7 @@ export async function planos(
       janelaDeAgendamentoDias: l.booking_window_days,
       beneficios: (l.beneficios ?? []) as readonly BeneficioNaTela[],
       bloqueios: (l.bloqueios ?? []) as readonly JanelaBloqueada[],
+      escopo: l.scope,
     }));
   });
 }
@@ -205,6 +209,14 @@ export async function salvarPlano(entrada: {
   }[];
   /** As faixas em que o plano não vale (bloco 46). Substituídas inteiras. */
   readonly bloqueios?: readonly JanelaBloqueada[];
+  /**
+   * Onde o plano cobre (bloco 59).
+   *
+   * Ausente significa **não mexa**, nunca "volte para a rede": escrever o padrão
+   * por omissão faria corrigir a descrição de um plano desfazer em silêncio a
+   * decisão de que ele é só da Pituba. É a regra do campo opcional na borda.
+   */
+  readonly escopo?: EscopoMultiunidade | undefined;
   readonly ator: Ator;
 }): Promise<{ readonly id: string }> {
   if (
@@ -253,7 +265,9 @@ export async function salvarPlano(entrada: {
                price_cents = ${entrada.precoCents},
                product_discount_bps = ${entrada.descontoEmProdutoBps},
                booking_window_days = ${entrada.janelaDeAgendamentoDias ?? 0},
-               active = ${entrada.ativo}, updated_at = now()
+               active = ${entrada.ativo},
+               scope = COALESCE(${entrada.escopo ?? null}::escopo_multiunidade, scope),
+               updated_at = now()
          WHERE id = ${id}::uuid
       `;
       if (afetados === 0) recusar('plano_nao_encontrado');
@@ -261,12 +275,13 @@ export async function salvarPlano(entrada: {
       const criados = await tx.$queryRaw<{ id: string }[]>`
         INSERT INTO club_plans
           (tenant_id, name, description, price_cents, product_discount_bps,
-           booking_window_days, active)
+           booking_window_days, active, scope)
         VALUES (
           NULLIF(current_setting('app.tenant_id', true), '')::uuid,
           ${entrada.nome.trim()}, ${entrada.descricao ?? null}, ${entrada.precoCents},
           ${entrada.descontoEmProdutoBps}, ${entrada.janelaDeAgendamentoDias ?? 0},
-          ${entrada.ativo}
+          ${entrada.ativo},
+          COALESCE(${entrada.escopo ?? null}::escopo_multiunidade, 'empresa')
         )
         RETURNING id
       `;

@@ -65,6 +65,7 @@ export default async function FidelidadePage({ searchParams }: Props) {
         visitasParaPremio: 10,
         cashbackBps: 500,
         validadeDias: null,
+        escopo: 'empresa' as const,
       };
 
   const salvo = first(busca['salvo']);
@@ -177,6 +178,25 @@ export default async function FidelidadePage({ searchParams }: Props) {
               type="number"
             />
             <span className="fidelidade__dica">Vazio significa que o saldo não vence.</span>
+          </label>
+
+          {/*
+            Onde o saldo vale, numa rede (bloco 59).
+
+            Trocar este seletor **não** faz saldo antigo sumir: cada lançamento
+            guarda o escopo com que nasceu, como já guarda o modo. O que muda é
+            de onde nasce o saldo daqui para a frente.
+          */}
+          <label className="fidelidade__campo">
+            <span>Onde o saldo vale</span>
+            <select className="ui-field__input" defaultValue={p.escopo ?? 'empresa'} name="escopo">
+              <option value="empresa">Em todas as unidades</option>
+              <option value="unidade">Só na unidade onde foi ganho</option>
+            </select>
+            <span className="fidelidade__dica">
+              O que já foi ganho não muda de lugar: cada lançamento guarda a regra com que
+              nasceu. Com uma unidade só, os dois significam a mesma coisa.
+            </span>
           </label>
         </fieldset>
 

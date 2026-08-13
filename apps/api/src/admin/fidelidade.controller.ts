@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import {
   FidelidadeError,
@@ -69,12 +70,20 @@ export class FidelidadeController {
   @Put('programa')
   async salvar(
     @Staff() staff: AuthenticatedStaff,
-    @Body(new ZodValidationPipe(programaSchema)) body: Record<string, never>,
+    /**
+     * Tipado a partir do schema, e não `Record<string, never>` com um `as
+     * never` na chamada.
+     *
+     * O `as never` desligava o compilador, e foi assim que `escopo` — campo novo
+     * do bloco 59 — passou despercebido em duas camadas. Com `z.infer`, um campo
+     * novo no schema aparece aqui em vez de sumir.
+     */
+    @Body(new ZodValidationPipe(programaSchema)) body: z.infer<typeof programaSchema>,
   ) {
     try {
       return await salvarPrograma({
         tenantId: staff.tenantId,
-        programa: body as never,
+        programa: body,
         ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (erro) {

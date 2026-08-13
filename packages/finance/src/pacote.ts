@@ -464,6 +464,18 @@ export async function consumirPacote(
 export async function reembolsarPacote(entrada: {
   readonly tenantId: string;
   readonly customerPackageId: string;
+  /**
+   * A loja do balcão onde o reembolso é feito (bloco 59).
+   *
+   * Obrigatória, e não opcional. Um crédito **positivo** sem loja é somado ao
+   * bolso de **cada** unidade: com fiado por unidade, um reembolso de R$ 250
+   * daria R$ 250 de crédito na matriz e outros R$ 250 na filial, e o cliente
+   * gastaria o mesmo dinheiro duas vezes. Opcional, ela seria esquecida no
+   * primeiro chamador novo e o defeito voltaria sem nada ficar vermelho.
+   *
+   * Achado da `/security-review` do bloco 59.
+   */
+  readonly locationId: string;
   readonly ator: { readonly id: string; readonly name: string };
   readonly agora?: Date;
 }): Promise<{ readonly valorCents: number }> {
@@ -509,6 +521,7 @@ export async function reembolsarPacote(entrada: {
       note: 'Reembolso de pacote',
       staffId: entrada.ator.id,
       staffName: entrada.ator.name,
+      locationId: entrada.locationId,
     });
 
     await audit(tx, {

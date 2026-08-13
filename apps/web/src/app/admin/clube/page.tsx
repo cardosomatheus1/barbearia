@@ -190,6 +190,32 @@ function CamposDoPlano({
         </p>
       </div>
 
+      {/*
+        Onde o plano cobre, numa rede (bloco 59).
+
+        Fica no plano e não na barbearia porque é assim que ela vende: o clube
+        da Pituba pode ser da loja e o Premium pode valer na rede, e um
+        interruptor único obrigaria a escolher pelo pior dos dois.
+      */}
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`${prefixo}-escopo`}>
+          Onde o plano cobre
+        </label>
+        <select
+          className="ui-field__input"
+          defaultValue={plano?.escopo ?? 'empresa'}
+          id={`${prefixo}-escopo`}
+          name="escopo"
+        >
+          <option value="empresa">Em todas as unidades</option>
+          <option value="unidade">Só na unidade onde a pessoa assinou</option>
+        </select>
+        <p className="ui-field__hint">
+          Quem já assinava antes continua coberto em toda parte. Com uma unidade só, os dois
+          significam a mesma coisa.
+        </p>
+      </div>
+
       <fieldset className="plano__servicos">
         <legend className="ui-field__label">Quando o plano não vale</legend>
         <p className="ui-field__hint">

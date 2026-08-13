@@ -408,7 +408,8 @@ describeIfDb('pacotes', () => {
 
     const pacote = (await meus())[0]!;
     const devolvido = await reembolsarPacote({
-      tenantId: TENANT, customerPackageId: pacote.id, ator, agora: AGORA,
+      tenantId: TENANT,
+      locationId: LOCATION, customerPackageId: pacote.id, ator, agora: AGORA,
     });
     expect(devolvido.valorCents).toBe(15_000);
 
@@ -425,9 +426,9 @@ describeIfDb('pacotes', () => {
     await comprar(id);
     const pacote = (await meus())[0]!;
 
-    await reembolsarPacote({ tenantId: TENANT, customerPackageId: pacote.id, ator, agora: AGORA });
+    await reembolsarPacote({ tenantId: TENANT, locationId: LOCATION, customerPackageId: pacote.id, ator, agora: AGORA });
     await expect(
-      reembolsarPacote({ tenantId: TENANT, customerPackageId: pacote.id, ator, agora: AGORA }),
+      reembolsarPacote({ tenantId: TENANT, locationId: LOCATION, customerPackageId: pacote.id, ator, agora: AGORA }),
     ).rejects.toMatchObject({ code: 'ja_reembolsado' });
   });
 
@@ -439,7 +440,7 @@ describeIfDb('pacotes', () => {
 
     const pacote = (await meus())[0]!;
     await expect(
-      reembolsarPacote({ tenantId: TENANT, customerPackageId: pacote.id, ator, agora: AGORA }),
+      reembolsarPacote({ tenantId: TENANT, locationId: LOCATION, customerPackageId: pacote.id, ator, agora: AGORA }),
     ).rejects.toMatchObject({ code: 'nada_a_devolver' });
   });
 
@@ -447,7 +448,7 @@ describeIfDb('pacotes', () => {
     const { id } = await noCatalogo();
     await comprar(id);
     const pacote = (await meus())[0]!;
-    await reembolsarPacote({ tenantId: TENANT, customerPackageId: pacote.id, ator, agora: AGORA });
+    await reembolsarPacote({ tenantId: TENANT, locationId: LOCATION, customerPackageId: pacote.id, ator, agora: AGORA });
 
     expect((await meus())[0]).toMatchObject({ estado: 'reembolsado', reembolsadoCents: 25_000 });
     expect(
@@ -463,7 +464,13 @@ describeIfDb('pacotes', () => {
     const pacote = (await meus())[0]!;
 
     await expect(
-      reembolsarPacote({ tenantId: RIVAL, customerPackageId: pacote.id, ator, agora: AGORA }),
+      reembolsarPacote({
+        tenantId: RIVAL,
+        locationId: LOCATION,
+        customerPackageId: pacote.id,
+        ator,
+        agora: AGORA,
+      }),
     ).rejects.toBeInstanceOf(PacoteError);
   });
 

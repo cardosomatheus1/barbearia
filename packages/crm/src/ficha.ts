@@ -35,6 +35,15 @@ export interface VisitaNaLinhaDoTempo {
   readonly profissional: string;
   readonly servicos: readonly string[];
   readonly precoCents: number;
+  /**
+   * Em qual loja a visita aconteceu (bloco 59).
+   *
+   * O cadastro do cliente sempre foi da empresa — `customers` nunca teve
+   * `location_id`. O que faltava para o histórico ser de fato **unificado** era
+   * a linha do tempo dizer onde ele esteve: sem isso, numa rede, "cortou dia 12"
+   * é meia resposta.
+   */
+  readonly unidade: string | null;
 }
 
 export interface Ficha {
@@ -114,16 +123,21 @@ export async function lerFicha(tenantId: string, customerId: string): Promise<Fi
         profissional: string;
         servicos: string[] | null;
         price_cents: number;
+        unidade: string | null;
       }[]
     >`
       SELECT a.id, a.service_starts_at AS quando, a.status::text AS status,
-             pr.name AS profissional, a.price_cents,
+             pr.name AS profissional, a.price_cents, lo.name AS unidade,
              (SELECT array_agg(sv.name ORDER BY aps.position)
                 FROM appointment_services aps
                 JOIN services sv ON sv.id = aps.service_id
                WHERE aps.appointment_id = a.id) AS servicos
         FROM appointments a
         JOIN professionals pr ON pr.id = a.professional_id
+        -- A loja de cada visita (bloco 59). O cadastro do cliente sempre foi da
+        -- empresa: o que faltava era a linha do tempo dizer onde ele esteve, que
+        -- e o que a SPEC §1.1 chama de historico unificado.
+        LEFT JOIN locations lo ON lo.id = a.location_id
        WHERE a.customer_id = ${customerId}::uuid
          AND a.status IN ('completed', 'no_show', 'cancelled_customer', 'cancelled_business')
        ORDER BY a.service_starts_at DESC
@@ -153,6 +167,7 @@ export async function lerFicha(tenantId: string, customerId: string): Promise<Fi
         profissional: visita.profissional,
         servicos: visita.servicos ?? [],
         precoCents: visita.price_cents,
+        unidade: visita.unidade,
       })),
       visitas: Number(linha.visitas),
       desde: linha.desde?.toISOString() ?? null,

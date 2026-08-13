@@ -172,3 +172,54 @@ export function saldoDoFiadoNaUnidade(params: {
     params.escopo === 'empresa' || l.unidadeId === null || l.unidadeId === params.unidadeId;
   return params.linhas.filter(conta).reduce((total, l) => total + l.valorCents, 0);
 }
+
+/**
+ * Onde um pagamento de fiado abate, quando a dívida está espalhada (bloco 59).
+ *
+ * ## O defeito que isto fecha
+ *
+ * Pagar no balcão de outra loja é normal — o cliente devia na matriz e passou na
+ * filial. A primeira versão validava o pagamento contra a dívida **da empresa** e
+ * carimbava a linha com a loja **onde se pagou**: o bolso da filial ficava
+ * positivo, e o limite lá passava a valer duas vezes. Repetindo pegar-e-pagar, o
+ * crédito na filial não tinha teto.
+ *
+ * A correção é abater onde a dívida está, e é o espelho do resgate: quem carrega
+ * a dívida mais antiga é quitado primeiro. O dinheiro entra na gaveta da loja em
+ * que foi pago — isso não muda —, mas a **dívida** que ele quita é a de quem a
+ * tem.
+ */
+export interface DividaDaUnidade {
+  readonly unidadeId: string | null;
+  /** Negativo. É o mesmo sinal do saldo em todo o produto. */
+  readonly saldoCents: number;
+}
+
+export function dividirPagamentoDeFiado(params: {
+  readonly pagamentoCents: number;
+  /** Da mais antiga para a mais nova: é a ordem em que se quita. */
+  readonly dividas: readonly DividaDaUnidade[];
+}): readonly { readonly unidadeId: string | null; readonly valorCents: number }[] {
+  let resta = params.pagamentoCents;
+  const partes: { unidadeId: string | null; valorCents: number }[] = [];
+
+  for (const divida of params.dividas) {
+    if (resta <= 0) break;
+    const devido = -divida.saldoCents;
+    if (devido <= 0) continue;
+    const abate = Math.min(resta, devido);
+    partes.push({ unidadeId: divida.unidadeId, valorCents: abate });
+    resta -= abate;
+  }
+
+  /**
+   * A sobra fica sem loja, e não na loja onde se pagou.
+   *
+   * Pagar mais do que se deve é legítimo — vira crédito —, e carimbá-lo com a
+   * loja do balcão daria àquela loja um crédito que a rede inteira concedeu.
+   * Sem loja, ele conta uma vez em cada leitura e nunca mais de uma, porque o
+   * teto da soma é o saldo da empresa.
+   */
+  if (resta > 0) partes.push({ unidadeId: null, valorCents: resta });
+  return partes;
+}

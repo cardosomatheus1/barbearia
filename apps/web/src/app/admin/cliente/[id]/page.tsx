@@ -130,7 +130,13 @@ function Visita({ visita }: { readonly visita: VisitaNaFicha }) {
       <span className="visita__servico">
         {veio ? visita.servicos.join(' + ') || 'Atendimento' : ROTULO_DA_VISITA[visita.status]}
       </span>
-      <span className="visita__quem">{visita.profissional}</span>
+      {/* A loja entra ao lado de quem atendeu, e não numa coluna própria: numa
+          barbearia de uma unidade só ela é sempre a mesma palavra, e uma coluna
+          inteira repetindo o nome da casa é ruído em todas as fichas. */}
+      <span className="visita__quem">
+        {visita.profissional}
+        {visita.unidade ? ` · ${visita.unidade}` : ''}
+      </span>
       {veio ? <span className="visita__valor tabular">{dinheiro(visita.precoCents)}</span> : null}
     </li>
   );

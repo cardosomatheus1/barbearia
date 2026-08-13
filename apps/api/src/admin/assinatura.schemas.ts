@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ESCOPOS } from '@barbearia/core';
 
 /**
  * A borda do clube (bloco 45).
@@ -13,6 +14,8 @@ export const planoSchema = z.object({
   // 5000 = 50%. Acima disso a casa paga para vender, e costuma ser um zero a mais.
   descontoEmProdutoBps: z.number().int().min(0).max(5000),
   ativo: z.boolean(),
+  /** Onde o plano cobre: na rede ou só na unidade da adesão (bloco 59). */
+  escopo: z.enum(ESCOPOS).optional(),
   /** Dias de antecedência a mais que o visitante (bloco 46). Zero é a da casa. */
   janelaDeAgendamentoDias: z.number().int().min(0).max(180).optional(),
   /**

@@ -135,6 +135,8 @@ export const changeWindowSchema = z.object({
   // Pontos-base inteiros, como toda alíquota do produto: 2000 é 20%. O teto do
   // schema acompanha a CHECK do banco.
   maxDiscountBps: z.number().int().min(0).max(10_000).optional(),
+  /** Onde o fiado vale (bloco 59). Ausente é "não mexa". */
+  creditScope: z.enum(['empresa', 'unidade'] as const).optional(),
   /**
    * O encarregado de dados (bloco 31).
    *
