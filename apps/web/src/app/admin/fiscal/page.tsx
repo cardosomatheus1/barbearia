@@ -337,7 +337,7 @@ export default async function FiscalPage({ searchParams }: Props) {
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="inscricaoMunicipal">
-                Inscrição municipal <span className="ui-field__opcional">(se a cidade exigir)</span>
+                Inscrição municipal <span className="ui-field__hint">(se a cidade exigir)</span>
               </label>
               <input
                 className="ui-field__input"

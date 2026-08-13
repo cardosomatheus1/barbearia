@@ -146,7 +146,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
       </p>
 
       {falha ? (
-        <div className="ui-alert ui-alert--erro painel__aviso" role="alert">
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {FALHA[falha] ?? FALHA['request_failed']}
         </div>
       ) : null}

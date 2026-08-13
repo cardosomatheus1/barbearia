@@ -184,7 +184,7 @@ export default async function OnboardingPage({ searchParams }: Props) {
           <div className="campos-lado">
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="phone">
-                Telefone <span className="ui-field__opcional">(opcional)</span>
+                Telefone <span className="ui-field__hint">(opcional)</span>
               </label>
               <input className="ui-field__input" id="phone" inputMode="tel" maxLength={24}
                      name="phone" placeholder="(71) 3333-4444" type="tel" />
@@ -192,7 +192,7 @@ export default async function OnboardingPage({ searchParams }: Props) {
             </div>
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="whatsapp">
-                WhatsApp <span className="ui-field__opcional">(opcional)</span>
+                WhatsApp <span className="ui-field__hint">(opcional)</span>
               </label>
               <input className="ui-field__input" id="whatsapp" inputMode="tel" maxLength={24}
                      name="whatsapp" placeholder="(71) 99999-0000" type="tel" />

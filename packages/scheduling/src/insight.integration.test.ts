@@ -1,6 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { agendasApertadas } from './ocupacao.js';
+import {
+  agendasApertadas,
+  apagarFaixaDePreco,
+  criarFaixaDePreco,
+  faixasDaUnidade,
+} from './ocupacao.js';
 
 /**
  * A leitura de agenda apertada contra Postgres real (bloco 67, SPEC §4.19).
@@ -26,6 +31,7 @@ const LOCAL_VIZINHA = '67aaaaaa-0000-0000-0000-000000000002';
 const JOAO = '67bbbbbb-0000-0000-0000-000000000001';
 const RUAN = '67bbbbbb-0000-0000-0000-000000000002';
 const CLIENTE = '67cccccc-0000-0000-0000-000000000001';
+const DONO = '67eeeeee-0000-0000-0000-000000000001';
 
 const AGORA = new Date('2026-08-12T12:00:00Z');
 
@@ -110,7 +116,10 @@ describeIfDb('a agenda que não está dando conta', () => {
         ('${RUAN}', '${TENANT}', '${LOCAL}', 'Ruan');
 
       INSERT INTO customers (id, tenant_id, name, phone_e164) VALUES
-        ('${CLIENTE}', '${TENANT}', 'Carlos', '+5571988887777')
+        ('${CLIENTE}', '${TENANT}', 'Carlos', '+5571988887777');
+
+      INSERT INTO staff_users (id, tenant_id, name, email, password_hash, role)
+      VALUES ('${DONO}', '${TENANT}', 'Matheus', 'dono@domari.com.br', 'x', 'owner')
     `);
   });
 
@@ -194,6 +203,66 @@ describeIfDb('a agenda que não está dando conta', () => {
     await exec(atendimento(idDe(1), JOAO, 2, 480));
     const agendas = await ler(0);
     expect(agendas.find((a) => a.nome === 'João')?.ocupacaoBps).toBe(0);
+  });
+
+  // -- faixas de preço entre lojas (bloco 68) --------------------------------
+
+  const OUTRA_LOJA = '67aaaaaa-0000-0000-0000-000000000003';
+
+  it('o gerente de uma loja não apaga a faixa da outra', async () => {
+    /**
+     * O ataque, executado. A RLS separa barbearias e **não** separa lojas dentro
+     * de uma: sem o filtro por `location_id` no domínio, um `DELETE` com o id
+     * alheio derruba o preço da matriz — a mesma falha que a revisão do bloco 58
+     * achou no estoque, e que a deste bloco achou aqui.
+     *
+     * O id ser UUID não conserta: `staff_locations` vazio significa "todas", e
+     * todo gerente enxerga os ids de todas as lojas até alguém escopá-lo.
+     */
+    await exec(`
+      INSERT INTO locations (id, tenant_id, name, timezone)
+      VALUES ('${OUTRA_LOJA}', '${TENANT}', 'Filial', 'America/Bahia')
+    `);
+    await criarFaixaDePreco({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      staffUserId: DONO,
+      diaDaSemana: 2,
+      inicioMinuto: 780,
+      fimMinuto: 960,
+      deltaBps: -1000,
+    });
+    const [daMatriz] = (await faixasDaUnidade(TENANT, LOCAL)).faixas;
+
+    // O gerente da filial manda o id da matriz.
+    expect(await apagarFaixaDePreco(TENANT, OUTRA_LOJA, daMatriz!.id)).toBe(false);
+    expect((await faixasDaUnidade(TENANT, LOCAL)).faixas).toHaveLength(1);
+
+    // E na própria loja ele apaga.
+    expect(await apagarFaixaDePreco(TENANT, LOCAL, daMatriz!.id)).toBe(true);
+  });
+
+  it('faixa que encosta noutra é recusada sem derrubar a transação', async () => {
+    /**
+     * A violação de exclusão **não** é tratada com `catch` dentro da transação:
+     * no Postgres ela aborta e toda instrução seguinte é recusada. A condição vai
+     * na própria instrução, e o índice fica como última linha de defesa.
+     */
+    const nova = (inicio: number, fim: number) =>
+      criarFaixaDePreco({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        staffUserId: DONO,
+        diaDaSemana: 2,
+        inicioMinuto: inicio,
+        fimMinuto: fim,
+        deltaBps: -1000,
+      });
+
+    expect(await nova(780, 960)).toBe(true);
+    expect(await nova(900, 1020)).toBe(false);
+    // Encostar não é sobrepor: `[início, fim)`.
+    expect(await nova(960, 1080)).toBe(true);
   });
 
   it('a barbearia vizinha não entra na conta desta', async () => {

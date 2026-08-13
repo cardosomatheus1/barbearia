@@ -743,7 +743,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
 
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="motivo">
-                  Motivo <span className="ui-field__opcional">(opcional)</span>
+                  Motivo <span className="ui-field__hint">(opcional)</span>
                 </label>
                 <input
                   className="ui-field__input"

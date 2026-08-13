@@ -6,6 +6,7 @@ import {
   montarGrade,
   type CelulaDeOcupacao,
   type CelulaNaTela,
+  type HoraMedida,
 } from '@barbearia/core';
 
 /**
@@ -290,4 +291,179 @@ export async function servicoMaisVendido(params: {
     return linhas[0]?.id ?? null;
   };
   return params.tx ? dentro(params.tx) : withTenant(params.tenantId, dentro);
+}
+
+/**
+ * As faixas cadastradas e o estado do interruptor (bloco 68, SPEC §4.20).
+ *
+ * Devolve o teto da marca junto porque a tela precisa dele para mostrar o efeito
+ * **aplicado** ao lado do cadastrado: uma faixa de −40% com teto de 15% desconta
+ * 15%, e sem o número na tela a barbearia acha que o produto ignorou a regra.
+ */
+export interface FaixasDaUnidade {
+  readonly ligado: boolean;
+  readonly tetoBps: number;
+  readonly faixas: readonly {
+    readonly id: string;
+    readonly diaDaSemana: number;
+    readonly inicioMinuto: number;
+    readonly fimMinuto: number;
+    readonly deltaBps: number;
+  }[];
+}
+
+export async function faixasDaUnidade(
+  tenantId: string,
+  locationId: string,
+): Promise<FaixasDaUnidade> {
+  return withTenant(tenantId, async (tx) => {
+    const config = await tx.$queryRaw<
+      { ligado: boolean; teto: number }[]
+    >`
+      SELECT l.dynamic_pricing_enabled AS ligado, t.max_price_variation_bps AS teto
+        FROM locations l
+        JOIN tenants t ON t.id = l.tenant_id
+       WHERE l.id = ${locationId}::uuid
+    `;
+    const linhas = await tx.$queryRaw<
+      { id: string; weekday: number; start_minute: number; end_minute: number; delta_bps: number }[]
+    >`
+      SELECT id, weekday, start_minute, end_minute, delta_bps
+        FROM pricing_rules
+       WHERE location_id = ${locationId}::uuid
+       ORDER BY weekday, start_minute
+    `;
+    return {
+      ligado: config[0]?.ligado === true,
+      tetoBps: Number(config[0]?.teto ?? 0),
+      faixas: linhas.map((f) => ({
+        id: f.id,
+        diaDaSemana: Number(f.weekday),
+        inicioMinuto: Number(f.start_minute),
+        fimMinuto: Number(f.end_minute),
+        deltaBps: Number(f.delta_bps),
+      })),
+    };
+  });
+}
+
+export async function ligarPrecoPorFaixa(
+  tenantId: string,
+  locationId: string,
+  ligado: boolean,
+): Promise<void> {
+  await withTenant(tenantId, async (tx) => {
+    await tx.$executeRaw`
+      UPDATE locations SET dynamic_pricing_enabled = ${ligado}
+       WHERE id = ${locationId}::uuid
+    `;
+  });
+}
+
+/**
+ * Cadastra a faixa, ou devolve nulo quando ela encosta noutra.
+ *
+ * A violação de exclusão **não** é tratada com `catch` dentro da transação: no
+ * Postgres a transação aborta e toda instrução seguinte é recusada. A condição
+ * vai na própria instrução (`NOT EXISTS`), e o índice de exclusão fica como
+ * última linha de defesa entre processos — é a regra escrita desde o bloco 56.
+ */
+export async function criarFaixaDePreco(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly staffUserId: string;
+  readonly diaDaSemana: number;
+  readonly inicioMinuto: number;
+  readonly fimMinuto: number;
+  readonly deltaBps: number;
+}): Promise<boolean> {
+  return withTenant(params.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      INSERT INTO pricing_rules
+        (tenant_id, location_id, weekday, start_minute, end_minute, delta_bps, created_by)
+      SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+             ${params.locationId}::uuid, ${params.diaDaSemana}, ${params.inicioMinuto},
+             ${params.fimMinuto}, ${params.deltaBps}, ${params.staffUserId}::uuid
+       WHERE NOT EXISTS (
+         SELECT 1 FROM pricing_rules r
+          WHERE r.location_id = ${params.locationId}::uuid
+            AND r.weekday = ${params.diaDaSemana}
+            -- Cast explícito para int: o Prisma manda número de JS como bigint,
+            -- e não existe int4range de bigint. O erro sai como função
+            -- inexistente sobre uma linha que parece certa.
+            AND int4range(r.start_minute, r.end_minute)
+                && int4range(${params.inicioMinuto}::int, ${params.fimMinuto}::int)
+       )
+    `;
+    return afetadas === 1;
+  });
+}
+
+/**
+ * Apaga a faixa **desta** unidade, e devolve se alguma linha caiu.
+ *
+ * O filtro por `location_id` é obrigatório e mora aqui, no domínio: a RLS separa
+ * barbearias e não separa lojas dentro de uma. A primeira versão apagava por id
+ * puro, e um gerente escopado à filial removia a faixa da matriz por um `DELETE`
+ * com o id alheio — a mesma falha que a revisão do bloco 58 achou no estoque.
+ *
+ * Achado da `/security-review` deste bloco. E o id ser UUID não conserta: com
+ * `staff_locations` vazio significando "todas", todo gerente enxerga os ids de
+ * todas as lojas até alguém escopá-lo, e escopar depois não tira dele o que ele
+ * já anotou.
+ */
+export async function apagarFaixaDePreco(
+  tenantId: string,
+  locationId: string,
+  faixaId: string,
+): Promise<boolean> {
+  return withTenant(tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      DELETE FROM pricing_rules
+       WHERE id = ${faixaId}::uuid AND location_id = ${locationId}::uuid
+    `;
+    return afetadas === 1;
+  });
+}
+
+/**
+ * A ocupação medida hora a hora, no formato que a recomendação lê.
+ *
+ * Sai da **mesma** grade do heatmap: dois lugares do produto dizendo "sexta às
+ * 17h está cheia" sobre janelas diferentes é a mesma pergunta com duas
+ * respostas.
+ */
+export async function horasMedidas(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly agora: Date;
+}): Promise<readonly HoraMedida[]> {
+  return withTenant(params.tenantId, async (tx) => {
+    const celulas = await carregarCelulas(tx, params.locationId, params.agora);
+    const grade = montarGrade(celulas, horasDaGrade(celulas));
+    const semanas = Math.floor(JANELA_DO_HEATMAP_DIAS / 7);
+
+    const atendimentos = await tx.$queryRaw<{ dia: number; hora: number; total: number }[]>`
+      SELECT EXTRACT(DOW FROM a.starts_at AT TIME ZONE l.timezone)::int AS dia,
+             EXTRACT(HOUR FROM a.starts_at AT TIME ZONE l.timezone)::int AS hora,
+             count(*)::int AS total
+        FROM appointments a
+        JOIN locations l ON l.id = a.location_id
+       WHERE a.location_id = ${params.locationId}::uuid
+         AND a.status IN ('completed', 'in_progress', 'checked_in', 'confirmed', 'pending')
+         AND a.starts_at >= ${params.agora}::timestamptz
+                            - ${JANELA_DO_HEATMAP_DIAS} * interval '1 day'
+         AND a.starts_at < ${params.agora}::timestamptz
+       GROUP BY 1, 2
+    `;
+    const porHora = new Map(atendimentos.map((a) => [`${a.dia}-${a.hora}`, Number(a.total)]));
+
+    return grade.map((celula) => ({
+      diaDaSemana: celula.diaDaSemana,
+      hora: celula.hora,
+      ocupacaoBps: celula.ocupacaoBps,
+      atendimentosPorSemana:
+        (porHora.get(`${celula.diaDaSemana}-${celula.hora}`) ?? 0) / semanas,
+    }));
+  });
 }

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 67 de 80 blocos.**
+**Status: 68 de 80 blocos.**
 
 ---
 
@@ -313,7 +313,7 @@ Depende de histórico acumulado. Não antecipar.
 | 65 | Agente de agendamento: intent, slots, confirmação | ✅ |
 | 66 | Agente: remarcação e recepção digital | ✅ |
 | 67 | Insights proativos | ✅ |
-| 68 | Smart pricing com aprovação humana |
+| 68 | Smart pricing com aprovação humana | ✅ |
 | 69 | Previsão de consumo e sugestão de compra |
 
 ---

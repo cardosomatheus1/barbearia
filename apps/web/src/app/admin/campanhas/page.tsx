@@ -278,7 +278,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--erro painel__aviso" role="alert">
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           Não deu para criar a campanha. Confira o nome e o público.
         </div>
       ) : null}

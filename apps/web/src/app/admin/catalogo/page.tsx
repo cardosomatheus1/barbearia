@@ -281,7 +281,7 @@ function FichaDeConsumo({
         <div className="ui-field" key={produto.id}>
           <input name="produtoId" type="hidden" value={produto.id} />
           <label className="ui-field__label" htmlFor={`f-${servico.id}-${produto.id}`}>
-            {produto.nome} <span className="ui-field__opcional">({produto.unidade})</span>
+            {produto.nome} <span className="ui-field__hint">({produto.unidade})</span>
           </label>
           <input
             className="ui-field__input"

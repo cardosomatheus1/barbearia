@@ -332,3 +332,65 @@ describe('tokens usados existem', () => {
     expect(orfaos, 'token inexistente invalida a declaração inteira').toEqual([]);
   });
 });
+
+/**
+ * Classe `ui-*` usada numa tela existe no design system ou nesta folha.
+ *
+ * O bloco 68 inventou uma `ui-input` que não existe em lugar nenhum: os campos
+ * do formulário de preço ficaram **sem estilo**, e a medição os pegou com 19px
+ * — menos da metade do alvo de toque de 44px. Nada ficou vermelho antes disso,
+ * porque um `className` errado é uma string válida para o TypeScript e para o
+ * React, e a tela renderiza.
+ *
+ * A guarda é derivada dos dois arquivos de estilo que existem, e não de uma
+ * lista escrita ao lado: classe nova no design system passa a valer aqui sem
+ * ninguém lembrar de cadastrá-la.
+ */
+describe('classes do design system', () => {
+  const AQUI = dirname(fileURLToPath(import.meta.url));
+  const folha =
+    readFileSync(join(AQUI, 'globals.css'), 'utf8') +
+    readFileSync(join(AQUI, '../../../../packages/ui/dist/tokens.css'), 'utf8');
+
+  const definidas = new Set(
+    [...folha.matchAll(/\.(ui-[a-z0-9_-]+)/g)].map((m) => m[1] as string),
+  );
+
+  function telas(pasta: string): string[] {
+    const achados: string[] = [];
+    for (const nome of readdirSync(pasta)) {
+      const caminho = join(pasta, nome);
+      if (statSync(caminho).isDirectory()) achados.push(...telas(caminho));
+      else if (nome.endsWith('.tsx')) achados.push(caminho);
+    }
+    return achados;
+  }
+
+  it('o teste enxerga as classes do design system', () => {
+    // Sem isto, um caminho errado deixaria o conjunto vazio e a guarda abaixo
+    // acusaria todas as telas — ou seria desligada por acusar demais.
+    expect(definidas.has('ui-button')).toBe(true);
+    expect(definidas.has('ui-field__input')).toBe(true);
+  });
+
+  it('nenhuma tela usa classe ui-* que não existe', () => {
+    const orfas = new Set<string>();
+    for (const caminho of telas(AQUI)) {
+      /**
+       * Só o que está dentro de `className`, e sem comentário.
+       *
+       * A prosa que explica o defeito cita a classe inventada — guarda que
+       * reprova a própria explicação é guarda que alguém apaga.
+       */
+      const fonte = readFileSync(caminho, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      for (const bloco of fonte.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+        for (const classe of `${bloco[1] ?? ''} ${bloco[2] ?? ''}`.split(/[\s${}?:'"]+/)) {
+          if (classe.startsWith('ui-') && !definidas.has(classe)) orfas.add(classe);
+        }
+      }
+    }
+    expect([...orfas], 'classe ui-* que nenhuma folha define').toEqual([]);
+  });
+});

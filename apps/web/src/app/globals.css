@@ -1809,6 +1809,73 @@ main { padding-bottom: var(--space-8); }
   .recado__responder { grid-column: 2; }
 }
 
+/* -- Preço por faixa de horário (bloco 68) --------------------------------- */
+
+.precos { padding-bottom: var(--space-8); }
+.precos__topo { margin-bottom: var(--space-5); }
+.precos__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.precos__aviso { margin-bottom: var(--space-4); }
+.precos__interruptor { margin-bottom: var(--space-5); }
+.precos__acao, .faixa__acao, .sugestao__acao, .precos__salvar { min-height: 44px; }
+.precos__vazio { margin: 0; color: var(--color-text-muted); }
+.precos__lista, .precos__sugestoes {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.faixa {
+  /* Recipiente da `@container`: um elemento não responde sobre si mesmo. */
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.faixa__quando { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.faixa__dia { margin: 0; font-weight: var(--font-weight-semibold); }
+.faixa__hora { margin: 0; color: var(--color-text-muted); }
+.faixa__delta {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+/* Cor é o último recurso: o sinal do número já diz a direção, e a cor só
+   confirma para quem lê de relance. */
+.faixa__delta--desconto { color: var(--color-success); }
+.faixa__aparada { font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+
+.sugestao {
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+.sugestao__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.sugestao__texto { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.sugestao__acoes { display: flex; }
+
+.precos__form { display: grid; gap: var(--space-3); }
+.precos__campos { display: grid; gap: var(--space-3); }
+/* O campo já vem do `ui-field`; aqui só o encaixe na grade. */
+.precos__campo { margin: 0; }
+.precos__dica { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* Espaço sobra: a faixa vira uma linha só e os campos dividem a largura. */
+@container (min-width: 30rem) {
+  .faixa { grid-template-columns: 1fr auto auto; align-items: center; }
+}
+@media (min-width: 768px) {
+  .precos__campos { grid-template-columns: repeat(4, 1fr); }
+}
+
 /* -- Insights proativos no painel (bloco 67) ------------------------------- */
 
 /**
@@ -4244,6 +4311,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='fidelidade']) .contexto__link[data-para='fidelidade'],
 .casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
 .casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
+.casco:has([data-secao='precos']) .contexto__link[data-para='precos'],
 .casco:has([data-secao='pacotes']) .contexto__link[data-para='pacotes'],
 .casco:has([data-secao='estoque']) .contexto__link[data-para='estoque'],
 .casco:has([data-secao='clube']) .contexto__link[data-para='clube'],

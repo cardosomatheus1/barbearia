@@ -1064,6 +1064,75 @@ async function prepararRecadosEFidelidade(slug) {
 }
 
 /**
+ * Uma faixa de preço ligada, para medir a tela do bloco 68.
+ *
+ * Pelo banco: a tela é de cadastro, e reproduzir o formulário aqui mediria o
+ * caminho e não o layout. O que a medição precisa é do **estado** — interruptor
+ * ligado, uma faixa de desconto e outra de acréscimo, e uma delas exagerada, que
+ * é a que desenha a linha "aparado no teto".
+ */
+async function prepararPrecos(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
+  if (!tenant || !local) return;
+
+  psql(`UPDATE locations SET dynamic_pricing_enabled = true WHERE id = '${local}'`);
+
+  /**
+   * Uma hora de verdade cheia, para a sugestão aparecer no print.
+   *
+   * A sugestão só existe para hora **medida** cheia — o desconto no escuro saiu
+   * do produto. Sem semear ocupação, a tela seria fotografada sem o bloco que o
+   * bloco 68 entrega, e print de tela pela metade é o que a medição existe para
+   * não deixar passar.
+   *
+   * Oito semanas de sexta às 18h, as duas cadeiras ocupadas a hora inteira: é
+   * exatamente a capacidade daquela célula, e portanto 100%.
+   */
+  const cliente = psql(
+    `select id from customers where tenant_id = '${tenant}' order by created_at limit 1`,
+  );
+  if (cliente) {
+    psql(
+      `INSERT INTO appointments
+         (tenant_id, location_id, customer_id, professional_id,
+          starts_at, ends_at, service_starts_at, service_ends_at, status)
+       SELECT '${tenant}', '${local}', '${cliente}', p.id,
+              (semana.dia + time '18:00') AT TIME ZONE l.timezone,
+              (semana.dia + time '19:00') AT TIME ZONE l.timezone,
+              (semana.dia + time '18:00') AT TIME ZONE l.timezone,
+              (semana.dia + time '19:00') AT TIME ZONE l.timezone,
+              'completed'
+         FROM professionals p
+         CROSS JOIN locations l
+         CROSS JOIN LATERAL (
+           -- Ancorado na sexta da semana corrente e recuando de sete em sete.
+           -- Um generate_series com passo de 7 dias mantém o dia da semana da
+           -- ponta inicial: filtrar por DOW depois só acerta quando hoje já é
+           -- sexta, e nas outras seis vezes a semeadura sai vazia em silêncio.
+           SELECT generate_series(
+             date_trunc('week', current_date)::date + 4 - 56,
+             date_trunc('week', current_date)::date + 4 - 7,
+             interval '7 days'
+           )::date AS dia
+         ) AS semana
+        WHERE p.location_id = '${local}' AND p.active AND l.id = '${local}'`,
+    );
+  }
+
+  for (const [dia, inicio, fim, delta] of [
+    [2, 780, 960, -1000],
+    [6, 540, 780, 1000],
+    [4, 1080, 1260, -4000],
+  ]) {
+    psql(
+      `INSERT INTO pricing_rules (tenant_id, location_id, weekday, start_minute, end_minute, delta_bps)
+       VALUES ('${tenant}', '${local}', ${dia}, ${inicio}, ${fim}, ${delta})`,
+    );
+  }
+}
+
+/**
  * Perguntas que a recepção digital não soube responder (bloco 66).
  *
  * Pela rota pública, e não pelo banco: é ela que decide o que vira lacuna, e
@@ -2142,6 +2211,7 @@ async function main() {
   const convitePreparado = await prepararConvite(slug);
   await prepararRecadosEFidelidade(slug);
   await prepararRecepcao(slug);
+  await prepararPrecos(slug);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);
@@ -2264,6 +2334,7 @@ async function main() {
     // a versão sem faturamento mediria a tela mais fácil.
     { nome: 'painel', url: '/admin/painel', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'diagnóstico do catálogo', url: '/admin/catalogo/diagnostico', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'preços por horário', url: '/admin/precos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'nota fiscal', url: '/admin/fiscal', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'whatsapp', url: '/admin/whatsapp', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'automações', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

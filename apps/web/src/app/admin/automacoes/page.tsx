@@ -133,7 +133,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--erro painel__aviso" role="alert">
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {EXPLICACAO_DA_FALHA[erro as keyof typeof EXPLICACAO_DA_FALHA] ??
             'Não deu para salvar. Tente de novo.'}
         </div>

@@ -85,6 +85,9 @@ import {
   devolverRecadoNaApi,
   encerrarRecadoNaApi,
   resolverLacunaNaApi,
+  apagarFaixaNaApi,
+  criarFaixaNaApi,
+  ligarPrecoPorFaixaNaApi,
   moverNaFila,
   responderRecadoNaApi,
   sentarDaFila,
@@ -1020,6 +1023,44 @@ export async function acaoEncerrarRecado(form: FormData): Promise<void> {
  * direito — e apagar a pergunta sem resposta seria apagar exatamente o dado que
  * esta lista existe para produzir.
  */
+/**
+ * Liga ou desliga o preço por faixa (bloco 68).
+ *
+ * É o que a SPEC §4.20 chama de "autorização configurada explicitamente": sem
+ * este interruptor, faixa cadastrada não muda preço nenhum.
+ */
+export async function acaoLigarPrecoPorFaixa(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await ligarPrecoPorFaixaNaApi(token, texto(form, 'ligado') === '1');
+  if (!resultado.ok) falhar('/admin/precos', resultado.code);
+  redirect('/admin/precos?feito=1');
+}
+
+/**
+ * Cadastra a faixa — e é isto que "o administrador aprova" quer dizer.
+ *
+ * O botão da recomendação chama esta mesma ação com os valores sugeridos
+ * preenchidos: não existe caminho em que uma sugestão vire regra sozinha.
+ */
+export async function acaoCriarFaixa(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await criarFaixaNaApi(token, {
+    diaDaSemana: Number(texto(form, 'diaDaSemana')),
+    inicioMinuto: Number(texto(form, 'inicioMinuto')),
+    fimMinuto: Number(texto(form, 'fimMinuto')),
+    deltaBps: Number(texto(form, 'deltaBps')),
+  });
+  if (!resultado.ok) falhar('/admin/precos', resultado.code);
+  redirect('/admin/precos?feito=1');
+}
+
+export async function acaoApagarFaixa(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await apagarFaixaNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/precos', resultado.code);
+  redirect('/admin/precos?feito=1');
+}
+
 export async function acaoResolverLacuna(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await resolverLacunaNaApi(token, texto(form, 'id'));

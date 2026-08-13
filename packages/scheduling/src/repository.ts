@@ -3,6 +3,7 @@ import {
   localToInstant,
   weekdayIn,
   type ComboRule,
+  type FaixaDePreco,
   type ScheduleException,
   type TimeRange,
   type WeeklyPlan,
@@ -39,6 +40,10 @@ export interface LocationSettings {
   readonly minLeadMinutes: number;
   readonly maxLeadDays: number;
   readonly requireOtpForBooking: boolean;
+  /** Se as faixas de preço valem nesta unidade (bloco 68). Nasce desligado. */
+  readonly dynamicPricingEnabled: boolean;
+  /** Teto de variação da marca, em pontos-base. Vem de `tenants`. */
+  readonly maxPriceVariationBps: number;
 }
 
 export interface ServiceRow {
@@ -88,6 +93,8 @@ export interface DayContext {
   readonly appointmentCount: ReadonlyMap<string, number>;
   readonly resourcePools: readonly ResourcePoolRow[];
   readonly comboRules: readonly ComboRule[];
+  /** As faixas de preço da unidade, vazias quando o interruptor está desligado. */
+  readonly faixasDePreco: readonly FaixaDePreco[];
 }
 
 export interface RangeContext {
@@ -167,12 +174,19 @@ export async function loadRangeContext(
       min_lead_minutes: number;
       max_lead_days: number;
       require_otp_for_booking: boolean;
+      dynamic_pricing_enabled: boolean;
+      max_price_variation_bps: number;
     }[]
   >`
-    SELECT id, name, timezone, slot_strategy, buffer_policy,
-           granularity_minutes, min_lead_minutes, max_lead_days,
-           require_otp_for_booking
-    FROM locations WHERE id = ${locationId}::uuid
+    SELECT l.id, l.name, l.timezone, l.slot_strategy, l.buffer_policy,
+           l.granularity_minutes, l.min_lead_minutes, l.max_lead_days,
+           l.require_otp_for_booking, l.dynamic_pricing_enabled,
+           -- O teto é da marca, não da unidade: uma rede não tem duas
+           -- percepções de preço.
+           t.max_price_variation_bps
+      FROM locations l
+      JOIN tenants t ON t.id = l.tenant_id
+     WHERE l.id = ${locationId}::uuid
   `;
   const locationRow = locationRows[0];
   if (!locationRow) return null;
@@ -187,7 +201,33 @@ export async function loadRangeContext(
     minLeadMinutes: locationRow.min_lead_minutes,
     maxLeadDays: locationRow.max_lead_days,
     requireOtpForBooking: locationRow.require_otp_for_booking,
+    dynamicPricingEnabled: locationRow.dynamic_pricing_enabled,
+    maxPriceVariationBps: Number(locationRow.max_price_variation_bps),
   };
+
+  /**
+   * As faixas de preço da unidade (bloco 68).
+   *
+   * Carregadas **só** quando o interruptor está ligado: com ele desligado, a
+   * lista vazia faz `precoDoHorario` devolver o preço de tabela sem nenhum
+   * ramo especial, e uma consulta a menos no caminho mais chamado do produto.
+   */
+  const faixasDePreco: FaixaDePreco[] = location.dynamicPricingEnabled
+    ? (
+        await tx.$queryRaw<
+          { weekday: number; start_minute: number; end_minute: number; delta_bps: number }[]
+        >`
+          SELECT weekday, start_minute, end_minute, delta_bps
+            FROM pricing_rules
+           WHERE location_id = ${locationId}::uuid
+        `
+      ).map((f) => ({
+        diaDaSemana: Number(f.weekday),
+        inicioMinuto: Number(f.start_minute),
+        fimMinuto: Number(f.end_minute),
+        deltaBps: Number(f.delta_bps),
+      }))
+    : [];
 
   const sorted = [...dates].sort();
   const first = sorted[0]!;
@@ -277,6 +317,7 @@ export async function loadRangeContext(
     appointmentCount: new Map(),
     resourcePools: [],
     comboRules: [],
+    faixasDePreco,
   });
 
   if (professionalRows.length === 0) {
@@ -540,6 +581,7 @@ export async function loadRangeContext(
         busy: usageByType.get(row.resource_type) ?? [],
       })),
       comboRules,
+      faixasDePreco,
     });
   }
 

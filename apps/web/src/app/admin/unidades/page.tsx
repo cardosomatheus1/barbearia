@@ -180,7 +180,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--erro painel__aviso" role="alert">
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {FALHA[erro] ?? FALHA['request_failed']}
         </div>
       ) : null}
@@ -216,7 +216,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
                     <span className="unidade-linha__nome">{unidade.nome}</span>
                     <button
                       className={`ui-button ${
-                        unidade.id === atual?.id ? 'ui-button--ghost' : 'ui-button--accent'
+                        unidade.id === atual?.id ? 'ui-button--ghost' : 'ui-button--primary'
                       }`}
                       disabled={unidade.id === atual?.id}
                       type="submit"

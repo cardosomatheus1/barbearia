@@ -132,6 +132,115 @@ describeIfDb('reserva', () => {
     expect(await slotsFor(GLEIDSON)).toContain('09:00');
   });
 
+  // -- preço por faixa de horário (bloco 68, SPEC §4.20) ---------------------
+
+  /** Liga a variação e cadastra uma faixa na terça de manhã. */
+  const comFaixa = (deltaBps: number, tetoBps = 1500) =>
+    exec(admin, `
+      UPDATE tenants SET max_price_variation_bps = ${tetoBps} WHERE id = '${TENANT}';
+      UPDATE locations SET dynamic_pricing_enabled = true WHERE id = '${LOCATION}';
+      INSERT INTO pricing_rules
+        (tenant_id, location_id, weekday, start_minute, end_minute, delta_bps)
+      VALUES ('${TENANT}', '${LOCATION}', 2, 540, 720, ${deltaBps});
+    `);
+
+  it('a faixa cadastrada muda o preço que a grade mostra', async () => {
+    // A grade pública e a gravação passam pelo **mesmo** motor: uma segunda
+    // noção de preço é o cliente vendo um valor na tela e outro ao pagar.
+    await comFaixa(-1000);
+    const grade = await getAvailability({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      serviceIds: [CABELO],
+      date: TERCA,
+      professionalId: RUAN,
+      now: AGORA,
+    });
+    expect(grade.slots.find((s) => s.start === '09:00')?.price).toBe(4410);
+  });
+
+  it('com o interruptor desligado, a faixa cadastrada não vale', async () => {
+    /**
+     * *"Nunca alterar preço automaticamente sem autorização configurada
+     * explicitamente."* A faixa fica cadastrada e inerte — que é o estado certo
+     * para quem está montando a política e ainda não decidiu.
+     */
+    await comFaixa(-1000);
+    await exec(admin, `UPDATE locations SET dynamic_pricing_enabled = false WHERE id = '${LOCATION}'`);
+
+    const appointment = await createAppointment(base);
+    expect(appointment.priceCents).toBe(4900);
+  });
+
+  it('o preço da faixa é o que fica congelado no agendamento', async () => {
+    /**
+     * *"Preço mostrado ao cliente é travado no momento da reserva. Mudança de
+     * regra não altera agendamento já feito."* Apagar a faixa depois não pode
+     * mexer no que já foi marcado.
+     */
+    await comFaixa(-1000);
+    const appointment = await createAppointment(base);
+    expect(appointment.priceCents).toBe(4410);
+
+    await exec(admin, `DELETE FROM pricing_rules WHERE location_id = '${LOCATION}'`);
+    const gravado = await admin.$queryRawUnsafe<{ price_cents: number }[]>(
+      `SELECT price_cents FROM appointments WHERE id = '${appointment.id}'`,
+    );
+    expect(gravado[0]?.price_cents).toBe(4410);
+  });
+
+  it('o desconto desce até o item, senão a comanda cobra o preço de tabela', async () => {
+    /**
+     * A comanda nasce de `appointment_services`. Um ajuste que ficasse só no
+     * total do agendamento apareceria na tela e sumiria na hora de pagar — e a
+     * soma dos itens tem que ser o total, ao centavo.
+     */
+    await comFaixa(-1000);
+    const appointment = await createAppointment({ ...base, serviceIds: [CABELO, BARBA] });
+
+    const itens = await admin.$queryRawUnsafe<{ price_cents: number }[]>(
+      `SELECT price_cents FROM appointment_services
+        WHERE appointment_id = '${appointment.id}' ORDER BY position`,
+    );
+    const soma = itens.reduce((total, i) => total + Number(i.price_cents), 0);
+    expect(soma).toBe(appointment.priceCents);
+    expect(soma).toBeLessThan(4900 + 3500);
+  });
+
+  it('assinante não paga o acréscimo, e o preço dele é o congelado', async () => {
+    /**
+     * *"Assinante **nunca** paga surge pricing; é benefício do clube."* A grade
+     * pública é anônima e mostra o preço cheio; quem grava sabe o cliente, e é o
+     * preço dele que fica.
+     */
+    await comFaixa(1000);
+    await exec(admin, `
+      INSERT INTO club_plans (id, tenant_id, name, price_cents)
+      VALUES ('68f00000-0000-0000-0000-000000000001', '${TENANT}', 'Premium', 9900);
+      INSERT INTO club_subscriptions (tenant_id, customer_id, plan_id, price_cents, status, started_at)
+      VALUES ('${TENANT}', '${CARLOS}', '68f00000-0000-0000-0000-000000000001', 9900, 'ativa',
+              '2026-07-01T00:00:00Z');
+    `);
+
+    const doAssinante = await createAppointment(base);
+    expect(doAssinante.priceCents).toBe(4900);
+
+    const deQuemNaoAssina = await createAppointment({
+      ...base,
+      customerId: JOAO,
+      start: '10:00',
+    });
+    expect(deQuemNaoAssina.priceCents).toBe(5390);
+  });
+
+  it('o teto da marca apara a faixa exagerada', async () => {
+    // Uma faixa de −40% com teto de 15% desconta 15%. Recusar faria a barbearia
+    // salvar sem erro e não entender por que nada mudou.
+    await comFaixa(-4000);
+    const appointment = await createAppointment(base);
+    expect(appointment.priceCents).toBe(4165);
+  });
+
   it('grava os serviços da visita', async () => {
     const appointment = await createAppointment({ ...base, serviceIds: [CABELO, BARBA] });
 

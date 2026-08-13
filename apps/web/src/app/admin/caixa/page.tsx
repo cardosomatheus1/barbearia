@@ -322,7 +322,7 @@ export default async function CaixaPage({ searchParams }: Props) {
 
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="notes">
-                  Observação <span className="ui-field__opcional">(opcional)</span>
+                  Observação <span className="ui-field__hint">(opcional)</span>
                 </label>
                 <input
                   className="ui-field__input"

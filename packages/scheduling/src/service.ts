@@ -5,6 +5,7 @@ import {
   cutoffMinuteFor,
   localToInstant,
   parseHHMM,
+  precoDoHorario,
   resolveWorkingDay,
   type AssignmentStrategy,
   type Service,
@@ -32,6 +33,16 @@ export interface AvailabilityRequest {
   readonly preferredProfessionalId?: string;
   /** Injetável para teste; default é o relógio real. */
   readonly now?: Date;
+  /**
+   * Se quem está vendo esta grade assina o clube (bloco 68, SPEC §4.20).
+   *
+   * *"Assinante **nunca** paga surge pricing."* Ausente é `false`, e é o certo
+   * para a página pública: quem não entrou não é ninguém ainda, e mostrar o
+   * preço cheio para depois cobrar menos é a direção segura do erro. Quem grava
+   * é `resolveSlot`, que já sabe o cliente e refaz a conta com o valor de
+   * verdade — e é o preço dele que fica congelado.
+   */
+  readonly assinante?: boolean;
   /**
    * Grade do balcão: desliga a antecedência mínima e a janela máxima.
    *
@@ -132,6 +143,7 @@ export function computeFromContext(
     | 'preferredProfessionalId'
     | 'now'
     | 'atCounter'
+    | 'assinante'
   >,
 ): AvailabilityResponse {
   const { location } = context;
@@ -212,7 +224,28 @@ export function computeFromContext(
     else if (result.unavailableReason) reasons.push(result.unavailableReason);
   }
 
-  let slots = allSlots.sort(
+  /**
+   * O preço da faixa entra **aqui**, e por isso ele vale nos dois caminhos.
+   *
+   * Esta função serve a grade pública e o `resolveSlot` que grava: aplicar o
+   * ajuste depois, em cada chamador, seria a segunda noção de preço que a SPEC
+   * §3.5 proíbe — e o cliente veria um valor na tela e outro na hora de pagar.
+   * Com o interruptor desligado a lista de faixas é vazia e isto é identidade.
+   */
+  const comPreco = allSlots.map((slot) => {
+    if (context.faixasDePreco.length === 0 || slot.price === undefined) return slot;
+    const { precoCents } = precoDoHorario({
+      precoBaseCents: slot.price,
+      faixas: context.faixasDePreco,
+      diaDaSemana: context.weekday,
+      minutoLocal: parseHHMM(slot.start),
+      assinante: request.assinante === true,
+      tetoBps: location.maxPriceVariationBps,
+    });
+    return { ...slot, price: precoCents };
+  });
+
+  let slots = comPreco.sort(
     (a, b) => a.start.localeCompare(b.start) || a.professionalId.localeCompare(b.professionalId),
   );
 

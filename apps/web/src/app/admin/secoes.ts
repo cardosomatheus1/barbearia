@@ -66,6 +66,7 @@ export const MODULOS = [
     nome: 'Cadastros',
     telas: [
       { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', nota: 'preço, duração e regras do serviço' },
+      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', nota: 'cobrar menos na hora vazia e mais na cheia' },
       { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', nota: 'combos pagos adiantado, como 5 cortes' },
       { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', nota: 'produtos, contagem e ficha de consumo' },
       { href: '/admin/clube', nome: 'Clube', secao: 'clube', nota: 'planos de assinatura e quem assina' },

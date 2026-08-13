@@ -48,6 +48,7 @@ import { SegmentoController } from './admin/segmento.controller.js';
 import { ChurnController } from './admin/churn.controller.js';
 import { MetricaController } from './admin/metrica.controller.js';
 import { InsightController } from './admin/insight.controller.js';
+import { PrecificacaoController } from './admin/precificacao.controller.js';
 import { MultiunidadeController } from './admin/multiunidade.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
@@ -123,6 +124,7 @@ import { TenantService } from './tenant/tenant.service.js';
     ChurnController,
     MetricaController,
     InsightController,
+    PrecificacaoController,
     MultiunidadeController,
     AvaliacaoController,
     EstoqueController,

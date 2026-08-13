@@ -14,6 +14,7 @@ import {
   localToInstant,
   minutesBetween,
   parseHHMM,
+  repartirPreco,
   type ChangeDecision,
   type ChangeRefusal,
   type DecisaoDeReembolso,
@@ -214,8 +215,25 @@ async function resolveSlot(
 
   if (!context) throw new BookingError('unknown_location', 'Unidade ou serviço não encontrado');
 
+  /**
+   * Quem assina o clube nunca paga acréscimo, e é **aqui** que isso é decidido.
+   *
+   * A grade pública é anônima e mostra o preço cheio; quem grava é esta função,
+   * que já sabe o cliente. É o preço dela que fica congelado em
+   * `appointments.price_cents` — *"preço mostrado ao cliente é travado no
+   * momento da reserva"* (SPEC §4.20).
+   *
+   * A leitura só acontece quando a unidade tem faixa cadastrada: sem faixa a
+   * resposta não muda nada, e este é o caminho mais chamado do produto.
+   */
+  const assinante =
+    context.faixasDePreco.length > 0 && request.customerId
+      ? await clienteAssina(tx, request.customerId)
+      : false;
+
   const availability = computeFromContext(context, {
     date: request.date,
+    assinante,
     ...(request.now ? { now: request.now } : {}),
     ...(request.atCounter ? { atCounter: true } : {}),
   });
@@ -235,12 +253,26 @@ async function resolveSlot(
   const professional = context.professionals.find((item) => item.id === request.professionalId);
 
   const durations = new Map<string, number>();
-  const prices = new Map<string, number>();
+  const base = new Map<string, number>();
   for (const service of context.services) {
     const override = professional?.overrides.get(service.id);
     durations.set(service.id, override?.durationMinutes ?? service.durationMinutes);
-    prices.set(service.id, override?.priceCents ?? service.priceCents);
+    base.set(service.id, override?.priceCents ?? service.priceCents);
   }
+
+  /**
+   * O ajuste da faixa desce até o item, não para no total do agendamento.
+   *
+   * A comanda nasce de `appointment_services` (bloco 18), então um desconto que
+   * ficasse só em `appointments.price_cents` apareceria na tela do cliente e
+   * sumiria na hora de pagar — e a comissão de cada serviço iria junto no erro.
+   * A soma das partes é o total, ao centavo.
+   */
+  const totalBase = [...base.values()].reduce((soma, v) => soma + v, 0);
+  const prices =
+    slot.price !== undefined && slot.price !== totalBase
+      ? repartirPreco(base, slot.price)
+      : base;
 
   const resources = new Map<string, number>();
   for (const service of context.services) {
@@ -263,6 +295,27 @@ async function resolveSlot(
     prices,
     resources: [...resources].map(([resourceType, quantity]) => ({ resourceType, quantity })),
   };
+}
+
+/**
+ * Esta pessoa assina o clube?
+ *
+ * Inadimplente conta junto de ativa, como no resto do produto: o cartão que
+ * falhou na terça costuma passar na quinta, e cobrar acréscimo de quem está em
+ * atraso é a punição que a SPEC §4.6 manda evitar. É o mesmo predicado do termo
+ * assinante do score (bloco 45) — e ele mora aqui pela mesma razão: `scheduling`
+ * não depende de `finance`, e perguntar "esta pessoa assina?" é ler uma tabela,
+ * não operar uma assinatura.
+ */
+async function clienteAssina(tx: TransactionClient, customerId: string): Promise<boolean> {
+  const linhas = await tx.$queryRaw<{ assina: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM club_subscriptions s
+       WHERE s.customer_id = ${customerId}::uuid
+         AND s.status IN ('ativa', 'inadimplente')
+    ) AS assina
+  `;
+  return linhas[0]?.assina === true;
 }
 
 /** O fuso da unidade, para converter a janela ocupada em dia e minutos locais. */

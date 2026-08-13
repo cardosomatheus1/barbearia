@@ -868,6 +868,52 @@ export const responderRecadoNaApi = (token: string, id: string, resposta: string
 export const encerrarRecadoNaApi = (token: string, id: string) =>
   chamar<{ encerrado: boolean }>('POST', `/v1/admin/recados/${id}/encerrar`, {}, token);
 
+// -- Preço por faixa de horário (bloco 68) -----------------------------------
+
+export interface FaixaNaTela {
+  id: string;
+  diaDaSemana: number;
+  inicioMinuto: number;
+  fimMinuto: number;
+  deltaBps: number;
+}
+
+export interface PrecificacaoNaTela {
+  ligado: boolean;
+  tetoBps: number;
+  faixas: FaixaNaTela[];
+}
+
+export interface RecomendacaoNaTela {
+  diaDaSemana: number;
+  hora: number;
+  ocupacaoBps: number;
+  deltaBps: number;
+  ganhoMensalCents: number;
+}
+
+export const precificacaoDaCasa = (token: string) =>
+  chamar<PrecificacaoNaTela>('GET', '/v1/admin/precificacao', undefined, token);
+
+export const recomendacoesDePreco = (token: string) =>
+  chamar<{ recomendacoes: RecomendacaoNaTela[] }>(
+    'GET',
+    '/v1/admin/precificacao/recomendacoes',
+    undefined,
+    token,
+  );
+
+export const ligarPrecoPorFaixaNaApi = (token: string, ligado: boolean) =>
+  chamar<PrecificacaoNaTela>('PUT', '/v1/admin/precificacao/ligado', { ligado }, token);
+
+export const criarFaixaNaApi = (
+  token: string,
+  faixa: { diaDaSemana: number; inicioMinuto: number; fimMinuto: number; deltaBps: number },
+) => chamar<PrecificacaoNaTela>('POST', '/v1/admin/precificacao/faixas', faixa, token);
+
+export const apagarFaixaNaApi = (token: string, id: string) =>
+  chamar<PrecificacaoNaTela>('DELETE', `/v1/admin/precificacao/faixas/${id}`, undefined, token);
+
 // -- Insights proativos (bloco 67) -------------------------------------------
 
 export interface InsightNaTela {

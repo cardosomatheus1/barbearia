@@ -396,7 +396,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
 
               <label className="ui-field">
                 <span className="ui-field__label">
-                  Quer contar alguma coisa? <span className="ui-field__opcional">(opcional)</span>
+                  Quer contar alguma coisa? <span className="ui-field__hint">(opcional)</span>
                 </span>
                 <textarea
                   className="ui-field__input"
