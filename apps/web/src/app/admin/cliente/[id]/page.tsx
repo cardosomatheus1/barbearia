@@ -367,9 +367,36 @@ function Fidelidade({
           </p>
         ) : null}
 
+        {/*
+          Quanto do saldo vale fora desta loja (bloco 59).
+
+          Só aparece quando os dois números diferem: numa barbearia de uma
+          unidade só — e em toda que mantém o programa na rede — eles são iguais,
+          e repetir o mesmo número com outro rótulo é a tela dizendo duas coisas
+          para não dizer nenhuma.
+
+          É o número que a recepção precisa para responder "posso usar isso na
+          Pituba?" sem abrir outra tela.
+        */}
+        {saldo.saldoCompartilhado !== saldo.saldo ? (
+          <p className="saldo-fidelidade__nota">
+            {saldoPorExtenso(saldo.modo, saldo.saldoCompartilhado)} valem em qualquer unidade; o
+            resto só nesta.
+          </p>
+        ) : null}
+
         {podeAjustar ? (
           <form action={acaoAjustarFidelidade} className="saldo-fidelidade__ajuste">
             <input name="customerId" type="hidden" value={customerId} />
+            {/* O bolso que o ajuste toca (bloco 59). Quem cria saldo precisa
+                saber onde ele vai valer — é dinheiro gastável no balcão da
+                operação seguinte. */}
+            {saldo.escopo === 'unidade' ? (
+              <p className="ui-field__hint">
+                O ajuste entra no saldo <strong>desta unidade</strong>. Tirar sai primeiro do que
+                vale em toda parte.
+              </p>
+            ) : null}
             <label className="fidelidade__campo">
               <span>Ajustar (use sinal negativo para tirar)</span>
               <input

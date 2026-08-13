@@ -111,12 +111,17 @@ export class FidelidadeController {
     @Body(new ZodValidationPipe(ajusteDeSaldoSchema))
     body: { quantidade: number; motivo: string },
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       return await ajustarSaldo({
         tenantId: staff.tenantId,
         customerId: id,
         quantidade: body.quantidade,
         motivo: body.motivo,
+        // A unidade do balcão decide de qual bolso o ajuste sai (bloco 59). Ela
+        // vem da sessão, nunca do corpo: quem ajusta saldo está criando valor
+        // gastável, e escolher o bolso pelo pedido seria escolher de onde tirar.
+        locationId: local.id,
         ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (erro) {

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 58 de 80 blocos.**
+**Status: 59 de 80 blocos.**
 
 ---
 
@@ -296,7 +296,7 @@ igual — o produto não oferece apagar reclamação.
 | 56 | Marketing automation: motor de eventos, teto de mensagens, janela de silêncio | ✅ |
 | 57 | Campanhas: filtros, canais, receita atribuída | ✅ |
 | 58 | Multiunidade: seleção, consolidação, transferência de estoque | ✅ |
-| 59 | Multiunidade: cliente e fidelidade compartilhados |
+| 59 | Multiunidade: cliente e fidelidade compartilhados | ✅ |
 
 ---
 
