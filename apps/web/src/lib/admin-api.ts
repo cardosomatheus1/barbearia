@@ -1514,6 +1514,11 @@ export interface FichaDoCliente {
   linhaDoTempo: VisitaNaFicha[];
   visitas: number;
   desde: string | null;
+  /** O segmento e o ritmo (bloco 61). Sem nenhum valor em reais — ver a rota. */
+  segmento: string;
+  explicacaoDoSegmento: string;
+  cicloDias: number | null;
+  diasSemVir: number | null;
 }
 
 export const fichaDoCliente = (token: string, customerId: string) =>
@@ -3208,3 +3213,24 @@ export const recusasOnlineNaApi = (token: string) =>
     undefined,
     token,
   );
+
+// -- Segmentação da base (bloco 61) -------------------------------------------
+
+export interface SegmentoNaTela {
+  readonly chave: string;
+  readonly rotulo: string;
+  readonly quantos: number;
+}
+
+export interface ClienteEmRiscoNaTela {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly cicloDias: number;
+  readonly diasSemVir: number;
+}
+
+export const segmentosNaApi = (token: string) =>
+  chamar<{
+    segmentos: readonly SegmentoNaTela[];
+    emRisco: readonly ClienteEmRiscoNaTela[];
+  }>('GET', '/v1/admin/segments', undefined, token);

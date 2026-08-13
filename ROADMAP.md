@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 60 de 80 blocos.**
+**Status: 61 de 80 blocos.**
 
 ---
 
@@ -308,7 +308,7 @@ Depende de histórico acumulado. Não antecipar.
 | # | Bloco |
 |---|---|
 | 60 | Reliability score + sinal condicional | ✅ |
-| 61 | Ciclo individual de retorno + segmentação automática |
+| 61 | Ciclo individual de retorno + segmentação automática | ✅ |
 | 62 | Churn score com explicação |
 | 63 | Schema semântico de métricas (base do assistente) |
 | 64 | Assistente do gestor: text-to-query |

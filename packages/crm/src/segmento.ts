@@ -157,6 +157,73 @@ export async function segmentoDe(
   return todos.find((c) => c.customerId === customerId) ?? null;
 }
 
+/**
+ * A leitura da tela do dono: a contagem por segmento e quem está em risco.
+ *
+ * A lista nominal vem junto porque a contagem sozinha é um relatório, e o que a
+ * SPEC §4.4 pede é ação — "vinte e três em risco" sem os nomes obriga a pessoa a
+ * abrir a base e procurar um por um. Ela é curta de propósito: quem precisa
+ * falar com todos usa a campanha, que é o caminho desenhado para isso.
+ *
+ * **Sem nenhum valor em reais.** O segmento é derivado de gasto entre outras
+ * coisas, e o total gasto é `finance.view` — devolvê-lo aqui seria o
+ * faturamento por cliente saindo de uma rota chamada "segmentos".
+ */
+export interface ClienteEmRisco {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly cicloDias: number;
+  readonly diasSemVir: number;
+}
+
+export interface SegmentosNaTela {
+  readonly contagem: Readonly<Record<Segmento, number>>;
+  readonly emRisco: readonly ClienteEmRisco[];
+}
+
+/** Quantos nomes a tela mostra antes de mandar para a campanha. */
+const EM_RISCO_NA_TELA = 12;
+
+export async function segmentosNaTela(
+  tenantId: string,
+  agora: Date = new Date(),
+): Promise<SegmentosNaTela> {
+  return withTenant(tenantId, async (tx) => {
+    const todos = await segmentosDaBase(tenantId, agora, tx);
+
+    /**
+     * Os nomes numa consulta só, e apenas dos que a tela mostra.
+     *
+     * Um `SELECT` por cliente em risco seria o N+1 sobre um conjunto que cresce
+     * com a base — e é justamente a barbearia com mais gente em risco que mais
+     * precisa desta tela abrir.
+     */
+    const candidatos = todos
+      .filter((c) => c.segmento === 'em_risco')
+      .sort((a, b) => (b.diasSemVir ?? 0) - (a.diasSemVir ?? 0))
+      .slice(0, EM_RISCO_NA_TELA);
+
+    const nomes =
+      candidatos.length === 0
+        ? []
+        : await tx.$queryRaw<{ id: string; name: string }[]>`
+            SELECT id, name FROM customers
+             WHERE id = ANY(${candidatos.map((c) => c.customerId)}::uuid[])
+          `;
+    const porId = new Map(nomes.map((n) => [n.id, n.name]));
+
+    return {
+      contagem: contarPorSegmento(todos),
+      emRisco: candidatos.map((c) => ({
+        customerId: c.customerId,
+        nome: porId.get(c.customerId) ?? '—',
+        cicloDias: c.ciclo?.medianaDias ?? 0,
+        diasSemVir: c.diasSemVir ?? 0,
+      })),
+    };
+  });
+}
+
 /** Quantos clientes em cada segmento, para a tela do dono. */
 export function contarPorSegmento(
   clientes: readonly ClienteSegmentado[],

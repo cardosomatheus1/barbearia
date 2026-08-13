@@ -42,6 +42,7 @@ import { FiscalController } from './admin/fiscal.controller.js';
 import { WhatsAppController } from './admin/whatsapp.controller.js';
 import { AutomacaoController } from './admin/automacao.controller.js';
 import { CampanhaController } from './admin/campanha.controller.js';
+import { SegmentoController } from './admin/segmento.controller.js';
 import { MultiunidadeController } from './admin/multiunidade.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
@@ -110,6 +111,7 @@ import { TenantService } from './tenant/tenant.service.js';
     WhatsAppController,
     AutomacaoController,
     CampanhaController,
+    SegmentoController,
     MultiunidadeController,
     AvaliacaoController,
     EstoqueController,

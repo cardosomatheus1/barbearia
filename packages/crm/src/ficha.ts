@@ -1,10 +1,13 @@
 import { withTenant } from '@barbearia/db';
 import {
   ehConversa,
+  EXPLICACAO_DO_SEGMENTO,
   PREFERENCIAS_VAZIAS,
   type Conversa,
   type Preferencias,
+  type Segmento,
 } from '@barbearia/core';
+import { segmentosDaBase } from './segmento.js';
 
 /**
  * A ficha do cliente — SPEC Parte 4 §4.1 e §4.3.
@@ -61,6 +64,22 @@ export interface Ficha {
   /** Quantas vezes já veio de fato. É o número que muda como se trata alguém. */
   readonly visitas: number;
   readonly desde: string | null;
+  /**
+   * O segmento e o ritmo (bloco 61, SPEC §4.4) — **sem nenhum valor em reais**.
+   *
+   * O segmento em si é derivado de gasto entre outras coisas, mas o que sai daqui
+   * é o rótulo, o ciclo em dias e há quantos dias a pessoa não vem.
+   *
+   * O **total acumulado** fica de fora de propósito. A linha do tempo já traz o
+   * preço de cada visita, que é o que o barbeiro precisa para conversar sobre o
+   * corte; o acumulado é outra coisa — é o LTV, o número sobre o qual o decil de
+   * VIP é construído, e ele é `finance.view`. Um campo de cada vez é como a rota
+   * da nota fiscal virou o caminho curto para o CPF de toda a base no bloco 54.
+   */
+  readonly segmento: Segmento;
+  readonly explicacaoDoSegmento: string;
+  readonly cicloDias: number | null;
+  readonly diasSemVir: number | null;
 }
 
 interface LinhaDaFicha {
@@ -89,7 +108,11 @@ interface LinhaDaFicha {
  */
 const VISITAS_NA_TELA = 10;
 
-export async function lerFicha(tenantId: string, customerId: string): Promise<Ficha> {
+export async function lerFicha(
+  tenantId: string,
+  customerId: string,
+  agora: Date = new Date(),
+): Promise<Ficha> {
   return withTenant(tenantId, async (tx) => {
     // Uma consulta para a ficha e uma para a linha do tempo. Duas, não uma por
     // visita: a tela abre com o cliente sentado na cadeira.
@@ -144,6 +167,20 @@ export async function lerFicha(tenantId: string, customerId: string): Promise<Fi
        LIMIT ${VISITAS_NA_TELA}
     `;
 
+    /**
+     * O segmento vem da base inteira, e é por isso que ele custa uma consulta a
+     * mais em vez de sair da linha acima.
+     *
+     * "Frequente" é ciclo abaixo da mediana da base e "VIP" é o topo do decil de
+     * gasto: não existe versão barata que responda por uma pessoa. Calcular aqui
+     * só os quatro segmentos que cabem no histórico individual seria mais rápido
+     * e faria esta tela discordar da contagem do dono sobre a mesma pessoa —
+     * duas telas mostrando o mesmo fato precisam concordar (§6, pergunta 6).
+     */
+    const naBase = (await segmentosDaBase(tenantId, agora, tx)).find(
+      (c) => c.customerId === customerId,
+    );
+
     return {
       customerId,
       nome: linha.name,
@@ -171,6 +208,15 @@ export async function lerFicha(tenantId: string, customerId: string): Promise<Fi
       })),
       visitas: Number(linha.visitas),
       desde: linha.desde?.toISOString() ?? null,
+      /**
+       * Cliente anonimizado sai da base — e a ficha dele continua abrindo, para
+       * a tela poder dizer que o cadastro foi apagado. `novo` é o rótulo honesto
+       * de quem não tem mais histórico legível.
+       */
+      segmento: naBase?.segmento ?? 'novo',
+      explicacaoDoSegmento: EXPLICACAO_DO_SEGMENTO[naBase?.segmento ?? 'novo'],
+      cicloDias: naBase?.ciclo?.medianaDias ?? null,
+      diasSemVir: naBase?.diasSemVir ?? null,
     };
   });
 }

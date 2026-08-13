@@ -128,6 +128,47 @@ describe('o vocabulário mora em um lugar só', () => {
     expect(dia).toContain("podeNaTela(estado, 'cashier.open')");
   });
 
+  it('nenhuma tela escreve o próprio nome dos públicos de campanha', () => {
+    /**
+     * O segundo mapa paralelo que este repositório encontrou, depois de
+     * `secoes.ts`.
+     *
+     * A tela de campanhas tinha os quatro públicos do bloco 57 escritos à mão.
+     * O bloco 61 acrescentou três na borda da API, e sem mover o mapa para o
+     * domínio a tela teria continuado oferecendo quatro com a API aceitando
+     * sete — sem nada ficar vermelho, porque a tela sozinha continuava coerente.
+     *
+     * O que se proíbe é **definir o mapa**, como acima: uma tela escrevendo
+     * `celula_fria: 'alguma coisa'`. Usar a palavra em prosa é português
+     * legítimo.
+     */
+    const chaves = ['inativos:', 'aniversariantes:', 'celula_fria:', 'em_risco:'];
+    const reincidentes: string[] = [];
+    for (const arquivo of arquivos) {
+      const conteudo = semComentarios(readFileSync(arquivo, 'utf8'));
+      for (const chave of chaves) {
+        const achado = new RegExp(`${chave}\\s*'([^']+)'`).exec(conteudo);
+        // Valor em minúscula sem espaço é nome de classe CSS, não texto de tela.
+        if (achado?.[1] && !/^[a-z][a-z0-9-]*$/.test(achado[1])) {
+          reincidentes.push(`${arquivo.replace(RAIZ, '')}: ${chave} '${achado[1]}'`);
+        }
+      }
+    }
+    expect(reincidentes).toEqual([]);
+  });
+
+  it('a tela de campanhas oferece todos os públicos que a API aceita', () => {
+    /**
+     * Derivado do domínio, nunca de uma lista escrita ao lado — é a mesma razão
+     * de as seções acenderem a partir de `secoes.ts`. A tela monta as opções
+     * percorrendo `FILTROS_DE_CAMPANHA`, então acrescentar um público no domínio
+     * o faz aparecer sozinho.
+     */
+    const tela = semComentarios(readFileSync(join(RAIZ, 'campanhas/page.tsx'), 'utf8'));
+    expect(tela).toContain('FILTROS_DE_CAMPANHA.map');
+    expect(tela).toContain('ROTULO_DO_FILTRO');
+  });
+
   it('o mapa que as telas usam é o do domínio, e está completo', () => {
     // Um mapa parcial devolveria `undefined` no botão de um estado raro — e o
     // caminho raro é justamente o que ninguém exercita antes de produção.

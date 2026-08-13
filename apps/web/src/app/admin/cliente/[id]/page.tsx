@@ -9,7 +9,9 @@ import {
   ESTADO_TRATADA,
   ROTULO_DA_ASSINATURA,
   ROTULO_DO_PACOTE,
+  ROTULO_DO_SEGMENTO,
   saldoPorExtenso,
+  type Segmento,
 } from '@barbearia/core';
 import {
   confiancaDoCliente,
@@ -1152,6 +1154,24 @@ export default async function FichaPage({ params, searchParams }: Props) {
           : `${ficha.dados.visitas} ${ficha.dados.visitas === 1 ? 'visita' : 'visitas'}`}
         {ficha.dados.desde ? ` · cliente desde ${dia(ficha.dados.desde)}` : ''}
         {ficha.dados.telefoneFinal ? ` · final ${ficha.dados.telefoneFinal}` : ''}
+      </p>
+
+      {/* O segmento e o ritmo (bloco 61, SPEC §4.4). O rótulo sozinho é uma
+          acusação sem critério: "Em risco" precisa vir com o porquê, senão a
+          recepção não consegue responder ao cliente que perguntar. */}
+      <p className="ritmo">
+        <span className={`ritmo__selo ritmo__selo--${ficha.dados.segmento}`}>
+          {ROTULO_DO_SEGMENTO[ficha.dados.segmento as Segmento] ?? ficha.dados.segmento}
+        </span>
+        <span className="ritmo__texto">
+          {ficha.dados.explicacaoDoSegmento}
+          {ficha.dados.cicloDias !== null
+            ? ` Costuma voltar a cada ${ficha.dados.cicloDias} dias`
+            : ''}
+          {ficha.dados.cicloDias !== null && ficha.dados.diasSemVir !== null
+            ? `, e faz ${ficha.dados.diasSemVir} ${ficha.dados.diasSemVir === 1 ? 'dia' : 'dias'} que não vem.`
+            : ''}
+        </span>
       </p>
 
       {erro ? (

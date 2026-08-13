@@ -7037,3 +7037,96 @@ main { padding-bottom: var(--space-8); }
 .unidades-saldos td {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+   Segmento e ritmo do cliente (bloco 61, SPEC §4.4)
+
+   O selo é o único lugar do produto onde o rótulo vem colorido, e a cor é o
+   **último** recurso, nunca o primeiro: quem não distingue as cores continua
+   lendo a palavra ao lado, que diz a mesma coisa. Nenhum estado depende só dela.
+--------------------------------------------------------------------------- */
+
+.ritmo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+.ritmo__selo {
+  padding: 2px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.ritmo__texto {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.ritmo__selo--em_risco,
+.segmentos__item--em_risco .segmentos__quantos {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+.ritmo__selo--perdido,
+.segmentos__item--perdido .segmentos__quantos {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.ritmo__selo--vip,
+.segmentos__item--vip .segmentos__quantos {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* A base repartida. `auto-fit` e não uma contagem de colunas: sete grupos em
+   360px precisam caber em duas, e no notebook eles cabem em uma linha só. */
+.segmentos {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--space-2);
+}
+.segmentos__item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+}
+.segmentos__quantos {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.segmentos__rotulo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O cartão inteiro é o alvo, e por isso ele tem o piso de toque — não é link
+   dentro de frase, que a WCAG 2.5.8 isenta, e sim um destino sozinho na linha. */
+.item-cadastro--link {
+  display: grid;
+  gap: var(--space-1);
+  min-height: 44px;
+  align-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+.item-cadastro--link:hover {
+  background: var(--color-surface-hover);
+}
+.cartao-balcao__subtitulo {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+}

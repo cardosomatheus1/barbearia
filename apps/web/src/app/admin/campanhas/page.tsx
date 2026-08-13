@@ -12,8 +12,11 @@ import {
 } from '@barbearia/core';
 import {
   campanhasNaApi,
+  segmentosNaApi,
   type CampanhaNaTelaDoAdmin,
   type CelulaNaTelaDoAdmin,
+  type ClienteEmRiscoNaTela,
+  type SegmentoNaTela,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -139,6 +142,71 @@ function Heatmap({ grade }: { readonly grade: readonly CelulaNaTelaDoAdmin[] }) 
   );
 }
 
+/**
+ * A base repartida por segmento, com o público em risco nomeado (bloco 61).
+ *
+ * Mora nesta tela e não numa própria pelo motivo do heatmap: *"a célula fria é
+ * clicável e vira campanha — não é relatório, é ponto de partida de ação"*. Uma
+ * contagem numa tela e o formulário em outra deixariam a pessoa com o número na
+ * cabeça e sem o que fazer com ele.
+ *
+ * Os nomes vêm junto porque "vinte e três em risco" sem eles obriga a abrir a
+ * base e procurar um por um. A lista é curta de propósito: quem precisa falar
+ * com todos usa a campanha, que é o botão ao lado.
+ */
+function Segmentos({
+  segmentos,
+  emRisco,
+}: {
+  readonly segmentos: readonly SegmentoNaTela[];
+  readonly emRisco: readonly ClienteEmRiscoNaTela[];
+}) {
+  return (
+    <section className="cartao-balcao">
+      <h2 className="cartao-balcao__titulo">Quem é a sua base hoje</h2>
+      <p className="cartao-balcao__texto">
+        Cada pessoa entra num grupo só, e o grupo é recalculado toda vez que esta tela abre — não
+        existe rótulo velho.
+      </p>
+
+      <ul className="segmentos">
+        {segmentos.map((s) => (
+          <li className={`segmentos__item segmentos__item--${s.chave}`} key={s.chave}>
+            <span className="segmentos__quantos">{s.quantos}</span>
+            <span className="segmentos__rotulo">{s.rotulo}</span>
+          </li>
+        ))}
+      </ul>
+
+      <h3 className="cartao-balcao__subtitulo">Passaram do ritmo e ainda não voltaram</h3>
+      {emRisco.length === 0 ? (
+        <p className="cartao-balcao__texto">
+          Ninguém está atrasado agora. Quando alguém passar do próprio ritmo, o nome aparece aqui.
+        </p>
+      ) : (
+        <>
+          <ul className="lista-cadastro">
+            {emRisco.map((c) => (
+              <li key={c.customerId}>
+                <a className="item-cadastro item-cadastro--link" href={`/admin/cliente/${c.customerId}`}>
+                  <span className="item-cadastro__nome">{c.nome}</span>
+                  <span className="item-cadastro__linha">
+                    Corta a cada {c.cicloDias} dias · faz {c.diasSemVir} que não vem
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="cartao-balcao__texto">
+            Para chamar todos de uma vez, escolha <strong>{ROTULO_DO_FILTRO['em_risco']}</strong> no
+            formulário abaixo.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Campanha({ campanha }: { readonly campanha: CampanhaNaTelaDoAdmin }) {
   return (
     <li>
@@ -176,7 +244,10 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const query = await searchParams;
   const podeMexer = podeNaTela(estado, 'marketing.send');
 
-  const resposta = podeMexer ? await campanhasNaApi(token) : null;
+  const [resposta, base] = await Promise.all([
+    podeMexer ? campanhasNaApi(token) : Promise.resolve(null),
+    podeNaTela(estado, 'customers.view') ? segmentosNaApi(token) : Promise.resolve(null),
+  ]);
   const campanhas = resposta?.ok ? resposta.dados.campanhas : [];
   const grade = resposta?.ok ? resposta.dados.grade : [];
 
@@ -230,6 +301,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
           <Heatmap grade={grade} />
         )}
       </section>
+
+      {base?.ok ? <Segmentos emRisco={base.dados.emRisco} segmentos={base.dados.segmentos} /> : null}
 
       {podeMexer ? (
         <section className="cartao-balcao">

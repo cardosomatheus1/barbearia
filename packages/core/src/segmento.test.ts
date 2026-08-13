@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   cicloDoCliente,
   corteDeVip,
+  FILTROS_DE_CAMPANHA,
   medianaDaBase,
+  NUMERO_DO_FILTRO,
+  ROTULO_DO_FILTRO,
   segmentoDoCliente,
+  SEGMENTO_DO_FILTRO,
+  SEGMENTOS,
   type CicloDoCliente,
 } from './segmento.js';
 
@@ -193,5 +198,43 @@ describe('as comparações contra a base', () => {
 
   it('a mediana da base sai de quem tem ciclo', () => {
     expect(medianaDaBase([10, 20, 30, 40, 50, 60, 70, 80, 90, 100])).toBe(55);
+  });
+});
+
+describe('o vocabulário dos públicos de campanha', () => {
+  it('todo público tem nome, e a resposta sobre o número é escrita', () => {
+    /**
+     * Os dois mapas são `Record` completos no tipo, mas o tipo não impede um
+     * valor vazio — e um rótulo vazio vira uma opção em branco no seletor, que
+     * é escolhível e não diz nada.
+     *
+     * `NUMERO_DO_FILTRO` aceita nulo de propósito: nulo é a resposta "este
+     * público não pede número", e é o que a opção mostra.
+     */
+    for (const filtro of FILTROS_DE_CAMPANHA) {
+      expect(ROTULO_DO_FILTRO[filtro], filtro).toBeTruthy();
+      expect(NUMERO_DO_FILTRO[filtro] ?? '—', filtro).toBeTruthy();
+    }
+  });
+
+  it('todo público de segmento aponta para um segmento que existe', () => {
+    // Um filtro apontando para um segmento inventado nunca casaria com ninguém:
+    // a campanha nasceria com público zero, sem erro e sem explicação.
+    for (const [filtro, segmento] of Object.entries(SEGMENTO_DO_FILTRO)) {
+      expect(SEGMENTOS, filtro).toContain(segmento);
+    }
+  });
+
+  it('os públicos que a casa não deve interromper ficam de fora', () => {
+    /**
+     * `novo`, `ativo`, `frequente` e `assinante` são estados em que não há nada
+     * a fazer. Mandar mensagem para quem está voltando sozinho é como se queima
+     * o número da barbearia, e um filtro para eles seria o caminho mais curto.
+     */
+    const oferecidos = Object.values(SEGMENTO_DO_FILTRO);
+    expect(oferecidos).not.toContain('ativo');
+    expect(oferecidos).not.toContain('frequente');
+    expect(oferecidos).not.toContain('assinante');
+    expect(oferecidos).not.toContain('novo');
   });
 });
