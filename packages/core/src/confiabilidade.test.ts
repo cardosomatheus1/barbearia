@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPARECIMENTOS_PARA_BONUS,
   MINIMO_DE_HISTORICO,
+  podeMarcarOnline,
   pontuacaoDeConfianca,
+  temPrioridadeNaEspera,
   type AgendamentoNoHistorico,
+  type Confiabilidade,
   type DesfechoDoAgendamento,
 } from './confiabilidade.js';
 import { LIMIAR_PADRAO_DE_SINAL, SCORE_QUE_DISPENSA_SINAL } from './sinal.js';
@@ -262,5 +265,108 @@ describe('o score é determinístico', () => {
     // de virar crédito acumulado — dez comparecimentos não compram nada além do
     // topo da escala.
     expect(pontuacaoDeConfianca(varios(12, 'compareceu'), AGORA).score).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O que o score decide (bloco 60, SPEC §2.13 "Uso")
+// ---------------------------------------------------------------------------
+
+describe('recusar marcação online em hora cheia', () => {
+  const comScore = (score: number, temEfeito = true): Confiabilidade => ({
+    score,
+    temEfeito,
+    total: temEfeito ? 10 : 1,
+    comparecimentos: 0,
+    faltas: 0,
+    cancelamentosTardios: 0,
+    cancelamentosAntecipados: 0,
+    atrasos: 0,
+  });
+
+  const pedido = (extra: Partial<Parameters<typeof podeMarcarOnline>[0]> = {}) =>
+    podeMarcarOnline({
+      confianca: comScore(20),
+      limiar: 40,
+      ehHorarioDePico: true,
+      peloBalcao: false,
+      ...extra,
+    });
+
+  it('quem falta muito não marca sozinho na hora cheia', () => {
+    expect(pedido()).toEqual({ pode: false, recusa: 'score_no_pico' });
+  });
+
+  it('a regra nasce desligada, e desligada não recusa ninguém', () => {
+    // Recusar um cliente é a coisa mais cara que este produto faz. Ligada por
+    // padrão, a barbearia descobriria a regra pelo cliente que ligou reclamando.
+    expect(pedido({ limiar: null }).pode).toBe(true);
+  });
+
+  it('fora do pico a mesma pessoa marca normalmente', () => {
+    // Fora da hora cheia a falta custa uma cadeira que estaria parada de
+    // qualquer forma, e a SPEC separa as duas de propósito.
+    expect(pedido({ ehHorarioDePico: false }).pode).toBe(true);
+  });
+
+  it('o balcão marca para quem quiser — a regra é de canal, não de atendimento', () => {
+    // "só recepção" é o que a SPEC escreve. A leitura contrária transformaria
+    // uma restrição de canal numa proibição de atender a pessoa.
+    expect(pedido({ peloBalcao: true }).pode).toBe(true);
+  });
+
+  it('cliente novo não é recusado nem depois de duas faltas seguidas', () => {
+    /**
+     * Regra de justiça 1 e 4 da SPEC §2.13 juntas: menos de três agendamentos
+     * não tem efeito, e o score é 100 por presunção. A confiabilidade vem do
+     * domínio e não de um objeto montado à mão — construído à mão, o teste
+     * passaria por causa do 100 e não por causa da guarda, e continuaria verde
+     * com a guarda removida.
+     */
+    const duasFaltas = pontuacaoDeConfianca(
+      [
+        { desfecho: 'faltou', quando: new Date('2026-10-01T10:00:00Z'), atrasoMinutos: null },
+        { desfecho: 'faltou', quando: new Date('2026-10-08T10:00:00Z'), atrasoMinutos: null },
+      ],
+      new Date('2026-11-01T10:00:00Z'),
+    );
+    /**
+     * A invariante é o que protege o novato, e por isso ela é o que se afirma:
+     * uma guarda de `temEfeito` dentro de `podeMarcarOnline` nunca dispararia —
+     * seria termo que não varia, o defeito que o quarto termo do sinal teve por
+     * sete blocos.
+     */
+    expect(duasFaltas.temEfeito).toBe(false);
+    expect(duasFaltas.score).toBe(100);
+    expect(pedido({ confianca: duasFaltas, limiar: 100 }).pode).toBe(true);
+  });
+
+  it('exatamente no limiar passa — o corte é "abaixo de", não "até"', () => {
+    expect(pedido({ confianca: comScore(40) }).pode).toBe(true);
+    expect(pedido({ confianca: comScore(39) }).pode).toBe(false);
+  });
+});
+
+describe('prioridade na lista de espera', () => {
+  const comScore = (score: number, temEfeito = true): Confiabilidade => ({
+    score,
+    temEfeito,
+    total: temEfeito ? 10 : 1,
+    comparecimentos: 0,
+    faltas: 0,
+    cancelamentosTardios: 0,
+    cancelamentosAntecipados: 0,
+    atrasos: 0,
+  });
+
+  it('quem sempre aparece passa na frente entre iguais', () => {
+    expect(temPrioridadeNaEspera(comScore(90), 85)).toBe(true);
+    expect(temPrioridadeNaEspera(comScore(84), 85)).toBe(false);
+  });
+
+  it('cliente novo não recebe prioridade por um 100 que ainda não provou', () => {
+    // `temEfeito` protege o novato dos dois lados: não é punido pela falta de
+    // histórico, e também não é premiado por ela.
+    expect(temPrioridadeNaEspera(comScore(100, false), 85)).toBe(false);
   });
 });

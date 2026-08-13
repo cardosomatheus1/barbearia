@@ -225,3 +225,74 @@ export function pontuacaoDeConfianca(
     temEfeito: true,
   };
 }
+
+// ---------------------------------------------------------------------------
+// O que o score decide (bloco 60, SPEC §2.13 "Uso")
+// ---------------------------------------------------------------------------
+
+/**
+ * O número da SPEC para recusar marcação online em hora cheia.
+ *
+ * Sugestão da tela, nunca padrão gravado: a coluna nasce nula, e é isso que faz
+ * ligar a regra ser uma decisão de alguém em vez de um deploy.
+ */
+export const SCORE_SUGERIDO_PARA_BLOQUEIO = 40;
+
+export type RecusaDeMarcacaoOnline = 'score_no_pico';
+
+/**
+ * Esta pessoa pode marcar sozinha este horário?
+ *
+ * > *"score < 40 → sem agendamento online em horário de pico (só recepção)"*
+ *
+ * ## As quatro condições, e por que todas são necessárias
+ *
+ * **A regra precisa estar ligada.** Nula é desligada, e é o padrão: recusar um
+ * cliente é a coisa mais cara que este produto faz.
+ *
+ * O cliente novo está protegido **sem uma condição aqui**, e é de propósito:
+ * `pontuacaoDeConfianca` devolve 100 sempre que `temEfeito` é falso, e o limiar
+ * é no máximo 100 por `CHECK`. Uma checagem de `temEfeito` neste ponto seria um
+ * termo que nunca varia — o defeito que o quarto termo do sinal já teve por sete
+ * blocos. O que prende a regra é o teste da invariante, não uma segunda guarda.
+ *
+ * **A hora precisa ser de pico.** Fora dela a mesma falta custa uma cadeira que
+ * estaria parada de qualquer forma — e a SPEC separa as duas de propósito.
+ *
+ * **O caminho precisa ser online.** A recepção marca para quem quiser: a regra
+ * diz *"só recepção"*, e a leitura contrária transformaria uma restrição de
+ * canal numa proibição de atendimento.
+ */
+export function podeMarcarOnline(pedido: {
+  readonly confianca: Confiabilidade;
+  /** Nulo é desligado. */
+  readonly limiar: number | null;
+  readonly ehHorarioDePico: boolean;
+  readonly peloBalcao: boolean;
+}): { readonly pode: true } | { readonly pode: false; readonly recusa: RecusaDeMarcacaoOnline } {
+  if (pedido.peloBalcao) return { pode: true };
+  if (pedido.limiar === null) return { pode: true };
+  if (!pedido.ehHorarioDePico) return { pode: true };
+  if (pedido.confianca.score >= pedido.limiar) return { pode: true };
+  return { pode: false, recusa: 'score_no_pico' };
+}
+
+/**
+ * Esta pessoa passa na frente **entre iguais** na lista de espera?
+ *
+ * Não cria fila preferencial: quem tem score alto e não cabe na vaga continua
+ * não cabendo. Ordenar por confiabilidade antes de compatibilidade ofereceria a
+ * vaga a quem não pode usá-la, e a oferta viraria ligação inútil — o defeito que
+ * o `contains` do bloco 38 existe para fechar.
+ *
+ * `temEfeito` protege o cliente novo dos dois lados: ele não é punido pela falta
+ * de histórico, e também não recebe prioridade por um 100 que ainda não provou.
+ *
+ * O limiar entra por parâmetro e **não** tem padrão aqui. `sinal.ts` já define
+ * `SCORE_QUE_DISPENSA_SINAL` para a mesma fronteira da SPEC, e um segundo 85
+ * escrito neste arquivo seria a lista que envelhece em silêncio: alguém mexeria
+ * num e o outro continuaria dizendo outra coisa.
+ */
+export function temPrioridadeNaEspera(confianca: Confiabilidade, limiar: number): boolean {
+  return confianca.temEfeito && confianca.score >= limiar;
+}
