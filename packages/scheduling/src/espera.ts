@@ -5,11 +5,13 @@ import {
   formatHHMM,
   instantToLocal,
   podeEsperar,
+  temPrioridadeNaEspera,
   vagaServe,
   type PedidoDeEspera,
   type RecusaDeEspera,
   type VagaAberta,
 } from '@barbearia/core';
+import { confiancaDeVarios, limiaresDoScore } from './confianca.js';
 
 /**
  * A lista de espera, do banco para a decisão (bloco 38, SPEC §2.9).
@@ -428,13 +430,27 @@ export interface CandidatoDaVaga extends EntradaDeEspera {
  * índice parcial da migração 0041; o casamento fino é do domínio, que é onde a
  * regra pode ser lida e discutida.
  *
- * A ordem é a de entrada na fila, que é o décimo do score da SPEC §2.9 e a
- * única parte dele que este bloco tem. O resto — aderência, recorrência,
- * assinatura, confiabilidade — é o bloco 39, junto da janela exclusiva.
+ * ## A ordem: confiabilidade primeiro, chegada depois (bloco 60)
+ *
+ * > *"score ≥ 85 → prioridade na fila de espera"* — SPEC §2.13.
+ *
+ * E **só entre iguais**: quem não cabe na vaga continua não cabendo. Ordenar por
+ * confiabilidade antes do casamento ofereceria o horário a quem não pode usá-lo,
+ * e a oferta viraria ligação inútil — o defeito que o `contains` do bloco 38
+ * existe para fechar. Por isso o filtro vem antes da ordenação, sempre.
+ *
+ * Dentro do grupo dos que cabem, quem sempre aparece passa na frente. Empate
+ * volta a ser a ordem de chegada, que é o décimo do score da SPEC §2.9.
+ * Aderência, recorrência e assinatura continuam sendo dívida declarada.
  */
 export async function candidatosDaVaga(
   tx: TransactionClient,
-  params: { readonly locationId: string; readonly vaga: VagaAberta },
+  params: {
+    readonly locationId: string;
+    readonly vaga: VagaAberta;
+    /** O relógio, para a janela de doze meses do score. */
+    readonly agora?: Date;
+  },
 ): Promise<readonly CandidatoDaVaga[]> {
   const linhas = await tx.$queryRawUnsafe<
     (LinhaDaEspera & {
@@ -463,20 +479,47 @@ export async function candidatosDaVaga(
     params.vaga.dia,
   );
 
-  return linhas
-    .filter((linha) =>
-      vagaServe(
-        {
-          de: diaDe(linha.wanted_from),
-          ate: diaDe(linha.wanted_to),
-          janela: { start: linha.window_start_minute, end: linha.window_end_minute },
-          profissionalId: linha.professional_id,
-          duracaoMinutos: linha.duration_minutes,
-        },
-        params.vaga,
-      ),
-    )
+  /** O casamento fino vem **antes** da ordem: quem não cabe não é ordenado. */
+  const cabem = linhas.filter((linha) =>
+    vagaServe(
+      {
+        de: diaDe(linha.wanted_from),
+        ate: diaDe(linha.wanted_to),
+        janela: { start: linha.window_start_minute, end: linha.window_end_minute },
+        profissionalId: linha.professional_id,
+        duracaoMinutos: linha.duration_minutes,
+      },
+      params.vaga,
+    ),
+  );
+  if (cabem.length === 0) return [];
+
+  const agora = params.agora ?? new Date();
+  const limiar = (await limiaresDoScore(tx, params.locationId)).confiavelNaEspera;
+  const confiancas = await confiancaDeVarios(
+    tx,
+    cabem.map((l) => l.customer_id),
+    agora,
+  );
+
+  return cabem
     .map((linha) => ({
+      linha,
+      // Ausente é impossível: `confiancaDeVarios` devolve uma entrada por id
+      // pedido. O `??` existe porque o tipo não sabe disso, e um `!` para calar
+      // o compilador é o que este projeto não aceita.
+      prioritario: temPrioridadeNaEspera(
+        confiancas.get(linha.customer_id) ?? { score: 100, considerados: 0, temEfeito: false },
+        limiar,
+      ),
+    }))
+    .sort((a, b) => {
+      // Confiabilidade primeiro; empate volta a ser a ordem de chegada, que o
+      // `ORDER BY` do banco já garantiu — `sort` do JavaScript é estável.
+      if (a.prioritario !== b.prioritario) return a.prioritario ? -1 : 1;
+      return 0;
+    })
+    .map(({ linha }) => ({
       ...daLinha(linha),
       customerId: linha.customer_id,
       customerNome: linha.customer_name,
@@ -561,6 +604,8 @@ export async function fecharEsperasAtendidas(
 export async function quemQuerAVagaLiberada(
   tx: TransactionClient,
   appointmentId: string,
+  /** O relógio do cancelamento, para a janela de doze meses do score (bloco 60). */
+  agora?: Date,
 ): Promise<readonly CandidatoDaVaga[]> {
   const linhas = await tx.$queryRaw<
     {
@@ -587,6 +632,7 @@ export async function quemQuerAVagaLiberada(
       fim: linha.ends_at,
       professionalId: linha.professional_id,
     }),
+    ...(agora ? { agora } : {}),
   });
 }
 

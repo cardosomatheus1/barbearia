@@ -506,7 +506,7 @@ export async function applyAttendance(params: {
      */
     const encontrados =
       destino === 'cancelled_business'
-        ? await quemQuerAVagaLiberada(tx, params.appointmentId)
+        ? await quemQuerAVagaLiberada(tx, params.appointmentId, now)
         : [];
 
     /**

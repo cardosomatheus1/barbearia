@@ -401,3 +401,55 @@ export async function registrarRecusaOnline(params: {
     `;
   });
 }
+
+/**
+ * A confiabilidade de várias pessoas, **numa consulta** (bloco 60).
+ *
+ * A lista de espera pergunta isso de todo mundo que cabe na vaga, e uma ida ao
+ * banco por candidato seria o N+1 dentro da transação do cancelamento — o
+ * caminho em que a vaga precisa ser oferecida antes de outro cliente marcar
+ * pelo site. Vazio devolve mapa vazio sem consultar nada.
+ *
+ * O score continua saindo de `packages/core`: o SQL carrega o histórico, a conta
+ * é do domínio. Calculá-lo na consulta seria regra de negócio em SQL, onde o
+ * teste não alcança e a faixa de janela não cabe.
+ */
+export async function confiancaDeVarios(
+  tx: TransactionClient,
+  customerIds: readonly string[],
+  agora: Date,
+): Promise<ReadonlyMap<string, Confiabilidade>> {
+  const ids = [...new Set(customerIds)];
+  if (ids.length === 0) return new Map();
+
+  const desde = new Date(agora);
+  desde.setUTCMonth(desde.getUTCMonth() - MESES_DA_JANELA);
+
+  const linhas = await tx.$queryRaw<(LinhaDoHistorico & { customer_id: string })[]>`
+    SELECT a.customer_id, a.service_starts_at, a.status::text AS status,
+           a.cancelled_at, a.checked_in_at
+      FROM appointments a
+     WHERE a.customer_id = ANY(${ids}::uuid[])
+       AND a.service_starts_at >= ${desde}
+       AND a.service_starts_at <= ${agora}
+     ORDER BY a.service_starts_at DESC
+  `;
+
+  const porCliente = new Map<string, AgendamentoNoHistorico[]>();
+  for (const linha of linhas) {
+    const desfecho = desfechoDe(linha);
+    if (!desfecho) continue;
+    const lista = porCliente.get(linha.customer_id) ?? [];
+    lista.push({
+      comecariaEm: linha.service_starts_at,
+      desfecho,
+      atrasoMinutos: atrasoDe(linha),
+    });
+    porCliente.set(linha.customer_id, lista);
+  }
+
+  // Quem não tem nenhuma linha entra igual: a presunção de boa-fé vale para
+  // quem nunca veio, e deixá-lo fora do mapa faria o chamador ter que repetir
+  // a regra 1 da SPEC §2.13 por conta própria.
+  return new Map(ids.map((id) => [id, pontuacaoDeConfianca(porCliente.get(id) ?? [], agora)]));
+}

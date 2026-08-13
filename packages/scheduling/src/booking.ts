@@ -844,7 +844,7 @@ export async function cancelAppointment(
     }
 
     const sinal = await decidirDestinoDoSinal(tx, request.appointmentId, request.by, agora);
-    const esperando = await quemQuerAVagaLiberada(tx, request.appointmentId);
+    const esperando = await quemQuerAVagaLiberada(tx, request.appointmentId, agora);
 
     /**
      * A vaga vai à fila por prioridade (bloco 39).

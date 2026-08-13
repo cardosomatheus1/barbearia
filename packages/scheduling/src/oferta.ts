@@ -113,6 +113,9 @@ export async function oferecerVaga(
   const candidatos = await candidatosDaVaga(tx, {
     locationId: params.locationId,
     vaga,
+    // O relógio do chamador, para a janela de doze meses do score ser a mesma
+    // que o resto da transação enxerga.
+    agora: params.agora,
   });
   if (candidatos.length === 0) return null;
 

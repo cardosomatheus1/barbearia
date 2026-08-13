@@ -485,4 +485,96 @@ describeIfDb('lista de espera', () => {
     );
     expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(0);
   });
+
+  // -- a prioridade de quem sempre aparece (bloco 60, SPEC §2.13) --------------
+
+  /**
+   * O histórico que faz o score, semeado direto.
+   *
+   * Doze comparecimentos levam a 100; três faltas em quatro levam a 25. Os dois
+   * são construídos com o mesmo helper porque o que se quer provar é a **ordem**
+   * entre eles, e um histórico montado à mão de um lado só provaria metade.
+   */
+  async function historico(
+    customerId: string,
+    quantos: number,
+    status: 'completed' | 'no_show',
+    /**
+     * O deslocamento em horas, para dois clientes não ocuparem a mesma cadeira
+     * no mesmo instante.
+     *
+     * `appointments_no_overlap` recusa, e ela está certa: dois atendimentos
+     * sobrepostos na mesma cadeira não existem. Semente que ignora a constraint
+     * do produto é semente que testa outro produto.
+     */
+    deslocamentoHoras = 0,
+  ): Promise<void> {
+    await admin.$executeRawUnsafe(
+      `INSERT INTO appointments
+         (tenant_id, location_id, professional_id, customer_id, status,
+          starts_at, ends_at, service_starts_at, service_ends_at)
+       SELECT $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::appointment_status,
+              q, q + interval '30 minutes', q, q + interval '30 minutes'
+         FROM generate_series(1, $6::int) AS n,
+              LATERAL (
+                SELECT $7::timestamptz - (n || ' days')::interval
+                       + ($8 || ' hours')::interval AS q
+              ) AS d`,
+      TENANT,
+      LOCATION,
+      GLEIDSON,
+      customerId,
+      status,
+      quantos,
+      AGORA,
+      String(deslocamentoHoras),
+    );
+  }
+
+  it('entre os que cabem na vaga, quem sempre aparece é chamado primeiro', async () => {
+    /**
+     * BRUNO entra na fila **depois** de CARLOS e é chamado antes: doze
+     * comparecimentos contra três faltas em quatro. A ordem de chegada continua
+     * valendo — ela só deixou de ser a única coisa que decide.
+     */
+    await historico(CARLOS, 3, 'no_show');
+    await historico(BRUNO, 12, 'completed', 1);
+
+    await esperar({ customerId: CARLOS });
+    await esperar({ customerId: BRUNO });
+
+    const marcado = await marcar('09:00');
+    const desfecho = await cancelAppointment({
+      tenantId: TENANT,
+      appointmentId: marcado.id,
+      by: 'business',
+      now: AGORA,
+    });
+
+    expect(desfecho.esperando.map((e) => e.customerId)).toEqual([BRUNO, CARLOS]);
+  });
+
+  it('a prioridade não fura a compatibilidade: quem não cabe continua fora', async () => {
+    /**
+     * A regra é "entre iguais". Ordenar por confiabilidade antes do casamento
+     * ofereceria a vaga a quem não pode usá-la, e a oferta viraria ligação
+     * inútil — o defeito que o `contains` do bloco 38 existe para fechar.
+     */
+    await historico(BRUNO, 12, 'completed');
+    await historico(CARLOS, 12, 'completed', 1);
+
+    // BRUNO é impecável e só quer a tarde. CARLOS também é, e quer a manhã.
+    await esperar({ customerId: BRUNO, inicioMinuto: 14 * 60, fimMinuto: 18 * 60 });
+    await esperar({ customerId: CARLOS });
+
+    const marcado = await marcar('09:00');
+    const desfecho = await cancelAppointment({
+      tenantId: TENANT,
+      appointmentId: marcado.id,
+      by: 'business',
+      now: AGORA,
+    });
+
+    expect(desfecho.esperando.map((e) => e.customerId)).toEqual([CARLOS]);
+  });
 });
