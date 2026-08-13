@@ -871,6 +871,16 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Isenção numa varredura de permissão | é **conquistada**, nunca declarada. A do assistente é "o handler chama `validarPergunta`" — quem compuser métricas sem passar por ela continua reprovado. Uma isenção por nome de arquivo seria a lista que ninguém revisa |
 | Guarda que varre código-fonte | tira comentário antes de casar. A guarda de pureza do `core` reprovava a **frase que explica a regra**, porque ela cita ``new Date()`` — e guarda que proíbe documentar o próprio motivo é guarda que alguém apaga |
 | `typecheck` e `build` num pacote | não são a mesma conferência. Uma colisão de nome no barril e um genérico estreito demais passaram pelo `tsc -p tsconfig.json` e só apareceram no `tsconfig.build.json` — o `pnpm verify` roda os dois, e é por isso que ele fecha bloco e o `--rapido` não |
+| Agente que agenda | **nunca** calcula disponibilidade: ele chama o motor, o mesmo da página pública, com a mesma antecedência mínima e a mesma constraint. Uma segunda noção de "horário livre" é a agenda vendida duas vezes |
+| Agente que fala com o cliente | não grava nada. O que sai é **proposta**; gravar continua sendo o `POST` que tem `Idempotency-Key`, sinal e score — não existe atalho para dentro da agenda |
+| Nome que o agente reconhece | sai do catálogo **desta** barbearia, casado contra a lista. O que não está nela vira nulo, e nulo faz perguntar em vez de chutar |
+| Substantivo no catálogo, verbo na boca | "Corte" não casa com "quero cortar" por `includes`. A raiz de quatro letras resolve, e sem ela o agente perguntava "o que você quer fazer?" para a frase mais comum que existe numa barbearia |
+| Nome longo que contém o curto | vence, e por isso são duas passadas: inteiro primeiro, raiz depois. "Corte e barba" caindo em "Corte" faz o cliente sair com metade do que pediu, pagando metade e ocupando metade do tempo |
+| Hora dita sem "depois" nem "antes" | é a hora **pedida**, não um piso. Tratada como piso, quem só pode às 19h vê três opções das quais duas não servem — pior que uma pergunta |
+| "Amanhã" numa conversa | é amanhã **na barbearia**. Somar 24 horas ao instante e cortar o ISO dá depois de amanhã para quem está a oeste às 22h |
+| Pedir para falar com gente | é intenção, não falha. Tratar como "não entendi" é o agente insistindo com quem já desistiu dele |
+| Quantos horários o agente oferece | três. Uma lista de vinte numa conversa não é escolha, é planilha — quem quer ver tudo tem a página |
+| Escrita que exige saber **qual** registro | não entra na rota pública do agente: ela exige sessão, e a rota que já faz isso tem as garantias que uma segunda porta não teria |
 
 ---
 

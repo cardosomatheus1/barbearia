@@ -32,6 +32,7 @@ export * from './login.js';
 export * from './pagamento.js';
 export * from './vocabulario.js';
 export * from './confiabilidade.js';
+export * from './agente.js';
 export * from './churn.js';
 export * from './crescimento.js';
 export * from './interpretacao.js';

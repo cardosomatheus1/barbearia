@@ -3,6 +3,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
+import { AgenteController } from './booking/agente.controller.js';
 import {
   AppointmentsController,
   GuestAppointmentsController,
@@ -79,6 +80,7 @@ import { TenantService } from './tenant/tenant.service.js';
   controllers: [
     HealthController,
     BookingController,
+    AgenteController,
     AuthController,
     SessionController,
     StaffAuthController,
