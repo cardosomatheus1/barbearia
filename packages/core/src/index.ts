@@ -39,6 +39,7 @@ export * from './interpretacao.js';
 export * from './metrica.js';
 export * from './consumo.js';
 export * from './marketplace.js';
+export * from './proximo.js';
 export * from './insight.js';
 export * from './precificacao.js';
 export * from './recepcao.js';

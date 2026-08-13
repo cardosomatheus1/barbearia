@@ -111,6 +111,22 @@ export interface ResultadoDaBusca extends BarbeariaNaVitrine {
 }
 
 /**
+ * O que a busca precisa saber e a tela **não** pode ver (bloco 71).
+ *
+ * `tenantId`, `locationId` e o serviço do piso de preço existem para o lote de
+ * disponibilidade abrir a agenda de cada casa. Eles ficam num tipo separado, e
+ * a rota pública faz a projeção à mão, porque a alternativa é a que este
+ * repositório já cobrou uma vez: *"duas telas com públicos diferentes lendo o
+ * mesmo objeto fazem todo campo novo chegar ao cliente sem ninguém decidir
+ * isso"*. Aqui os públicos são a plataforma e a internet inteira.
+ */
+export interface CasaParaAgenda {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly precoServicoId: string | null;
+}
+
+/**
  * Recorta e ordena o que a consulta trouxe.
  *
  * A consulta faz o recorte grosseiro por caixa de coordenadas — o que o índice
@@ -118,14 +134,14 @@ export interface ResultadoDaBusca extends BarbeariaNaVitrine {
  * no SQL espalharia a regra por uma consulta que nenhum teste puro alcança;
  * fazer os dois aqui traria a cidade inteira para dentro do processo.
  */
-export function filtrarBusca(
-  candidatas: readonly BarbeariaNaVitrine[],
+export function filtrarBusca<T extends BarbeariaNaVitrine>(
+  candidatas: readonly T[],
   filtro: FiltroDaBusca,
   limite: number = RESULTADOS_POR_BUSCA,
-): readonly ResultadoDaBusca[] {
+): readonly (T & { readonly distanciaKm: number })[] {
   const raio = Math.min(Math.max(0, filtro.raioKm), RAIO_MAXIMO_KM);
 
-  const dentro: ResultadoDaBusca[] = [];
+  const dentro: (T & { readonly distanciaKm: number })[] = [];
   for (const casa of candidatas) {
     const km = distanciaKm(filtro.de, casa);
     if (km > raio) continue;

@@ -1897,6 +1897,12 @@ main { padding-bottom: var(--space-8); }
 .casa__nota--sem { font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .casa__avaliacoes { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 .casa__linha { margin: 0; color: var(--color-text-muted); }
+/* O próximo horário é o elemento principal do card (SPEC §5.2): hierarquia por
+   tamanho e peso, antes de cor. */
+.casa__horario { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.casa__horario-rotulo { font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.casa__horario-valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.casa__horario--sem { color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .casa__acao { min-height: 44px; justify-self: start; }
 
 /* Espaco sobra: a foto vai para o lado e o card para de ser uma coluna. */
@@ -1905,7 +1911,10 @@ main { padding-bottom: var(--space-8); }
   .casa__foto { height: 100%; aspect-ratio: auto; }
 }
 @media (min-width: 768px) {
-  .buscar__form { grid-template-columns: 2fr 1fr 1fr auto auto; align-items: end; }
+  /* Cidade · ordem · disponibilidade · distância · assinatura · botão, na mesma
+     sequência do formulário. A cidade fica com o dobro porque é o único campo
+     cujo conteúdo é texto de tamanho imprevisível. */
+  .buscar__form { grid-template-columns: 2fr 1fr 1fr 1fr auto auto; align-items: end; }
 }
 
 /* -- Preço por faixa de horário (bloco 68) --------------------------------- */

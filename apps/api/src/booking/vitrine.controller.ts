@@ -1,6 +1,11 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { RESULTADOS_POR_BUSCA, type FiltroDaBusca } from '@barbearia/core';
-import { buscarNaVitrine, cidadesNaVitrine } from '@barbearia/platform';
+import {
+  rotuloDoProximoHorario,
+  RESULTADOS_POR_BUSCA,
+  type Disponibilidade,
+  type FiltroDaBusca,
+} from '@barbearia/core';
+import { buscarComHorario, cidadesNaVitrine } from '@barbearia/platform';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { buscaNaVitrineSchema } from './vitrine.schemas.js';
 
@@ -19,13 +24,19 @@ import { buscaNaVitrineSchema } from './vitrine.schemas.js';
  * não tem coluna que alcance cliente, agenda ou dinheiro, e é essa ausência — não
  * uma política — que torna seguro ler sem tenant no contexto.
  *
- * ## O que ela ainda não responde
+ * ## O "próximo horário" sai daqui, e o motor é o de sempre
  *
- * *"Disponível hoje"* e *"disponível agora"* são filtros da SPEC §5.2 e não estão
- * aqui: os dois exigem rodar o motor de disponibilidade em lote sobre a lista de
- * resultados, que é o bloco 71 e a razão de ele existir separado. A tela mostra
- * os dois marcados como o que ainda não funciona, nunca escondidos — esconder
- * faria a SPEC parecer entregue.
+ * Desde o bloco 71 cada card traz a próxima vaga da casa — *"o elemento
+ * principal do card, e o que diferencia de diretório"*. Quem a calcula é o mesmo
+ * motor de `GET /availability`, rodado em lote: uma segunda noção de "horário
+ * livre" seria a agenda vendida duas vezes.
+ *
+ * ## A projeção pública é escrita à mão, e é de propósito
+ *
+ * A busca interna carrega `tenantId`, `locationId` e o serviço do piso de preço,
+ * porque o lote precisa deles para abrir a agenda de cada casa. Nada disso sai
+ * na resposta: devolver o objeto inteiro faria todo campo novo da vitrine chegar
+ * à internet sem ninguém ter decidido isso.
  */
 @Controller('v1/marketplace')
 export class VitrineController {
@@ -50,6 +61,7 @@ export class VitrineController {
       lon: number;
       raioKm: number;
       ordem: FiltroDaBusca['ordem'];
+      disponivel: Disponibilidade;
       notaMinimaBps?: number;
       precoMaximoCents?: number;
       comodidades?: string[];
@@ -66,7 +78,40 @@ export class VitrineController {
       somenteComClube: query.clube === true,
     };
 
-    const resultados = await buscarNaVitrine(filtro);
-    return { resultados, limite: RESULTADOS_POR_BUSCA };
+    const busca = await buscarComHorario(filtro, query.disponivel);
+
+    return {
+      // Projeção pública, campo a campo. Ver o cabeçalho: o que o lote precisou
+      // saber para abrir a agenda não atravessa esta linha.
+      resultados: busca.resultados.map((casa) => ({
+        slug: casa.slug,
+        nome: casa.nome,
+        cidade: casa.cidade,
+        estado: casa.estado,
+        fotoUrl: casa.fotoUrl,
+        precoDeCents: casa.precoDeCents,
+        notaBps: casa.notaBps,
+        avaliacoes: casa.avaliacoes,
+        comodidades: casa.comodidades,
+        temClube: casa.temClube,
+        distanciaKm: casa.distanciaKm,
+        /**
+         * A frase vai pronta, e o instante vai junto.
+         *
+         * Quem decide se 17:40 é "hoje" é o fuso da **unidade** — o aparelho de
+         * quem busca pode estar em qualquer lugar, e foi assim que o sistema
+         * analisado errou a grade inteira (defeito D2).
+         */
+        proximoHorario: casa.proximoHorario
+          ? {
+              startsAt: casa.proximoHorario.startsAt,
+              rotulo: rotuloDoProximoHorario(casa.proximoHorario),
+            }
+          : null,
+      })),
+      analisadas: busca.analisadas,
+      truncada: busca.truncada,
+      limite: RESULTADOS_POR_BUSCA,
+    };
   }
 }

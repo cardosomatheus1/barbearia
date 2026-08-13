@@ -363,6 +363,9 @@ importers:
       '@barbearia/jobs':
         specifier: workspace:*
         version: link:../jobs
+      '@barbearia/scheduling':
+        specifier: workspace:*
+        version: link:../scheduling
     devDependencies:
       '@prisma/client':
         specifier: ^6.19.3

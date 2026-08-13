@@ -2385,6 +2385,10 @@ async function main() {
     { nome: 'clube', url: '/admin/clube', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },
     { nome: 'buscar barbearia', url: '/buscar' },
+    // Com o filtro de disponibilidade ligado o card muda de forma — e é a única
+    // largura em que a frase do truncamento aparece. Medir só a versão sem
+    // filtro mediria a tela mais fácil.
+    { nome: 'buscar — disponível hoje', url: '/buscar?disponivel=hoje' },
     // O painel entra com o segundo fator já provado (o `prepararCaixa` o liga),
     // porque é com o bloco de dinheiro desenhado que ele fica mais largo — medir
     // a versão sem faturamento mediria a tela mais fácil.

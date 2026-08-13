@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import {
+  DISPONIBILIDADES,
   imagemPublica,
   ORDENS_DA_BUSCA,
   RAIO_PADRAO_KM,
+  ROTULO_DA_DISPONIBILIDADE,
   ROTULO_DA_ORDEM,
+  type Disponibilidade,
   type OrdemDaBusca,
 } from '@barbearia/core';
 import { buscarBarbearias, cidadesDaVitrine, type CasaNaBusca } from '@/lib/api';
@@ -70,16 +73,23 @@ export default async function BuscarPage({ searchParams }: Props) {
     : 'distancia';
   const raio = Number(primeiro(busca['raioKm']) ?? RAIO_PADRAO_KM);
   const clube = primeiro(busca['clube']) === 'true';
+  const disponivel = (DISPONIBILIDADES as readonly string[]).includes(
+    primeiro(busca['disponivel']) ?? '',
+  )
+    ? (primeiro(busca['disponivel']) as Disponibilidade)
+    : 'qualquer';
 
-  const resultados = escolhida
+  const encontrado = escolhida
     ? await buscarBarbearias({
         lat: String(escolhida.latitude),
         lon: String(escolhida.longitude),
         raioKm: String(Number.isFinite(raio) && raio > 0 ? raio : RAIO_PADRAO_KM),
         ordem,
+        disponivel,
         ...(clube ? { clube: 'true' } : {}),
       })
-    : [];
+    : { resultados: [], analisadas: 0, truncada: false };
+  const resultados = encontrado.resultados;
 
   return (
     <main className="ui-container buscar">
@@ -136,6 +146,24 @@ export default async function BuscarPage({ searchParams }: Props) {
             </div>
 
             <div className="ui-field buscar__campo">
+              <label className="ui-field__label" htmlFor="busca-quando">
+                Disponibilidade
+              </label>
+              <select
+                className="ui-field__input"
+                defaultValue={disponivel}
+                id="busca-quando"
+                name="disponivel"
+              >
+                {DISPONIBILIDADES.map((d) => (
+                  <option key={d} value={d}>
+                    {ROTULO_DA_DISPONIBILIDADE[d]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="ui-field buscar__campo">
               <label className="ui-field__label" htmlFor="busca-raio">
                 Distância
               </label>
@@ -161,17 +189,32 @@ export default async function BuscarPage({ searchParams }: Props) {
           {/* O que ainda não funciona aparece marcado, nunca escondido: esconder
               faria a SPEC parecer entregue.
 
-              A primeira frase é a mais importante das duas, e ela nasceu de um
-              print: com uma barbearia na cidade, o card dizia "0 m". O número
-              está certo — a origem é o centro da cidade, que com uma casa só é
-              ela mesma —, e é justamente por isso que ele mente: quem lê "0 m"
-              entende "é aqui do lado", e a página havia prometido "perto de
-              você" sem nunca ter perguntado onde a pessoa está. */}
+              Esta frase nasceu de um print: com uma barbearia na cidade, o card
+              dizia "0 m". O número está certo — a origem é o centro da cidade,
+              que com uma casa só é ela mesma —, e é justamente por isso que ele
+              mente: quem lê "0 m" entende "é aqui do lado", e a página havia
+              prometido "perto de você" sem nunca ter perguntado onde a pessoa
+              está. */}
           <p className="buscar__pendente">
-            As distâncias saem do centro de {escolhida?.cidade}, não de onde você está: a busca
-            pela localização do aparelho ainda não está pronta, assim como os filtros{' '}
-            <strong>disponível hoje</strong> e <strong>disponível agora</strong>, que precisam
-            consultar a agenda de cada barbearia da lista.
+            As distâncias saem do centro de {escolhida?.cidade}, não de onde você está — a busca
+            pela localização do aparelho ainda não está pronta.{' '}
+            {/* O horário do card é o do serviço de entrada, o mesmo do "a partir
+                de": é o pareamento que faz preço e horário falarem da mesma
+                coisa, e ele tem um efeito que a tela precisa admitir — uma casa
+                cujo serviço mais barato está lotado some do filtro mesmo com a
+                tarde livre para o resto do cardápio. O filtro por serviço é
+                lacuna declarada. */}
+            Os horários são os do serviço de entrada de cada casa, o mesmo do &ldquo;a partir
+            de&rdquo;.
+            {encontrado.truncada ? (
+              <>
+                {' '}
+                Com filtro de disponibilidade, a agenda foi consultada nas{' '}
+                {encontrado.analisadas} primeiras por{' '}
+                {ROTULO_DA_ORDEM[ordem].toLocaleLowerCase('pt-BR')} — pode haver outras fora dessa
+                faixa.
+              </>
+            ) : null}
           </p>
 
           {resultados.length === 0 ? (
@@ -249,8 +292,32 @@ function Card({ casa }: { readonly casa: CasaNaBusca }) {
           {casa.temClube ? ' · tem plano' : ''}
         </p>
 
+        {/**
+         * O próximo horário é o **elemento principal** do card (SPEC §5.2), e é
+         * por isso que ele tem peso próprio em vez de virar mais um item da
+         * linha acima: é ele que responde "dá para ir hoje?", que é a pergunta
+         * que separa um marketplace de um diretório.
+         *
+         * Sem vaga, a frase é a ausência — nunca um espaço em branco. Card mudo
+         * lê como defeito de carregamento, e a barbearia lotada continua sendo
+         * um resultado legítimo.
+         */}
+        {casa.proximoHorario ? (
+          <p className="casa__horario">
+            <span className="casa__horario-rotulo">Próximo horário</span>
+            <strong className="casa__horario-valor tabular">{casa.proximoHorario.rotulo}</strong>
+          </p>
+        ) : (
+          <p className="casa__horario casa__horario--sem">Sem horário hoje nem amanhã</p>
+        )}
+
+        {/* "Agendar horário" é o que o botão da página da barbearia diz, e o
+            card leva exatamente para lá. Dizia "Ver horários" — dois nomes para
+            a mesma ação em duas telas seguidas do mesmo fluxo (§6, pergunta 2),
+            e o mais fraco dos dois: agora que o card já mostra o horário, "ver"
+            promete o que a pessoa acabou de ler. */}
         <a className="ui-button ui-button--secondary casa__acao" href={`/${casa.slug}`}>
-          Ver horários
+          Agendar horário
         </a>
       </div>
     </article>

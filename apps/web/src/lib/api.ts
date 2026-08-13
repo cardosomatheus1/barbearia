@@ -840,6 +840,20 @@ export interface CasaNaBusca {
   comodidades: string[];
   temClube: boolean;
   distanciaKm: number;
+  /**
+   * O próximo horário livre, já com a frase pronta (bloco 71).
+   *
+   * A frase vem do servidor porque quem decide "Hoje" e "Amanhã" é o fuso da
+   * **unidade**, não o do aparelho — é a mesma razão de a grade da página
+   * pública vir montada.
+   */
+  proximoHorario: { startsAt: string; rotulo: string } | null;
+}
+
+export interface BuscaDeBarbearias {
+  readonly resultados: readonly CasaNaBusca[];
+  readonly analisadas: number;
+  readonly truncada: boolean;
 }
 
 export async function cidadesDaVitrine(): Promise<readonly CidadeNaVitrine[]> {
@@ -851,10 +865,9 @@ export async function cidadesDaVitrine(): Promise<readonly CidadeNaVitrine[]> {
 
 export async function buscarBarbearias(
   parametros: Record<string, string>,
-): Promise<readonly CasaNaBusca[]> {
+): Promise<BuscaDeBarbearias> {
   const query = new URLSearchParams(parametros).toString();
   const resposta = await fetch(`${BASE}/v1/marketplace/busca?${query}`, { cache: 'no-store' });
-  if (!resposta.ok) return [];
-  const corpo = (await resposta.json()) as { resultados: CasaNaBusca[] };
-  return corpo.resultados;
+  if (!resposta.ok) return { resultados: [], analisadas: 0, truncada: false };
+  return (await resposta.json()) as BuscaDeBarbearias;
 }

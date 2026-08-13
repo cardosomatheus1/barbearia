@@ -981,6 +981,13 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Pedir para falar com gente | é intenção, não falha. Tratar como "não entendi" é o agente insistindo com quem já desistiu dele |
 | Quantos horários o agente oferece | três. Uma lista de vinte numa conversa não é escolha, é planilha — quem quer ver tudo tem a página |
 | Escrita que exige saber **qual** registro | não entra na rota pública do agente: ela exige sessão, e a rota que já faz isso tem as garantias que uma segunda porta não teria |
+| Motor rodado em lote | é o **mesmo** motor, uma transação por barbearia. A RLS é fixada por transação, então atravessar barbearias numa consulta só é justamente o que a política impede — o que dá para limitar é a largura, para o lote não esgotar o pool de quem está agendando neste instante |
+| Preço e horário no mesmo card | falam do **mesmo serviço**, e por isso a vitrine guarda o id do serviço que deu o piso. Anunciar "a partir de R$ 55" ao lado do horário de outro serviço é o card prometendo o que a página não vende — e o predicado do piso tem cinco condições, então recalculá-lo do outro lado seria a terceira cópia de "o que é público" |
+| Grade em lote para escolher um horário só | `collapse: true`, sempre. Sem ele a grade sai uma vez por profissional e o "primeiro horário" vira o do primeiro barbeiro da lista: com três cadeiras, o card mostra 17:40 tendo 15:00 livre ao lado |
+| Tipo de retorno que estreita um objeto | estreita **o objeto**, não só a declaração. Um `{ ...casa }` tipado como público continua carregando `tenantId` em tempo de execução, e aí o compilador passa a garantir "isto é público" sobre o que não é — a única barreira vira a lista de campos escrita à mão na rota, e a primeira paginação que alguém escrever manda o id da barbearia para a internet sem nada ficar vermelho |
+| Teto que a busca aplica antes de calcular | é dito na tela **com o critério do corte**. "Olhamos as 40 mais próximas" é falso quando a ordem pedida foi menor preço: quem corta é a ordem vigente, e uma frase que nomeia o critério errado é pior que nenhuma |
+| Card de resultado sem o dado principal | mostra a ausência em letras, nunca um espaço em branco. Card mudo lê como defeito de carregamento, e a barbearia lotada continua sendo resultado legítimo de uma busca por barbearia |
+| Ponto e vírgula dentro de comentário de SQL | não, quando a semente parte a instrução por ele. É irmão da crase: o comentário vira metade de uma instrução e o erro sai como sintaxe em cima de uma linha de prosa |
 
 ---
 

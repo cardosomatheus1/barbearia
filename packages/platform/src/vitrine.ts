@@ -2,11 +2,17 @@ import { semTenant, withTenant } from '@barbearia/db';
 import {
   caixaDaBusca,
   filtrarBusca,
+  passaNaDisponibilidade,
+  RESULTADOS_POR_BUSCA,
   resumoPublico,
   type BarbeariaNaVitrine,
+  type CasaParaAgenda,
+  type Disponibilidade,
   type FiltroDaBusca,
+  type HorarioDaVitrine,
   type ResultadoDaBusca,
 } from '@barbearia/core';
+import { proximosHorariosEmLote } from '@barbearia/scheduling';
 
 /**
  * A vitrine do marketplace, do banco para a busca (bloco 70, SPEC §5.2).
@@ -23,7 +29,10 @@ import {
  * alcança cliente, agenda ou dinheiro, e a atualização é escrita `withTenant`,
  * de dentro da barbearia.
  */
-export async function buscarNaVitrine(filtro: FiltroDaBusca): Promise<readonly ResultadoDaBusca[]> {
+export async function buscarNaVitrine(
+  filtro: FiltroDaBusca,
+  limite: number = RESULTADOS_POR_BUSCA,
+): Promise<readonly (ResultadoDaBusca & CasaParaAgenda)[]> {
   const caixa = caixaDaBusca(filtro.de, filtro.raioKm);
 
   return semTenant(async (tx) => {
@@ -39,6 +48,8 @@ export async function buscarNaVitrine(filtro: FiltroDaBusca): Promise<readonly R
      */
     const linhas = await tx.$queryRaw<
       {
+        tenant_id: string;
+        location_id: string;
         slug: string;
         name: string;
         city: string | null;
@@ -47,14 +58,17 @@ export async function buscarNaVitrine(filtro: FiltroDaBusca): Promise<readonly R
         longitude: string;
         cover_url: string | null;
         price_from_cents: number | null;
+        price_from_service_id: string | null;
         rating_bps: number | null;
         rating_count: number;
         amenities: string[];
         has_club: boolean;
       }[]
     >`
-      SELECT m.slug, m.name, m.city, m.state, m.latitude, m.longitude, m.cover_url,
-             m.price_from_cents, m.rating_bps, m.rating_count, m.amenities, m.has_club
+      SELECT m.tenant_id, m.location_id, m.slug, m.name, m.city, m.state,
+             m.latitude, m.longitude, m.cover_url,
+             m.price_from_cents, m.price_from_service_id,
+             m.rating_bps, m.rating_count, m.amenities, m.has_club
         FROM marketplace_listings m
         LEFT JOIN tenant_platform tp ON tp.tenant_id = m.tenant_id
        WHERE m.latitude BETWEEN ${caixa.latMin} AND ${caixa.latMax}
@@ -62,7 +76,10 @@ export async function buscarNaVitrine(filtro: FiltroDaBusca): Promise<readonly R
          AND tp.blocked_at IS NULL
     `;
 
-    const candidatas: BarbeariaNaVitrine[] = linhas.map((l) => ({
+    const candidatas: (BarbeariaNaVitrine & CasaParaAgenda)[] = linhas.map((l) => ({
+      tenantId: l.tenant_id,
+      locationId: l.location_id,
+      precoServicoId: l.price_from_service_id,
       slug: l.slug,
       nome: l.name,
       cidade: l.city,
@@ -77,8 +94,97 @@ export async function buscarNaVitrine(filtro: FiltroDaBusca): Promise<readonly R
       temClube: l.has_club,
     }));
 
-    return filtrarBusca(candidatas, filtro);
+    return filtrarBusca(candidatas, filtro, limite);
   });
+}
+
+/**
+ * Quantas candidatas o filtro de disponibilidade chega a analisar.
+ *
+ * Rodar o motor por casa custa uma transação, então a lista que vai ao lote tem
+ * teto. Quarenta é o dobro do que a busca devolve: dá folga para metade delas
+ * estar lotada e a página ainda encher.
+ *
+ * O teto não é silencioso. `analisadas` volta na resposta e a tela diz quando
+ * ele foi alcançado — *"número de relatório que ignora parte do dado diz isso na
+ * tela"*, e uma lista curta com cara de completa é pior do que uma lista curta
+ * que se explica.
+ */
+export const CANDIDATAS_COM_DISPONIBILIDADE = 40;
+
+export interface BuscaComHorario {
+  readonly resultados: readonly (ResultadoDaBusca & {
+    readonly proximoHorario: HorarioDaVitrine | null;
+  })[];
+  /** Quantas casas o lote chegou a consultar. */
+  readonly analisadas: number;
+  /** Se o teto de análise foi alcançado — a tela diz isso em letras. */
+  readonly truncada: boolean;
+}
+
+/**
+ * A busca com o "próximo horário" de cada card (bloco 71, SPEC §5.2).
+ *
+ * ## A ordem importa, e é esta
+ *
+ * Buscar, **ordenar**, cortar no teto de análise, consultar a agenda das que
+ * sobraram e só então aplicar o filtro de disponibilidade. Filtrar antes de
+ * ordenar não teria como: a disponibilidade não está no banco, ela é calculada.
+ * Cortar em vinte antes de consultar seria pior — com metade da lista lotada, o
+ * filtro "disponível hoje" devolveria dez resultados sobre uma cidade que tem
+ * cem barbearias com vaga.
+ *
+ * ## Sem filtro, o lote roda igual
+ *
+ * O card mostra o horário sempre — é ele que *"diferencia de diretório"*. O que
+ * o filtro muda é quem fica na lista, não se a agenda é consultada.
+ */
+export async function buscarComHorario(
+  filtro: FiltroDaBusca,
+  disponibilidade: Disponibilidade,
+  agora: Date = new Date(),
+): Promise<BuscaComHorario> {
+  const teto =
+    disponibilidade === 'qualquer' ? RESULTADOS_POR_BUSCA : CANDIDATAS_COM_DISPONIBILIDADE;
+  const candidatas = await buscarNaVitrine(filtro, teto);
+
+  const horarios = await proximosHorariosEmLote(
+    candidatas.map((c) => ({
+      tenantId: c.tenantId,
+      locationId: c.locationId,
+      serviceId: c.precoServicoId,
+    })),
+    agora,
+  );
+
+  const resultados = candidatas
+    .map((casa) => {
+      /**
+       * A projeção acontece **aqui**, e não só na rota.
+       *
+       * Com `{ ...casa }` o objeto continuava carregando `tenantId`,
+       * `locationId` e o serviço do piso em tempo de execução, enquanto o tipo
+       * de retorno afirmava que eles não existiam. O compilador passava a
+       * garantir "isto é público" sobre um objeto que não era, e a única
+       * barreira real virava a lista de onze campos escrita à mão no
+       * controller: a primeira pessoa a escrever `resultados: busca.resultados`
+       * — numa paginação, num bloco de JSON-LD — mandaria o id da barbearia
+       * para a internet sem nada ficar vermelho. E `tenantId` não é público em
+       * lugar nenhum: o token da sessão do gestor é `<tenantId>.<segredo>`.
+       *
+       * Achado da `/security-review` deste bloco.
+       */
+      const { tenantId: _t, locationId, precoServicoId: _s, ...publico } = casa;
+      return { ...publico, proximoHorario: horarios.get(locationId) ?? null };
+    })
+    .filter((casa) => passaNaDisponibilidade(casa.proximoHorario, disponibilidade, agora))
+    .slice(0, RESULTADOS_POR_BUSCA);
+
+  return {
+    resultados,
+    analisadas: candidatas.length,
+    truncada: candidatas.length >= teto && disponibilidade !== 'qualquer',
+  };
 }
 
 /**
@@ -119,31 +225,14 @@ export async function atualizarVitrine(params: {
         listed: boolean;
         published: boolean;
         preco: number | null;
+        preco_servico_id: string | null;
         clube: boolean;
       }[]
     >`
       SELECT ts.slug, t.name, l.city, l.state, l.latitude, l.longitude, l.cover_url,
              l.amenities, l.listed_in_marketplace AS listed,
              t.published_at IS NOT NULL AS published,
-             /**
-              * O piso é o do que a página pública **de fato oferece**.
-              *
-              * A primeira versão usava min(price_cents) de todo serviço ativo, e
-              * publicava numa vitrine anônima o preço que a barbearia tinha
-              * mantido fora da própria página: serviço sem bookable_online, ou
-              * sem nenhum profissional que o faça online. Achado da
-              * /security-review deste bloco. O predicado é o mesmo de
-              * getPublicProfile — duas noções de "o que é público" é como uma
-              * delas fica para trás.
-              */
-             (SELECT min(s.price_cents)
-                FROM services s
-                JOIN professional_services ps ON ps.service_id = s.id
-                JOIN professionals p ON p.id = ps.professional_id
-               WHERE s.active AND s.bookable_online
-                 AND p.active AND p.bookable_online
-                 AND p.kind IN ('professional', 'external')
-                 AND p.location_id = l.id) AS preco,
+             piso.price_cents AS preco, piso.id AS preco_servico_id,
              /**
               * "Tem plano de assinatura" é um booleano, e a decisão de
               * publicá-lo é escrita.
@@ -158,6 +247,38 @@ export async function atualizarVitrine(params: {
         FROM locations l
         JOIN tenants t ON t.id = l.tenant_id
         LEFT JOIN tenant_slugs ts ON ts.tenant_id = l.tenant_id AND ts.is_primary
+        /**
+         * O piso é o do que a página pública **de fato oferece**, e ele sai daqui
+         * uma vez só — com o preço e com o id do serviço.
+         *
+         * A primeira versão usava min(price_cents) de todo serviço ativo, e
+         * publicava numa vitrine anônima o preço que a barbearia tinha mantido
+         * fora da própria página: serviço sem bookable_online, ou sem nenhum
+         * profissional que o faça online. Achado da /security-review do bloco
+         * 70. O predicado é o mesmo de getPublicProfile — duas noções de "o que
+         * é público" é como uma delas fica para trás.
+         *
+         * Desde o bloco 71 ele também devolve o **id**, porque é esse serviço
+         * que o lote consulta para o "próximo horário": preço e horário no mesmo
+         * card precisam falar da mesma coisa. Escrever o predicado de novo lá
+         * seria a terceira cópia dele.
+         *
+         * O desempate por id é o que torna a escolha estável: com dois serviços
+         * do mesmo preço, a ordem da consulta trocaria o card entre duas
+         * atualizações sem nada ter mudado.
+         */
+        LEFT JOIN LATERAL (
+          SELECT s.id, s.price_cents
+            FROM services s
+            JOIN professional_services ps ON ps.service_id = s.id
+            JOIN professionals p ON p.id = ps.professional_id
+           WHERE s.active AND s.bookable_online
+             AND p.active AND p.bookable_online
+             AND p.kind IN ('professional', 'external')
+             AND p.location_id = l.id
+           ORDER BY s.price_cents, s.id
+           LIMIT 1
+        ) piso ON true
        WHERE l.id = ${params.locationId}::uuid
     `;
     const casa = linhas[0];
@@ -205,14 +326,15 @@ export async function atualizarVitrine(params: {
     await tx.$executeRaw`
       INSERT INTO marketplace_listings (
         location_id, tenant_id, slug, name, city, state, latitude, longitude,
-        cover_url, price_from_cents, rating_bps, rating_count, amenities, has_club,
-        refreshed_at
+        cover_url, price_from_cents, price_from_service_id, rating_bps, rating_count,
+        amenities, has_club, refreshed_at
       ) VALUES (
         ${params.locationId}::uuid,
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${casa.slug}, ${casa.name}, ${casa.city}, ${casa.state},
         ${casa.latitude}::numeric, ${casa.longitude}::numeric,
         ${casa.cover_url}, ${casa.preco === null ? null : Number(casa.preco)},
+        ${casa.preco_servico_id}::uuid,
         ${resumo.media === null ? null : Math.round(resumo.media * 100)},
         ${resumo.total}, ${casa.amenities}, ${casa.clube}, now()
       )
@@ -220,7 +342,9 @@ export async function atualizarVitrine(params: {
         slug = EXCLUDED.slug, name = EXCLUDED.name, city = EXCLUDED.city,
         state = EXCLUDED.state, latitude = EXCLUDED.latitude,
         longitude = EXCLUDED.longitude, cover_url = EXCLUDED.cover_url,
-        price_from_cents = EXCLUDED.price_from_cents, rating_bps = EXCLUDED.rating_bps,
+        price_from_cents = EXCLUDED.price_from_cents,
+        price_from_service_id = EXCLUDED.price_from_service_id,
+        rating_bps = EXCLUDED.rating_bps,
         rating_count = EXCLUDED.rating_count, amenities = EXCLUDED.amenities,
         has_club = EXCLUDED.has_club, refreshed_at = EXCLUDED.refreshed_at
     `;

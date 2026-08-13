@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { ORDENS_DA_BUSCA, RAIO_MAXIMO_KM, RAIO_PADRAO_KM } from '@barbearia/core';
+import {
+  DISPONIBILIDADES,
+  ORDENS_DA_BUSCA,
+  RAIO_MAXIMO_KM,
+  RAIO_PADRAO_KM,
+} from '@barbearia/core';
 
 /**
  * O que a busca do marketplace aceita (bloco 70, SPEC §5.2).
@@ -17,6 +22,14 @@ export const buscaNaVitrineSchema = z.object({
   lon: z.coerce.number().min(-180).max(180),
   raioKm: z.coerce.number().positive().max(RAIO_MAXIMO_KM).default(RAIO_PADRAO_KM),
   ordem: z.enum(ORDENS_DA_BUSCA).default('distancia'),
+  /**
+   * "Disponível hoje" e "disponível agora" (bloco 71, SPEC §5.2).
+   *
+   * Conjunto fechado e com padrão: um valor inventado é recusado na borda, e a
+   * ausência é `qualquer` — que deixa passar inclusive a barbearia lotada. O
+   * padrão importa porque é ele que decide quantas casas a busca consulta.
+   */
+  disponivel: z.enum(DISPONIBILIDADES).default('qualquer'),
   notaMinimaBps: z.coerce.number().int().min(100).max(500).optional(),
   precoMaximoCents: z.coerce.number().int().positive().max(1_000_000).optional(),
   /**

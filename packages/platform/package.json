@@ -21,7 +21,8 @@
     "@barbearia/core": "workspace:*",
     "@barbearia/db": "workspace:*",
     "@barbearia/identity": "workspace:*",
-    "@barbearia/jobs": "workspace:*"
+    "@barbearia/jobs": "workspace:*",
+    "@barbearia/scheduling": "workspace:*"
   },
   "devDependencies": {
     "@prisma/client": "^6.19.3",
