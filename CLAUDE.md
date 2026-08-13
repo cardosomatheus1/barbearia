@@ -10,6 +10,60 @@ cometido e corrigido neste repositório.
 
 ---
 
+## 0. Autoridade de decisão
+
+@AGENT_AUTHORITY.md
+
+O que aquele documento governa é **quando parar e perguntar** — e a resposta é
+quase sempre "não pare". A escolha não especificada se decide pelos quatro
+critérios de lá e a execução continua. As regras 1 a 6 **deste** arquivo
+continuam valendo integralmente: elas dizem *o que* o código precisa cumprir,
+não *quem* decide.
+
+Quatro pontos em que este repositório é mais específico que o texto geral, e
+onde o específico vence:
+
+- **"Toda query de domínio filtra por tenant explicitamente"** não vale aqui, e
+  o motivo está na regra 2: quem filtra é a política de RLS, e o repositório
+  **não** repete `tenant_id` no `WHERE` de propósito. Repetir o filtro mascara
+  política ausente — a consulta fica certa, o teste passa, e a próxima que
+  alguém escrever sem o `WHERE` vaza sem nada ter ficado vermelho antes. O teste
+  que consulta **sem filtro** esperando zero linhas é o que prova a política, e
+  ele existe desde o bloco 1.
+- **Não existe `DECISIONS.md`, de propósito.** Já há três lugares para registrar
+  decisão, e nenhuma lista mora em dois lugares neste código — é a regra que
+  `secoes.ts`, os rótulos de campanha e o estado que ocupa uma venda já
+  cobraram. Onde vai cada coisa:
+
+  | O que é | Onde mora |
+  |---|---|
+  | Decisão que vale daqui para a frente | tabela de convenções deste arquivo, com o contrafactual |
+  | Decisão que deixa algo por fazer | [Lacunas com dependência](ROADMAP.md#lacunas-com-dependência-declarada), com o bloco de destino |
+  | Decisão local de um bloco | a mensagem de commit, que descreve **a decisão**, não o arquivo |
+
+  O prefixo `REVISAR:` do texto geral — a escolha que nem o precedente decidiu —
+  entra como linha na tabela de lacunas, que é o único dos três lugares que tem
+  destino e que o `pnpm verify` cobra.
+- **"Não declare conclusão sem o CI verde"**: não há CI aqui, e `pnpm verify`
+  mais `scripts/medicao.sh` fazem o julgamento por código de saída. Mas o portão
+  é **necessário e não suficiente**, e isso não é ressalva de estilo: o bloco 35
+  passou o portão inteiro — 123 testes, verify verde, medição verde, revisão de
+  segurança feita — e entregou uma tela em que nenhuma aba acendia e um
+  indicador que nunca saía de `—`. Portão verde prova que o que existe passa;
+  não prova que existe o que precisa existir. Quem responde por isso é a regra 6
+  e os prints, e o critério de conclusão é o
+  [Definition of Done](#definition-of-done) inteiro.
+- **"Uma SPEC por branch, PR aberto"**: o trabalho sai em bloco do
+  [`ROADMAP.md`](ROADMAP.md), um commit por bloco na branch designada da sessão.
+  Pull request é aberto quando pedido, não por padrão.
+
+O documento diz de si mesmo que é "contexto, não trava". A réplica das paradas
+obrigatórias em `.claude/settings.json` e o hook de `PreToolUse` que ele cita
+**não** estão instalados: mexer na configuração de permissão da ferramenta é a
+única coisa aqui que não se faz sem o dono saber.
+
+---
+
 ## 1. Testes
 
 **Todo bloco entrega teste junto com o código. Não existe "testo depois".**
