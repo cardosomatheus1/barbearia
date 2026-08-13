@@ -1467,6 +1467,34 @@ function prepararUnidades(slug) {
   );
 }
 
+/**
+ * A regra de recusa ligada, com uma recusa registrada (bloco 60).
+ *
+ * Ela nasce desligada, e é a decisão certa do produto — mas isso faz o cartão
+ * "Quem a regra recusou" nunca aparecer na medição. Estado vazio e estado cheio
+ * são telas diferentes, e a que ninguém fotografa é a que ninguém confere.
+ */
+function prepararRecusaOnline(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  const local = primeiraLinha(
+    psql(`select id from locations where tenant_id = '${tenant}' order by created_at limit 1`),
+  );
+  const cliente = primeiraLinha(
+    psql(`select id from customers where tenant_id = '${tenant}' order by created_at limit 1`),
+  );
+  if (!local || !cliente) return;
+
+  // Cinco faltas em dez é o que a tela pergunta; o motor guarda o limiar de
+  // score equivalente, que é o que a coluna aceita.
+  psql(`UPDATE locations SET online_block_score = 60 WHERE id = '${local}'`);
+  psql(
+    `INSERT INTO online_blocks (tenant_id, location_id, customer_id, score, threshold, wanted_at)
+     VALUES ('${tenant}', '${local}', '${cliente}', 25, 60, now() + interval '2 days')`,
+  );
+}
+
 function prepararCampanha(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return;
@@ -1969,6 +1997,7 @@ async function main() {
   prepararAutomacoes(slug);
   prepararCampanha(slug);
   prepararUnidades(slug);
+  prepararRecusaOnline(slug);
   const tokenBarbeiro = balcao.profissionalLivre
     ? await prepararBarbeiro(token, balcao.profissionalLivre)
     : null;
