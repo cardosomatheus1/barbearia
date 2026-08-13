@@ -43,6 +43,7 @@ import { WhatsAppController } from './admin/whatsapp.controller.js';
 import { AutomacaoController } from './admin/automacao.controller.js';
 import { CampanhaController } from './admin/campanha.controller.js';
 import { SegmentoController } from './admin/segmento.controller.js';
+import { ChurnController } from './admin/churn.controller.js';
 import { MultiunidadeController } from './admin/multiunidade.controller.js';
 import { AvaliacaoController } from './admin/avaliacao.controller.js';
 import { EstoqueController } from './admin/estoque.controller.js';
@@ -112,6 +113,7 @@ import { TenantService } from './tenant/tenant.service.js';
     AutomacaoController,
     CampanhaController,
     SegmentoController,
+    ChurnController,
     MultiunidadeController,
     AvaliacaoController,
     EstoqueController,

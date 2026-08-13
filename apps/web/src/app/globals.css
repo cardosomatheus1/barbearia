@@ -4134,6 +4134,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp'],
 .casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes'],
 .casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas'],
+.casco:has([data-secao='retencao']) .contexto__link[data-para='retencao'],
 .casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
 .casco:has([data-secao='plano']) .contexto__link[data-para='plano'] {
   color: var(--color-accent);
@@ -7129,4 +7130,202 @@ main { padding-bottom: var(--space-8); }
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Retenção: crescimento, série de faturamento e risco de abandono (bloco 62)
+--------------------------------------------------------------------------- */
+
+.crescimento {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.crescimento__item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+}
+.crescimento__valor {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.crescimento__rotulo { font-size: var(--font-size-sm); }
+.crescimento__aviso { color: var(--color-text-muted); }
+.crescimento__porque {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* A série. `height` no CSS e `viewBox` no SVG: sem os dois o navegador não
+   reserva o espaço e o gráfico empurra o conteúdo ao montar — é a mesma regra
+   da imagem com `aspect-ratio` declarado. */
+.serie { margin: 0 0 var(--space-3); }
+.serie__desenho {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 720 / 200;
+  overflow: visible;
+}
+.serie__linha {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.serie__area { fill: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.serie__eixo { stroke: var(--color-border); stroke-width: 1; }
+.serie__media {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.serie__ponto {
+  fill: var(--color-surface);
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+.serie__ponto--maior { fill: var(--color-accent); }
+.serie__media-rotulo,
+.serie__data {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+}
+.serie__pico {
+  fill: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* O selo de risco. A cor é o último recurso: o rótulo ao lado diz a mesma coisa
+   em palavras, e o número está escrito nele. */
+.risco {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+}
+.risco--medio { color: var(--color-warning); border-color: var(--color-warning); }
+.risco--alto { color: var(--color-danger); border-color: var(--color-danger); }
+
+/* A explicação, aberta. Um acordeão faria a tela ficar bonita e a explicação,
+   opcional — e a SPEC §4.5 chama a explicação de requisito funcional. */
+.motivos {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.motivos__item {
+  position: relative;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.motivos__item::before {
+  content: '·';
+  position: absolute;
+  left: var(--space-2);
+  color: var(--color-accent);
+}
+/* O que segura a pessoa aparece com o sinal trocado, porque é o único motivo da
+   lista que empurra o risco para baixo. */
+.motivos__item--assinatura_ativa::before { content: '+'; color: var(--color-success); }
+
+/* ---------------------------------------------------------------------------
+   A linha do tempo da plataforma (bloco 62)
+
+   A rampa é a mesma do heatmap de ocupação: **um tom só**, do fraco ao forte.
+   Sequencial é uma cor com intensidade variável, nunca um arco-íris — o
+   arco-íris obriga a consultar a legenda para saber se verde é mais que laranja.
+   O contraste dos degraus baixos contra o fundo fica abaixo de 3:1, e é por isso
+   que **toda célula mostra o número**: a cor nunca carrega sozinha o dado.
+--------------------------------------------------------------------------- */
+
+.plataforma__secao { margin-top: var(--space-6); }
+
+.mrr {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-block-size: 180px;
+}
+.mrr__mes {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  align-items: end;
+  justify-items: center;
+  gap: var(--space-1);
+  min-inline-size: 3.5rem;
+  block-size: 180px;
+}
+.mrr__valor {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 4px de raio só no topo: a ponta do dado é arredondada, a base fica ancorada
+   na linha de zero. Uma barra arredondada nas quatro pontas flutua. */
+.mrr__barra {
+  inline-size: 1.75rem;
+  border-radius: 4px 4px 0 0;
+  background: var(--color-accent);
+  align-self: end;
+}
+.mrr__rotulo { font-size: var(--font-size-xs); }
+.mrr__quantas {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.safras { border-collapse: separate; border-spacing: 2px; white-space: nowrap; }
+.safras__legenda {
+  caption-side: bottom;
+  padding-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: left;
+  white-space: normal;
+  max-width: var(--size-readable);
+}
+.safras th {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+}
+.safras__celula,
+.safras__fora {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+}
+/* Célula fora da curva: a safra de dois meses atrás não tem o mês +5 ainda.
+   "Ainda não aconteceu" não é "todos saíram", e pintá-la seria mentir. */
+.safras__fora { background: transparent; }
+.safras__celula--baixa { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.safras__celula--media { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+.safras__celula--alta {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-medium);
 }

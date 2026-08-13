@@ -174,6 +174,31 @@ async function prepararPlataforma() {
       ` now() + interval '4 days' FROM tenant_platform`,
   );
 
+  /**
+   * Doze meses de fatura paga, para a linha do tempo da plataforma (bloco 62).
+   *
+   * Sem elas o MRR mês a mês e o triângulo de safra desenham o estado vazio —
+   * que é honesto e não é o que precisa ser fotografado. A barra de um mês só
+   * também não mede nada: o que estoura layout é a fileira de doze com valor de
+   * cinco dígitos embaixo.
+   *
+   * A safra é a do **primeiro mês pago**, então uma barbearia que começa doze
+   * meses atrás e outra que começa há três produzem duas linhas de comprimento
+   * diferente — que é exatamente o triângulo que a tela existe para mostrar.
+   */
+  psql(
+    `INSERT INTO invoices (tenant_id, kind, status, plan_code, amount_cents,` +
+      ` period_start, period_end, due_at, paid_at)` +
+      ` SELECT tenant_id, 'subscription', 'paid', 'essencial',` +
+      ` 9900 + (m * 700),` +
+      ` date_trunc('month', now()) - (m * interval '1 month'),` +
+      ` date_trunc('month', now()) - ((m - 1) * interval '1 month'),` +
+      ` date_trunc('month', now()) - (m * interval '1 month') + interval '5 days',` +
+      ` date_trunc('month', now()) - (m * interval '1 month') + interval '5 days'` +
+      ` FROM tenant_platform, generate_series(0, 11) AS m` +
+      ` ON CONFLICT DO NOTHING`,
+  );
+
   // O cartão na conta (bloco 29): a tela do plano tem dois estados, e o
   // preenchido é o que tem marca, final e validade na mesma linha.
   psql(
@@ -2204,6 +2229,7 @@ async function main() {
     ...(balcao.clienteId
       ? [{ nome: 'ficha do cliente', url: `/admin/cliente/${balcao.clienteId}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } }]
       : []),
+    { nome: 'retenção', url: '/admin/retencao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A ficha de quem tem ritmo (bloco 61). A do balcão tem uma visita só, e
     // sem ciclo a linha do ritmo não é escrita — mediria a tela sem o elemento
     // que o bloco acrescentou.

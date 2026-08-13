@@ -490,6 +490,144 @@ describe('as rotas do painel', () => {
     expect(faltando, 'rota devolve margem ou custo sem finance.view_profit').toEqual([]);
   });
 
+  it('rota que devolve receita declara finance.view — e portanto segundo fator', () => {
+    /**
+     * A irmã do teste acima, e ela nasceu de um achado da `/security-review` do
+     * bloco 62.
+     *
+     * A rota de crescimento declarava `reports.finance`, que **parece** a
+     * permissão certa pelo nome e não está em `PERMISSOES_DE_DINHEIRO` — o grupo
+     * que a `PermissaoGuard` usa para derivar o segundo fator filtra por prefixo
+     * `finance.`/`cashier.` mais duas de comissão. O resultado seria um ano de
+     * faturamento dia a dia saindo sem TOTP enquanto o DRE ao lado o cobra para
+     * mostrar os mesmos centavos.
+     *
+     * O teste anterior deriva **margem**; este deriva **receita**, e são coisas
+     * diferentes: um `Dre` tem os dois, mas uma série de faturamento tem só o
+     * segundo. Sem esta varredura, a próxima rota de receita repete o defeito —
+     * e uma lista escrita ao lado seria a que ninguém atualiza.
+     */
+    const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
+    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
+
+    /**
+     * `receita`, `faturamento`, `total...Cents` — e **não** `preco` nem `valor`.
+     *
+     * Preço é catálogo, que a página pública mostra a qualquer visitante; valor
+     * sozinho aparece em toda parte. O que `finance.view` separa é **quanto a
+     * casa faturou**, e é isso que estes nomes descrevem.
+     */
+    const CAMPO_DE_RECEITA = /\b(receita\w*|faturamento\w*|total\w*Cents)\s*:/i;
+
+    const tiposDeReceita = new Set<string>();
+    const funcoesDeReceita = new Set<string>();
+    const fontes = PASTAS.flatMap((pasta) =>
+      readdirSync(pasta)
+        .filter((n) => n.endsWith('.ts') && !n.includes('.test.'))
+        .map((n) => readFileSync(join(pasta, n), 'utf8')),
+    );
+
+    const corpoDaInterface = new Map<string, string>();
+    const paiDaInterface = new Map<string, string>();
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
+        corpoDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
+        if (CAMPO_DE_RECEITA.test(bloco[2] ?? '')) tiposDeReceita.add(bloco[1] ?? '');
+      }
+      for (const bloco of fonte.matchAll(/export interface (\w+) extends (\w+)/g)) {
+        paiDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
+      }
+    }
+
+    // Herança e composição até o ponto fixo, como no teste de margem: a série de
+    // faturamento é um campo dentro do objeto que a rota devolve.
+    let cresceu = true;
+    while (cresceu) {
+      cresceu = false;
+      for (const [filho, pai] of paiDaInterface) {
+        if (tiposDeReceita.has(pai) && !tiposDeReceita.has(filho)) {
+          tiposDeReceita.add(filho);
+          cresceu = true;
+        }
+      }
+      for (const [nome, corpo] of corpoDaInterface) {
+        if (tiposDeReceita.has(nome)) continue;
+        const compoe = [...tiposDeReceita].some((t) =>
+          new RegExp(`:\\s*(readonly\\s+)?${t}\\b`).test(corpo),
+        );
+        if (compoe) {
+          tiposDeReceita.add(nome);
+          cresceu = true;
+        }
+      }
+    }
+
+    for (const fonte of fontes) {
+      /**
+       * A janela é de 3000, e não de 900 como na varredura de margem.
+       *
+       * Não é folga por precaução: `crescimentoDaCasa` tem um parâmetro com
+       * quinze linhas de comentário explicando por que o abandono entra por
+       * fora, e o `Promise<...>` fica além de 900 caracteres da palavra
+       * `function`. Com a janela curta a varredura **passava verde sobre a rota
+       * que a revisão de segurança tinha acabado de reprovar** — guarda que não
+       * alcança o defeito que a motivou é pior que guarda nenhuma, e foi só
+       * quebrar a rota de propósito que isso apareceu.
+       */
+      for (const bloco of fonte.matchAll(
+        /export async function (\w+)[\s\S]{0,3000}?Promise<([^>]+)>/g,
+      )) {
+        const retorno = bloco[2] ?? '';
+        if ([...tiposDeReceita].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
+          funcoesDeReceita.add(bloco[1] ?? '');
+        }
+      }
+    }
+
+    expect(
+      tiposDeReceita.size,
+      'a varredura não achou nenhum tipo de receita — ela deixou de valer',
+    ).toBeGreaterThan(0);
+    expect(funcoesDeReceita.size).toBeGreaterThan(0);
+
+    const faltando: string[] = [];
+    for (const { arquivo, classe, corpo, guardada } of controllers()) {
+      if (!guardada) continue;
+      const handlers = [...corpo.matchAll(/@Exige\(([^)]*)\)([\s\S]*?)(?=@Exige\(|$)/g)];
+      for (const handler of handlers) {
+        const permissoes = handler[1] ?? '';
+        const codigo = (handler[2] ?? '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/.*/g, '');
+        const chamada = [...funcoesDeReceita].find((f) =>
+          new RegExp(`\\b${f}\\s*\\(`).test(codigo),
+        );
+        if (!chamada) continue;
+        /**
+         * Qualquer permissão do grupo de dinheiro serve.
+         *
+         * O que o teste cobra não é a string `finance.view`: é que a rota caia
+         * dentro de `PERMISSOES_DE_DINHEIRO`, que é de onde o segundo fator é
+         * derivado. `finance.view_profit` num relatório de resultado já cumpre.
+         */
+        if (PERMISSOES_DE_DINHEIRO.some((p) => permissoes.includes(`'${p}'`))) continue;
+        /**
+         * `commission.view_own` é a exceção, e ela já estava escrita.
+         *
+         * `permissoes.ts` a deixa **fora** do grupo de dinheiro de propósito: é
+         * o barbeiro olhando o próprio holerite, o dado é dele e ele já provou a
+         * senha. As duas rotas que a varredura acusou na primeira execução —
+         * o extrato de comissão e os números do profissional — são exatamente
+         * essa. Reprovar o certo é o que faz alguém desligar a guarda.
+         */
+        if (permissoes.includes("'commission.view_own'")) continue;
+        faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
+      }
+    }
+
+    expect(faltando, 'rota devolve receita sem nenhuma permissão de dinheiro').toEqual([]);
+  });
+
   it('rota marcada com @Recurso pergunta pelo recurso; rota sem @Recurso não', async () => {
     // Sem o segundo argumento nenhuma consulta acontece — é o que mantém este
     // arquivo sendo teste de unidade. Com ele, a guarda vai ao banco, e é isso

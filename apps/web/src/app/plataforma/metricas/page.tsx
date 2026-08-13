@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
+import { CurvaDeRetencao, MrrMesAMes } from './linha-do-tempo';
 import type { Metadata } from 'next';
 import {
+  linhaDoTempoDaPlataforma,
   metricasDaPlataforma,
   saudeDasBarbearias,
   type ResumoDaPlataforma,
@@ -208,9 +210,10 @@ export default async function MetricasPage({ searchParams }: Props) {
   const pedido = Number(Array.isArray(query['dias']) ? query['dias'][0] : query['dias']);
   const dias = JANELAS.includes(pedido as (typeof JANELAS)[number]) ? pedido : 30;
 
-  const [metricas, saude] = await Promise.all([
+  const [metricas, saude, linha] = await Promise.all([
     metricasDaPlataforma(token, dias),
     saudeDasBarbearias(token, dias),
+    linhaDoTempoDaPlataforma(token),
   ]);
 
   if (!metricas.ok) {
@@ -292,6 +295,29 @@ export default async function MetricasPage({ searchParams }: Props) {
           </table>
         </div>
       )}
+
+      {/* A linha do tempo (bloco 62). Ela fica **depois** da janela de 30 dias
+          de propósito: a janela responde "como estamos agora", e a linha do
+          tempo responde "estamos melhorando?" — e a segunda pergunta só faz
+          sentido depois de a primeira ter sido lida. */}
+      {linha.ok ? (
+        <>
+          <h2 className="cartao-balcao__titulo plataforma__secao">Receita recorrente, mês a mês</h2>
+          <p className="cartao-balcao__texto">
+            O que de fato foi pago em cada mês, e quantas barbearias pagaram. Uma troca de plano no
+            meio do mês não entra: ela é ajuste, não receita recorrente.
+          </p>
+          <MrrMesAMes maiorMrrCents={linha.dados.linha.maiorMrrCents} meses={linha.dados.linha.mrr} />
+
+          <h2 className="cartao-balcao__titulo plataforma__secao">Retenção por safra</h2>
+          <p className="cartao-balcao__texto">
+            É a leitura que separa &quot;estamos retendo melhor&quot; de &quot;entrou muita gente
+            nova&quot; — uma retenção global sobe sozinha num mês de muitas assinaturas, porque
+            ninguém cancela no primeiro mês.
+          </p>
+          <CurvaDeRetencao safras={linha.dados.linha.safras} />
+        </>
+      ) : null}
     </main>
   );
 }

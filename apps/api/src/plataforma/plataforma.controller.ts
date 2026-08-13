@@ -29,6 +29,7 @@ import {
   listarBarbearias,
   listarPlanos,
   PlataformaError,
+  linhaDoTempoDaPlataforma,
   resumoDaPlataforma,
   saudeDasBarbearias,
   provaDaSessao,
@@ -474,6 +475,18 @@ export class PlataformaController {
   async metricas(@Query(new ZodValidationPipe(janelaSchema)) query: Janela) {
     const ate = query.ate ?? ultimoDiaFechado();
     return { ate, resumo: await resumoDaPlataforma({ ate, dias: query.dias }) };
+  }
+
+  /**
+   * A linha do tempo: MRR mês a mês, safra de entrada, curva de retenção.
+   *
+   * Sem `@AgeNaConta`, e a ausência é o que libera: a polaridade do decorador da
+   * plataforma é o inverso do `@Exige` — toda conta de plataforma já lê tudo, e o
+   * que se separa é o que se **faz**. Esta rota só lê.
+   */
+  @Get('linha-do-tempo')
+  async linhaDoTempo() {
+    return { linha: await linhaDoTempoDaPlataforma() };
   }
 
   @Get('saude')

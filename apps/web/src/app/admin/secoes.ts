@@ -88,6 +88,7 @@ export const MODULOS = [
       { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'número da casa e textos aprovados' },
       { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha' },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar' },
+      { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', nota: 'quem está indo embora, e por quê' },
       { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', nota: 'solicitações e dados de clientes' },
       { href: '/admin/plano', nome: 'Plano e cobrança', secao: 'plano', nota: 'assinatura, uso e limites' },
     ],

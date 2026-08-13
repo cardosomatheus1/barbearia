@@ -266,3 +266,26 @@ export const registrarPagamento = (token: string, faturaId: string, metodo: stri
 
 export const anularFatura = (token: string, faturaId: string, motivo: string) =>
   chamar<{ ok: true }>('DELETE', `/v1/plataforma/faturas/${faturaId}`, { motivo }, token);
+
+// -- A linha do tempo (bloco 62) ----------------------------------------------
+
+export interface MesDoMrrNaTela {
+  readonly mes: string;
+  readonly mrrCents: number;
+  readonly barbeariasPagantes: number;
+}
+
+export interface SafraNaTela {
+  readonly safra: string;
+  readonly entraram: number;
+  readonly retidas: readonly number[];
+}
+
+export const linhaDoTempoDaPlataforma = (token: string) =>
+  chamar<{
+    linha: {
+      mrr: readonly MesDoMrrNaTela[];
+      safras: readonly SafraNaTela[];
+      maiorMrrCents: number;
+    };
+  }>('GET', '/v1/plataforma/linha-do-tempo', undefined, token);

@@ -3234,3 +3234,58 @@ export const segmentosNaApi = (token: string) =>
     segmentos: readonly SegmentoNaTela[];
     emRisco: readonly ClienteEmRiscoNaTela[];
   }>('GET', '/v1/admin/segments', undefined, token);
+
+// -- Retenção e crescimento (bloco 62) ----------------------------------------
+
+export interface MotivoDeChurnNaTela {
+  readonly sinal: string;
+  readonly frase: string;
+}
+
+export interface ClienteEmChurnNaTela {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly risco: number;
+  readonly faixa: string;
+  readonly rotuloDaFaixa: string;
+  readonly motivos: readonly MotivoDeChurnNaTela[];
+  readonly cicloDias: number | null;
+  readonly diasSemVir: number | null;
+}
+
+export const churnNaApi = (token: string) =>
+  chamar<{ clientes: readonly ClienteEmChurnNaTela[]; avaliados: number }>(
+    'GET',
+    '/v1/admin/churn',
+    undefined,
+    token,
+  );
+
+export interface PontoDaSerieNaTela {
+  readonly dia: string;
+  readonly valorCents: number;
+}
+
+export interface CrescimentoNaTelaDoAdmin {
+  readonly de: string;
+  readonly ate: string;
+  readonly retencaoBps: number | null;
+  readonly churnBps: number | null;
+  readonly valorPorClienteCents: number | null;
+  readonly receitaPorCadeiraCents: number | null;
+  readonly receitaPorHoraCents: number | null;
+  readonly serie: {
+    readonly pontos: readonly PontoDaSerieNaTela[];
+    readonly maximoCents: number;
+    readonly totalCents: number;
+    readonly mediaCents: number | null;
+  };
+}
+
+export const crescimentoNaApi = (token: string, de: string, ate: string) =>
+  chamar<CrescimentoNaTelaDoAdmin>(
+    'GET',
+    `/v1/admin/crescimento?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
