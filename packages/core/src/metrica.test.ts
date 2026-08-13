@@ -8,6 +8,7 @@ import {
   formatarMetrica,
   METRICAS,
   PERGUNTAS_SUGERIDAS,
+  SEM_ROTULO,
   validarPergunta,
 } from './metrica.js';
 
@@ -168,6 +169,17 @@ describe('toda resposta pode se explicar', () => {
     for (const s of PERGUNTAS_SUGERIDAS) {
       expect(ehMetrica(s.metrica), s.texto).toBe(true);
       expect(definicaoDaMetrica(s.metrica).dimensoes, s.texto).toContain(s.dimensao);
+    }
+  });
+
+  it('toda dimensão sabe nomear a fatia que não tem nome', () => {
+    /**
+     * Venda avulsa não tem barbeiro. Agrupada, ela vira uma linha de rótulo nulo
+     * — e a tela desenhava uma célula em branco ao lado de um valor, que é o
+     * número mentindo por omissão. Apareceu no print, não no teste.
+     */
+    for (const d of DIMENSOES) {
+      expect(SEM_ROTULO[d], d).toBeTruthy();
     }
   });
 

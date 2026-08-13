@@ -7,6 +7,7 @@ import {
   PERGUNTAS_SUGERIDAS,
   interpretadorLocal,
   periodoDaInterpretacao,
+  SEM_ROTULO,
   validarPergunta,
   type ChaveDeMetrica,
   type FalhaDaPergunta,
@@ -193,7 +194,9 @@ export class MetricaController {
       total: resposta.total,
       totalFormatado: formatarMetrica(resposta.total, definicao.unidade),
       fatias: resposta.fatias.map((f) => ({
-        rotulo: f.rotulo,
+        // A fatia sem nome diz o que é — ver `SEM_ROTULO`. Célula em branco ao
+        // lado de um valor é o número mentindo por omissão.
+        rotulo: f.rotulo ?? SEM_ROTULO[pergunta.dimensao],
         valor: f.valor,
         formatado: formatarMetrica(f.valor, definicao.unidade),
       })),

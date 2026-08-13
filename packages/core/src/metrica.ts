@@ -324,6 +324,24 @@ export const PERGUNTAS_SUGERIDAS: readonly {
   { texto: 'Como está a ocupação por barbeiro?', metrica: 'ocupacao', dimensao: 'profissional' },
 ];
 
+/**
+ * O nome da fatia que não tem nome.
+ *
+ * Uma venda avulsa de produto não tem barbeiro; uma comanda sem atendimento não
+ * tem serviço. Agrupadas, elas viram uma linha com o rótulo nulo — e a tela
+ * desenhava uma célula em branco ao lado de um valor, que é o número mentindo
+ * por omissão.
+ *
+ * Dizer "sem barbeiro" é a mesma regra do relatório que ignora parte do dado: o
+ * número sai completo, com cara de completo, e quem lê decide em cima dele.
+ */
+export const SEM_ROTULO: Readonly<Record<DimensaoDaMetrica, string>> = {
+  nenhuma: 'Total',
+  profissional: 'Sem barbeiro (venda avulsa)',
+  servico: 'Sem serviço',
+  unidade: 'Sem unidade',
+};
+
 /** O número já formatado, para a tela e a resposta dizerem a mesma coisa. */
 export function formatarMetrica(valor: number | null, unidade: UnidadeDaMetrica): string {
   if (valor === null) return '—';
