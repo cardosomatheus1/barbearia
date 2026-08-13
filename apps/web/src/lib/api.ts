@@ -39,7 +39,14 @@ export interface PublicProfile {
   };
   categories: { id: string | null; name: string; services: PublicService[] }[];
   bundles: { serviceId: string; name: string; priceCents: number; componentIds: string[] }[];
-  professionals: { id: string; name: string; bio: string | null; photoUrl: string | null }[];
+  professionals: {
+    id: string;
+    name: string;
+    bio: string | null;
+    photoUrl: string | null;
+    /** Endereço da página pública dele, quando existe (bloco 73). */
+    perfilPublico: string | null;
+  }[];
   hours: { weekday: number; opensAt: string | null; closesAt: string | null }[];
   open: { isOpen: boolean; detail: string };
   priceFromCents: number | null;
@@ -878,4 +885,33 @@ export async function buscarBarbearias(
   const resposta = await fetch(`${BASE}/v1/marketplace/busca?${query}`, { cache: 'no-store' });
   if (!resposta.ok) return { resultados: [], analisadas: 0, truncada: false };
   return (await resposta.json()) as BuscaDeBarbearias;
+}
+
+export interface PerfilDoBarbeiroNaApi {
+  professionalId: string;
+  locationId: string;
+  nome: string;
+  slug: string;
+  fotoUrl: string | null;
+  bio: string | null;
+  especialidades: string[];
+  notaBps: number | null;
+  avaliacoes: number;
+  atendimentos: number;
+}
+
+/**
+ * A página pública do barbeiro (bloco 73, SPEC §5.2).
+ *
+ * Sem cache: a nota e a contagem de atendimentos mudam a cada avaliação e a
+ * cada dia de trabalho, e uma página que diz "1.842 atendimentos" quando são
+ * 1.900 é o tipo de número que só é notado por quem confere.
+ */
+export async function perfilDoBarbeiro(
+  slug: string,
+  barbeiro: string,
+): Promise<PerfilDoBarbeiroNaApi | null> {
+  const resposta = await fetch(`${BASE}/v1/b/${slug}/b/${barbeiro}`, { cache: 'no-store' });
+  if (!resposta.ok) return null;
+  return (await resposta.json()) as PerfilDoBarbeiroNaApi;
 }

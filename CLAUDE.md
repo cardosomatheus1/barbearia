@@ -996,6 +996,13 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 | Total que a tela promete e a cobrança usa | sai do domínio, sem o teto da leitura. Somar a página truncada dá um total menor que a fatura assim que a lista passa do limite |
 | `psql -tAc` com `RETURNING` | devolve a linha **e** a etiqueta do comando ("INSERT 0 1"). Sem pegar a primeira linha, o id sai com o rótulo colado e a instrução seguinte recusa o uuid |
 | Semente que cria agendamento no relógio | colide com o que outra semeadura já criou para a mesma cadeira, e a constraint anti-overbooking recusa a linha inteira. Hora fixa e fora do expediente |
+| Publicar uma **pessoa** | nasce desligado, e é a exceção consciente à regra do bloco 60. Nome, foto, nota e contagem de atendimentos numa página indexada é exposição de gente, não benefício que a barbearia concede — ligado por padrão, o barbeiro descobriria o próprio perfil pelo Google |
+| Endereço público de pessoa | permanente, gravado só enquanto é nulo, e único **por barbearia**. Global, dois "joao" em cidades diferentes virariam corrida por nome; trocável, o link salvo pelo cliente morre |
+| Página pública de quem trabalha na casa | some quando a pessoa sai **e** quando a unidade fecha. Fechar filial não desliga quem trabalhava nela, e o pior link deste produto é o perfil indexado com "Agendar com X" funcionando para quem não está mais lá |
+| Precisão de um número em duas telas | é a mesma nas duas. A nota deste produto tem uma casa desde o bloco 43; a página do barbeiro mostrando duas diria 4,92 onde a da casa diz 4,9, sobre a mesma pessoa (§6, pergunta 6) |
+| Teste que prova uma guarda por ausência de dado | não prova nada. O caso "perfil desligado não aparece" passava com a guarda removida, porque a linha nem tinha endereço público para ser achada — a semente precisa satisfazer **tudo menos** a regra sob teste |
+| Interruptor e campos no mesmo formulário | são dois envios, não um. Com o estado num campo escondido fixo na negação, salvar uma especialidade nova exigia tirar a página do ar e publicar de novo — o botão que submete é quem manda o valor |
+| `ALTER TABLE` com várias cláusulas | é `ADD CONSTRAINT`, nunca `CONSTRAINT` solto. A forma de dentro do `CREATE TABLE` não vale no `ALTER`, e o erro sai como sintaxe apontando para a linha seguinte |
 | Ponto e vírgula dentro de comentário de SQL | não, quando a semente parte a instrução por ele. É irmão da crase: o comentário vira metade de uma instrução e o erro sai como sintaxe em cima de uma linha de prosa |
 
 ---

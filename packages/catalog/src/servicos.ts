@@ -27,7 +27,10 @@ export type CatalogFailure =
   // Bloco 58: a unidade tem nome, existe, e a última aberta não fecha.
   | 'invalid_location'
   | 'location_not_found'
-  | 'ultima_unidade';
+  | 'ultima_unidade'
+  // Bloco 73: o perfil público do barbeiro.
+  | 'too_many_specialties'
+  | 'invalid_public_slug';
 
 export class CatalogError extends Error {
   constructor(

@@ -13,3 +13,4 @@ export * from './oferta.js';
 export * from './multiunidade.js';
 export * from './ocupacao.js';
 export * from './lote.js';
+export * from './barbeiro.js';

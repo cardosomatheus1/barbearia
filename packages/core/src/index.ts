@@ -41,6 +41,7 @@ export * from './consumo.js';
 export * from './marketplace.js';
 export * from './proximo.js';
 export * from './atribuicao.js';
+export * from './barbeiro.js';
 export * from './insight.js';
 export * from './precificacao.js';
 export * from './recepcao.js';

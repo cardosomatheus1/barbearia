@@ -586,7 +586,23 @@ export interface ProfissionalDoCadastro {
   futureAppointments: number;
   hasAccount: boolean;
   phone: string | null;
+  /** Página pública do barbeiro (bloco 73, SPEC §5.2). */
+  perfilPublico: boolean;
+  perfilSlug: string | null;
+  especialidades: string[];
 }
+
+export const definirPerfilPublicoNaApi = (
+  token: string,
+  id: string,
+  corpo: { ligado: boolean; especialidades: string[]; bio?: string },
+) =>
+  chamar<{ ligado: boolean; slug: string | null }>(
+    'PUT',
+    `/v1/admin/catalog/professionals/${id}/perfil-publico`,
+    corpo,
+    token,
+  );
 
 export interface EntradaDeProfissional {
   name: string;

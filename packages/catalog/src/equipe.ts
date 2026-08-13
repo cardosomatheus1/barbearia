@@ -1,5 +1,11 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
-import { formatHHMM, instantToLocal } from '@barbearia/core';
+import {
+  ehEspecialidade,
+  formatHHMM,
+  instantToLocal,
+  MAXIMO_DE_ESPECIALIDADES,
+  slugDoBarbeiro,
+} from '@barbearia/core';
 import { CatalogError, exigirServicosDoTenant } from './servicos.js';
 
 /**
@@ -34,6 +40,10 @@ export interface Profissional {
   readonly hasAccount: boolean;
   /** Para onde o convite vai. Guardado na cadeira para o reenvio não repetir. */
   readonly phone: string | null;
+  /** Se a pessoa tem página pública, e onde ela mora (bloco 73, SPEC §5.2). */
+  readonly perfilPublico: boolean;
+  readonly perfilSlug: string | null;
+  readonly especialidades: readonly string[];
 }
 
 export async function listProfessionals(
@@ -57,6 +67,9 @@ export async function listProfessionals(
         future_appointments: bigint;
         has_account: boolean;
         phone_e164: string | null;
+        public_profile: boolean;
+        public_slug: string | null;
+        specialties: string[];
       }[]
     >`
       SELECT p.id, p.name, p.kind, p.bookable_online, p.daily_limit, p.active,
@@ -71,7 +84,7 @@ export async function listProfessionals(
                  AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
              ) AS future_appointments,
              EXISTS (SELECT 1 FROM staff_users s WHERE s.professional_id = p.id) AS has_account,
-             p.phone_e164
+             p.phone_e164, p.public_profile, p.public_slug, p.specialties
       FROM professionals p
       WHERE p.location_id = ${locationId}::uuid
       ORDER BY p.active DESC, p.name
@@ -91,6 +104,9 @@ export async function listProfessionals(
       futureAppointments: Number(linha.future_appointments),
       hasAccount: linha.has_account,
       phone: linha.phone_e164,
+      perfilPublico: linha.public_profile,
+      perfilSlug: linha.public_slug,
+      especialidades: linha.specialties,
     }));
   });
 }
@@ -196,6 +212,98 @@ export async function updateProfessional(
 
     await gravarHabilidades(tx, professionalId, input.serviceIds);
   });
+}
+
+/**
+ * Liga ou desliga a página pública do profissional (bloco 73, SPEC §5.2).
+ *
+ * Rota própria em vez de um campo em `updateProfessional`: aquela função grava
+ * o cadastro inteiro, e chamá-la para mexer num interruptor exigiria reenviar
+ * nome, tipo, limite diário e a lista de habilidades — o caminho em que um
+ * campo vazio apaga o que ninguém queria apagar. É a mesma razão de a vitrine e
+ * o segundo fator terem rota própria.
+ *
+ * O endereço é **permanente**: gravado só enquanto está nulo. Trocá-lo mudaria
+ * o link de uma página indexada, e o endereço que o cliente salvou morreria —
+ * é o precedente de `tenant_slugs`, que adiciona e nunca substitui.
+ */
+export async function definirPerfilPublico(
+  tenantId: string,
+  locationId: string,
+  professionalId: string,
+  input: {
+    readonly ligado: boolean;
+    readonly especialidades: readonly string[];
+    readonly bio?: string | undefined;
+  },
+): Promise<{ readonly slug: string | null }> {
+  const especialidades = input.especialidades.filter(ehEspecialidade);
+  if (especialidades.length > MAXIMO_DE_ESPECIALIDADES) {
+    throw new CatalogError('too_many_specialties', 'Escolha no máximo seis especialidades.');
+  }
+
+  return withTenant(tenantId, async (tx) => {
+    /**
+     * A unidade é conferida **no domínio**, e a recusa é a de inexistente.
+     *
+     * A RLS separa barbearias e não separa lojas dentro de uma: sem este
+     * filtro, o gerente escopado a uma filial publicava a página de um barbeiro
+     * da matriz mandando o id alheio — e o id sai na página pública da casa,
+     * então não há nem o que adivinhar. O que ele publicaria é nome, foto e
+     * biografia de uma pessoa numa página indexada, que é justamente a decisão
+     * que esta coluna existe para deixar com ela.
+     *
+     * Achado da `/security-review` deste bloco, e é o mesmo do 58 e do 68.
+     */
+    const linhas = await tx.$queryRaw<{ name: string; public_slug: string | null }[]>`
+      SELECT name, public_slug FROM professionals
+       WHERE id = ${professionalId}::uuid AND location_id = ${locationId}::uuid
+    `;
+    const atual = linhas[0];
+    if (!atual) throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
+
+    /**
+     * O endereço nasce do nome e nunca muda depois.
+     *
+     * Quando o nome já foi usado por outro colega, entra o sufixo — dois "João"
+     * na mesma casa é caso comum, e recusar o segundo perfil por causa disso
+     * seria transformar cadastro de equipe numa corrida por nome.
+     */
+    let slug = atual.public_slug;
+    if (!slug && input.ligado) {
+      const base = slugDoBarbeiro(atual.name);
+      if (!base) {
+        throw new CatalogError('invalid_public_slug', 'O nome não gera um endereço público.');
+      }
+      slug = await enderecoLivre(tx, base);
+    }
+
+    const afetadas = await tx.$executeRaw`
+      UPDATE professionals SET
+        public_profile = ${input.ligado},
+        public_slug = COALESCE(public_slug, ${slug}),
+        specialties = ${especialidades},
+        bio = COALESCE(${input.bio ?? null}, bio),
+        updated_at = now()
+      WHERE id = ${professionalId}::uuid AND location_id = ${locationId}::uuid
+    `;
+    if (afetadas === 0) {
+      throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
+    }
+    return { slug: input.ligado ? slug : atual.public_slug };
+  });
+}
+
+/** O primeiro endereço livre a partir da base, dentro desta barbearia. */
+async function enderecoLivre(tx: TransactionClient, base: string): Promise<string> {
+  for (let i = 0; i < 50; i += 1) {
+    const candidato = i === 0 ? base : `${base.slice(0, 56)}-${i + 1}`;
+    const ocupados = await tx.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*)::bigint AS n FROM professionals WHERE public_slug = ${candidato}
+    `;
+    if (Number(ocupados[0]?.n ?? 0) === 0) return candidato;
+  }
+  throw new CatalogError('invalid_public_slug', 'Não foi possível gerar um endereço público.');
 }
 
 // -- Jornada ------------------------------------------------------------------

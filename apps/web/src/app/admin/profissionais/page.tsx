@@ -10,6 +10,7 @@ import {
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
 import { reaisDoCampo } from '@/lib/dinheiro';
+import { ESPECIALIDADES, ROTULO_DA_ESPECIALIDADE } from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import {
   lerConflitoDeJornada,
@@ -24,6 +25,7 @@ import {
   acaoMeta,
   acaoSair,
   acaoSalvarJornada,
+  acaoPerfilPublico,
   acaoSalvarProfissional,
 } from '../acoes';
 import { secao } from '../secoes';
@@ -441,6 +443,91 @@ function Convite({
  * que ninguém escolheu e que todo mundo ignora. Campo vazio apaga, que é o único
  * jeito de dizer "sem meta".
  */
+/**
+ * A página pública do barbeiro (bloco 73, SPEC §5.2).
+ *
+ * Nasce desligada, e é a exceção consciente à regra do bloco 60 — ali, "regra
+ * que beneficia nasce ligada". Aparecer numa página indexada com nome, foto,
+ * nota e contagem de atendimentos é exposição pública de uma **pessoa**, e a
+ * SPEC escreve "opcional, por profissional" justamente porque a decisão é de
+ * quem vai aparecer.
+ */
+function PaginaPublica({
+  pessoa,
+  slug,
+}: {
+  readonly pessoa: ProfissionalDoCadastro;
+  readonly slug: string;
+}) {
+  return (
+    <form action={acaoPerfilPublico} className="formulario perfil-publico">
+      <input name="id" type="hidden" value={pessoa.id} />
+
+      <p className="perfil-publico__nota">
+        {pessoa.perfilPublico && pessoa.perfilSlug ? (
+          <>
+            No ar em{' '}
+            <a href={`/${slug}/b/${pessoa.perfilSlug}`}>
+              /{slug}/b/{pessoa.perfilSlug}
+            </a>
+            . O endereço é permanente: quem salvou o link continua chegando.
+          </>
+        ) : (
+          <>
+            Fora do ar. Ligando, {pessoa.name} ganha uma página com nota, atendimentos e
+            especialidades — e o cartão dele na página da barbearia passa a levar para lá.
+          </>
+        )}
+      </p>
+
+      <fieldset className="perfil-publico__campos">
+        <legend className="ui-field__label">Especialidades (até seis)</legend>
+        <div className="perfil-publico__lista">
+          {ESPECIALIDADES.map((e) => (
+            <label className="perfil-publico__opcao" key={e}>
+              <input
+                defaultChecked={pessoa.especialidades.includes(e)}
+                name="especialidades"
+                type="checkbox"
+                value={e}
+              />
+              {ROTULO_DA_ESPECIALIDADE[e]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {/**
+        * Dois botões, e o `value` de cada um é o estado que ele grava.
+        *
+        * Com um campo escondido fixo na negação, salvar uma especialidade nova
+        * numa página já publicada exigia tirá-la do ar e publicar de novo — o
+        * interruptor e os campos ficavam presos no mesmo envio. O botão que
+        * submete é quem manda o `ligado`, então "Salvar" preserva o estado e o
+        * outro o inverte. Achado da revisão deste bloco.
+        */}
+      <div className="perfil-publico__botoes">
+        <button
+          className="ui-button ui-button--secondary perfil-publico__acao"
+          name="ligado"
+          type="submit"
+          value={pessoa.perfilPublico ? '1' : '0'}
+        >
+          Salvar especialidades
+        </button>
+        <button
+          className={`ui-button ${pessoa.perfilPublico ? 'ui-button--ghost' : 'ui-button--primary'} perfil-publico__acao`}
+          name="ligado"
+          type="submit"
+          value={pessoa.perfilPublico ? '0' : '1'}
+        >
+          {pessoa.perfilPublico ? 'Tirar do ar' : 'Publicar página'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function Meta({
   pessoa,
   meta,
@@ -647,6 +734,16 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
                 <summary className="dobra__titulo">Editar cadastro</summary>
                 <CamposDaPessoa pessoa={pessoa} prefixo={`p-${pessoa.id}`} servicos={servicos} />
               </details>
+
+              {pessoa.kind === 'professional' ? (
+                <details className="dobra">
+                  <summary className="dobra__titulo">
+                    Página pública
+                    {pessoa.perfilPublico ? <span className="item-cadastro__selo">no ar</span> : null}
+                  </summary>
+                  <PaginaPublica pessoa={pessoa} slug={estado.slug} />
+                </details>
+              ) : null}
 
               {pessoa.kind === 'professional' && metas.ok ? (
                 <details className="dobra">

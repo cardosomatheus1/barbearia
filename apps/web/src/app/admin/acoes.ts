@@ -89,6 +89,7 @@ import {
   criarFaixaNaApi,
   ligarPrecoPorFaixaNaApi,
   contestarClienteDoMarketplace,
+  definirPerfilPublicoNaApi,
   definirVitrineNaApi,
   moverNaFila,
   responderRecadoNaApi,
@@ -1036,6 +1037,23 @@ export async function acaoDefinirVitrine(form: FormData): Promise<void> {
   const resultado = await definirVitrineNaApi(token, texto(form, 'ligado') === '1');
   if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
   redirect('/admin/configuracoes?salvo=1');
+}
+
+/**
+ * Liga ou desliga a página pública do barbeiro (bloco 73, SPEC §5.2).
+ *
+ * As especialidades vão juntas porque é a mesma decisão: uma página pública sem
+ * elas é um nome e uma foto, e a SPEC as põe no card justamente porque é por
+ * elas que o cliente escolhe quem corta o cabelo dele.
+ */
+export async function acaoPerfilPublico(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await definirPerfilPublicoNaApi(token, texto(form, 'id'), {
+    ligado: texto(form, 'ligado') === '1',
+    especialidades: form.getAll('especialidades').map(String).filter(Boolean),
+  });
+  if (!resultado.ok) falhar('/admin/profissionais', resultado.code);
+  redirect('/admin/profissionais?feito=1');
 }
 
 /**

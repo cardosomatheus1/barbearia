@@ -7686,3 +7686,101 @@ main { padding-bottom: var(--space-8); }
 .plano__aliquota { color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .plano__contestar { min-height: 44px; }
 .plano__contestacao { display: grid; gap: var(--space-2); min-width: 14rem; }
+
+/* -- Página pública do barbeiro (bloco 73) --------------------------------- */
+
+.barbeiro { padding-bottom: var(--space-8); }
+.barbeiro__voltar {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-text-muted);
+}
+.barbeiro__topo {
+  display: grid;
+  gap: var(--space-4);
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+.barbeiro__foto {
+  display: block;
+  width: 96px;
+  height: 96px;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+}
+.barbeiro__foto--vazia {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+.barbeiro__nome { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); }
+.barbeiro__numeros { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.barbeiro__nota { color: var(--color-text-primary); font-weight: var(--font-weight-semibold); }
+.barbeiro__sep { opacity: 0.5; }
+
+.barbeiro__bloco { margin-bottom: var(--space-5); }
+.barbeiro__secao {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.barbeiro__especialidades {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.barbeiro__especialidade {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+}
+.barbeiro__bio { margin: 0; color: var(--color-text-muted); }
+
+.barbeiro__acoes { display: grid; gap: var(--space-3); margin-bottom: var(--space-5); }
+.barbeiro__agendar, .barbeiro__acao { min-height: 44px; }
+
+.barbeiro__pendente {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 40em) {
+  /* A foto ao lado do nome quando há largura; empilhada no celular, que é onde
+     o produto começa. */
+  .barbeiro__topo { grid-template-columns: auto 1fr; }
+  .barbeiro__acoes { grid-auto-flow: column; justify-content: start; }
+}
+
+/* -- Página pública do barbeiro, no admin (bloco 73) ----------------------- */
+
+.perfil-publico__nota { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.perfil-publico__campos { border: 0; margin: 0 0 var(--space-3); padding: 0; }
+.perfil-publico__lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+}
+/* 44px como todo alvo de toque, em qualquer largura: a caixa do navegador dá
+   13px, e a medição reprova. */
+.perfil-publico__opcao { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
+.perfil-publico__opcao input { width: 24px; height: 24px; }
+.perfil-publico__acao { min-height: 44px; }
+.perfil-publico__botoes { display: flex; flex-wrap: wrap; gap: var(--space-3); }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ESPECIALIDADES, MAXIMO_DE_ESPECIALIDADES } from '@barbearia/core';
 
 /**
  * Entrada do CRUD do admin, validada na borda.
@@ -120,4 +121,20 @@ export const serviceResourcesSchema = z.object({
       }),
     )
     .max(10),
+});
+
+/**
+ * O perfil público do barbeiro (bloco 73, SPEC §5.2).
+ *
+ * A especialidade é conjunto **fechado** na borda, e não texto livre: o que não
+ * está no catálogo não existe, e a recusa acontece antes de qualquer ida ao
+ * banco. Um valor inventado aqui não quebra nada — o domínio o descarta —, mas
+ * recusar cedo dá motivo legível em vez de um perfil salvo com menos coisas do
+ * que a pessoa marcou.
+ */
+export const perfilPublicoSchema = z.object({
+  ligado: z.boolean(),
+  especialidades: z.array(z.enum(ESPECIALIDADES)).max(MAXIMO_DE_ESPECIALIDADES).default([]),
+  /** Ausente é "não mexa", nunca "apague" — a regra do campo opcional na borda. */
+  bio: z.string().trim().max(500).optional(),
 });

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import {
   CatalogError,
+  definirPerfilPublico,
   conflitosDaJornada,
   createProfessional,
   createService,
@@ -33,9 +34,12 @@ import {
   scheduleSchema,
   serviceResourcesSchema,
   serviceSchema,
+  perfilPublicoSchema,
 } from './catalogo.schemas.js';
 
 const STATUS: Record<string, number> = {
+  too_many_specialties: 422,
+  invalid_public_slug: 422,
   service_not_found: 404,
   professional_not_found: 404,
   category_not_found: 404,
@@ -183,6 +187,35 @@ export class CatalogoController {
     try {
       await updateProfessional(staff.tenantId, id, body);
       return { updated: true };
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  /**
+   * A página pública do profissional (bloco 73, SPEC §5.2).
+   *
+   * `settings.manage`, como o resto da tela de equipe: é configuração do
+   * cadastro, não dinheiro nem dado de cliente. E rota própria em vez de campo
+   * no `PUT` de cima — aquele grava o cadastro inteiro, e um campo vazio ali
+   * apagaria a habilidade de quem só queria ligar o perfil.
+   */
+  @Exige('settings.manage')
+  @Put('professionals/:id/perfil-publico')
+  async perfilPublico(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(perfilPublicoSchema))
+    body: { ligado: boolean; especialidades: string[]; bio?: string },
+  ) {
+    try {
+      const local = await this.unidade(staff);
+      const { slug } = await definirPerfilPublico(staff.tenantId, local.id, id, {
+        ligado: body.ligado,
+        especialidades: body.especialidades,
+        ...(body.bio === undefined ? {} : { bio: body.bio }),
+      });
+      return { ligado: body.ligado, slug };
     } catch (error) {
       return toHttp(error);
     }

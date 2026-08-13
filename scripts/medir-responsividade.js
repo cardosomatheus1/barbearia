@@ -1135,6 +1135,34 @@ async function prepararConsumo(slug) {
  * A varredura não roda aqui: quem grava é o worker, e a medição não o levanta.
  * A linha é escrita direto, com os mesmos números que a varredura produziria.
  */
+/**
+ * Publica a página de um barbeiro (bloco 73).
+ *
+ * A tela só existe quando o perfil está ligado, e a medição precisa fotografar
+ * a versão com conteúdo: nota, atendimentos e especialidades. Sem semente, o
+ * print seria de um 404.
+ */
+function prepararPerfilDoBarbeiro(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return null;
+
+  const pessoa = psql(
+    `select id from professionals
+      where tenant_id = '${tenant}' and kind = 'professional' and active
+      order by name limit 1`,
+  );
+  if (!pessoa) return null;
+
+  psql(
+    `UPDATE professionals
+        SET public_profile = true,
+            public_slug = COALESCE(public_slug, 'barbeiro-da-medicao'),
+            specialties = ARRAY['fade', 'degrade', 'barba']
+      WHERE id = '${pessoa}'`,
+  );
+  return 'barbeiro-da-medicao';
+}
+
 async function prepararMarketplace(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
@@ -2321,6 +2349,7 @@ async function main() {
   await prepararRecepcao(slug);
   await prepararPrecos(slug);
   await prepararMarketplace(slug);
+  const barbeiro = prepararPerfilDoBarbeiro(slug);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);
@@ -2442,6 +2471,7 @@ async function main() {
     { nome: 'clube', url: '/admin/clube', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fale com a gente', url: `/${slug}/falar` },
     { nome: 'buscar barbearia', url: '/buscar' },
+    ...(barbeiro ? [{ nome: 'perfil do barbeiro', url: `/${slug}/b/${barbeiro}` }] : []),
     // Com o filtro de disponibilidade ligado o card muda de forma — e é a única
     // largura em que a frase do truncamento aparece. Medir só a versão sem
     // filtro mediria a tela mais fácil.

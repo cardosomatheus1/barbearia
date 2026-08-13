@@ -37,6 +37,15 @@ export interface PublicProfessional {
   readonly bio: string | null;
   readonly photoUrl: string | null;
   /**
+   * O endereço da página dele, quando ela existe (bloco 73, SPEC §5.2).
+   *
+   * Nulo é "não tem página" — o padrão, porque expor uma pessoa numa página
+   * indexada é decisão dela. Sai daqui e não de uma consulta separada porque a
+   * lista de profissionais já é lida inteira: uma segunda ida ao banco por
+   * causa de uma coluna é latência que a meta de LCP paga.
+   */
+  readonly perfilPublico: string | null;
+  /**
    * Os dias da semana em que ele atende (bloco 66).
    *
    * Sai daqui porque a pergunta *"João trabalha sexta?"* é uma das quatro que a
@@ -220,9 +229,14 @@ export async function getPublicProfile(
     if (!location) return null;
 
     const professionalRows = await tx.$queryRaw<
-      { id: string; name: string; bio: string | null; photo_url: string | null }[]
+      {
+        id: string; name: string; bio: string | null; photo_url: string | null;
+        public_slug: string | null;
+      }[]
     >`
-      SELECT id, name, bio, photo_url FROM professionals
+      SELECT id, name, bio, photo_url,
+             CASE WHEN public_profile THEN public_slug END AS public_slug
+        FROM professionals
       WHERE location_id = ${location.id}::uuid
         AND active AND bookable_online AND kind IN ('professional', 'external')
       ORDER BY name
@@ -349,6 +363,7 @@ export async function getPublicProfile(
         name: row.name,
         bio: row.bio,
         photoUrl: row.photo_url,
+        perfilPublico: row.public_slug,
         // Ordenados e sem repetição: a jornada pode ter mais de um intervalo no
         // mesmo dia, e "atende terça, terça e sexta" é a frase que ninguém quer.
         weekdays: [

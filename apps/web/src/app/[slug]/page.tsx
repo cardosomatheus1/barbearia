@@ -276,7 +276,24 @@ export default async function BarbershopPage({ params }: Params) {
                   const rosto = imagemPublica(pessoa.photoUrl);
                   return (
                   <li className="pessoa" key={pessoa.id}>
-                    <a className="pessoa__link" href={`/${slug}/p/${pessoa.id}`}>
+                    {/**
+                      * O link ia para `/{slug}/p/{id}`, que **não existe** — o
+                      * cartão do profissional era um caminho para lugar nenhum,
+                      * na seção em que a decisão do cliente acontece (§6,
+                      * pergunta 1). Achado ao abrir o bloco 73.
+                      *
+                      * Com página pública, leva a ela; sem, leva ao agendamento
+                      * já com aquela cadeira escolhida, que é o que a pessoa
+                      * queria ao clicar num rosto.
+                      */}
+                    <a
+                      className="pessoa__link"
+                      href={
+                        pessoa.perfilPublico
+                          ? `/${slug}/b/${pessoa.perfilPublico}`
+                          : `/${slug}/agendar?p=${pessoa.id}`
+                      }
+                    >
                       {rosto ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img

@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { criarUnidade, definirUnidadeAtiva, unidadesDoCadastro } from './unidades.js';
+import { definirPerfilPublico } from './equipe.js';
 
 /**
  * Abrir e fechar uma loja, contra Postgres real (bloco 58).
@@ -53,6 +54,42 @@ describeIfDb('unidades da casa', () => {
       INSERT INTO staff_users (id, tenant_id, name, email, password_hash, role)
       VALUES ('${DONO}', '${TENANT}', 'Matheus', 'dono@domari.com.br', 'x', 'owner');
     `);
+  });
+
+  it('o gerente de uma filial não publica a página de um barbeiro da matriz', async () => {
+    /**
+     * A RLS separa barbearias e não separa lojas dentro de uma, e o id do
+     * profissional sai na **página pública** da casa — não há nem o que
+     * adivinhar. Sem o filtro por unidade no domínio, o gerente escopado à
+     * filial punha nome, foto e biografia de um colega da matriz numa página
+     * indexada, que é a decisão que a coluna existe para deixar com a pessoa.
+     *
+     * Achado da `/security-review` do bloco 73, e é o mesmo do 58 e do 68.
+     */
+    const filial = await criarUnidade({
+      tenantId: TENANT,
+      nome: 'Filial',
+      timezone: 'America/Bahia',
+      cidade: 'Salvador',
+      ator,
+    });
+    const daMatriz = 'b5858585-aaaa-0000-0000-000000000001';
+    await exec(`
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${daMatriz}', '${TENANT}', '${MATRIZ}', 'João da Matriz', 'professional')
+    `);
+
+    await expect(
+      definirPerfilPublico(TENANT, filial.id, daMatriz, {
+        ligado: true,
+        especialidades: ['fade'],
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+
+    const depois = await admin.$queryRawUnsafe<{ publicado: boolean }[]>(
+      `SELECT public_profile AS publicado FROM professionals WHERE id = '${daMatriz}'`,
+    );
+    expect(depois[0]?.publicado).toBe(false);
   });
 
   it('a segunda loja nasce aberta e com o próprio fuso', async () => {
