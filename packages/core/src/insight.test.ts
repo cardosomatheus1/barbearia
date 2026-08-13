@@ -27,6 +27,7 @@ const dados = (parcial: Partial<DadosDoInsight> = {}): DadosDoInsight => ({
   ticketMedioCents: TICKET,
   horaOciosa: null,
   apertadas: [],
+  acabando: [],
   ...parcial,
 });
 
@@ -121,6 +122,7 @@ describe('insight que não tem o que dizer não aparece', () => {
         ticketMedioCents: 0,
         horaOciosa: { vagas: 23, primeiraHora: 13, ultimaHora: 17, clientesNoPonto: 90 },
         apertadas: [apertada('Ana', 14)],
+        acabando: [],
       }),
     ).toHaveLength(0);
   });
@@ -159,5 +161,57 @@ describe('o texto diz o que a pessoa precisa para decidir', () => {
     expect(insight?.texto).toContain('97%');
     expect(insight?.texto).toContain('14 pessoas');
     expect(insight?.acao.parametros['profissionalId']).toBe('id-João');
+  });
+});
+
+describe('o produto que vai acabar (bloco 69)', () => {
+  const acabando = (nome: string, dias: number, comprar: number, precoCents: number) => ({
+    produtoId: `id-${nome}`,
+    nome,
+    diasAteAcabar: dias,
+    comprar,
+    precoCents,
+  });
+
+  it('vira cartão com o prazo, a quantidade e o que deixa de ser vendido', () => {
+    // É o terceiro exemplo da SPEC §4.19, e ele tem os dois números por uma
+    // razão: sem o prazo o dono não sabe se corre, sem a quantidade não sabe o
+    // que pedir.
+    const [insight] = montarInsights(
+      dados({ acabando: [acabando('Pomada modeladora', 9, 12, 4500)] }),
+    );
+    expect(insight?.tipo).toBe('estoque_acabando');
+    expect(insight?.titulo).toContain('9 dias');
+    expect(insight?.texto).toContain('12 unidades');
+    // O texto acrescenta em vez de repetir: o print mostrou o cartão dizendo o
+    // nome e o prazo duas vezes.
+    expect(insight?.texto).not.toContain('Pomada modeladora');
+    expect(insight?.impactoCents).toBe(12 * 4500);
+  });
+
+  it('produto sem preço de venda não vira cartão de dinheiro', () => {
+    /**
+     * É o consumo interno chegando por engano. Para o shampoo da lavagem o
+     * produto não sabe quanto de receita a falta bloqueia, e um teto inventado
+     * ao lado de dois defensáveis faz a ordenação inteira deixar de valer.
+     */
+    expect(montarInsights(dados({ acabando: [acabando('Shampoo', 4, 6, 0)] }))).toHaveLength(0);
+  });
+
+  it('o que já está coberto não vira cartão', () => {
+    // "Comprar zero unidades" é o cartão que ocupa espaço sem pedir nada.
+    expect(montarInsights(dados({ acabando: [acabando('Cera', 40, 0, 4500)] }))).toHaveLength(0);
+  });
+
+  it('o estoque disputa a ordem com os outros dois pelo mesmo teto', () => {
+    // Os três tipos usam a mesma definição de impacto; se cada um tivesse a
+    // própria escala, a ordem seria a de quem escreveu o código.
+    const lista = montarInsights(
+      dados({
+        apertadas: [apertada('Ana', 2)],
+        acabando: [acabando('Pomada', 3, 20, 4500)],
+      }),
+    );
+    expect(lista[0]?.tipo).toBe('estoque_acabando');
   });
 });

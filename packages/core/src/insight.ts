@@ -36,18 +36,16 @@
 import type { FiltroDeCampanha } from './segmento.js';
 
 /**
- * Os tipos que existem hoje.
+ * Os três tipos da SPEC §4.19.
  *
- * A SPEC §4.19 lista três exemplos, e o terceiro — *"a pomada X deve acabar em
- * ~9 dias"* — depende da previsão de consumo, que é o bloco 69. Ele entra aqui
- * como tipo novo quando existir a previsão; declarar o tipo agora seria um
- * assunto que a tela oferece e nada preenche.
+ * `estoque_acabando` entrou no bloco 69, junto da previsão de consumo que o
+ * sustenta — no 67 ele teria sido um assunto que a tela oferece e nada preenche.
  */
-export const TIPOS_DE_INSIGHT = ['hora_ociosa', 'agenda_apertada'] as const;
+export const TIPOS_DE_INSIGHT = ['hora_ociosa', 'agenda_apertada', 'estoque_acabando'] as const;
 export type TipoDeInsight = (typeof TIPOS_DE_INSIGHT)[number];
 
 /** Onde o botão do insight leva. A tela traduz para caminho. */
-export const DESTINOS_DO_INSIGHT = ['campanha', 'jornada_do_profissional'] as const;
+export const DESTINOS_DO_INSIGHT = ['campanha', 'jornada_do_profissional', 'estoque'] as const;
 export type DestinoDoInsight = (typeof DESTINOS_DO_INSIGHT)[number];
 
 export interface AcaoDoInsight {
@@ -94,10 +92,31 @@ export interface AgendaApertada {
   readonly pedidosSemVaga: number;
 }
 
+/**
+ * O produto de **revenda** que vai acabar, com o que deixa de ser vendido.
+ *
+ * Só revenda gera cartão, e a ausência do consumo interno é decisão: para o
+ * shampoo da lavagem o produto não sabe quanto de receita a falta bloqueia, e
+ * inventar um número poria ao lado de dois tetos defensáveis um terceiro sem
+ * defesa — que é o que faz a ordenação inteira deixar de valer.
+ *
+ * O consumo interno não fica sem resposta: ele aparece na tela de estoque com o
+ * prazo e a sugestão de compra, que é a resposta operacional. O que ele não tem
+ * é lugar numa lista ordenada por dinheiro.
+ */
+export interface EstoqueAcabando {
+  readonly produtoId: string;
+  readonly nome: string;
+  readonly diasAteAcabar: number;
+  readonly comprar: number;
+  readonly precoCents: number;
+}
+
 export interface DadosDoInsight {
   readonly ticketMedioCents: number;
   readonly horaOciosa: HoraOciosa | null;
   readonly apertadas: readonly AgendaApertada[];
+  readonly acabando: readonly EstoqueAcabando[];
 }
 
 /**
@@ -166,6 +185,33 @@ export function montarInsights(
         destino: 'jornada_do_profissional',
         parametros: { profissionalId: apertada.profissionalId },
       },
+    });
+  }
+
+  for (const produto of dados.acabando) {
+    if (produto.comprar <= 0 || produto.precoCents <= 0) continue;
+    candidatos.push({
+      tipo: 'estoque_acabando',
+      titulo: `${produto.nome} deve acabar em ${contar(produto.diasAteAcabar, 'dia', 'dias')}`,
+      /**
+       * O texto **acrescenta**, não repete o título.
+       *
+       * A primeira versão dizia o nome do produto e o prazo de novo, e o print
+       * mostrou o cartão falando duas vezes a mesma frase. O que o título não
+       * diz é de onde sai a conta e o que fazer — é isso que cabe aqui.
+       */
+      texto:
+        `É o consumo das últimas ${SEMANAS_DA_LEITURA} semanas. Comprar ` +
+        `${contar(produto.comprar, 'unidade', 'unidades')} cobre o próximo mês.`,
+      /**
+       * O teto é o que **deixa de ser vendido** enquanto falta.
+       *
+       * Mesma definição dos outros dois: receita deixada na mesa. Aqui são as
+       * unidades que a prateleira não terá, ao preço de venda — e não ao custo,
+       * que é quanto a falta economiza, não quanto ela custa.
+       */
+      impactoCents: produto.comprar * produto.precoCents,
+      acao: { rotulo: 'Ver no estoque', destino: 'estoque', parametros: { produtoId: produto.produtoId } },
     });
   }
 

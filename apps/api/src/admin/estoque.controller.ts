@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nest
 import {
   EstoqueError,
   cmvDoPeriodo,
+  consumoMedido,
   fichaDoServico,
   lancarMovimento,
   margemPorServico,
@@ -10,7 +11,7 @@ import {
   salvarFicha,
   salvarProduto,
 } from '@barbearia/finance';
-import { diaNaUnidade } from '@barbearia/core';
+import { diaNaUnidade, preverConsumo } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -64,10 +65,39 @@ export class EstoqueController {
     return diaNaUnidade(null, local.timezone, new Date()).dia;
   }
 
+  /**
+   * A lista, com a previsão de consumo ao lado (bloco 69, SPEC §4.19).
+   *
+   * *"A pomada X deve acabar em ~9 dias pelo consumo das últimas 8 semanas."* A
+   * previsão vem junto da lista e não numa rota separada porque a pergunta é a
+   * mesma: quem abre o estoque quer saber o que está acabando. Duas rotas
+   * fariam a tela pedir duas vezes o que ela mostra numa linha só.
+   *
+   * Ela **não** substitui o mínimo cadastrado: o mínimo é a decisão de quem
+   * conhece o fornecedor, e a previsão é o que o movimento diz. As duas
+   * aparecem, e quando as duas apontam a maior manda — quem decide é o dono.
+   */
   @Exige('inventory.view')
   @Get('produtos')
   async lista(@Staff() staff: AuthenticatedStaff, @Query('todos') todos?: string) {
-    return { produtos: await produtos(staff.tenantId, todos === 'true') };
+    const agora = new Date();
+    const [lista, consumo] = await Promise.all([
+      produtos(staff.tenantId, todos === 'true', agora),
+      consumoMedido({ tenantId: staff.tenantId, agora }),
+    ]);
+
+    const previsao = new Map(consumo.map((c) => [c.produtoId, preverConsumo(c)]));
+    return {
+      produtos: lista.map((produto) => {
+        const prevista = previsao.get(produto.id);
+        return {
+          ...produto,
+          /** Nulo é "não dá para dizer", nunca "nunca acaba". */
+          diasAteAcabar: prevista?.diasAteAcabar ?? null,
+          comprarPorConsumo: prevista?.comprar ?? 0,
+        };
+      }),
+    };
   }
 
   @Exige('inventory.adjust')

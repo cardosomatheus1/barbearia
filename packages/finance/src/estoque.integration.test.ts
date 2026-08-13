@@ -3,8 +3,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
+import { preverConsumo } from '@barbearia/core';
 import {
   cmvDoPeriodo,
+  consumoMedido,
   custoDeInsumo,
   fichaDoServico,
   lancarMovimento,
@@ -597,4 +599,109 @@ describeIfDb('estoque', () => {
     expect(depois?.margemCents).toBe(antes?.margemCents);
   });
 
+  // -- previsão de consumo (bloco 69, SPEC §4.19) -----------------------------
+
+  const AGORA = new Date('2026-11-01T12:00:00Z');
+
+  /** Uma saída de `quantidade` unidades a `semanasAtras` semanas. */
+  async function saida(
+    produtoId: string,
+    tipo: 'venda' | 'consumo' | 'perda' | 'ajuste',
+    quantidade: number,
+    semanasAtras: number,
+  ): Promise<void> {
+    await lancarMovimento({
+      tenantId: TENANT,
+      produtoId,
+      tipo,
+      quantidade: tipo === 'ajuste' ? -quantidade : quantidade,
+      diaDaUnidade: HOJE,
+      locationId: LOCAL,
+      ...(tipo === 'perda' || tipo === 'ajuste' ? { motivo: 'semente da previsão' } : {}),
+      ator,
+    });
+    /**
+     * O carimbo é ancorado em `AGORA`, não no relógio real.
+     *
+     * O movimento nasce com `now()`, e a janela que a consulta recorta parte do
+     * `agora` que o teste passa — que é uma data fixa de 2026. Recuar semanas a
+     * partir do relógio real deixa toda a semente **fora** da janela, e a
+     * primeira versão deste teste media zero achando que media consumo.
+     *
+     * E o recorte é uma janela de um minuto **em volta** do relógio real, não
+     * "o mais recente": os já carimbados ficam a semanas de distância — no
+     * futuro, porque `AGORA` é 2026-11 e o relógio real não —, então ordenar por
+     * data pegava um deles em vez do novo, e as três semanas distintas viravam
+     * uma. O teste media uma coisa e afirmava outra.
+     */
+    await exec(
+      `UPDATE stock_movements
+          SET created_at = timestamptz '${AGORA.toISOString()}' - interval '${semanasAtras} weeks'
+        WHERE product_id = '${produtoId}'
+          AND created_at > now() - interval '1 minute'
+          AND created_at < now() + interval '1 minute'`,
+    );
+  }
+
+  it('o consumo sai das saídas, e o ajuste não conta', async () => {
+    /**
+     * `ajuste` é correção de contagem — a linha que aparece quando alguém
+     * recontou e achou menos. Somá-lo faria o erro de inventário virar demanda,
+     * e a sugestão mandaria comprar o que nunca foi usado.
+     */
+    const { id } = await novoProduto();
+    await lancarMovimento({
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 100,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
+    });
+    await saida(id, 'venda', 7, 1);
+    await saida(id, 'consumo', 7, 2);
+    await saida(id, 'perda', 7, 3);
+    await saida(id, 'ajuste', 50, 4);
+
+    const [medido] = await consumoMedido({ tenantId: TENANT, agora: AGORA });
+    expect(medido?.saidasNaJanela).toBe(21);
+    expect(medido?.semanasComSaida).toBe(3);
+  });
+
+  it('saída de antes da janela não conta', async () => {
+    // Oito semanas, o mesmo número do heatmap: dois lugares do produto dizendo
+    // "as últimas semanas" sobre janelas diferentes é a mesma pergunta com duas
+    // respostas.
+    const { id } = await novoProduto();
+    await lancarMovimento({
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 100,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
+    });
+    await saida(id, 'venda', 5, 2);
+    await saida(id, 'venda', 5, 12);
+
+    const [medido] = await consumoMedido({ tenantId: TENANT, agora: AGORA });
+    expect(medido?.saidasNaJanela).toBe(5);
+  });
+
+  it('produto sem saída devolve zero, e a previsão devolve nulo', async () => {
+    // "Não dá para dizer" é diferente de "nunca acaba", e o `null` vem de `core`.
+    const { id } = await novoProduto();
+    await lancarMovimento({
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 10,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
+    });
+
+    const [medido] = await consumoMedido({ tenantId: TENANT, agora: AGORA });
+    expect(medido?.saidasNaJanela).toBe(0);
+    expect(preverConsumo(medido!).diasAteAcabar).toBeNull();
+  });
+
+  it('o consumo da barbearia vizinha não entra no desta', async () => {
+    const { id } = await novoProduto();
+    await lancarMovimento({
+      tenantId: TENANT, produtoId: id, tipo: 'entrada', quantidade: 50,
+      diaDaUnidade: HOJE, locationId: LOCAL, ator,
+    });
+    await saida(id, 'venda', 4, 1);
+
+    const daVizinha = await consumoMedido({ tenantId: RIVAL, agora: AGORA });
+    expect(daVizinha.every((c) => c.saidasNaJanela === 0)).toBe(true);
+  });
 });

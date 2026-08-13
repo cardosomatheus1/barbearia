@@ -37,6 +37,7 @@ export * from './churn.js';
 export * from './crescimento.js';
 export * from './interpretacao.js';
 export * from './metrica.js';
+export * from './consumo.js';
 export * from './insight.js';
 export * from './precificacao.js';
 export * from './recepcao.js';

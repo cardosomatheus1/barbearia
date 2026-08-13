@@ -790,6 +790,96 @@ describe('as rotas do painel', () => {
     ).toEqual([]);
   });
 
+  it('rota que devolve estoque declara inventory.view', () => {
+    /**
+     * A sétima vez que a regra da rota que agrega foi quebrada, virada em guarda.
+     *
+     * O insight de estoque do bloco 69 passou a nomear o produto, dizer em
+     * quantos dias ele acaba e quantas unidades comprar — tudo que
+     * `GET /estoque/produtos` serve sob `inventory.view` — numa rota que não a
+     * declarava. Bastava a barbearia tirar `inventory.view` do gerente, um
+     * clique na tela de permissões, para o painel virar o caminho mais curto
+     * para o estoque do que a própria tela de estoque.
+     *
+     * A varredura **deriva** de `core` e `finance` quais tipos descrevem estoque
+     * — identidade de produto ao lado de saldo, prazo ou compra — e cobra a
+     * permissão em toda rota que os sirva.
+     */
+    const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
+    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
+
+    const CAMPO_DE_PRODUTO = /\b(produtoId|minimo)\s*:/;
+    const CAMPO_DE_ESTOQUE = /\b(saldo|diasAteAcabar|comprar\w*|saidasNaJanela)\s*:/;
+
+    const tiposDeEstoque = new Set<string>();
+    const corpoDaInterface = new Map<string, string>();
+    const fontes = PASTAS.flatMap((pasta) =>
+      readdirSync(pasta)
+        .filter((n) => n.endsWith('.ts') && !n.includes('.test.'))
+        .map((n) => readFileSync(join(pasta, n), 'utf8')),
+    );
+
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
+        const corpo = bloco[2] ?? '';
+        corpoDaInterface.set(bloco[1] ?? '', corpo);
+        if (CAMPO_DE_PRODUTO.test(corpo) && CAMPO_DE_ESTOQUE.test(corpo)) {
+          tiposDeEstoque.add(bloco[1] ?? '');
+        }
+      }
+    }
+
+    let cresceu = true;
+    while (cresceu) {
+      cresceu = false;
+      for (const [nome, corpo] of corpoDaInterface) {
+        if (tiposDeEstoque.has(nome)) continue;
+        const compoe = [...tiposDeEstoque].some((t) =>
+          new RegExp(`:\\s*(readonly\\s+)?${t}\\b`).test(corpo),
+        );
+        if (compoe) {
+          tiposDeEstoque.add(nome);
+          cresceu = true;
+        }
+      }
+    }
+
+    const funcoes = new Set<string>();
+    for (const fonte of fontes) {
+      for (const bloco of fonte.matchAll(
+        /export (?:async )?function (\w+)[\s\S]{0,3000}?(?:Promise<([^>]+)>|\)\s*:\s*([^{;]+)\{)/g,
+      )) {
+        const retorno = `${bloco[2] ?? ''} ${bloco[3] ?? ''}`;
+        if ([...tiposDeEstoque].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
+          funcoes.add(bloco[1] ?? '');
+        }
+      }
+    }
+
+    expect(
+      tiposDeEstoque.size,
+      'a varredura não achou nenhum tipo de estoque — ela deixou de valer',
+    ).toBeGreaterThan(0);
+    expect(funcoes.size).toBeGreaterThan(0);
+
+    const faltando: string[] = [];
+    for (const { arquivo, classe, corpo, guardada } of controllers()) {
+      if (!guardada) continue;
+      for (const handler of corpo.matchAll(/@Exige\(([^)]*)\)([\s\S]*?)(?=@Exige\(|$)/g)) {
+        const permissoes = handler[1] ?? '';
+        const codigo = (handler[2] ?? '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/.*/g, '');
+        const chamada = [...funcoes].find((f) => new RegExp(`\\b${f}\\s*\\(`).test(codigo));
+        if (!chamada) continue;
+        if (/'inventory\.\w+'/.test(permissoes)) continue;
+        faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
+      }
+    }
+
+    expect(faltando, 'rota devolve estoque sem declarar inventory.view').toEqual([]);
+  });
+
   it('rota marcada com @Recurso pergunta pelo recurso; rota sem @Recurso não', async () => {
     // Sem o segundo argumento nenhuma consulta acontece — é o que mantém este
     // arquivo sendo teste de unidade. Com ele, a guarda vai ao banco, e é isso

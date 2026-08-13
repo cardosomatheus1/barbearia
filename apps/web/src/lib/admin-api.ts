@@ -2246,6 +2246,9 @@ export interface ProdutoNaTela {
   saldo: number;
   alertas: AlertaDeEstoque[];
   sugestaoDeCompra: number;
+  /** Nulo é "não dá para dizer", nunca "nunca acaba" (bloco 69). */
+  diasAteAcabar: number | null;
+  comprarPorConsumo: number;
 }
 
 export interface MovimentoNaTela {
@@ -2289,7 +2292,10 @@ export const produtosNaApi = (token: string, todos = false) =>
 
 export const salvarProdutoNaApi = (
   token: string,
-  dados: Omit<ProdutoNaTela, 'id' | 'saldo' | 'alertas' | 'sugestaoDeCompra'>,
+  dados: Omit<
+    ProdutoNaTela,
+    'id' | 'saldo' | 'alertas' | 'sugestaoDeCompra' | 'diasAteAcabar' | 'comprarPorConsumo'
+  >,
   id?: string,
 ) =>
   chamar<{ id: string }>(

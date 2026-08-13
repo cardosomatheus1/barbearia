@@ -261,6 +261,32 @@ function Produto({ produto, podeMexer }: { readonly produto: ProdutoNaTela; read
               </>
             ) : null}
           </p>
+          {/**
+           * A previsão vem **antes** do mínimo, e as duas convivem.
+           *
+           * O mínimo é um número que alguém digitou uma vez; a previsão é o que
+           * o movimento diz. Quando as duas apontam, a maior manda — e quem
+           * decide é o dono, que precisa ver as duas para isso.
+           *
+           * Prazo nulo não vira frase: "não dá para dizer" escrito ao lado de
+           * cada produto sem histórico é ruído em toda a lista.
+           */}
+          {produto.diasAteAcabar !== null ? (
+            <p className="item-cadastro__aviso">
+              Pelo consumo das últimas 8 semanas, acaba em{' '}
+              <span className="tabular">{produto.diasAteAcabar}</span>{' '}
+              {produto.diasAteAcabar === 1 ? 'dia' : 'dias'}
+              {produto.comprarPorConsumo > 0 ? (
+                <>
+                  {' '}
+                  — comprar <span className="tabular">{produto.comprarPorConsumo}</span> cobre o
+                  próximo mês.
+                </>
+              ) : (
+                '.'
+              )}
+            </p>
+          ) : null}
           {produto.sugestaoDeCompra > 0 ? (
             <p className="item-cadastro__aviso">
               Comprar <span className="tabular">{produto.sugestaoDeCompra}</span> repõe a folga

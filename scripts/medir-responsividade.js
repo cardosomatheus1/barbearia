@@ -1071,6 +1071,42 @@ async function prepararRecadosEFidelidade(slug) {
  * ligado, uma faixa de desconto e outra de acréscimo, e uma delas exagerada, que
  * é a que desenha a linha "aparado no teto".
  */
+/**
+ * Consumo medido, para a previsão do bloco 69 aparecer no print.
+ *
+ * A previsão só existe com histórico: sem semear saídas, a tela de estoque
+ * mostra o cadastro e nenhuma frase de prazo, e o print sairia sem a coisa que
+ * o bloco entrega. Três semanas distintas de saída é o mínimo que forma ritmo.
+ */
+async function prepararConsumo(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
+  const produto = psql(
+    `select id from products where tenant_id = '${tenant}' and kind = 'resale' order by name limit 1`,
+  );
+  if (!tenant || !local || !produto) return;
+
+  /**
+   * A entrada vem antes, e com data anterior às saídas.
+   *
+   * O gatilho do bloco 44 recusa movimento que deixaria o saldo negativo — e
+   * está certo. Semear as saídas sem repor primeiro derruba a medição inteira
+   * com "estoque ficaria negativo", que foi o que aconteceu.
+   */
+  psql(
+    `INSERT INTO stock_movements (tenant_id, location_id, product_id, kind, quantity, business_day, created_at)
+     VALUES ('${tenant}', '${local}', '${produto}', 'entrada', 20, current_date - 60,
+             now() - interval '60 days')`,
+  );
+  psql(
+    `INSERT INTO stock_movements (tenant_id, location_id, product_id, kind, quantity, business_day, created_at)
+     SELECT '${tenant}', '${local}', '${produto}', 'venda', -3,
+            (now() - (semana || ' weeks')::interval)::date,
+            now() - (semana || ' weeks')::interval
+       FROM generate_series(1, 6) AS semana`,
+  );
+}
+
 async function prepararPrecos(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
@@ -2215,6 +2251,9 @@ async function main() {
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);
+  // Depois de `prepararEstoque`: o consumo é sobre produto que já existe, e
+  // rodar antes fazia a semeadura sair vazia em silêncio.
+  await prepararConsumo(slug);
   await prepararClube(slug, balcao.clienteId);
   prepararPlanoDoCliente(slug, '+5571988887777');
   await prepararAgenda(token, balcao.dia);

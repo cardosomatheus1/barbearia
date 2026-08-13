@@ -132,6 +132,7 @@ const CAMINHO_DO_INSIGHT: Readonly<
 > = {
   campanha: (p) => `/admin/campanhas?filtro=${p['filtro'] ?? 'em_risco'}`,
   jornada_do_profissional: (p) => `/admin/profissionais?pessoa=${p['profissionalId'] ?? ''}`,
+  estoque: () => '/admin/estoque',
 };
 
 function Oportunidade({ insight }: { readonly insight: InsightNaTela }) {

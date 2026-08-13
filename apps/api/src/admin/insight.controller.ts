@@ -3,11 +3,14 @@ import {
   CORTE_CHEIO_BPS,
   MAXIMO_DE_INSIGHTS,
   montarInsights,
+  oQueVaiAcabar,
+  preverConsumo,
+  type EstoqueAcabando,
   type HoraOciosa,
 } from '@barbearia/core';
 import { agendasApertadas, getAvailabilityRange, servicoMaisVendido } from '@barbearia/scheduling';
 import { contarPorSegmento, segmentosDaBase } from '@barbearia/crm';
-import { medir } from '@barbearia/finance';
+import { consumoMedido, medir, produtos } from '@barbearia/finance';
 import { diaNaUnidade } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { Staff, StaffGuard } from './staff.guard.js';
@@ -45,6 +48,16 @@ import { unidadeDoBalcao } from './unidade.js';
  * entre colegas que a separação `commission.view_own` existe para evitar. O
  * padrão só o barrava por acidente, porque ele não tem `finance.view`.
  *
+ * E `inventory.view` entrou no bloco 69 pela mesma regra, achado da
+ * `/security-review` daquele bloco — a **sétima** vez. O cartão de estoque diz
+ * o nome do produto, em quantos dias ele acaba, quantas unidades comprar e um
+ * impacto do qual o preço de venda se recupera dividindo. Isso é exatamente o
+ * que `GET /estoque/produtos` serve sob `inventory.view`, e sem a declaração
+ * esta rota virava o caminho mais curto para os dados de estoque do que a rota
+ * de estoque. Basta a barbearia decidir que compra é assunto do dono e tirar
+ * `inventory.view` do gerente — um clique na tela de permissões desde o bloco
+ * 30 — para ele passar a ler pelo painel o que a tela de estoque lhe recusa.
+ *
  * O custo é o segundo fator, que `finance.view` deriva. Ele é aceito porque
  * estes cartões moram no painel, que já o exige para a faixa de dinheiro: quem
  * abre o painel de manhã já provou o TOTP uma vez, e não haverá uma segunda
@@ -53,7 +66,7 @@ import { unidadeDoBalcao } from './unidade.js';
 @Controller('v1/admin/insights')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class InsightController {
-  @Exige('appointments.view_all_professionals', 'customers.view', 'finance.view')
+  @Exige('appointments.view_all_professionals', 'customers.view', 'finance.view', 'inventory.view')
   @Get()
   async insights(@Staff() staff: AuthenticatedStaff) {
     const local = await unidadeDoBalcao(staff);
@@ -65,7 +78,7 @@ export class InsightController {
       .toISOString()
       .slice(0, 10);
 
-    const [ticket, apertadas, segmentos, servicoId] = await Promise.all([
+    const [ticket, apertadas, segmentos, servicoId, consumo, catalogo] = await Promise.all([
       /**
        * O ticket da janela de leitura, e não o de ontem.
        *
@@ -83,7 +96,29 @@ export class InsightController {
       agendasApertadas({ tenantId, locationId: local.id, agora, corteBps: CORTE_CHEIO_BPS }),
       segmentosDaBase(tenantId, agora),
       servicoMaisVendido({ tenantId, locationId: local.id, agora }),
+      consumoMedido({ tenantId, agora, locationId: local.id }),
+      produtos(tenantId, false, agora),
     ]);
+
+    /**
+     * Só revenda vira cartão, e o preço vem do catálogo.
+     *
+     * Para o consumo interno o produto não sabe quanto de receita a falta
+     * bloqueia — e um teto inventado ao lado de dois defensáveis faz a ordenação
+     * inteira deixar de valer. Ele continua na tela de estoque, com prazo e
+     * sugestão de compra.
+     */
+    const precoDe = new Map(catalogo.map((p) => [p.id, p.precoCents ?? 0]));
+    const acabando: EstoqueAcabando[] = oQueVaiAcabar(
+      consumo.map(preverConsumo),
+      DIAS_QUE_PREOCUPAM,
+    ).map((p) => ({
+      produtoId: p.produtoId,
+      nome: p.nome,
+      diasAteAcabar: p.diasAteAcabar ?? 0,
+      comprar: p.comprar,
+      precoCents: precoDe.get(p.produtoId) ?? 0,
+    }));
 
     const horaOciosa = servicoId
       ? await this.vagasDeAmanha(tenantId, local.id, servicoId, amanha, segmentos)
@@ -95,6 +130,7 @@ export class InsightController {
           ticketMedioCents: Math.round(ticket.total ?? 0),
           horaOciosa,
           apertadas,
+          acabando,
         },
         MAXIMO_DE_INSIGHTS,
       ),
@@ -147,6 +183,15 @@ export class InsightController {
     };
   }
 }
+
+/**
+ * A partir de quantos dias de prazo o produto vira cartão no painel.
+ *
+ * Trinta é a mesma cobertura que a sugestão de compra mira: avisar sobre o que
+ * dura mais que isso é avisar sobre o que já está resolvido, e o painel só tem
+ * três lugares.
+ */
+const DIAS_QUE_PREOCUPAM = 30;
 
 /** Recua dias no calendário, sobre a data já resolvida no fuso da unidade. */
 const recuar = (dia: string, dias: number): string =>

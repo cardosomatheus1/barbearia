@@ -1,5 +1,6 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
+  JANELA_DO_CONSUMO_SEMANAS,
   alertasDoProduto,
   custoDaFicha,
   margemDeContribuicao,
@@ -7,6 +8,7 @@ import {
   sugestaoDeCompra,
   validarMovimento,
   type AlertaDeEstoque,
+  type ConsumoMedido,
   type DecomposicaoDaMargem,
   type FaixaDeComissao,
   type ModoDeComissao,
@@ -889,4 +891,76 @@ export async function custoDeInsumo(tenantId: string, serviceId: string): Promis
       custoUnitarioCents: i.custoUnitarioCents,
     })),
   );
+}
+
+/**
+ * O consumo medido de cada produto, para a previsão (bloco 69, SPEC §4.19).
+ *
+ * ## O que conta como consumo, e o que não conta
+ *
+ * `venda`, `consumo` e `perda` — o que **saiu** da prateleira e não volta.
+ * `entrada` e `transferencia` não são consumo por definição; `ajuste` fica de
+ * fora de propósito: ele é correção de contagem, e é justamente a linha que
+ * aparece quando alguém recontou e achou menos. Somá-lo faria o erro de
+ * inventário virar "demanda", e a sugestão mandaria comprar o que nunca foi
+ * usado.
+ *
+ * ## A janela é a mesma do heatmap e do insight
+ *
+ * Oito semanas, `JANELA_DO_CONSUMO_SEMANAS`. Dois lugares do produto dizendo "o
+ * consumo das últimas semanas" sobre janelas diferentes é a mesma pergunta com
+ * duas respostas.
+ *
+ * O `agora` entra por parâmetro pela razão de sempre: a janela é função do
+ * relógio, e lê-la do banco tornaria o resultado impossível de testar sem
+ * esperar o tempo passar.
+ */
+export async function consumoMedido(params: {
+  readonly tenantId: string;
+  readonly agora: Date;
+  readonly locationId?: string | null;
+}): Promise<readonly ConsumoMedido[]> {
+  const unidade = params.locationId ?? null;
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { id: string; name: string; saldo: number | null; saidas: number | null; semanas: number }[]
+    >`
+      SELECT p.id, p.name,
+             (SELECT sum(m.quantity) FROM stock_movements m WHERE m.product_id = p.id) AS saldo,
+             COALESCE(saidas.total, 0) AS saidas,
+             COALESCE(saidas.semanas, 0) AS semanas
+        FROM products p
+        LEFT JOIN LATERAL (
+          SELECT sum(-m.quantity)::int AS total,
+                 count(DISTINCT date_trunc('week', m.created_at))::int AS semanas
+            FROM stock_movements m
+           WHERE m.product_id = p.id
+             AND m.kind IN ('venda', 'consumo', 'perda')
+             AND m.created_at >= ${params.agora}::timestamptz
+                                 - ${JANELA_DO_CONSUMO_SEMANAS} * interval '7 days'
+             AND m.created_at < ${params.agora}::timestamptz
+             -- Comparação por texto, e não por cast de uuid: dentro do LATERAL o
+             -- Postgres não infere o tipo do parâmetro nulo, e o erro sai como
+             -- "cannot cast type jsonb to uuid" sobre uma linha que parece certa.
+             AND (${unidade}::text IS NULL OR m.location_id::text = ${unidade}::text)
+        ) AS saidas ON true
+       WHERE p.active
+       ORDER BY p.name
+    `;
+
+    return linhas.map((l) => ({
+      produtoId: l.id,
+      nome: l.name,
+      saldo: Number(l.saldo ?? 0),
+      /**
+       * As saídas vêm com o sinal invertido na consulta.
+       *
+       * `stock_movements.quantity` guarda saída como número negativo — é o que
+       * faz o saldo ser a soma pura. Consumo é uma quantidade positiva, e deixar
+       * o sinal negativo aqui faria toda previsão devolver dias negativos.
+       */
+      saidasNaJanela: Math.max(0, Number(l.saidas ?? 0)),
+      semanasComSaida: Number(l.semanas ?? 0),
+    }));
+  });
 }
