@@ -112,7 +112,25 @@ export function cicloDoCliente(visitas: readonly Date[]): CicloDoCliente | null 
     const anterior = ordenadas[i - 1];
     const atual = ordenadas[i];
     if (!anterior || !atual) continue;
-    intervalos.push(dias(atual.getTime() - anterior.getTime()));
+    const intervalo = dias(atual.getTime() - anterior.getTime());
+    /**
+     * Duas visitas no mesmo dia são **uma** visita, para efeito de ritmo.
+     *
+     * Corte e barba lançados como dois atendimentos, ou o cliente que volta à
+     * tarde porque a máquina falhou: nenhum dos dois é "voltar". Contados, eles
+     * puxam a mediana para zero, e aí a tela escreve *"normalmente volta a cada
+     * 0 dias"* — uma frase que não quer dizer nada — e o churn dispara no
+     * máximo, porque qualquer ausência já passa do dobro de zero.
+     *
+     * Foi assim que apareceu: nenhum teste ficou vermelho, e a leitura da tela
+     * mostrou a pessoa com risco 60 por ter vindo duas vezes numa terça.
+     *
+     * O corte é o intervalo, e não o dia do calendário, de propósito: `core` não
+     * tem fuso — ele mora em `zone.ts` e depende da unidade —, e comparar datas
+     * de calendário aqui exigiria trazê-lo para dentro do domínio puro.
+     */
+    if (intervalo < 1) continue;
+    intervalos.push(intervalo);
   }
   if (intervalos.length === 0) return null;
 

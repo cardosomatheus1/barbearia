@@ -138,11 +138,20 @@ function Cliente({ cliente }: { readonly cliente: ClienteEmChurnNaTela }) {
               </li>
             ))}
           </ul>
-          <p className="item-cadastro__linha">
-            <a className="item-cadastro__acao" href={`/admin/cliente/${cliente.customerId}`}>
+          {/* Botão de verdade, não um link solto.
+              `item-cadastro__acao` é o **recipiente** das ações, e usá-lo como
+              estilo de link deixou o alvo com 21px em quatro larguras — o mesmo
+              defeito que a medição pegou no `← Voltar`. Link sozinho no fim de um
+              cartão não é link dentro de frase, e a isenção da WCAG 2.5.8 não
+              vale para ele. */}
+          <div className="item-cadastro__acao">
+            <a
+              className="ui-button ui-button--secondary"
+              href={`/admin/cliente/${cliente.customerId}`}
+            >
               Abrir a ficha
             </a>
-          </p>
+          </div>
         </div>
       </article>
     </li>

@@ -201,6 +201,38 @@ describe('as comparações contra a base', () => {
   });
 });
 
+describe('duas visitas no mesmo dia', () => {
+  it('não são um ritmo, e não viram ciclo de zero dias', () => {
+    /**
+     * Corte e barba lançados como dois atendimentos, ou o cliente que volta à
+     * tarde: nenhum dos dois é "voltar". Contados, a mediana ia a zero, a tela
+     * escrevia *"normalmente volta a cada 0 dias"* e o churn disparava no
+     * máximo — qualquer ausência já passa do dobro de zero.
+     *
+     * Nenhum teste ficou vermelho quando isso aconteceu. Apareceu na leitura do
+     * print: uma cliente com risco 60 por ter vindo duas vezes numa terça.
+     */
+    const mesmoDia = cicloDoCliente([
+      new Date(2026, 0, 10, 9, 0),
+      new Date(2026, 0, 10, 11, 0),
+      new Date(2026, 0, 10, 15, 0),
+    ]);
+    expect(mesmoDia).toBeNull();
+  });
+
+  it('a visita repetida no dia não encurta o ciclo de quem tem ritmo', () => {
+    // Quinze dias entre as vindas, com uma tarde em que ele voltou. O ciclo
+    // continua sendo quinze, não sete e meio.
+    const ciclo = cicloDoCliente([
+      new Date(2026, 0, 1, 10, 0),
+      new Date(2026, 0, 16, 10, 0),
+      new Date(2026, 0, 16, 16, 0),
+      new Date(2026, 0, 31, 10, 0),
+    ]);
+    expect(ciclo?.medianaDias).toBe(15);
+  });
+});
+
 describe('o vocabulário dos públicos de campanha', () => {
   it('todo público tem nome, e a resposta sobre o número é escrita', () => {
     /**
