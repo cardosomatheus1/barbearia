@@ -256,6 +256,9 @@ describeIfDb('direitos do titular', () => {
       // tomada a partir do histórico dele: o fato sai, o score e o limiar não —
       // eles são internos por regra da SPEC §2.13.
       'online_blocks',
+      // Bloco 74: a foto do rosto da pessoa é dado dela, e sai no arquivo com
+      // o endereço, o momento e se estava no portfólio.
+      'customer_photos',
     ]);
 
     const EXCECOES = new Map([

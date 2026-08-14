@@ -347,7 +347,24 @@ describeIfDb('o agente de agendamento pela HTTP', () => {
     const local = perfil.body.location.id as string;
     const servico = perfil.body.categories[0].services[0].id as string;
     const profissional = perfil.body.professionals[0].id as string;
-    const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    /**
+     * "Amanhã" é amanhã **na barbearia**, não em UTC.
+     *
+     * A conta era `Date.now() + 24h` cortado no ISO, e ela discorda do domínio
+     * entre a meia-noite de Londres e a de Salvador: às 00h30 UTC já é dia 14
+     * ali e ainda é 13 aqui, então a semente marcava para o 15 e o agente
+     * oferecia o 14. O teste passava vinte e uma horas por dia — que é a pior
+     * forma de um teste falhar.
+     */
+    const fuso = perfil.body.location.timezone as string;
+    const hoje = new Intl.DateTimeFormat('en-CA', {
+      timeZone: fuso,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const [ano, mes, dia] = hoje.split('-').map(Number) as [number, number, number];
+    const amanha = new Date(Date.UTC(ano, mes - 1, dia + 1)).toISOString().slice(0, 10);
 
     const grade = await http()
       .get(`/v1/b/${SLUG}/availability`)

@@ -3461,3 +3461,40 @@ export const catalogoDeMetricasNaApi = (token: string) =>
     metricas: readonly { readonly chave: string; readonly rotulo: string }[];
     sugestoes: readonly { readonly texto: string; readonly metrica: string }[];
   }>('GET', '/v1/admin/metricas', undefined, token);
+
+export interface FotoNaFicha {
+  id: string;
+  tipo: 'antes' | 'depois';
+  url: string;
+  legenda: string | null;
+  noPortfolio: boolean;
+  quando: string;
+  appointmentId: string | null;
+  professionalId: string | null;
+}
+
+export const fotosDoClienteNaApi = (token: string, id: string) =>
+  chamar<{ fotos: FotoNaFicha[] }>('GET', `/v1/admin/customers/${id}/fotos`, undefined, token);
+
+export const registrarFotoNaApi = (
+  token: string,
+  id: string,
+  corpo: {
+    tipo: 'antes' | 'depois';
+    url: string;
+    legenda?: string;
+    professionalId?: string;
+    noPortfolio?: boolean;
+  },
+) => chamar<{ id: string }>('POST', `/v1/admin/customers/${id}/fotos`, corpo, token);
+
+export const publicarFotoNaApi = (token: string, fotoId: string, publicar: boolean) =>
+  chamar<{ ok: true }>(
+    'PUT',
+    `/v1/admin/customers/fotos/${fotoId}/portfolio`,
+    { publicar },
+    token,
+  );
+
+export const apagarFotoNaApi = (token: string, fotoId: string) =>
+  chamar<{ ok: true }>('DELETE', `/v1/admin/customers/fotos/${fotoId}`, undefined, token);

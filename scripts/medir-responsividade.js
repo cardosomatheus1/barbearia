@@ -1142,6 +1142,57 @@ async function prepararConsumo(slug) {
  * a versão com conteúdo: nota, atendimentos e especialidades. Sem semente, o
  * print seria de um 404.
  */
+/**
+ * Fotos antes/depois com os dois aceites (bloco 74).
+ *
+ * A seção da ficha e o portfólio da página do barbeiro só existem com foto, e
+ * a foto só existe com consentimento — semear os aceites é semear a regra, não
+ * contorná-la: as linhas entram pelo mesmo gatilho que a aplicação enfrenta.
+ */
+function prepararFotos(slug, clienteDaFicha) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  /**
+   * O cliente é **o da ficha fotografada**, não o primeiro da base.
+   *
+   * A tela de fotos é a que este bloco entrega, e semear noutro cadastro faria
+   * o print sair no estado vazio — que também precisa passar, mas não é o que
+   * o bloco entrega.
+   */
+  const cliente =
+    clienteDaFicha ??
+    psql(`select id from customers where tenant_id = '${tenant}' order by created_at limit 1`);
+  const pessoa = psql(
+    `select id from professionals
+      where tenant_id = '${tenant}' and kind = 'professional' and active
+      order by name limit 1`,
+  );
+  if (!cliente || !pessoa) return;
+
+  for (const finalidade of ['photos', 'photos_public']) {
+    psql(
+      `INSERT INTO customer_consents (customer_id, tenant_id, purpose, granted, text_version)
+       VALUES ('${cliente}', '${tenant}', '${finalidade}', true, 'medicao-v1')`,
+    );
+  }
+
+  // Fotos de corte, não de rosto: é o que um portfólio de barbearia mostra.
+  const fotos = [
+    [FOTOS.cortes[0], 'antes', 'Antes do fade'],
+    [FOTOS.cortes[1] ?? FOTOS.cortes[0], 'depois', 'Fade médio com risco'],
+    [FOTOS.cortes[2] ?? FOTOS.cortes[0], 'depois', 'Social com barba'],
+  ];
+  for (const [url, momento, legenda] of fotos) {
+    psql(
+      `INSERT INTO customer_photos
+         (tenant_id, customer_id, professional_id, kind, url, caption, in_portfolio)
+       VALUES ('${tenant}', '${cliente}', '${pessoa}', '${momento}', '${url}',
+               '${legenda}', true)`,
+    );
+  }
+}
+
 function prepararPerfilDoBarbeiro(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -2350,6 +2401,7 @@ async function main() {
   await prepararPrecos(slug);
   await prepararMarketplace(slug);
   const barbeiro = prepararPerfilDoBarbeiro(slug);
+  prepararFotos(slug, balcao.clienteId);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
   await prepararEstoque(slug);

@@ -29,9 +29,11 @@ import {
   type PacoteDoCliente,
   type SaldoDeFidelidade,
   consentimentosDaFicha,
+  fotosDoClienteNaApi,
   fichaDoCliente,
   type ConfiancaDoCliente,
   type ConsentimentosNaFicha,
+  type FotoNaFicha,
   type VisitaNaFicha,
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
@@ -43,7 +45,10 @@ import {
   acaoAnonimizarCliente,
   acaoAjustarFidelidade,
   acaoConfiancaDoCliente,
+  acaoApagarFoto,
   acaoConsentimentoNoBalcao,
+  acaoPublicarFoto,
+  acaoRegistrarFoto,
   acaoPreferencias,
   acaoAssinar,
   acaoAgendarCancelamento,
@@ -163,6 +168,151 @@ function Visita({ visita }: { readonly visita: VisitaNaFicha }) {
  * Fechado por padrão (`details`): o barbeiro abre a ficha para ver como cortar,
  * e empurrar três aceites para o topo enterraria o que ele veio buscar.
  */
+/**
+ * As fotos antes/depois (bloco 74, SPEC §4.2).
+ *
+ * A seção diz **em letras** o que cada aceite libera, porque a diferença entre
+ * eles é a coisa mais fácil de errar aqui: guardar na ficha e publicar no
+ * portfólio são duas decisões, e quem está no balcão com o cliente na cadeira
+ * precisa saber qual pediu.
+ *
+ * Sem o aceite de registro a seção não some — ela explica por que está vazia e
+ * manda para o lugar de coletá-lo. Esconder faria a recepção concluir que o
+ * produto não tem fotos.
+ */
+function Fotos({
+  fotos,
+  consentimentos,
+  customerId,
+  podeGerenciar,
+}: {
+  readonly fotos: readonly FotoNaFicha[];
+  readonly consentimentos: ConsentimentosNaFicha;
+  readonly customerId: string;
+  readonly podeGerenciar: boolean;
+}) {
+  const podeGuardar = consentimentos.atuais.photos?.concedido === true;
+  const podePublicar = consentimentos.atuais.photos_public?.concedido === true;
+
+  return (
+    <section className="quadro cartao-balcao">
+      <h2 className="cartao-balcao__titulo">Fotos do atendimento</h2>
+
+      {!podeGuardar ? (
+        <p className="cartao-balcao__vazio">
+          Este cliente ainda não autorizou o registro de fotos. O aceite fica logo acima, em
+          Consentimentos — sem ele o sistema recusa a foto, e é assim de propósito.
+        </p>
+      ) : (
+        <p className="fotos__aviso">
+          Ele autorizou <strong>guardar na ficha</strong>
+          {podePublicar ? (
+            <>
+              {' '}
+              e <strong>publicar no portfólio</strong>. Fotos marcadas aparecem na página pública
+              do barbeiro.
+            </>
+          ) : (
+            <>
+              , mas <strong>não</strong> autorizou publicar. Para o portfólio é preciso o segundo
+              aceite.
+            </>
+          )}
+        </p>
+      )}
+
+      {fotos.length === 0 ? (
+        <p className="cartao-balcao__vazio">Nenhuma foto ainda.</p>
+      ) : (
+        <ul className="fotos">
+          {fotos.map((foto) => (
+            <li className="fotos__item" key={foto.id}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="" className="fotos__foto" height={200} loading="lazy" src={foto.url} width={200} />
+              <span className="fotos__tipo">{foto.tipo === 'antes' ? 'Antes' : 'Depois'}</span>
+              {podeGerenciar ? (
+                <div className="fotos__acoes">
+                  {podePublicar || foto.noPortfolio ? (
+                    <form action={acaoPublicarFoto}>
+                      <input name="customerId" type="hidden" value={customerId} />
+                      <input name="fotoId" type="hidden" value={foto.id} />
+                      <input name="publicar" type="hidden" value={foto.noPortfolio ? '0' : '1'} />
+                      <button className="ui-button ui-button--ghost fotos__acao" type="submit">
+                        {foto.noPortfolio ? 'Tirar do portfólio' : 'Pôr no portfólio'}
+                      </button>
+                    </form>
+                  ) : null}
+                  <form action={acaoApagarFoto}>
+                    <input name="customerId" type="hidden" value={customerId} />
+                    <input name="fotoId" type="hidden" value={foto.id} />
+                    <button className="ui-button ui-button--ghost fotos__acao" type="submit">
+                      Apagar
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {podeGerenciar && podeGuardar ? (
+        <form action={acaoRegistrarFoto} className="formulario fotos__form">
+          <input name="customerId" type="hidden" value={customerId} />
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="foto-url">
+              Endereço da foto
+            </label>
+            <input
+              className="ui-field__input"
+              id="foto-url"
+              name="url"
+              placeholder="https://..."
+              required
+              type="url"
+            />
+            <span className="ui-field__hint">
+              Enquanto não há upload próprio, cole o endereço — é a mesma decisão das fotos da
+              barbearia.
+            </span>
+          </div>
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="foto-tipo">
+              Momento
+            </label>
+            <select className="ui-field__input" id="foto-tipo" name="tipo">
+              <option value="antes">Antes</option>
+              <option value="depois">Depois</option>
+            </select>
+          </div>
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="foto-legenda">
+              Legenda (opcional)
+            </label>
+            <input
+              className="ui-field__input"
+              id="foto-legenda"
+              maxLength={120}
+              name="legenda"
+              placeholder="Fade médio com risco"
+              type="text"
+            />
+          </div>
+          {podePublicar ? (
+            <label className="ui-field__label fotos__marca">
+              <input name="noPortfolio" type="checkbox" value="1" />
+              Publicar no portfólio do barbeiro
+            </label>
+          ) : null}
+          <button className="ui-button ui-button--primary fotos__salvar" type="submit">
+            Registrar foto
+          </button>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
 function Consentimentos({
   consentimentos,
   customerId,
@@ -1073,7 +1223,10 @@ export default async function FichaPage({ params, searchParams }: Props) {
     estado.staff.permissions.includes('finance.view') &&
     estado.staff.permissions.includes('customers.view');
   const veClube = estado.staff.permissions.includes('finance.subscription_manage');
-  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube, fiado] =
+  // Ver foto é permissão própria e a rota audita a leitura: pedir sem ela
+  // devolveria 403 em toda abertura de ficha da recepção, e encheria a trilha.
+  const veFotos = estado.staff.permissions.includes('customers.view_photos');
+  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube, fiado, fotos] =
     await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
@@ -1096,6 +1249,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
     // Saldo e limite de fiado (bloco 51). Mesma dupla de sempre: é dinheiro de
     // uma pessoa identificada.
     veSaldo ? fiadoDoClienteNaApi(token, id) : Promise.resolve(null),
+    veFotos ? fotosDoClienteNaApi(token, id) : Promise.resolve(null),
   ]);
 
   /**
@@ -1346,6 +1500,15 @@ export default async function FichaPage({ params, searchParams }: Props) {
           customerId={ficha.dados.customerId}
           de={voltar}
           podeEditar={estado.staff.permissions.includes('customers.edit')}
+        />
+      ) : null}
+
+      {veFotos && fotos?.ok && consentimentos.ok && !ficha.dados.anonimizado ? (
+        <Fotos
+          consentimentos={consentimentos.dados}
+          customerId={ficha.dados.customerId}
+          fotos={fotos.dados.fotos}
+          podeGerenciar={estado.staff.permissions.includes('customers.manage_photos')}
         />
       ) : null}
 

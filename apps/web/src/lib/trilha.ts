@@ -19,6 +19,11 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'staff.reactivated': 'religou',
   'staff.password_reset': 'reemitiu a senha de',
   'permissions.changed': 'mudou as permissões do papel',
+  'customers.photos_viewed': 'abriu as fotos do cliente',
+  'customers.photo_added': 'registrou uma foto do cliente',
+  'customers.photo_published': 'publicou uma foto no portfólio',
+  'customers.photo_unpublished': 'tirou uma foto do portfólio',
+  'customers.photo_deleted': 'apagou uma foto do cliente',
   'marketplace.attribution_contested': 'contestou uma comissão do marketplace',
 
   'cash.opened': 'abriu o caixa',

@@ -73,3 +73,24 @@ export const metaSchema = z.object({
   // O teto acompanha a CHECK da migração 0022: R$ 1.000.000,00.
   metaCents: z.number().int().min(1).max(100_000_000).nullable(),
 });
+
+/**
+ * Uma foto antes/depois (bloco 74, SPEC §4.2).
+ *
+ * A URL é validada na borda com `https` porque ela vai para um `src` — e, se a
+ * foto entrar no portfólio, para uma página anônima. É a mesma regra da foto da
+ * vitrine, e o banco a repete numa `CHECK`.
+ */
+export const fotoSchema = z.object({
+  tipo: z.enum(['antes', 'depois']),
+  url: z.string().url().startsWith('https://').max(2048),
+  appointmentId: z.string().uuid().optional(),
+  professionalId: z.string().uuid().optional(),
+  legenda: z.string().trim().max(120).optional(),
+  /** Ausente é "não publica" — o padrão seguro para dado de pessoa. */
+  noPortfolio: z.boolean().optional(),
+});
+
+export type EntradaDeFoto = z.infer<typeof fotoSchema>;
+
+export const publicarSchema = z.object({ publicar: z.boolean() });

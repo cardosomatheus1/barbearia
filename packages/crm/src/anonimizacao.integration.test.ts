@@ -462,6 +462,99 @@ describeIfDb('anonimização e retenção', () => {
     expect(Number(linhas[0]?.n)).toBe(1);
   });
 
+  it('a foto do titular some da ficha e da internet quando ele pede exclusão', async () => {
+    /**
+     * O pior defeito possível deste produto, e ele quase entrou: `anonimizar_cliente`
+     * é **lista escrita**, e o bloco 74 criou uma tabela nova com o rosto da
+     * pessoa. Sem a linha na função, quem exercesse o direito à exclusão
+     * continuaria com a foto numa página **indexada** — porque a anonimização
+     * não insere revogação de consentimento, e o gatilho que apaga por
+     * revogação nunca dispararia.
+     *
+     * Achado da `/security-review` do bloco 74.
+     */
+    await exec(`
+      INSERT INTO customer_consents (customer_id, tenant_id, purpose, granted, text_version)
+      VALUES ('${CARLOS}', '${TENANT}', 'photos', true, 'v1'),
+             ('${CARLOS}', '${TENANT}', 'photos_public', true, 'v1');
+
+      INSERT INTO customer_photos (tenant_id, customer_id, professional_id, kind, url, in_portfolio)
+      VALUES ('${TENANT}', '${CARLOS}', '${RUAN}', 'depois', 'https://exemplo.com.br/x.jpg', true)
+    `);
+
+    await withTenant(TENANT, (tx) =>
+      tx.$executeRaw`SELECT anonimizar_cliente(${CARLOS}::uuid, 'pedido de exclusão do titular')`,
+    );
+
+    const sobrou = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM customer_photos WHERE customer_id = '${CARLOS}'`,
+    );
+    expect(Number(sobrou[0]?.n)).toBe(0);
+  });
+
+  it('toda tabela com dado de cliente é limpa pela anonimização ou tem exceção escrita', async () => {
+    /**
+     * A varredura de catálogo é a ferramenta certa **aqui**, como é na lista de
+     * colunas de `customers`: o que se quer pegar é a tabela que ninguém pensou.
+     * `anonimizar_cliente` é lista escrita, e lista escrita só continua certa se
+     * quem acrescenta tabela a atualiza — o bloco 74 não atualizou, e o
+     * resultado seria a foto de quem pediu exclusão continuar no ar.
+     *
+     * O teste lê o **corpo da função** e cobra que cada tabela com `customer_id`
+     * apareça nele, ou esteja aqui com o motivo.
+     */
+    const ondeFica = new Map([
+      // Fatos do negócio: a pessoa sai de dentro deles pela chave estrangeira
+      // ou pelo apelido, e a linha fica porque há obrigação de guarda.
+      ['orders', 'venda: registro fiscal, e o cliente vira apelido em customers'],
+      ['order_items', 'item da venda, sem dado pessoal próprio'],
+      ['appointment_services', 'serviço do atendimento, sem dado pessoal próprio'],
+      ['commission_entries', 'comissão do profissional, calculada sobre a venda'],
+      ['loyalty_entries', 'razão de fidelidade: centavos e pontos, sem dado pessoal'],
+      ['package_purchases', 'pacote comprado: valor e unidades'],
+      ['package_uses', 'consumo do pacote, que é quando a receita foi reconhecida'],
+      ['club_uses', 'uso do plano: fato do negócio, e a assinatura é cancelada pela função'],
+      ['club_invoices', 'fatura do clube: registro financeiro'],
+      ['club_dependents', 'vínculo de dependente: só a chave, sem nome de quem banca'],
+      ['customer_packages', 'pacote comprado: valor e unidades, sem dado pessoal próprio'],
+      ['marketplace_attributions', 'contrato entre plataforma e barbearia (bloco 72)'],
+      ['automation_sends', 'desempenho da automação; a mensagem sai por whatsapp_messages'],
+      ['campaign_targets', 'desempenho da campanha, pela mesma razão'],
+      ['whatsapp_messages', 'a mensagem em si é limpa por whatsapp_inbound, que a função trata'],
+      ['data_requests', 'o registro do próprio pedido de exclusão'],
+      ['customer_ledger', 'razão do fiado: os centavos ficam, e a nota é limpa pela função'],
+      ['online_blocks', 'recusa por score: o fato fica, sem nada que identifique'],
+      ['deposits', 'sinal pago: dinheiro, e a linha é do agendamento'],
+      ['slot_holds', 'reserva temporária, que expira sozinha'],
+      ['invites', 'convite de vaga, sem dado pessoal além do vínculo'],
+    ]);
+
+    const corpo = await admin.$queryRawUnsafe<{ src: string }[]>(
+      `SELECT prosrc AS src FROM pg_proc WHERE proname = 'anonimizar_cliente'`,
+    );
+    const fonte = corpo[0]?.src ?? '';
+    expect(fonte).not.toBe('');
+
+    const tabelas = await admin.$queryRawUnsafe<{ table_name: string }[]>(
+      `SELECT DISTINCT c.table_name
+         FROM information_schema.columns c
+         JOIN information_schema.tables t
+           ON t.table_name = c.table_name AND t.table_schema = c.table_schema
+        WHERE c.table_schema = 'public'
+          AND c.column_name = 'customer_id'
+          AND t.table_type = 'BASE TABLE'`,
+    );
+
+    const esquecidas = tabelas
+      .map((t) => t.table_name)
+      .filter((nome) => !fonte.includes(`public.${nome}`) && !ondeFica.has(nome));
+
+    expect(
+      esquecidas,
+      `tabela com dado de cliente que a anonimização não alcança: ${esquecidas.join(', ')}`,
+    ).toEqual([]);
+  });
+
   it('erro de domínio é do tipo certo, não erro solto', async () => {
     await expect(
       encerrarPedidoDoTitular({

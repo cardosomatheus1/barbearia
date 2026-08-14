@@ -25,6 +25,19 @@ export type AuditAction =
   | 'staff.password_reset'
   | 'permissions.changed'
   /**
+   * Foto do cliente (bloco 74, SPEC §4.2).
+   *
+   * *"Acesso a fotos é permissão própria e auditado."* A trilha registra que
+   * alguém abriu, criou, publicou ou apagou — nunca a URL: `audit_log` é
+   * append-only e a anonimização não o alcança, então uma cópia do endereço
+   * ali sobreviveria ao apagamento que a revogação faz.
+   */
+  | 'customers.photos_viewed'
+  | 'customers.photo_added'
+  | 'customers.photo_published'
+  | 'customers.photo_unpublished'
+  | 'customers.photo_deleted'
+  /**
    * A barbearia contestou uma comissão de cliente novo (bloco 72).
    *
    * Contestar renuncia a uma cobrança da plataforma e o efeito é permanente:
@@ -373,6 +386,18 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
  * a casa, não de quem tem `finance.view`.
  */
 export const ACOES_DE_GESTAO: readonly AuditAction[] = [
+  /**
+   * Foto de cliente é dado pessoal, não dinheiro (bloco 74).
+   *
+   * A pergunta que a trilha responde aqui é "quem abriu as fotos do Carlos?",
+   * e ela é de quem administra a casa — o mesmo lado de `customers.export` e da
+   * impersonação.
+   */
+  'customers.photos_viewed',
+  'customers.photo_added',
+  'customers.photo_published',
+  'customers.photo_unpublished',
+  'customers.photo_deleted',
   'staff.created',
   'staff.role_changed',
   'staff.deactivated',

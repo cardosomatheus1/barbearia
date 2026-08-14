@@ -216,6 +216,17 @@ export const PERMISSOES = [
   'customers.edit',
   'customers.export',
   'customers.view_photos',
+  /**
+   * Criar e publicar foto do cliente, que é diferente de vê-la (bloco 74).
+   *
+   * `view_photos` abre a ficha; esta autoriza **criar** dado pessoal sensível
+   * — a foto do rosto de alguém — e pô-la numa página indexada. Escrita
+   * guardada por permissão de leitura é defeito, não economia, e é a regra do
+   * bloco 30 aplicada ao caso em que ela mais importa.
+   *
+   * Só o dono por padrão: quem quiser dar ao barbeiro edita o papel na tela.
+   */
+  'customers.manage_photos',
   'customers.view_notes',
   /**
    * Escrever a anotação, que é diferente de lê-la.

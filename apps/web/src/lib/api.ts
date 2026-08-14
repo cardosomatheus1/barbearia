@@ -898,6 +898,8 @@ export interface PerfilDoBarbeiroNaApi {
   notaBps: number | null;
   avaliacoes: number;
   atendimentos: number;
+  /** Portfólio público, só com o consentimento de uso público vigente. */
+  portfolio: { id: string; url: string; legenda: string | null }[];
 }
 
 /**

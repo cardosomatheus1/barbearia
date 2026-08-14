@@ -198,6 +198,8 @@ export interface DadosDoTitular {
   readonly fiado: readonly Record<string, unknown>[];
   readonly mensagens: readonly Record<string, unknown>[];
   readonly filas: readonly Record<string, unknown>[];
+  /** Fotos antes/depois (bloco 74). O endereço é o dado; o rosto é dele. */
+  readonly fotos: readonly Record<string, unknown>[];
 }
 
 /**
@@ -285,6 +287,22 @@ export async function exportarDadosDoTitular(
       SELECT kind::text AS kind, status::text AS status, reason, phone_masked, sent_at
         FROM notifications WHERE customer_id = ${customerId}::uuid
        ORDER BY sent_at
+    `;
+
+    /**
+     * As fotos (bloco 74, SPEC §4.2).
+     *
+     * Entram porque o teste de completude cobrou, e porque é evidente: a foto
+     * do rosto da pessoa é dado dela. Sai o endereço, o momento e se estava no
+     * portfólio — **não** sai quem tirou nem de qual atendimento é, que é o
+     * mesmo recorte das outras consultas: o arquivo é do titular, e o nome do
+     * profissional é de terceiro.
+     */
+    const fotos = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT kind::text AS momento, url, caption AS legenda,
+             in_portfolio AS no_portfolio, created_at
+        FROM customer_photos WHERE customer_id = ${customerId}::uuid
+       ORDER BY created_at
     `;
 
     const filas = await tx.$queryRaw<Record<string, unknown>[]>`
@@ -522,6 +540,7 @@ export async function exportarDadosDoTitular(
       fiado,
       mensagens,
       filas,
+      fotos,
       esperas,
       recados,
       fidelidade,

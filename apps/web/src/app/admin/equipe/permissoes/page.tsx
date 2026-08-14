@@ -96,6 +96,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'customers.edit': 'Editar cadastro de cliente',
   'customers.export': 'Exportar a base de clientes',
   'customers.view_photos': 'Ver fotos do cliente',
+  'customers.manage_photos': 'Registrar e publicar fotos do cliente',
   'customers.view_notes': 'Ler a anotação sobre o cliente',
   'customers.edit_notes': 'Escrever a anotação sobre o cliente',
   // O rótulo diz o que acontece, não o nome técnico: quem marca esta caixa

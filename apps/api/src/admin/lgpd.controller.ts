@@ -180,7 +180,21 @@ export class LgpdController {
    * o saldo de fiado de uma pessoa **é** dado pessoal dela, e exportação
    * incompleta é o defeito que a LGPD pune, não o que ela evita.
    */
-  @Exige('customers.export', 'finance.view', 'customers.view_notes', 'feedback.view')
+  /**
+   * Bloco 74: o arquivo passou a trazer as **fotos** do titular, e por isso a
+   * lista de permissões cresceu.
+   *
+   * `customers.view_photos` é permissão separada, tem rota própria e leitura
+   * auditada por exigência da SPEC §4.2 — sem ela declarada aqui, a exportação
+   * entregava a mesma foto por fora. A configuração natural "o gerente responde
+   * os pedidos de LGPD" concede `customers.export` a um papel que a barbearia
+   * deliberadamente deixou sem `view_photos`, e ele passaria a colher a foto de
+   * rosto de toda a base, um cliente por vez.
+   *
+   * É a **oitava** vez que a regra da rota que agrega é quebrada neste
+   * repositório, e a quarta nesta mesma rota.
+   */
+  @Exige('customers.export', 'finance.view', 'customers.view_notes', 'feedback.view', 'customers.view_photos')
   @Get(':id/dados')
   async exportar(
     @Staff() staff: AuthenticatedStaff,

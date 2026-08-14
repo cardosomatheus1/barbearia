@@ -5,6 +5,7 @@ import {
   MAX_RANGE_DAYS,
   perfilPublicoDoBarbeiro,
 } from '@barbearia/scheduling';
+import { portfolioDoProfissional } from '@barbearia/crm';
 import { notFound, badRequest } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
@@ -76,7 +77,19 @@ export class BookingController {
 
     const perfil = await perfilPublicoDoBarbeiro(tenantId, barbeiro);
     if (!perfil) throw notFound('professional_not_found', 'Profissional não encontrado');
-    return perfil;
+
+    /**
+     * O portfólio sai daqui e não de `scheduling` (bloco 74, SPEC §5.2).
+     *
+     * Quem sabe de foto de cliente e de consentimento é `crm`, e a seta não
+     * volta — é a mesma razão de a reputação da casa ter rota própria. A API é
+     * a camada que conhece as duas.
+     *
+     * O que sai é url e legenda. **Nunca o nome de quem aparece na foto**: o
+     * cliente autorizou o uso da imagem, não a publicação de quem ele é.
+     */
+    const portfolio = await portfolioDoProfissional(tenantId, perfil.professionalId);
+    return { ...perfil, portfolio };
   }
 
   @Get('availability')

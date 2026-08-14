@@ -157,10 +157,45 @@ export default async function BarbeiroPage({ params }: Props) {
         </a>
       </div>
 
-      <p className="barbeiro__pendente">
-        O <strong>portfólio</strong> de trabalhos ainda não está aqui: publicar foto de corte feito
-        no cabelo de um cliente exige o consentimento dele registrado, e é isso que falta.
-      </p>
+      {/**
+        * O portfólio (bloco 74, SPEC §4.2 e §5.2).
+        *
+        * Só aparece foto de cliente que autorizou o **uso público** — o aceite
+        * de guardar na ficha não publica nada, e são duas decisões separadas
+        * desde o bloco 5. Sem nome de quem está na foto: a pessoa autorizou a
+        * imagem, não a publicação de quem ela é.
+        *
+        * Sem portfólio a seção não existe. Um bloco vazio dizendo "sem fotos"
+        * numa página de venda é pior que a ausência dele — a página continua
+        * inteira com nota, atendimentos e especialidades.
+        */}
+      {perfil.portfolio.length > 0 ? (
+        <section className="barbeiro__bloco">
+          <h2 className="barbeiro__secao">Trabalhos</h2>
+          <ul className="portfolio">
+            {perfil.portfolio.map((foto) => {
+              const imagem = imagemPublica(foto.url);
+              if (!imagem) return null;
+              return (
+                <li className="portfolio__item" key={foto.id}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    alt={foto.legenda ?? ''}
+                    className="portfolio__foto"
+                    height={400}
+                    loading="lazy"
+                    src={imagem}
+                    width={400}
+                  />
+                  {foto.legenda ? (
+                    <span className="portfolio__legenda">{foto.legenda}</span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }

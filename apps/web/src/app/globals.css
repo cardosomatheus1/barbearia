@@ -7784,3 +7784,68 @@ main { padding-bottom: var(--space-8); }
 .perfil-publico__opcao input { width: 24px; height: 24px; }
 .perfil-publico__acao { min-height: 44px; }
 .perfil-publico__botoes { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+/* -- Portfólio do barbeiro (bloco 74) -------------------------------------- */
+
+.portfolio {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+}
+.portfolio__item { position: relative; }
+.portfolio__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+.portfolio__legenda {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 40em) {
+  .portfolio { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* -- Fotos do cliente, na ficha (bloco 74) --------------------------------- */
+
+.fotos__aviso { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.fotos {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+}
+.fotos__item { display: grid; gap: var(--space-2); }
+.fotos__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+.fotos__tipo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fotos__acoes { display: grid; gap: var(--space-2); }
+.fotos__acao { min-height: 44px; width: 100%; }
+.fotos__form { margin-top: var(--space-3); }
+.fotos__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
+.fotos__marca input { width: 24px; height: 24px; }
+.fotos__salvar { min-height: 44px; }
+
+@media (min-width: 40em) {
+  .fotos { grid-template-columns: repeat(4, 1fr); }
+  .fotos__acoes { grid-auto-flow: column; }
+}

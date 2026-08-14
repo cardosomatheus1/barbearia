@@ -88,8 +88,11 @@ import {
   apagarFaixaNaApi,
   criarFaixaNaApi,
   ligarPrecoPorFaixaNaApi,
+  apagarFotoNaApi,
   contestarClienteDoMarketplace,
   definirPerfilPublicoNaApi,
+  publicarFotoNaApi,
+  registrarFotoNaApi,
   definirVitrineNaApi,
   moverNaFila,
   responderRecadoNaApi,
@@ -1037,6 +1040,53 @@ export async function acaoDefinirVitrine(form: FormData): Promise<void> {
   const resultado = await definirVitrineNaApi(token, texto(form, 'ligado') === '1');
   if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
   redirect('/admin/configuracoes?salvo=1');
+}
+
+/**
+ * Registra uma foto antes/depois (bloco 74, SPEC §4.2).
+ *
+ * O consentimento é conferido pela API e pelo banco; aqui a falha volta para a
+ * ficha com o código, e a tela escreve a frase — "este cliente não autorizou" é
+ * o que a recepção precisa ler para saber o que fazer, não um erro genérico.
+ */
+export async function acaoRegistrarFoto(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'customerId');
+  const resultado = await registrarFotoNaApi(token, id, {
+    tipo: texto(form, 'tipo') === 'depois' ? 'depois' : 'antes',
+    url: texto(form, 'url'),
+    ...(texto(form, 'legenda') ? { legenda: texto(form, 'legenda') } : {}),
+    ...(texto(form, 'professionalId') ? { professionalId: texto(form, 'professionalId') } : {}),
+    noPortfolio: texto(form, 'noPortfolio') === '1',
+  });
+  if (!resultado.ok) falhar(`/admin/cliente/${id}`, resultado.code);
+  redirect(`/admin/cliente/${id}?foto=1`);
+}
+
+export async function acaoPublicarFoto(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'customerId');
+  const resultado = await publicarFotoNaApi(
+    token,
+    texto(form, 'fotoId'),
+    texto(form, 'publicar') === '1',
+  );
+  if (!resultado.ok) falhar(`/admin/cliente/${id}`, resultado.code);
+  redirect(`/admin/cliente/${id}?foto=1`);
+}
+
+/**
+ * Apaga uma foto — `DELETE` de verdade.
+ *
+ * O titular que pede para tirar uma foto não pediu para escondê-la, e é a
+ * exceção deliberada num schema em que quase tudo é append-only.
+ */
+export async function acaoApagarFoto(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'customerId');
+  const resultado = await apagarFotoNaApi(token, texto(form, 'fotoId'));
+  if (!resultado.ok) falhar(`/admin/cliente/${id}`, resultado.code);
+  redirect(`/admin/cliente/${id}?foto=1`);
 }
 
 /**
