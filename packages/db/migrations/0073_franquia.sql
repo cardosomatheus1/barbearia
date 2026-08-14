@@ -197,11 +197,40 @@ CREATE POLICY franchises_escrita ON franchises FOR ALL
   USING (NULLIF(current_setting('app.tenant_id', true), '') IS NULL)
   WITH CHECK (NULLIF(current_setting('app.tenant_id', true), '') IS NULL);
 
+/**
+ * `FORCE`, como todas as outras — e a recursão que se temia não acontece.
+ *
+ * A política abaixo chama `franquia_do_contexto()`, que lê **esta** tabela. A
+ * primeira versão tirou o `FORCE` daqui com medo de "infinite recursion
+ * detected in policy", que é o que o Postgres faz quando uma política se invoca.
+ *
+ * Não acontece, e o motivo é escrito para o dia em que alguém mexer nisto: a
+ * função é `SECURITY DEFINER` e o dono dela é a conta que roda as migrações,
+ * que é superusuário — e superusuário não passa por row security, com ou sem
+ * `FORCE`. A política se resolve numa consulta que não volta a ela.
+ *
+ * Se um dia as migrações rodarem com uma conta comum, esta é a linha que
+ * quebra: aí o caminho é `ENABLE` sem `FORCE` (a aplicação nunca é dona de
+ * tabela nenhuma aqui, então a proteção seria a mesma), e não tirar a política.
+ * A diferença entre as duas é que esta não depende de como o banco foi
+ * provisionado — e a outra dependia. Achado da `/security-review` do bloco 77,
+ * que executou o ataque em vez de ler o argumento.
+ */
 ALTER TABLE franchise_tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE franchise_tenants FORCE ROW LEVEL SECURITY;
+/**
+ * A franqueadora enxerga quem está na rede dela.
+ *
+ * Sem este ramo ela não conseguia nem listar as próprias franqueadas: a meta
+ * combinada com a loja de Feira era recusada com "franqueada não encontrada",
+ * porque a linha de vínculo dela estava escondida da franqueadora. A franqueada
+ * continua vendo só a própria — quem está na rede é informação da rede, e o
+ * faturamento de cada uma continua atrás de `indicadores_da_franquia`.
+ */
 CREATE POLICY franchise_tenants_leitura ON franchise_tenants FOR SELECT USING (
   NULLIF(current_setting('app.tenant_id', true), '') IS NULL
   OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+  OR (franchise_id = franquia_do_contexto() AND papel_na_franquia() = 'franqueadora')
 );
 CREATE POLICY franchise_tenants_escrita ON franchise_tenants FOR ALL
   USING (NULLIF(current_setting('app.tenant_id', true), '') IS NULL)

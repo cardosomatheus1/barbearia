@@ -142,6 +142,7 @@ import {
   expulsarSuporte,
   salvarPreferenciasDeAlerta,
   adotarDoPadrao,
+  salvarMetaDaRedeNaApi,
   despublicarDoPadrao,
   publicarNoPadrao,
 } from '@/lib/admin-api';
@@ -2982,4 +2983,21 @@ export async function acaoAdotarDoPadrao(form: FormData): Promise<void> {
   const resultado = await adotarDoPadrao(token, texto(form, 'itemId'));
   if (!resultado.ok) falhar('/admin/franquia', resultado.code);
   redirect(`/admin/franquia?adotado=${resultado.dados.novo ? 'novo' : 'atualizado'}`);
+}
+
+/**
+ * A meta combinada com uma franqueada (bloco 77).
+ *
+ * Meta não é preço: combinar alvo de vendas é o contrato de franquia; dizer por
+ * quanto vender é que não.
+ */
+export async function acaoSalvarMetaDaRede(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await salvarMetaDaRedeNaApi(token, {
+    franqueadaId: texto(form, 'franqueadaId'),
+    mes: texto(form, 'mes'),
+    metaCents: centavos(form, 'meta', '/admin/rede'),
+  });
+  if (!resultado.ok) falhar('/admin/rede', resultado.code);
+  redirect('/admin/rede?meta=1');
 }

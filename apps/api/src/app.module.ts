@@ -43,6 +43,7 @@ import { FinanceiroController } from './admin/financeiro.controller.js';
 import { DreController } from './admin/dre.controller.js';
 import { FiscalController } from './admin/fiscal.controller.js';
 import { FranquiaController } from './admin/franquia.controller.js';
+import { RedeController } from './admin/rede.controller.js';
 import { WhatsAppController } from './admin/whatsapp.controller.js';
 import { AutomacaoController } from './admin/automacao.controller.js';
 import { CampanhaController } from './admin/campanha.controller.js';
@@ -121,6 +122,7 @@ import { TenantService } from './tenant/tenant.service.js';
     DreController,
     FiscalController,
     FranquiaController,
+    RedeController,
     WhatsAppController,
     AutomacaoController,
     CampanhaController,

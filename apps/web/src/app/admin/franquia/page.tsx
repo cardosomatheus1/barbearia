@@ -184,6 +184,9 @@ export default async function FranquiaPage({ searchParams }: Props) {
       {topo}
 
       <h1 className="painel__titulo">{franquia.nome}</h1>
+      <p className="franquia-atalho">
+        <a href="/admin/rede">Ver os números da rede →</a>
+      </p>
       <p className="painel__sub">
         {publica
           ? 'Você publica o cardápio padrão da rede. O preço é de referência: cada franqueada é uma empresa e decide o que cobrar.'

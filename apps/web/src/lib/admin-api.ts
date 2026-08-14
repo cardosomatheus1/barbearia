@@ -3552,3 +3552,68 @@ export const adotarDoPadrao = (token: string, itemId: string) =>
     { itemId },
     token,
   );
+
+/** Indicadores consolidados e metas da rede (bloco 77). */
+export interface LinhaDaRedeNaApi {
+  readonly tenantId: string | null;
+  readonly nome: string | null;
+  readonly eu: boolean;
+  readonly receitaCents: number;
+  readonly vendas: number;
+  readonly atendimentos: number;
+  readonly metaCents: number | null;
+  readonly ticketMedioCents: number | null;
+  readonly progressoBps: number | null;
+}
+
+export interface RedeNaApi {
+  readonly linhas: readonly LinhaDaRedeNaApi[];
+  readonly receitaTotalCents: number;
+  readonly vendasTotais: number;
+  readonly ticketMedioCents: number | null;
+  readonly medianaDaReceitaCents: number | null;
+  readonly bateramAMeta: number | null;
+}
+
+export interface MeuLugarNaApi {
+  readonly minha: LinhaDaRedeNaApi;
+  readonly medianaDaReceitaCents: number | null;
+  readonly percentil: number | null;
+}
+
+export interface MetaDaRedeNaApi {
+  readonly tenantId: string;
+  readonly nome: string;
+  readonly mes: string;
+  readonly metaCents: number | null;
+  readonly anteriorCents: number | null;
+}
+
+export const redeConsolidadaNaApi = (token: string, de: string, ate: string) =>
+  chamar<{ rede: RedeNaApi }>(
+    'GET',
+    `/v1/admin/rede/consolidado?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+export const meuLugarNaApi = (token: string, de: string, ate: string) =>
+  chamar<{ lugar: MeuLugarNaApi }>(
+    'GET',
+    `/v1/admin/rede/meu-lugar?de=${de}&ate=${ate}`,
+    undefined,
+    token,
+  );
+
+export const metasDaRedeNaApi = (token: string, mes: string) =>
+  chamar<{ metas: MetaDaRedeNaApi[] }>(
+    'GET',
+    `/v1/admin/rede/metas?mes=${mes}`,
+    undefined,
+    token,
+  );
+
+export const salvarMetaDaRedeNaApi = (
+  token: string,
+  dados: { franqueadaId: string; mes: string; metaCents: number },
+) => chamar<{ ok: true }>('PUT', '/v1/admin/rede/metas', dados, token);

@@ -57,11 +57,24 @@ export interface Franquia {
  */
 export async function franquiaDaCasa(tenantId: string): Promise<Franquia | null> {
   return withTenant(tenantId, async (tx) => {
+    /**
+     * O papel sai de `papel_na_franquia()`, não de uma linha da tabela.
+     *
+     * A consulta original juntava `franchise_tenants` e pegava `linhas[0]`,
+     * apostando que a RLS devolveria exatamente uma linha. O bloco 77 abriu a
+     * política para a franqueadora enxergar quem está na rede dela — e a partir
+     * dali ela recebia o próprio vínculo **e** o de cada franqueada, sem ordem
+     * garantida. Meia dúzia de carregamentos e a tela dela dizia
+     * `papel: 'franqueada'`, escondendo o formulário de publicar.
+     *
+     * Falhava fechado — `publicarItemDoPadrao` deriva o papel da mesma função
+     * que a política usa —, então ninguém publicava o que não podia; mas quem
+     * podia perdia o botão.
+     */
     const linhas = await tx.$queryRaw<{ id: string; name: string; role: string }[]>`
-      SELECT f.id, f.name, ft.role::text AS role
-        FROM franchise_tenants ft
-        JOIN franchises f ON f.id = ft.franchise_id
-       WHERE ft.franchise_id = franquia_do_contexto()
+      SELECT f.id, f.name, papel_na_franquia()::text AS role
+        FROM franchises f
+       WHERE f.id = franquia_do_contexto()
     `;
     const linha = linhas[0];
     if (!linha) return null;

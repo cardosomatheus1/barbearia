@@ -213,6 +213,21 @@ describeIfDb('o padrão da franquia', () => {
     expect((await padraoDaFranquia(FILHA)).filter((i) => i.ativo)).toHaveLength(0);
   });
 
+  it('a franqueadora se reconhece como franqueadora, com a rede cheia', async () => {
+    /**
+     * O bloco 77 abriu a política para a franqueadora enxergar quem está na
+     * rede dela. A leitura do papel pegava `linhas[0]` de uma consulta sem
+     * ordem: com franqueadas dentro, a tela da franqueadora passava a dizer
+     * "franqueada" e o formulário de publicar sumia.
+     *
+     * A semente satisfaz **tudo menos** a regra sob teste: a rede tem mais de
+     * uma casa, que é a condição em que o defeito aparecia.
+     */
+    expect((await franquiaDaCasa(DONA))?.papel).toBe('franqueadora');
+    expect((await franquiaDaCasa(FILHA))?.papel).toBe('franqueada');
+    expect((await franquiaDaCasa(DONA))?.nome).toBe('Rede Dock');
+  });
+
   it('barbearia fora de franquia não vê padrão nenhum, e não quebra', async () => {
     await exec(`DELETE FROM franchise_tenants WHERE tenant_id = '${FILHA}'`);
     expect(await franquiaDaCasa(FILHA)).toBeNull();

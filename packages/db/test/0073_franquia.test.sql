@@ -225,6 +225,14 @@ BEGIN
 
   RESET ROLE;
   PERFORM set_config('app.tenant_id', '', true);
+  -- E ela é `FORCE`, como todas as outras: sem isso a proteção passaria a
+  -- depender de `barbearia_app` nunca ser dona de tabela — um fato do
+  -- provisionamento, não da tabela.
+  IF NOT (SELECT relrowsecurity AND relforcerowsecurity
+            FROM pg_class WHERE relname = 'franchise_tenants') THEN
+    RAISE EXCEPTION 'franchise_tenants sem RLS FORCE';
+  END IF;
+
   RAISE NOTICE 'OK 6b — a participacao so e escrita sem tenant, pela plataforma';
 END $$;
 

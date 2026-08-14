@@ -1264,6 +1264,41 @@ function prepararFranquia(slug) {
     );
   });
 
+  /**
+   * Duas franqueadas com faturamento e meta.
+   *
+   * Sem elas a tela da rede sai com quatro indicadores em `—` e uma tabela
+   * vazia — e indicador que é sempre `—` é pior que indicador ausente. Os
+   * números vêm de comandas pagas de verdade, com `business_day` no mês
+   * corrente, que é a janela que a tela pergunta.
+   */
+  ['Dock Feira', 'Dock Norte'].forEach((nome, i) => {
+    const filha = psql(
+      `INSERT INTO tenants (name) VALUES ('${nome}') RETURNING id`,
+    )?.split('\n')[0];
+    if (!filha) return;
+    const local = psql(
+      `INSERT INTO locations (tenant_id, name, timezone)
+       VALUES ('${filha}', 'Matriz', 'America/Bahia') RETURNING id`,
+    )?.split('\n')[0];
+    psql(
+      `INSERT INTO franchise_tenants (tenant_id, franchise_id, role)
+       VALUES ('${filha}', '${franquia}', 'franqueada')`,
+    );
+    const valor = 128_00 * (i + 3);
+    psql(
+      `INSERT INTO orders (tenant_id, location_id, status, subtotal_cents, total_cents,
+                           business_day, opened_at, closed_at)
+       VALUES ('${filha}', '${local}', 'paid', ${valor}, ${valor},
+               date_trunc('month', current_date)::date + 2, now(), now())`,
+    );
+    psql(
+      `INSERT INTO franchise_goals (franchise_id, tenant_id, month, revenue_cents)
+       VALUES ('${franquia}', '${filha}', date_trunc('month', current_date)::date, ${valor * 2})
+       ON CONFLICT DO NOTHING`,
+    );
+  });
+
   // Um adotado e com preço diferente: é a linha que mostra a distância.
   const primeiro = psql(
     `select id from franchise_services where franchise_id = '${franquia}' order by position limit 1`,
@@ -2553,6 +2588,7 @@ async function main() {
     { nome: 'privacidade (LGPD)', url: '/admin/lgpd', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'franquia', url: '/admin/franquia', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'rede da franquia', url: '/admin/rede', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'equipe', url: '/admin/equipe', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'catálogo', url: '/admin/catalogo', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'profissionais', url: '/admin/profissionais', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

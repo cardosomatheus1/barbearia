@@ -8034,3 +8034,52 @@ main { padding-bottom: var(--space-8); }
   .franquia__entrada { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
   .franquia__entrada .ui-field__label { grid-column: 1 / -1; }
 }
+
+/* -- Indicadores da rede (bloco 77) ----------------------------------------- */
+
+.franquia-atalho { margin: 0 0 var(--space-4); }
+.franquia-atalho a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-accent);
+}
+
+.rede-numeros { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.rede-numero {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.rede-numero__rotulo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.rede-numero__valor { font-size: var(--font-size-lg); }
+.rede-numero__nota { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+@media (min-width: 40em) {
+  .rede-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 64em) {
+  .rede-numeros { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* "Sem meta" não é zero por cento, e a tela mostra a diferença em letras. */
+.rede-sem-meta { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+.rede-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+}
+.rede-meta__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 40em) {
+  .rede-meta { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .rede-meta__acao { justify-self: end; }
+}
+
+.rede-lugar { margin: 0; display: grid; gap: var(--space-2); }
+.rede-lugar__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }

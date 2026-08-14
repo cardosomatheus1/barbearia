@@ -19,3 +19,4 @@ export * from './fiscal.js';
 export * from './multiunidade.js';
 export * from './crescimento.js';
 export * from './metrica.js';
+export * from './rede.js';
