@@ -1,3 +1,4 @@
+import { semTenant, withTenant } from '@barbearia/db';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { cancelarDestaque, destaquesDaCidade, venderDestaque } from './destaque.js';
@@ -256,19 +257,84 @@ describeIfDb('a plataforma revisa o que a barbearia contestou', () => {
     /**
      * Fecha a lacuna do bloco 72. O nome do cliente fica de fora de propósito:
      * a barbearia precisa dele para conferir a conta, e para a plataforma a
-     * pergunta é *"esta renúncia se explica?"* — quem responde isso é o motivo
-     * escrito, não quem é a pessoa.
+     * pergunta é *"esta renúncia se explica?"* — quem responde isso é o motivo,
+     * não quem é a pessoa.
+     *
+     * ## E o que sai é a **categoria**, não a frase
+     *
+     * O comentário acima estava certo sobre o nome e errado sobre o caminho: o
+     * campo que atravessava era texto livre escrito pelo balcão **sobre um
+     * cliente específico** — a linha tem `customer_id NOT NULL` —, e a
+     * justificativa natural é justamente a que o nomeia: *"o João Paulo é primo
+     * do dono, já corta aqui há três anos"*. Ele ia íntegro para a tela de quem
+     * é **operadora** e não responde por aquele dado, e ficava lá depois de o
+     * titular pedir exclusão.
+     *
+     * A categoria responde a mesma pergunta e não nomeia ninguém. A frase
+     * continua obrigatória e fica do lado da barbearia.
      */
     const [linha] = await atribuicoesDaBarbearia(CASA);
     await contestarAtribuicao({
-      tenantId: CASA, staffUserId: DONO, staffNome: 'Matheus',
-      atribuicaoId: linha!.id, motivo: 'já era meu cliente há dois anos',
+      tenantId: CASA,
+      staffUserId: DONO,
+      staffNome: 'Matheus',
+      atribuicaoId: linha!.id,
+      categoria: 'ja_era_cliente',
+      motivo: 'o Carlos Souza já corta aqui há dois anos, veio pela porta',
     });
 
     const vistas = await contestacoesNaPlataforma();
     expect(vistas).toHaveLength(1);
-    expect(vistas[0]?.motivo).toBe('já era meu cliente há dois anos');
+    expect(vistas[0]?.motivo).toBe('ja_era_cliente');
     expect(JSON.stringify(vistas[0])).not.toContain('Carlos');
+    // A frase inteira não atravessa — nem o nome, nem o resto dela.
+    expect(JSON.stringify(vistas[0])).not.toContain('porta');
+  });
+
+  it('a frase escrita sobre o cliente sai quando ele é anonimizado', async () => {
+    /**
+     * A tabela tem `customer_id NOT NULL` e é append-only para `DELETE`, então
+     * nem `anonimizar_cliente` — que é lista escrita — nem a varredura de
+     * catálogo do bloco 34 — que só olha colunas de `customers` — a alcançavam.
+     * Quem a alcança é o gatilho da 0079, que dispara quando `anonymized_at`
+     * deixa de ser nulo.
+     */
+    const [linha] = await atribuicoesDaBarbearia(CASA);
+    await contestarAtribuicao({
+      tenantId: CASA,
+      staffUserId: DONO,
+      staffNome: 'Matheus',
+      atribuicaoId: linha!.id,
+      categoria: 'ja_era_cliente',
+      motivo: 'o Carlos Souza já corta aqui há dois anos, veio pela porta',
+    });
+
+    /**
+     * `withTenant`, e não `semTenant` — é o caminho real.
+     *
+     * As três tabelas que o gatilho escreve têm `FORCE ROW LEVEL SECURITY`, que
+     * sujeita até o dono: sem tenant no contexto o `UPDATE` dele alcança zero
+     * linhas em silêncio. `anonimizar_cliente` roda `withTenant` por definição —
+     * ela precisa do contexto para achar o cliente —, então a garantia vale
+     * onde ela é exercida. A primeira versão deste teste usou `semTenant` e
+     * mediu o próprio atalho.
+     */
+    await withTenant(CASA, (tx) =>
+      tx.$executeRawUnsafe(
+        `UPDATE customers SET anonymized_at = now() WHERE tenant_id = '${CASA}'`,
+      ),
+    );
+
+    const sobrou = await semTenant((tx) =>
+      tx.$queryRawUnsafe<{ contested_reason: string | null }[]>(
+        `SELECT contested_reason FROM marketplace_attributions WHERE id = '${linha!.id}'`,
+      ),
+    );
+    expect(sobrou[0]?.contested_reason).toBeNull();
+
+    // A categoria fica: ela não nomeia ninguém e é o que explica a renúncia.
+    const vistas = await contestacoesNaPlataforma();
+    expect(vistas[0]?.motivo).toBe('ja_era_cliente');
   });
 
   it('reverter devolve a linha para pendente, nunca para faturada', async () => {
@@ -280,7 +346,7 @@ describeIfDb('a plataforma revisa o que a barbearia contestou', () => {
     const [linha] = await atribuicoesDaBarbearia(CASA);
     await contestarAtribuicao({
       tenantId: CASA, staffUserId: DONO, staffNome: 'Matheus',
-      atribuicaoId: linha!.id, motivo: 'contestação indevida de teste',
+      atribuicaoId: linha!.id, categoria: 'ja_era_cliente', motivo: 'contestação indevida de teste',
     });
 
     await reverterContestacao({
@@ -301,7 +367,7 @@ describeIfDb('a plataforma revisa o que a barbearia contestou', () => {
     const [linha] = await atribuicoesDaBarbearia(CASA);
     await contestarAtribuicao({
       tenantId: CASA, staffUserId: DONO, staffNome: 'Matheus',
-      atribuicaoId: linha!.id, motivo: 'contestação de teste para reverter',
+      atribuicaoId: linha!.id, categoria: 'ja_era_cliente', motivo: 'contestação de teste para reverter',
     });
 
     await expect(

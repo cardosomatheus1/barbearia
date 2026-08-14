@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
+import { saldoDoCliente } from './fidelidade.js';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
 import {
@@ -569,4 +570,91 @@ describeIfDb('pacotes', () => {
     ).rejects.toThrow();
   });
 
+
+  // -- fidelidade e pacote, que se cruzam sem saber ---------------------------
+
+  it('o pacote não gera cashback duas vezes', async () => {
+    /**
+     * A convenção é explícita: *"acúmulo sobre o que a pessoa **pagou de
+     * verdade** — o que saiu do próprio saldo não gera saldo novo"*, e é a
+     * frase que a SPEC §4.8 usa para nomear o laço do corte grátis que compra o
+     * próximo corte grátis.
+     *
+     * O acúmulo desconta `fidelidade` da base e **não** desconta `pacote`. Mas
+     * o pacote é receita já reconhecida e já premiada na venda: R$ 250 entram
+     * uma vez, e o cashback é creditado na compra **e** em cada uso.
+     */
+    const pacote = (await noCatalogo()).id;
+    await exec(`
+      INSERT INTO loyalty_programs (tenant_id, mode, cashback_bps)
+      VALUES ('${TENANT}', 'cashback', 500)
+      ON CONFLICT (tenant_id) DO UPDATE SET mode = 'cashback', cashback_bps = 500
+    `);
+
+    await comprar(pacote);
+    const naCompra = await saldoDoCliente(TENANT, CARLOS, AGORA);
+    // 5% de R$ 250 — o crédito legítimo, sobre o dinheiro que entrou.
+    expect(naCompra.saldo).toBe(1250);
+
+    for (let i = 0; i < 5; i += 1) await usar();
+
+    const depois = await saldoDoCliente(TENANT, CARLOS, AGORA);
+    expect(
+      depois.saldo,
+      `o cashback dobrou: ${depois.saldo} sobre R$ 250 de receita, onde a casa configurou 5%`,
+    ).toBe(1250);
+  });
+
+  it('o prêmio de visitas não paga a compra de um pacote', async () => {
+    /**
+     * "A cada dez cortes, um grátis" é um **corte**. O teto do resgate é
+     * `comanda.totalCents`, e a decisão foi tomada quando a comanda só tinha
+     * serviço — itens de pacote e de produto entraram nos blocos 42 e 44 sem
+     * revisitá-lo.
+     *
+     * Com um pacote de R$ 250 na mesma comanda, o prêmio cobre a comanda
+     * inteira: o cliente sai com cinco cortes pré-pagos que ninguém pagou, e
+     * eles ainda são reembolsáveis proporcionalmente — virando crédito no razão
+     * do fiado.
+     */
+    const pacote = (await noCatalogo()).id;
+    await exec(`
+      INSERT INTO loyalty_programs (tenant_id, mode, visits_goal)
+      VALUES ('${TENANT}', 'visitas', 10)
+      ON CONFLICT (tenant_id) DO UPDATE SET mode = 'visitas', visits_goal = 10
+    `);
+    await exec(`
+      -- O motivo e obrigatorio por CHECK no ajuste manual, e a semente tem que
+      -- satisfazer tudo menos a regra sob teste.
+      INSERT INTO loyalty_entries (tenant_id, customer_id, kind, amount, mode, scope, note)
+      VALUES ('${TENANT}', '${CARLOS}', 'ajuste', 10, 'visitas', 'empresa',
+              'Cartao carimbado no papel, migrado a mao')
+    `);
+
+    const aberta = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      tipo: 'service', serviceId: CORTE, descricao: 'Corte', quantidade: 1,
+      precoUnitarioCents: 5000, professionalId: RUAN, ...operador,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      tipo: 'package', descricao: '5 cortes', quantidade: 1,
+      precoUnitarioCents: 25_000, packageId: pacote, ...operador,
+    });
+
+    const fechar = fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      resgateQuantidade: 10,
+      pagamentos: [{ forma: 'fidelidade', valorCents: 30_000 }],
+      ...fecha,
+    });
+
+    await expect(
+      fechar,
+      'o prêmio de um corte pagou a venda de um pacote de R$ 250',
+    ).rejects.toThrow();
+  });
 });

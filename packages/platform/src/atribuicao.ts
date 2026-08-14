@@ -1,3 +1,4 @@
+import { ehMotivoDeComissao } from '@barbearia/core';
 import { semTenant, withTenant } from '@barbearia/db';
 import {
   comissaoDoMarketplace,
@@ -418,8 +419,13 @@ export async function contestarAtribuicao(entrada: {
   readonly staffUserId: string;
   readonly staffNome: string;
   readonly atribuicaoId: string;
+  /** A categoria, de lista fechada. É a única coisa que a plataforma lê. */
+  readonly categoria: string;
   readonly motivo: string;
 }): Promise<boolean> {
+  if (!ehMotivoDeComissao(entrada.categoria)) {
+    throw new PlataformaError('missing_reason', 'Escolha um dos motivos da lista');
+  }
   const motivo = entrada.motivo.trim();
   /**
    * Piso na borda, no domínio e por `CHECK`, como o override do score.
@@ -437,15 +443,20 @@ export async function contestarAtribuicao(entrada: {
   return withTenant(entrada.tenantId, async (tx) => {
     const mudadas = await tx.$executeRaw`
       UPDATE marketplace_attributions
-         SET status = 'cancelada', contested_reason = ${motivo}
+         SET status = 'cancelada',
+             contest_reason = ${entrada.categoria}::attribution_contest_reason,
+             contested_reason = ${motivo}
        WHERE id = ${entrada.atribuicaoId}::uuid AND status = 'pendente'
     `;
     if (mudadas !== 1) return false;
 
     /**
      * Auditada **dentro da transação** que muda o estado, como toda trilha
-     * deste produto. O motivo entra: é ele que a plataforma lê quando a
-     * barbearia contesta uma cobrança e alguém precisa responder.
+     * deste produto.
+     *
+     * A **categoria** entra; a nota escrita, não. Ela é texto sobre um cliente,
+     * e `audit_log` é append-only, fora do alcance da anonimização e fora da
+     * exportação do titular — o pior destino possível para dado pessoal.
      */
     await audit(tx, {
       actorId: entrada.staffUserId,
@@ -453,7 +464,7 @@ export async function contestarAtribuicao(entrada: {
       action: 'marketplace.attribution_contested',
       entity: 'marketplace_attribution',
       entityId: entrada.atribuicaoId,
-      after: { motivo },
+      after: { categoria: entrada.categoria, caracteresDoMotivo: motivo.length },
     });
     return true;
   });
@@ -494,13 +505,16 @@ export async function contestacoesNaPlataforma(): Promise<readonly ContestacaoNa
         id: string;
         tenant_id: string;
         nome: string;
-        contested_reason: string | null;
+        contest_reason: string | null;
         base_cents: number;
         fee_cents: number;
         attributed_at: Date;
       }[]
     >`
-      SELECT a.id, a.tenant_id, t.name AS nome, a.contested_reason,
+      -- contest_reason (a categoria), nunca contested_reason (a nota).
+      -- A segunda é texto que o balcão escreve sobre um cliente, e a plataforma
+      -- é operadora — não responde por dado que não é dela.
+      SELECT a.id, a.tenant_id, t.name AS nome, a.contest_reason,
              a.base_cents, a.fee_cents, a.attributed_at
         FROM marketplace_attributions a
         -- tenant_platform e nao tenants: aquela tem RLS estrita, e esta leitura
@@ -515,7 +529,7 @@ export async function contestacoesNaPlataforma(): Promise<readonly ContestacaoNa
       id: l.id,
       tenantId: l.tenant_id,
       barbearia: l.nome,
-      motivo: l.contested_reason,
+      motivo: l.contest_reason,
       baseCents: Number(l.base_cents),
       feeCents: Number(l.fee_cents),
       quando: l.attributed_at,

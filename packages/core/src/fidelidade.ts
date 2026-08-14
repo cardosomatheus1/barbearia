@@ -132,17 +132,43 @@ export function acumuloDaVenda(params: {
   readonly totalCents: number;
   /** Quanto desse total saiu do próprio saldo de fidelidade. */
   readonly resgatadoCents: number;
+  /**
+   * Quanto saiu de crédito **já pago e já premiado** — pacote e assinatura.
+   *
+   * Obrigatório e não opcional com padrão zero: opcional, o caminho novo que
+   * esquecesse dele voltaria a premiar duas vezes em silêncio, que é o defeito
+   * que este parâmetro existe para fechar.
+   */
+  readonly prepagoCents: number;
 }): AcumuloDaVenda | null {
   const { programa } = params;
   if (programa.modo === 'nenhum') return null;
 
-  const baseCents = Math.max(0, params.totalCents - params.resgatadoCents);
+  /**
+   * A base é o que a pessoa **pagou de verdade nesta venda**.
+   *
+   * O resgate já saía; o pré-pago não saía, e essa é a metade que faltava. O
+   * pacote de R$ 250 entra uma vez no caixa e era premiado duas: na compra e em
+   * cada um dos cinco usos — 10% onde a casa configurou 5%. É o laço que a SPEC
+   * §4.8 nomeia numa linha, pelo caminho de fora.
+   */
+  const baseCents = Math.max(0, params.totalCents - params.resgatadoCents - params.prepagoCents);
 
   if (programa.modo === 'visitas') {
-    // Conta inteira paga com crédito é o corte grátis: ele não empurra o
-    // contador para o próximo corte grátis.
-    if (params.totalCents > 0 && baseCents === 0) return null;
+    /**
+     * A visita conta mesmo paga com pacote, e é a diferença que importa.
+     *
+     * Quem usa uma unidade **veio e sentou** — em `visitas` o programa conta
+     * gente na cadeira, não dinheiro. O que não conta é a conta inteira paga
+     * com o próprio saldo: aí é o corte grátis, e ele não pode empurrar o
+     * contador para o próximo corte grátis.
+     *
+     * Por isso este teste olha só `resgatadoCents`, e não a base: descontar o
+     * pré-pago aqui faria o cliente do pacote parar de acumular visita, que é
+     * um segundo defeito com o sinal trocado.
+     */
     if (params.totalCents <= 0) return null;
+    if (params.totalCents - params.resgatadoCents <= 0) return null;
     return { quantidade: 1, baseCents };
   }
 

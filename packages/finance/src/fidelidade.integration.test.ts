@@ -368,7 +368,7 @@ describeIfDb('fidelidade', () => {
 
     await expect(
       conferirResgate({
-        tenantId: TENANT, customerId: CARLOS, quantidade: 5, tetoCents: 5000, agora: AGORA,
+        tenantId: TENANT, customerId: CARLOS, quantidade: 5, tetoCents: 5000, tetoDeUmServicoCents: 5000, agora: AGORA,
       }),
     ).rejects.toMatchObject({ code: 'premio_incompleto' });
   });

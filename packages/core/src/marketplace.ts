@@ -247,3 +247,45 @@ export function caixaDaBusca(de: Coordenada, raioKm: number): {
     lonMax: de.longitude + grausDeLon,
   };
 }
+
+/**
+ * Por que a barbearia contesta uma comissão de cliente novo (revisão de
+ * segurança do bloco 80).
+ *
+ * Lista fechada, e é a mesma decisão da contestação de avaliação: texto livre
+ * viraria "não gostei", e "não gostei" é evasão de cem por cento da receita
+ * indistinguível de discordância legítima. Os cinco descrevem coisas que ou
+ * aconteceram ou não aconteceram, e é isso que torna a renúncia auditável.
+ *
+ * A nota escrita continua existindo, e continua obrigatória — ela só não
+ * atravessa para o painel da plataforma, porque é texto sobre um cliente e a
+ * plataforma é operadora, não controladora.
+ */
+export const MOTIVOS_DA_CONTESTACAO_DE_COMISSAO = [
+  'ja_era_cliente',
+  'veio_por_outro_canal',
+  'nao_compareceu',
+  'venda_desfeita',
+  'cadastro_errado',
+] as const;
+
+export type MotivoDaContestacaoDeComissao =
+  (typeof MOTIVOS_DA_CONTESTACAO_DE_COMISSAO)[number];
+
+export const ROTULO_DO_MOTIVO_DE_COMISSAO: Readonly<
+  Record<MotivoDaContestacaoDeComissao, string>
+> = {
+  ja_era_cliente: 'Já era cliente antes do marketplace',
+  veio_por_outro_canal: 'Veio por indicação ou anúncio nosso',
+  nao_compareceu: 'O atendimento não aconteceu',
+  venda_desfeita: 'A venda foi cancelada ou estornada',
+  cadastro_errado: 'Cadastro duplicado ou trocado',
+};
+
+const MOTIVOS_DE_COMISSAO: ReadonlySet<string> = new Set(
+  MOTIVOS_DA_CONTESTACAO_DE_COMISSAO,
+);
+
+export function ehMotivoDeComissao(v: string): v is MotivoDaContestacaoDeComissao {
+  return MOTIVOS_DE_COMISSAO.has(v);
+}

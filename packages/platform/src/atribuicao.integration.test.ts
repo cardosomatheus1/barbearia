@@ -292,7 +292,7 @@ describeIfDb('a comissão do marketplace', () => {
         staffUserId: null as unknown as string,
         staffNome: 'Dono',
         atribuicaoId: linha!.id,
-        motivo: 'erro',
+        categoria: 'ja_era_cliente', motivo: 'erro',
       }),
     ).rejects.toThrow(/motivo/i);
   });
@@ -347,7 +347,7 @@ describeIfDb('a comissão do marketplace', () => {
         staffUserId: null as unknown as string,
         staffNome: 'Dono',
         atribuicaoId: linha!.id,
-        motivo: 'já era meu cliente há dois anos',
+        categoria: 'ja_era_cliente', motivo: 'já era meu cliente há dois anos',
       }),
     ).toBe(true);
 

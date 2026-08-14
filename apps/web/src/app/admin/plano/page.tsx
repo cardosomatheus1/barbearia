@@ -1,3 +1,7 @@
+import {
+  MOTIVOS_DA_CONTESTACAO_DE_COMISSAO,
+  ROTULO_DO_MOTIVO_DE_COMISSAO,
+} from '@barbearia/core';
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -371,8 +375,31 @@ export default async function PlanoPage({
                              discordância de evasão. */
                           <form action={acaoContestarMarketplace} className="plano__contestacao">
                             <input name="id" type="hidden" value={c.id} />
+
+                            {/*
+                              A categoria é o que a plataforma lê; a frase abaixo
+                              fica com você. Texto livre viraria "não gostei", e
+                              "não gostei" é evasão de receita indistinguível de
+                              discordância legítima.
+                            */}
+                            <label className="ui-field__label" htmlFor={`categoria-${c.id}`}>
+                              Por quê
+                            </label>
+                            <select
+                              className="ui-field__input"
+                              defaultValue="ja_era_cliente"
+                              id={`categoria-${c.id}`}
+                              name="categoria"
+                            >
+                              {MOTIVOS_DA_CONTESTACAO_DE_COMISSAO.map((m) => (
+                                <option key={m} value={m}>
+                                  {ROTULO_DO_MOTIVO_DE_COMISSAO[m]}
+                                </option>
+                              ))}
+                            </select>
+
                             <label className="ui-field__label" htmlFor={`motivo-${c.id}`}>
-                              Motivo
+                              O que aconteceu
                             </label>
                             <input
                               className="ui-field__input"

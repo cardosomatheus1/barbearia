@@ -153,7 +153,12 @@ import {
   publicarNoPadrao,
 } from '@/lib/admin-api';
 import { versaoDoConsentimento } from '@/lib/politica';
-import { MOTIVOS_DA_CONTESTACAO, ehConversa, type MotivoDaContestacao } from '@barbearia/core';
+import {
+  MOTIVOS_DA_CONTESTACAO,
+  MOTIVOS_DA_CONTESTACAO_DE_COMISSAO,
+  ehConversa,
+  type MotivoDaContestacao,
+} from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
 import { limiarDeFaltas } from '@/lib/sinal';
@@ -1125,11 +1130,15 @@ export async function acaoPerfilPublico(form: FormData): Promise<void> {
  */
 export async function acaoContestarMarketplace(form: FormData): Promise<void> {
   const token = await exigirSessao();
-  const resultado = await contestarClienteDoMarketplace(
-    token,
-    texto(form, 'id'),
-    texto(form, 'motivo'),
-  );
+  const categoria = texto(form, 'categoria');
+  if (!MOTIVOS_DA_CONTESTACAO_DE_COMISSAO.includes(categoria as never)) {
+    falhar('/admin/plano', 'invalid_request');
+  }
+
+  const resultado = await contestarClienteDoMarketplace(token, texto(form, 'id'), {
+    categoria,
+    motivo: texto(form, 'motivo'),
+  });
   if (!resultado.ok) falhar('/admin/plano', resultado.code);
   redirect('/admin/plano?contestado=1');
 }

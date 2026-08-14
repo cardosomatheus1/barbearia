@@ -1,3 +1,4 @@
+import { MOTIVOS_DA_CONTESTACAO_DE_COMISSAO } from '@barbearia/core';
 import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import {
   assinaturaDaBarbearia,
@@ -29,7 +30,19 @@ const idSchema = z.string().uuid();
  * forma **permanente** — aquele cliente nunca mais gera comissão —, e sem
  * motivo nada distingue discordância de evasão.
  */
-const contestacaoSchema = z.object({ motivo: z.string().trim().min(10).max(500) });
+/**
+ * A borda da contestação de comissão.
+ *
+ * A **categoria** sai do catálogo do domínio, e não de uma lista escrita aqui:
+ * um motivo novo nasce aceito sem ninguém lembrar da borda, e um inventado pelo
+ * cliente da API morre antes de chegar ao banco. A nota escrita continua
+ * obrigatória — ela é o que sustenta a renúncia quando alguém pergunta —, e
+ * fica do lado da barbearia: a plataforma lê só a categoria.
+ */
+const contestacaoSchema = z.object({
+  categoria: z.enum(MOTIVOS_DA_CONTESTACAO_DE_COMISSAO),
+  motivo: z.string().trim().min(10).max(500),
+});
 
 /**
  * O plano, visto pela barbearia que paga por ele.
@@ -188,7 +201,7 @@ export class PlanoController {
   async contestar(
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(idSchema)) id: string,
-    @Body(new ZodValidationPipe(contestacaoSchema)) corpo: { motivo: string },
+    @Body(new ZodValidationPipe(contestacaoSchema)) corpo: { categoria: string; motivo: string },
   ) {
     try {
       const feito = await contestarAtribuicao({
@@ -196,6 +209,7 @@ export class PlanoController {
         staffUserId: staff.staffUserId,
         staffNome: staff.name,
         atribuicaoId: id,
+        categoria: corpo.categoria,
         motivo: corpo.motivo,
       });
       if (!feito) throw notFound('unknown_attribution', 'Cobrança não encontrada ou já faturada');

@@ -1963,8 +1963,11 @@ export const clientesDoMarketplace = (token: string) =>
     token,
   );
 
-export const contestarClienteDoMarketplace = (token: string, id: string, motivo: string) =>
-  chamar<{ ok: true }>('POST', `/v1/admin/plano/marketplace/${id}/contestar`, { motivo }, token);
+export const contestarClienteDoMarketplace = (
+  token: string,
+  id: string,
+  dados: { categoria: string; motivo: string },
+) => chamar<{ ok: true }>('POST', `/v1/admin/plano/marketplace/${id}/contestar`, dados, token);
 
 export interface FaturaDaBarbearia {
   id: string;

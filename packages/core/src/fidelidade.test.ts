@@ -43,7 +43,7 @@ const lancamento = (
 
 describe('o acúmulo de cada modelo', () => {
   it('sem programa, nenhuma venda gera nada', () => {
-    expect(acumuloDaVenda({ programa: programa(), totalCents: 5000, resgatadoCents: 0 })).toBeNull();
+    expect(acumuloDaVenda({ programa: programa(), totalCents: 5000, resgatadoCents: 0 , prepagoCents: 0 })).toBeNull();
   });
 
   it('pontos: um real, um ponto', () => {
@@ -53,6 +53,7 @@ describe('o acúmulo de cada modelo', () => {
         programa: programa({ modo: 'pontos', pontosPorReal: 1 }),
         totalCents: 4900,
         resgatadoCents: 0,
+        prepagoCents: 0,
       }),
     ).toEqual({ quantidade: 49, baseCents: 4900 });
   });
@@ -63,6 +64,7 @@ describe('o acúmulo de cada modelo', () => {
         programa: programa({ modo: 'cashback', cashbackBps: 500 }),
         totalCents: 4900,
         resgatadoCents: 0,
+        prepagoCents: 0,
       }),
     ).toEqual({ quantidade: 245, baseCents: 4900 });
   });
@@ -75,6 +77,7 @@ describe('o acúmulo de cada modelo', () => {
         programa: programa({ modo: 'cashback', cashbackBps: 500 }),
         totalCents: 190,
         resgatadoCents: 0,
+        prepagoCents: 0,
       }),
     ).toMatchObject({ quantidade: 9 });
   });
@@ -85,6 +88,7 @@ describe('o acúmulo de cada modelo', () => {
         programa: programa({ modo: 'visitas' }),
         totalCents: 4900,
         resgatadoCents: 0,
+        prepagoCents: 0,
       }),
     ).toMatchObject({ quantidade: 1 });
   });
@@ -102,6 +106,7 @@ describe('o bloqueio anti-laço', () => {
         programa: programa({ modo: 'pontos', pontosPorReal: 1 }),
         totalCents: 5000,
         resgatadoCents: 2000,
+        prepagoCents: 0,
       }),
     ).toEqual({ quantidade: 30, baseCents: 3000 });
   });
@@ -112,6 +117,7 @@ describe('o bloqueio anti-laço', () => {
         programa: programa({ modo: 'cashback', cashbackBps: 500 }),
         totalCents: 5000,
         resgatadoCents: 5000,
+        prepagoCents: 0,
       }),
     ).toBeNull();
   });
@@ -124,6 +130,7 @@ describe('o bloqueio anti-laço', () => {
         programa: programa({ modo: 'visitas' }),
         totalCents: 4900,
         resgatadoCents: 4900,
+        prepagoCents: 0,
       }),
     ).toBeNull();
   });
@@ -136,6 +143,7 @@ describe('o bloqueio anti-laço', () => {
         programa: programa({ modo: 'visitas' }),
         totalCents: 4900,
         resgatadoCents: 200,
+        prepagoCents: 0,
       }),
     ).toMatchObject({ quantidade: 1 });
   });

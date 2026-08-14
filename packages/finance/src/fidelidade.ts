@@ -337,6 +337,8 @@ export async function conferirResgate(params: {
   readonly customerId: string | null;
   readonly quantidade: number;
   readonly tetoCents: number;
+  /** O maior serviço da comanda. É ele que o prêmio de `visitas` cobre. */
+  readonly tetoDeUmServicoCents: number;
   readonly agora?: Date;
   /** A loja da venda: com fidelidade por unidade, o saldo é o dos dois bolsos dela. */
   readonly locationId?: string | null;
@@ -351,18 +353,28 @@ export async function conferirResgate(params: {
     const extrato = await extratoDe(tx, params.customerId);
     const saldo = saldoNosBolsos(extrato, params.locationId ?? null, agora).total;
 
+    /**
+     * O teto depende do **modo**, e é o que separa "um corte grátis" de "a
+     * comanda grátis".
+     *
+     * Em `pontos` e `cashback` o crédito é dinheiro e cobre qualquer coisa que
+     * a conta tenha. Em `visitas` o prêmio é um **serviço** — e com um pacote de
+     * R$ 250 na mesma comanda, o teto pelo total pagava a compra inteira.
+     */
+    const teto = p.modo === 'visitas' ? params.tetoDeUmServicoCents : params.tetoCents;
+
     const decisao = podeResgatar({
       programa: p,
       saldo,
       quantidade: params.quantidade,
-      tetoCents: params.tetoCents,
+      tetoCents: teto,
     });
     if (!decisao.aceito) recusar(decisao.recusa);
 
     const valorCents = valorDoResgate({
       programa: p,
       quantidade: params.quantidade,
-      tetoCents: params.tetoCents,
+      tetoCents: teto,
     });
     if (valorCents <= 0) recusar('nada_a_pagar');
 
@@ -444,6 +456,8 @@ export async function creditarDaVenda(
     readonly customerId: string | null;
     readonly totalCents: number;
     readonly resgatadoCents: number;
+    /** Pacote e assinatura: crédito já pago e já premiado na venda dele. */
+    readonly prepagoCents: number;
     readonly agora: Date;
     readonly locationId?: string | null;
   },
@@ -455,6 +469,7 @@ export async function creditarDaVenda(
     programa: p,
     totalCents: params.totalCents,
     resgatadoCents: params.resgatadoCents,
+    prepagoCents: params.prepagoCents,
   });
   if (!acumulo) return 0;
 

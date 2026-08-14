@@ -1126,6 +1126,21 @@ export async function fecharComanda(params: {
         customerId: comanda.customerId,
         quantidade: params.resgateQuantidade ?? 0,
         tetoCents: comanda.totalCents,
+        /**
+         * O prêmio de `visitas` é **um serviço**, não a comanda.
+         *
+         * "A cada dez cortes, um grátis" é um corte. O teto era o total, e a
+         * decisão foi tomada quando a comanda só tinha serviço — item de pacote
+         * e de produto entraram nos blocos 42 e 44 sem revisitá-lo. Com um
+         * pacote de R$ 250 na mesma conta, o prêmio pagava a compra inteira: o
+         * cliente saía com cinco cortes pré-pagos que ninguém pagou, ainda
+         * reembolsáveis proporcionalmente — virando crédito no razão do fiado.
+         *
+         * O maior item de serviço, e não a soma deles: o prêmio é **um**.
+         */
+        tetoDeUmServicoCents: comanda.itens
+          .filter((i) => i.tipo === 'service')
+          .reduce((maior, i) => Math.max(maior, i.precoUnitarioCents * i.quantidade), 0),
         locationId: params.locationId,
         tx,
       });
@@ -1367,6 +1382,17 @@ export async function fecharComanda(params: {
       // barbearia pagando fidelidade com dinheiro que não é dela.
       totalCents: comanda.totalCents - comanda.gorjetaCents,
       resgatadoCents,
+      /**
+       * Pacote e assinatura saem da base: são crédito **já pago e já premiado**.
+       *
+       * O pacote de R$ 250 entra uma vez no caixa e era premiado duas — na
+       * compra e em cada um dos cinco usos —, dando 10% onde a casa configurou
+       * 5%. Cada metade era internamente coerente, e por isso nada ficava
+       * vermelho.
+       */
+      prepagoCents: params.pagamentos
+        .filter((p) => p.forma === 'pacote' || p.forma === 'assinatura')
+        .reduce((soma, p) => soma + p.valorCents, 0),
       agora: new Date(),
       // O bolso em que o saldo nasce, congelado com o lançamento (bloco 59).
       locationId: params.locationId,
