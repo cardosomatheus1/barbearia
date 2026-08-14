@@ -116,6 +116,9 @@ done
 printf '\n\033[1m==> responsividade em 360, 390, 768 e 1280\033[0m\n'
 node scripts/medir-responsividade.js
 
+printf '\n\033[1m==> percursos: do clique ao banco\033[0m\n'
+node scripts/percorrer.mjs
+
 printf '\n\033[1m==> carga em /availability\033[0m\n'
 node scripts/carga-availability.mjs
 
