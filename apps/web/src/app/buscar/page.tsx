@@ -59,7 +59,17 @@ const primeiro = (valor: string | string[] | undefined): string | undefined =>
 const reais = (centavos: number): string =>
   (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const nota = (bps: number): string => (bps / 100).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+/**
+ * Uma casa decimal, e o **máximo** também é uma.
+ *
+ * A nota deste produto tem uma casa desde o bloco 43, e quem escreve a vitrine
+ * já arredonda assim — `atualizarVitrine` usa a mesma `resumoPublico` da página
+ * da barbearia. Sem o teto, este card ficava dependendo daquele invariante:
+ * qualquer `rating_bps` que não fosse múltiplo de dez sairia como "4,69" ao
+ * lado de uma página dizendo "4,7", sobre a mesma casa (§6, pergunta 6).
+ */
+const nota = (bps: number): string =>
+  (bps / 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 const distancia = (km: number): string =>
   km < 1 ? `${Math.round(km * 1000)} m` : `${km.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km`;

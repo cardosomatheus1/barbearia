@@ -728,7 +728,16 @@ function empilhar(linhas, m, vendasDoDia, agendaPorCadeira, cadeira) {
   const pedido = id();
   const itemId = id();
   const gorjeta = chance(0.12) ? entre(2, 10) * 100 : 0;
-  const total = m.doMenu.preco + gorjeta;
+  /**
+   * Um desconto de vez em quando, dentro do teto da casa.
+   *
+   * Sem ele a linha "Descontos concedidos" do DRE nasce zerada, e uma linha
+   * sempre em zero é a que ninguém confere — foi exatamente assim que o
+   * desconto passou meses sumindo do resultado sem ninguém notar. Barbearia dá
+   * desconto: cliente antigo, indicação, promoção de terça.
+   */
+  const desconto = chance(0.06) ? Math.min(entre(2, 8) * 100, Math.floor(m.doMenu.preco * 0.2)) : 0;
+  const total = m.doMenu.preco - desconto + gorjeta;
   /**
    * Quem não tem cadastro não leva fiado.
    *
@@ -752,7 +761,10 @@ function empilhar(linhas, m, vendasDoDia, agendaPorCadeira, cadeira) {
     opened_at: m.fim,
     closed_at: new Date(m.fim.getTime() + entre(1, 9) * 60_000),
     subtotal_cents: m.doMenu.preco,
-    discount_cents: 0,
+    discount_cents: desconto,
+    discount_reason: desconto > 0
+      ? escolher(['Cliente antigo, combinado com o dono', 'Indicou dois amigos este mes', 'Promocao de terca'])
+      : null,
     tip_cents: gorjeta,
     total_cents: total,
     change_cents: 0,
@@ -791,7 +803,9 @@ function empilhar(linhas, m, vendasDoDia, agendaPorCadeira, cadeira) {
     mode: 'percent',
     value: m.regra?.bps ?? 4000,
     tiers: '[]',
-    base_cents: m.doMenu.preco,
+    // Base já descontada, como o domínio faz: `reduz_base` é o padrão, e a
+    // comissão do bloco 30 sempre soube do desconto — só o DRE não sabia.
+    base_cents: m.doMenu.preco - desconto,
     sign: 1,
     created_at: m.fim,
   });
@@ -803,9 +817,9 @@ function empilhar(linhas, m, vendasDoDia, agendaPorCadeira, cadeira) {
       order_id: pedido,
       kind: 'acumulo',
       mode: 'pontos',
-      // Um ponto por real pago, que é o padrão do programa semeado.
-      amount: Math.floor(m.doMenu.preco / 100),
-      base_cents: m.doMenu.preco,
+      // Um ponto por real **pago**: o que a casa abriu mão não gera ponto.
+      amount: Math.floor((m.doMenu.preco - desconto) / 100),
+      base_cents: m.doMenu.preco - desconto,
       location_id: m.apt.location_id,
       scope: 'empresa',
       created_at: m.fim,
@@ -1038,7 +1052,7 @@ function gravar(url, tenant, regras, linhas) {
     inserir('orders',
       ['id', 'tenant_id', 'location_id', 'customer_id', 'appointment_id', 'session_id', 'status',
         'opened_by', 'opened_at', 'closed_at', 'subtotal_cents', 'discount_cents',
-        'tip_cents', 'total_cents', 'change_cents', 'business_day', 'fee_cents'],
+        'tip_cents', 'total_cents', 'change_cents', 'business_day', 'fee_cents', 'discount_reason'],
       linhas.orders),
 
     inserir('order_items',

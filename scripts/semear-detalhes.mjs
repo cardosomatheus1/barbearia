@@ -113,23 +113,32 @@ const PRODUTOS = [
   { nome: 'Bálsamo pós-barba sem álcool', cat: 'Barba', tipo: 'resale', custo: 1900, preco: 4200, min: 4, un: 'un' },
   { nome: 'Boné da casa', cat: 'Vestuário', tipo: 'resale', custo: 2500, preco: 5900, min: 3, un: 'un' },
   // Consumo interno: entra no custo do serviço, nunca na receita.
-  { nome: 'Shampoo de lavatório 5L', cat: 'Insumo', tipo: 'internal', custo: 8900, preco: null, min: 2, un: 'un' },
+  /**
+   * O insumo é cadastrado **na unidade em que ele é gasto**, não na embalagem.
+   *
+   * Um frasco de 5 litros rende umas quarenta lavagens; cadastrá-lo como "1 un
+   * a R$ 89" e baixar uma por corte fez o CMV do mês dar R$ 18 mil sobre
+   * R$ 13,5 mil de serviço — a barbearia aparecia perdendo dinheiro. O produto
+   * está certo: ele congela o custo do movimento e soma. Quem estava errado era
+   * a ficha técnica, e é o mesmo erro que uma barbearia comete ao cadastrar.
+   */
+  { nome: 'Shampoo de lavatório (dose)', cat: 'Insumo', tipo: 'internal', custo: 220, preco: null, min: 80, un: 'dose' },
   { nome: 'Toalha descartável', cat: 'Insumo', tipo: 'internal', custo: 25, preco: null, min: 200, un: 'un' },
   { nome: 'Lâmina de barbear descartável', cat: 'Insumo', tipo: 'internal', custo: 90, preco: null, min: 100, un: 'un' },
-  { nome: 'Talco antisséptico', cat: 'Insumo', tipo: 'internal', custo: 1200, preco: null, min: 3, un: 'un' },
+  { nome: 'Talco antisséptico (aplicação)', cat: 'Insumo', tipo: 'internal', custo: 25, preco: null, min: 60, un: 'aplicação' },
   { nome: 'Tinta para pigmentação de barba', cat: 'Insumo', tipo: 'internal', custo: 4200, preco: null, min: 2, un: 'un' },
   { nome: 'Pó descolorante 300g', cat: 'Insumo', tipo: 'internal', custo: 3800, preco: null, min: 2, un: 'un' },
 ];
 
 /** A ficha técnica: quanto de cada insumo sai por serviço. */
 const FICHA = {
-  'Corte masculino': [['Shampoo de lavatório 5L', 1], ['Toalha descartável', 1]],
-  'Corte + barba': [['Shampoo de lavatório 5L', 1], ['Toalha descartável', 2], ['Lâmina de barbear descartável', 1], ['Talco antisséptico', 1]],
-  'Barba terapêutica com toalha quente': [['Toalha descartável', 2], ['Lâmina de barbear descartável', 1], ['Talco antisséptico', 1]],
-  'Degradê navalhado': [['Shampoo de lavatório 5L', 1], ['Toalha descartável', 1], ['Lâmina de barbear descartável', 1]],
-  'Corte infantil': [['Shampoo de lavatório 5L', 1], ['Toalha descartável', 1]],
+  'Corte masculino': [['Shampoo de lavatório (dose)', 1], ['Toalha descartável', 1]],
+  'Corte + barba': [['Shampoo de lavatório (dose)', 1], ['Toalha descartável', 2], ['Lâmina de barbear descartável', 1], ['Talco antisséptico (aplicação)', 1]],
+  'Barba terapêutica com toalha quente': [['Toalha descartável', 2], ['Lâmina de barbear descartável', 1], ['Talco antisséptico (aplicação)', 1]],
+  'Degradê navalhado': [['Shampoo de lavatório (dose)', 1], ['Toalha descartável', 1], ['Lâmina de barbear descartável', 1]],
+  'Corte infantil': [['Shampoo de lavatório (dose)', 1], ['Toalha descartável', 1]],
   'Pigmentação de barba': [['Tinta para pigmentação de barba', 1], ['Toalha descartável', 1]],
-  'Platinado global': [['Pó descolorante 300g', 1], ['Shampoo de lavatório 5L', 1], ['Toalha descartável', 2]],
+  'Platinado global': [['Pó descolorante 300g', 1], ['Shampoo de lavatório (dose)', 1], ['Toalha descartável', 2]],
 };
 
 // ---------------------------------------------------------------------------
@@ -173,8 +182,34 @@ export function semearDetalhes({ url, slug }) {
   const hoje = new Date();
   const sql = ['BEGIN;'];
 
-  sql.push(estoque(url, { tenant, local, doNome, hoje }));
-  sql.push(vendaDeProduto(url, { tenant, local, hoje }));
+  /**
+   * Os produtos nascem em JavaScript e são **passados adiante**.
+   *
+   * A venda de produto precisa deles, e reler do banco não funciona: as seções
+   * montam uma transação só, executada no fim, e `consultar` abre outra
+   * conexão — que não enxerga o que ainda não foi commitado. O sintoma foi
+   * silencioso e caro de ler: "Produtos R$ 0,00" no DRE ao lado de um CMV de
+   * cinco dígitos.
+   */
+  const produtos = PRODUTOS.map((p) => ({ ...p, id: id() }));
+  const vendasPagas = consultar(
+    url,
+    `SELECT o.id, o.business_day FROM orders o
+      WHERE o.tenant_id = ${lit(tenant)} AND o.status = 'paid'`,
+  );
+
+  /**
+   * A venda de balcão é sorteada **antes** da compra, e não depois.
+   *
+   * O gatilho do banco recusa saldo negativo — e está certo. A primeira versão
+   * dimensionava o pedido mensal só pelo consumo da ficha técnica e dava à
+   * revenda um valor fixo: bastou a variância do sorteio passar dele para a
+   * transação inteira morrer. Uma barbearia compra o que vai vender; a semente
+   * precisa saber quanto vai vender antes de comprar.
+   */
+  const prateleira = sortearVendaDeProduto({ tenant, local, produtos, vendas: vendasPagas });
+  sql.push(estoque(url, { tenant, local, doNome, hoje, produtos, demanda: prateleira.demanda }));
+  sql.push(prateleira.sql);
   sql.push(pacotes(url, { tenant, local, doNome, fieis, hoje }));
   sql.push(clube(url, { tenant, local, doNome, fieis, hoje }));
   sql.push(resgateDeFidelidade(url, { tenant, local, hoje }));
@@ -199,8 +234,7 @@ export function semearDetalhes({ url, slug }) {
 // 1 — prateleira, ficha técnica e consumo
 // ---------------------------------------------------------------------------
 
-function estoque(url, { tenant, local, doNome, hoje }) {
-  const produtos = PRODUTOS.map((p) => ({ ...p, id: id() }));
+function estoque(url, { tenant, local, doNome, hoje, produtos, demanda }) {
   const porNome = new Map(produtos.map((p) => [p.nome, p]));
 
   const linhas = [];
@@ -274,6 +308,11 @@ function estoque(url, { tenant, local, doNome, hoje }) {
    * distribuidor —, e é o que faz a tela de estoque ter entrada, saída e saldo
    * em vez de um número que apareceu do nada.
    */
+  // O que o balcão vai vender entra na mesma conta do que a cadeira vai gastar.
+  for (const [chave, quantidade] of demanda ?? []) {
+    precisa.set(chave, (precisa.get(chave) ?? 0) + quantidade);
+  }
+
   const meses = [...new Set([...precisa.keys()].map((k) => k.split('|')[1]))].sort();
   for (const p of produtos) {
     for (const mes of meses) {
@@ -339,21 +378,12 @@ function estoque(url, { tenant, local, doNome, hoje }) {
  * com o pagamento — uma comanda cujo `total_cents` não bate com a soma dos
  * itens é a incoerência que a tela de fechamento existe para acusar.
  */
-function vendaDeProduto(url, { tenant, local, hoje }) {
-  const revenda = consultar(
-    url,
-    `SELECT id, price_cents, cost_cents FROM products
-      WHERE tenant_id = ${lit(tenant)} AND kind = 'resale' AND price_cents IS NOT NULL`,
-  ).map(([pid, preco, custo]) => ({ id: pid, preco: Number(preco), custo: Number(custo) }));
-  if (revenda.length === 0) return '';
-
-  const vendas = consultar(
-    url,
-    `SELECT o.id, o.business_day, o.total_cents
-       FROM orders o
-      WHERE o.tenant_id = ${lit(tenant)} AND o.status = 'paid'
-        AND o.business_day >= ${lit(diaDe(somarDias(hoje, -245)))}`,
-  );
+function sortearVendaDeProduto({ tenant, local, produtos, vendas }) {
+  const revenda = produtos
+    .filter((p) => p.tipo === 'resale' && p.preco !== null)
+    .map((p) => ({ id: p.id, preco: p.preco, custo: p.custo }));
+  const demanda = new Map();
+  if (revenda.length === 0 || vendas.length === 0) return { sql: '', demanda };
 
   const itens = [];
   const movimentos = [];
@@ -363,7 +393,7 @@ function vendaDeProduto(url, { tenant, local, hoje }) {
     const p = escolher(revenda);
     itens.push({
       id: id(), tenant_id: tenant, order_id: orderId, kind: 'product', product_id: p.id,
-      description: 'Produto vendido no balcão', quantity: 1, unit_price_cents: p.preco,
+      description: 'Produto vendido no balcao', quantity: 1, unit_price_cents: p.preco,
       position: 1, created_at: new Date(`${dia}T18:00:00Z`),
     });
     movimentos.push({
@@ -372,6 +402,8 @@ function vendaDeProduto(url, { tenant, local, hoje }) {
       created_at: new Date(`${dia}T18:00:00Z`),
     });
     ajustes.push({ orderId, delta: p.preco });
+    const chave = `${p.id}|${String(dia).slice(0, 7)}`;
+    demanda.set(chave, (demanda.get(chave) ?? 0) + 1);
   }
 
   const descricao = `
@@ -393,18 +425,21 @@ function vendaDeProduto(url, { tenant, local, hoje }) {
        AND o.status = 'paid'
        AND 1 = (SELECT count(*) FROM order_payments q WHERE q.order_id = o.id);`;
 
-  return [
-    inserir('order_items',
-      ['id', 'tenant_id', 'order_id', 'kind', 'product_id', 'description', 'quantity',
-        'unit_price_cents', 'position', 'created_at'],
-      itens),
-    descricao,
-    inserir('stock_movements',
-      ['id', 'tenant_id', 'product_id', 'location_id', 'kind', 'quantity', 'unit_cost_cents',
-        'order_id', 'business_day', 'created_at'],
-      movimentos),
-    refazer,
-  ].join('\n');
+  return {
+    demanda,
+    sql: [
+      inserir('order_items',
+        ['id', 'tenant_id', 'order_id', 'kind', 'product_id', 'description', 'quantity',
+          'unit_price_cents', 'position', 'created_at'],
+        itens),
+      descricao,
+      inserir('stock_movements',
+        ['id', 'tenant_id', 'product_id', 'location_id', 'kind', 'quantity', 'unit_cost_cents',
+          'order_id', 'business_day', 'created_at'],
+        movimentos),
+      refazer,
+    ].join('\n'),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1042,7 +1077,10 @@ function vitrineEPerfil({ tenant, local, cadeiras, slug }) {
            -- Copiar "a média de tudo" faria o card anunciar um número que a
            -- pagina da barbearia nao mostra. A varredura do produto, que e
            -- quem manda, usa exatamente estas condicoes.
-           (SELECT round(avg(r.rating) * 100)::int FROM reviews r
+           -- Uma casa decimal, como a funcao de resumo publico do produto: a
+           -- nota daqui tem uma casa desde o bloco 43, e guardar duas faria o
+           -- card dizer 4,69 onde a pagina da barbearia diz 4,7.
+           (SELECT round(avg(r.rating) * 10)::int * 10 FROM reviews r
              WHERE r.tenant_id = t.id AND r.contested_at IS NULL
                AND (r.rating >= 4 OR r.created_at <= now() - interval '48 hours')),
            (SELECT count(*)::int FROM reviews r

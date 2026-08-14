@@ -169,9 +169,17 @@ const slug = consultar(`SELECT slug FROM tenant_slugs ORDER BY created_at LIMIT 
 // diferentes da mesma casa, e é a de avaliações que a página desenha.
 const publica = await chamar(`/v1/b/${slug}/avaliacoes`);
 const naVitrine = Number(consultar(`SELECT coalesce(rating_bps, 0) FROM marketplace_listings LIMIT 1`));
+/**
+ * Com **uma casa decimal**, que é a convenção do produto desde o bloco 43.
+ *
+ * A primeira versão desta consulta arredondava para duas e acusava a página de
+ * dizer 4,70 onde "o banco" dizia 4,69. Uma conferência que impõe a própria
+ * precisão vira o terceiro número sobre o mesmo fato — exatamente o que ela
+ * existe para não deixar acontecer.
+ */
 const publicadas = Number(
   consultar(
-    `SELECT coalesce(round(avg(rating) * 100), 0) FROM reviews
+    `SELECT coalesce(round(avg(rating) * 10) * 10, 0) FROM reviews
       WHERE contested_at IS NULL AND (rating >= 4 OR created_at < now() - interval '48 hours')`,
   ),
 );
