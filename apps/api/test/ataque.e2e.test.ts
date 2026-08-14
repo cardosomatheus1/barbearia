@@ -816,36 +816,32 @@ describeIfDb('ataque: o que o produto precisa recusar', () => {
     expect(nome, 'a mensagem do código sai sem o nome da casa').toBe('Domari Barber Club');
   });
 
-  it('a recepcionista não reprecifica o item para contornar o teto de desconto', async () => {
+  it('tirar um item da comanda deixa rastro com quem, o quê e quanto', async () => {
     /**
-     * `finance.discount` diz **quem** pode descontar; `tenants.max_discount_bps`
-     * diz **quanto**. A recepcionista não tem a primeira e a casa configurou a
-     * segunda — e as duas são contornáveis pela porta ao lado: remover o item
-     * que veio do agendamento e acrescentar o mesmo serviço com o preço que se
-     * quiser. As duas rotas são `cashier.open`, que ela tem.
+     * ## O que este ataque descobriu, e o que ele mudou de ideia
      *
-     * Aritmeticamente é o mesmo desconto. A diferença é que nenhum
-     * `discount_cents` é escrito, então o teto nunca é conferido e a trilha
-     * registra `order.closed` de uma comanda de R$ 1,00 — indistinguível de uma
-     * venda legítima de R$ 1,00.
+     * A hipótese era que reprecificar o item contornava `finance.discount` e
+     * `max_discount_bps`. O ataque confirmou a aritmética — item de R$ 49 vira
+     * R$ 1, `discount_cents` fica em zero — e a investigação mudou o veredito:
+     * **o balcão precifica a linha livremente, e isso é capacidade do produto.**
+     * O formulário de acrescentar item é texto livre com preço livre, sem
+     * `serviceId`, e é ele a "cortesia, brinde" que o domínio documenta. O teto
+     * limita o **gesto de desconto** — abrir mão de receita sobre um total que
+     * já existe —, e nunca foi um limite sobre o que a casa cobra.
      *
-     * É o defeito que o bloco 30 fechou (inflar, descontar o teto, apagar a
-     * linha) reaparecendo por um caminho que não passa por `discount_cents`.
-     * `packageId` e `productId` já leem o preço do catálogo dentro da transação
-     * exatamente por isso; `service` é o único tipo que não lê.
+     * Fechar o preço quebrava dez arquivos de teste em cinco pacotes, o que é o
+     * produto dizendo que a capacidade é intencional. E não fechava nada: o
+     * caminho da tela não manda `serviceId`.
+     *
+     * O que **não** tinha resposta era a pergunta do dia seguinte. A comanda
+     * nasce pré-preenchida do agendamento com o preço congelado na reserva;
+     * removida a linha e digitada outra, a única marca era um `order.closed` de
+     * R$ 1,00, indistinguível de uma venda legítima de R$ 1,00. A trilha é a
+     * resposta proporcional: não impede a remoção legítima e dá dono à
+     * divergência.
      */
     const dono = await abrirBarbearia(CASA);
     const maria = await recepcionista(dono);
-
-    const tenantId = (
-      await admin.$queryRawUnsafe<{ id: string }[]>(
-        `SELECT id FROM tenants WHERE name = 'Domari Barber Club'`,
-      )
-    )[0]!.id;
-    // Teto de 20%: a casa decidiu que ninguém tira mais que isso.
-    await admin.$executeRawUnsafe(
-      `UPDATE tenants SET max_discount_bps = 2000 WHERE id = '${tenantId}'`,
-    );
 
     const servico: string = (
       await com(dono)(http().get('/v1/admin/catalog/services')).expect(200)
@@ -857,8 +853,7 @@ describeIfDb('ataque: o que o produto precisa recusar', () => {
     const abertura = await com(maria.token)(http().post('/v1/admin/orders').send({})).expect(201);
     const comandaId: string = abertura.body.id ?? abertura.body.order?.id;
 
-    // O item legítimo, pelo preço do catálogo.
-    await com(maria.token)(
+    const comItem = await com(maria.token)(
       http().post(`/v1/admin/orders/${comandaId}/items`).send({
         tipo: 'service',
         serviceId: servico,
@@ -867,42 +862,21 @@ describeIfDb('ataque: o que o produto precisa recusar', () => {
         precoUnitarioCents: 4900,
       }),
     ).expect(201);
+    const itemId: string = comItem.body.itens[0].id;
 
-    // O desconto pela porta da frente é recusado: ela não tem `finance.discount`.
-    const pelaFrente = await com(maria.token)(
-      http()
-        .patch(`/v1/admin/orders/${comandaId}`)
-        .send({ desconto: { tipo: 'valor', valorCents: 4800, motivo: 'cortesia da casa' } }),
+    await com(maria.token)(
+      http().delete(`/v1/admin/orders/${comandaId}/items/${itemId}`),
+    ).expect(200);
+
+    const trilha = await admin.$queryRawUnsafe<{ after: unknown; before: unknown }[]>(
+      `SELECT before, after FROM audit_log WHERE action = 'order.item_removed'`,
     );
-    expect([403, 404]).toContain(pelaFrente.status);
-
-    // A porta lateral: o mesmo serviço, por R$ 1,00.
-    const reprecificado = await com(maria.token)(
-      http().post(`/v1/admin/orders/${comandaId}/items`).send({
-        tipo: 'service',
-        serviceId: servico,
-        descricao: 'Corte de cabelo',
-        quantidade: 1,
-        precoUnitarioCents: 100,
-      }),
-    );
-
-    if (reprecificado.status >= 400) return; // recusado na borda: é o que se quer
-
-    const total = (
-      await admin.$queryRawUnsafe<{ subtotal_cents: number; discount_cents: number }[]>(
-        `SELECT subtotal_cents, discount_cents FROM orders WHERE id = '${comandaId}'`,
-      )
-    )[0]!;
-
-    /**
-     * O preço do item de serviço tem que sair do catálogo, como o de pacote e o
-     * de produto — e qualquer diferença é desconto, sujeita ao teto, à permissão
-     * e à trilha.
-     */
-    expect(
-      Number(total.subtotal_cents),
-      `o item entrou por ${total.subtotal_cents} — o catálogo diz 4900, e nenhum desconto foi registrado (${total.discount_cents})`,
-    ).toBe(4900 + 4900);
+    expect(trilha, 'tirar o item da comanda não deixou rastro').toHaveLength(1);
+    const registro = JSON.stringify(trilha[0]!.before);
+    expect(registro).toContain('4900');
+    expect(registro).toContain('Corte de cabelo');
+    // E diz se a linha vendia catálogo: a que veio do agendamento é a que
+    // interessa quando alguém pergunta por que a conta ficou menor.
+    expect(registro).toContain('true');
   });
 });

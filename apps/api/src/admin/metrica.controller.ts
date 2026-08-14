@@ -18,7 +18,12 @@ import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
-import { Exige, PermissaoGuard } from './permissao.guard.js';
+import {
+  Exige,
+  PermissaoGuard,
+  exigirLimiteDoSuporte,
+  exigirSegundoFator,
+} from './permissao.guard.js';
 import { conversaSchema, perguntaSchema } from './metrica.schemas.js';
 import { unidadeDoBalcao } from './unidade.js';
 
@@ -177,6 +182,26 @@ export class MetricaController {
     }
 
     const { pergunta, definicao } = validada;
+
+    /**
+     * As **três** derivações da guarda, e não só a de permissão.
+     *
+     * O piso desta rota é o mais baixo que existe, de propósito — quem decide é
+     * o catálogo, uma métrica de cada vez. O que a primeira versão não viu é que
+     * a `PermissaoGuard` deriva outras duas decisões da mesma lista do `@Exige`:
+     * o limite da sessão de suporte e o segundo fator do dinheiro. Com
+     * `appointments.view` declarado, as duas ficavam desligadas — e uma pergunta
+     * sobre faturamento saía sem TOTP, e a sessão de suporte da plataforma lia o
+     * caixa da barbearia, que é justamente o que `PERMISSOES_DO_SUPORTE` diz que
+     * ela não vê.
+     *
+     * A permissão viaja com **o que foi perguntado**, então as outras duas têm
+     * que viajar junto. São as mesmas funções que a guarda chama: uma segunda
+     * cópia da regra seria a lista paralela que este código proíbe.
+     */
+    exigirLimiteDoSuporte(staff, definicao.exige);
+    exigirSegundoFator(staff, definicao.exige);
+
     const unidade = await unidadeDoBalcao(staff);
     const resposta = await responder(staff.tenantId, pergunta, unidade.id);
 

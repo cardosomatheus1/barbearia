@@ -55,6 +55,20 @@ export type AuditAction =
   | 'cash.supply'
   | 'order.closed'
   | 'order.discount'
+  /**
+   * Uma linha tirada da comanda (revisão de segurança do bloco 80).
+   *
+   * O balcão precifica a linha livremente — é capacidade do produto, e a
+   * cortesia é a mesma linha de texto livre. O que não tinha resposta era
+   * *"quem tirou o corte de R$ 49 da comanda do Carlos?"*: a comanda nasce
+   * pré-preenchida do agendamento com o preço congelado, e remover a linha para
+   * digitar outra por R$ 1,00 é aritmeticamente um desconto de 98% que não
+   * passa por `discount_cents` — logo, nem pelo teto, nem por
+   * `finance.discount`, nem pela trilha de desconto.
+   *
+   * Fica no lado do dinheiro: ela muda o que o cliente paga.
+   */
+  | 'order.item_removed'
   | 'debt.received'
   // Cobrança online (bloco 35). Emitir põe um QR Code pagável no mundo, e
   // cancelar o tira de circulação com o cliente possivelmente já lendo o
@@ -373,6 +387,7 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'cash.supply',
   'order.closed',
   'order.discount',
+  'order.item_removed',
   'debt.received',
   'order.charge_created',
   'order.charge_cancelled',

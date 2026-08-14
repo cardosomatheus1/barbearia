@@ -118,14 +118,7 @@ export class PermissaoGuard implements CanActivate {
      * que o segundo fator do dinheiro: a rota que alguém escrever no bloco 40
      * nasceria fora de qualquer lista, e ninguém veria. Aqui ela nasce coberta.
      */
-    if (staff.impersonatedBy && !suportePode(exigidas)) {
-      throw new DomainError(
-        'support_read_only',
-        403,
-        'A sessão de suporte é somente leitura.',
-      );
-    }
-
+    exigirLimiteDoSuporte(staff, exigidas);
     exigirSegundoFator(staff, exigidas);
 
     const recurso = this.reflector.getAllAndOverride<CodigoDeRecurso | undefined>(
@@ -140,6 +133,32 @@ export class PermissaoGuard implements CanActivate {
     }
 
     return true;
+  }
+}
+
+/**
+ * Sessão de suporte é somente leitura.
+ *
+ * A regra mora aqui, e não numa lista de rotas proibidas, pelo mesmo motivo que
+ * o segundo fator do dinheiro: a rota que alguém escrever no bloco 90 nasceria
+ * fora de qualquer lista, e ninguém veria. Aqui ela nasce coberta.
+ *
+ * ## Por que ela é exportada
+ *
+ * A guarda deriva **três** decisões da mesma lista do `@Exige`: a permissão, o
+ * limite do suporte e o segundo fator. Uma rota que declara um piso baixo de
+ * propósito — o assistente, que decide métrica por métrica — desligava as duas
+ * últimas junto com a primeira, e nada ficava vermelho.
+ *
+ * Quem baixa o piso passa a ter que cobrar as três com a permissão **de fato
+ * exercida**. Exportar é o que impede a segunda cópia da regra.
+ */
+export function exigirLimiteDoSuporte(
+  staff: NonNullable<StaffRequest['staff']>,
+  exigidas: readonly Permissao[],
+): void {
+  if (staff.impersonatedBy && !suportePode(exigidas)) {
+    throw new DomainError('support_read_only', 403, 'A sessão de suporte é somente leitura.');
   }
 }
 
@@ -170,7 +189,7 @@ export class PermissaoGuard implements CanActivate {
  * lista para alguém esquecer de atualizar — o defeito que a derivação existe
  * para eliminar. Aqui, ligar é uma decisão só, e ela vale para tudo.
  */
-function exigirSegundoFator(
+export function exigirSegundoFator(
   staff: NonNullable<StaffRequest['staff']>,
   exigidas: readonly Permissao[],
 ): void {

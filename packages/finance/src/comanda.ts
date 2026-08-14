@@ -679,18 +679,70 @@ export async function adicionarItem(params: {
   });
 }
 
+/**
+ * Tira um item da comanda.
+ *
+ * ## Por que a remoção é auditada, e a inclusão não
+ *
+ * O balcão precifica a linha livremente, e isso é capacidade do produto, não
+ * furo: a "cortesia" e o "serviço avulso" são a mesma linha de texto livre com
+ * preço livre, e é assim que a tela a oferece. `max_discount_bps` limita o
+ * **gesto de desconto**, que é outra coisa — abrir mão de receita sobre um
+ * total que já existe.
+ *
+ * O que não tinha resposta era a pergunta do dia seguinte: *"quem tirou o corte
+ * de R$ 49 da comanda do Carlos?"*. A comanda nasce pré-preenchida do
+ * agendamento, com o preço congelado na reserva; removida a linha e digitada
+ * outra por R$ 1,00, o resultado é aritmeticamente um desconto de 98% — e a
+ * única marca que ficava era um `order.closed` de R$ 1,00, indistinguível de
+ * uma venda legítima de R$ 1,00.
+ *
+ * A trilha é a resposta proporcional. Ela não impede a operação legítima —
+ * cliente desistiu da barba, item digitado errado —, e dá dono à divergência.
+ * Guarda o valor e **se a linha vendia catálogo**: a que carrega `service_id`
+ * veio do agendamento ou do cadastro, e é a que interessa.
+ */
 export async function removerItem(params: {
   readonly tenantId: string;
   readonly orderId: string;
   readonly itemId: string;
+  readonly ator?: { readonly id: string; readonly name: string };
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
     await exigirAberta(tx, params.orderId);
     await exigirSemCobrancaViva(tx, params.orderId);
-    await tx.$executeRaw`
+
+    const alvo = await tx.$queryRaw<
+      { description: string; unit_price_cents: number; quantity: number; service_id: string | null }[]
+    >`
+      SELECT description, unit_price_cents, quantity, service_id
+        FROM order_items
+       WHERE id = ${params.itemId}::uuid AND order_id = ${params.orderId}::uuid
+    `;
+
+    const removidas = await tx.$executeRaw`
       DELETE FROM order_items
        WHERE id = ${params.itemId}::uuid AND order_id = ${params.orderId}::uuid
     `;
+
+    const item = alvo[0];
+    // A contagem conferida: sem ela, o segundo toque gravaria trilha de uma
+    // remoção que não aconteceu.
+    if (removidas > 0 && item && params.ator) {
+      await audit(tx, {
+        actorId: params.ator.id,
+        actorName: params.ator.name,
+        action: 'order.item_removed',
+        entity: 'orders',
+        entityId: params.orderId,
+        before: {
+          descricao: item.description,
+          valorCents: item.unit_price_cents * item.quantity,
+          doCatalogo: item.service_id !== null,
+        },
+      });
+    }
+
     await recalcular(tx, params.orderId);
     return carregar(tx, params.orderId);
   });

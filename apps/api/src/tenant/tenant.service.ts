@@ -135,12 +135,26 @@ export class TenantService {
     this.cache.delete(slug.toLowerCase());
   }
 
-  /** Nome do estabelecimento, para compor a mensagem do código. */
+  /**
+   * Nome do estabelecimento, para compor a mensagem do código.
+   *
+   * Por `nome_da_barbearia`, e não por um `SELECT` direto: a consulta anterior
+   * rodava **fora** de `withTenant`, e `tenants` tem `FORCE ROW LEVEL SECURITY`
+   * com política por `id = current_setting('app.tenant_id')`. Sem tenant no
+   * contexto ela devolvia **zero linhas, em silêncio**, e todo código de acesso
+   * saía como *"Seu código para Barbearia"* — desde o bloco 5, sem nada falhar
+   * e sem nada logar.
+   *
+   * Aqui não dá para abrir `withTenant`: quem chama está resolvendo **quem é** a
+   * barbearia, antes de o contexto existir. A função da migração 0078 recorta
+   * exatamente a coluna que já é pública; a política estrita continua valendo
+   * para o resto da linha, porque RLS não recorta coluna.
+   */
   async nameOf(tenantId: string): Promise<string> {
-    const rows = await getPrisma().$queryRaw<{ name: string }[]>`
-      SELECT name FROM tenants WHERE id = ${tenantId}::uuid
+    const rows = await getPrisma().$queryRaw<{ nome: string | null }[]>`
+      SELECT nome_da_barbearia(${tenantId}::uuid) AS nome
     `;
-    return rows[0]?.name ?? 'Barbearia';
+    return rows[0]?.nome ?? 'Barbearia';
   }
 
   private evictExpired(): void {

@@ -282,6 +282,11 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
       throw new StaffError('email_taken', 'Este e-mail já tem conta nesta barbearia.');
     }
 
+    // Criar a conta com um papel que o ator não alcança é a mesma escalada de
+    // `changeStaffRole` em um passo a menos: a resposta devolve a senha inicial
+    // em claro, então quem cria já entra.
+    await recusarPapelAcimaDoAtor(tx, request.actor.id, request.role);
+
     const criado = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO staff_users
         (tenant_id, name, email, phone_e164, password_hash, role,
@@ -476,6 +481,51 @@ async function carregar(
  * `team.manage` se trancando para fora da própria barbearia, sem caminho de
  * volta pela aplicação.
  */
+/**
+ * Ninguém alcança o papel que ele mesmo não alcança.
+ *
+ * A regra "ninguém concede o que não tem" estava escrita e implementada em
+ * `definirPermissoesDoPapel` e em `definirUnidadesDoOperador` — e **não** aqui.
+ * Atribuir um papel é conceder o conjunto inteiro dele de uma vez: é a mesma
+ * concessão, pela porta ao lado, e era a mais barata das duas.
+ *
+ * O cenário não é hipotético: é a configuração que o bloco 30 passou a
+ * suportar. O dono acrescenta `team.manage` ao papel da recepção — delegação
+ * natural —, e a recepcionista chama esta rota sobre a própria conta pedindo
+ * `manager`. As permissões da sessão são relidas do banco a cada requisição,
+ * então na chamada seguinte ela tem o caixa, o financeiro e a comissão da casa.
+ * E o segundo fator não a segura: as rotas do MFA declaram `@Exige()` vazio, e
+ * ela cadastra o próprio autenticador em três chamadas.
+ *
+ * O que o ator tem sai do **banco**, nunca do parâmetro nem da sessão: é o
+ * mesmo cuidado do bloco 30, e pela mesma razão — a sessão é um retrato, e o
+ * banco é o fato.
+ */
+async function recusarPapelAcimaDoAtor(
+  tx: TransactionClient,
+  actorId: string,
+  papel: Papel,
+): Promise<void> {
+  const doAtor = await tx.$queryRaw<{ permission: string }[]>`
+    SELECT rp.permission
+      FROM staff_users u
+      JOIN role_permissions rp ON rp.role = u.role
+     WHERE u.id = ${actorId}::uuid AND u.active
+  `;
+  const doDestino = await tx.$queryRaw<{ permission: string }[]>`
+    SELECT permission FROM role_permissions WHERE role = ${papel}::staff_role
+  `;
+
+  const tem = new Set(doAtor.map((l) => l.permission));
+  const excedente = doDestino.map((l) => l.permission).find((p) => !tem.has(p));
+  if (excedente !== undefined) {
+    throw new StaffError(
+      'cannot_grant',
+      `Você não tem "${excedente}", então não pode dar esse papel.`,
+    );
+  }
+}
+
 export async function changeStaffRole(request: {
   readonly tenantId: string;
   readonly actor: { readonly id: string; readonly name: string };
@@ -494,6 +544,7 @@ export async function changeStaffRole(request: {
     if (atual.role === 'owner') {
       throw new StaffError('owner_protected', 'O dono não muda de papel.');
     }
+    await recusarPapelAcimaDoAtor(tx, request.actor.id, request.role);
 
     await tx.$executeRaw`
       UPDATE staff_users SET role = ${request.role}::staff_role, updated_at = now()
@@ -592,6 +643,15 @@ export async function resetStaffPassword(request: {
     if (atual.role === 'owner') {
       throw new StaffError('owner_protected', 'A senha do dono não se reemite por aqui.');
     }
+    /**
+     * E também não se reemite a senha de quem alcança mais que o ator.
+     *
+     * O comentário acima descreve a tomada de conta numa requisição e a fechava
+     * só para o dono — mas um gerente com `team.manage` restrito tomaria a conta
+     * de outro gerente pelo mesmo caminho, e a partir dali seria ele. O alcance
+     * do **alvo** é o que decide, e o do ator é lido do banco.
+     */
+    await recusarPapelAcimaDoAtor(tx, request.actor.id, atual.role);
 
     await tx.$executeRaw`
       UPDATE staff_users

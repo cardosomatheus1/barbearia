@@ -289,7 +289,12 @@ export class CaixaController {
     @Param('itemId', new ZodValidationPipe(uuidSchema)) itemId: string,
   ) {
     try {
-      return await removerItem({ tenantId: staff.tenantId, orderId: id, itemId });
+      return await removerItem({
+        tenantId: staff.tenantId,
+        orderId: id,
+        itemId,
+        ator: { id: staff.staffUserId, name: staff.name },
+      });
     } catch (error) {
       return toHttp(error);
     }

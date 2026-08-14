@@ -50,6 +50,7 @@ export type WhatsAppFailure =
   | 'template_nao_encontrado'
   | 'template_nao_aprovado'
   | 'numero_invalido'
+  | 'numero_indisponivel'
   | 'nome_invalido';
 
 export class WhatsAppError extends Error {
@@ -68,6 +69,14 @@ const MENSAGEM: Readonly<Record<WhatsAppFailure, string>> = {
   template_nao_encontrado: 'Este texto não existe.',
   template_nao_aprovado: 'Só um texto aprovado pela Meta pode ser enviado.',
   numero_invalido: 'Confira o identificador do número.',
+  /**
+   * A mesma frase de "não deu para gravar", e é decisão.
+   *
+   * "Este número é de outra barbearia" confirmaria o id para quem o adivinhou —
+   * o precedente do OTP, que responde igual para telefone existente e
+   * inexistente.
+   */
+  numero_indisponivel: 'Não foi possível salvar este número. Confira o identificador.',
   nome_invalido: 'O nome do texto aceita só minúsculas, números e sublinhado.',
 };
 
@@ -208,7 +217,21 @@ export async function salvarCadastroDoWhatsApp(params: {
      * Mora na mesma transação do cadastro porque as duas coisas são o mesmo
      * fato: este número é desta barbearia.
      */
-    await tx.$executeRaw`
+    /**
+     * A sobrescrita é condicionada à dona da linha.
+     *
+     * Sem o `WHERE`, a segunda barbearia a reivindicar o mesmo
+     * `phone_number_id` **levava o roteamento** — e com ele o telefone e o texto
+     * que os clientes da primeira escrevem, que passavam a ser gravados sob o
+     * tenant de quem tomou. A política da migração 0078 é a camada que
+     * sobrevive a uma reescrita deste arquivo; esta é a que produz a frase.
+     *
+     * A recusa tem a **mesma mensagem** de qualquer outra falha de gravação:
+     * "este número é de outra barbearia" confirmaria o id para quem o adivinhou,
+     * e é o precedente do OTP, que responde igual para telefone existente e
+     * inexistente.
+     */
+    const roteamento = await tx.$executeRaw`
       INSERT INTO whatsapp_numbers (phone_number_id, tenant_id, location_id)
       VALUES (${params.phoneNumberId},
               NULLIF(current_setting('app.tenant_id', true), '')::uuid,
@@ -216,7 +239,12 @@ export async function salvarCadastroDoWhatsApp(params: {
       ON CONFLICT (phone_number_id) DO UPDATE SET
         tenant_id = EXCLUDED.tenant_id,
         location_id = EXCLUDED.location_id
+      WHERE whatsapp_numbers.tenant_id
+            = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     `;
+    if (roteamento === 0) {
+      recusar('numero_indisponivel');
+    }
 
     /**
      * Auditado, e a trilha guarda **se** o token mudou, nunca o token.

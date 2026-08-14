@@ -103,6 +103,22 @@ const DONO = {
  * consultaria `feature_flags` só é tomado quando a rota declara `@Recurso`, e
  * nenhuma destas declara.
  */
+/**
+ * A isenção do schema semântico, conquistada nas três derivações.
+ *
+ * `validarPergunta` cobre a permissão; `exigirLimiteDoSuporte` e
+ * `exigirSegundoFator` cobrem as outras duas coisas que a `PermissaoGuard`
+ * deriva da mesma lista. Quem compuser métricas sem as três continua reprovado,
+ * que é o que separa isenção conquistada de isenção declarada.
+ */
+function isentoPeloSchemaSemantico(codigo: string): boolean {
+  return (
+    /\bvalidarPergunta\s*\(/.test(codigo) &&
+    /\bexigirLimiteDoSuporte\s*\(/.test(codigo) &&
+    /\bexigirSegundoFator\s*\(/.test(codigo)
+  );
+}
+
 describe('guarda de permissão', () => {
   it('deixa passar quem tem a permissão exigida', async () => {
     await expect(guardaCom(['appointments.view']).canActivate(contexto(DONO))).resolves.toBe(true);
@@ -492,13 +508,19 @@ describe('as rotas do painel', () => {
          * mundo, inclusive de quem só quer saber quantos faltaram hoje.
          *
          * O que a torna segura é a permissão viajar com a **métrica**, conferida
-         * em `validarPergunta` contra o que a pessoa tem no banco. Por isso a
-         * isenção é exatamente essa: o handler tem que chamar `validarPergunta`.
+         * em `validarPergunta` contra o que a pessoa tem no banco — e as outras
+         * **duas** derivações da guarda viajando junto.
+         *
+         * A primeira versão desta isenção pedia só `validarPergunta`, e com isso
+         * benzia uma rota que entregava faturamento sem segundo fator e abria o
+         * caixa para a sessão de suporte: a `PermissaoGuard` deriva três coisas
+         * do mesmo `@Exige`, e baixar o piso desligava as três. A isenção agora
+         * cobra as três chamadas.
          * Uma rota nova que compuser métricas sem passar por ela continua sendo
          * reprovada — e o e2e do bloco 63 executa o ataque para provar que a
          * conferência de fato acontece.
          */
-        if (/\bvalidarPergunta\s*\(/.test(codigo)) continue;
+        if (isentoPeloSchemaSemantico(codigo)) continue;
         faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
       }
     }
@@ -672,13 +694,19 @@ describe('as rotas do painel', () => {
          * mundo, inclusive de quem só quer saber quantos faltaram hoje.
          *
          * O que a torna segura é a permissão viajar com a **métrica**, conferida
-         * em `validarPergunta` contra o que a pessoa tem no banco. Por isso a
-         * isenção é exatamente essa: o handler tem que chamar `validarPergunta`.
+         * em `validarPergunta` contra o que a pessoa tem no banco — e as outras
+         * **duas** derivações da guarda viajando junto.
+         *
+         * A primeira versão desta isenção pedia só `validarPergunta`, e com isso
+         * benzia uma rota que entregava faturamento sem segundo fator e abria o
+         * caixa para a sessão de suporte: a `PermissaoGuard` deriva três coisas
+         * do mesmo `@Exige`, e baixar o piso desligava as três. A isenção agora
+         * cobra as três chamadas.
          * Uma rota nova que compuser métricas sem passar por ela continua sendo
          * reprovada — e o e2e do bloco 63 executa o ataque para provar que a
          * conferência de fato acontece.
          */
-        if (/\bvalidarPergunta\s*\(/.test(codigo)) continue;
+        if (isentoPeloSchemaSemantico(codigo)) continue;
         faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
       }
     }

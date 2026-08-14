@@ -38,6 +38,9 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'cash.supply': 'fez suprimento no caixa',
   'order.closed': 'fechou a comanda',
   'order.discount': 'deu desconto na comanda',
+  // "Tirou", e não "removeu": é a palavra do balcão, e a frase diz o que a
+  // pergunta do dia seguinte procura — quem tirou aquele item da conta.
+  'order.item_removed': 'tirou um item da comanda',
   'debt.received': 'recebeu um fiado',
   // Financeiro (bloco 51). "Lançou" e não "criou": é a palavra do balcão para
   // pôr uma conta na lista, e vocabulário de ação é um só em todo o produto.
