@@ -170,6 +170,7 @@ lancar "resolvedor de afetados" npx vitest run scripts/afetados.test.mjs
 # Crase dentro de consulta fecha o tagged template e o erro sai como sintaxe em
 # cima de uma linha de prosa. Custou três voltas de build em três blocos.
 lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
+lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
