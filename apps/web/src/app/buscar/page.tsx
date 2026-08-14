@@ -255,7 +255,7 @@ function Card({ casa }: { readonly casa: CasaNaBusca }) {
   const foto = imagemPublica(casa.fotoUrl);
 
   return (
-    <article className="casa">
+    <article className={`casa${casa.patrocinado ? ' casa--patrocinada' : ''}`}>
       {foto ? (
         /* `width` e `height` no `img` mais `aspect-ratio` no CSS: sem os dois o
            navegador não reserva o espaço e a foto empurra o conteúdo ao carregar. */
@@ -272,6 +272,16 @@ function Card({ casa }: { readonly casa: CasaNaBusca }) {
       )}
 
       <div className="casa__corpo">
+        {/**
+          * O rótulo do card pago (bloco 75).
+          *
+          * Em letras, acima do nome, e não um selo discreto no canto: um
+          * resultado pago sem rótulo é publicidade disfarçada de recomendação, e
+          * é a única coisa que faria esta busca valer menos que um diretório.
+          * O destaque compra **posição**, nunca a aparência de escolha do
+          * produto.
+          */}
+        {casa.patrocinado ? <p className="casa__patrocinio">Patrocinado</p> : null}
         <div className="casa__topo">
           <h2 className="casa__nome">{casa.nome}</h2>
           {casa.notaBps !== null ? (

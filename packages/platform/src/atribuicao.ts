@@ -460,3 +460,120 @@ export async function contestarAtribuicao(entrada: {
 }
 
 export type { RecusaDaAtribuicao };
+
+// ---------------------------------------------------------------------------
+// A plataforma revisa o que a barbearia contestou (bloco 75)
+// ---------------------------------------------------------------------------
+
+export interface ContestacaoNaPlataforma {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly barbearia: string;
+  readonly motivo: string | null;
+  readonly baseCents: number;
+  readonly feeCents: number;
+  readonly quando: Date;
+}
+
+/**
+ * As contestações, para o outro lado do contrato poder olhar.
+ *
+ * Lida `semTenant` — a política de `marketplace_attributions` tem o ramo do
+ * `IS NULL` desde o bloco 72, e foi acrescentado justamente porque sem ele a
+ * plataforma enxergava zero linhas: uma tabela em que só um dos lados vê o
+ * próprio contrato não é isolamento, é cegueira.
+ *
+ * O nome do **cliente** não sai. A barbearia precisa dele para conferir a
+ * conta; a plataforma não — para ela a pergunta é "esta renúncia se explica?",
+ * e o que responde isso é o motivo escrito, não quem é a pessoa.
+ */
+export async function contestacoesNaPlataforma(): Promise<readonly ContestacaoNaPlataforma[]> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        id: string;
+        tenant_id: string;
+        nome: string;
+        contested_reason: string | null;
+        base_cents: number;
+        fee_cents: number;
+        attributed_at: Date;
+      }[]
+    >`
+      SELECT a.id, a.tenant_id, t.name AS nome, a.contested_reason,
+             a.base_cents, a.fee_cents, a.attributed_at
+        FROM marketplace_attributions a
+        -- tenant_platform e nao tenants: aquela tem RLS estrita, e esta leitura
+        -- roda sem tenant no contexto. O espelho do nome existe ali desde o
+        -- bloco 21 exatamente para o painel da plataforma poder ler.
+        JOIN tenant_platform t ON t.tenant_id = a.tenant_id
+       WHERE a.status = 'cancelada'
+       ORDER BY a.attributed_at DESC
+       LIMIT 200
+    `;
+    return linhas.map((l) => ({
+      id: l.id,
+      tenantId: l.tenant_id,
+      barbearia: l.nome,
+      motivo: l.contested_reason,
+      baseCents: Number(l.base_cents),
+      feeCents: Number(l.fee_cents),
+      quando: l.attributed_at,
+    }));
+  });
+}
+
+/**
+ * A plataforma reverte uma contestação indevida.
+ *
+ * Fecha a lacuna do bloco 72: a renúncia era **definitiva** do lado da
+ * barbearia, porque o índice único faz aquele cliente nunca mais gerar
+ * comissão. Sem esta rota, uma contestação errada — ou de má-fé — não tinha
+ * conserto, e o freio era só o motivo escrito.
+ *
+ * Volta para `pendente`, nunca para `faturada`: a linha entra na emissão do mês
+ * seguinte pelo caminho normal, e forçá-la a faturada apontaria para uma fatura
+ * cujo valor nunca a incluiu — o defeito que a revisão do bloco 72 achou.
+ *
+ * O motivo escrito é exigido dos dois lados. Quem contesta explica; quem
+ * reverte também, e a trilha guarda os dois: é uma cobrança de volta, e uma
+ * cobrança de volta sem explicação é o que gera a ligação para o suporte.
+ */
+export async function reverterContestacao(entrada: {
+  readonly adminId: string;
+  readonly atribuicaoId: string;
+  readonly motivo: string;
+}): Promise<void> {
+  const motivo = entrada.motivo.trim();
+  if (motivo.length < MOTIVO_MINIMO) {
+    throw new PlataformaError('missing_reason', 'Escreva o motivo da reversão');
+  }
+
+  await semTenant(async (tx) => {
+    /**
+     * `contested_reason` fica, e é de propósito.
+     *
+     * O que a barbearia escreveu é a metade dela da conversa; apagar ao
+     * reverter deixaria o registro contando só o lado de quem reverteu. A
+     * trilha guarda a outra metade.
+     */
+    const linhas = await tx.$queryRaw<{ tenant_id: string }[]>`
+      UPDATE marketplace_attributions
+         SET status = 'pendente'
+       WHERE id = ${entrada.atribuicaoId}::uuid AND status = 'cancelada'
+      RETURNING tenant_id
+    `;
+    const linha = linhas[0];
+    if (!linha) {
+      throw new PlataformaError('unknown_attribution', 'Contestação não encontrada ou já revertida');
+    }
+
+    await registrarNaTrilha(
+      tx,
+      entrada.adminId,
+      linha.tenant_id,
+      'marketplace.contestation_reverted',
+      { motivo },
+    );
+  });
+}

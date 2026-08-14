@@ -47,6 +47,20 @@ function rotasQueMudam(): readonly { metodo: string; caminho: string; declara: b
   return achadas;
 }
 
+/**
+ * As únicas rotas que mudam estado e **não** agem sobre a conta de um cliente.
+ *
+ * Lista escrita, e curta de propósito: toda rota nova nasce exigindo
+ * `@AgeNaConta` até alguém decidir o contrário aqui, com o diff mostrando.
+ */
+const DA_PROPRIA_CONTA = [
+  'login',
+  'logout',
+  'mfa',
+  'mfa/confirmar',
+  'mfa/provar',
+];
+
 describe('papéis dentro da plataforma', () => {
   it('encontra as rotas de verdade, e não uma lista vazia', () => {
     // A guarda da guarda: uma expressão regular que parasse de casar deixaria
@@ -58,13 +72,22 @@ describe('papéis dentro da plataforma', () => {
 
   it('toda rota que age sobre a conta de uma barbearia exige o papel de operador', () => {
     /**
-     * O critério é o caminho: `barbearias/…` e `faturas/…` são as duas famílias
-     * que tocam a conta de um cliente. Bloquear, ligar recurso, entrar por
-     * suporte, cancelar cobrança — nada disso é trabalho de quem foi contratado
-     * para responder chamado e olhar métrica.
+     * O critério é **invertido**: toda rota que muda estado exige `@AgeNaConta`,
+     * menos as poucas que são da conta do próprio admin.
+     *
+     * Ele era uma lista de prefixos — `barbearias/` e `faturas/` —, e o bloco 75
+     * mostrou o buraco: as famílias `destaques/` e `contestacoes/` nasceram fora
+     * dela, então o teste que existe justamente porque a polaridade do
+     * decorador é "ausência libera" não olhava para as rotas novas. Cancelar um
+     * anúncio pago e reverter uma comissão renunciada são dinheiro na conta de
+     * outra empresa, e um `viewer` — que é como toda conta de plataforma nasce
+     * — passaria por elas.
+     *
+     * Com a lista do que **não** exige, a rota nova nasce coberta. Achado da
+     * `/security-review` do bloco 75.
      */
     const semDeclarar = rotasQueMudam()
-      .filter((r) => r.caminho.includes('barbearias/') || r.caminho.includes('faturas/'))
+      .filter((r) => !DA_PROPRIA_CONTA.some((caminho) => r.caminho === caminho))
       .filter((r) => !r.declara)
       .map((r) => `${r.metodo} ${r.caminho}`);
 
@@ -80,11 +103,9 @@ describe('papéis dentro da plataforma', () => {
      * nenhuma. Exigir `operator` ali trancaria a conta de leitura fora do
      * próprio autenticador — que é o oposto de endurecer.
      */
-    const daPropriaConta = rotasQueMudam().filter(
-      (r) => !r.caminho.includes('barbearias/') && !r.caminho.includes('faturas/'),
-    );
+    const daPropriaConta = rotasQueMudam().filter((r) => DA_PROPRIA_CONTA.includes(r.caminho));
 
-    expect(daPropriaConta.length).toBeGreaterThan(0);
+    expect(daPropriaConta.length).toBe(DA_PROPRIA_CONTA.length);
     expect(daPropriaConta.filter((r) => r.declara).map((r) => r.caminho)).toEqual([]);
   });
 });

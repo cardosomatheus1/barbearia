@@ -14,7 +14,10 @@ import {
   sairDaPlataforma,
   trocarPlano,
   anularFatura,
+  cancelarDestaqueNaApi,
   registrarPagamento,
+  reverterContestacaoNaApi,
+  venderDestaqueNaApi,
 } from '@/lib/plataforma-api';
 import {
   apagarSessaoDaPlataforma,
@@ -166,4 +169,54 @@ export async function acaoAnularFatura(form: FormData): Promise<void> {
   const resultado = await anularFatura(token, texto(form, 'faturaId'), texto(form, 'motivo'));
   if (!resultado.ok) falhar('/plataforma/faturas', resultado.code);
   redirect('/plataforma/faturas?anulada=1');
+}
+
+// -- Destaque e contestações (bloco 75) ---------------------------------------
+
+/**
+ * Vende um destaque.
+ *
+ * Sem `locationId`: a unidade é a primária, a mais antiga — a mesma que a
+ * página pública mostra. A rede que quiser destacar outra loja usa a rota
+ * direta; obrigar a escolher aqui faria a barbearia de uma loja só, que é a
+ * esmagadora maioria, procurar um id que ela não tem por que conhecer.
+ */
+export async function acaoVenderDestaque(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await venderDestaqueNaApi(token, texto(form, 'tenantId'), {
+    lugar: Number(texto(form, 'lugar')),
+    de: texto(form, 'de'),
+    ate: texto(form, 'ate'),
+  });
+  if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
+  redirect('/plataforma/destaques?vendido=1');
+}
+
+export async function acaoCancelarDestaque(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await cancelarDestaqueNaApi(
+    token,
+    texto(form, 'anuncioId'),
+    texto(form, 'motivo'),
+  );
+  if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
+  redirect('/plataforma/destaques?feito=1');
+}
+
+/**
+ * A plataforma reverte uma contestação indevida.
+ *
+ * Fecha a lacuna do bloco 72: a renúncia era definitiva do lado da barbearia,
+ * porque o índice único faz aquele cliente nunca mais gerar comissão. O motivo
+ * é exigido dos dois lados — quem contesta explica, quem reverte também.
+ */
+export async function acaoReverterContestacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await reverterContestacaoNaApi(
+    token,
+    texto(form, 'atribuicaoId'),
+    texto(form, 'motivo'),
+  );
+  if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
+  redirect('/plataforma/destaques?revertida=1');
 }

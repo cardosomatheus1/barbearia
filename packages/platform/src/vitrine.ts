@@ -1,6 +1,7 @@
 import { semTenant, withTenant } from '@barbearia/db';
 import {
   caixaDaBusca,
+  comDestaques,
   filtrarBusca,
   passaNaDisponibilidade,
   RESULTADOS_POR_BUSCA,
@@ -13,6 +14,7 @@ import {
   type ResultadoDaBusca,
 } from '@barbearia/core';
 import { proximosHorariosEmLote } from '@barbearia/scheduling';
+import { destaquesDaCidade } from './destaque.js';
 
 /**
  * A vitrine do marketplace, do banco para a busca (bloco 70, SPEC §5.2).
@@ -115,6 +117,8 @@ export const CANDIDATAS_COM_DISPONIBILIDADE = 40;
 export interface BuscaComHorario {
   readonly resultados: readonly (ResultadoDaBusca & {
     readonly proximoHorario: HorarioDaVitrine | null;
+    /** Se este card foi pago (bloco 75). A tela é obrigada a dizer. */
+    readonly patrocinado: boolean;
   })[];
   /** Quantas casas o lote chegou a consultar. */
   readonly analisadas: number;
@@ -174,14 +178,50 @@ export async function buscarComHorario(
        *
        * Achado da `/security-review` deste bloco.
        */
-      const { tenantId: _t, locationId, precoServicoId: _s, ...publico } = casa;
-      return { ...publico, proximoHorario: horarios.get(locationId) ?? null };
+      const { tenantId: _t, precoServicoId: _s, ...publico } = casa;
+      return { ...publico, proximoHorario: horarios.get(casa.locationId) ?? null };
     })
     .filter((casa) => passaNaDisponibilidade(casa.proximoHorario, disponibilidade, agora))
     .slice(0, RESULTADOS_POR_BUSCA);
 
+  /**
+   * O destaque pago entra **em cima e marcado** (bloco 75).
+   *
+   * Depois do filtro, nunca antes: quem comprou destaque e não tem vaga hoje
+   * não aparece numa busca por "disponível hoje". O destaque compra posição
+   * entre resultados válidos, não o direito de contrariar o que a pessoa pediu.
+   *
+   * As cidades saem **dos próprios resultados**, todas elas. A primeira versão
+   * usava a cidade da primeira casa da lista, e isso quebrava em silêncio: um
+   * raio que cruza a divisa municipal, ou um primeiro colocado com `city` nula,
+   * buscava os anúncios da cidade errada — a barbearia pagava e o card nunca
+   * era promovido, sem erro em lugar nenhum.
+   *
+   * E o casamento é por **unidade**: `slug` vem de `tenant_slugs` e é o mesmo
+   * para todas as lojas de uma rede.
+   */
+  const cidades = new Map<string, { readonly cidade: string; readonly estado: string }>();
+  for (const casa of resultados) {
+    if (casa.cidade && casa.estado) {
+      cidades.set(`${casa.cidade}/${casa.estado}`, { cidade: casa.cidade, estado: casa.estado });
+    }
+  }
+
+  const pagos = (
+    await Promise.all(
+      [...cidades.values()].map((c) => destaquesDaCidade(c.cidade, c.estado, agora)),
+    )
+  ).flat();
+
+  const comPatrocinio = comDestaques(resultados, pagos).map((r) => {
+    // A projeção pública acontece aqui, no fim: o casamento precisou do
+    // `locationId`, e ele não atravessa esta linha.
+    const { locationId: _l, ...publico } = r.casa;
+    return { ...publico, patrocinado: r.patrocinado };
+  });
+
   return {
-    resultados,
+    resultados: comPatrocinio,
     analisadas: candidatas.length,
     truncada: candidatas.length >= teto && disponibilidade !== 'qualquer',
   };

@@ -289,3 +289,65 @@ export const linhaDoTempoDaPlataforma = (token: string) =>
       maiorMrrCents: number;
     };
   }>('GET', '/v1/plataforma/linha-do-tempo', undefined, token);
+
+// -- Destaque e contestações (bloco 75) ---------------------------------------
+
+export interface DestaqueNaTela {
+  readonly id: string;
+  readonly barbearia: string;
+  readonly cidade: string;
+  readonly estado: string;
+  readonly lugar: number;
+  readonly de: string;
+  readonly ate: string;
+  readonly valorCents: number;
+  readonly estado_: 'ativo' | 'cancelado';
+}
+
+export const destaquesNaApi = (token: string) =>
+  chamar<{ destaques: DestaqueNaTela[] }>('GET', '/v1/plataforma/destaques', undefined, token);
+
+export const venderDestaqueNaApi = (
+  token: string,
+  tenantId: string,
+  corpo: { locationId?: string; lugar: number; de: string; ate: string },
+) =>
+  chamar<{ id: string; valorCents: number }>(
+    'POST',
+    `/v1/plataforma/barbearias/${tenantId}/destaques`,
+    corpo,
+    token,
+  );
+
+export const cancelarDestaqueNaApi = (token: string, anuncioId: string, motivo: string) =>
+  chamar<{ ok: true }>(
+    'POST',
+    `/v1/plataforma/destaques/${anuncioId}/cancelamento`,
+    { motivo },
+    token,
+  );
+
+export interface ContestacaoNaTela {
+  readonly id: string;
+  readonly barbearia: string;
+  readonly motivo: string | null;
+  readonly baseCents: number;
+  readonly feeCents: number;
+  readonly quando: string;
+}
+
+export const contestacoesNaApi = (token: string) =>
+  chamar<{ contestacoes: ContestacaoNaTela[] }>(
+    'GET',
+    '/v1/plataforma/contestacoes',
+    undefined,
+    token,
+  );
+
+export const reverterContestacaoNaApi = (token: string, atribuicaoId: string, motivo: string) =>
+  chamar<{ ok: true }>(
+    'POST',
+    `/v1/plataforma/contestacoes/${atribuicaoId}/reversao`,
+    { motivo },
+    token,
+  );

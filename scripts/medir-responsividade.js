@@ -1193,6 +1193,32 @@ function prepararFotos(slug, clienteDaFicha) {
   }
 }
 
+/**
+ * Um destaque pago vivo (bloco 75).
+ *
+ * O card patrocinado é o que este bloco entrega, e sem semente o print sairia
+ * com a lista orgânica de sempre. A linha entra pelo mesmo caminho do produto:
+ * um anúncio ativo na cidade da vitrine, dentro do período.
+ */
+function prepararDestaque(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+
+  const local = psql(
+    `select id from locations where tenant_id = '${tenant}' and city is not null limit 1`,
+  );
+  if (!local) return;
+
+  psql(
+    `INSERT INTO marketplace_ads
+       (tenant_id, location_id, city, state, slot, starts_on, ends_on, price_cents)
+     SELECT '${tenant}', l.id, l.city, l.state, 1,
+            current_date - 1, current_date + 30, 27000
+       FROM locations l WHERE l.id = '${local}'
+     ON CONFLICT DO NOTHING`,
+  );
+}
+
 function prepararPerfilDoBarbeiro(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -2401,6 +2427,7 @@ async function main() {
   await prepararPrecos(slug);
   await prepararMarketplace(slug);
   const barbeiro = prepararPerfilDoBarbeiro(slug);
+  prepararDestaque(slug);
   prepararFotos(slug, balcao.clienteId);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
@@ -2456,6 +2483,7 @@ async function main() {
       ? [
           { nome: 'plataforma — barbearias', url: '/plataforma', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — métricas', url: '/plataforma/metricas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          { nome: 'plataforma — destaques', url: '/plataforma/destaques', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — trilha', url: '/plataforma/trilha', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — segurança', url: '/plataforma/seguranca', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — cobrança', url: '/plataforma/faturas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
@@ -2645,6 +2673,28 @@ async function main() {
       }
 
       /**
+       * Esperar a **fonte** também, e não só a folha de estilo.
+       *
+       * A fonte de display é mais larga que a de fallback, e a troca acontece
+       * depois de o CSS já estar em vigor. Medir na janela entre as duas coisas
+       * mede metrica de texto que a tela não vai ter — e erra **para menos**,
+       * que é a direção perigosa: a medição aprova.
+       *
+       * Não foi isto que escondeu o transbordo da barra da plataforma (aquilo
+       * era o `scrollWidth` clamped, logo abaixo), e está aqui pelo próprio
+       * mérito: esta medição existe para conferir largura, e largura de texto
+       * depende de qual fonte está aplicada no instante da conta.
+       */
+      try {
+        await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      } catch {
+        console.log(`FALHA ${tela.nome.padEnd(20)} ${largura}px as fontes não carregaram`);
+        problemas += 1;
+        await ctx.close();
+        continue;
+      }
+
+      /**
        * Uma tela que não carregou passa em qualquer largura.
        *
        * O estado de erro é uma caixa curta e centrada — nunca rola, nunca
@@ -2678,7 +2728,22 @@ async function main() {
 
       const medida = await page.evaluate(() => {
         const limite = document.documentElement.clientWidth;
-        const rola = document.documentElement.scrollWidth > limite;
+        /**
+         * Os **dois** elementos, e o `body` é quem pega o caso difícil.
+         *
+         * `documentElement.scrollWidth` vem clamped quando o transbordo mora
+         * dentro de um elemento `position: sticky`: o Chromium não propaga
+         * aquele estouro para a caixa de rolagem do `<html>`. A barra do painel
+         * da plataforma é sticky, e por isso 156px de transbordo em 390px
+         * ficaram invisíveis para esta medição por vários blocos — com "ok" nas
+         * quatro larguras, nas seis telas, enquanto dois destinos da navegação
+         * ficavam fora do alcance de quem usa o celular.
+         *
+         * `body.scrollWidth` enxerga. Medido: 546 contra os 390 que o
+         * `documentElement` relatava.
+         */
+        const rola =
+          document.documentElement.scrollWidth > limite || document.body.scrollWidth > limite;
 
         const estouram = [];
         for (const el of document.querySelectorAll('body *')) {
@@ -2749,6 +2814,8 @@ async function main() {
       });
 
       resultados.push({ largura, ...medida });
+
+
 
       /**
        * O print, quando `MEDICAO_PRINTS` aponta para uma pasta.

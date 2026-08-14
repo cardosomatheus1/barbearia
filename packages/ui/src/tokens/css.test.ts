@@ -41,6 +41,18 @@ describe('emitCss', () => {
     expect(css).toMatch(/\.ui-field__input\s*\{[\s\S]*min-height: var\(--size-touch\)/);
   });
 
+  it('campo e controle não têm piso de min-content', () => {
+    /**
+     * Item de grade e de flex tem piso de `min-content`, e o `min-content` de
+     * um `<select>` é a opção mais comprida que ele guarda. Sem `min-width: 0`
+     * o dado é quem decide a largura da tela: um nome de barbearia comprido
+     * fazia a coluna nascer com 391px dentro de 360, e a página rolava de
+     * lado com a medição dizendo "ok".
+     */
+    expect(css).toMatch(/\.ui-field\s*\{[^}]*min-width: 0/);
+    expect(css).toMatch(/\.ui-field__input\s*\{[\s\S]*?min-width: 0/);
+  });
+
   it('toda media query de layout é mobile-first', () => {
     // `max-width` significa "desfazer o que fiz para telas grandes", o que
     // inverte a ordem de trabalho e deixa o celular — o aparelho em que o

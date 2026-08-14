@@ -53,7 +53,22 @@ export function Field({ label, hint, error, ...rest }: FieldProps) {
 }
 
 export const fieldCss = `
-.ui-field { display: flex; flex-direction: column; gap: var(--space-2); }
+/*
+ * min-width: 0 no campo e no controle, e é o piso do design system — não um
+ * conserto local.
+ *
+ * Item de grade e de flex tem piso de min-content, e o min-content de um
+ * select é a **opção mais comprida** que ele carrega. Uma barbearia chamada
+ * "Barbearia com nome bem comprido de teste" fazia a coluna nascer com 391px
+ * dentro de uma tela de 360, e a página inteira rolava de lado.
+ *
+ * Havia seis min-width: 0 escritos à mão em globals.css, um por formulário que
+ * já tinha sofrido isso — a lista que ninguém atualiza. Aqui, o formulário do
+ * bloco que vier daqui a dez já nasce coberto.
+ *
+ * Sem crase: isto é o conteúdo de um template literal, e a crase o fecha.
+ */
+.ui-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 
 .ui-field__label {
   font-size: var(--font-size-sm);
@@ -63,6 +78,8 @@ export const fieldCss = `
 
 .ui-field__input {
   min-height: var(--size-touch);
+  min-width: 0;
+  max-width: 100%;
   padding: 0 var(--space-3);
   background: var(--color-surface-raised);
   color: var(--color-text-primary);

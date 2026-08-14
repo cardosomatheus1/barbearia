@@ -16,8 +16,13 @@ import {
   abrirSuporte,
   bloquearBarbearia,
   confirmarCadastroDoSegundoFator,
+  cancelarDestaque,
+  contestacoesNaPlataforma,
   definirComissaoDoMarketplace,
   definirRecurso,
+  destaquesVendidos,
+  reverterContestacao,
+  venderDestaque,
   encerrarSuporteDaBarbearia,
   iniciarCadastroDoSegundoFator,
   listarRecursos,
@@ -61,6 +66,9 @@ import {
   bloqueioSchema,
   cancelamentoSchema,
   comissaoDoMarketplaceSchema,
+  destaqueSchema,
+  motivoSchema,
+  type EntradaDeDestaque,
   estornoSchema,
   meioDePagamentoSchema,
   pagamentoSchema,
@@ -386,6 +394,90 @@ export class PlataformaController {
         criadoEm: e.criadoEm.toISOString(),
       })),
     };
+  }
+
+  /**
+   * Os destaques vendidos (bloco 75).
+   *
+   * Leitura, então sem `@AgeNaConta`: a polaridade daquele decorador é o
+   * inverso do `@Exige` — toda conta de plataforma já lê tudo, e o que se
+   * separa é o que se **faz**.
+   */
+  @Get('destaques')
+  async destaques() {
+    return { destaques: await destaquesVendidos() };
+  }
+
+  /**
+   * Vende um destaque. Age sobre a conta: emite fatura.
+   *
+   * Não existe rota da barbearia que crie anúncio — destaque é vendido, não
+   * solicitado, e é o que impede a lista de virar leilão automático.
+   */
+  @AgeNaConta()
+  @Post('barbearias/:tenantId/destaques')
+  async venderDestaqueNaConta(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Body(new ZodValidationPipe(destaqueSchema)) corpo: EntradaDeDestaque,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      return await venderDestaque({
+        adminId: admin.id,
+        tenantId,
+        // Ausente é a unidade primária, a mais antiga — a mesma que a página
+        // pública mostra. A rede que quiser destacar outra loja manda o id.
+        ...(corpo.locationId ? { locationId: corpo.locationId } : {}),
+        lugar: corpo.lugar,
+        de: new Date(`${corpo.de}T00:00:00Z`),
+        ate: new Date(`${corpo.ate}T00:00:00Z`),
+      });
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  @AgeNaConta()
+  @Post('destaques/:anuncioId/cancelamento')
+  async cancelarDestaqueVendido(
+    @Param('anuncioId', new ZodValidationPipe(tenantIdSchema)) anuncioId: string,
+    @Body(new ZodValidationPipe(motivoSchema)) corpo: { motivo: string },
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await cancelarDestaque({ adminId: admin.id, anuncioId, motivo: corpo.motivo });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  /**
+   * As contestações de comissão, e a reversão de uma indevida (bloco 75).
+   *
+   * Fecha a lacuna do bloco 72: a renúncia era definitiva do lado da barbearia,
+   * porque o índice único faz aquele cliente nunca mais gerar comissão. O nome
+   * do cliente não sai — para a plataforma a pergunta é "esta renúncia se
+   * explica?", e quem responde isso é o motivo escrito.
+   */
+  @Get('contestacoes')
+  async contestacoes() {
+    return { contestacoes: await contestacoesNaPlataforma() };
+  }
+
+  @AgeNaConta()
+  @Post('contestacoes/:atribuicaoId/reversao')
+  async reverter(
+    @Param('atribuicaoId', new ZodValidationPipe(tenantIdSchema)) atribuicaoId: string,
+    @Body(new ZodValidationPipe(motivoSchema)) corpo: { motivo: string },
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await reverterContestacao({ adminId: admin.id, atribuicaoId, motivo: corpo.motivo });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
   }
 
   /**

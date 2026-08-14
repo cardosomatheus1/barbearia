@@ -51,6 +51,9 @@ export default async function PlataformaLayout({ children }: { readonly children
             <a className="plataforma__link" href="/plataforma/faturas">
               Cobrança
             </a>
+            <a className="plataforma__link" href="/plataforma/destaques">
+              Destaques
+            </a>
             <a className="plataforma__link" href="/plataforma/trilha">
               Trilha
             </a>

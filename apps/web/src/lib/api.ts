@@ -863,6 +863,8 @@ export interface CasaNaBusca {
   proximoHorario: { startsAt: string; rotulo: string } | null;
   /** Carimbo assinado de "veio pela busca" (bloco 72). A página só o carrega. */
   carimbo: string;
+  /** Card pago (bloco 75). A tela diz isso em letras, sempre. */
+  patrocinado: boolean;
 }
 
 export interface BuscaDeBarbearias {

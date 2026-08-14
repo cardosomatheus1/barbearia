@@ -1849,7 +1849,7 @@ main { padding-bottom: var(--space-8); }
    13px, e a medicao reprova. */
 .buscar__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
 .buscar__marca input { width: 24px; height: 24px; }
-.buscar__acao { min-height: 44px; }
+.buscar__acao { min-height: 44px; justify-self: start; }
 
 .buscar__pendente {
   margin: 0 0 var(--space-5);
@@ -1911,10 +1911,23 @@ main { padding-bottom: var(--space-8); }
   .casa__foto { height: 100%; aspect-ratio: auto; }
 }
 @media (min-width: 768px) {
-  /* Cidade · ordem · disponibilidade · distância · assinatura · botão, na mesma
-     sequência do formulário. A cidade fica com o dobro porque é o único campo
-     cujo conteúdo é texto de tamanho imprevisível. */
-  .buscar__form { grid-template-columns: 2fr 1fr 1fr 1fr auto auto; align-items: end; }
+  /* Duas colunas no tablet, seis só quando há espaço de verdade.
+     `minmax(0, …)` e não `2fr 1fr`: o piso de uma coluna de grade é o
+     `min-content` do que ela guarda, e o `min-content` de um `<select>` é a
+     opção mais comprida. Sem o zero explícito, o nome de uma cidade decidia a
+     largura da busca e ela estourava 200px para fora da tela em 768px. Com o
+     zero e seis colunas, o problema virou o oposto: "Qualquer dia" aparecia
+     como "Qualquer d". As duas coisas se resolvem com menos colunas aqui e um
+     piso legível lá embaixo. */
+  .buscar__form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+}
+@media (min-width: 64em) {
+  /* Os quatro seletores numa linha, o filtro de assinatura e o botão na de
+     baixo — e **não** os seis lado a lado. Com seis colunas, "Disponível hoje"
+     saía como "Disponível h": um seletor cortado responde outra pergunta, e a
+     pessoa escolhe sem saber o que escolheu. O piso de `10rem` é o rótulo mais
+     comprido inteiro. */
+  .buscar__form { grid-template-columns: repeat(4, minmax(10rem, 1fr)); }
 }
 
 /* -- Preço por faixa de horário (bloco 68) --------------------------------- */
@@ -5190,9 +5203,15 @@ main { padding-bottom: var(--space-8); }
 }
 .plataforma__nav {
   display: flex;
+  /* A barra externa quebra em linhas; a **de dentro** também precisa quebrar.
+     Sem isto os seis destinos formam uma linha só que não cabe em 390px, e os
+     dois últimos — Trilha e Segurança — ficam fora da tela, alcançáveis apenas
+     digitando a URL. O comentário antigo prometia "sem nada sumir" e era o
+     contrário: o que sumia eram justamente a trilha de auditoria e a tela de
+     segurança. */
+  flex-wrap: wrap;
   gap: var(--space-1);
-  /* Empurra "Sair" para a ponta quando há espaço, e cai para a linha de baixo
-     no piso de 360px sem nada sumir. */
+  /* Empurra "Sair" para a ponta quando há espaço. */
   margin-inline-end: auto;
 }
 .plataforma__link,
@@ -5211,6 +5230,17 @@ main { padding-bottom: var(--space-8); }
 .plataforma__link:hover { background: var(--color-surface-hover); }
 
 .plataforma__trabalho { padding-block: var(--space-5) var(--space-8); }
+
+/* O painel da plataforma é console, não coluna de leitura.
+   `46rem` é a largura certa para as telas de formulário da barbearia, e errada
+   aqui: as tabelas desta seção têm seis colunas e a última carrega um motivo
+   escrito. Com o teto de leitura, o botão de cancelar o destaque ficava fora
+   da vista **no notebook**, atrás de uma rolagem interna que ninguém procura
+   numa tela larga. Só a partir de 64em: abaixo disso a coluna estreita
+   continua sendo a certa. */
+@media (min-width: 64em) {
+  .plataforma .painel__conteudo { max-width: 72rem; }
+}
 
 /* ----------------------------------------------------------------------------
    A lista de contas
@@ -7848,4 +7878,26 @@ main { padding-bottom: var(--space-8); }
 @media (min-width: 40em) {
   .fotos { grid-template-columns: repeat(4, 1fr); }
   .fotos__acoes { grid-auto-flow: column; }
+}
+
+/* -- Destaque pago na busca (bloco 75) ------------------------------------- */
+
+/* A borda marca o card pago sem escondê-lo: o rótulo em letras é quem informa,
+   e a cor sozinha não carrega dado — quem tem baixa visão lê a palavra. */
+.casa--patrocinada { border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); }
+.casa__patrocinio {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.destaque-venda { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.destaque-venda__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 60em) {
+  .destaque-venda {
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto;
+    align-items: end;
+  }
 }

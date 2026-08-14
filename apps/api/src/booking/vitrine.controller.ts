@@ -98,6 +98,14 @@ export class VitrineController {
         temClube: casa.temClube,
         distanciaKm: casa.distanciaKm,
         /**
+         * Card pago, dito em letras (bloco 75).
+         *
+         * Um resultado pago sem rótulo é publicidade disfarçada de
+         * recomendação, e é a única coisa que faria a busca deste produto valer
+         * menos que um diretório.
+         */
+        patrocinado: casa.patrocinado,
+        /**
          * O carimbo de "veio pela busca" (bloco 72, SPEC §5.2).
          *
          * Emitido **aqui**, com o segredo do servidor, e conferido na borda do
