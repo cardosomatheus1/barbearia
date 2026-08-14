@@ -98,9 +98,58 @@ portões não fazem:
 A segunda é a §6 pergunta 6 virada código, e foi ela que achou o desconto sumido
 do DRE e a gorjeta contada como faturamento em três consultas.
 
-**O que ainda não foi ensaiado:** o rollback. Não há procedimento escrito para
-"a migração quebrou em produção", e as migrações são aditivas por convenção mas
-não reversíveis por script.
+### 1.5 A volta atrás — ensaiada, com números
+
+Havia uma lacuna aqui, e ela estava mal formulada: *"as migrações são aditivas
+por convenção mas não reversíveis por script"*. Migração aditiva **não precisa**
+ser reversível — o que precisa ser verdade é outra coisa, e agora ela é
+verificada.
+
+**Existem duas voltas, e a pergunta que as separa é: o que quebrou?**
+
+| O que quebrou | A volta | Custo |
+|---|---|---|
+| O aplicativo novo, com o banco bom | sobe a imagem anterior | segundos, sem tocar em dado |
+| A migração em si | restaura o backup de antes dela | **2,7 s** medidos, mais o dado escrito na janela |
+
+A primeira é a que acontece quase sempre, e ela só funciona se a versão anterior
+continuar rodando contra o banco novo. É por isso que
+`packages/db/test/migracao-aditiva.test.mjs` entrou no portão: ele varre as 82
+migrações atrás das cinco formas que quebram quem está no ar — `DROP TABLE`,
+`DROP COLUMN`, `RENAME`, mudança de tipo e `SET NOT NULL`. Nenhuma aparece, e a
+convenção deixa de valer por disciplina e passa a valer porque o portão cobra.
+
+`DROP CONSTRAINT` fica de fora da lista de propósito: afrouxar uma regra não
+quebra quem já obedecia. Apertar quebraria — e é por isso que `SET NOT NULL`
+está lá.
+
+A segunda é ensaiada por `scripts/ensaio-de-rollback.sh`, sobre 30 mil clientes
+e 90 mil lançamentos:
+
+| Passo | Tempo |
+|---|---|
+| backup imediatamente antes de migrar | 820 ms (5,6 MB) |
+| aplicar a migração | 51 ms |
+| **restaurar o backup** | **2.684 ms** ← a indisponibilidade real |
+
+E o ensaio confere que o banco restaurado **é** o de antes, por uma assinatura
+do schema inteiro — colunas, corpo de função e definição de constraint. A
+primeira versão procurava uma coluna específica como marca da migração e a
+coluna era de outra: marcador escolhido a dedo prova o que quem escreveu já
+achava.
+
+#### O procedimento, em quatro linhas
+
+1. `pg_dump --format=custom` **imediatamente antes** de aplicar a migração. É
+   este backup que define quanto dado se perde no pior caso.
+2. Aplicar as migrações. Se falharem, restaurar e parar: não há deploy.
+3. Subir a imagem nova. Se ela estiver ruim, **subir a anterior** — o banco fica
+   como está, e nada se perde.
+4. Só se o banco tiver sido corrompido pela migração é que se restaura o backup
+   do passo 1, aceitando perder o que foi escrito depois dele.
+
+**O que ainda não foi ensaiado** é o passo 3 num ambiente de verdade, porque não
+há ambiente — é a §3.1.
 
 ---
 
@@ -167,7 +216,7 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 
 - [x] Os seis percursos verdes
 - [ ] Caminho de deploy definido, com ambiente de staging
-- [ ] Rollback de migração escrito e ensaiado
+- [x] Rollback de migração escrito e ensaiado
 - [ ] Restauração ensaiada **no ambiente de produção**, não só aqui
 - [ ] Decisão escrita sobre fiscal (`FISCAL_MODO`) e sobre cobrança (`PSP_MODO`)
 - [x] Cabeçalhos de segurança
