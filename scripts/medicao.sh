@@ -51,6 +51,20 @@ export FISCAL_MODO="${FISCAL_MODO:-fake}"
 export RATE_LIMIT_SHORT="${RATE_LIMIT_SHORT:-1000000}"
 export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-1000000}"
 
+# As contas que a medição cria, num lugar só.
+#
+# Dois processos precisam delas: `medir-responsividade.js`, que **cria**, e
+# `percorrer.mjs`, que **entra**. Escritas nos dois arquivos, seriam a lista
+# paralela de sempre — e o sintoma seria um percurso falhando com "senha
+# incorreta" sobre uma conta que existe.
+#
+# O e-mail da plataforma carrega o instante porque `platform_admins.email_key`
+# é único e a tabela não é recriada quando alguém roda com `MEDICAO_MANTER_BANCO`.
+# O do dono não precisa: ele sai do banco, que o guarda em claro.
+export MEDICAO_SENHA="${MEDICAO_SENHA:-senha-bem-comprida}"
+export MEDICAO_PLATAFORMA_EMAIL="${MEDICAO_PLATAFORMA_EMAIL:-super-$(date +%s)@plataforma.teste}"
+export MEDICAO_PLATAFORMA_SENHA="${MEDICAO_PLATAFORMA_SENHA:-senha-da-plataforma-medida}"
+
 PORTA_API="${API_URL##*:}"
 PORTA_WEB="${WEB_URL##*:}"
 LOG_API="$(mktemp -t medicao-api-XXXXXX.log)"

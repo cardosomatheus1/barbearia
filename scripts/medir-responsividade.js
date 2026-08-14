@@ -128,11 +128,17 @@ if (PRINTS) mkdirSync(PRINTS, { recursive: true });
  * onde a linha estoura em 360px se estourar.
  */
 async function prepararPlataforma() {
-  const email = `super${Date.now()}@plataforma.teste`;
-  const senha = 'senha-da-plataforma-medida';
+  // Do ambiente, porque `percorrer.mjs` entra com esta conta e o e-mail da
+  // plataforma é guardado como HMAC — não há como lê-lo do banco depois.
+  const email = process.env.MEDICAO_PLATAFORMA_EMAIL ?? `super${Date.now()}@plataforma.teste`;
+  const senha = process.env.MEDICAO_PLATAFORMA_SENHA ?? 'senha-da-plataforma-medida';
 
   try {
-    execFileSync('node', ['scripts/criar-super-admin.mjs', 'Super', email], {
+    // `--operador`: sem ele a conta nasce `viewer`, e toda ação sobre uma
+    // barbearia responde 403. O bloqueio abaixo vinha falhando em silêncio
+    // desde o bloco 35, e o cartão "bloqueada" que esta função diz preparar
+    // nunca chegou a existir — o percurso da medição foi quem descobriu.
+    execFileSync('node', ['scripts/criar-super-admin.mjs', 'Super', email, '--operador'], {
       env: { ...process.env, SUPER_ADMIN_PASSWORD: senha, DATABASE_URL: process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL },
       stdio: 'pipe',
     });
@@ -154,14 +160,22 @@ async function prepararPlataforma() {
 
   // Uma barbearia bloqueada de verdade, e não a `slug` que as outras telas
   // usam: bloquear aquela derrubaria metade da medição.
-  const alvo = psql(
-    `INSERT INTO tenants (name) VALUES ('Barbearia com nome bem comprido de teste') RETURNING id`,
+  // `primeiraLinha`, porque `-tAc` com `RETURNING` devolve a linha **e** a
+  // etiqueta do comando ("INSERT 0 1"). Sem ela o id saía com o rótulo colado,
+  // a rota respondia 400, e o bloqueio nunca acontecia — em silêncio.
+  const alvo = primeiraLinha(
+    psql(`INSERT INTO tenants (name) VALUES ('Barbearia com nome bem comprido de teste') RETURNING id`),
   );
-  await fetch(`${API}/v1/plataforma/barbearias/${alvo}/bloqueio`, {
+  // Conferida, e não disparada e esquecida: uma semente que não checa a
+  // resposta prepara o estado que ela **acha** que preparou.
+  const bloqueio = await fetch(`${API}/v1/plataforma/barbearias/${alvo}/bloqueio`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify({ motivo: 'inadimplente há 60 dias, sem retorno no telefone do cadastro' }),
   });
+  if (!bloqueio.ok) {
+    throw new Error(`bloqueio da semente recusado (${bloqueio.status}) — o cartão bloqueado não existe`);
+  }
 
   // Métricas com a tabela cheia. Medir a tela vazia mediria o estado vazio —
   // que também precisa passar, mas não é onde oito colunas estouram os 360px.
@@ -241,7 +255,7 @@ async function preparar() {
   const conta = {
     name: 'Medida',
     email: `medida${Date.now()}@teste.com`,
-    password: 'senha-bem-comprida',
+    password: process.env.MEDICAO_SENHA ?? 'senha-bem-comprida',
     phone: '(71) 99999-0000',
     businessName: `Medida ${Date.now() % 10000}`,
   };

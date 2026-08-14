@@ -13,27 +13,46 @@ foram executadas**, e numa quarta que é decisão comercial.
 
 ## 1. As três que nunca foram executadas
 
-### 1.1 O navegador — em andamento
+### 1.1 O navegador — fechado
 
 Oitenta blocos de interface, e nada clicava. O e2e da API monta o corpo em
 JavaScript; a medição renderiza e mede layout; os testes de integração provam a
 regra sem tela. Entre o `<input name="...">` e o `z.object({...})` da borda não
 havia nada.
 
-`scripts/percorrer.mjs` fecha isso, e roda dentro da medição. **Dois de seis
-percursos entregues:**
+`scripts/percorrer.mjs` fecha isso, e roda dentro da medição. **Os seis
+percursos passam:**
 
-| Percurso | Estado |
+| Percurso | O que só ele prova |
 |---|---|
-| Cliente marca pelo site | ✅ |
-| Balcão entra e fecha venda | ✅ |
-| Onboarding do dono, do zero | falta |
-| O dia do barbeiro | falta |
-| LGPD: exportar e anonimizar | falta |
-| Plataforma bloqueia e desbloqueia uma barbearia | falta |
+| Cliente marca pelo site | a grade, o formulário e o agendamento gravado |
+| Balcão entra e fecha venda | login de gestor de verdade e a comanda |
+| Onboarding do dono, do zero | conta nova → seis etapas → **o link publicado abre** |
+| O dia do barbeiro | senha de primeiro acesso na tela, troca obrigada, desvio para `/admin/meu-dia` |
+| LGPD: registrar, exportar e anonimizar | o pedido, o arquivo baixado, e o texto satélite saindo junto |
+| Plataforma reativa e bloqueia | a porta sem cadastro, e o efeito no `tenant_platform` |
 
 Cada percurso termina **perguntando ao banco**. "A tela mostrou pronto" é
 exatamente o que o gatilho inerte da migração 0079 também mostrava.
+
+#### O que os quatro novos acharam na primeira execução
+
+Nenhum deles falhou por acaso, e nenhum dos três achados aparecia no portão:
+
+1. **`anonimizar_cliente` respondia 500** para qualquer pessoa com ajuste manual
+   de saldo. O gatilho da 0079 escreve `note = NULL` e a 0044 exige motivo
+   escrito em toda linha de `ajuste`: a constraint recusava e a transação
+   inteira abortava. **O direito à exclusão era impossível de exercer**, com
+   erro interno na cara de quem tentava responder ao titular. Corrigido na
+   migração 0082, com marcador fixo no lugar do nulo — e com teste que fica
+   vermelho sem ele.
+2. **A plataforma não tinha como ter um operador.** Conta nova nasce `viewer`,
+   nenhuma rota promove, e `criar-super-admin.mjs` era a única porta: ninguém
+   podia bloquear uma inadimplente, trocar um plano ou encerrar um suporte. O
+   comando ganhou `--operador`.
+3. **A semente da medição bloqueava uma barbearia e não conferia a resposta** —
+   400 por id malformado, depois 403 por papel. O cartão "bloqueada", que a
+   função diz existir para medir a linha mais larga da tela, nunca existiu.
 
 ### 1.2 As integrações reais — bloqueado por contrato
 
@@ -114,7 +133,7 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 
 ## 4. Go / no-go
 
-- [ ] Os seis percursos verdes
+- [x] Os seis percursos verdes
 - [ ] Caminho de deploy definido, com ambiente de staging
 - [ ] Rollback de migração escrito e ensaiado
 - [ ] Restauração ensaiada **no ambiente de produção**, não só aqui

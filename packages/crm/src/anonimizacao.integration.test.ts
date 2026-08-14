@@ -492,6 +492,62 @@ describeIfDb('anonimização e retenção', () => {
     expect(Number(sobrou[0]?.n)).toBe(0);
   });
 
+  it('quem tem ajuste manual de saldo consegue ser anonimizado', async () => {
+    /**
+     * O `CHECK` que exige motivo escrito não pode impedir a limpeza que a lei
+     * manda fazer — e impedia, com 500 na cara de quem tentava responder ao
+     * titular.
+     *
+     * `loyalty_entries_ajuste_tem_motivo` cobra dez caracteres de motivo em toda
+     * linha de `ajuste`, e o gatilho da 0079 escrevia `note = NULL`: a
+     * constraint recusava, a transação inteira abortava, e **ninguém com um
+     * ajuste manual no extrato conseguia exercer o direito à exclusão**.
+     *
+     * É a segunda vez que a mesma pedra aparece — a primeira foi o motivo da
+     * contestação de comissão, no bloco 80 —, e nada ficou vermelho porque a
+     * suíte de LGPD anonimizava gente sem ajuste e a suíte de fidelidade não
+     * anonimizava ninguém. Quem encontrou foi o percurso de navegador, clicando
+     * "Apagar os dados" numa ficha com saldo lançado à mão.
+     *
+     * A asserção é dupla de propósito: o texto **sai**, e a linha **fica** —
+     * apagar o lançamento levaria os pontos junto, e saldo é dinheiro.
+     */
+    const MARCADOR = 'texto removido na anonimizacao do titular';
+    await exec(`
+      INSERT INTO loyalty_programs (tenant_id, mode) VALUES ('${TENANT}', 'pontos');
+      INSERT INTO loyalty_entries (tenant_id, customer_id, kind, mode, amount, note)
+      VALUES ('${TENANT}', '${CARLOS}', 'ajuste', 'pontos', 340,
+              'cortesia combinada com o Carlos por causa do atraso de sabado'),
+             ('${TENANT}', '${CARLOS}', 'acumulo', 'pontos', 120, 'compra do dia 3');
+    `);
+
+    const resultado = await anonimizarCliente({
+      tenantId: TENANT,
+      customerId: CARLOS,
+      motivo: 'pedido de exclusão do titular',
+      ator,
+    });
+    expect(resultado.anonimizado).toBe(true);
+
+    const razao = await admin.$queryRawUnsafe<{ kind: string; amount: number; note: string | null }[]>(
+      `SELECT kind, amount, note FROM loyalty_entries
+        WHERE customer_id = '${CARLOS}' ORDER BY kind`,
+    );
+    expect(razao).toHaveLength(2);
+
+    const ajuste = razao.find((l) => l.kind === 'ajuste');
+    const acumulo = razao.find((l) => l.kind === 'acumulo');
+    // O ajuste guarda o marcador: o `CHECK` continua valendo, e a linha continua
+    // explicando a si mesma sem dizer nada sobre a pessoa.
+    expect(ajuste?.note).toBe(MARCADOR);
+    expect(ajuste?.note).not.toContain('Carlos');
+    // O acúmulo automático fica com nulo: o marcador ali não explicaria nada.
+    expect(acumulo?.note).toBeNull();
+    // E os pontos ficam nos dois. Anonimizar tira a pessoa, não o saldo.
+    expect(Number(ajuste?.amount)).toBe(340);
+    expect(Number(acumulo?.amount)).toBe(120);
+  });
+
   it('toda tabela com dado de cliente é limpa pela anonimização ou tem exceção escrita', async () => {
     /**
      * A varredura de catálogo é a ferramenta certa **aqui**, como é na lista de
@@ -510,7 +566,7 @@ describeIfDb('anonimização e retenção', () => {
       ['order_items', 'item da venda, sem dado pessoal próprio'],
       ['appointment_services', 'serviço do atendimento, sem dado pessoal próprio'],
       ['commission_entries', 'comissão do profissional, calculada sobre a venda'],
-      ['loyalty_entries', 'razão de fidelidade: centavos e pontos, sem dado pessoal'],
+      ['loyalty_entries', 'razão de fidelidade: os centavos ficam, e a nota é limpa pelo gatilho'],
       ['package_purchases', 'pacote comprado: valor e unidades'],
       ['package_uses', 'consumo do pacote, que é quando a receita foi reconhecida'],
       ['club_uses', 'uso do plano: fato do negócio, e a assinatura é cancelada pela função'],

@@ -2,10 +2,28 @@
 /**
  * Cria a primeira conta da plataforma.
  *
- *   node scripts/criar-super-admin.mjs "Nome" email@dominio
+ *   node scripts/criar-super-admin.mjs "Nome" email@dominio [--operador]
  *
  * A senha vem da entrada padrão, ou de `SUPER_ADMIN_PASSWORD` quando o chamador
  * é um script.
+ *
+ * ## Por que `--operador` existe
+ *
+ * Conta nova nasce `viewer`, e essa regra está certa: quem chega não age sobre
+ * a conta de ninguém. Só que **não há rota que promova** — nem na tela de
+ * segurança, nem na API —, e `criar-super-admin.mjs` era a única porta. O
+ * resultado é o estado sem saída do `CLAUDE.md` §6 um nível acima: a plataforma
+ * inteira sem ninguém capaz de bloquear uma barbearia inadimplente, de trocar
+ * um plano ou de encerrar uma sessão de suporte, e a única saída sendo um
+ * `UPDATE` à mão que nada documentava.
+ *
+ * O percurso da medição foi quem encontrou: ele tentou reativar uma barbearia
+ * pela tela e não achou nenhuma bloqueada — o bloqueio da semente vinha
+ * respondendo 403 em silêncio havia blocos, e o cartão "bloqueada" que a
+ * medição diz fotografar nunca existiu.
+ *
+ * A promoção continua sendo de quem tem o banco, como a criação. O que muda é
+ * ela ser **dita** em vez de improvisada, e o padrão continua `viewer`.
  *
  * ## Por que isto é um comando e não uma rota
  *
@@ -25,10 +43,12 @@
 import { createInterface } from 'node:readline';
 import { criarAdminDaPlataforma, PlataformaError } from '../packages/platform/dist/index.js';
 
-const [nome, email] = process.argv.slice(2);
+const argumentos = process.argv.slice(2);
+const papel = argumentos.includes('--operador') ? 'operator' : 'viewer';
+const [nome, email] = argumentos.filter((a) => !a.startsWith('--'));
 
 if (!nome || !email) {
-  console.error('uso: node scripts/criar-super-admin.mjs "Nome" email@dominio');
+  console.error('uso: node scripts/criar-super-admin.mjs "Nome" email@dominio [--operador]');
   process.exit(2);
 }
 
@@ -64,8 +84,8 @@ async function lerSenha() {
 }
 
 try {
-  const admin = await criarAdminDaPlataforma({ nome, email, senha: await lerSenha() });
-  console.log(`conta criada: ${admin.nome} (${admin.id})`);
+  const admin = await criarAdminDaPlataforma({ nome, email, senha: await lerSenha(), papel });
+  console.log(`conta criada: ${admin.nome} (${admin.id}) — ${admin.papel}`);
   process.exit(0);
 } catch (erro) {
   if (erro instanceof PlataformaError) {
