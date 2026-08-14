@@ -324,8 +324,23 @@ describeIfDb('automação', () => {
       `SELECT sent_at FROM automation_sends WHERE id = '${disparo!.id}'`,
     );
     const enviadaEm = carimbo[0]!.sent_at.getTime();
-    const depois = new Date(enviadaEm + 2 * 86_400_000).toISOString();
-    const fimDepois = new Date(enviadaEm + 2 * 86_400_000 + 1_800_000).toISOString();
+    /**
+     * Hora **fixa** e fora do expediente, e o dia é o que importa.
+     *
+     * Carregando os minutos do relógio, este horário caía por cima do que outra
+     * semente já criou para a mesma cadeira às 15h — e a constraint
+     * anti-overbooking recusava a linha inteira. Só falhava quando a suíte
+     * rodava perto das 15h20: intermitente, e portanto do tipo que ensina todo
+     * mundo a reexecutar em vez de olhar.
+     *
+     * É a cicatriz que o `CLAUDE.md` escreve: *semente que cria agendamento no
+     * relógio colide com o que outra semeadura já criou para a mesma cadeira.
+     * Hora fixa e fora do expediente.* A janela de atribuição conta em dias, e o
+     * dia continua sendo o mesmo.
+     */
+    const diaDepois = new Date(enviadaEm + 2 * 86_400_000).toISOString().slice(0, 10);
+    const depois = `${diaDepois}T03:00:00.000Z`;
+    const fimDepois = `${diaDepois}T03:30:00.000Z`;
     await exec(`
       INSERT INTO appointments
         (id, tenant_id, location_id, professional_id, customer_id, status,

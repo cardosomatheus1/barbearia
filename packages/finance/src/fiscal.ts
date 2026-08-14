@@ -16,6 +16,7 @@ import {
   type EstadoDaNota,
   type FaixaDeComissao,
   type ModoDeComissao,
+  FakeFiscalProvider,
   type FiscalProvider,
   type MotivoDeNaoEmitir,
   type RegimeFiscal,
@@ -45,6 +46,61 @@ import { enfileirarPara } from '@barbearia/jobs';
  * `finance` inteiro para montar um pedido.
  */
 
+/**
+ * Quem decide se a casa emite nota, e por qual emissor.
+ *
+ * ## Por que uma função só, e não um `new` em cada processo
+ *
+ * É o desenho do adquirente, e pela mesma cicatriz: o produto tem **dois**
+ * processos que falam com o emissor — a API, quando o balcão pede a nota, e o
+ * worker, que a leva à prefeitura. Cada um escolhendo o seu significa que ligar
+ * o emissor de verdade é lembrar de dois lugares, e o que acontece é ligar num e
+ * esquecer no outro.
+ *
+ * Foi exatamente o estado em que este código estava: `new FakeFiscalProvider()`
+ * fixo nos dois, sem interruptor nenhum.
+ *
+ * ## Por que o padrão é **não emitir**, e não o falso
+ *
+ * O falso é otimista de um jeito silencioso. Ele aceita o pedido e devolve
+ * `processando` — então em produção o balcão pedia a nota, a fila rodava, e a
+ * nota ficava **em `processando` para sempre**. Sem erro, sem log, sem alerta. O
+ * cliente pediu nota fiscal, a tela disse "processando", e nada jamais chegou à
+ * prefeitura.
+ *
+ * É o defeito da §6 pergunta 5 — indicador que nunca preenche — com consequência
+ * fiscal. Com `nenhum`, a rota **recusa** e a tela diz que o recurso não está
+ * disponível, que é a convenção deste repositório: *gatilho ou opção que ainda
+ * não funciona aparece na tela marcado, nunca escondido.*
+ *
+ * ## E por que ele recusa o que não conhece
+ *
+ * `FISCAL_MODO=nfeio` — um emissor que alguém contratou e ninguém integrou —
+ * cairia em "não emite" numa leitura permissiva, e o sintoma seria a barbearia
+ * descobrindo pelo cliente que a nota não sai. Falhar alto na subida é
+ * barulhento uma vez; o silêncio custa o mês inteiro de notas.
+ */
+export type ModoFiscal = 'nenhum' | 'fake';
+
+export function modoFiscal(bruto = process.env['FISCAL_MODO']): ModoFiscal {
+  if (bruto === undefined || bruto === '') return 'nenhum';
+  if (bruto === 'nenhum' || bruto === 'fake') return bruto;
+  throw new Error(
+    `FISCAL_MODO inválido: ${bruto}. Use nenhum ou fake — ` +
+      'não há emissor de verdade integrado, e inventar um nome não contrata nenhum.',
+  );
+}
+
+/**
+ * O emissor do processo, ou `null` quando a casa não emite.
+ *
+ * `null` e não um falso silencioso: quem chama tem que decidir o que fazer, e a
+ * decisão certa é recusar com mensagem, não fingir que emitiu.
+ */
+export function emissorFiscal(modo = modoFiscal()): FiscalProvider | null {
+  return modo === 'fake' ? new FakeFiscalProvider() : null;
+}
+
 export type FiscalRepoFailure =
   | 'cnpj_invalido'
   | 'regime_invalido'
@@ -58,7 +114,8 @@ export type FiscalRepoFailure =
   | 'venda_nao_encontrada'
   | 'nao_emite'
   | 'documento_invalido'
-  | 'cliente_nao_encontrado';
+  | 'cliente_nao_encontrado'
+  | 'fiscal_indisponivel';
 
 export class FiscalError extends Error {
   constructor(
@@ -85,6 +142,14 @@ const MENSAGEM: Readonly<Record<FiscalRepoFailure, string>> = {
   nao_emite: 'Esta venda não gera nota.',
   documento_invalido: 'Confira o CPF ou o CNPJ.',
   cliente_nao_encontrado: 'Este cliente não existe.',
+  /**
+   * A frase diz o que é: não é erro da barbearia nem falha momentânea.
+   *
+   * "Tente de novo" mandaria a recepção repetir para sempre uma operação que
+   * não existe neste ambiente, com o cliente esperando no balcão.
+   */
+  fiscal_indisponivel:
+    'A emissão de nota não está disponível: nenhum emissor está configurado nesta instalação.',
 };
 
 function recusar(code: FiscalRepoFailure, motivo?: MotivoDeNaoEmitir): never {
@@ -376,6 +441,28 @@ export async function pedirNota(
     readonly automatica: boolean;
   },
 ): Promise<{ readonly id: string } | null> {
+  /**
+   * Sem emissor no ambiente, não existe nota a pedir.
+   *
+   * A guarda vem **antes** de tudo porque criar a linha `pendente` seria o
+   * defeito inteiro: a fila a pegaria, falaria com um emissor que não existe, e
+   * ela ficaria em `processando` para sempre — com o cliente tendo pedido nota
+   * fiscal e a tela dizendo que está a caminho.
+   *
+   * Automática é **silêncio**, e é obrigatório que seja: `pedirNota` roda dentro
+   * de `fecharComanda`, que por sua vez roda na transação do webhook do Pix.
+   * Uma exceção ali volta atrás com o dinheiro sem registro nenhum — é a lição
+   * do bloco 35, e ela vale aqui inteira.
+   *
+   * O modo sai do ambiente, como `modoDoAdquirente` em `packages/platform`:
+   * enfiá-lo por parâmetro obrigaria `fecharComanda` a conhecer o emissor para
+   * repassá-lo, e ela não deve conhecer.
+   */
+  if (modoFiscal() === 'nenhum') {
+    if (params.automatica) return null;
+    recusar('fiscal_indisponivel');
+  }
+
   const config = await configuracaoFiscal(params.tenantId, params.locationId, tx);
 
   const vendas = await tx.$queryRaw<

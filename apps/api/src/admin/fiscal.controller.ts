@@ -9,8 +9,9 @@ import {
   pedirNota,
   salvarDocumentoDoCliente,
   tomadorDaVenda,
+  emissorFiscal,
 } from '@barbearia/finance';
-import { FakeFiscalProvider, type RegimeFiscal } from '@barbearia/core';
+import { type FiscalProvider, type RegimeFiscal } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
@@ -78,13 +79,30 @@ function toHttp(erro: unknown): never {
 }
 
 /**
- * Enquanto não há contrato com emissor terceirizado, é o de mentira.
+ * O emissor sai de `FISCAL_MODO`, e pode ser **nenhum**.
  *
- * Ele responde `processando` por padrão — o estado real de uma NFS-e
- * recém-enviada —, e é o que faz a cadeia de conciliação ser percorrida pelo
- * caminho real em vez de pulada por um fake otimista.
+ * Antes era `new FakeFiscalProvider()` fixo aqui e outro fixo no worker — dois
+ * lugares para ligar o emissor de verdade, e o que acontece é ligar num e
+ * esquecer no outro. Pior: em produção o falso aceitava o pedido e devolvia
+ * `processando`, então a nota ficava nesse estado **para sempre**, sem erro e
+ * sem log, com o cliente tendo pedido nota fiscal.
+ *
+ * `null` faz a rota recusar com mensagem, que é a única resposta honesta quando
+ * não há emissor contratado.
  */
-const EMISSOR = new FakeFiscalProvider();
+const EMISSOR = emissorFiscal();
+
+/** A recusa é a mesma nas duas rotas que falam com o emissor. */
+function exigirEmissor(): FiscalProvider {
+  if (!EMISSOR) {
+    throw new DomainError(
+      'fiscal_indisponivel',
+      503,
+      'A emissão de nota não está disponível: nenhum emissor está configurado nesta instalação.',
+    );
+  }
+  return EMISSOR;
+}
 
 @Controller('v1/admin/fiscal')
 @UseGuards(StaffGuard, PermissaoGuard)
@@ -97,7 +115,19 @@ export class FiscalController {
   @Get('configuracao')
   async configuracao(@Staff() staff: AuthenticatedStaff) {
     const local = await this.unidade(staff);
-    return { configuracao: await configuracaoFiscal(staff.tenantId, local.id) };
+    return {
+      configuracao: await configuracaoFiscal(staff.tenantId, local.id),
+      /**
+       * A tela precisa **dizer** que não há emissor, e não descobrir no clique.
+       *
+       * É a convenção do repositório: *gatilho ou opção que ainda não funciona
+       * aparece na tela marcado, nunca escondido.* Escondê-lo faria a SPEC
+       * parecer entregue; deixá-lo sem aviso faz a barbearia cadastrar CNPJ,
+       * alíquota e código de serviço, pedir a nota, e concluir que o produto
+       * está quebrado.
+       */
+      disponivel: EMISSOR !== null,
+    };
   }
 
   @Exige('fiscal.settings')
@@ -283,7 +313,7 @@ export class FiscalController {
         tenantId: staff.tenantId,
         invoiceId: id,
         motivo: body.motivo,
-        provider: EMISSOR,
+        provider: exigirEmissor(),
         staffId: staff.staffUserId,
         staffName: staff.name,
       });

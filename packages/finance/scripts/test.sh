@@ -25,4 +25,9 @@ DATABASE_URL="$(../../scripts/url-do-app.sh "$ADMIN_URL" "$APP_DB_PASSWORD" "$DB
 export DATABASE_URL
 export APP_DATABASE_URL="$DATABASE_URL"
 export SEED_DATABASE_URL="$BASE/$DB_NAME"
+# O emissor fiscal é escolhido por ambiente desde a revisão de go-live, e o
+# padrão é **não emitir**. A suíte exercita o caminho fiscal inteiro, então ela
+# declara o modo — que é o que o interruptor existe para obrigar.
+export FISCAL_MODO="${FISCAL_MODO:-fake}"
+
 exec vitest run "$@"

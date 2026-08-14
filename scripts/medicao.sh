@@ -43,6 +43,11 @@ export MFA_SECRET_KEY="${MFA_SECRET_KEY:-$(openssl rand -base64 32)}"
 # ligado, a medição mede o rate limit — e o sintoma é traiçoeiro: o 429 cai na
 # leitura da grade, ela volta vazia e o relatório diz "agenda não encheu".
 # O limite tem suíte própria (`rate-limit.e2e.test.ts`); aqui ele é ruído.
+# O emissor fiscal é escolhido por ambiente desde a revisão de go-live, e o
+# padrão é **não emitir**. A suíte exercita o caminho fiscal inteiro, então ela
+# declara o modo — que é o que o interruptor existe para obrigar.
+export FISCAL_MODO="${FISCAL_MODO:-fake}"
+
 export RATE_LIMIT_SHORT="${RATE_LIMIT_SHORT:-1000000}"
 export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-1000000}"
 

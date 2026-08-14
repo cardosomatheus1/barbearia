@@ -53,4 +53,9 @@ export MARKETPLACE_ORIGIN_SECRET="${MARKETPLACE_ORIGIN_SECRET:-origem-de-teste-0
 export MFA_SECRET_KEY="${MFA_SECRET_KEY:-$(openssl rand -base64 32)}"
 # `"$@"`: rodar um arquivo só durante o laço interno. Sem isto, provar que um
 # teste fica vermelho custa a suíte inteira por quebra.
+# O emissor fiscal é escolhido por ambiente desde a revisão de go-live, e o
+# padrão é **não emitir**. A suíte exercita o caminho fiscal inteiro, então ela
+# declara o modo — que é o que o interruptor existe para obrigar.
+export FISCAL_MODO="${FISCAL_MODO:-fake}"
+
 exec vitest run "$@"

@@ -49,18 +49,37 @@ import {
   rodarWorker,
   type ResultadoDaRodada,
 } from '@barbearia/jobs';
-import { FakeFiscalProvider } from '@barbearia/core';
-import { enviarNota } from '@barbearia/finance';
+
+import { emissorFiscal, enviarNota } from '@barbearia/finance';
 
 /**
- * O emissor de nota do processo — **um só**.
+ * O emissor sai de `FISCAL_MODO`, e pode ser **nenhum**.
  *
- * Enquanto não há contrato com emissor terceirizado, é o de mentira. Ele nasce
- * respondendo `processando`, que é o estado real de uma NFS-e recém-enviada: um
- * fake otimista faria a cadeia de conciliação nunca ser exercida pelo caminho
- * que ela percorre na vida real.
+ * Antes era `new FakeFiscalProvider()` fixo aqui e outro fixo no controller —
+ * dois lugares para ligar o emissor de verdade, e o que acontece é ligar num e
+ * esquecer no outro. É a cicatriz que `modoDoAdquirente` já tinha fechado do
+ * lado do dinheiro, e que o lado fiscal não copiou.
+ *
+ * Com `nenhum`, `pedirNota` recusa antes de criar a linha, então a fila não
+ * recebe tarefa — e o `null` aqui é o que faz o handler falhar alto se alguma
+ * tarefa antiga sobreviver a uma troca de configuração.
  */
-const EMISSOR_FISCAL = new FakeFiscalProvider();
+const EMISSOR_FISCAL = emissorFiscal();
+
+/**
+ * Falha alto, e é o certo aqui.
+ *
+ * A tarefa só existe se `pedirNota` a criou, e ela recusa sem emissor. Chegar
+ * aqui com `null` significa configuração trocada com fila cheia — e a tarefa
+ * ficar retentando com erro visível é melhor que ser descartada em silêncio,
+ * porque a nota do cliente continua devendo.
+ */
+function exigirEmissorFiscal() {
+  if (!EMISSOR_FISCAL) {
+    throw new Error('FISCAL_MODO=nenhum, mas há tarefa de nota na fila');
+  }
+  return EMISSOR_FISCAL;
+}
 import {
   CobrancaManualProvider,
   ConsoleGestorProvider,
@@ -226,7 +245,7 @@ async function main(): Promise<void> {
        * caminho real, e não pulada por um fake otimista.
        */
       processarNota: (tenantId, invoiceId) =>
-        enviarNota({ tenantId, invoiceId, provider: EMISSOR_FISCAL }),
+        enviarNota({ tenantId, invoiceId, provider: exigirEmissorFiscal() }),
       /**
        * A nota autorizada chegando ao cliente (bloco 54), ligada aqui pelo mesmo
        * motivo da retenção: ela mora em `packages/finance`, decide com

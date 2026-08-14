@@ -3076,7 +3076,7 @@ export interface NotaNaTela {
 }
 
 export const configuracaoFiscalNaApi = (token: string) =>
-  chamar<{ configuracao: ConfiguracaoFiscalNaTela | null }>(
+  chamar<{ configuracao: ConfiguracaoFiscalNaTela | null; disponivel: boolean }>(
     'GET',
     '/v1/admin/fiscal/configuracao',
     undefined,

@@ -188,6 +188,30 @@ export default async function FiscalPage({ searchParams }: Props) {
   const feito = first(query['feito']);
   const atual = config?.ok ? config.dados.configuracao : null;
   const lista = notas?.ok ? notas.dados.notas : [];
+  /**
+   * Sem emissor contratado, a tela **diz**.
+   *
+   * A convenção é escrita: *gatilho ou opção que ainda não funciona aparece na
+   * tela marcado, nunca escondido.* Escondê-la faria a SPEC parecer entregue;
+   * deixá-la sem aviso faz a barbearia cadastrar CNPJ, alíquota e código de
+   * serviço municipal, pedir a nota, e concluir que o produto está quebrado —
+   * com o cliente esperando no balcão.
+   *
+   * Ausente é `false` de propósito: a versão antiga da API não manda o campo, e
+   * presumir disponível é justamente o erro que este aviso existe para impedir.
+   */
+  const emissorDisponivel = config?.ok ? config.dados.disponivel === true : false;
+
+  const semEmissor = (
+    <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+      <strong>A emissão de nota não está ligada nesta instalação.</strong> O cadastro
+      abaixo pode ser preenchido — ele fica guardado —, mas nenhuma nota vai à
+      prefeitura enquanto não houver um emissor contratado e configurado
+      (<code>FISCAL_MODO</code>). Pedir a nota devolve recusa, e é de propósito:
+      nota que fica &ldquo;processando&rdquo; para sempre é pior que nota que não
+      existe.
+    </div>
+  );
 
   const topo = (
     <header className="painel__topo">
@@ -211,6 +235,8 @@ export default async function FiscalPage({ searchParams }: Props) {
         A emissão é feita por um emissor contratado — a barbearia cadastra o CNPJ e o regime, e a
         nota sai sozinha.
       </p>
+
+      {emissorDisponivel ? null : semEmissor}
 
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
