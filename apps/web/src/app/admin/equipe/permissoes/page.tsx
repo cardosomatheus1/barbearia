@@ -123,6 +123,7 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'marketing.send': 'Disparar campanha de marketing',
   'settings.manage': 'Mudar configurações da barbearia',
   'team.manage': 'Criar contas e mudar permissões',
+  'franchise.manage': 'Publicar o cardápio padrão da franquia',
 };
 
 /**
@@ -175,6 +176,19 @@ const GRUPOS: readonly Grupo[] = [
     titulo: 'Nota fiscal',
     sobre: 'Emitir, cancelar e cadastrar o fiscal da casa. Não pede segundo fator.',
     permissoes: PERMISSOES.filter((p) => p.startsWith('fiscal.')),
+  },
+  {
+    /**
+     * Grupo próprio, e não dentro de "A casa".
+     *
+     * Franquia é a única permissão do catálogo que fala de **outra empresa**:
+     * ela publica o padrão que as franqueadas leem. Numa barbearia que não é
+     * franqueadora, a caixa aparece vazia de escolhas marcadas — e é isso que
+     * se quer, porque ela explica o que existe sem conceder nada.
+     */
+    titulo: 'Franquia',
+    sobre: 'Publicar o cardápio padrão da rede. Só a franqueadora usa.',
+    permissoes: PERMISSOES.filter((p) => p.startsWith('franchise.')),
   },
   {
     titulo: 'A casa',

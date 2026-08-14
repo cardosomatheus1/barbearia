@@ -351,3 +351,45 @@ export const reverterContestacaoNaApi = (token: string, atribuicaoId: string, mo
     { motivo },
     token,
   );
+
+/** Franquias montadas (bloco 76). */
+export interface FranquiaNaTela {
+  readonly id: string;
+  readonly nome: string;
+  readonly criadaEm: string;
+  readonly franqueadora: string | null;
+  readonly franqueadas: number;
+  readonly itensNoPadrao: number;
+}
+
+export interface CasaDaFranquiaNaTela {
+  readonly tenantId: string;
+  readonly nome: string;
+  readonly papel: 'franqueadora' | 'franqueada';
+  readonly entrouEm: string;
+}
+
+export const franquiasNaApi = (token: string) =>
+  chamar<{ franquias: FranquiaNaTela[] }>('GET', '/v1/plataforma/franquias', undefined, token);
+
+export const casasDaFranquiaNaApi = (token: string, franquiaId: string) =>
+  chamar<{ casas: CasaDaFranquiaNaTela[] }>(
+    'GET',
+    `/v1/plataforma/franquias/${franquiaId}/casas`,
+    undefined,
+    token,
+  );
+
+export const criarFranquiaNaApi = (token: string, corpo: { nome: string; tenantId: string }) =>
+  chamar<{ id: string }>('POST', '/v1/plataforma/franquias', corpo, token);
+
+export const porNaFranquiaNaApi = (token: string, franquiaId: string, tenantId: string) =>
+  chamar<{ ok: true }>(
+    'POST',
+    `/v1/plataforma/franquias/${franquiaId}/casas`,
+    { tenantId },
+    token,
+  );
+
+export const tirarDaFranquiaNaApi = (token: string, tenantId: string) =>
+  chamar<{ ok: true }>('DELETE', `/v1/plataforma/franquias/casas/${tenantId}`, undefined, token);

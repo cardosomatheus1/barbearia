@@ -3498,3 +3498,57 @@ export const publicarFotoNaApi = (token: string, fotoId: string, publicar: boole
 
 export const apagarFotoNaApi = (token: string, fotoId: string) =>
   chamar<{ ok: true }>('DELETE', `/v1/admin/customers/fotos/${fotoId}`, undefined, token);
+
+/** Franquia: o cardápio padrão da rede e o que esta casa adotou (bloco 76). */
+export interface ItemDoPadraoNaApi {
+  readonly id: string;
+  readonly nome: string;
+  readonly descricao: string | null;
+  readonly referenciaCents: number;
+  readonly duracaoMinutos: number;
+  readonly categoria: string | null;
+  readonly ativo: boolean;
+  readonly adotadoComo: {
+    readonly serviceId: string;
+    readonly praticadoCents: number;
+    readonly quando: string;
+    readonly distancia: {
+      readonly bps: number;
+      readonly sentido: 'acima' | 'abaixo' | 'igual';
+      readonly diferencaCents: number;
+      readonly relevante: boolean;
+    } | null;
+  } | null;
+}
+
+export interface PadraoDaFranquia {
+  readonly franquia: { readonly id: string; readonly nome: string; readonly papel: 'franqueadora' | 'franqueada' } | null;
+  readonly itens: readonly ItemDoPadraoNaApi[];
+}
+
+export const padraoDaFranquiaNaApi = (token: string) =>
+  chamar<PadraoDaFranquia>('GET', '/v1/admin/franquia/padrao', undefined, token);
+
+export const publicarNoPadrao = (
+  token: string,
+  dados: {
+    id?: string;
+    nome: string;
+    descricao: string | null;
+    referenciaCents: number;
+    duracaoMinutos: number;
+    categoria: string | null;
+    posicao: number;
+  },
+) => chamar<{ id: string }>('POST', '/v1/admin/franquia/padrao', dados, token);
+
+export const despublicarDoPadrao = (token: string, itemId: string) =>
+  chamar<{ ok: true }>('DELETE', `/v1/admin/franquia/padrao/${itemId}`, undefined, token);
+
+export const adotarDoPadrao = (token: string, itemId: string) =>
+  chamar<{ serviceId: string; novo: boolean }>(
+    'POST',
+    '/v1/admin/franquia/adocao',
+    { itemId },
+    token,
+  );

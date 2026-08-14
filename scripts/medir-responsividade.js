@@ -1219,6 +1219,63 @@ function prepararDestaque(slug) {
   );
 }
 
+/**
+ * Uma franquia com padrão publicado e um item adotado (bloco 76).
+ *
+ * A barbearia da medição vira a **franqueadora**: assim a tela mostra as duas
+ * metades — o formulário de publicar e a lista com o preço praticado ao lado do
+ * de referência. Sem a adoção, a linha da distância nunca apareceria, e a tela
+ * seria fotografada sem a única informação que ela existe para dar.
+ */
+function prepararFranquia(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  if (psql(`select 1 from franchise_tenants where tenant_id = '${tenant}'`)) return;
+
+  // `psql -tAc` com `RETURNING` devolve a linha **e** a etiqueta do comando
+  // ("INSERT 0 1"). Sem pegar a primeira linha, o id sai com o rótulo colado.
+  const franquia = psql(
+    `INSERT INTO franchises (name) VALUES ('Rede Barber Dock') RETURNING id`,
+  )?.split('\n')[0];
+  if (!franquia) return;
+
+  psql(
+    `INSERT INTO franchise_tenants (tenant_id, franchise_id, role)
+     VALUES ('${tenant}', '${franquia}', 'franqueadora')`,
+  );
+  psql(
+    `INSERT INTO role_permissions (tenant_id, role, permission)
+     VALUES ('${tenant}', 'owner', 'franchise.manage') ON CONFLICT DO NOTHING`,
+  );
+
+  // Conteúdo real: nome longo e preço de quatro dígitos são o que quebra
+  // layout, e só aparecem com conteúdo verdadeiro.
+  const itens = [
+    ['Corte social', 'Cabelo', 5500, 30],
+    ['Barba modelada com toalha quente', 'Barba', 4500, 40],
+    ['Coloração completa com hidratação', 'Química', 18900, 180],
+  ];
+  itens.forEach(([nome, categoria, preco, minutos], i) => {
+    psql(
+      `INSERT INTO franchise_services
+         (franchise_id, name, category_name, reference_price_cents, duration_minutes, position)
+       VALUES ('${franquia}', '${nome}', '${categoria}', ${preco}, ${minutos}, ${i})
+       ON CONFLICT DO NOTHING`,
+    );
+  });
+
+  // Um adotado e com preço diferente: é a linha que mostra a distância.
+  const primeiro = psql(
+    `select id from franchise_services where franchise_id = '${franquia}' order by position limit 1`,
+  );
+  if (!primeiro) return;
+  psql(
+    `UPDATE services SET franchise_service_id = '${primeiro}', adopted_at = now(), price_cents = 4500
+      WHERE id = (SELECT id FROM services WHERE tenant_id = '${tenant}' AND active
+                   ORDER BY created_at LIMIT 1)`,
+  );
+}
+
 function prepararPerfilDoBarbeiro(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -2428,6 +2485,7 @@ async function main() {
   await prepararMarketplace(slug);
   const barbeiro = prepararPerfilDoBarbeiro(slug);
   prepararDestaque(slug);
+  prepararFranquia(slug);
   prepararFotos(slug, balcao.clienteId);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
@@ -2484,6 +2542,7 @@ async function main() {
           { nome: 'plataforma — barbearias', url: '/plataforma', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — métricas', url: '/plataforma/metricas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — destaques', url: '/plataforma/destaques', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          { nome: 'plataforma — franquias', url: '/plataforma/franquias', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — trilha', url: '/plataforma/trilha', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — segurança', url: '/plataforma/seguranca', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — cobrança', url: '/plataforma/faturas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
@@ -2493,6 +2552,7 @@ async function main() {
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'privacidade (LGPD)', url: '/admin/lgpd', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'franquia', url: '/admin/franquia', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'equipe', url: '/admin/equipe', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'catálogo', url: '/admin/catalogo', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'profissionais', url: '/admin/profissionais', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

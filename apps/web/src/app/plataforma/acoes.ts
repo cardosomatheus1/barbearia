@@ -18,6 +18,9 @@ import {
   registrarPagamento,
   reverterContestacaoNaApi,
   venderDestaqueNaApi,
+  criarFranquiaNaApi,
+  porNaFranquiaNaApi,
+  tirarDaFranquiaNaApi,
 } from '@/lib/plataforma-api';
 import {
   apagarSessaoDaPlataforma,
@@ -219,4 +222,39 @@ export async function acaoReverterContestacao(form: FormData): Promise<void> {
   );
   if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
   redirect('/plataforma/destaques?revertida=1');
+}
+
+/**
+ * Montar uma franquia (bloco 76).
+ *
+ * Ligar duas barbearias é operação **entre tenants**, e não existe lugar dentro
+ * de uma delas de onde ela possa ser feita: a RLS separa barbearias, e é para
+ * isso que ela existe.
+ */
+export async function acaoCriarFranquia(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await criarFranquiaNaApi(token, {
+    nome: texto(form, 'nome'),
+    tenantId: texto(form, 'tenantId'),
+  });
+  if (!resultado.ok) falhar('/plataforma/franquias', resultado.code);
+  redirect('/plataforma/franquias?criada=1');
+}
+
+export async function acaoPorNaFranquia(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await porNaFranquiaNaApi(
+    token,
+    texto(form, 'franquiaId'),
+    texto(form, 'tenantId'),
+  );
+  if (!resultado.ok) falhar('/plataforma/franquias', resultado.code);
+  redirect('/plataforma/franquias?entrou=1');
+}
+
+export async function acaoTirarDaFranquia(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await tirarDaFranquiaNaApi(token, texto(form, 'tenantId'));
+  if (!resultado.ok) falhar('/plataforma/franquias', resultado.code);
+  redirect('/plataforma/franquias?saiu=1');
 }

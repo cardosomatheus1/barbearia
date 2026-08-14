@@ -17,6 +17,11 @@ import {
   bloquearBarbearia,
   confirmarCadastroDoSegundoFator,
   cancelarDestaque,
+  casasDaFranquia,
+  criarFranquia,
+  entrarNaFranquia,
+  franquiasNaPlataforma,
+  sairDaFranquia,
   contestacoesNaPlataforma,
   definirComissaoDoMarketplace,
   definirRecurso,
@@ -67,6 +72,8 @@ import {
   cancelamentoSchema,
   comissaoDoMarketplaceSchema,
   destaqueSchema,
+  entradaNaFranquiaSchema,
+  franquiaSchema,
   motivoSchema,
   type EntradaDeDestaque,
   estornoSchema,
@@ -394,6 +401,84 @@ export class PlataformaController {
         criadoEm: e.criadoEm.toISOString(),
       })),
     };
+  }
+
+  /**
+   * As franquias montadas (bloco 76).
+   *
+   * Montar uma franquia é operação **entre tenants**, e não existe lugar dentro
+   * de uma barbearia de onde ela possa ser feita: a RLS separa barbearias, e é
+   * para isso que ela existe. Depois de montada, a franquia é dos dois lados
+   * dela — a plataforma não publica cardápio nem vê preço praticado.
+   */
+  @Get('franquias')
+  async franquias() {
+    return { franquias: await franquiasNaPlataforma() };
+  }
+
+  @Get('franquias/:franquiaId/casas')
+  async casasDaRede(
+    @Param('franquiaId', new ZodValidationPipe(tenantIdSchema)) franquiaId: string,
+  ) {
+    return { casas: await casasDaFranquia(franquiaId) };
+  }
+
+  /**
+   * Cria a franquia com a franqueadora já dentro, e concede `franchise.manage`
+   * ao dono dela na mesma operação — é o único instante em que se sabe que
+   * aquela barbearia é uma franqueadora.
+   */
+  @AgeNaConta()
+  @Post('franquias')
+  async montarFranquia(
+    @Body(new ZodValidationPipe(franquiaSchema)) corpo: { nome: string; tenantId: string },
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      return await criarFranquia({
+        adminId: admin.id,
+        nome: corpo.nome,
+        franqueadoraTenantId: corpo.tenantId,
+      });
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  /**
+   * Põe uma barbearia na franquia, sempre como **franqueada**.
+   *
+   * O papel não vem do corpo: é o precedente do convite do barbeiro no bloco 29,
+   * e aqui vale mais ainda — `franqueadora` é quem escreve o padrão da rede
+   * inteira.
+   */
+  @AgeNaConta()
+  @Post('franquias/:franquiaId/casas')
+  async porNaFranquia(
+    @Param('franquiaId', new ZodValidationPipe(tenantIdSchema)) franquiaId: string,
+    @Body(new ZodValidationPipe(entradaNaFranquiaSchema)) corpo: { tenantId: string },
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await entrarNaFranquia({ adminId: admin.id, franquiaId, tenantId: corpo.tenantId });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
+  }
+
+  @AgeNaConta()
+  @Delete('franquias/casas/:tenantId')
+  async tirarDaFranquia(
+    @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
+    @Admin() admin: AdminDaPlataforma,
+  ) {
+    try {
+      await sairDaFranquia({ adminId: admin.id, tenantId });
+      return { ok: true };
+    } catch (erro) {
+      return paraHttp(erro);
+    }
   }
 
   /**

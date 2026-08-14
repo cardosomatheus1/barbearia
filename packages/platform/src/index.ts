@@ -16,3 +16,4 @@ export * from './serie.js';
 export * from './vitrine.js';
 export * from './atribuicao.js';
 export * from './destaque.js';
+export * from './franquia.js';

@@ -43,6 +43,7 @@ export * from './proximo.js';
 export * from './atribuicao.js';
 export * from './barbeiro.js';
 export * from './destaque.js';
+export * from './franquia.js';
 export * from './insight.js';
 export * from './precificacao.js';
 export * from './recepcao.js';

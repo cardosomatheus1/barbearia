@@ -141,6 +141,9 @@ import {
   encerrarSessao as encerrarSessaoDoAparelho,
   expulsarSuporte,
   salvarPreferenciasDeAlerta,
+  adotarDoPadrao,
+  despublicarDoPadrao,
+  publicarNoPadrao,
 } from '@/lib/admin-api';
 import { versaoDoConsentimento } from '@/lib/politica';
 import { ehConversa } from '@barbearia/core';
@@ -2943,4 +2946,40 @@ export async function acaoDefinirUnidadeAtiva(form: FormData): Promise<void> {
 export async function acaoPerguntarAoAssistente(form: FormData): Promise<void> {
   const texto = String(form.get('p') ?? '').slice(0, 200);
   redirect(`/admin/assistente?p=${encodeURIComponent(texto)}`);
+}
+
+/**
+ * Franquia: publicar no padrão, tirar do padrão e adotar (bloco 76).
+ *
+ * O preço vai em **centavos**, pela mesma função que o resto do produto usa:
+ * `Number(v) * 100` daria 4499,999… para "44,99".
+ */
+export async function acaoPublicarNoPadrao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const id = texto(form, 'id');
+  const resultado = await publicarNoPadrao(token, {
+    ...(id ? { id } : {}),
+    nome: texto(form, 'nome'),
+    descricao: texto(form, 'descricao') || null,
+    referenciaCents: centavos(form, 'referencia', '/admin/franquia'),
+    duracaoMinutos: Number(texto(form, 'duracao')) || 0,
+    categoria: texto(form, 'categoria') || null,
+    posicao: Number(texto(form, 'posicao')) || 0,
+  });
+  if (!resultado.ok) falhar('/admin/franquia', resultado.code);
+  redirect('/admin/franquia?publicado=1');
+}
+
+export async function acaoDespublicarDoPadrao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await despublicarDoPadrao(token, texto(form, 'itemId'));
+  if (!resultado.ok) falhar('/admin/franquia', resultado.code);
+  redirect('/admin/franquia?despublicado=1');
+}
+
+export async function acaoAdotarDoPadrao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await adotarDoPadrao(token, texto(form, 'itemId'));
+  if (!resultado.ok) falhar('/admin/franquia', resultado.code);
+  redirect(`/admin/franquia?adotado=${resultado.dados.novo ? 'novo' : 'atualizado'}`);
 }

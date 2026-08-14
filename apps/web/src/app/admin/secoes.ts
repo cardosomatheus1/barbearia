@@ -73,6 +73,7 @@ export const MODULOS = [
       { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', nota: 'barbeiros, jornadas e metas' },
       { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', nota: 'cadeiras, lavatórios e salas' },
       { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', nota: 'logo e imagens da página pública' },
+      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', nota: 'o cardápio padrão da rede e o que esta casa adotou' },
     ],
     dentro: [],
   },

@@ -213,3 +213,19 @@ export type EntradaDeDestaque = z.infer<typeof destaqueSchema>;
  * no dinheiro de outra empresa. Sem motivo, nada distingue correção de engano.
  */
 export const motivoSchema = z.object({ motivo: z.string().trim().min(10).max(500) });
+
+/**
+ * Montar uma franquia (bloco 76).
+ *
+ * O papel **não** entra no corpo: a franqueadora é a que cria, e quem entra
+ * depois entra sempre como franqueada. É o precedente do convite do barbeiro no
+ * bloco 29 — papel que vem da requisição é papel que alguém escolhe.
+ */
+export const franquiaSchema = z.object({
+  nome: z.string().trim().min(2).max(120),
+  tenantId: z.string().uuid(),
+});
+
+export const entradaNaFranquiaSchema = z.object({
+  tenantId: z.string().uuid(),
+});

@@ -4439,6 +4439,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais'],
 .casco:has([data-secao='recursos']) .contexto__link[data-para='recursos'],
 .casco:has([data-secao='fotos']) .contexto__link[data-para='fotos'],
+.casco:has([data-secao='franquia']) .contexto__link[data-para='franquia'],
 .casco:has([data-secao='equipe']) .contexto__link[data-para='equipe'],
 .casco:has([data-secao='unidades']) .contexto__link[data-para='unidades'],
 .casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
@@ -7900,4 +7901,136 @@ main { padding-bottom: var(--space-8); }
     grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto;
     align-items: end;
   }
+}
+
+/* -- Cardápio padrão da franquia (bloco 76) --------------------------------- */
+
+.padrao-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.padrao-form__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .padrao-form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+}
+
+.padrao-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+/* O número ao lado do título precisa parecer contagem, não parte da frase:
+   "O padrão da rede 3" lê como um nome. */
+.padrao-lista__contagem {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+.padrao-lista__contagem::before { content: '· '; }
+
+.padrao-item {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  /* O recipiente decide o formato, não a janela: esta lista aparece no painel
+     largo e vai aparecer numa coluna estreita quando a franqueadora tiver o
+     painel dela. */
+  container-type: inline-size;
+}
+.padrao-item__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.padrao-item__nome { margin: 0; font-size: var(--font-size-base); }
+.padrao-item__referencia { font-weight: var(--font-weight-semibold); }
+.padrao-item__sobre {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.padrao-item__praticado { margin: var(--space-3) 0 0; font-size: var(--font-size-sm); }
+.padrao-item__praticado--fora { color: var(--color-text-muted); }
+
+/* A distância é informação, não acusação: sem vermelho, sem seta. A franqueada
+   é outra empresa, e o produto não pode dizer que o preço dela está errado. */
+.padrao-item__distancia { color: var(--color-text-muted); }
+.padrao-item__distancia--longe { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+
+.padrao-item__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.padrao-item__acao { min-height: 44px; }
+
+.padrao-vazio { display: grid; gap: var(--space-3); }
+.padrao-vazio__como { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+@container (min-width: 30rem) {
+  .padrao-item__acoes { flex-wrap: nowrap; }
+}
+
+/* -- Franquias, no painel da plataforma (bloco 76) -------------------------- */
+
+.franquia-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.franquia-form__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .franquia-form { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; }
+}
+
+.franquia-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+.franquia {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.franquia__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.franquia__nome { margin: 0; font-size: var(--font-size-base); }
+.franquia__numeros { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.franquia-casas { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.franquia-casa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block: var(--space-1);
+}
+.franquia-casa__nome { font-weight: var(--font-weight-medium); }
+.franquia-casa__papel {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.franquia-casa__papel--dona { color: var(--color-accent); }
+.franquia-casa__desde { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.franquia-casa__acao { min-height: 44px; }
+.franquia-casa__fixa {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.franquia__entrada {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.franquia__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .franquia__entrada { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .franquia__entrada .ui-field__label { grid-column: 1 / -1; }
 }

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 75 de 80 blocos.**
+**Status: 76 de 80 blocos.**
 
 ---
 
@@ -332,7 +332,7 @@ Só faz sentido com centenas de barbearias na base.
 | 73 | Perfil público do barbeiro | ✅ |
 | 74 | Portfólio e consentimento de uso público | ✅ |
 | 75 | Anúncios e destaque | ✅ |
-| 76 | Franquias: catálogo padrão, preços sugeridos |
+| 76 | Franquias: catálogo padrão, preços sugeridos | ✅ |
 | 77 | Franquias: indicadores consolidados, metas |
 | 78 | API pública: chaves, escopos, rate limit |
 | 79 | Webhooks assinados para terceiros |

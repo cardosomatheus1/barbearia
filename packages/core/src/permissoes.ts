@@ -303,6 +303,20 @@ export const PERMISSOES = [
   'inventory.view',
   'inventory.adjust',
   'marketing.send',
+  /**
+   * Publicar o cardápio padrão da franquia (bloco 76).
+   *
+   * Só faz sentido numa franqueadora, e por isso ela **não** entra em papel
+   * nenhum por omissão: quem a concede é a própria plataforma, no momento em
+   * que marca um tenant como franqueadora. Uma permissão que nascesse concedida
+   * na base inteira seria permissão que ninguém decidiu dar.
+   *
+   * Fora do grupo de dinheiro de propósito, e a razão é a mesma de `fiscal.`:
+   * o preço que ela publica é **de referência** e nunca é cobrado de ninguém.
+   * O que a franqueada cobra continua saindo de `services.price_cents`, sob
+   * `settings.manage`.
+   */
+  'franchise.manage',
   'settings.manage',
   'team.manage',
 ] as const;
