@@ -650,10 +650,16 @@ describeIfDb('WhatsApp oficial', () => {
       texto: 'aqui é o Carlos, quero remarcar',
     });
 
-    await exec(`SELECT set_config('app.tenant_id', '${TENANT}', false)`);
-    await admin.$executeRawUnsafe(
-      `SELECT anonimizar_cliente('${CARLOS}'::uuid, 'pedido de exclusão do titular')`,
-    );
+    // Numa transação só, com o contexto local a ela — como `withTenant`. Duas
+    // chamadas soltas pegam duas conexões do pool, e o `set_config` da sessão
+    // não atravessa: a função responde "exige app.tenant_id no contexto" numa
+    // execução a cada tantas, conforme o pool distribuir.
+    await admin.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '${TENANT}', true)`);
+      await tx.$executeRawUnsafe(
+        `SELECT anonimizar_cliente('${CARLOS}'::uuid, 'pedido de exclusão do titular')`,
+      );
+    });
 
     const linha = await admin.$queryRawUnsafe<
       { from_phone: string | null; body: string | null; customer_id: string | null }[]

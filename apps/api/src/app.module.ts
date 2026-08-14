@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { cabecalhosDeSeguranca } from './common/cabecalhos.middleware.js';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { throttlerConfig } from './common/throttler.config.js';
 import { BookingController } from './booking/booking.controller.js';
@@ -176,4 +177,14 @@ import { TenantService } from './tenant/tenant.service.js';
     { provide: APP_INTERCEPTOR, useClass: SuporteInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Antes do roteamento, para valer também no 404 e na recusa da guarda.
+   *
+   * `{*splat}` e não `*`: o Nest 11 usa `path-to-regexp` v8, que recusa o
+   * curinga sem nome — e a forma entre chaves é a que casa também com a raiz.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(cabecalhosDeSeguranca).forRoutes('{*splat}');
+  }
+}

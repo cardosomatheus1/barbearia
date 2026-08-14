@@ -678,6 +678,88 @@ await percurso('plataforma reativa e bloqueia', async (page) => {
 });
 
 // ---------------------------------------------------------------------------
+// 7 — os cabeçalhos de segurança, do servidor de verdade
+// ---------------------------------------------------------------------------
+
+await percurso('cabeçalhos de segurança saem do servidor', async (page) => {
+  /**
+   * Porque o teste unitário prova a **minha leitura**, não o Next.
+   *
+   * `next.config.mjs` declara três regras de cabeçalho e elas precisam ser
+   * excludentes: o Next aplica todas as que casam, então uma regra ampla no fim
+   * reescreveria o referrer fechado do painel. O teste em `apps/web` confere
+   * isso reimplementando o casamento de rota numa regex escrita à mão — o que
+   * é útil e não é prova. Aqui quem responde é o servidor.
+   *
+   * E a CSP com nonce é o caso extremo desse mesmo problema: ela sai de um
+   * middleware, o Next precisa achar o nonce no cabeçalho da requisição para
+   * repeti-lo nos scripts dele, e se essa ponte quebrar a política sai correta
+   * e a página fica em branco. Os seis percursos acima já cairiam — este diz
+   * **por quê** em vez de deixar o diagnóstico para quem lê.
+   */
+  const esperado = [
+    ['/', 'strict-origin-when-cross-origin'],
+    [`/${slug}`, 'strict-origin-when-cross-origin'],
+    ['/admin/entrar', 'no-referrer'],
+    ['/plataforma/entrar', 'no-referrer'],
+  ];
+
+  for (const [caminho, referrer] of esperado) {
+    const resposta = await page.goto(`${WEB}${caminho}`, { waitUntil: 'domcontentloaded' });
+    if (!resposta) throw new Error(`${caminho} não respondeu`);
+    const cabecalhos = resposta.headers();
+
+    const conferir = (nome, contem) => {
+      const valor = cabecalhos[nome] ?? '';
+      if (!valor.includes(contem)) {
+        throw new Error(`${caminho}: ${nome} é "${valor}", esperava conter "${contem}"`);
+      }
+    };
+
+    conferir('x-frame-options', 'DENY');
+    conferir('x-content-type-options', 'nosniff');
+    conferir('strict-transport-security', 'max-age=31536000');
+    conferir('permissions-policy', 'camera=()');
+    conferir('referrer-policy', referrer);
+    conferir('content-security-policy', "frame-ancestors 'none'");
+
+    // O referrer é comparação exata: `no-referrer` é subcadeia de
+    // `no-referrer-when-downgrade`, que é o contrário do que se quer.
+    if (cabecalhos['referrer-policy'] !== referrer) {
+      throw new Error(`${caminho}: referrer-policy é "${cabecalhos['referrer-policy']}"`);
+    }
+
+    const csp = cabecalhos['content-security-policy'] ?? '';
+    const scripts = csp.split('; ').find((d) => d.startsWith('script-src')) ?? '';
+    if (!/'nonce-[a-zA-Z0-9+/]+'/.test(scripts)) {
+      throw new Error(`${caminho}: script-src saiu sem nonce ("${scripts}")`);
+    }
+    if (scripts.includes('unsafe-inline')) {
+      throw new Error(`${caminho}: script-src abriu exceção para script embutido`);
+    }
+  }
+
+  /**
+   * E o nonce chega **ao HTML**, que é a metade que nenhum cabeçalho prova.
+   *
+   * Política com nonce e página sem nonce é uma página em branco no navegador
+   * de quem instalou — e um `curl` no cabeçalho diria que está tudo certo.
+   *
+   * A conferência é sobre os **bytes**, nunca sobre o DOM: o navegador esconde
+   * o valor do nonce depois de analisar a página (é o *nonce hiding* do CSP 3,
+   * feito justamente para que um script injetado não consiga lê-lo), então
+   * `page.content()` devolve `nonce=""` mesmo quando está tudo certo. A
+   * primeira versão deste percurso acusou o produto por causa disso.
+   */
+  const bruta = await page.request.get(`${WEB}/${slug}`);
+  const nonce = /'nonce-([a-zA-Z0-9+/]+)'/.exec(bruta.headers()['content-security-policy'] ?? '');
+  if (!nonce) throw new Error('a resposta crua saiu sem nonce na política');
+  if (!(await bruta.text()).includes(`nonce="${nonce[1]}"`)) {
+    throw new Error('o nonce da política não chegou a nenhum script do HTML');
+  }
+});
+
+// ---------------------------------------------------------------------------
 
 console.log('');
 if (falhas.length > 0) {

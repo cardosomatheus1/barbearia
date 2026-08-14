@@ -115,10 +115,21 @@ describeIfDb('campanhas', () => {
     //
     // O telefone só pode ser nulo em quem foi anonimizado — há `CHECK` desde o
     // bloco 34 —, então o caminho do teste é o de verdade: anonimizar.
-    await exec(`SELECT set_config('app.tenant_id', '${TENANT}', false)`);
-    await admin.$executeRawUnsafe(
-      `SELECT anonimizar_cliente('${BRUNO}'::uuid, 'pedido de exclusão do titular')`,
-    );
+    /**
+     * Numa transação só, e com o contexto local a ela — como `withTenant`.
+     *
+     * Duas chamadas soltas pegam **duas conexões do pool**, e `set_config` com
+     * `false` é da sessão: a segunda chegava numa conexão sem tenant e a função
+     * respondia "exige app.tenant_id no contexto". Falhava uma vez a cada
+     * tantas execuções, conforme o pool distribuísse — o mesmo motivo pelo qual
+     * o produto inteiro só fala com o banco por `withTenant`.
+     */
+    await admin.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '${TENANT}', true)`);
+      await tx.$executeRawUnsafe(
+        `SELECT anonimizar_cliente('${BRUNO}'::uuid, 'pedido de exclusão do titular')`,
+      );
+    });
     const criada = await campanha();
     expect(criada.publico).toBe(2);
   });
