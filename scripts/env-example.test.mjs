@@ -74,7 +74,15 @@ function fontes(dir, achados = []) {
 }
 
 describe('o .env.example é a lista', () => {
-  it('toda variável que o produto lê está declarada', () => {
+  /**
+   * Com folga, e não por lentidão tolerada.
+   *
+   * O caso lê 448 arquivos do fonte, e o portão roda dez etapas em paralelo
+   * contra a mesma máquina: sob carga, os 5s do padrão do vitest estouram numa
+   * varredura que sozinha leva 60ms. Guarda que fica vermelha por disputa de
+   * CPU é guarda que alguém desliga.
+   */
+  it('toda variável que o produto lê está declarada', { timeout: 30_000 }, () => {
     const declaradas = new Set(
       readFileSync(join(RAIZ, '.env.example'), 'utf8')
         .split('\n')

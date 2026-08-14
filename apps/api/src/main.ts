@@ -6,6 +6,7 @@ import { assertRlsEnforced } from '@barbearia/db';
 import { AppModule } from './app.module.js';
 import { TETO_DO_ARQUIVO } from './admin/importacao.schemas.js';
 import { guardarCorpoCru } from './common/corpo-cru.js';
+import { ajustarKeepAlive } from './common/keep-alive.js';
 
 async function bootstrap(): Promise<void> {
   // Antes de servir a primeira requisição: se a conexão ignora RLS, o
@@ -51,6 +52,14 @@ async function bootstrap(): Promise<void> {
 
   // A API fica atrás de proxy; sem isso o rate limit enxerga um IP só.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+  /**
+   * E, pela mesma razão de estar atrás de proxy, a conexão ociosa precisa viver
+   * mais que a dele. O porquê está em `common/keep-alive.ts`; aqui fica só a
+   * chamada, porque é este o único lugar onde o servidor HTTP existe.
+   */
+  ajustarKeepAlive(app.getHttpServer());
+
   app.enableShutdownHooks();
 
   const port = Number(process.env['PORT'] ?? 3000);

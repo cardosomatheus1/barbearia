@@ -25,6 +25,7 @@
  * e a segunda roubaria o `slug`.
  */
 
+import { semearDetalhes } from './semear-detalhes.mjs';
 import { CARDAPIO, JORNADA_DA_SEMANA, semearFundo } from './semear-fundo.mjs';
 
 const API = process.env.API_URL ?? 'http://127.0.0.1:3000';
@@ -743,6 +744,19 @@ async function main() {
       `${fundo.dias} dias de história: ${fundo.atendimentos} atendimentos, ` +
         `${fundo.clientes} clientes, ${fundo.vendas} vendas, ${fundo.avaliacoes} avaliações`,
     );
+
+    /**
+     * E o resto da casa, que o movimento não produz sozinho.
+     *
+     * Área vazia não é área neutra: o DRE com "Produtos R$ 0,00" ao lado de uma
+     * agenda cheia diz que a barbearia não vende na prateleira, e quem olha
+     * conclui que o relatório não funciona.
+     */
+    const detalhes = semearDetalhes({ url: bancoAdmin, slug });
+    passo(
+      `prateleira, clube, pacote, financeiro e integrações: ` +
+        `${detalhes.produtos} produtos e ${detalhes.fieis} clientes com histórico`,
+    );
   } else {
     console.log(cinza('    sem ADMIN_DATABASE_URL: a barbearia nasce sem histórico'));
   }
@@ -842,5 +856,7 @@ function contar({ slug, segredo, recuperacao, contas = [], vitrine }) {
 
 main().catch((erro) => {
   console.error(`\n    falhou: ${erro.message}\n`);
+  if (erro.cause) console.error(`    causa: ${erro.cause.message ?? erro.cause}\n`);
+  console.error(erro.stack);
   process.exit(1);
 });
