@@ -79,6 +79,25 @@ aviso cai no canal de reserva.
 O ensaio de restauração pergunta ao **banco restaurado**, não ao código de saída
 do `pg_restore` — que responderia só "o arquivo não está corrompido".
 
+### 1.4 A barbearia de demonstração, e as duas conferências
+
+`scripts/semear-fundo.mjs` simula 245 dias dia a dia — jornada por dia da
+semana, peso por hora, crescimento, sazonalidade e 620 clientes com ciclo
+próprio — e `scripts/semear-detalhes.mjs` preenche o que o movimento não produz:
+prateleira, clube, pacote, financeiro, marketing e integrações. As 41 tabelas
+com linha, e cada coisa apontando para as outras.
+
+Sobre ela rodam duas conferências, e elas existem para perguntas que os outros
+portões não fazem:
+
+| Ferramenta | A pergunta |
+|---|---|
+| `scripts/conferir-telas.mjs` | o dado está no banco **e** está na tela? (33 telas, cada uma pelo papel mais baixo que deveria vê-la) |
+| `scripts/conferir-numeros.mjs` | o mesmo fato, por caminhos e papéis diferentes, dá o mesmo número? |
+
+A segunda é a §6 pergunta 6 virada código, e foi ela que achou o desconto sumido
+do DRE e a gorjeta contada como faturamento em três consultas.
+
 **O que ainda não foi ensaiado:** o rollback. Não há procedimento escrito para
 "a migração quebrou em produção", e as migrações são aditivas por convenção mas
 não reversíveis por script.
@@ -122,7 +141,20 @@ não cobraria nem emitiria nota.
 Corrigido, e agora há guarda derivada (`scripts/env-example.test.mjs`) que lê
 `process.env[...]` do fonte e reprova o que não estiver declarado.
 
-### 3.3 Não há cabeçalho de segurança
+### 3.3 Um erro cru sob contenção, visto uma vez
+
+Com o portão inteiro em paralelo **e** a pilha de demonstração no mesmo
+Postgres, o caso de dois clientes no mesmo horário reprovou com `P2010` — o
+código genérico do Prisma para consulta crua — em vez do erro de domínio. O
+tradutor cobre `23P01` e `23505`; o que escapou foi outro SQLSTATE, provavelmente
+de contenção (`40P01` ou `40001`).
+
+Não reproduziu em três execuções, então não está nomeado como defeito. O que
+mudou é o diagnóstico: a asserção agora imprime **qual** código escapou. Se
+aparecer de novo, a próxima execução já diz o que consertar — e o que está em
+jogo é um cliente ver 500 em vez de "esse horário acabou de ser preenchido".
+
+### 3.4 Não há cabeçalho de segurança — resolvido
 
 Sem CSP, HSTS, `X-Content-Type-Options` nem `X-Frame-Options`. O vetor óbvio
 está fechado por outro caminho — os cookies do painel são `sameSite=strict` —,
@@ -138,7 +170,7 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 - [ ] Rollback de migração escrito e ensaiado
 - [ ] Restauração ensaiada **no ambiente de produção**, não só aqui
 - [ ] Decisão escrita sobre fiscal (`FISCAL_MODO`) e sobre cobrança (`PSP_MODO`)
-- [ ] Cabeçalhos de segurança
+- [x] Cabeçalhos de segurança
 - [ ] Barbearia-piloto escolhida, com plano de saída escrito
 
 ---

@@ -88,7 +88,9 @@ const AREAS = [
   ['chaves', '/admin/chaves', 'dono', `SELECT count(*) FROM api_keys WHERE revoked_at IS NULL`],
   ['webhooks', '/admin/webhooks', 'dono', `SELECT count(*) FROM webhook_endpoints`],
   ['trilha', '/admin/trilha', 'dono', `SELECT count(*) FROM audit_log`],
-  ['fiscal', '/admin/fiscal', 'gerente', `SELECT count(*) FROM fiscal_settings`],
+  // A tela lista **notas**, não o cadastro: perguntar por `fiscal_settings`
+  // acusaria a tela por um dado que ela não mostra.
+  ['fiscal', '/admin/fiscal', 'gerente', `SELECT count(*) FROM fiscal_invoices`],
   ['whatsapp', '/admin/whatsapp', 'dono', `SELECT count(*) FROM whatsapp_templates`],
   ['automacoes', '/admin/automacoes', 'gerente', `SELECT count(*) FROM automations`],
   ['campanhas', '/admin/campanhas', 'gerente', `SELECT count(*) FROM campaigns`],
@@ -138,17 +140,29 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
   };
   page.on('response', ouvinte);
 
+  /**
+   * Teto de tempo, e ele é **critério** — não paciência.
+   *
+   * A meta da SPEC §5.12 é P95 abaixo de 500 ms nas APIs comuns. Uma tela que
+   * não termina em quinze segundos sobre uma barbearia de oito meses não está
+   * lenta: está com um N+1 ou uma varredura sem índice, e isso é achado, não
+   * espera. Sem o teto a conferência inteira fica pendurada e não diz onde.
+   */
+  const comecou = Date.now();
   let resposta;
   try {
-    resposta = await page.goto(`${WEB}${rota}`, { waitUntil: 'networkidle', timeout: 30_000 });
-    await page.waitForTimeout(200);
+    resposta = await page.goto(`${WEB}${rota}`, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   } catch (erro) {
-    falhas.push(`${nome}: a tela não carregou (${erro.message.split('\n')[0]})`);
+    falhas.push(`${nome}: a tela não carregou em 15s (${erro.message.split('\n')[0].slice(0, 90)})`);
     page.off('response', ouvinte);
+    console.log(`\x1b[31mLENTA\x1b[0m  ${nome.padEnd(16)} ${rota}`);
     continue;
   }
   page.off('response', ouvinte);
   conferidas += 1;
+  const levou = Date.now() - comecou;
+  if (levou > 3000) avisos.push(`${nome}: a tela levou ${(levou / 1000).toFixed(1)}s para ${papel}`);
 
   if (!resposta || resposta.status() >= 400) {
     falhas.push(`${nome}: ${rota} respondeu ${resposta?.status() ?? 'nada'} para ${papel}`);
@@ -170,8 +184,8 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
    * conferência possível sem uma asserção escrita à mão por tela. Um alerta de
    * erro na tela conta como falha pelo mesmo motivo.
    */
-  const vazio = await page.locator('.vazio__titulo').first().textContent().catch(() => null);
-  const alerta = await page.locator('.ui-alert--danger').first().textContent().catch(() => null);
+  const vazio = await page.locator('.vazio__titulo').first().textContent({ timeout: 2000 }).catch(() => null);
+  const alerta = await page.locator('.ui-alert--danger').first().textContent({ timeout: 2000 }).catch(() => null);
 
   if (alerta) {
     falhas.push(`${nome}: a tela mostra erro — "${alerta.trim().slice(0, 120)}"`);
@@ -182,6 +196,7 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
   } else if (noBanco === 0 && !vazio) {
     avisos.push(`${nome}: sem dado no banco e sem estado vazio na tela`);
   }
+  console.log(`\x1b[32mok\x1b[0m     ${nome.padEnd(16)} ${String(noBanco).padStart(6)} no banco · ${(levou / 1000).toFixed(1)}s · ${papel}`);
 }
 
 // ---------------------------------------------------------------------------

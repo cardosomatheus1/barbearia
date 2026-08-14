@@ -186,7 +186,7 @@ export function semearDetalhes({ url, slug }) {
   sql.push(marketing({ tenant, local, fieis, hoje, balcao }));
   sql.push(precos({ tenant, local, balcao }));
   sql.push(vitrineEPerfil({ tenant, local, cadeiras, slug }));
-  sql.push(integracoes({ tenant, local, balcao }));
+  sql.push(integracoes(url, { tenant, local, balcao }));
   sql.push(privacidade(url, { tenant, fieis, cadeiras, hoje, balcao }));
 
   sql.push('COMMIT;');
@@ -439,14 +439,26 @@ function pacotes(url, { tenant, local, doNome, fieis, hoje }) {
       created_at: compradoEm,
     });
 
-    // Parte já consumida: pacote comprado e intocado não mostra o que a tela faz.
-    const usadas = entre(0, pacote.qtd - 1);
-    for (let n = 0; n < usadas; n += 1) {
-      const quando = somarDias(compradoEm, entre(3, 60));
-      if (quando > hoje) continue;
+    /**
+     * A unidade consumida aponta para **a comanda que a consumiu**.
+     *
+     * Não é enfeite de coerência: o DRE reconhece a receita do pacote no
+     * consumo e chega nela por `JOIN orders` — é dali que sai a unidade da
+     * venda. Um `package_uses` sem comanda some do relatório sem erro, e foi
+     * exatamente o que a conferência de números pegou: R$ 65 de receita
+     * reconhecida que o DRE não via.
+     */
+    const comandas = consultar(
+      url,
+      `SELECT id, business_day FROM orders
+        WHERE tenant_id = ${lit(tenant)} AND customer_id = ${lit(cliente.id)}
+          AND status = 'paid' AND business_day >= ${lit(diaDe(compradoEm))}
+        ORDER BY business_day LIMIT ${pacote.qtd - 1}`,
+    );
+    for (const [orderId, dia] of comandas) {
       usos.push({
-        id: id(), tenant_id: tenant, customer_package_id: compraId,
-        value_cents: unitario, business_day: diaDe(quando), created_at: quando,
+        id: id(), tenant_id: tenant, customer_package_id: compraId, order_id: orderId,
+        value_cents: unitario, business_day: dia, created_at: new Date(`${dia}T18:00:00Z`),
       });
     }
   }
@@ -463,7 +475,7 @@ function pacotes(url, { tenant, local, doNome, fieis, hoje }) {
         'unit_value_cents', 'transferable', 'purchased_at', 'expires_at', 'created_at'],
       compras),
     inserir('package_uses',
-      ['id', 'tenant_id', 'customer_package_id', 'value_cents', 'business_day', 'created_at'],
+      ['id', 'tenant_id', 'customer_package_id', 'order_id', 'value_cents', 'business_day', 'created_at'],
       usos),
     // `location_id` fica de fora: a compra é da casa, e a unidade sai da venda.
     `-- ${usos.length} unidades ja consumidas`,
@@ -1025,8 +1037,17 @@ function vitrineEPerfil({ tenant, local, cadeiras, slug }) {
            (SELECT s.id FROM services s
              WHERE s.tenant_id = t.id AND s.active AND s.bookable_online
              ORDER BY s.price_cents LIMIT 1),
-           (SELECT round(avg(r.rating) * 100)::int FROM reviews r WHERE r.tenant_id = t.id),
-           (SELECT count(*)::int FROM reviews r WHERE r.tenant_id = t.id),
+           -- O **mesmo predicado** do que é público: nota contestada sai da
+           -- vitrine, e nota baixa espera as 48h da janela de recuperação.
+           -- Copiar "a média de tudo" faria o card anunciar um número que a
+           -- pagina da barbearia nao mostra. A varredura do produto, que e
+           -- quem manda, usa exatamente estas condicoes.
+           (SELECT round(avg(r.rating) * 100)::int FROM reviews r
+             WHERE r.tenant_id = t.id AND r.contested_at IS NULL
+               AND (r.rating >= 4 OR r.created_at <= now() - interval '48 hours')),
+           (SELECT count(*)::int FROM reviews r
+             WHERE r.tenant_id = t.id AND r.contested_at IS NULL
+               AND (r.rating >= 4 OR r.created_at <= now() - interval '48 hours')),
            l.amenities,
            EXISTS (SELECT 1 FROM club_plans p WHERE p.tenant_id = t.id AND p.active),
            now()
@@ -1043,7 +1064,7 @@ function vitrineEPerfil({ tenant, local, cadeiras, slug }) {
 // 14 — WhatsApp, fiscal, chave de API e webhook
 // ---------------------------------------------------------------------------
 
-function integracoes({ tenant, local, balcao }) {
+function integracoes(url, { tenant, local, balcao }) {
   /**
    * O número é **da barbearia**, verificado na Meta, nunca o da plataforma.
    * A mensagem que chega de número desconhecido é a que o cliente bloqueia.
@@ -1120,7 +1141,42 @@ function integracoes({ tenant, local, balcao }) {
       ]),
   ].join('\n');
 
+  /**
+   * Notas emitidas, em três estados.
+   *
+   * A nota **nunca** bloqueia a venda: ela nasce `pendente` dentro da transação
+   * que fecha a comanda, a fila fala com a prefeitura, e o balcão vê o estado.
+   * Sem a rejeitada, a tela não mostra o caminho que mais importa — corrigir o
+   * cadastro e emitir de novo sobre a mesma comanda.
+   */
+  const notas = consultar(
+    url,
+    `SELECT o.id, o.total_cents, o.business_day FROM orders o
+      WHERE o.tenant_id = ${lit(tenant)} AND o.status = 'paid'
+      ORDER BY o.business_day DESC LIMIT 24`,
+  ).map(([orderId, total, dia], i) => {
+    const estado = i === 0 ? 'pendente' : i === 1 ? 'rejeitada' : 'autorizada';
+    return {
+      id: id(), tenant_id: tenant, location_id: local, order_id: orderId,
+      status: estado, regime: 'simples', service_cents: Number(total),
+      iss_bps: 200, service_code: '1401', municipality_ibge: '2927408',
+      number: estado === 'autorizada' ? String(1000 + i) : null,
+      provider_invoice_id: estado === 'pendente' ? null : `nf_demo_${i}`,
+      rejection_reason: estado === 'rejeitada'
+        ? 'Inscricao municipal invalida para o codigo de servico informado'
+        : null,
+      requested_at: new Date(`${dia}T19:00:00Z`),
+      authorized_at: estado === 'autorizada' ? new Date(`${dia}T19:02:00Z`) : null,
+      created_by: balcao.id, created_by_name: balcao.nome,
+    };
+  });
+
   return [whats,
+    inserir('fiscal_invoices',
+      ['id', 'tenant_id', 'location_id', 'order_id', 'status', 'regime', 'service_cents',
+        'iss_bps', 'service_code', 'municipality_ibge', 'number', 'provider_invoice_id',
+        'rejection_reason', 'requested_at', 'authorized_at', 'created_by', 'created_by_name'],
+      notas),
     inserir('whatsapp_templates',
       ['id', 'tenant_id', 'location_id', 'kind', 'name', 'body', 'status'],
       modelos.map(([tipo, nome, corpo, estado]) => ({

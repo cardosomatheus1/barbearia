@@ -41,11 +41,24 @@ const RAIZ = new URL('..', import.meta.url);
  */
 const ARQUIVOS = execFileSync(
   'git',
-  ['ls-files', '--cached', '--others', '--exclude-standard', 'packages', 'apps'],
+  ['ls-files', '--cached', '--others', '--exclude-standard', 'packages', 'apps', 'scripts'],
   { encoding: 'utf8', cwd: RAIZ.pathname },
 )
   .split('\n')
-  .filter((caminho) => caminho.includes('/src/') && caminho.endsWith('.ts'));
+  /**
+   * `scripts/` entrou depois, e por ter sido mordido duas vezes.
+   *
+   * Os semeadores montam alguns KB de SQL em template literal e caíram na mesma
+   * armadilha do produto — com um sintoma pior: o erro sai como sintaxe de
+   * JavaScript apontando para uma linha de prosa em português, e o `node
+   * --check` é quem acusa, não o portão. Guarda que só olha onde já foi
+   * consertado é guarda que não vale.
+   */
+  .filter(
+    (caminho) =>
+      (caminho.includes('/src/') && caminho.endsWith('.ts')) ||
+      (caminho.startsWith('scripts/') && caminho.endsWith('.mjs') && !caminho.includes('.test.')),
+  );
 
 const CHAMADA = /\$(?:query|execute)Raw(?:Unsafe)?/g;
 
@@ -152,6 +165,38 @@ describe('crase dentro de consulta SQL', () => {
      * teto esconderia regressão. Aquele ficou como estava.
      */
   }, 60_000);
+
+  it('comentário de SQL não carrega crase', () => {
+    /**
+     * A mesma armadilha com outra assinatura.
+     *
+     * A varredura acima procura crase dentro de `$queryRaw` do Prisma, e não
+     * alcança os semeadores: eles montam alguns KB de SQL como template
+     * literal comum e mandam para o `psql`. Uma crase num comentário `--` ali
+     * fecha o template do mesmo jeito, e o erro sai como sintaxe de JavaScript
+     * apontando para uma linha de prosa em português — pior de ler que o do
+     * produto, e fora do portão, porque quem acusa é o `node --check`.
+     *
+     * O sinal é preciso e quase não tem superfície de falso positivo: linha que
+     * começa com `--` e contém crase é SQL comentado dentro de template. Foi
+     * cometida duas vezes aqui em duas horas.
+     */
+    const achados = [];
+    for (const arquivo of ARQUIVOS) {
+      const fonte = readFileSync(new URL(arquivo, RAIZ), 'utf8');
+      fonte.split('\n').forEach((linha, i) => {
+        const limpa = linha.trim();
+        if (limpa.startsWith('--') && limpa.includes('`')) {
+          achados.push(`${arquivo}:${i + 1} — ${limpa.slice(0, 70)}`);
+        }
+      });
+    }
+
+    expect(
+      achados,
+      'crase em comentário de SQL fecha o template; escreva sem crase',
+    ).toEqual([]);
+  });
 
   it('toda consulta fecha numa linha que só tem a crase', () => {
     const problemas = [];

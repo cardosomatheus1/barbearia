@@ -432,7 +432,23 @@ describeIfDb('reserva', () => {
     const erro = (recusados[0] as PromiseRejectedResult).reason as BookingError;
     // Pode cair na validação ou na constraint, dependendo do entrelaçamento —
     // as duas são respostas corretas, e nenhuma delas é overbooking.
-    expect(['slot_taken', 'slot_not_available']).toContain(erro.code);
+    /**
+     * A mensagem nomeia o erro cru quando ele aparece.
+     *
+     * Aconteceu uma vez, com o portão inteiro em paralelo e a pilha de
+     * demonstração disputando o mesmo Postgres: o caso reprovou com `P2010`, o
+     * código genérico do Prisma para consulta crua. `pgCode` traduz `23P01` e
+     * `23505`; o que escapou foi outro SQLSTATE — provavelmente `40P01` ou
+     * `40001`, que são de contenção. Não reproduziu em três execuções, e
+     * nomear um defeito que não se reproduz é pior que não nomeá-lo.
+     *
+     * O que fica é o diagnóstico: na próxima vez o relatório diz **qual**
+     * código escapou, em vez de "esperava conter P2010".
+     */
+    expect(
+      ['slot_taken', 'slot_not_available'],
+      `o erro veio cru: ${erro.code} — ${String(erro.message).slice(0, 300)}`,
+    ).toContain(erro.code);
 
     const total = await admin.$queryRawUnsafe<{ n: bigint }[]>(
       `SELECT count(*) AS n FROM appointments`,
