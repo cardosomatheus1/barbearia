@@ -901,7 +901,7 @@ async function prepararAvaliacoes(slug, clienteDaFicha) {
    * medir e o menos parecido com a barbearia de verdade.
    */
   const agendamentos = psql(
-    `select id from appointments where tenant_id = '${tenant}' order by starts_at limit 4`,
+    `select id from appointments where tenant_id = '${tenant}' order by starts_at limit 5`,
   )
     .split('\n')
     .map((l) => l.trim())
@@ -921,6 +921,14 @@ async function prepararAvaliacoes(slug, clienteDaFicha) {
     // só mostra a média a partir de três **publicadas**, e a nota 2 está
     // segurada pela janela de 48h.
     [5, 'Atendimento impecavel do comeco ao fim, marquei pelo site em dois minutos.', null],
+    /**
+     * A quinta entra com o bloco 80, e é a terceira **publicada**.
+     *
+     * Com quatro, contestar a terceira derrubava a média pública abaixo do
+     * mínimo de exibição e o painel mostrava `—` — a tela ficava sem a única
+     * coisa que este bloco existe para mostrar: as duas médias afastadas.
+     */
+    [4, 'Barba caprichada e a toalha quente no fim faz diferenca. Volto no mes que vem.', null],
   ];
 
   /**
@@ -979,6 +987,25 @@ async function prepararAvaliacoes(slug, clienteDaFicha) {
        ON CONFLICT DO NOTHING`,
     );
   });
+
+  /**
+   * Uma delas nasce **contestada** (bloco 80).
+   *
+   * O estado precisa aparecer no print: é ele que carrega o motivo, a
+   * justificativa e — o que mais importa — o botão de retirar. Sem semear, a
+   * medição fotografaria só a entrada do estado, e a saída ficaria sem prova
+   * visual justamente na tela em que a §6 pergunta 3 é decidida.
+   */
+  const contestada = agendamentos[2];
+  if (contestada) {
+    psql(
+      `UPDATE reviews
+          SET contested_at = now() - interval '2 days',
+              contest_reason = 'nunca_foi_cliente',
+              contest_note = 'Nao temos atendimento no nome dela, e o texto e o mesmo que apareceu em outras tres barbearias da rua'
+        WHERE tenant_id = '${tenant}' AND appointment_id = '${contestada}'`,
+    );
+  }
 }
 
 /**

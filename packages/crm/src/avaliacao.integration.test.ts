@@ -7,9 +7,11 @@ import {
   avaliacoesDoCliente,
   avaliacoesPublicas,
   avaliarAtendimento,
+  contestarAvaliacao,
   mediaDoProfissional,
   painelDeAvaliacoes,
   registrarRecuperacao,
+  retirarContestacao,
 } from './avaliacao.js';
 import { anonimizarCliente } from './anonimizacao.js';
 
@@ -522,6 +524,271 @@ describeIfDb('avaliações', () => {
         tx.$executeRaw`UPDATE reviews SET comment = NULL WHERE id = ${alvo.id}::uuid`,
       ),
     ).rejects.toThrow();
+  });
+
+
+  // -- a contestação (bloco 80) ------------------------------------------------
+
+  it('contestada sai da vitrine e continua na média do gestor', async () => {
+    /**
+     * A frase do bloco inteiro, provada nos dois lados de uma vez. Uma nota 1
+     * junto de três 5 dá média 4,0 — e ela **continua** 4,0 depois de
+     * contestada, enquanto a pública sobe para 5,0. Se a suspensão mexesse na
+     * média interna, o dono cegaria o próprio termômetro com o botão que o
+     * produto lhe deu.
+     *
+     * Quatro avaliações e não três: com três, tirar uma derrubaria a pública
+     * abaixo do mínimo de exibição e o número sumiria — o teste passaria
+     * medindo o mínimo do bloco 43, e não a média recalculada.
+     */
+    for (const nota of [5, 5, 5, 1]) {
+      const id = await atendimento();
+      await avaliarAtendimento({
+        tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota, agora: AGORA,
+      });
+    }
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+    expect(alvo.nota).toBe(1);
+
+    // Depois da janela, sem contestar: as quatro estão no ar, e a nota 1 junto.
+    const depois = horas(JANELA_DE_RECUPERACAO_HORAS);
+    const antes = await avaliacoesPublicas(TENANT, depois);
+    expect(antes.total).toBe(4);
+    expect(antes.media).toBe(4);
+
+    await contestarAvaliacao({
+      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
+      nota: 'Não temos atendimento no nome dela, e o telefone não é de cliente nosso.',
+      ator, agora: horas(2),
+    });
+
+    const publica = await avaliacoesPublicas(TENANT, depois);
+    expect(publica.total).toBe(3);
+    expect(publica.media).toBe(5);
+
+    const painel = await painelDeAvaliacoes(TENANT, depois);
+    expect(painel.total).toBe(4);
+    expect(painel.media).toBe(4);
+    // E as duas médias se afastaram: é essa distância que diz ao dono o tamanho
+    // do que ele suspendeu.
+    expect(painel.mediaPublica).toBe(5);
+    // E o cartão diz por quê — um selo mudo obrigaria a abrir a documentação.
+    const contestada = painel.ultimas.find((a) => a.id === alvo.id)!;
+    expect(contestada.contestacaoMotivo).toBe('nunca_foi_cliente');
+    expect(contestada.publicada).toBe(false);
+  });
+
+  it('a nota cinco estrelas de spam sai igual', async () => {
+    // `estaPublicada` olha a contestação **antes** da nota alta: elogio comprado
+    // publica na hora, e é justamente por isso que ele precisa de saída.
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id,
+      nota: 5, comentario: 'Compre seguidores no site tal', agora: AGORA,
+    });
+    expect((await avaliacoesPublicas(TENANT, AGORA)).total).toBe(1);
+
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]!;
+    await contestarAvaliacao({
+      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'spam',
+      nota: 'Texto de propaganda, o mesmo que apareceu em três barbearias da rua.',
+      ator, agora: horas(1),
+    });
+
+    expect((await avaliacoesPublicas(TENANT, horas(1))).total).toBe(0);
+  });
+
+  it('contestar não afrouxa a imutabilidade da nota nem do texto', async () => {
+    // O risco de virar "apagar com outro nome" mora aqui: se a contestação
+    // tivesse aberto a linha para reescrita, ela teria trocado um problema por
+    // um maior.
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id,
+      nota: 1, comentario: 'Esperei quarenta minutos', agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+    await contestarAvaliacao({
+      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'ofensa',
+      nota: 'O comentário completo tem xingamento que não cabe na tela.',
+      ator, agora: horas(1),
+    });
+
+    await expect(
+      withTenant(TENANT, (tx) =>
+        tx.$executeRaw`UPDATE reviews SET rating = 5 WHERE id = ${alvo.id}::uuid`,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withTenant(TENANT, (tx) =>
+        tx.$executeRaw`DELETE FROM reviews WHERE id = ${alvo.id}::uuid`,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('contestar duas vezes é recusado, e não grava a segunda trilha', async () => {
+    // O gatilho do banco recusaria a reescrita com erro de banco no balcão. A
+    // guarda de estado é quem transforma isso na frase que o gestor entende.
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota: 2, agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+
+    const contestar = (motivo: 'spam' | 'duplicada') =>
+      contestarAvaliacao({
+        tenantId: TENANT, avaliacaoId: alvo.id, motivo,
+        nota: 'A mesma avaliação já tinha entrado no dia anterior.',
+        ator, agora: horas(1),
+      });
+
+    await contestar('spam');
+    await expect(contestar('duplicada')).rejects.toMatchObject({ code: 'ja_contestada' });
+
+    const trilha = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ n: bigint; after: unknown }[]>`
+        SELECT count(*) AS n, min(after::text) AS after
+          FROM audit_log WHERE action = 'review.contested'
+      `,
+    );
+    expect(Number(trilha[0]!.n)).toBe(1);
+    // A trilha guarda o motivo e o tamanho — nunca o texto, que costuma nomear
+    // o cliente e que `audit_log` não sabe anonimizar.
+    expect(String(trilha[0]!.after)).toContain('spam');
+    expect(String(trilha[0]!.after)).not.toContain('avaliação já tinha entrado');
+  });
+
+  it('contestar sem motivo da lista, ou sem justificativa, é recusado', async () => {
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota: 2, agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+
+    await expect(
+      contestarAvaliacao({
+        tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nao_gostei',
+        nota: 'Não gostei desta avaliação.', ator, agora: horas(1),
+      }),
+    ).rejects.toMatchObject({ code: 'motivo_invalido' });
+
+    await expect(
+      contestarAvaliacao({
+        tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'spam',
+        nota: 'spam', ator, agora: horas(1),
+      }),
+    ).rejects.toMatchObject({ code: 'motivo_curto' });
+
+    // E nada disso encostou na avaliação.
+    expect((await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]?.contestadaEm).toBeNull();
+  });
+
+  it('a vizinha não contesta a avaliação desta casa', async () => {
+    // A RLS separa barbearias, e o `UPDATE` sem filtro de tenant no `WHERE` é o
+    // que a política precisa barrar sozinha.
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota: 1, agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+
+    await expect(
+      contestarAvaliacao({
+        tenantId: RIVAL, avaliacaoId: alvo.id, motivo: 'spam',
+        nota: 'Isto não é da minha barbearia, e mesmo assim tentei.',
+        ator, agora: horas(1),
+      }),
+    ).rejects.toMatchObject({ code: 'avaliacao_nao_encontrada' });
+
+    expect((await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]?.contestadaEm).toBeNull();
+  });
+
+
+  it('retirar a contestação devolve a avaliação ao ar', async () => {
+    /**
+     * A saída do estado, e é ela que separa contestar de apagar. Sem este
+     * caminho a casa que contestasse por engano deixaria a nota fora da vitrine
+     * para sempre — e o botão seria "apagar" com um carimbo diferente.
+     */
+    for (const nota of [5, 5, 5, 1]) {
+      const id = await atendimento();
+      await avaliarAtendimento({
+        tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota, agora: AGORA,
+      });
+    }
+    const depois = horas(JANELA_DE_RECUPERACAO_HORAS);
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+
+    await contestarAvaliacao({
+      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'duplicada',
+      nota: 'A mesma avaliação já tinha entrado no dia anterior.', ator, agora: horas(1),
+    });
+    expect((await avaliacoesPublicas(TENANT, depois)).total).toBe(3);
+
+    await retirarContestacao({ tenantId: TENANT, avaliacaoId: alvo.id, ator });
+
+    const voltou = await avaliacoesPublicas(TENANT, depois);
+    expect(voltou.total).toBe(4);
+    expect(voltou.media).toBe(4);
+    expect((await painelDeAvaliacoes(TENANT, depois)).ultimas.find((a) => a.id === alvo.id)
+      ?.contestadaEm).toBeNull();
+
+    // As duas pontas ficam na trilha: "esta nota sumiu por três semanas" tem
+    // começo e fim encontráveis.
+    const trilha = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ action: string }[]>`
+        SELECT action FROM audit_log
+         WHERE action IN ('review.contested', 'review.uncontested')
+         ORDER BY created_at
+      `,
+    );
+    expect(trilha.map((t) => t.action)).toEqual(['review.contested', 'review.uncontested']);
+  });
+
+  it('retirar o que não está contestado é recusado', async () => {
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota: 5, agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]!;
+
+    await expect(
+      retirarContestacao({ tenantId: TENANT, avaliacaoId: alvo.id, ator }),
+    ).rejects.toMatchObject({ code: 'nao_contestada' });
+    await expect(
+      retirarContestacao({ tenantId: RIVAL, avaliacaoId: alvo.id, ator }),
+    ).rejects.toMatchObject({ code: 'avaliacao_nao_encontrada' });
+  });
+
+  it('anonimizar tira o nome de dentro da justificativa e deixa o motivo', async () => {
+    /**
+     * `contest_note` é texto do balcão **sobre quem avaliou**, e a tela sugere
+     * uma frase que nomeia a pessoa. Sem o gatilho, quem exerce o direito à
+     * exclusão sairia do cadastro e continuaria nomeado ali — numa linha que a
+     * imutabilidade da contestação tinha acabado de tornar incorrigível, fora da
+     * exportação do titular e fora do alcance de qualquer varredura.
+     */
+    const id = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: id, nota: 1, agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
+    await contestarAvaliacao({
+      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
+      nota: 'O Carlos Souza nunca foi atendido aqui, e o telefone não é de cliente nosso.',
+      ator, agora: horas(1),
+    });
+
+    await anonimizarCliente({
+      tenantId: TENANT, customerId: CARLOS, motivo: 'Pedido de exclusão do titular', ator,
+    });
+
+    const depois = (await painelDeAvaliacoes(TENANT, horas(2))).ultimas[0]!;
+    expect(depois.contestacaoNota).not.toContain('Carlos Souza');
+    // O motivo fica: ele é de lista fechada, não nomeia ninguém, e é o que
+    // continua explicando por que a nota está fora do ar.
+    expect(depois.contestacaoMotivo).toBe('nunca_foi_cliente');
+    expect(depois.contestadaEm).not.toBeNull();
   });
 
 });

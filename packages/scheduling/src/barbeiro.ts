@@ -83,6 +83,9 @@ export async function perfilPublicoDoBarbeiro(
     const notas = await tx.$queryRaw<{ rating: number }[]>`
       SELECT r.rating FROM reviews r
        WHERE r.professional_id = ${barbeiro.id}::uuid
+         -- Contestada sai da vitrine (bloco 80). A média do painel continua
+         -- contando esta nota; o que muda é só o que o público vê.
+         AND r.contested_at IS NULL
          AND (r.rating >= 4 OR r.created_at <= ${desde48h})
     `;
     const atendidos = await tx.$queryRaw<{ n: bigint }[]>`

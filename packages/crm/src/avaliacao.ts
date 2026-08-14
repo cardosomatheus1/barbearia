@@ -10,8 +10,10 @@ import {
   podeAvaliar,
   precisaDeRecuperacao,
   resumoPublico,
+  ehMotivoDaContestacao,
   validarNota,
   type Avaliacao,
+  type MotivoDaContestacao,
   type CategoriaDaAvaliacao,
   type DesfechoDaRecuperacao,
   type Nota,
@@ -36,6 +38,9 @@ export type AvaliacaoFailure =
   | 'comentario_longo'
   | 'avaliacao_nao_encontrada'
   | 'ja_resolvida'
+  | 'ja_contestada'
+  | 'nao_contestada'
+  | 'motivo_invalido'
   | 'motivo_curto';
 
 export class AvaliacaoError extends Error {
@@ -53,6 +58,9 @@ const MENSAGEM: Readonly<Record<AvaliacaoFailure, string>> = {
   comentario_longo: 'O comentário ficou longo demais.',
   avaliacao_nao_encontrada: 'Esta avaliação não existe.',
   ja_resolvida: 'Esta avaliação já foi tratada.',
+  ja_contestada: 'Esta avaliação já está contestada.',
+  nao_contestada: 'Esta avaliação não está contestada.',
+  motivo_invalido: 'Escolha um dos motivos da lista.',
   motivo_curto: 'Escreva o que foi feito — pelo menos uma frase.',
 };
 
@@ -176,6 +184,8 @@ export async function avaliarAtendimento(entrada: {
           comentario: null,
           criadaEm: criada.created_at,
           resolvidaEm: null,
+          // Nasce sem contestação: a casa só contesta o que já leu.
+          contestadaEm: null,
         },
         agora,
       ),
@@ -195,6 +205,9 @@ interface LinhaDaAvaliacao {
   resolved_at: Date | null;
   outcome: DesfechoDaRecuperacao | null;
   resolution_note: string | null;
+  contested_at: Date | null;
+  contest_reason: MotivoDaContestacao | null;
+  contest_note: string | null;
   cliente: string | null;
   profissional: string | null;
   servico: string | null;
@@ -208,6 +221,7 @@ interface LinhaDaAvaliacao {
 const SELECT_DA_AVALIACAO = `
   SELECT r.id, r.rating, r.comment, r.created_at, r.resolved_at, r.outcome,
          r.resolution_note,
+         r.contested_at, r.contest_reason, r.contest_note,
          c.name AS cliente, p.name AS profissional,
          a.ends_at AS atendido_em,
          (SELECT s.name FROM appointment_services aps
@@ -236,6 +250,10 @@ export interface AvaliacaoNaTela {
   readonly resolvidaEm: string | null;
   readonly desfecho: DesfechoDaRecuperacao | null;
   readonly resolucao: string | null;
+  /** Suspensa da vitrine, e nunca apagada — a média do painel continua contando. */
+  readonly contestadaEm: string | null;
+  readonly contestacaoMotivo: MotivoDaContestacao | null;
+  readonly contestacaoNota: string | null;
   readonly categorias: Readonly<Partial<Record<CategoriaDaAvaliacao, number>>>;
 }
 
@@ -246,6 +264,7 @@ function paraTela(linha: LinhaDaAvaliacao, agora: Date): AvaliacaoNaTela {
     comentario: linha.comment,
     criadaEm: linha.created_at,
     resolvidaEm: linha.resolved_at,
+    contestadaEm: linha.contested_at,
   };
 
   const categorias: Partial<Record<CategoriaDaAvaliacao, number>> = {};
@@ -271,6 +290,9 @@ function paraTela(linha: LinhaDaAvaliacao, agora: Date): AvaliacaoNaTela {
     resolvidaEm: linha.resolved_at?.toISOString() ?? null,
     desfecho: linha.outcome,
     resolucao: linha.resolution_note,
+    contestadaEm: linha.contested_at?.toISOString() ?? null,
+    contestacaoMotivo: linha.contest_reason,
+    contestacaoNota: linha.contest_note,
     categorias,
   };
 }
@@ -299,8 +321,10 @@ export async function painelDeAvaliacoes(
   limite = 30,
 ): Promise<PainelDeAvaliacoes> {
   return withTenant(tenantId, async (tx) => {
-    const todas = await tx.$queryRaw<{ rating: number; created_at: Date }[]>`
-      SELECT rating, created_at FROM reviews
+    const todas = await tx.$queryRaw<
+      { rating: number; created_at: Date; contested_at: Date | null }[]
+    >`
+      SELECT rating, created_at, contested_at FROM reviews
     `;
 
     const linhas = await tx.$queryRawUnsafe<LinhaDaAvaliacao[]>(
@@ -309,10 +333,24 @@ export async function painelDeAvaliacoes(
     );
     const naTela = linhas.map((l) => paraTela(l, agora));
 
+    /**
+     * A contestada entra em `media` e **não** em `mediaPublica`.
+     *
+     * É a distância entre as duas que diz ao dono o tamanho do que ele suspendeu:
+     * uma nota 1 contestada continua puxando a média interna para baixo, e é
+     * assim que a suspensão não vira o filtro embutido que a SPEC §4.10 proíbe.
+     */
     const publicadas = todas
       .filter((t) =>
         estaPublicada(
-          { id: '', nota: t.rating as Nota, comentario: null, criadaEm: t.created_at, resolvidaEm: null },
+          {
+            id: '',
+            nota: t.rating as Nota,
+            comentario: null,
+            criadaEm: t.created_at,
+            resolvidaEm: null,
+            contestadaEm: t.contested_at,
+          },
           agora,
         ),
       )
@@ -368,7 +406,10 @@ export async function avaliacoesPublicas(
         FROM reviews r
         LEFT JOIN customers c ON c.id = r.customer_id
         LEFT JOIN professionals p ON p.id = r.professional_id
-       WHERE r.rating >= 4 OR r.created_at <= ${new Date(agora.getTime() - 48 * 3_600_000)}
+       -- Contestada sai da vitrine (bloco 80), e só dela: a média do painel,
+       -- logo acima, continua contando tudo — publicado ou não.
+       WHERE r.contested_at IS NULL
+         AND (r.rating >= 4 OR r.created_at <= ${new Date(agora.getTime() - 48 * 3_600_000)})
        ORDER BY r.created_at DESC
     `;
 
@@ -465,6 +506,130 @@ export async function registrarRecuperacao(entrada: {
     });
 
     return { resolvida: true };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// A contestação
+// ---------------------------------------------------------------------------
+
+/**
+ * Suspende da vitrine uma avaliação que a casa alega ser injusta (bloco 80).
+ *
+ * **Isto não é apagar, e a diferença precisa ser visível de dentro do código.**
+ * A nota e o comentário continuam imutáveis pelo gatilho do bloco 43, a linha
+ * continua na tabela, e a média que o gestor vê continua contando esta
+ * avaliação — só o predicado do que é público olha `contested_at`. Se contestar
+ * mexesse na média interna, o dono cegaria o próprio termômetro com o botão que
+ * o produto lhe deu.
+ *
+ * O motivo é de **lista fechada**. Texto livre viraria "não gostei", e "não
+ * gostei" é apagar com outro nome — os cinco valores descrevem coisas que ou
+ * aconteceram ou não aconteceram, e é isso que torna a suspensão auditável em
+ * vez de discricionária. A nota escrita é obrigatória nas três camadas: aqui,
+ * na borda e por `CHECK`.
+ */
+export async function contestarAvaliacao(entrada: {
+  readonly tenantId: string;
+  readonly avaliacaoId: string;
+  readonly motivo: string;
+  readonly nota: string;
+  readonly ator: Ator;
+  readonly agora?: Date;
+}): Promise<{ readonly contestada: true }> {
+  if (!ehMotivoDaContestacao(entrada.motivo)) recusar('motivo_invalido');
+  const nota = entrada.nota.trim();
+  if (nota.length < 10 || nota.length > MAXIMO_DA_RESOLUCAO) recusar('motivo_curto');
+
+  const agora = entrada.agora ?? new Date();
+
+  return withTenant(entrada.tenantId, async (tx) => {
+    /**
+     * `contested_at IS NULL` no `WHERE`, com a contagem conferida.
+     *
+     * O gatilho da migração 0077 recusa reescrever uma contestação, então o
+     * segundo toque morreria em erro de banco no balcão. A guarda aqui é quem
+     * transforma isso na frase que o gestor entende — e é o precedente de
+     * `registrarRecuperacao`, logo acima.
+     */
+    const afetadas = await tx.$executeRaw`
+      UPDATE reviews
+         SET contested_at = ${agora}, contested_by = ${entrada.ator.id}::uuid,
+             contest_reason = ${entrada.motivo}::review_contest_reason,
+             contest_note = ${nota}
+       WHERE id = ${entrada.avaliacaoId}::uuid AND contested_at IS NULL
+    `;
+    if (afetadas === 0) {
+      const existe = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM reviews WHERE id = ${entrada.avaliacaoId}::uuid
+      `;
+      recusar(existe[0] ? 'ja_contestada' : 'avaliacao_nao_encontrada');
+    }
+
+    /**
+     * A trilha guarda o motivo e o **tamanho** da nota, nunca o texto dela.
+     *
+     * É a regra do dado pessoal na trilha, e aqui ela vale por outro caminho: a
+     * justificativa costuma nomear o cliente ("a Ana nunca veio aqui"), e
+     * `audit_log` é append-only e fica de fora da exportação do titular.
+     */
+    await audit(tx, {
+      actorId: entrada.ator.id,
+      actorName: entrada.ator.name,
+      action: 'review.contested',
+      entity: 'reviews',
+      entityId: entrada.avaliacaoId,
+      after: { motivo: entrada.motivo, caracteres: nota.length },
+    });
+
+    return { contestada: true };
+  });
+}
+
+/**
+ * Retira a contestação e devolve a avaliação ao ar (bloco 80).
+ *
+ * **O estado precisa ter saída, e é o que separa contestar de apagar.** Sem
+ * esta função, a casa que contestasse por engano deixaria a nota fora da
+ * vitrine para sempre, sem caminho de volta em tela nenhuma — apagar com mais
+ * passos, que é exatamente o que a SPEC §4.10 proíbe.
+ *
+ * Ela não exige permissão mais alta que a entrada, e o motivo é a direção: quem
+ * retira devolve a avaliação ao público. É o sentido seguro, e cobrar mais para
+ * desfazer do que para fazer produziria contestação sem quem a desfizesse.
+ *
+ * Recontestar continua possível — retirar e contestar de novo, dois gestos e
+ * duas linhas na trilha. O que o gatilho recusa é trocar o motivo por baixo,
+ * que apagaria o registro de por que a nota tinha saído do ar.
+ */
+export async function retirarContestacao(entrada: {
+  readonly tenantId: string;
+  readonly avaliacaoId: string;
+  readonly ator: Ator;
+}): Promise<{ readonly retirada: true }> {
+  return withTenant(entrada.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      UPDATE reviews
+         SET contested_at = NULL, contested_by = NULL,
+             contest_reason = NULL, contest_note = NULL
+       WHERE id = ${entrada.avaliacaoId}::uuid AND contested_at IS NOT NULL
+    `;
+    if (afetadas === 0) {
+      const existe = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM reviews WHERE id = ${entrada.avaliacaoId}::uuid
+      `;
+      recusar(existe[0] ? 'nao_contestada' : 'avaliacao_nao_encontrada');
+    }
+
+    await audit(tx, {
+      actorId: entrada.ator.id,
+      actorName: entrada.ator.name,
+      action: 'review.uncontested',
+      entity: 'reviews',
+      entityId: entrada.avaliacaoId,
+    });
+
+    return { retirada: true };
   });
 }
 

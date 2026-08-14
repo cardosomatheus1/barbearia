@@ -298,6 +298,21 @@ export const PERMISSOES = [
    */
   'reviews.view',
   'reviews.recover',
+  /**
+   * Contestar uma nota injusta (bloco 80).
+   *
+   * Não é a terceira que apaga: a nota e o texto continuam imutáveis, e a média
+   * que o gestor vê continua contando esta avaliação. O que a contestação faz é
+   * **suspender** da vitrine enquanto a casa alega spam, ofensa, profissional
+   * errado, cliente que nunca veio ou avaliação repetida — com o motivo de
+   * lista fechada, uma nota escrita e trilha.
+   *
+   * Própria e **não** `reviews.recover`, que vem no papel de recepção: recuperar
+   * é ligar para o cliente dentro da janela, e tirar uma nota do ar é a única
+   * coisa neste produto que decide o que o público **não** vê. Ela é do dono,
+   * e ele concede quando quiser.
+   */
+  'reviews.contest',
   'reports.finance',
   'reports.operational',
   'inventory.view',

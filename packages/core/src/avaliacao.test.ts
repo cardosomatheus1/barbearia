@@ -16,6 +16,9 @@ import {
   resumoPublico,
   validarNota,
   type Avaliacao,
+  MOTIVOS_DA_CONTESTACAO,
+  ROTULO_DO_MOTIVO,
+  ehMotivoDaContestacao,
 } from './avaliacao.js';
 
 const AGORA = new Date('2026-11-01T12:00:00Z');
@@ -26,6 +29,7 @@ const avaliacao = (extra: Partial<Avaliacao> = {}): Avaliacao => ({
   comentario: null,
   criadaEm: AGORA,
   resolvidaEm: null,
+  contestadaEm: null,
   ...extra,
 });
 
@@ -176,5 +180,45 @@ describe('as estrelas', () => {
   it('desenham a nota', () => {
     expect(estrelas(2)).toBe('★★☆☆☆');
     expect(estrelas(5)).toBe('★★★★★');
+  });
+});
+
+describe('contestar uma avaliação', () => {
+  const nota = (n: 1 | 2 | 3 | 4 | 5, extra: Partial<Avaliacao> = {}): Avaliacao => ({
+    id: 'a',
+    nota: n,
+    comentario: null,
+    criadaEm: new Date('2026-11-10T10:00:00Z'),
+    resolvidaEm: null,
+    contestadaEm: null,
+    ...extra,
+  });
+
+  const DEPOIS = new Date('2026-11-13T10:00:00Z');
+
+  it('contestada sai da vitrine, e a nota alta sai igual', () => {
+    /**
+     * Uma avaliação cinco estrelas de quem nunca foi cliente é spam elogioso, e
+     * sai pelo mesmo caminho. Por isso a contestação vem **antes** da nota alta
+     * no predicado.
+     */
+    expect(estaPublicada(nota(5), DEPOIS)).toBe(true);
+    expect(estaPublicada(nota(5, { contestadaEm: DEPOIS }), DEPOIS)).toBe(false);
+
+    expect(estaPublicada(nota(1), DEPOIS)).toBe(true);
+    expect(estaPublicada(nota(1, { contestadaEm: DEPOIS }), DEPOIS)).toBe(false);
+  });
+
+  it('contestar não é resolver, e resolver não esconde', () => {
+    // A janela de recuperação é de conserto, não de censura: resolver continua
+    // sem cancelar a publicação.
+    expect(estaPublicada(nota(1, { resolvidaEm: DEPOIS }), DEPOIS)).toBe(true);
+  });
+
+  it('os cinco motivos são fechados, e cada um tem rótulo', () => {
+    // Texto livre viraria "não gostei", e "não gostei" é apagar com outro nome.
+    expect(Object.keys(ROTULO_DO_MOTIVO).sort()).toEqual([...MOTIVOS_DA_CONTESTACAO].sort());
+    expect(ehMotivoDaContestacao('spam')).toBe(true);
+    expect(ehMotivoDaContestacao('nao_gostei')).toBe(false);
   });
 });

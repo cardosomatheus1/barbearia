@@ -395,9 +395,15 @@ export async function exportarDadosDoTitular(
      * fica de fora.
      */
     const avaliacoes = await tx.$queryRaw<Record<string, unknown>[]>`
+      -- A contestacao entra como **fato e motivo**, nunca com a justificativa
+      -- escrita (bloco 80). O titular tem direito de saber que a casa suspendeu
+      -- a avaliacao dele e por qual dos cinco motivos; o texto do balcao e
+      -- opiniao interna, e fica de fora pela mesma razao que resolution_note e
+      -- a trilha ficam.
       SELECT rating AS nota, comment AS comentario, created_at,
              rating_service, rating_quality, rating_punctual, rating_ambience,
-             resolved_at AS tratada_em
+             resolved_at AS tratada_em,
+             contested_at AS contestada_em, contest_reason AS contestacao_motivo
         FROM reviews WHERE customer_id = ${customerId}::uuid
        ORDER BY created_at
     `;

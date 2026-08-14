@@ -359,7 +359,9 @@ export async function atualizarVitrine(params: {
      */
     const notas = await tx.$queryRaw<{ rating: number }[]>`
       SELECT r.rating FROM reviews r
-       WHERE r.rating >= 4 OR r.created_at <= ${desde48h}
+       -- Contestada sai da vitrine (bloco 80), e só dela.
+       WHERE r.contested_at IS NULL
+         AND (r.rating >= 4 OR r.created_at <= ${desde48h})
     `;
     const resumo = resumoPublico(notas.map((n) => n.rating));
 

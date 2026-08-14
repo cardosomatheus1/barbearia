@@ -65,6 +65,8 @@ import {
   lancarSaldoInicialDeFiado as lancarSaldoInicialDeFiadoApi,
   salvarPacoteNaApi,
   reembolsarPacoteNaApi,
+  contestarAvaliacaoNaApi,
+  retirarContestacaoNaApi,
   tratarAvaliacaoNaApi,
   salvarProdutoNaApi,
   moverEstoqueNaApi,
@@ -151,7 +153,7 @@ import {
   publicarNoPadrao,
 } from '@/lib/admin-api';
 import { versaoDoConsentimento } from '@/lib/politica';
-import { ehConversa } from '@barbearia/core';
+import { MOTIVOS_DA_CONTESTACAO, ehConversa, type MotivoDaContestacao } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
 import { limiarDeFaltas } from '@/lib/sinal';
@@ -2228,6 +2230,38 @@ export async function acaoTratarAvaliacao(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
   redirect('/admin/avaliacoes?tratada=1');
+}
+
+/**
+ * Contestar não é apagar, e a mensagem de volta diz isso.
+ *
+ * O redirecionamento leva `contestada=1`, e o aviso da tela repete que a nota
+ * continua na média do gestor. Um "pronto!" genérico ensinaria a equipe que o
+ * botão faz a avaliação sumir — que é o oposto do que ele faz.
+ */
+export async function acaoContestarAvaliacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const motivo = texto(form, 'motivo');
+  if (!MOTIVOS_DA_CONTESTACAO.includes(motivo as MotivoDaContestacao)) {
+    falhar('/admin/avaliacoes', 'invalid_request');
+  }
+
+  const resultado = await contestarAvaliacaoNaApi(token, texto(form, 'id'), {
+    motivo: motivo as MotivoDaContestacao,
+    nota: texto(form, 'nota'),
+  });
+  if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
+  redirect('/admin/avaliacoes?contestada=1');
+}
+
+/**
+ * A saída do estado. Sem ela, contestar por engano seria definitivo.
+ */
+export async function acaoRetirarContestacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await retirarContestacaoNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
+  redirect('/admin/avaliacoes?retirada=1');
 }
 
 // -- Estoque (bloco 44) -------------------------------------------------------

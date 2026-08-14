@@ -2,16 +2,19 @@ import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import {
   AvaliacaoError,
   avaliacoesDoCliente,
+  contestarAvaliacao,
   painelDeAvaliacoes,
   registrarRecuperacao,
+  retirarContestacao,
 } from '@barbearia/crm';
 import type { AuthenticatedStaff } from '@barbearia/identity';
+import { atualizarVitrineDaCasa } from '@barbearia/platform';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
-import { recuperacaoSchema } from './avaliacao.schemas.js';
+import { contestacaoSchema, recuperacaoSchema } from './avaliacao.schemas.js';
 
 /**
  * Avaliações e recuperação de nota baixa (bloco 43, SPEC §4.10).
@@ -31,6 +34,11 @@ import { recuperacaoSchema } from './avaliacao.schemas.js';
  * `reviews.view` lê; `reviews.recover` age dentro da janela. Mesma separação de
  * `feedback.view` e `feedback.manage`, e de ler e escrever anotação.
  *
+ * `reviews.contest` é a terceira, e continua não sendo "apagar": ela suspende
+ * da vitrine com motivo de lista fechada, deixa a nota imutável e deixa a média
+ * do painel intacta. É a única operação do produto que decide o que o público
+ * **não** vê, e por isso não vem no papel de recepção.
+ *
  * A rota que traz as avaliações de um cliente declara `customers.view` junto:
  * ela devolve o histórico de uma pessoa, e rota que agrega declara **todas** as
  * permissões do que devolve.
@@ -44,6 +52,9 @@ const STATUS: Record<string, number> = {
   comentario_longo: 400,
   avaliacao_nao_encontrada: 404,
   ja_resolvida: 409,
+  ja_contestada: 409,
+  nao_contestada: 409,
+  motivo_invalido: 400,
   motivo_curto: 400,
 };
 
@@ -109,6 +120,68 @@ export class AvaliacaoController {
         nota: body.nota,
         ator: { id: staff.staffUserId, name: staff.name },
       });
+    } catch (erro) {
+      return avaliacaoParaHttp(erro);
+    }
+  }
+
+  /**
+   * Contesta uma avaliação, suspendendo-a da vitrine.
+   *
+   * Não apaga: a nota e o comentário continuam imutáveis pelo gatilho do bloco
+   * 43, e a média do painel continua contando esta avaliação. O que muda é só o
+   * predicado do que é público — e é a distância entre as duas médias que diz ao
+   * dono o tamanho do que ele suspendeu.
+   */
+  @Exige('reviews.contest')
+  @Post(':id/contestar')
+  async contestar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(contestacaoSchema))
+    body: { motivo: string; nota: string },
+  ) {
+    try {
+      const feito = await contestarAvaliacao({
+        tenantId: staff.tenantId,
+        avaliacaoId: id,
+        motivo: body.motivo,
+        nota: body.nota,
+        ator: { id: staff.staffUserId, name: staff.name },
+      });
+      // A cópia do marketplace guarda a nota, e ela é derivada de dado com RLS:
+      // sem esta chamada o card continuaria contando a avaliação suspensa até a
+      // varredura da madrugada — a suspensão funcionando na tela que o dono abre
+      // e falhando na que o cliente abre.
+      await atualizarVitrineDaCasa(staff.tenantId);
+      return feito;
+    } catch (erro) {
+      return avaliacaoParaHttp(erro);
+    }
+  }
+
+  /**
+   * Retira a contestação e devolve a avaliação ao ar.
+   *
+   * A saída do estado, e é o que separa contestar de apagar: sem ela, a casa que
+   * contestasse por engano deixaria a nota fora da vitrine para sempre. Mesma
+   * permissão da entrada, porque a direção é a segura — quem retira devolve a
+   * avaliação ao público.
+   */
+  @Exige('reviews.contest')
+  @Post(':id/retirar-contestacao')
+  async retirar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+  ) {
+    try {
+      const feito = await retirarContestacao({
+        tenantId: staff.tenantId,
+        avaliacaoId: id,
+        ator: { id: staff.staffUserId, name: staff.name },
+      });
+      await atualizarVitrineDaCasa(staff.tenantId);
+      return feito;
     } catch (erro) {
       return avaliacaoParaHttp(erro);
     }

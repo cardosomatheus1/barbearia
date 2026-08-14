@@ -112,6 +112,9 @@ const TEXTO: Readonly<Record<Permissao, string>> = {
   'finance.subscription_manage': 'Criar planos e assinar clientes no clube',
   'reviews.view': 'Ver as avaliações dos atendimentos',
   'reviews.recover': 'Tratar uma nota baixa dentro da janela de 48h',
+  // "Contestar" é o nome do botão na tela de avaliações, e o rótulo diz o efeito
+  // — suspender — porque quem marca a caixa precisa saber que não é apagar.
+  'reviews.contest': 'Contestar uma nota injusta e suspendê-la da vitrine',
   // Ler o que os clientes escreveram, e responder em nome da casa. Duas caixas
   // porque são duas coisas: o barbeiro pode precisar da primeira sem a segunda.
   'feedback.view': 'Ler os recados dos clientes',

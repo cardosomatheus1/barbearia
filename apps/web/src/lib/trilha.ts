@@ -135,6 +135,15 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
    */
   'review.recovered': 'tratou uma avaliação de nota baixa',
 
+  /**
+   * "Suspendeu", não "removeu" nem "apagou": o verbo da trilha é o mesmo da
+   * tela, e o que aconteceu é reversível de fato — a nota continua na média que
+   * o gestor vê. Um verbo definitivo aqui ensinaria a equipe errada sobre o que
+   * o botão faz.
+   */
+  'review.contested': 'contestou uma avaliação e a suspendeu da vitrine',
+  'review.uncontested': 'retirou a contestação e devolveu a avaliação ao ar',
+
   // Estoque (bloco 44). Só perda e ajuste: são os dois em que o número muda sem
   // nota fiscal nem venda.
   'product.changed': 'mexeu no cadastro de um produto',

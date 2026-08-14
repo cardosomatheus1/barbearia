@@ -291,6 +291,27 @@ export type AuditAction =
    * porque não existe operação para isso.
    */
   | 'review.recovered'
+  /**
+   * A contestação de uma nota (bloco 80).
+   *
+   * É a única operação do produto que decide o que o público **não** vê, e por
+   * isso é a que mais precisa de trilha: a nota continua na média do gestor e
+   * continua imutável, mas sai da vitrine. Sem registro de quem suspendeu, por
+   * qual motivo e com que justificativa, "contestar" seria "apagar" com um
+   * carimbo diferente — e o produto teria o filtro embutido que a SPEC §4.10
+   * proíbe. O registro guarda o motivo de lista fechada e a nota escrita; a
+   * avaliação em si já está no banco, imutável.
+   */
+  | 'review.contested'
+  /**
+   * A retirada da contestação (bloco 80).
+   *
+   * O par da anterior, e o que faz de `contested` um estado com saída em vez de
+   * um apagar com mais passos. Ela devolve a nota ao público — o sentido seguro
+   * —, e a trilha guarda as duas pontas para que "esta nota sumiu por três
+   * semanas" tenha começo e fim encontráveis.
+   */
+  | 'review.uncontested'
   | 'lgpd.request_fulfilled'
   | 'lgpd.request_refused'
   /**
@@ -472,6 +493,8 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'feedback.answered',
   'feedback.closed',
   'review.recovered',
+  'review.contested',
+  'review.uncontested',
   'product.changed',
   'stock.adjusted',
   'lgpd.request_fulfilled',

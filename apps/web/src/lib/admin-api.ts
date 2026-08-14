@@ -2227,6 +2227,12 @@ export const receitaDePacotesNaApi = (token: string) =>
 // -- Avaliações (bloco 43) ----------------------------------------------------
 
 export type DesfechoDaRecuperacao = 'contato' | 'retrabalho' | 'credito' | 'sem_retorno';
+export type MotivoDaContestacao =
+  | 'spam'
+  | 'ofensa'
+  | 'profissional_errado'
+  | 'nunca_foi_cliente'
+  | 'duplicada';
 
 export interface AvaliacaoNaTela {
   id: string;
@@ -2244,6 +2250,9 @@ export interface AvaliacaoNaTela {
   resolvidaEm: string | null;
   desfecho: DesfechoDaRecuperacao | null;
   resolucao: string | null;
+  contestadaEm: string | null;
+  contestacaoMotivo: MotivoDaContestacao | null;
+  contestacaoNota: string | null;
   categorias: Partial<Record<'atendimento' | 'qualidade' | 'pontualidade' | 'ambiente', number>>;
 }
 
@@ -2271,6 +2280,20 @@ export const tratarAvaliacaoNaApi = (
   id: string,
   dados: { desfecho: DesfechoDaRecuperacao; nota: string },
 ) => chamar<{ resolvida: boolean }>('POST', `/v1/admin/avaliacoes/${id}/tratar`, dados, token);
+
+export const retirarContestacaoNaApi = (token: string, id: string) =>
+  chamar<{ retirada: boolean }>(
+    'POST',
+    `/v1/admin/avaliacoes/${id}/retirar-contestacao`,
+    {},
+    token,
+  );
+
+export const contestarAvaliacaoNaApi = (
+  token: string,
+  id: string,
+  dados: { motivo: MotivoDaContestacao; nota: string },
+) => chamar<{ contestada: boolean }>('POST', `/v1/admin/avaliacoes/${id}/contestar`, dados, token);
 
 // -- Estoque (bloco 44) -------------------------------------------------------
 

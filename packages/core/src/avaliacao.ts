@@ -109,6 +109,15 @@ export interface Avaliacao {
   readonly comentario: string | null;
   readonly criadaEm: Date;
   readonly resolvidaEm: Date | null;
+  /**
+   * Suspensa da vitrine (bloco 80). Nunca apagada, e fora só do que é público.
+   *
+   * Obrigatória e não opcional, como os campos do `Contexto` do worker. Opcional,
+   * o campo esquecido numa consulta nova chegaria `undefined` — e `undefined` é
+   * falso, então a avaliação contestada voltaria ao ar sem o compilador dizer
+   * nada. O erro que a omissão produz aqui é o pior possível, e é silencioso.
+   */
+  readonly contestadaEm: Date | null;
 }
 
 /**
@@ -123,8 +132,52 @@ export interface Avaliacao {
  * casa fez, e não compra o direito de esconder a nota.
  */
 export function estaPublicada(avaliacao: Avaliacao, agora: Date): boolean {
+  /**
+   * Contestada sai da vitrine — e **só** da vitrine (bloco 80).
+   *
+   * É a única coisa que tira uma nota do ar neste produto, e por isso ela vive
+   * aqui, no predicado do que é público, e em lugar nenhum mais. A média que o
+   * gestor vê continua contando esta nota: é a distância entre ela e a média
+   * pública que diz *"o Bruno está com 4,8 na rua e 3,9 de verdade"*, e um botão
+   * que mexesse nas duas cegaria o dono com a ferramenta que o produto lhe deu.
+   *
+   * Vem **antes** da nota alta: uma avaliação cinco estrelas de quem nunca foi
+   * cliente é spam elogioso, e sai igual.
+   */
+  if (avaliacao.contestadaEm) return false;
   if (avaliacao.nota > NOTA_QUE_SEGURA) return true;
   return agora.getTime() >= fimDaJanela(avaliacao).getTime();
+}
+
+/**
+ * Os cinco motivos, e por que a lista é fechada.
+ *
+ * Texto livre viraria "não gostei", e "não gostei" é apagar com outro nome. Os
+ * cinco descrevem coisas que ou aconteceram ou não aconteceram — é isso que
+ * torna a contestação auditável em vez de discricionária.
+ */
+export const MOTIVOS_DA_CONTESTACAO = [
+  'spam',
+  'ofensa',
+  'profissional_errado',
+  'nunca_foi_cliente',
+  'duplicada',
+] as const;
+
+export type MotivoDaContestacao = (typeof MOTIVOS_DA_CONTESTACAO)[number];
+
+export const ROTULO_DO_MOTIVO: Readonly<Record<MotivoDaContestacao, string>> = {
+  spam: 'Propaganda ou texto repetido',
+  ofensa: 'Ofensa, ameaça ou discurso de ódio',
+  profissional_errado: 'A nota é de outro profissional',
+  nunca_foi_cliente: 'Nunca foi atendido aqui',
+  duplicada: 'A mesma avaliação, de novo',
+};
+
+const MOTIVOS: ReadonlySet<string> = new Set(MOTIVOS_DA_CONTESTACAO);
+
+export function ehMotivoDaContestacao(valor: string): valor is MotivoDaContestacao {
+  return MOTIVOS.has(valor);
 }
 
 export function fimDaJanela(avaliacao: Avaliacao): Date {
