@@ -69,11 +69,15 @@ const SEGUNDOS_NA_TELA = 120;
  * (o convite do barbeiro). O caminho continua restrito — não é `/admin` — para
  * que o cookie não acompanhe a navegação pelo resto do painel.
  */
-export type TelaDaSenha = 'equipe' | 'profissionais';
+export type TelaDaSenha = 'equipe' | 'profissionais' | 'chaves';
 
 const CAMINHO_DA_TELA: Record<TelaDaSenha, string> = {
   equipe: CAMINHO_EQUIPE,
   profissionais: '/admin/profissionais',
+  // A chave de API sai por aqui pelo mesmo motivo da senha (bloco 78): ela
+  // existe uma vez, e um parâmetro de consulta ficaria no histórico do
+  // navegador, no autocompletar e em qualquer referrer.
+  chaves: '/admin/chaves',
 };
 
 export async function guardarSenhaDeUmaVez(

@@ -3617,3 +3617,29 @@ export const salvarMetaDaRedeNaApi = (
   token: string,
   dados: { franqueadaId: string; mes: string; metaCents: number },
 ) => chamar<{ ok: true }>('PUT', '/v1/admin/rede/metas', dados, token);
+
+/** Chaves de API da barbearia (bloco 78). */
+export interface ChaveNaApi {
+  readonly id: string;
+  readonly nome: string;
+  readonly prefixo: string;
+  readonly escopos: readonly string[];
+  readonly criadaEm: string;
+  readonly usadaEm: string | null;
+  readonly revogadaEm: string | null;
+  readonly motivoDaRevogacao: string | null;
+}
+
+export const chavesNaApi = (token: string) =>
+  chamar<{ chaves: ChaveNaApi[]; disponiveis: string[] }>(
+    'GET',
+    '/v1/admin/chaves',
+    undefined,
+    token,
+  );
+
+export const criarChaveNaApi = (token: string, dados: { nome: string; escopos: string[] }) =>
+  chamar<{ id: string; chave: string; prefixo: string }>('POST', '/v1/admin/chaves', dados, token);
+
+export const revogarChaveNaApi = (token: string, chaveId: string, motivo: string) =>
+  chamar<{ ok: true }>('POST', `/v1/admin/chaves/${chaveId}/revogacao`, { motivo }, token);

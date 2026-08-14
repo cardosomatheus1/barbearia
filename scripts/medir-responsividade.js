@@ -1227,6 +1227,33 @@ function prepararDestaque(slug) {
  * de referência. Sem a adoção, a linha da distância nunca apareceria, e a tela
  * seria fotografada sem a única informação que ela existe para dar.
  */
+/**
+ * Duas chaves de API: uma viva e uma revogada (bloco 78).
+ *
+ * O `secret_hmac` é lixo de propósito — nenhuma delas autentica, e nem
+ * precisa: o que a tela mostra é prefixo, escopo e data. O segredo não existe
+ * em lugar nenhum depois da criação, e uma semente que o inventasse estaria
+ * mentindo sobre o que o produto guarda.
+ */
+function prepararChaves(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  if (psql(`select 1 from api_keys where tenant_id = '${tenant}' limit 1`)) return;
+
+  psql(
+    `INSERT INTO api_keys (tenant_id, name, prefix, secret_hmac, scopes, last_used_at)
+     VALUES ('${tenant}', 'Integracao do site', 'a1b2c3d4e5f6', 'nao-e-segredo',
+             ARRAY['appointments.view', 'appointments.create'], now() - interval '2 hours')`,
+  );
+  psql(
+    `INSERT INTO api_keys (tenant_id, name, prefix, secret_hmac, scopes,
+                           revoked_at, revoke_reason)
+     VALUES ('${tenant}', 'ERP do contador', 'f6e5d4c3b2a1', 'nao-e-segredo',
+             ARRAY['customers.view'], now() - interval '10 days',
+             'contrato com o escritorio encerrado')`,
+  );
+}
+
 function prepararFranquia(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return;
@@ -2521,6 +2548,7 @@ async function main() {
   const barbeiro = prepararPerfilDoBarbeiro(slug);
   prepararDestaque(slug);
   prepararFranquia(slug);
+  prepararChaves(slug);
   prepararFotos(slug, balcao.clienteId);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
@@ -2663,6 +2691,7 @@ async function main() {
     { nome: 'automações', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'campanhas', url: '/admin/campanhas', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'unidades', url: '/admin/unidades', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'chaves de API', url: '/admin/chaves', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

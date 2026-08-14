@@ -9,3 +9,4 @@ export * from './cofre.js';
 export * from './mfa-staff.js';
 export * from './forca-bruta.js';
 export * from './origem.js';
+export * from './apikey.js';

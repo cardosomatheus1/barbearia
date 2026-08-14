@@ -142,6 +142,8 @@ import {
   expulsarSuporte,
   salvarPreferenciasDeAlerta,
   adotarDoPadrao,
+  criarChaveNaApi,
+  revogarChaveNaApi,
   salvarMetaDaRedeNaApi,
   despublicarDoPadrao,
   publicarNoPadrao,
@@ -3000,4 +3002,28 @@ export async function acaoSalvarMetaDaRede(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar('/admin/rede', resultado.code);
   redirect('/admin/rede?meta=1');
+}
+
+/**
+ * Emitir e revogar chave de API (bloco 78).
+ *
+ * O segredo volta **uma vez**, e vai para a tela num cookie `httpOnly` de dois
+ * minutos com caminho restrito — nunca por parâmetro de consulta. É o mesmo
+ * mecanismo da senha de primeiro acesso do bloco 29, e pela mesma razão: a URL
+ * fica no histórico do navegador, no autocompletar e em qualquer referrer.
+ */
+export async function acaoCriarChave(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const escopos = form.getAll('escopos').map((v) => String(v));
+  const resultado = await criarChaveNaApi(token, { nome: texto(form, 'nome'), escopos });
+  if (!resultado.ok) falhar('/admin/chaves', resultado.code);
+  await guardarSenhaDeUmaVez(texto(form, 'nome'), resultado.dados.chave, 'chaves');
+  redirect('/admin/chaves?criada=1');
+}
+
+export async function acaoRevogarChave(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await revogarChaveNaApi(token, texto(form, 'chaveId'), texto(form, 'motivo'));
+  if (!resultado.ok) falhar('/admin/chaves', resultado.code);
+  redirect('/admin/chaves?revogada=1');
 }

@@ -7,7 +7,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'formato esperado YYYY-M
 const MAX_SERVICES = 10;
 
 /** Aceita `serviceIds=a&serviceIds=b` e `serviceIds=a,b`. */
-const serviceIds = z
+export const serviceIds = z
   .union([z.string(), z.array(z.string())])
   .transform((value) => (Array.isArray(value) ? value : value.split(',')))
   .pipe(z.array(uuid).min(1).max(MAX_SERVICES));

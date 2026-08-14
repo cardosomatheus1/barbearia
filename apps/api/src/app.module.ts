@@ -44,6 +44,9 @@ import { DreController } from './admin/dre.controller.js';
 import { FiscalController } from './admin/fiscal.controller.js';
 import { FranquiaController } from './admin/franquia.controller.js';
 import { RedeController } from './admin/rede.controller.js';
+import { PublicaController } from './publica/publica.controller.js';
+import { ChavesController } from './admin/chaves.controller.js';
+import { ChaveGuard } from './publica/chave.guard.js';
 import { WhatsAppController } from './admin/whatsapp.controller.js';
 import { AutomacaoController } from './admin/automacao.controller.js';
 import { CampanhaController } from './admin/campanha.controller.js';
@@ -123,6 +126,8 @@ import { TenantService } from './tenant/tenant.service.js';
     FiscalController,
     FranquiaController,
     RedeController,
+    PublicaController,
+    ChavesController,
     WhatsAppController,
     AutomacaoController,
     CampanhaController,
@@ -157,6 +162,7 @@ import { TenantService } from './tenant/tenant.service.js';
     PermissaoGuard,
     CustomerGuard,
     PlataformaGuard,
+    ChaveGuard,
     // Provedor real do WhatsApp entra no bloco 55. Até lá, o de console — que
     // nunca imprime o código.
     { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },

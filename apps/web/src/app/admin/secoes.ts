@@ -85,6 +85,7 @@ export const MODULOS = [
       { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', nota: 'lojas da rede, quem opera cada uma e estoque entre elas' },
       { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'horários, políticas e preferências' },
       { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'senha e segundo fator' },
+      { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', nota: 'integração do seu site ou do seu ERP' },
       { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', nota: 'histórico de alterações' },
       { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema' },
       { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas' },

@@ -4443,6 +4443,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='equipe']) .contexto__link[data-para='equipe'],
 .casco:has([data-secao='unidades']) .contexto__link[data-para='unidades'],
 .casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
+.casco:has([data-secao='chaves']) .contexto__link[data-para='chaves'],
 .casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
 .casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca'],
 .casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes'],
@@ -8083,3 +8084,74 @@ main { padding-bottom: var(--space-8); }
 
 .rede-lugar { margin: 0; display: grid; gap: var(--space-2); }
 .rede-lugar__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Chaves de API (bloco 78) ----------------------------------------------- */
+
+.chave-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.chave-form__acao { min-height: 44px; justify-self: start; }
+
+.chave-escopos {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* 44px como todo alvo de toque: o padrão do navegador dá 13px na caixa, e o
+   alvo é o rótulo inteiro — clicar em qualquer parte dele aciona o controle. */
+.chave-escopo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  font-weight: var(--font-weight-normal);
+}
+/* O identificador é o que o integrador copia, e ele não tem espaço: sem isto,
+   uma permissão mais comprida que `appointments.view_all_professionals` — que
+   já encosta na borda em 390px — passa a cortar. */
+.chave-escopo code { font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+
+.chave-nova { display: grid; gap: var(--space-2); }
+.chave-nova__aviso { margin: 0; }
+.chave-nova__valor {
+  display: block;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+  /* A chave é longa e não tem espaço: sem isto ela estoura o cartão. */
+  overflow-wrap: anywhere;
+}
+
+.chave-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.chave {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.chave--morta { opacity: 0.65; }
+.chave__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.chave__nome { margin: 0; font-size: var(--font-size-base); }
+.chave__prefixo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.chave__escopos {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.chave__datas { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.chave__revogada { margin: var(--space-3) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.chave__revogar { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.chave__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .chave-escopos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chave__revogar { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .chave__revogar .ui-field__label { grid-column: 1 / -1; }
+}

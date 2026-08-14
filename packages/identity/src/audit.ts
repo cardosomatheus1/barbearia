@@ -312,7 +312,11 @@ export type AuditAction =
   // barbearia, e não só na trilha da plataforma, que o dono não lê.
   | 'support.started'
   | 'support.accessed'
-  | 'support.ended';
+  | 'support.ended'
+  // Chave de API (bloco 78). A trilha registra que a chave nasceu e com que
+  // escopo — nunca o segredo, nem o HMAC dele.
+  | 'api_key.created'
+  | 'api_key.revoked';
 
 /**
  * O vocabulário partido em dois, porque a leitura não é uma permissão só.
@@ -398,6 +402,20 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'customers.photo_published',
   'customers.photo_unpublished',
   'customers.photo_deleted',
+  /**
+   * Chave de API é **conta**, não dinheiro (bloco 78).
+   *
+   * Emitir uma chave é criar um ator com um conjunto de permissões — a mesma
+   * coisa que criar uma conta de equipe —, e a pergunta que a trilha responde é
+   * "quem emitiu esta chave, e com que escopo?". Fica do lado de quem
+   * administra a casa, sob `team.manage`.
+   *
+   * E ela **não** pode cair no lado do dinheiro: o `@Exige` daquele lado é
+   * `finance.view`, que deriva segundo fator — a barbearia perderia a leitura
+   * da própria trilha de chaves atrás de um TOTP que nada ali justifica.
+   */
+  'api_key.created',
+  'api_key.revoked',
   'staff.created',
   'staff.role_changed',
   'staff.deactivated',
