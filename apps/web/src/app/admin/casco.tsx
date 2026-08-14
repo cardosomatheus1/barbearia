@@ -27,7 +27,7 @@ import type { ReactNode } from 'react';
  * para saber em que página estamos.
  */
 
-import { MODULOS as REGISTRO, type Modulo } from './secoes';
+import { modulosVisiveis, type Modulo } from './secoes';
 
 export type { Modulo, Secao } from './secoes';
 export { secao, SECOES_POR_MODULO } from './secoes';
@@ -54,19 +54,21 @@ const ICONE: Readonly<Record<Modulo, ReactNode>> = {
   administracao: traco('M4 7h10M18 7h2M4 12h2M10 12h10M4 17h8M16 17h4'),
 };
 
-const MODULOS = REGISTRO;
-
 export function Casco({
   children,
   nome,
   papel,
   barbearia,
+  recursos,
 }: {
   readonly children: ReactNode;
   readonly nome: string;
   readonly papel: string;
   readonly barbearia: string;
+  readonly recursos: readonly string[];
 }) {
+  const modulos = modulosVisiveis(recursos);
+
   const iniciais = nome
     .split(/\s+/)
     .filter(Boolean)
@@ -81,7 +83,7 @@ export function Casco({
           <img alt="Barber Dock" height={384} src="/barber-dock.png" width={384} />
         </a>
 
-        {MODULOS.map((modulo) => (
+        {modulos.map((modulo) => (
           <a
             className="trilho__botao"
             data-modulo={modulo.id}
@@ -105,7 +107,7 @@ export function Casco({
             Não é "esconder no celular" — é condicional por seção, e vale igual
             em qualquer largura. */}
         <div className="contexto__lista">
-          {MODULOS.map((modulo) => (
+          {modulos.map((modulo) => (
             <div className="contexto__bloco" data-modulo={modulo.id} key={modulo.id}>
               <p className="contexto__grupo">{modulo.nome}</p>
               {modulo.telas.map((tela) => (

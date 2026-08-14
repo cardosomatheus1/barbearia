@@ -92,6 +92,13 @@ export interface EstadoOnboarding {
     professionalId: string | null;
     suporte?: boolean;
   };
+  /**
+   * Os recursos ligados pela plataforma para esta barbearia (bloco 26).
+   *
+   * Códigos, não rótulos: quem sabe o nome e a descrição de cada recurso é a
+   * tela da plataforma, que lê o catálogo. Aqui só se pergunta "existe?".
+   */
+  recursos: string[];
 }
 
 export const estadoDoPainel = (token: string) =>

@@ -24,7 +24,12 @@ import {
 } from '@barbearia/onboarding';
 import { BloqueioDeLogin } from '@barbearia/identity';
 import { recusasRecentes } from '@barbearia/scheduling';
-import { atualizarVitrineDaCasa, definirVitrine, lerVitrine } from '@barbearia/platform';
+import {
+  atualizarVitrineDaCasa,
+  definirVitrine,
+  lerVitrine,
+  recursosDaBarbearia,
+} from '@barbearia/platform';
 import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -190,6 +195,22 @@ export class OnboardingController {
     // (CLAUDE.md). E é uma ida ao banco a menos que uma rota `/me` por página.
     return {
       ...estado,
+      /**
+       * Os recursos ligados para esta conta, pela **mesma função** que a
+       * `PermissaoGuard` consulta.
+       *
+       * É o desenho de `permissions` logo abaixo, pela mesma razão: o menu
+       * esconde o que a guarda recusaria, e um segundo jeito de responder
+       * "esta barbearia tem fiscal?" divergiria do primeiro no dia em que
+       * alguém mudasse um dos dois. Sai só a lista de códigos ligados — nome e
+       * descrição do catálogo são da tela da plataforma, não desta.
+       *
+       * Não é dado sensível e não amplia o `@Exige` da rota: o que ela diz a
+       * quem já está autenticado é quais telas da própria casa existem.
+       */
+      recursos: (await recursosDaBarbearia(staff.tenantId))
+        .filter((r) => r.ligado)
+        .map((r) => r.code),
       staff: {
         name: staff.name,
         role: staff.role,

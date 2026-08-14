@@ -14,6 +14,17 @@ export interface Destino {
   readonly nome: string;
   readonly secao: string;
   readonly nota: string;
+  /**
+   * O recurso da plataforma que liga esta tela, quando ela depende de um
+   * (bloco 26). Ausente é o caso normal: a tela é do produto e existe sempre.
+   *
+   * O código é `string` e não uma união escrita aqui de propósito — o catálogo
+   * mora em `packages/platform`, e copiá-lo para cá seria a lista paralela que
+   * `secoes.ts` já custou uma vez. Quem impede o erro de digitação é
+   * `scripts/recursos-da-navegacao.test.mjs`, que compara os dois arquivos: um
+   * código inexistente esconderia a tela para sempre, e em silêncio.
+   */
+  readonly recurso?: string;
 }
 
 export interface ModuloDoPainel {
@@ -39,8 +50,8 @@ export const MODULOS = [
     telas: [
       { href: '/admin/dia', nome: 'Hoje', secao: 'dia', nota: 'operação do dia em tempo real' },
       { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', nota: 'dia, semana e próximos horários' },
-      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'clientes que chegaram sem marcar' },
-      { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'retornos e pendências de clientes' },
+      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'clientes que chegaram sem marcar', recurso: 'fila' },
+      { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'retornos e pendências de clientes', recurso: 'avisos' },
       { href: '/admin/recados', nome: 'Recados', secao: 'recados', nota: 'sugestões e reclamações de clientes' },
       { href: '/admin/recepcao', nome: 'Recepção', secao: 'recepcao', nota: 'perguntas que o site não soube responder' },
       { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', nota: 'notas dos atendimentos e nota baixa a tratar' },
@@ -88,8 +99,8 @@ export const MODULOS = [
       { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', nota: 'integração do seu site ou do seu ERP' },
       { href: '/admin/webhooks', nome: 'Webhooks', secao: 'webhooks', nota: 'avisar outro sistema quando algo acontece aqui' },
       { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', nota: 'histórico de alterações' },
-      { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema' },
-      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas' },
+      { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema', recurso: 'importacao' },
+      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas', recurso: 'fiscal' },
       { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'número da casa e textos aprovados' },
       { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha' },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar' },
@@ -116,6 +127,47 @@ const MODULO_DA_SECAO = new Map<string, Modulo>(
 export function moduloDaSecao(nome: Secao): Modulo | undefined {
   return MODULO_DA_SECAO.get(nome);
 }
+
+/**
+ * O menu, já sem o que a plataforma não ligou para esta barbearia.
+ *
+ * Um destino com `recurso` só aparece quando aquele recurso está ligado — e
+ * quem responde é o servidor, pela mesma função que a `PermissaoGuard`
+ * consulta.
+ *
+ * **Não é o mesmo caso da permissão.** Sem permissão o item continua no menu e
+ * a tela explica, porque quem decide é o dono e ele pode liberar. Sem o
+ * recurso, quem decidiu foi a plataforma: o dono não tem o que fazer com um
+ * link que responde 404, e mandá-lo procurar quem libera é o pior recado
+ * possível. É a mesma razão de a guarda responder 404 e não 403.
+ *
+ * O módulo que ficasse sem nenhuma tela sai junto — um ícone no trilho que abre
+ * uma lista vazia é a pessoa tocando e nada acontecendo.
+ *
+ * Mora aqui e não no casco de propósito: quem sabe filtrar o registro é o
+ * registro, e assim a regra é testável sem montar JSX.
+ */
+export function modulosVisiveis(recursos: readonly string[]): readonly ModuloDoPainel[] {
+  return REGISTRO.map((modulo) => ({
+    ...modulo,
+    telas: modulo.telas.filter((tela) => !tela.recurso || recursos.includes(tela.recurso)),
+  })).filter((modulo) => modulo.telas.length > 0);
+}
+
+/**
+ * O mesmo registro, pelo tipo largo.
+ *
+ * `MODULOS` é `as const` porque `Secao` sai dos literais dele — e o preço é que
+ * cada destino tem um tipo próprio, sem `recurso` naqueles que não o declaram.
+ * Perguntar `tela.recurso` ali não compila. O `satisfies` na declaração é quem
+ * garante que esta visão não mente.
+ */
+const REGISTRO: readonly ModuloDoPainel[] = MODULOS;
+
+/** Os destinos que só existem quando a plataforma liga o recurso. */
+export const DESTINOS_GATEADOS: readonly (Destino & { readonly recurso: string })[] = REGISTRO
+  .flatMap((modulo) => modulo.telas)
+  .filter((tela): tela is Destino & { readonly recurso: string } => tela.recurso !== undefined);
 
 export function secao(nome: Secao): {
   readonly 'data-secao': string;

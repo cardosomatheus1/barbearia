@@ -1128,6 +1128,27 @@ function integracoes(url, { tenant, local, balcao }) {
     ['retorno', 'convite_para_voltar', 'Oi {{1}}, faz um tempo que voce nao aparece. Bora marcar?', 'pausado'],
   ];
 
+  /**
+   * Os recursos que a plataforma controla (bloco 26).
+   *
+   * Fila, importacao e avisos sao conteudo de plano: uma barbearia com oito
+   * meses de movimento os tem, e sem a linha aqui as tres telas respondem 404 —
+   * a conferencia as pularia e a demonstracao pareceria ter menos produto do
+   * que tem.
+   *
+   * `fiscal` fica **de fora de proposito**: ele nasce desligado e quem o liga e
+   * o toggle do Super Admin, uma conta de cada vez, enquanto nao ha emissor
+   * contratado. A barbearia de demonstracao mostra o produto como ele chega a
+   * quem instala hoje — com a nota fora do menu. O cadastro e as notas abaixo
+   * continuam semeados: sao o que aparece no dia em que o toggle virar.
+   */
+  const recursos = `
+    INSERT INTO tenant_features (tenant_id, flag_code, enabled) VALUES
+      (${lit(tenant)}, 'fila', true),
+      (${lit(tenant)}, 'importacao', true),
+      (${lit(tenant)}, 'avisos', true)
+    ON CONFLICT (tenant_id, flag_code) DO UPDATE SET enabled = true;`;
+
   const fiscal = `
     INSERT INTO fiscal_settings (location_id, tenant_id, cnpj, regime, service_code,
                                  iss_bps, municipality_ibge, municipal_registration, auto_issue)
@@ -1209,7 +1230,7 @@ function integracoes(url, { tenant, local, balcao }) {
     };
   });
 
-  return [whats,
+  return [recursos, whats,
     inserir('fiscal_invoices',
       ['id', 'tenant_id', 'location_id', 'order_id', 'status', 'regime', 'service_cents',
         'iss_bps', 'service_code', 'municipality_ibge', 'number', 'provider_invoice_id',

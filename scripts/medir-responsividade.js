@@ -1602,11 +1602,6 @@ async function prepararConvite(slug) {
   );
   if (!tenant || !local || !profissional || !servico || !cliente) return { link: null };
 
-  psql(
-    `INSERT INTO tenant_features (tenant_id, flag_code, enabled) VALUES ('${tenant}', 'avisos', true)
-       ON CONFLICT (tenant_id, flag_code) DO UPDATE SET enabled = true`,
-  );
-
   const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   // A primeira linha: `psql -tAc` com RETURNING imprime o id **e** o `INSERT 0 1`
   // do comando, e o segundo vira parte do uuid na consulta seguinte.
@@ -2230,6 +2225,40 @@ function prepararSegmentos(slug) {
   return emRisco;
 }
 
+/**
+ * Liga os recursos que a plataforma controla (bloco 26, e o fiscal no 81).
+ *
+ * Sem isto a medição fotografa a página de 404: `fila`, `importacao`, `avisos` e
+ * `fiscal` nascem desligados no catálogo, e a tela de cada um fecha a própria
+ * porta quando o recurso não está ligado. Uma barbearia de verdade tem os três
+ * primeiros pelo plano e o quarto pelo toggle do Super Admin — o que a medição
+ * mede é a tela **existindo**, então ela liga os quatro.
+ *
+ * Confere a resposta em vez de disparar e seguir: uma semente que prepara um
+ * estado e não o verifica prepara o estado que ela **acha** que preparou, e a
+ * tela é medida no estado errado sem nada ficar vermelho. Foi o defeito do
+ * cartão "bloqueada" no bloco 80.
+ */
+function ligarRecursos(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return false;
+  for (const code of ['fila', 'importacao', 'avisos', 'fiscal']) {
+    psql(
+      `INSERT INTO tenant_features (tenant_id, flag_code, enabled) VALUES ('${tenant}', '${code}', true)
+         ON CONFLICT (tenant_id, flag_code) DO UPDATE SET enabled = true`,
+    );
+  }
+  const ligados = psql(
+    `select count(*) from tenant_features where tenant_id = '${tenant}' and enabled
+       and flag_code in ('fila', 'importacao', 'avisos', 'fiscal')`,
+  );
+  if (Number(ligados) !== 4) {
+    console.warn(`  aviso: só ${ligados} de 4 recursos ligados; telas gateadas medirão 404`);
+    return false;
+  }
+  return true;
+}
+
 function prepararFiscal(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return null;
@@ -2616,6 +2645,9 @@ function prepararRetencao(clienteId) {
 
 async function main() {
   const { token, slug } = await preparar();
+  // Antes de qualquer tela: as gateadas fecham a própria porta quando o recurso
+  // está desligado, e o resto da semeadura escreve dentro delas.
+  ligarRecursos(slug);
   const tokenCliente = await prepararCliente(slug);
   const balcao = await prepararBalcao(token);
   await prepararRecursos(token);

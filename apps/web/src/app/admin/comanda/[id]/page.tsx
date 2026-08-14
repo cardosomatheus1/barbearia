@@ -22,7 +22,7 @@ import {
   vendaAceitaNota,
 } from '@barbearia/core';
 import { notaDaComandaNaApi } from '@/lib/admin-api';
-import { painelOuDesvio, podeNaTela } from '@/lib/painel';
+import { painelOuDesvio, podeNaTela, recursoNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import {
@@ -365,7 +365,14 @@ export default async function ComandaPage({ params, searchParams }: Props) {
    * abertura de comanda paga — a permissão exibida na tela sai da mesma função
    * que a API aplica, e aqui isso quer dizer repetir a mesma conjunção.
    */
-  const veNota = podeNaTela(estado, 'fiscal.view') && podeNaTela(estado, 'customers.view');
+  /**
+   * E o recurso, antes das duas: com o fiscal desligado pela plataforma, a rota
+   * responde 404 e o cartão anunciaria uma nota que esta casa não emite.
+   */
+  const veNota =
+    recursoNaTela(estado, 'fiscal') &&
+    podeNaTela(estado, 'fiscal.view') &&
+    podeNaTela(estado, 'customers.view');
   const notaResposta =
     veNota && conta.status !== 'open' ? await notaDaComandaNaApi(token, conta.id) : null;
   const nota = notaResposta?.ok ? notaResposta.dados.nota : null;

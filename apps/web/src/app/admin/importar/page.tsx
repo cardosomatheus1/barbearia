@@ -8,7 +8,7 @@ import {
   type ResumoDaImportacao,
   type SlugDaCasa,
 } from '@/lib/admin-api';
-import { painelOuDesvio, podeNaTela } from '@/lib/painel';
+import { exigirRecurso, painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
   acaoAdicionarSlug,
@@ -187,6 +187,7 @@ export default async function ImportarPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
+  exigirRecurso(estado, 'importacao');
   const podeImportar = podeNaTela(estado, 'customers.edit');
   const podeEndereco = podeNaTela(estado, 'settings.manage');
 

@@ -19,7 +19,8 @@ import { BoardController } from '../src/admin/board.controller.js';
 import { FilaController } from '../src/admin/fila.controller.js';
 import { FilaPublicaController } from '../src/booking/fila-publica.controller.js';
 import { SuporteInterceptor } from '../src/admin/suporte.interceptor.js';
-import { StaffAuthController } from '../src/admin/admin.controller.js';
+import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
+import { FiscalController } from '../src/admin/fiscal.controller.js';
 import { MeController } from '../src/admin/team.controller.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { guardarCorpoCru } from '../src/common/corpo-cru.js';
@@ -250,6 +251,10 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       controllers: [
         BookingController,
         StaffAuthController,
+        // O fiscal e o `/v1/admin/state` entram pelo bloco 81: é aqui que se
+        // prova que o recurso desligado tira a tela do ar **e** some do menu.
+        OnboardingController,
+        FiscalController,
         MeController,
         PlanoController,
         WebhookDoPspController,
@@ -644,6 +649,67 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(200);
   });
 
+  it('o fiscal nasce desligado, e é o toggle da plataforma que o liga', async () => {
+    /**
+     * O quarto recurso, e o primeiro que não é conteúdo de plano.
+     *
+     * `FISCAL_MODO` é `nenhum` e não há emissor contratado: quem decide quando
+     * a nota estreia é a plataforma, uma conta de cada vez. O que este teste
+     * prende são as duas pontas — **desligado por padrão**, e não por alguém
+     * ter lembrado de desligar, e **ligável sem migração**.
+     *
+     * O `/v1/admin/state` entra junto porque é dele que o menu do painel tira
+     * o que mostrar: sem o código na lista, o item some da navegação. Provar só
+     * o 404 deixaria o painel oferecendo um link para uma tela que não existe.
+     */
+    const daPlataforma = await tokenDaPlataforma();
+    const doDono = await tokenDoDono();
+
+    const recusada = await http()
+      .get('/v1/admin/fiscal/configuracao')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(404);
+    expect(recusada.body.error.code).toBe('feature_off');
+
+    const antes = await http()
+      .get('/v1/admin/state')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+    expect(antes.body.recursos).not.toContain('fiscal');
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ code: 'fiscal', ligado: true })
+      .expect(200);
+
+    await http()
+      .get('/v1/admin/fiscal/configuracao')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+
+    const depois = await http()
+      .get('/v1/admin/state')
+      .set('authorization', `Bearer ${doDono}`)
+      .expect(200);
+    expect(depois.body.recursos).toContain('fiscal');
+
+    // E a vizinha continua sem: ligar é decisão sobre **uma** conta.
+    const daVizinha = await http()
+      .get(`/v1/plataforma/barbearias/${VIZINHA}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .expect(200);
+    expect(
+      daVizinha.body.recursos.find((r: { code: string }) => r.code === 'fiscal').ligado,
+    ).toBe(false);
+
+    await http()
+      .put(`/v1/plataforma/barbearias/${DOMARI}/recursos`)
+      .set('authorization', `Bearer ${daPlataforma}`)
+      .send({ code: 'fiscal', ligado: false })
+      .expect(200);
+  });
+
   it('recurso que o código não conhece morre na borda', async () => {
     const token = await tokenDaPlataforma();
     await http()
@@ -975,8 +1041,22 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
 
     expect(plano.body.plano).toMatchObject({ code: 'pro', precoCents: 9900 });
     expect(plano.body.cadeiras).toEqual({ emUso: 0, teto: 5 });
-    // A tela precisa distinguir o que vem no plano do que é cortesia.
-    expect(plano.body.recursos.every((r: { noPlano: boolean }) => r.noPlano)).toBe(true);
+    /**
+     * A tela precisa distinguir o que vem no plano do que é cortesia.
+     *
+     * Os três do bloco 26 são **conteúdo de plano** — é o que faz o Pro custar
+     * mais que o Starter. O fiscal não é: ele entrou no bloco 81 como recurso
+     * que a plataforma liga uma conta de cada vez, enquanto não há emissor
+     * contratado, e por isso nasce fora de `plan_features`. Pedir `every` aqui
+     * de novo obrigaria todo recurso futuro a ser vendido junto de um plano.
+     */
+    const doPlano = plano.body.recursos.filter(
+      (r: { code: string }) => r.code !== 'fiscal',
+    );
+    expect(doPlano.length).toBe(3);
+    expect(doPlano.every((r: { noPlano: boolean }) => r.noPlano)).toBe(true);
+    const fiscal = plano.body.recursos.find((r: { code: string }) => r.code === 'fiscal');
+    expect(fiscal).toMatchObject({ noPlano: false, ligado: false });
   });
 
   it('cancelar a assinatura não tira a barbearia do ar', async () => {

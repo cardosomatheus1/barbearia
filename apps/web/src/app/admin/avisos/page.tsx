@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { avisos, type EnvioRegistrado, type TipoDeAviso } from '@/lib/admin-api';
-import { painelOuDesvio } from '@/lib/painel';
+import { exigirRecurso, painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAvisos, acaoSair } from '../acoes';
 import { secao } from '../secoes';
@@ -85,6 +85,7 @@ export default async function AvisosPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
+  exigirRecurso(estado, 'avisos');
   const query = await searchParams;
   const erro = first(query['erro']);
   const salvo = first(query['salvo']) === '1';

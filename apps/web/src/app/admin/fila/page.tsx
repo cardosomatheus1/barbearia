@@ -7,7 +7,7 @@ import {
   type CadeiraNaFila,
   type PessoaNaFila,
 } from '@/lib/admin-api';
-import { painelOuDesvio } from '@/lib/painel';
+import { exigirRecurso, painelOuDesvio } from '@/lib/painel';
 import { lerLinkDaFila, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoEntrarNaFila, acaoMoverNaFila, acaoSair, acaoSentarDaFila } from '../acoes';
 import { secao } from '../secoes';
@@ -177,6 +177,7 @@ export default async function FilaPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
+  exigirRecurso(estado, 'fila');
   const query = await searchParams;
 
   const [fila, catalogo] = await Promise.all([filaDoBalcao(token), catalogoDoBalcao(token)]);

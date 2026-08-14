@@ -11,9 +11,24 @@ import { PlataformaError, registrarNaTrilha } from './plataforma.js';
  * é exatamente como um sistema acaba com trinta flags das quais quatro fazem
  * alguma coisa.
  *
- * Cada um dos três tem consumidor de verdade neste mesmo bloco: `fila` e
- * `importacao` são cobrados na guarda de permissão da API, e `avisos` no worker,
- * antes de gastar mensagem.
+ * Cada um dos três primeiros tem consumidor de verdade desde o bloco 26: `fila`
+ * e `importacao` são cobrados na guarda de permissão da API, e `avisos` no
+ * worker, antes de gastar mensagem.
+ *
+ * ## O quarto é de outra natureza, e a diferença está escrita
+ *
+ * `fila`, `importacao` e `avisos` são **conteúdo de plano**: é o que faz o
+ * Starter e o Business custarem diferente. `fiscal` não é isso — é um recurso
+ * que ainda não estreou, e que a plataforma liga uma conta de cada vez enquanto
+ * não há emissor contratado. Por isso ele nasce `false` no catálogo e **não**
+ * entra em `plan_features`: só a linha de `tenant_features` que o toggle do
+ * Super Admin escreve o liga.
+ *
+ * A tela do painel não fica com um item marcado "em breve", e essa é a
+ * diferença para a convenção de *gatilho que ainda não funciona aparece
+ * marcado, nunca escondido*: aquela regra é sobre o que **a barbearia** liga.
+ * Quando quem decide é a plataforma, o recurso desligado não existe para o
+ * outro lado — é a mesma razão de a guarda responder 404 e não 403.
  *
  * ## Três níveis, e o mais específico ganha (bloco 27)
  *
@@ -29,7 +44,7 @@ import { PlataformaError, registrarNaTrilha } from './plataforma.js';
  * dizem — e mudar o padrão deixaria de mudar coisa alguma.
  */
 
-export const RECURSOS = ['fila', 'importacao', 'avisos'] as const;
+export const RECURSOS = ['fila', 'importacao', 'avisos', 'fiscal'] as const;
 export type CodigoDeRecurso = (typeof RECURSOS)[number];
 
 export const ehRecurso = (valor: string): valor is CodigoDeRecurso =>

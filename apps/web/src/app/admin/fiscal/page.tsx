@@ -12,7 +12,7 @@ import {
   notasNaApi,
   type NotaNaTela,
 } from '@/lib/admin-api';
-import { painelOuDesvio, podeNaTela } from '@/lib/painel';
+import { exigirRecurso, painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { acaoCancelarNota, acaoSair, acaoSalvarFiscal } from '../acoes';
@@ -167,6 +167,7 @@ export default async function FiscalPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
+  exigirRecurso(estado, 'fiscal');
   const query = await searchParams;
 
   const podeCadastrar = podeNaTela(estado, 'fiscal.settings');

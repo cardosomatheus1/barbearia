@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { estadoDoPainel, type EstadoOnboarding } from './admin-api';
 
 /**
@@ -26,6 +26,37 @@ export async function painelOuDesvio(token: string): Promise<EstadoOnboarding> {
  */
 export function podeNaTela(estado: EstadoOnboarding, permissao: string): boolean {
   return estado.staff.permissions.includes(permissao);
+}
+
+/**
+ * Este recurso está ligado para esta barbearia?
+ *
+ * A lista vem do servidor, da mesma função que a `PermissaoGuard` consulta —
+ * nunca de um cálculo daqui. É o desenho de `podeNaTela`, e a razão é a mesma:
+ * duas noções de "esta casa tem fiscal?" divergem no primeiro ajuste.
+ *
+ * A diferença para a permissão é o que a tela faz com a resposta. Sem
+ * permissão, o item continua no menu e a tela explica; sem o recurso, ele
+ * **some** — porque quem decidiu não foi a barbearia, e mandá-la procurar o
+ * dono para liberar algo que o dono também não tem é o pior recado possível.
+ */
+export function recursoNaTela(estado: EstadoOnboarding, recurso: string): boolean {
+  return estado.recursos.includes(recurso);
+}
+
+/**
+ * A porta da tela de um recurso desligado.
+ *
+ * Esconder o link do menu não fecha a tela: o endereço continua digitável, e
+ * quem o tem salvo no navegador chegaria a uma página que pede à API algo que
+ * ela responde 404 — estado de erro no lugar de "isto não existe aqui".
+ *
+ * Vale para **toda** tela gateada, e não só para a que motivou o mecanismo: há
+ * guarda derivada que percorre `secoes.ts` e cobra esta chamada em cada destino
+ * que declara `recurso`.
+ */
+export function exigirRecurso(estado: EstadoOnboarding, recurso: string): void {
+  if (!recursoNaTela(estado, recurso)) notFound();
 }
 
 /**

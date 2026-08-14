@@ -17,7 +17,7 @@ import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
-import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
 import { unidadeDoBalcao } from './unidade.js';
 import {
@@ -104,7 +104,16 @@ function exigirEmissor(): FiscalProvider {
   return EMISSOR;
 }
 
+/**
+ * O controller inteiro é gateado pelo recurso, e não rota por rota.
+ *
+ * `@Recurso` no método deixaria a próxima rota fiscal nascer aberta — é a mesma
+ * razão de `@Exige` ser cobrado por varredura. Enquanto o recurso está
+ * desligado, todas respondem **404**: para quem está do outro lado, um recurso
+ * que a plataforma não ligou não existe.
+ */
 @Controller('v1/admin/fiscal')
+@Recurso('fiscal')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class FiscalController {
   private async unidade(staff: AuthenticatedStaff) {

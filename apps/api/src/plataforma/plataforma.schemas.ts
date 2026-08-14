@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LUGARES_EM_DESTAQUE } from '@barbearia/core';
+import { RECURSOS } from '@barbearia/platform';
 
 /**
  * Validação na borda, como toda entrada externa (CLAUDE.md §2).
@@ -66,9 +67,17 @@ export const janelaSchema = z.object({
 
 export type Janela = z.infer<typeof janelaSchema>;
 
-/** O recurso a ligar ou desligar. Fechado no tipo e conferido na borda. */
+/**
+ * O recurso a ligar ou desligar. Fechado no tipo e conferido na borda.
+ *
+ * A lista sai de `RECURSOS`, e não escrita de novo aqui: escrita, ela ficou
+ * para trás quando o fiscal entrou no bloco 81 — o toggle do Super Admin
+ * respondia **400** para um recurso que o catálogo, o banco e a guarda já
+ * conheciam. É a lista paralela de sempre, e a borda é o pior lugar para ela,
+ * porque o sintoma é a rota recusando o que o produto aceita.
+ */
 export const recursoSchema = z.object({
-  code: z.enum(['fila', 'importacao', 'avisos']),
+  code: z.enum(RECURSOS),
   ligado: z.boolean(),
 });
 

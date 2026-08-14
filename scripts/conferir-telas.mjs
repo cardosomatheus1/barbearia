@@ -125,13 +125,51 @@ async function entrar(page, quem) {
 const navegador = await chromium.launch({ args: ['--no-sandbox'] });
 const paginas = {};
 
+/**
+ * O menu do painel, lido da própria tela.
+ *
+ * Desde o bloco 81 uma tela pode estar **desligada pela plataforma** — o fiscal
+ * é a primeira, e fila, importação e avisos já eram gateados na API. Conferir
+ * uma dessas contra o banco daria falha por um recurso que ninguém ligou, que é
+ * o formato de vermelho que ensina todo mundo a ignorar vermelho.
+ *
+ * Quem responde "esta tela existe para esta barbearia?" é o menu, e ele é
+ * derivado no servidor da mesma consulta que a `PermissaoGuard` faz. Repetir
+ * aqui o `COALESCE` de `recursoLigado` seria a quarta cópia daquela expressão —
+ * e a primeira que divergiria, porque este arquivo não é o produto.
+ */
+async function menuDoPainel(page) {
+  const hrefs = await page.$$eval('.contexto__link', (as) =>
+    as.map((a) => new URL(a.href).pathname),
+  );
+  // Menu que não é lido passa a "pular tudo" em silêncio, que é pior do que
+  // não ter a conferência.
+  if (hrefs.length < 20) throw new Error(`menu do painel com ${hrefs.length} destinos: seletor mudou?`);
+  return new Set(hrefs);
+}
+
+let menu = null;
+
 for (const [nome, rota, papel, pergunta] of AREAS) {
   if (!paginas[papel]) {
     const ctx = await navegador.newContext({ viewport: { width: 1280, height: 1000 } });
     paginas[papel] = await ctx.newPage();
     await entrar(paginas[papel], papel);
+    menu ??= await menuDoPainel(paginas[papel]);
   }
   const page = paginas[papel];
+
+  /**
+   * As telas "de dentro" não aparecem no menu de propósito — são abertas a
+   * partir de outra. Duas linhas, e não uma cópia da lista de trinta que o
+   * menu já é: uma lista longa aqui divergiria de `secoes.ts` na primeira tela
+   * nova, e o sintoma seria uma área deixando de ser conferida em silêncio.
+   */
+  const FORA_DO_MENU = ['/admin/meu-dia', '/admin/meus-numeros'];
+  if (!menu.has(rota) && !FORA_DO_MENU.includes(rota)) {
+    console.log(`\x1b[33mpulada\x1b[0m ${nome.padEnd(16)} desligada pela plataforma (fora do menu)`);
+    continue;
+  }
   const noBanco = Number(consultar(pergunta));
 
   const erros = [];

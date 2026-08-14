@@ -3,7 +3,15 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { MODULOS, SECOES_POR_MODULO, moduloDaSecao, secao, type Secao } from './secoes';
+import {
+  DESTINOS_GATEADOS,
+  MODULOS,
+  SECOES_POR_MODULO,
+  moduloDaSecao,
+  modulosVisiveis,
+  secao,
+  type Secao,
+} from './secoes';
 
 /**
  * O casco é padrão, e padrão sem guarda é convenção — dura até a próxima tela.
@@ -218,5 +226,70 @@ describe('a navegação não é reescrita à mão', () => {
         expect(moduloDaSecao(dentro), dentro).toBe(modulo.id);
       }
     }
+  });
+});
+
+/**
+ * Tela que a plataforma liga: some do menu **e** fecha a porta.
+ *
+ * O fiscal entrou assim no bloco 81 — `FISCAL_MODO` é `nenhum`, não há emissor
+ * contratado, e quem decide quando a nota estreia é a plataforma, uma conta de
+ * cada vez. Fila, importação e avisos já eram gateados na API desde o bloco 26
+ * e continuavam no menu: o link existia, a tela abria, e a API respondia 404
+ * dentro dela. Estado de erro no lugar de "isto não existe aqui".
+ *
+ * Os dois testes abaixo fecham as duas metades, e a segunda é a que se perde:
+ * esconder o link não fecha o endereço, e quem tem a tela salva no navegador
+ * chega lá do mesmo jeito.
+ */
+describe('tela ligada pela plataforma', () => {
+  const gateadas = DESTINOS_GATEADOS;
+
+  it('há telas gateadas — senão os dois testes abaixo passam por vacuidade', () => {
+    expect(gateadas.length).toBeGreaterThan(0);
+  });
+
+  it('o destino some do menu quando o recurso está desligado, e volta quando liga', () => {
+    for (const tela of gateadas) {
+      const codigo = tela.recurso;
+      const outros = gateadas.map((t) => t.recurso).filter((c) => c !== codigo);
+
+      const sem = modulosVisiveis(outros).flatMap((m) => m.telas.map((t) => t.href));
+      expect(sem, `${tela.href} continua no menu com ${codigo} desligado`).not.toContain(tela.href);
+
+      const com = modulosVisiveis([...outros, codigo]).flatMap((m) => m.telas.map((t) => t.href));
+      expect(com, `${tela.href} sumiu com ${codigo} ligado`).toContain(tela.href);
+    }
+  });
+
+  it('o que não depende de recurso aparece com a lista vazia', () => {
+    // Uma barbearia sem recurso nenhum ligado é o caso comum — é o padrão do
+    // catálogo. Se o filtro errasse a polaridade, o painel inteiro sumiria.
+    const semNada = modulosVisiveis([]).flatMap((m) => m.telas);
+    const todas = MODULOS.reduce((n, m) => n + m.telas.length, 0);
+    expect(semNada.length).toBe(todas - gateadas.length);
+    expect(semNada.every((t) => !t.recurso)).toBe(true);
+  });
+
+  it('toda tela gateada fecha a própria porta com exigirRecurso', () => {
+    /**
+     * Derivado do registro, e não de uma lista escrita ao lado: o destino que
+     * alguém marcar com `recurso` no bloco seguinte nasce cobrado. Uma lista
+     * paralela seria a que ninguém atualiza — é o defeito que `secoes.ts` já
+     * custou uma vez.
+     */
+    const faltando: string[] = [];
+    for (const tela of gateadas) {
+      const caminho = join(AQUI, tela.href.replace('/admin/', ''), 'page.tsx');
+      const fonte = readFileSync(caminho, 'utf8');
+      if (!fonte.includes(`exigirRecurso(estado, '${tela.recurso}')`)) {
+        faltando.push(`${tela.href} — falta exigirRecurso(estado, '${tela.recurso}')`);
+      }
+    }
+    expect(
+      faltando,
+      'esconder o link do menu não fecha a tela: o endereço continua digitável, e quem o tem ' +
+        'salvo chega a uma página que pede à API algo que ela responde 404.',
+    ).toEqual([]);
   });
 });

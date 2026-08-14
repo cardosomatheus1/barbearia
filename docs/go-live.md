@@ -62,12 +62,29 @@ isso é decisão escrita:
 | Integração | Interruptor | Padrão | O que falta |
 |---|---|---|---|
 | Adquirente | `PSP_MODO` | `nenhum` | conta contratada na Stripe |
-| Fiscal | `FISCAL_MODO` | `nenhum` | emissor contratado (a regra municipal **não** entra no código, SPEC §5.11) |
+| Fiscal | **recurso da plataforma** + `FISCAL_MODO` | desligado | emissor contratado (a regra municipal **não** entra no código, SPEC §5.11) |
 | WhatsApp | cadastro por barbearia | sem número | conta na Meta e verificação de empresa |
 
 Com o padrão, o produto opera: a plataforma fatura e o Super Admin registra o
-que viu no extrato (bloco 28), a nota não é oferecida — e a tela **diz** —, e o
-aviso cai no canal de reserva.
+que viu no extrato (bloco 28), a nota **não aparece**, e o aviso cai no canal de
+reserva.
+
+#### O fiscal tem dois interruptores, e eles respondem coisas diferentes
+
+`FISCAL_MODO` é da **instalação**: existe emissor contratado? Enquanto ele é
+`nenhum`, a rota de emitir responde 503 e a tela diz isso em letras — que é a
+convenção do repositório para gatilho que ainda não funciona.
+
+O recurso `fiscal` é da **conta**: esta barbearia já tem nota fiscal? Ele nasce
+desligado no catálogo (`feature_flags`), não entra em `plan_features`, e só é
+ligado pelo toggle do Super Admin, uma conta de cada vez. Desligado, a tela some
+do menu, o endereço responde 404 e o cartão da comanda não aparece — porque quem
+decidiu não foi a barbearia, e mandá-la procurar quem libera é o pior recado
+possível.
+
+A convenção do "gatilho marcado, nunca escondido" continua valendo para o que a
+barbearia liga. Quando quem decide é a plataforma, o recurso desligado **não
+existe** para o outro lado — é a mesma razão de a guarda responder 404 e não 403.
 
 ### 1.3 A operação — ensaiada, com números
 
@@ -218,7 +235,9 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 - [ ] Caminho de deploy definido, com ambiente de staging
 - [x] Rollback de migração escrito e ensaiado
 - [ ] Restauração ensaiada **no ambiente de produção**, não só aqui
-- [ ] Decisão escrita sobre fiscal (`FISCAL_MODO`) e sobre cobrança (`PSP_MODO`)
+- [x] Decisão escrita sobre fiscal: nasce **desligado por conta**, e liga pelo
+      toggle do Super Admin quando houver emissor contratado
+- [ ] Decisão escrita sobre cobrança (`PSP_MODO`)
 - [x] Cabeçalhos de segurança
 - [ ] Barbearia-piloto escolhida, com plano de saída escrito
 
