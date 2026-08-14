@@ -64,7 +64,10 @@ export async function medir(params: {
             WHEN ${dimensao} = 'unidade' THEN lo.name
             ELSE NULL
           END AS rotulo,
-          sum(o.total_cents)::bigint AS total,
+          -- Sem a gorjeta, como o painel e o DRE: e a mesma pergunta feita em
+          -- portugues, e tres respostas diferentes para "quanto faturei" e a
+          -- pior coisa que um assistente pode devolver.
+          sum(o.total_cents - o.tip_cents)::bigint AS total,
           count(*)::bigint AS comandas
           FROM orders o
           LEFT JOIN appointments a ON a.id = o.appointment_id

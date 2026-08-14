@@ -20,6 +20,7 @@ const MES: FatosDoDre = {
   receitaServicosCents: 4_200_000,
   receitaProdutosCents: 380_000,
   receitaAssinaturasCents: 149_000,
+  descontosCents: 96_000,
   comissoesCents: 1_800_000,
   cmvCents: 152_000,
   taxasCents: 138_000,
@@ -33,15 +34,15 @@ describe('o DRE soma o que a SPEC lista, e nada mais', () => {
     expect(dre.receitaBrutaCents).toBe(4_729_000);
   });
 
-  it('o resultado desconta as cinco linhas de custo', () => {
+  it('o resultado desconta as seis linhas de custo', () => {
     const dre = montarDre(MES);
-    expect(dre.custoTotalCents).toBe(3_022_000);
-    expect(dre.resultadoCents).toBe(1_707_000);
+    expect(dre.custoTotalCents).toBe(3_118_000);
+    expect(dre.resultadoCents).toBe(1_611_000);
   });
 
   it('a margem sai em pontos-base, como toda alíquota deste produto', () => {
-    // 1.707.000 / 4.729.000 = 36,10%
-    expect(montarDre(MES).margemBps).toBe(3610);
+    // 1.611.000 / 4.729.000 = 34,07%
+    expect(montarDre(MES).margemBps).toBe(3407);
   });
 
   it('mês sem receita não tem margem infinita', () => {
@@ -54,6 +55,7 @@ describe('o DRE soma o que a SPEC lista, e nada mais', () => {
       receitaServicosCents: 0,
       receitaProdutosCents: 0,
       receitaAssinaturasCents: 0,
+      descontosCents: 0,
       comissoesCents: 0,
       cmvCents: 0,
       taxasCents: 0,
@@ -62,6 +64,24 @@ describe('o DRE soma o que a SPEC lista, e nada mais', () => {
     });
     expect(vazio.margemBps).toBeNull();
     expect(vazio.resultadoCents).toBe(-120_000);
+  });
+
+  it('o desconto concedido entra no resultado, e a receita continua bruta', () => {
+    /**
+     * O mesmo formato de defeito da fidelidade, e passou despercebido pela
+     * mesma razão: o caixa bate — a comanda já fecha pelo valor com desconto —
+     * e só o resultado do mês ficava maior, no valor exato do que a casa abriu
+     * mão. Medido no produto: uma venda de R$ 100 com R$ 20 de desconto
+     * mostrava R$ 63,21 de sobra sobre R$ 80 que de fato entraram.
+     *
+     * A receita bruta **não** muda: `bruto` ignora taxa e desconto, senão
+     * "bruto" quer dizer "bruto menos uma coisa". E o total concedido fica
+     * visível, que é o número que `finance.discount` e `max_discount_bps`
+     * existem para controlar.
+     */
+    const sem = montarDre({ ...MES, descontosCents: 0 });
+    expect(sem.receitaBrutaCents).toBe(montarDre(MES).receitaBrutaCents);
+    expect(sem.resultadoCents - montarDre(MES).resultadoCents).toBe(96_000);
   });
 
   it('o custo da fidelidade entra no resultado', () => {
@@ -111,12 +131,13 @@ describe('o comparativo diz se melhorou, não só se subiu', () => {
     expect(linha.variacaoBps).toBe(7500);
   });
 
-  it('o DRE comparado traz as oito linhas da SPEC, em ordem', () => {
+  it('o DRE comparado traz as nove linhas, em ordem', () => {
     const comparado = compararDre(montarDre(MES), montarDre({ ...MES, despesasCents: 500_000 }));
     expect(comparado.linhas.map((l) => l.campo)).toEqual([
       'receitaServicosCents',
       'receitaProdutosCents',
       'receitaAssinaturasCents',
+      'descontosCents',
       'comissoesCents',
       'cmvCents',
       'taxasCents',

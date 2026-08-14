@@ -25,6 +25,8 @@
  * e a segunda roubaria o `slug`.
  */
 
+import { CARDAPIO, JORNADA_DA_SEMANA, semearFundo } from './semear-fundo.mjs';
+
 const API = process.env.API_URL ?? 'http://127.0.0.1:3000';
 
 /**
@@ -113,12 +115,16 @@ async function chamar(rota, { metodo = 'GET', corpo, token, cabecalhos } = {}) {
   return dados;
 }
 
-/** Jornada de todo dia, das 9h às 20h. Minutos locais desde a meia-noite. */
-const JORNADA = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-  weekday,
-  startMinute: 9 * 60,
-  endMinute: 20 * 60,
-}));
+/**
+ * A jornada e o cardápio saem do simulador, não daqui.
+ *
+ * Os dois arquivos precisam concordar ou a barbearia fica incoerente consigo
+ * mesma: a ocupação tem a jornada cadastrada no denominador, e o histórico
+ * simulado precisa casar com o serviço que existe no catálogo pelo **nome**.
+ * Duas listas parecidas em dois arquivos é como uma delas fica para trás — é a
+ * regra que `secoes.ts` e os rótulos de campanha já cobraram aqui.
+ */
+const JORNADA = JORNADA_DA_SEMANA;
 
 const somarDias = (dia, n) => {
   const d = new Date(`${dia}T12:00:00Z`);
@@ -173,9 +179,25 @@ async function abrirBarbearia() {
     },
   });
 
-  const { templates } = await chamar('/v1/admin/templates', { token });
-  await chamar('/v1/admin/services', { metodo: 'PUT', token, corpo: { services: templates } });
-  passo(`${templates.length} serviços no catálogo`);
+  /**
+   * O cardápio da casa, e não o modelo genérico do onboarding.
+   *
+   * Os templates existem para a barbearia que está abrindo agora e não sabe o
+   * que cobrar. Uma demonstração precisa do contrário: preço e duração de
+   * verdade, com "Barba terapêutica com toalha quente" e R$ 180 de platinado —
+   * é o nome comprido e o preço de três dígitos que quebram layout, e eles só
+   * aparecem com conteúdo verdadeiro (CLAUDE.md §5).
+   */
+  const servicos = CARDAPIO.map((s) => ({
+    key: s.chave,
+    name: s.nome,
+    category: s.categoria,
+    durationMinutes: s.min,
+    bufferAfterMinutes: s.buffer,
+    priceCents: s.preco,
+  }));
+  await chamar('/v1/admin/services', { metodo: 'PUT', token, corpo: { services: servicos } });
+  passo(`${servicos.length} serviços no catálogo`);
 
   await chamar('/v1/admin/professionals', {
     metodo: 'PUT',
@@ -216,18 +238,25 @@ async function abrirBarbearia() {
   return { token, slug: sessao.slug };
 }
 
-/** Uma recepcionista, para a tela de equipe ter mais de um papel. */
+/**
+ * A recepcionista, com conta que **entra** — e é ela quem abre o caixa.
+ *
+ * Ela vem antes do histórico de propósito: cada dia simulado registra quem
+ * abriu e fechou a gaveta, e esse nome sai da conta que existe aqui. Sem ela,
+ * o extrato do caixa e a trilha nomeariam alguém que não está na tela de
+ * equipe — e "quem fez isso?" é a primeira pergunta de quem abre um
+ * fechamento com diferença.
+ */
 async function convidarRecepcao(token) {
-  await chamar('/v1/admin/team', {
+  const email = 'recepcao@teste.com';
+  const convite = await chamar('/v1/admin/team', {
     metodo: 'POST',
     token,
-    corpo: {
-      name: 'Maria Aparecida do Nascimento',
-      email: 'recepcao@teste.com',
-      role: 'receptionist',
-    },
+    corpo: { name: 'Maria Aparecida do Nascimento', email, role: 'receptionist' },
   });
-  passo('recepcionista na equipe');
+  if (convite?.senhaInicial) await estrear(email, convite.senhaInicial);
+  passo('recepcionista na equipe, e é ela quem abre o caixa');
+  return { papel: 'recepção', email };
 }
 
 // -- o dia -------------------------------------------------------------------
@@ -566,46 +595,102 @@ async function moverDinheiro(token, catalogo) {
  * renderiza, mas mostrando o salão inteiro — que é justamente o layout que ela
  * existe para não ter.
  */
-async function convidarBarbeiro(token, catalogo, hoje) {
-  const email = 'barbeiro@teste.com';
-  const { senhaInicial } = await chamar('/v1/admin/team/invite', {
-    metodo: 'POST',
-    token,
-    corpo: { professionalId: catalogo.professionals[0]?.id, email },
-  });
-
+/** Destranca a conta recém-criada: a senha de primeiro acesso é de uso único. */
+async function estrear(email, senhaInicial) {
   const primeira = await chamar('/v1/admin/login', {
     metodo: 'POST',
     corpo: { email, password: senhaInicial },
   });
-  // A senha inicial é de uso único e o produto obriga a troca. Trocar aqui é o
-  // que faz a conta servir para entrar na demonstração.
   await chamar('/v1/admin/me/password', {
     metodo: 'PUT',
     token: primeira.token,
     corpo: { currentPassword: senhaInicial, newPassword: SENHA_DA_EQUIPE },
   });
-
-  // Meta do mês: sem ela a tela mostra "sem meta", que é o estado mais curto.
-  await chamar('/v1/admin/pro/goals', {
-    metodo: 'PUT',
-    token,
-    corpo: {
-      professionalId: catalogo.professionals[0]?.id,
-      mes: `${hoje.slice(0, 7)}-01`,
-      metaCents: 1_500_000,
-    },
-  }).catch(() => null);
-
-  passo(`conta do barbeiro: ${email}`);
-  return email;
 }
 
-/** A ficha do cliente cheia: preferências e anotação, que é o que ela serve. */
-async function encherUmaFicha(token) {
-  const clientes = await chamar('/v1/admin/customers?q=João', { token }).catch(() => null);
-  const cliente = clientes?.customers?.[0];
-  if (!cliente) return;
+/**
+ * Uma conta por cadeira, e uma meta para cada uma.
+ *
+ * As três, e não uma: o histórico simulado tem três barbeiros com procura
+ * diferente, e é entrando com cada um que se vê o que a §4.21 da SPEC promete —
+ * o indicador comparado com o **próprio** passado. Com uma conta só, duas das
+ * três telas de barbeiro que existem no produto ficam por conta da imaginação.
+ *
+ * A meta é do mês e por pessoa (bloco 22): sem ela a tela mostra "sem meta",
+ * que é o estado mais curto e o menos parecido com uma casa em operação.
+ */
+async function convidarEquipe(token, catalogo, hoje, fundo) {
+  const contas = [];
+
+  for (const [i, cadeira] of catalogo.professionals.entries()) {
+    const email = `barbeiro${i + 1}@teste.com`;
+    const convite = await chamar('/v1/admin/team/invite', {
+      metodo: 'POST',
+      token,
+      corpo: { professionalId: cadeira.id, email },
+    }).catch(() => null);
+    if (!convite) continue;
+
+    await estrear(email, convite.senhaInicial);
+
+    /**
+     * A meta sai do que **aquela** cadeira faturou nos últimos trinta dias.
+     *
+     * É o que o produto já sugere na tela (bloco 22), e é a única forma de a
+     * meta conversar com a pessoa que a recebeu: um número igual para os três
+     * faria o barbeiro que entrou há quatro meses abrir o mês com 40% do alvo
+     * e o mais procurado com 110% — e a §4.21 diz que o indicador se compara
+     * com o próprio passado, não com o do colega.
+     */
+    const ultimoMes = fundo?.cadeiras?.find((c) => c.id === cadeira.id)?.ultimoMesCents ?? 0;
+    const meta = Math.max(300_000, Math.round((ultimoMes * 1.1) / 10_000) * 10_000);
+    await chamar('/v1/admin/pro/goals', {
+      metodo: 'PUT',
+      token,
+      corpo: { professionalId: cadeira.id, mes: `${hoje.slice(0, 7)}-01`, metaCents: meta },
+    }).catch(() => null);
+
+    contas.push({ papel: `barbeiro — ${cadeira.name}`, email });
+  }
+
+  /**
+   * E o gerente, que é o papel do meio e o mais fácil de esquecer.
+   *
+   * Ele tem o financeiro e a operação e **não** tem a margem, o custo de
+   * insumo nem o limite de fiado — é assim que o dono delega o dia a dia sem
+   * entregar a estratégia. Entrar com ele é a única forma de ver que a tela
+   * esconde o que a guarda recusaria, em vez de mostrar botão que dá 403.
+   */
+  const gerente = 'gerente@teste.com';
+  const conviteDoGerente = await chamar('/v1/admin/team', {
+    metodo: 'POST',
+    token,
+    corpo: { name: 'Simone Andrade Requião', email: gerente, role: 'manager' },
+  }).catch(() => null);
+  if (conviteDoGerente?.senhaInicial) {
+    await estrear(gerente, conviteDoGerente.senhaInicial);
+    contas.push({ papel: 'gerente', email: gerente });
+  }
+
+  passo(`${contas.length} contas de equipe, cada uma com a tela dela`);
+  return contas;
+}
+
+/**
+ * A ficha de um cliente de verdade, escolhido por ter história.
+ *
+ * Ele é o quinto papel da demonstração — quem entra pela página pública e vê a
+ * própria agenda —, e por isso não pode ser um cadastro qualquer: precisa ser
+ * alguém com meses de atendimento, saldo de fidelidade e barbeiro de sempre,
+ * senão a tela do cliente abre no estado vazio enquanto o painel do dono está
+ * cheio. Duas telas contando histórias diferentes sobre a mesma casa é o que a
+ * §6 pergunta 6 proíbe.
+ *
+ * A escolha é **por dado**, não por nome: quem mais voltou.
+ */
+async function encherUmaFicha(token, vitrine) {
+  if (!vitrine) return null;
+  const cliente = { id: vitrine.id, name: vitrine.nome, phone: vitrine.telefone };
 
   await chamar(`/v1/admin/customers/${cliente.id}/preferences`, {
     metodo: 'PUT',
@@ -621,7 +706,8 @@ async function encherUmaFicha(token) {
         'Redemoinho do lado direito abre para cima. Não gosta de espelho na frente durante o corte.',
     },
   }).catch(() => null);
-  passo(`ficha preenchida (${cliente.name})`);
+  passo(`ficha preenchida: ${cliente.name}, ${vitrine.visitas} atendimentos`);
+  return cliente;
 }
 
 // -- fim ---------------------------------------------------------------------
@@ -634,7 +720,32 @@ async function main() {
   }
 
   const { token, slug } = await abrirBarbearia();
-  await convidarRecepcao(token);
+  const recepcao = await convidarRecepcao(token);
+
+  /**
+   * O passado, antes do dia de hoje.
+   *
+   * Ele vem primeiro porque o resto da semeadura monta **hoje** pela API, e
+   * hoje precisa cair sobre uma casa que já tem clientela, histórico e ritmo —
+   * senão a demonstração abre num painel onde todo indicador é o primeiro do
+   * seu tipo e todo comparativo é contra o nada.
+   *
+   * Sem `ADMIN_DATABASE_URL` isto é pulado com aviso, e não com erro: a
+   * demonstração continua funcionando, só que rasa. Dizer isso é obrigatório —
+   * uma semeadura que silenciosamente entrega menos é como alguém conclui que
+   * o produto não tem relatório.
+   */
+  const bancoAdmin = process.env.ADMIN_DATABASE_URL ?? process.env.DATABASE_URL;
+  let fundo = null;
+  if (bancoAdmin) {
+    fundo = await semearFundo({ url: bancoAdmin, slug });
+    passo(
+      `${fundo.dias} dias de história: ${fundo.atendimentos} atendimentos, ` +
+        `${fundo.clientes} clientes, ${fundo.vendas} vendas, ${fundo.avaliacoes} avaliações`,
+    );
+  } else {
+    console.log(cinza('    sem ADMIN_DATABASE_URL: a barbearia nasce sem histórico'));
+  }
 
   const catalogo = await chamar('/v1/admin/catalog', { token });
   const { today } = await encherODia(token, catalogo);
@@ -657,30 +768,44 @@ async function main() {
 
   await moverDinheiro(token, catalogo);
 
-  const barbeiro = await convidarBarbeiro(token, catalogo, today);
-  await encherUmaFicha(token);
+  const equipe = await convidarEquipe(token, catalogo, today, fundo);
+  const vitrine = await encherUmaFicha(token, fundo?.vitrine);
 
-  contar({ slug, segredo, barbeiro, recuperacao });
+  contar({ slug, segredo, recuperacao, contas: [recepcao, ...equipe], vitrine });
 }
 
-function contar({ slug, segredo, barbeiro, recuperacao }) {
-  const linha = (rotulo, valor) => console.log(`      ${rotulo.padEnd(7)}${valor}`);
+function contar({ slug, segredo, recuperacao, contas = [], vitrine }) {
+  const linha = (rotulo, valor) => console.log(`      ${rotulo.padEnd(11)}${valor}`);
 
   console.log('');
   console.log(`    ${verde('painel da barbearia')}  ${WEB}/admin/entrar`);
   linha('e-mail', DONO.email);
   linha('senha', DONO.password);
 
-  if (barbeiro) {
+  /**
+   * Uma linha por papel, porque **cada papel vê outra coisa**.
+   *
+   * O produto não é uma tela com permissões: o barbeiro tem `/admin/meu-dia`, o
+   * gerente tem o financeiro sem a margem, a recepção tem o balcão sem o
+   * relatório, e o cliente tem a própria agenda. Entregar só a conta do dono é
+   * demonstrar um quarto do que foi construído — e é o dono a única pessoa que
+   * nunca vai operar o balcão o dia inteiro.
+   */
+  if (contas.length > 0) {
     console.log('');
-    console.log(`    ${verde('a mesma tela pelo olho do barbeiro')}`);
-    linha('e-mail', barbeiro);
-    linha('senha', SENHA_DA_EQUIPE);
+    console.log(`    ${verde('a mesma casa, pelo olho de cada um')}  (senha: ${SENHA_DA_EQUIPE})`);
+    for (const conta of contas) {
+      const largura = Math.max(...contas.map((c) => c.papel.length)) + 2;
+      console.log(`      ${conta.papel.padEnd(largura)}${conta.email}`);
+    }
   }
 
   if (slug) {
     console.log('');
     console.log(`    ${verde('a página do cliente')}  ${WEB}/${slug}`);
+    if (vitrine?.phone) {
+      linha('entre com', `${vitrine.phone}  (${vitrine.name})`);
+    }
     console.log(cinza(`      O código de acesso do cliente sai no log da API — não há SMS aqui.`));
   }
 

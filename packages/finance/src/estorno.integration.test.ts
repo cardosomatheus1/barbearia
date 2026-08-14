@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { abrirCaixa, caixaAberto } from './caixa.js';
-import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
+import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda } from './comanda.js';
 import { estornarVenda, transferirPacote } from './estorno.js';
 import { salvarRegraDeComissao } from './comissao.js';
 import { salvarProduto } from './estoque.js';
@@ -685,6 +685,66 @@ describeIfDb('vale, estorno e DRE', () => {
     expect(depois.atual.receitaServicosCents).toBe(5000);
     // A comissão também: o lançamento negativo entrou no mesmo período.
     expect(depois.atual.comissoesCents).toBe(2000);
+  });
+
+  it('o desconto concedido aparece no DRE, e a receita continua bruta', async () => {
+    /**
+     * Era o defeito: a comanda fecha pelo valor com desconto, o caixa bate, a
+     * comissão sai sobre a base já reduzida — e **só** o relatório do dono não
+     * sabia. Uma venda de R$ 50 com R$ 10 de desconto entrava como R$ 50 de
+     * receita, e o resultado do mês crescia exatamente os R$ 10 que a casa
+     * abriu mão.
+     *
+     * A receita bruta continua R$ 50 de propósito: `bruto` ignora taxa e
+     * desconto, senão "bruto" quer dizer "bruto menos uma coisa". O que muda é
+     * o desconto virar linha de custo — e é ela que devolve ao dono o número
+     * que `finance.discount` e `max_discount_bps` existem para controlar.
+     */
+    const comanda = await abrirComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      customerId: CARLOS,
+      staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId: comanda.id,
+      tipo: 'service',
+      descricao: 'Corte',
+      serviceId: CORTE,
+      professionalId: RUAN,
+      quantidade: 1,
+      precoUnitarioCents: 5000,
+      ...operador,
+    });
+    await ajustarComanda({
+      tenantId: TENANT,
+      orderId: comanda.id,
+      desconto: { tipo: 'amount', valor: 1000, motivo: 'cliente de sempre, combinado com o dono' },
+      staffId: STAFF,
+      staffName: 'Maria',
+    });
+    await fecharComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId: comanda.id,
+      pagamentos: [{ forma: 'cash', valorCents: 4000 }],
+      ...fecha,
+    });
+
+    const dre = await dreDoPeriodo({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      de: '2026-11-01',
+      ate: '2026-11-30',
+    });
+
+    expect(dre.atual.receitaServicosCents).toBe(5000);
+    expect(dre.atual.descontosCents).toBe(1000);
+    // O que de fato sobrou: R$ 40 entraram, e a comissão saiu sobre os R$ 40.
+    expect(dre.atual.receitaBrutaCents - dre.atual.descontosCents).toBe(4000);
+    expect(dre.atual.resultadoCents).toBe(4000 - dre.atual.comissoesCents - dre.atual.taxasCents);
   });
 
   it('a despesa paga do bloco 51 entra no resultado', async () => {

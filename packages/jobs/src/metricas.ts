@@ -120,8 +120,12 @@ export async function apurarDiaDaBarbearia(
           AND ws.weekday = EXTRACT(DOW FROM alvo.d)
       ),
       vendas AS (
+        -- Sem a gorjeta, como o painel e o DRE: o total e subtotal menos
+        -- desconto mais gorjeta, e a gorjeta atravessa a casa a caminho do
+        -- barbeiro. Este numero e o que a plataforma usa para dizer como a
+        -- barbearia vai, e nele a gorjeta e receita de outra pessoa.
         SELECT count(*)::bigint AS comandas,
-               coalesce(sum(o.total_cents), 0)::bigint AS cents
+               coalesce(sum(o.total_cents - o.tip_cents), 0)::bigint AS cents
         FROM orders o
         CROSS JOIN alvo
         WHERE o.status = 'paid' AND o.business_day = alvo.d
@@ -129,9 +133,10 @@ export async function apurarDiaDaBarbearia(
       -- A quebra por meio de pagamento (bloco 29).
       --
       -- Sai de order_payments e não de orders: a comanda pode ser paga em dois
-      -- meios, e somar o total no meio "principal" inventaria um número. Por
-      -- isso ela não fecha com a receita quando há fiado — e é assim que tem
-      -- que ser: fiado é venda registrada, não dinheiro recebido.
+      -- meios, e somar o total no meio "principal" inventaria um número. Ela
+      -- nao fecha com a receita por duas razoes, e as duas sao assim de
+      -- proposito: o fiado e venda registrada e nao dinheiro recebido, e a
+      -- gorjeta e dinheiro recebido que nao e receita da casa.
       meios AS (
         SELECT
           coalesce(sum(op.amount_cents) FILTER (WHERE op.method = 'pix'), 0)::bigint AS pix,

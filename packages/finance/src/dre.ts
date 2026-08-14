@@ -156,6 +156,26 @@ async function fatosDoPeriodo(
        AND m.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
 
+  /**
+   * O que a casa abriu mão — a lacuna que este bloco fecha.
+   *
+   * `orders.discount_cents`, e não a diferença entre item e total: o total já
+   * carrega a gorjeta, que não é da casa, e subtrair um do outro misturaria
+   * duas coisas que a comanda guarda separadas de propósito.
+   *
+   * Sem esta linha o relatório somava o preço cheio do item contra a comissão
+   * calculada sobre o valor com desconto, e o resultado do mês crescia no valor
+   * exato do que foi concedido. A comissão sempre soube — `base_cents` é o
+   * total descontado —, e era só o relatório do dono que não.
+   */
+  const descontos = await tx.$queryRaw<{ total: number | null }[]>`
+    SELECT sum(o.discount_cents)::int AS total
+      FROM orders o
+     WHERE o.location_id = ${params.locationId}::uuid
+       AND o.status = 'paid'
+       AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
+  `;
+
   const taxas = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(o.fee_cents)::int AS total
       FROM orders o
@@ -202,6 +222,7 @@ async function fatosDoPeriodo(
     receitaServicosCents: servicoCents + (pacotesReconhecidos[0]?.total ?? 0),
     receitaProdutosCents: produtoCents,
     receitaAssinaturasCents: assinaturas[0]?.total ?? 0,
+    descontosCents: descontos[0]?.total ?? 0,
     comissoesCents,
     cmvCents: cmv[0]?.total ?? 0,
     taxasCents: taxas[0]?.total ?? 0,

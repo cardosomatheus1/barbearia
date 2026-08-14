@@ -6,6 +6,7 @@
  * + Receita de produtos
  * + Receita de assinaturas
  * ──────────────────────────
+ * − Descontos concedidos
  * − Comissões
  * − CMV
  * − Taxas de pagamento
@@ -34,6 +35,24 @@
  * Ela fica **fora** de "despesas operacionais" de propósito. Aquela linha soma
  * contas digitadas pelo balcão; esta é derivada da venda. Misturá-las faria a
  * única linha que ninguém digita desaparecer dentro da que todo mundo confere.
+ *
+ * ## O desconto é custo, e a receita continua bruta
+ *
+ * O desconto tem exatamente o mesmo formato de defeito que o resgate de
+ * fidelidade descrito acima, e passou despercebido pela mesma razão: o caixa
+ * bate — a comanda já fecha pelo valor com desconto — e nada fica vermelho.
+ * Só o resultado do mês ficava maior, no valor exato do que a casa abriu mão.
+ * Uma venda de R$ 100 com R$ 20 de desconto entrava como R$ 100 de receita
+ * contra R$ 36 de comissão, e o relatório mostrava R$ 63,21 de sobra sobre
+ * R$ 80 que de fato entraram.
+ *
+ * Ele entra como **custo**, e não como redução da receita, porque é o que a
+ * convenção deste código já diz: *"`bruto` ignora taxa e desconto, senão
+ * 'bruto' quer dizer 'bruto menos uma coisa'"*. E porque desconto é decisão —
+ * tem permissão própria (`finance.discount`) e teto próprio
+ * (`tenants.max_discount_bps`): esconder o total concedido dentro de uma
+ * receita menor tiraria da tela justamente o número que essas duas guardas
+ * existem para controlar.
  */
 
 /** Tudo em centavos inteiros, e cada campo é uma linha do relatório. */
@@ -41,6 +60,7 @@ export interface FatosDoDre {
   readonly receitaServicosCents: number;
   readonly receitaProdutosCents: number;
   readonly receitaAssinaturasCents: number;
+  readonly descontosCents: number;
   readonly comissoesCents: number;
   readonly cmvCents: number;
   readonly taxasCents: number;
@@ -65,7 +85,8 @@ export function montarDre(fatos: FatosDoDre): Dre {
     fatos.receitaServicosCents + fatos.receitaProdutosCents + fatos.receitaAssinaturasCents;
 
   const custoTotalCents =
-    fatos.comissoesCents
+    fatos.descontosCents
+    + fatos.comissoesCents
     + fatos.cmvCents
     + fatos.taxasCents
     + fatos.fidelidadeCents
@@ -138,6 +159,7 @@ export const LINHAS_DO_DRE = [
   { campo: 'receitaServicosCents', rotulo: 'Serviços', natureza: 'receita' },
   { campo: 'receitaProdutosCents', rotulo: 'Produtos', natureza: 'receita' },
   { campo: 'receitaAssinaturasCents', rotulo: 'Assinaturas', natureza: 'receita' },
+  { campo: 'descontosCents', rotulo: 'Descontos concedidos', natureza: 'custo' },
   { campo: 'comissoesCents', rotulo: 'Comissões', natureza: 'custo' },
   { campo: 'cmvCents', rotulo: 'Custo dos produtos vendidos', natureza: 'custo' },
   { campo: 'taxasCents', rotulo: 'Taxas de pagamento', natureza: 'custo' },

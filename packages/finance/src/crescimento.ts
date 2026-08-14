@@ -78,7 +78,10 @@ export async function crescimentoDaCasa(params: {
      * aqui: quem resolveu isso foi quem gravou a venda.
      */
     const serie = await tx.$queryRaw<{ dia: Date; total: bigint }[]>`
-      SELECT o.business_day AS dia, sum(o.total_cents)::bigint AS total
+      -- Sem a gorjeta: esta serie e comparada com a do painel e com o DRE, e
+      -- tres numeros diferentes para "quanto entrou" e o defeito que a §6
+      -- pergunta 6 descreve.
+      SELECT o.business_day AS dia, sum(o.total_cents - o.tip_cents)::bigint AS total
         FROM orders o
        WHERE o.status = 'paid'
          AND o.business_day BETWEEN ${de}::date AND ${ate}::date

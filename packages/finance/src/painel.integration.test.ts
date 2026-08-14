@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { abrirCaixa } from './caixa.js';
-import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
+import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda } from './comanda.js';
 import { painelDeDinheiro, painelOperacional } from './painel.js';
 
 /**
@@ -210,6 +210,43 @@ describeIfDb('painel do proprietário', () => {
     expect(painel.faturamentoCents.valor).toBe(12000);
     expect(painel.faturamentoCents.anterior).toBe(8000);
     expect(painel.faturamentoCents.variacao).toBe(50);
+  });
+
+  it('a gorjeta não entra no faturamento — ela não é da casa', async () => {
+    /**
+     * `total_cents` é subtotal − desconto + gorjeta, e o painel somava o total
+     * inteiro. O efeito era duas telas discordando sobre o mesmo mês: o painel
+     * dizia R$ 13.480 e o DRE dizia R$ 13.268, e a diferença era exatamente a
+     * gorjeta — sem que nenhuma das duas explicasse nada (§6, pergunta 6).
+     *
+     * `somarComanda` já soma a gorjeta **por fora** justamente porque ela não é
+     * da casa: aplicá-la sobre o total descontado faria o barbeiro receber
+     * menos quando a barbearia dá desconto. O painel é a última tela que ainda
+     * a tratava como receita — e é ela que compara com a meta do mês, o que
+     * tornava a meta batível com dinheiro de outra pessoa.
+     */
+    const aberta = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      tipo: 'service', serviceId: CABELO, descricao: 'Corte',
+      quantidade: 1, precoUnitarioCents: 5000, professionalId: RUAN,
+    });
+    await ajustarComanda({
+      tenantId: TENANT, orderId: aberta.id, desconto: null, gorjetaCents: 1000,
+      staffId: STAFF, staffName: 'Maria',
+    });
+    await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 0, ...operador })
+      .catch(() => undefined);
+    await fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      pagamentos: [{ forma: 'cash', valorCents: 6000 }],
+      hojeNaUnidade: SABADO, ...operador,
+    });
+
+    const painel = await dinheiro();
+    expect(painel.faturamentoCents.valor).toBe(5000);
   });
 
   it('o ticket médio divide pelo número de comandas', async () => {

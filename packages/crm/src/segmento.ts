@@ -73,6 +73,11 @@ export async function segmentosDaBase(
              (SELECT array_agg(a.service_starts_at ORDER BY a.service_starts_at)
                 FROM appointments a
                WHERE a.customer_id = c.id AND a.status = 'completed') AS visitas,
+             -- O total inteiro, **com** a gorjeta, e aqui e de proposito:
+             -- a pergunta e quanto esta pessoa gastou na barbearia, e a gorjeta
+             -- ela gastou. O faturamento da casa e outra pergunta e por isso a
+             -- desconta — nomear cada numero pelo que ele e vale mais que
+             -- fazer os dois baterem.
              (SELECT sum(o.total_cents)::int
                 FROM orders o
                WHERE o.customer_id = c.id AND o.status = 'paid') AS gasto,

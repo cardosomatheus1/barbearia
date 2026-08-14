@@ -231,8 +231,21 @@ async function dinheiroDoDia(
   locationId: string,
   dia: string,
 ): Promise<LinhaDeDinheiro> {
+  /**
+   * Faturamento **sem a gorjeta**, e é o que a palavra quer dizer.
+   *
+   * `total_cents` é subtotal − desconto + gorjeta, e a gorjeta não é da casa:
+   * `somarComanda` a soma por fora justamente para o barbeiro não perder quando
+   * a casa dá desconto. Contá-la aqui fazia o painel dizer "faturamento" sobre
+   * dinheiro que a barbearia só repassa — e fazia esta tela discordar do DRE
+   * pelo valor exato das gorjetas do mês, sem que nenhuma das duas explicasse a
+   * diferença (CLAUDE.md §6, pergunta 6).
+   *
+   * A meta do mês é comparada com este número, e é outra razão para ele ser o
+   * da casa: bater a meta com gorjeta de cliente é bater a meta de outra pessoa.
+   */
   const linhas = await tx.$queryRaw<LinhaDeDinheiro[]>`
-    SELECT coalesce(sum(o.total_cents), 0)::bigint AS faturamento_cents,
+    SELECT coalesce(sum(o.total_cents - o.tip_cents), 0)::bigint AS faturamento_cents,
            count(*)::bigint AS comandas
       FROM orders o
      WHERE o.location_id = ${locationId}::uuid
@@ -468,7 +481,8 @@ async function dinheiroDoPeriodo(
   fim: string,
 ): Promise<LinhaDeDinheiro> {
   const linhas = await tx.$queryRaw<LinhaDeDinheiro[]>`
-    SELECT coalesce(sum(o.total_cents), 0)::bigint AS faturamento_cents,
+    -- Sem a gorjeta, pelo mesmo motivo do faturamento do dia: ela nao e da casa.
+    SELECT coalesce(sum(o.total_cents - o.tip_cents), 0)::bigint AS faturamento_cents,
            count(*)::bigint AS comandas
       FROM orders o
      WHERE o.location_id = ${locationId}::uuid
@@ -486,7 +500,10 @@ async function serieDeFaturamento(
   fim: string,
 ): Promise<readonly PontoFaturamento[]> {
   const linhas = await tx.$queryRaw<{ dia: string; faturamento_cents: bigint }[]>`
-    SELECT to_char(d.dia::date, 'YYYY-MM-DD') AS dia, coalesce(sum(o.total_cents), 0)::bigint AS faturamento_cents
+    -- Sem a gorjeta, como o resto do painel: a serie e o cartao precisam somar
+    -- a mesma coisa, senao o grafico contradiz o numero em cima dele.
+    SELECT to_char(d.dia::date, 'YYYY-MM-DD') AS dia,
+           coalesce(sum(o.total_cents - o.tip_cents), 0)::bigint AS faturamento_cents
       FROM generate_series(${inicio}::date, ${fim}::date, interval '1 day') AS d(dia)
       LEFT JOIN orders o ON o.location_id = ${locationId}::uuid
                         AND o.status = 'paid'
