@@ -316,7 +316,11 @@ export type AuditAction =
   // Chave de API (bloco 78). A trilha registra que a chave nasceu e com que
   // escopo — nunca o segredo, nem o HMAC dele.
   | 'api_key.created'
-  | 'api_key.revoked';
+  | 'api_key.revoked'
+  // Webhook para terceiros (bloco 79). A trilha guarda o endereco e os
+  // eventos — nunca o segredo compartilhado.
+  | 'webhook.registered'
+  | 'webhook.disabled';
 
 /**
  * O vocabulário partido em dois, porque a leitura não é uma permissão só.
@@ -416,6 +420,8 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
    */
   'api_key.created',
   'api_key.revoked',
+  'webhook.registered',
+  'webhook.disabled',
   'staff.created',
   'staff.role_changed',
   'staff.deactivated',

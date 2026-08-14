@@ -145,6 +145,9 @@ importers:
       '@barbearia/finance':
         specifier: workspace:*
         version: link:../../packages/finance
+      '@barbearia/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@barbearia/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs

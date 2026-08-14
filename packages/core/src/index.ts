@@ -46,6 +46,7 @@ export * from './destaque.js';
 export * from './franquia.js';
 export * from './rede.js';
 export * from './apikey.js';
+export * from './webhook.js';
 export * from './insight.js';
 export * from './precificacao.js';
 export * from './recepcao.js';

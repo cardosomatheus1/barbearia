@@ -46,6 +46,7 @@ import { FranquiaController } from './admin/franquia.controller.js';
 import { RedeController } from './admin/rede.controller.js';
 import { PublicaController } from './publica/publica.controller.js';
 import { ChavesController } from './admin/chaves.controller.js';
+import { WebhooksController } from './admin/webhooks.controller.js';
 import { ChaveGuard } from './publica/chave.guard.js';
 import { WhatsAppController } from './admin/whatsapp.controller.js';
 import { AutomacaoController } from './admin/automacao.controller.js';
@@ -128,6 +129,7 @@ import { TenantService } from './tenant/tenant.service.js';
     RedeController,
     PublicaController,
     ChavesController,
+    WebhooksController,
     WhatsAppController,
     AutomacaoController,
     CampanhaController,

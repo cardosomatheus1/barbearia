@@ -6,6 +6,7 @@ import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { uuidSchema } from './caixa.schemas.js';
 import { novaChaveSchema, revogacaoDaChaveSchema } from './chaves.schemas.js';
 
 /**
@@ -91,7 +92,8 @@ export class ChavesController {
   @Post(':chaveId/revogacao')
   async revogar(
     @Staff() staff: AuthenticatedStaff,
-    @Param('chaveId') chaveId: string,
+    // Id malformado é 400 com motivo, nunca 500.
+    @Param('chaveId', new ZodValidationPipe(uuidSchema)) chaveId: string,
     @Body(new ZodValidationPipe(revogacaoDaChaveSchema)) body: { motivo: string },
   ) {
     try {

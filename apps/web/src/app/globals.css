@@ -4444,6 +4444,7 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-secao='unidades']) .contexto__link[data-para='unidades'],
 .casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
 .casco:has([data-secao='chaves']) .contexto__link[data-para='chaves'],
+.casco:has([data-secao='webhooks']) .contexto__link[data-para='webhooks'],
 .casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
 .casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca'],
 .casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes'],
@@ -8154,4 +8155,20 @@ main { padding-bottom: var(--space-8); }
   .chave-escopos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chave__revogar { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
   .chave__revogar .ui-field__label { grid-column: 1 / -1; }
+}
+
+/* -- Webhooks para terceiros (bloco 79) ------------------------------------- */
+
+/* O estado da entrega é dito em letras, e a cor só reforça: quem tem baixa
+   visão precisa da palavra, e "falhou" em vermelho sem texto não é informação. */
+.entrega-estado { font-size: var(--font-size-sm); }
+.entrega-estado--entregue { color: var(--color-success); }
+.entrega-estado--pendente { color: var(--color-text-muted); }
+.entrega-estado--falhou,
+.entrega-estado--desistiu { color: var(--color-danger); }
+
+.entrega-motivo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }

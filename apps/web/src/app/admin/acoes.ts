@@ -143,6 +143,8 @@ import {
   salvarPreferenciasDeAlerta,
   adotarDoPadrao,
   criarChaveNaApi,
+  cadastrarWebhookNaApi,
+  desligarWebhookNaApi,
   revogarChaveNaApi,
   salvarMetaDaRedeNaApi,
   despublicarDoPadrao,
@@ -3026,4 +3028,25 @@ export async function acaoRevogarChave(form: FormData): Promise<void> {
   const resultado = await revogarChaveNaApi(token, texto(form, 'chaveId'), texto(form, 'motivo'));
   if (!resultado.ok) falhar('/admin/chaves', resultado.code);
   redirect('/admin/chaves?revogada=1');
+}
+
+/** Webhooks para terceiros (bloco 79). O segredo sai uma vez, como a chave. */
+export async function acaoCadastrarWebhook(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const eventos = form.getAll('eventos').map((v) => String(v));
+  const resultado = await cadastrarWebhookNaApi(token, {
+    nome: texto(form, 'nome'),
+    url: texto(form, 'url'),
+    eventos,
+  });
+  if (!resultado.ok) falhar('/admin/webhooks', resultado.code);
+  await guardarSenhaDeUmaVez(texto(form, 'nome'), resultado.dados.segredo, 'webhooks');
+  redirect('/admin/webhooks?criado=1');
+}
+
+export async function acaoDesligarWebhook(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await desligarWebhookNaApi(token, texto(form, 'endpointId'));
+  if (!resultado.ok) falhar('/admin/webhooks', resultado.code);
+  redirect('/admin/webhooks?desligado=1');
 }

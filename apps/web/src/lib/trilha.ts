@@ -16,6 +16,8 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   // Chave de API é conta, e a frase precisa dizer isso: quem lê a trilha
   // procura "quem abriu uma porta", não "quem mexeu numa configuração".
   'api_key.created': 'emitiu a chave de API',
+  'webhook.registered': 'cadastrou o webhook',
+  'webhook.disabled': 'desligou o webhook',
   'api_key.revoked': 'revogou a chave de API',
   'staff.created': 'criou a conta de',
   'staff.role_changed': 'mudou o papel de',

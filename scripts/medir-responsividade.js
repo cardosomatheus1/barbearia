@@ -1235,6 +1235,45 @@ function prepararDestaque(slug) {
  * em lugar nenhum depois da criação, e uma semente que o inventasse estaria
  * mentindo sobre o que o produto guarda.
  */
+/**
+ * Um endereço de webhook e três entregas: uma boa, uma na fila e uma que
+ * desistiu (bloco 79).
+ *
+ * Sem elas a tabela de "últimos avisos" sai vazia, e a tela seria fotografada
+ * sem a única informação que ela existe para dar — se está chegando ou não.
+ */
+function prepararWebhooks(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  if (psql(`select 1 from webhook_endpoints where tenant_id = '${tenant}' limit 1`)) return;
+
+  const endpoint = psql(
+    `INSERT INTO webhook_endpoints (tenant_id, name, url, secret_cipher, events)
+     VALUES ('${tenant}', 'ERP do contador', 'https://erp.exemplo.com.br/barber-dock',
+             'nao-e-segredo', ARRAY['appointment.created', 'order.paid']::webhook_event[])
+     RETURNING id`,
+  )?.split('\n')[0];
+  if (!endpoint) return;
+
+  psql(
+    `INSERT INTO webhook_deliveries
+       (tenant_id, endpoint_id, event, payload, status, attempts, delivered_at, response_status)
+     VALUES ('${tenant}', '${endpoint}', 'appointment.created',
+             '{"event":"appointment.created"}'::jsonb, 'entregue', 1, now(), 200)`,
+  );
+  psql(
+    `INSERT INTO webhook_deliveries (tenant_id, endpoint_id, event, payload, status, attempts)
+     VALUES ('${tenant}', '${endpoint}', 'order.paid',
+             '{"event":"order.paid"}'::jsonb, 'pendente', 0)`,
+  );
+  psql(
+    `INSERT INTO webhook_deliveries
+       (tenant_id, endpoint_id, event, payload, status, attempts, response_status)
+     VALUES ('${tenant}', '${endpoint}', 'appointment.created',
+             '{"event":"appointment.created"}'::jsonb, 'desistiu', 1, 404)`,
+  );
+}
+
 function prepararChaves(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return;
@@ -2549,6 +2588,7 @@ async function main() {
   prepararDestaque(slug);
   prepararFranquia(slug);
   prepararChaves(slug);
+  prepararWebhooks(slug);
   prepararFotos(slug, balcao.clienteId);
   await prepararPacotes(slug, balcao.clienteId);
   await prepararAvaliacoes(slug, balcao.clienteId);
@@ -2692,6 +2732,7 @@ async function main() {
     { nome: 'campanhas', url: '/admin/campanhas', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'unidades', url: '/admin/unidades', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'chaves de API', url: '/admin/chaves', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'webhooks', url: '/admin/webhooks', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'trilha', url: '/admin/trilha', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     // A aba do dinheiro é outra rota e outra permissão, com valores em centavos
     // no corpo do evento — que é o que estoura a linha em 360px.

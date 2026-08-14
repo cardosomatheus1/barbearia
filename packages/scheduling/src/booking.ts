@@ -5,6 +5,7 @@ import {
   agendarFalta,
   agendarOfertaDaVaga,
   cancelarTarefasDoAgendamento,
+  registrarEventoDeWebhook,
 } from '@barbearia/jobs';
 import {
   POLITICA_SEM_SINAL,
@@ -656,6 +657,25 @@ async function criarDentroDaTransacao(
         }),
       });
     }
+
+    /**
+     * O aviso ao sistema do cliente nasce **dentro** desta transação (bloco 79).
+     *
+     * Depois do commit existe a janela em que o horário foi marcado e o ERP da
+     * barbearia não sabe — e é nela que o processo cai. Mesma razão da comissão,
+     * da nota fiscal e do lembrete.
+     *
+     * O corpo carrega id e fato, nunca dado pessoal: quem quer o detalhe busca
+     * na API pública, com chave e escopo. E sem endpoint cadastrado isto não
+     * grava nada — que é o caso da esmagadora maioria das barbearias.
+     */
+    await registrarEventoDeWebhook(tx, {
+      tenantId: request.tenantId,
+      evento: 'appointment.created',
+      objetoId: id,
+      locationId: request.locationId,
+      quando: request.now ?? new Date(),
+    });
 
     return {
       id,

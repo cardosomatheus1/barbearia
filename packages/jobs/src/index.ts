@@ -10,3 +10,4 @@ export * from './alerta-agendado.js';
 export * from './espera.js';
 export * from './clube.js';
 export * from './fiscal.js';
+export * from './webhook.js';

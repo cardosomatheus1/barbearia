@@ -14,6 +14,7 @@
     "@barbearia/crm": "workspace:*",
     "@barbearia/db": "workspace:*",
     "@barbearia/finance": "workspace:*",
+    "@barbearia/identity": "workspace:*",
     "@barbearia/jobs": "workspace:*",
     "@barbearia/platform": "workspace:*",
     "@barbearia/scheduling": "workspace:*"

@@ -10,3 +10,4 @@ export * from './mfa-staff.js';
 export * from './forca-bruta.js';
 export * from './origem.js';
 export * from './apikey.js';
+export * from './webhook.js';

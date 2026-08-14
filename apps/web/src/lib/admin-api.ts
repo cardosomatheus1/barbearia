@@ -3643,3 +3643,40 @@ export const criarChaveNaApi = (token: string, dados: { nome: string; escopos: s
 
 export const revogarChaveNaApi = (token: string, chaveId: string, motivo: string) =>
   chamar<{ ok: true }>('POST', `/v1/admin/chaves/${chaveId}/revogacao`, { motivo }, token);
+
+/** Webhooks para terceiros (bloco 79). */
+export interface EndpointNaApi {
+  readonly id: string;
+  readonly nome: string;
+  readonly url: string;
+  readonly eventos: readonly string[];
+  readonly ativo: boolean;
+  readonly criadoEm: string;
+}
+
+export interface EntregaNaApi {
+  readonly id: string;
+  readonly evento: string;
+  readonly estado: string;
+  readonly tentativas: number;
+  readonly respostaHttp: number | null;
+  readonly erro: string | null;
+  readonly criadaEm: string;
+  readonly entregueEm: string | null;
+}
+
+export const webhooksNaApi = (token: string) =>
+  chamar<{ endpoints: EndpointNaApi[]; entregas: EntregaNaApi[] }>(
+    'GET',
+    '/v1/admin/webhooks',
+    undefined,
+    token,
+  );
+
+export const cadastrarWebhookNaApi = (
+  token: string,
+  dados: { nome: string; url: string; eventos: string[] },
+) => chamar<{ id: string; segredo: string }>('POST', '/v1/admin/webhooks', dados, token);
+
+export const desligarWebhookNaApi = (token: string, endpointId: string) =>
+  chamar<{ ok: true }>('DELETE', `/v1/admin/webhooks/${endpointId}`, undefined, token);

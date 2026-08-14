@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 78 de 80 blocos.**
+**Status: 79 de 80 blocos.**
 
 ---
 
@@ -110,6 +110,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Formas de pagamento na recepção digital | o assunto é reconhecido e a pergunta vira lacuna contada, com a tela dizendo em letras que ainda não há onde cadastrar | o **cadastro**: uma lista de meios aceitos na tela de Configurações, para a recepção responder "aceitamos Pix, débito e crédito" em vez de escalar | sem bloco definido: é uma coluna e um campo de formulário, e entra no primeiro bloco que abrir a tela de Configurações. Deixá-lo marcado é decisão — escondê-lo faria a SPEC §4.17 parecer entregue, e inventar a resposta é exatamente o que "respostas vêm **exclusivamente** dos dados configurados" proíbe. A pergunta não some enquanto isso: ela é contada, e a contagem é o que justifica o campo |
 | "Perto de mim" com a coordenada do aparelho | a busca inteira: vitrine sem RLS, raio, caixa de coordenada indexada, filtros de nota, preço, comodidade e clube, e a cidade escolhida com o centro derivado das próprias barbearias listadas | ler a **geolocalização do navegador**, que é o que a SPEC §5.2 chama de "perto de mim" | sem bloco definido: exige o **primeiro componente de cliente do produto**, hoje 100% renderizado no servidor — a mesma dependência do arraste na agenda, da atualização automática do balcão e da resolução de conflito de telefone, e as quatro devem entrar juntas com medição de pacote. Escolher a cidade não é consolo: ela resolve o caso de quem busca do computador, e o centro sai do cadastro em vez de uma tabela de municípios que alguém teria que manter |
 | Filtro por **serviço** na busca do marketplace | os outros sete filtros da SPEC §5.2, o motor rodando em lote, e — desde o bloco 73 — a dimensão "profissional", que entrou como **página pública do barbeiro**: é assim que ela existe num marketplace, porque ninguém busca por um barbeiro que ainda não conhece | escolher o serviço na busca. Hoje o horário do card é o do **serviço de entrada** da casa, o mesmo do "a partir de", e a tela diz isso em letras — a casa cujo serviço mais barato está lotado some do filtro com a tarde livre para o resto do cardápio | sem bloco definido: cada barbearia nomeia os serviços como quer ("Corte", "Corte masculino", "Cabelo"), e um filtro que atravessa casas exige uma **taxonomia compartilhada** que ainda não existe. Inventá-la dentro deste bloco seria decidir por todo mundo a partir de um cadastro só; ela vale junto com o primeiro cliente real que tenha catálogo grande o bastante para justificá-la |
+| Saída de webhook por proxy de egresso | a recusa de destino interno em duas camadas — o nome no cadastro e **cada IP resolvido** antes de conectar —, `redirect: 'manual'` para o `3xx` não virar o segundo salto sem guarda, e `https://` por `CHECK` | fechar a janela entre a resolução e a do `fetch` (religação de DNS). Hoje ela é estreita e de baixo impacto: o esquema é `https:` e o certificado é conferido, então uma religação para IP interno falha no aperto de mão antes de qualquer corpo sair ou voltar — e o erro registrado é o genérico da biblioteca, sem servir de oráculo de porta | sem bloco definido: o conserto de verdade é a saída da rede passar por um proxy de egresso com lista de destinos, e isso é decisão de infraestrutura, não de código. Entra junto do primeiro deploy de verdade |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
 
 A leitura agrupada — o que é dívida, o que espera infraestrutura, o que é ordem
@@ -335,7 +336,7 @@ Só faz sentido com centenas de barbearias na base.
 | 76 | Franquias: catálogo padrão, preços sugeridos | ✅ |
 | 77 | Franquias: indicadores consolidados, metas | ✅ |
 | 78 | API pública: chaves, escopos, rate limit | ✅ |
-| 79 | Webhooks assinados para terceiros |
+| 79 | Webhooks assinados para terceiros | ✅ |
 
 ---
 

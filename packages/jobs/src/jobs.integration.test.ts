@@ -248,6 +248,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => AGORA },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     };
   });
@@ -534,6 +536,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -560,6 +564,8 @@ describeIfDb('fila de trabalho', () => {
         provider,
         relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
         recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
         ...ligacoesDaPlataforma(),
       });
 
@@ -583,6 +589,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => COMECA_EM },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -610,6 +618,8 @@ describeIfDb('fila de trabalho', () => {
         provider,
         relogio: { agora: () => COMECA_EM },
         recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
         ...ligacoesDaPlataforma(),
       });
       expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
@@ -631,6 +641,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => COMECA_EM },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -661,6 +673,8 @@ describeIfDb('fila de trabalho', () => {
         provider,
         relogio: { agora: () => COMECA_EM },
         recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
         ...ligacoesDaPlataforma(),
       });
       expect(resultado).toMatchObject({ tomadas: 2, concluidas: 2, falhadas: 0 });
@@ -684,6 +698,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => COMECA_EM },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -709,6 +725,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => COMECA_EM },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -735,6 +753,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => COMECA_EM },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -763,6 +783,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => COMECA_EM },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -789,6 +811,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
       recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
 
@@ -1035,6 +1059,8 @@ describeIfDb('fila de trabalho', () => {
       provider,
       relogio: { agora: () => VENCEU },
       recursoLigado: async () => true,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
       ...ligacoesDaPlataforma(),
     });
     expect(resultado.concluidas).toBe(1);

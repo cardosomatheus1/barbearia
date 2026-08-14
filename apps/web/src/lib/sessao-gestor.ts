@@ -69,7 +69,7 @@ const SEGUNDOS_NA_TELA = 120;
  * (o convite do barbeiro). O caminho continua restrito — não é `/admin` — para
  * que o cookie não acompanhe a navegação pelo resto do painel.
  */
-export type TelaDaSenha = 'equipe' | 'profissionais' | 'chaves';
+export type TelaDaSenha = 'equipe' | 'profissionais' | 'chaves' | 'webhooks';
 
 const CAMINHO_DA_TELA: Record<TelaDaSenha, string> = {
   equipe: CAMINHO_EQUIPE,
@@ -78,6 +78,9 @@ const CAMINHO_DA_TELA: Record<TelaDaSenha, string> = {
   // existe uma vez, e um parâmetro de consulta ficaria no histórico do
   // navegador, no autocompletar e em qualquer referrer.
   chaves: '/admin/chaves',
+  // O segredo compartilhado do webhook sai pelo mesmo caminho, e pela mesma
+  // razão: ele existe uma vez.
+  webhooks: '/admin/webhooks',
 };
 
 export async function guardarSenhaDeUmaVez(

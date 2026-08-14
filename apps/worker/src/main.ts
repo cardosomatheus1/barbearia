@@ -1,3 +1,4 @@
+import { entregarWebhook, varrerEntregasPendentes } from '@barbearia/identity';
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import {
   atribuirObjetivos,
@@ -327,6 +328,8 @@ async function main(): Promise<void> {
       cobrarComissaoDoMarketplace: async (tenantId, agora) => {
         await emitirComissaoDoMarketplace({ tenantId, agora });
       },
+      entregarWebhook: async (entregaId, agora) => entregarWebhook(entregaId, agora),
+      varrerWebhooks: async (agora) => varrerEntregasPendentes(agora),
       varrerRetencao: async (tenantId, agora) => {
         /**
          * O texto cru das perguntas anônimas vence junto (bloco 66).

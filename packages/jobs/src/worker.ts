@@ -145,6 +145,21 @@ export interface Contexto {
     agora: Date,
   ) => Promise<{ readonly avisados: number; readonly anonimizados: number }>;
   /**
+   * A entrega de um webhook para terceiro (bloco 79), injetada.
+   *
+   * Mesma razão de todas as anteriores: ela decifra o segredo com
+   * `WEBHOOK_SECRET_KEY` e fala com a internet, e nada disso é assunto de
+   * `jobs` — que continua sabendo enfileirar e nada mais. Obrigatória no tipo:
+   * opcional, o primeiro worker novo esqueceria dela e o aviso ao sistema do
+   * cliente pararia de sair sem nada ficar vermelho.
+   */
+  readonly entregarWebhook: (
+    entregaId: string,
+    agora: Date,
+  ) => Promise<'entregue' | 'retentar' | 'desistiu' | 'sumiu'>;
+  /** As entregas vencidas, para a varredura. Injetada pelo mesmo motivo. */
+  readonly varrerWebhooks: (agora: Date) => Promise<readonly string[]>;
+  /**
    * A vitrine do marketplace refeita (bloco 70), injetada.
    *
    * Mesma razão da retenção: ela vive em `packages/platform`, que é camada de
@@ -337,6 +352,38 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    * plataforma para notas pendentes: `fiscal_invoices` tem RLS, e um processo
    * sem tenant no contexto enxergaria zero linhas — sempre.
    */
+  /**
+   * Entrega um webhook. Quem reprograma é a **varredura**, não esta tarefa.
+   *
+   * A nota fiscal se reprograma sozinha porque `fiscal_invoices` tem RLS e um
+   * processo sem tenant enxergaria zero linhas. Aqui é o contrário:
+   * `webhook_deliveries` é legível sem tenant de propósito, e `next_attempt_at`
+   * já é a resposta para *"quando tentar de novo"*.
+   *
+   * Reprogramar aqui **também** seria a segunda noção do mesmo instante — e a
+   * entrega cuja tarefa se perdesse entre a falha e a reprogramação ficaria
+   * pendente para sempre, sem erro. Uma fonte só, e a varredura é a rede.
+   */
+  'webhook.entregar': async (tarefa, contexto) => {
+    const entregaId = String(tarefa.payload['entregaId'] ?? '');
+    if (!entregaId) throw new Error('tarefa de webhook sem entrega');
+    await contexto.entregarWebhook(entregaId, contexto.relogio.agora());
+  },
+
+  /**
+   * A varredura das entregas vencidas.
+   *
+   * Ela alcança o primeiro degrau da escada e tudo que a tarefa perdeu. Roda
+   * sem tenant, como a política da tabela permite — a fila de entregas não
+   * pertence a nenhuma barbearia.
+   */
+  'webhook.varrer': async (_tarefa, contexto) => {
+    const agora = contexto.relogio.agora();
+    for (const entregaId of await contexto.varrerWebhooks(agora)) {
+      await contexto.entregarWebhook(entregaId, agora);
+    }
+  },
+
   'fiscal.emitir': async (tarefa, contexto) => {
     const invoiceId = String(tarefa.payload['invoiceId'] ?? '');
     if (!invoiceId) throw new Error('tarefa fiscal sem nota');
