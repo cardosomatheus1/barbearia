@@ -275,7 +275,8 @@ export type RecusaDeResgate =
   | 'saldo_insuficiente'
   | 'nada_a_pagar'
   | 'quantidade_invalida'
-  | 'premio_incompleto';
+  | 'premio_incompleto'
+  | 'resgate_acima_do_teto';
 
 /**
  * O resgate pode acontecer?
@@ -301,7 +302,41 @@ export function podeResgatar(params: {
   if (programa.modo === 'visitas' && quantidade !== programa.visitasParaPremio) {
     return { aceito: false, recusa: 'premio_incompleto' };
   }
+
+  /**
+   * Não se queima mais saldo do que a conta consome.
+   *
+   * `valorDoResgate` apara no teto — o que ainda falta pagar —, e quem grava
+   * debitava a quantidade **pedida**. Um cliente com 5.000 pontos numa comanda
+   * de R$ 10 pagava os R$ 10 e perdia R$ 50 de crédito: o razão registrava
+   * `-5000` e os R$ 40 sumiam para sempre, porque a única volta seria um
+   * `finance.loyalty_adjust` positivo, com outra permissão e motivo escrito.
+   *
+   * O que impedia isso era `resgateSugerido`, e ele mora na **tela**. Qualquer
+   * cliente HTTP que não a use — a API pública do bloco 78, um integrador, um
+   * toque duplo — passava direto.
+   *
+   * Recusar e não aparar, porque é o estilo do arquivo e porque aparar em
+   * silêncio devolveria "deu certo" para um pedido que não é o que a pessoa
+   * quis. A tela já pergunta o valor certo.
+   */
+  if (valorDoResgate({ programa, quantidade, tetoCents }) < precisoParaCobrir(programa, quantidade)) {
+    return { aceito: false, recusa: 'resgate_acima_do_teto' };
+  }
+
   return { aceito: true };
+}
+
+/**
+ * Quanto a comanda precisaria ter para esta quantidade ser inteiramente usada.
+ *
+ * Em `visitas` o prêmio é o próprio teto — "um corte grátis" vale o que a conta
+ * vale —, então ele nunca sobra e a conferência não se aplica.
+ */
+function precisoParaCobrir(programa: ProgramaDeFidelidade, quantidade: number): number {
+  if (programa.modo === 'cashback') return quantidade;
+  if (programa.modo === 'pontos') return quantidade * programa.valorDoPontoCents;
+  return 0;
 }
 
 /**

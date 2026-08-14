@@ -77,7 +77,9 @@ services:
       preparar:
         condition: service_completed_successfully
     environment: *ambiente
-    ports: ['3000:3000']
+    # Só o laço: publicar em todas as interfaces expõe a API de quem sobe o
+    # compose num VPS ou numa rede de escritório para mostrar o produto.
+    ports: ['127.0.0.1:3000:3000']
     command: node apps/api/dist/main.js
     healthcheck:
       # A sonda de pronto da própria API: ela só responde ok com o banco
@@ -105,11 +107,21 @@ services:
       # De servidor para servidor, dentro da rede do compose — não passa pelo
       # navegador de quem abre.
       API_URL: http://api:3000
-    ports: ['3001:3001']
+    ports: ['127.0.0.1:3001:3001']
     command: pnpm --filter @barbearia/web exec next start -p 3001 -H 0.0.0.0
 
   # Semeia e sai. Idempotente: rodar de novo não cria a segunda barbearia.
+  #
+  # **Atrás de um profile**, e não mais em todo `docker compose up`: ele cria uma
+  # conta de **dono** com senha conhecida, publicada no repositório e impressa no
+  # terminal. Enquanto isso rodava sozinho, quem subisse o compose num VPS ou
+  # numa máquina de homologação para mostrar o produto entregava base de
+  # clientes, caixa, fiado, exportação LGPD e cadastro de webhook a quem
+  # alcançasse a porta.
+  #
+  #     docker compose --profile demo up
   semear:
+    profiles: ['demo']
     build: .
     depends_on:
       api:

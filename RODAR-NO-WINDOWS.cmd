@@ -49,7 +49,7 @@ echo.
 echo   Para parar: aperte Ctrl+C nesta janela.
 echo.
 
-docker compose up --build
+docker compose --profile demo up --build
 echo.
 echo   O sistema parou. Feche a janela ou rode este arquivo de novo.
 pause

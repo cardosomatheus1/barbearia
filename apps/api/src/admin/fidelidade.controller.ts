@@ -39,6 +39,7 @@ const STATUS: Record<string, number> = {
   nada_a_pagar: 409,
   quantidade_invalida: 400,
   premio_incompleto: 409,
+  resgate_acima_do_teto: 409,
   motivo_curto: 400,
   programa_invalido: 400,
 };

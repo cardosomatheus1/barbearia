@@ -26,6 +26,32 @@
  */
 
 const API = process.env.API_URL ?? 'http://127.0.0.1:3000';
+
+/**
+ * A trava de ambiente, e por que ela não é paranoia.
+ *
+ * Este script cria uma conta de **dono** com senha conhecida e publicada no
+ * repositório. A frase que ele imprime no fim — "não servem em lugar nenhum
+ * além desta máquina" — era uma suposição sobre onde o comando foi digitado,
+ * não uma verificação: `API_URL` vinha do compose e apontava para `api:3000`
+ * independentemente de o compose estar num notebook ou num VPS.
+ *
+ * Quem alcançasse a porta entrava como dono: base de clientes com telefone e
+ * ficha, caixa, comanda, fiado, exportação LGPD, chaves de API e cadastro de
+ * webhook — que é o ponto de saída de rede do produto.
+ *
+ * A conferência é pelo **host**, que é o que decide para onde os dados vão.
+ */
+const LOCAIS = ['localhost', '127.0.0.1', '::1', 'api', 'host.docker.internal'];
+const alvo = new URL(API).hostname;
+if (!LOCAIS.includes(alvo)) {
+  console.error(
+    `[semear] recusado: ${alvo} não é uma máquina local.\n` +
+      '  Este script cria um dono com senha conhecida e publicada. Ele existe\n' +
+      '  para demonstração local — num alvo remoto, seria uma porta aberta.',
+  );
+  process.exit(1);
+}
 const WEB = process.env.WEB_URL ?? 'http://127.0.0.1:3001';
 
 /**
@@ -682,8 +708,11 @@ function contar({ slug, segredo, barbeiro, recuperacao }) {
   }
 
   console.log('');
-  console.log(cinza('    Credenciais de demonstração, em banco local. Não servem em lugar nenhum'));
-  console.log(cinza('    além desta máquina, e o produto não tem senha padrão.'));
+  // A frase agora é verdade porque foi conferida: o script recusa alvo remoto
+  // logo na subida. Antes ela era uma suposição sobre onde o comando foi
+  // digitado — e era a única coisa protegendo a conta de dono.
+  console.log(cinza(`    Credenciais de demonstração, contra ${new URL(API).hostname}.`));
+  console.log(cinza('    O script recusa alvo que não seja local, e o produto não tem senha padrão.'));
 }
 
 main().catch((erro) => {

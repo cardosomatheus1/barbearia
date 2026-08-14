@@ -47,4 +47,7 @@ echo "  Construindo e subindo. Na primeira vez leva alguns minutos."
 echo "  Depois, abra:  http://localhost:3001"
 echo "  Painel:        teste@teste.com / testeteste"
 echo
-exec docker compose up --build
+# `--profile demo` liga o semeador, que cria a conta de dono com senha
+# conhecida. Ele fica atrás do profile de propósito: fora daqui, `docker compose
+# up` sobe o produto sem nenhuma conta padrão.
+exec docker compose --profile demo up --build

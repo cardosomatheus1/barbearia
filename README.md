@@ -98,6 +98,13 @@ No fim ele imprime os endereços e as credenciais:
 | dono | `teste@teste.com` | `testeteste` |
 | barbeiro (tela própria, `/admin/meu-dia`) | `barbeiro@teste.com` | `testeteste` |
 
+**Elas só existem com `--profile demo`, e só contra uma máquina local.** O
+semeador recusa alvo remoto e o compose publica as portas em `127.0.0.1`: sem as
+duas coisas, subir isto num VPS para mostrar o produto entregaria uma conta de
+**dono** — base de clientes, caixa, fiado e exportação LGPD — a quem alcançasse
+a porta, com a senha publicada aqui. Um `docker compose up` sem o profile sobe o
+produto sem conta nenhuma.
+
 A senha tem dez caracteres porque `MIN_PASSWORD` são dez no domínio, e o
 e-mail tem formato de e-mail porque o login valida isso na borda — a
 demonstração não é motivo para afrouxar nenhum dos dois.

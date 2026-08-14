@@ -44,6 +44,7 @@ export type FidelidadeFailure =
   | 'nada_a_pagar'
   | 'quantidade_invalida'
   | 'premio_incompleto'
+  | 'resgate_acima_do_teto'
   | 'motivo_curto'
   | 'programa_invalido';
 
@@ -61,6 +62,8 @@ const MENSAGEM: Readonly<Record<FidelidadeFailure, string>> = {
   nada_a_pagar: 'Não há valor a pagar nesta comanda.',
   quantidade_invalida: 'Informe uma quantidade inteira e positiva.',
   premio_incompleto: 'O cartão ainda não está completo para o prêmio.',
+  // A frase diz o que fazer: o saldo não se perde, ele fica.
+  resgate_acima_do_teto: 'Esta conta não usa tudo isso. Resgate só o que ela cobre.',
   motivo_curto: 'Escreva por que o saldo está sendo ajustado.',
   programa_invalido: 'Confira os números do programa.',
 };

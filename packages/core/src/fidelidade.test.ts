@@ -340,4 +340,39 @@ describe('o vocabulário do saldo', () => {
     expect(saldoPorExtenso('pontos', 1)).toBe('1 ponto');
     expect(saldoPorExtenso('pontos', 340)).toBe('340 pontos');
   });
+
+  it('não se queima mais saldo do que a conta consome', () => {
+    /**
+     * O defeito: `valorDoResgate` apara no teto e quem grava debitava a
+     * quantidade **pedida**. Cinco mil pontos numa comanda de R$ 10 pagavam os
+     * R$ 10 e apagavam R$ 50 de crédito — os R$ 40 sumiam para sempre, porque a
+     * única volta é um ajuste manual com outra permissão.
+     *
+     * O que segurava era `resgateSugerido`, e ele mora na tela: qualquer cliente
+     * HTTP que não a use passava direto.
+     */
+    const emPontos: ProgramaDeFidelidade = {
+      modo: 'pontos',
+      pontosPorReal: 1,
+      valorDoPontoCents: 1,
+      visitasParaPremio: 0,
+      cashbackBps: 0,
+      validadeDias: null,
+      escopo: 'empresa',
+    };
+
+    expect(
+      podeResgatar({ programa: emPontos, saldo: 5000, quantidade: 5000, tetoCents: 1000 }),
+    ).toEqual({ aceito: false, recusa: 'resgate_acima_do_teto' });
+
+    // O que cabe, cabe: mil pontos numa conta de R$ 10 é resgate cheio.
+    expect(
+      podeResgatar({ programa: emPontos, saldo: 5000, quantidade: 1000, tetoCents: 1000 }),
+    ).toEqual({ aceito: true });
+
+    // E o parcial continua valendo, que é requisito da SPEC.
+    expect(
+      podeResgatar({ programa: emPontos, saldo: 5000, quantidade: 400, tetoCents: 1000 }),
+    ).toEqual({ aceito: true });
+  });
 });
