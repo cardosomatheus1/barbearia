@@ -12,6 +12,15 @@ import type { MessagingProvider } from './messaging.js';
  *   existente e inexistente.
  */
 
+/**
+ * Quanto tempo o desafio vencido ainda fica.
+ *
+ * Folga sobre a janela de cinco minutos — o cooldown do reenvio e a contagem de
+ * tentativas leem a linha depois de ela expirar —, e curto o bastante para o
+ * telefone em claro não virar base.
+ */
+const RETENCAO_DO_DESAFIO_DIAS = 7;
+
 export const OTP_LENGTH = 6;
 export const OTP_TTL_MINUTES = 5;
 export const OTP_MAX_ATTEMPTS = 5;
@@ -416,5 +425,53 @@ export async function resolveGuestCustomer(input: GuestIdentity): Promise<{
     const customer = rows[0];
     if (!customer) throw new OtpError('no_challenge', 'Não foi possível identificar o cliente');
     return { customerId: customer.id, phoneE164: phone };
+  });
+}
+
+/**
+ * Apaga os desafios de OTP vencidos.
+ *
+ * ## O que ele guarda, e por que isso precisa de prazo
+ *
+ * `otp_challenges` tem `phone_e164` **em claro** e `pending_name` — o nome que a
+ * pessoa digitou antes de confirmar. Cópia de dado pessoal **fora de
+ * `customers`** vive com prazo escrito, como `imports.payload` e o texto anônimo
+ * da recepção.
+ *
+ * A migração 0005 anunciou a faxina num comentário e ela nunca teve chamador. O
+ * único apagamento morava dentro de `anonimizar_cliente`, condicionado ao
+ * telefone do cadastro — logo, alcançava só quem **é** cliente com aquele número
+ * naquele instante. Sobravam dois casos:
+ *
+ * - quem pediu o código, desistiu e nunca marcou nada. Não está em `customers`,
+ *   então nenhum pedido de exclusão a alcança e a retenção de cinco anos não a
+ *   enxerga;
+ * - quem trocou de número: o desafio do número **antigo** ficava, com o nome
+ *   verdadeiro. É o que o comentário da 0071 diz que não pode acontecer.
+ *
+ * Um dump da tabela é a lista de todo telefone que já tentou agendar em qualquer
+ * barbearia da plataforma.
+ *
+ * ## Por que sete dias, e não zero
+ *
+ * O desafio vencido ainda serve por um instante: o cooldown progressivo do
+ * reenvio e a contagem de tentativas leem a linha depois de ela expirar, e
+ * apagar na hora daria reenvio livre a quem esgotou as cinco tentativas. Sete
+ * dias é folga sobre a janela de cinco minutos, e curto o bastante para o dado
+ * não virar base.
+ *
+ * Devolve quantas linhas saíram: varredura que não conta não prova que rodou.
+ */
+export async function expirarDesafiosDeOtp(entrada: {
+  readonly tenantId: string;
+  readonly agora?: Date;
+}): Promise<number> {
+  const agora = entrada.agora ?? new Date();
+  const corte = new Date(agora.getTime() - RETENCAO_DO_DESAFIO_DIAS * 86_400_000);
+
+  return withTenant(entrada.tenantId, async (tx) => {
+    return tx.$executeRaw`
+      DELETE FROM otp_challenges WHERE expires_at < ${corte}
+    `;
   });
 }

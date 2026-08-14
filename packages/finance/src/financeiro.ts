@@ -1007,7 +1007,16 @@ export async function lancarSaldoInicialDeFiado(params: {
       action: 'debt.opening_balance',
       entity: 'customer',
       entityId: params.customerId,
-      after: { deveCents: params.deveCents, motivo, saldoCents: saldo },
+      /**
+       * O tamanho do motivo, nunca o texto.
+       *
+       * Ele é escrito **sobre um cliente** ("devia desde a mudança do salão"),
+       * e a cópia dele mora em `customer_ledger.note`, que `anonimizar_cliente`
+       * limpa. A de `audit_log` não seria limpa por nada: a tabela é
+       * append-only, a anonimização não a alcança e a exportação do titular a
+       * deixa de fora de propósito.
+       */
+      after: { deveCents: params.deveCents, caracteresDoMotivo: motivo.length, saldoCents: saldo },
     });
 
     return { saldoCents: saldo };

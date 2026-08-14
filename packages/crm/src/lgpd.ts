@@ -231,7 +231,12 @@ export async function exportarDadosDoTitular(
 ): Promise<DadosDoTitular> {
   return withTenant(tenantId, async (tx) => {
     const clientes = await tx.$queryRaw<Record<string, unknown>[]>`
-      SELECT c.id, c.name, c.phone_e164, c.accepts_marketing,
+      -- CPF e nascimento entram, e a ausencia deles era descumprimento do
+      -- art. 18 II: o arquivo afirmava pelo silencio que a barbearia nao os
+      -- guardava, enquanto anonimizar_cliente os apaga justamente por serem
+      -- dado pessoal do titular. Uma resposta incompleta com cara de completa e
+      -- pior que uma recusa, porque ninguem investiga.
+      SELECT c.id, c.name, c.phone_e164, c.birth_date, c.tax_id, c.accepts_marketing,
              c.balance_cents, c.credit_limit_cents, c.created_at, c.updated_at,
              t.name AS barbearia, t.dpo_name, t.dpo_email
         FROM customers c
@@ -533,6 +538,8 @@ export async function exportarDadosDoTitular(
       cadastro: {
         nome: cliente['name'],
         telefone: cliente['phone_e164'],
+        nascimento: cliente['birth_date'],
+        cpf: cliente['tax_id'],
         aceitaMarketing: cliente['accepts_marketing'],
         saldoCents: cliente['balance_cents'],
         limiteDeFiadoCents: cliente['credit_limit_cents'],
@@ -761,7 +768,9 @@ export async function encerrarPedidoDoTitular(entrada: {
       action: entrada.atendido ? 'lgpd.request_fulfilled' : 'lgpd.request_refused',
       entity: 'data_requests',
       entityId: entrada.pedidoId,
-      after: { nota: nota.length > 0 ? nota : null },
+      // O tamanho, nunca o texto: a recusa de um pedido do titular é escrita
+      // **sobre ele**, e `audit_log` é a única cópia que a exclusão não alcança.
+      after: { caracteresDaNota: nota.length },
     });
   });
 }

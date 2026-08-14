@@ -590,7 +590,9 @@ export async function ajustarSaldo(entrada: {
       action: 'loyalty.adjusted',
       entity: 'customers',
       entityId: entrada.customerId,
-      after: { quantidade: entrada.quantidade, motivo },
+      // Idem: "creditei porque o Marcelo brigou na frente da loja" é texto
+      // sobre uma pessoa, e ele fica no razão, que a anonimização alcança.
+      after: { quantidade: entrada.quantidade, caracteresDoMotivo: motivo.length },
     });
   });
 

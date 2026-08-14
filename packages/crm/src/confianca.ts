@@ -119,7 +119,24 @@ export async function definirConfianca(
       entity: 'customer',
       entityId: entrada.customerId,
       before: { score: anterior.reliability_override },
-      after: { score: entrada.score, motivo },
+      /**
+       * O **tamanho** do motivo, nunca o texto.
+       *
+       * A migração que criou `reliability_override_reason` explica por que ela
+       * é apagada na anonimização, e os exemplos são dela: *"faltou por
+       * internação"* e *"sumiu com a chave da barbearia"* — dado de saúde e
+       * imputação de crime. Copiado para `audit_log`, o mesmo texto sobrevivia
+       * à exclusão que o titular pediu: a tabela é append-only por `REVOKE`, a
+       * anonimização não a alcança e a exportação a deixa de fora de propósito.
+       * Sobrava a narrativa com o id da pessoa e o carimbo de hora, que sozinho
+       * já reidentifica — legível por qualquer papel com `settings.manage`,
+       * para sempre.
+       *
+       * É o precedente do CPF no bloco 54: a trilha registra **que** mudou. O
+       * motivo continua consultável em `customers`, onde a anonimização o
+       * alcança.
+       */
+      after: { score: entrada.score, caracteresDoMotivo: motivo.length },
       ...(entrada.ip ? { ip: entrada.ip } : {}),
       ...(entrada.userAgent ? { userAgent: entrada.userAgent } : {}),
     });

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
@@ -325,6 +327,88 @@ describeIfDb('direitos do titular', () => {
     expect(
       esquecidas,
       `tabela com dado de cliente fora da exportação: ${esquecidas.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('nenhuma coluna de customers fica de fora da exportação', async () => {
+    /**
+     * A rede que faltava, e a que deixou o CPF e o nascimento passarem.
+     *
+     * A varredura acima compara **tabelas**; esta compara **colunas de
+     * `customers`**, que é onde mora o cadastro do titular. `birth_date` entrou
+     * no bloco 25 e `tax_id` no 54, e nenhum dos dois estava no arquivo que a
+     * pessoa recebe — enquanto `anonimizar_cliente` apaga os dois, justamente
+     * por serem dado pessoal dela.
+     *
+     * O silêncio é o defeito: o arquivo afirmava, por omissão, que a barbearia
+     * não guardava o CPF — enquanto ele estava no cadastro e tinha sido impresso
+     * na nota que foi à prefeitura. Resposta incompleta com cara de completa é o
+     * pior desfecho de um pedido do titular.
+     *
+     * É o espelho da varredura de catálogo que a 0034 já faz para a
+     * anonimização, e a assimetria entre as duas era o buraco.
+     */
+    const FORA: ReadonlyMap<string, string> = new Map([
+      ['id', 'chave técnica; o titular não pede o uuid dele'],
+      ['tenant_id', 'de quem é o cadastro, não do cadastro'],
+      ['import_id', 'de qual importação veio — operação, não dado da pessoa'],
+      ['anonymized_at', 'carimbo da própria exclusão'],
+      ['retention_notified_at', 'quando o aviso de retenção saiu; operação da casa'],
+      [
+        'reliability_override',
+        'score interno, e a SPEC §2.13 proíbe mostrá-lo ao cliente — nem ao dono',
+      ],
+      ['reliability_override_reason', 'anotação interna do balcão sobre a pessoa, não dela'],
+      ['reliability_override_by', 'quem do balcão decidiu; nome de terceiro'],
+      ['reliability_override_at', 'idem'],
+      ['marketing_consent_ip', 'sai por customer_consents, com data e versão do texto'],
+      ['marketing_consent_at', 'idem'],
+      ['marketing_consent_version', 'idem'],
+      ['acquired_via', 'termo comercial entre plataforma e barbearia'],
+      ['acquired_at', 'idem'],
+      ['notes_updated_at', 'carimbo da anotação interna, que não sai'],
+      ['created_at', 'sai como criadoEm'],
+      ['updated_at', 'sai como atualizadoEm'],
+    ]);
+
+    /**
+     * O que a exportação pede, **lido do fonte** e não escrito aqui.
+     *
+     * Uma lista escrita ao lado seria a que ninguém atualiza — o defeito que
+     * esta varredura existe para pegar, cometido dentro dela. A consulta real é
+     * a fonte da verdade, e o `c.<coluna>` do `SELECT` é o que se extrai.
+     */
+    const fonte = readFileSync(
+      join(import.meta.dirname, 'lgpd.ts'),
+      'utf8',
+    );
+    const consulta = fonte.slice(
+      fonte.indexOf('SELECT c.id, c.name'),
+      fonte.indexOf('FROM customers c'),
+    );
+    const NO_ARQUIVO = new Set(
+      // Dígitos entram: `phone_e164` é o nome da coluna, e a primeira versão
+      // desta regex não o via — a varredura acusou o telefone como esquecido
+      // sobre uma exportação que sempre o levou.
+      [...consulta.matchAll(/\bc\.([a-z_0-9]+)/g)].map((m) => m[1] as string),
+    );
+    expect(NO_ARQUIVO.size, 'não achei a consulta do cadastro em lgpd.ts').toBeGreaterThan(5);
+
+    const colunas = await withTenant(TENANT, (tx) =>
+      tx.$queryRaw<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'customers'
+      `,
+    );
+
+    const esquecidas = colunas
+      .map((c) => c.column_name)
+      .filter((nome) => !NO_ARQUIVO.has(nome) && !FORA.has(nome));
+
+    expect(
+      esquecidas,
+      `coluna de customers fora da exportação do titular: ${esquecidas.join(', ')}. ` +
+        'Ou ela entra no arquivo, ou entra em FORA com o motivo escrito.',
     ).toEqual([]);
   });
 

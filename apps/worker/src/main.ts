@@ -1,4 +1,4 @@
-import { entregarWebhook, varrerEntregasPendentes } from '@barbearia/identity';
+import { entregarWebhook, expirarDesafiosDeOtp, varrerEntregasPendentes } from '@barbearia/identity';
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import {
   atribuirObjetivos,
@@ -340,6 +340,20 @@ async function main(): Promise<void> {
          * seguinte. Antes da varredura de cadastro, porque não depende dela e
          * uma exceção lá não pode deixar o texto para trás.
          */
+        /**
+         * O desafio de OTP vence junto, e pela mesma pergunta.
+         *
+         * Ele guarda telefone em claro e o nome digitado antes de confirmar, de
+         * quem muitas vezes **nunca virou cliente** — e por isso nem a
+         * anonimização nem a retenção de cinco anos o alcançam. É a linha que
+         * faltava para "cópia de dado pessoal fora de `customers` vive com prazo
+         * escrito" valer também aqui.
+         */
+        const desafios = await expirarDesafiosDeOtp({ tenantId, agora });
+        if (desafios > 0) {
+          console.log('[lgpd] desafios de OTP expirados', { tenantId, linhas: desafios });
+        }
+
         const expirados = await expirarTextoDaRecepcao({ tenantId, agora });
         if (expirados > 0) {
           // Só a contagem: o texto que está sendo apagado por ser possivelmente
