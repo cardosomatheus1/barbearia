@@ -3,6 +3,7 @@ import { conectarWhatsAppNaApi } from '@/lib/admin-api';
 import { VOLTA_DA_META } from '@/lib/meta';
 import {
   guardarCodigoDaMeta,
+  guardarMotivoDaMeta,
   lerSessaoGestor,
   tomarCodigoDaMeta,
   tomarEstadoDaMeta,
@@ -123,7 +124,13 @@ export async function GET(requisicao: Request): Promise<Response> {
       numeroVisivel: null,
     });
 
-    if (!resultado.ok) redirect(TELA + '?erro=' + resultado.code);
+    if (!resultado.ok) {
+      // O que a Meta respondeu vai junto, num cookie curto: a recusa dela diz o
+      // motivo, e a tela dizia só "veja no painel da Meta" — que é mandar
+      // procurar o que a resposta já trouxe.
+      await guardarMotivoDaMeta(resultado.message);
+      redirect(TELA + '?erro=' + resultado.code);
+    }
     redirect(TELA + '?feito=conectado');
   }
 

@@ -221,7 +221,14 @@ export class SignupError extends Error {
 }
 
 interface RespostaDeErro {
-  readonly error?: { readonly message?: string; readonly error_user_msg?: string };
+  readonly error?: {
+    readonly message?: string;
+    readonly error_user_msg?: string;
+    /** O código numérico da Meta: 100 é entrada inválida, 191 é endereço não registrado. */
+    readonly code?: number;
+    /** O único identificador que o suporte da Meta aceita num chamado. */
+    readonly fbtrace_id?: string;
+  };
 }
 
 async function chamar(
@@ -244,6 +251,24 @@ async function chamar(
   }
   if (!resposta.ok) {
     const erro = (json as RespostaDeErro).error;
+    /**
+     * A recusa da Meta no log, com o `fbtrace_id`.
+     *
+     * É o único identificador que o suporte dela aceita, e sem ele "a Meta
+     * recusou" é uma frase que não abre chamado nenhum. O caminho entra para
+     * dizer **qual** passo caiu — trocar código, descobrir conta, registrar
+     * número são falhas diferentes com a mesma cara na tela.
+     *
+     * A URL inteira **não** entra: ela carrega `client_secret` na troca do
+     * código, e log é o lugar onde segredo fica em claro sem ninguém decidir.
+     */
+    console.error('[whatsapp] a Meta recusou', {
+      passo: url.pathname,
+      status: resposta.status,
+      codigo: erro?.code ?? null,
+      fbtrace: erro?.fbtrace_id ?? null,
+      mensagem: erro?.error_user_msg ?? erro?.message ?? null,
+    });
     throw new SignupError(
       'meta_recusou',
       erro?.error_user_msg ?? erro?.message ?? `a Meta respondeu ${resposta.status}`,

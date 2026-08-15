@@ -437,6 +437,43 @@ export async function guardarCodigoDaMeta(codigo: string): Promise<void> {
   });
 }
 
+/**
+ * O que a Meta respondeu quando recusou, da rota de volta para a tela.
+ *
+ * A Meta **diz** por que recusou — "o número já está em outra conta", "esta
+ * conta não tem permissão", "o código expirou" — e a tela dizia só "a mensagem
+ * dela está no painel da Meta", que manda a pessoa procurar num painel que tem
+ * dezenas de telas. Cada tentativa custava uma volta inteira de conserto para
+ * descobrir o que a resposta já trazia.
+ *
+ * Cookie e não parâmetro de URL, pelo mesmo motivo da senha de primeiro acesso:
+ * a mensagem pode citar o número da barbearia, e a URL do painel fica no
+ * histórico do navegador e no `Referer` de toda requisição seguinte.
+ *
+ * Dois minutos: é o tempo entre o redirecionamento e a tela desenhar.
+ */
+const MOTIVO_DA_META = 'barbearia_meta_motivo';
+
+export async function guardarMotivoDaMeta(motivo: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(MOTIVO_DA_META, motivo.slice(0, 400), {
+    httpOnly: true,
+    path: '/admin/whatsapp',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+/**
+ * Lê sem apagar: componente de servidor não apaga cookie durante a
+ * renderização, e é o mesmo desenho da senha de primeiro acesso — quem limpa é
+ * o tempo curto.
+ */
+export async function lerMotivoDaMeta(): Promise<string | null> {
+  return (await cookies()).get(MOTIVO_DA_META)?.value ?? null;
+}
+
 /** Lê e **apaga**: o código vale uma troca só, e a Meta recusa a segunda. */
 export async function tomarCodigoDaMeta(): Promise<string | null> {
   const jar = await cookies();

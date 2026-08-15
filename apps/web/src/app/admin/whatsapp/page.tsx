@@ -17,7 +17,7 @@ import {
 } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
-import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { lerMotivoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
   acaoIrParaMeta,
   acaoSalvarCadastroDoWhatsApp,
@@ -67,7 +67,7 @@ const FALHA: Record<string, string> = {
     'Esta volta não bate com a conexão que começou aqui. Comece de novo por segurança — e se repetir, use o cadastro à mão logo abaixo.',
   sem_app: 'A conexão automática não está configurada nesta instalação.',
   codigo_invalido: 'O código da Meta não vale mais. Ele expira em 30 segundos — tente de novo.',
-  meta_recusou: 'A Meta recusou a conexão. A mensagem dela está no painel da Meta.',
+  meta_recusou: 'A Meta recusou a conexão. O motivo é o que ela respondeu, abaixo.',
   numero_invalido: 'Confira os identificadores: eles são só números, e vêm do painel da Meta.',
   nome_invalido: 'O nome do texto aceita só minúsculas, números e sublinhado.',
   nao_configurado: 'Cadastre o número antes.',
@@ -370,6 +370,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
   const podeMexer = podeNaTela(estado, 'whatsapp.manage');
   const atual = cadastro?.estado ?? 'nao_configurado';
   const falha = first(query['erro']);
+  const motivoDaMeta = falha ? await lerMotivoDaMeta() : null;
   const feito = first(query['feito']);
 
   return (
@@ -394,6 +395,14 @@ export default async function WhatsAppPage({ searchParams }: Props) {
       {falha ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {FALHA[falha] ?? FALHA['request_failed']}
+          {/* O que a Meta respondeu, em letras.
+
+              Ela diz o motivo — "este número já está em outra conta", "esta
+              conta não tem permissão", "o código expirou" — e a tela mandava
+              procurar no painel dela, que tem dezenas de telas. Cada tentativa
+              custava uma volta inteira para descobrir o que a resposta já
+              trazia na primeira. */}
+          {motivoDaMeta ? <p className="whatsapp__motivo">Ela disse: “{motivoDaMeta}”</p> : null}
         </div>
       ) : null}
       <Caminho

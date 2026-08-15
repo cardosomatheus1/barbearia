@@ -8482,3 +8482,15 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
+
+/* O que a Meta respondeu, dentro do aviso de recusa.
+
+   Menor e recuado, porque é a fala de outro sistema e não a nossa: quem lê
+   precisa distinguir o que o produto diz do que a Meta disse — e a frase dela
+   vem em inglês, às vezes com o nome do número dentro. */
+.whatsapp__motivo {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
