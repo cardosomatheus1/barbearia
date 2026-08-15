@@ -127,6 +127,38 @@ A outra volta — restaurar o backup — é só para quando a **migração** cor
 algo, e ela perde o que foi escrito depois do dump. Está medida em
 `docs/go-live.md`: 2,7 s para 30 mil clientes.
 
+## 5.1 Atualizar sozinho
+
+```bash
+deploy/auto-atualizar.sh --ligar       # a cada 5 min, a cada commit novo
+deploy/auto-atualizar.sh --desligar
+tail -f /var/log/barbearia-deploy.log  # o que ele fez
+```
+
+Ele pergunta ao GitHub se a branch padrão andou. Andou, sobe — pelo mesmo
+`atualizar.sh` de sempre, com backup antes de migrar.
+
+**Sem portão do lado de fora, a rede de segurança fica aqui dentro**, em três
+camadas:
+
+1. a migração falha → `atualizar.sh` para antes de trocar a imagem, e o site
+   nunca sai do ar;
+2. a versão nova sobe e **não responde** → o script volta sozinho para a
+   anterior;
+3. o commit que quebrou é anotado e **nunca é tentado de novo** — sem isso o
+   laço seria sobe, quebra, volta, sobe de novo em cinco minutos, com o site
+   piscando a cada volta do cron.
+
+Quando o GitHub Actions estiver rodando na conta, `--ligar --exigir-esteira`
+troca isso pelo mais seguro: só sobe commit que a esteira aprovou. Enquanto a
+esteira não roda, exigir o verde significaria **nunca subir** — e um deploy que
+nunca acontece é pior que um deploy sem rede.
+
+**Não é webhook de propósito.** Webhook exigiria guardar uma chave do servidor
+no GitHub e abrir um endereço que aceita chamada de fora. Perguntando de dentro
+não há segredo guardado em lugar nenhum nem porta nova: continua 80 e 443 e mais
+nada. O custo é até cinco minutos de latência entre o push e o ar.
+
 ## 6. O backup
 
 Diário, às 04:17, quinze dias de retenção, com o arquivo conferido antes de a
