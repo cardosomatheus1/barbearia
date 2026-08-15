@@ -152,8 +152,7 @@ done
 # ---------------------------------------------------------------------------
 titulo "backup diário"
 install -m 700 deploy/backup.sh /usr/local/bin/barbearia-backup
-cron_linha="17 4 * * * DESTINO=$DESTINO /usr/local/bin/barbearia-backup >> /var/log/barbearia-backup.log 2>&1"
-( crontab -l 2>/dev/null | grep -v barbearia-backup; echo "$cron_linha" ) | crontab -
+deploy/cron-do-backup.sh "$DESTINO"
 verde "  ok  todo dia às 04:17 (fuso da máquina)"
 
 titulo "pronto"
