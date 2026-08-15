@@ -116,7 +116,12 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
         // Banco descartável: falhar em apagar não invalida o que foi provado.
       }
     }
-  });
+    // Cinco `DROP DATABASE ... WITH (FORCE)` passam dos 10s padrão do gancho
+    // quando o portão roda dez suítes contra o mesmo Postgres. Sem esta folga o
+    // arquivo fica vermelho com os cinco testes verdes — reprovado pela
+    // limpeza, que é o pior formato de vermelho que existe: ele não aponta
+    // defeito nenhum e ensina a ignorar a cor.
+  }, 60_000);
 
   it(
     'a segunda passada não quebra — e é ela que derrubava o site',
