@@ -92,7 +92,22 @@ function toHttp(erro: unknown): never {
    * estava bem formado.
    */
   if (erro instanceof WhatsAppMetaError) {
-    throw new DomainError('meta_recusou', 502, erro.message);
+    /**
+     * Código **próprio**, e a distinção não é cosmética.
+     *
+     * `meta_recusou` é a conexão do número. Reusá-lo aqui fez a tela dizer "a
+     * Meta recusou a conexão" sobre uma recusa de **texto**, com o número já
+     * conectado e o cartão dele desenhado logo abaixo — dois estados
+     * embaralhados numa frase, que é a §6 pergunta 6.
+     *
+     * Os três estados sempre foram separados no banco e no motor: número
+     * conectado, texto aprovado, automação ligada. Quem os misturava era a
+     * mensagem.
+     *
+     * As rotas que usam o provedor são as de texto; a conexão passa por
+     * `SignupError`, tratado acima.
+     */
+    throw new DomainError('meta_recusou_texto', 502, erro.message);
   }
   throw erro;
 }

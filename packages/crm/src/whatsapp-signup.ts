@@ -420,6 +420,25 @@ async function descobrirWaba(
    * `messaging` também traz alvo, e serve de reserva: a barbearia pode ter
    * concedido as duas ou só uma, dependendo do que o `config_id` pede.
    */
+  /**
+   * Quais permissões a Meta concedeu, no log.
+   *
+   * Sem isto não há como responder "este token pode criar template?" depois — e
+   * a resposta decide tudo: criar template exige
+   * `whatsapp_business_management`, e o produto se contenta com `messaging`
+   * para **descobrir** a conta. Quem concedesse só a segunda conectaria o
+   * número normalmente e descobriria a falta na primeira tentativa de aprovar
+   * um texto, com "a conta não pode criar um novo modelo" — que não nomeia
+   * permissão nenhuma.
+   *
+   * Só os nomes dos escopos: os `target_ids` são ids de conta e já são
+   * gravados; o token não entra aqui e em lugar nenhum de log.
+   */
+  console.log('[whatsapp] permissões concedidas', {
+    escopos: (granulares ?? []).map((g) => g.scope).filter(Boolean),
+    podeGerenciar: (granulares ?? []).some((g) => g.scope === 'whatsapp_business_management'),
+  });
+
   const alvo =
     granulares?.find((g) => g.scope === 'whatsapp_business_management')?.target_ids?.[0] ??
     granulares?.find((g) => g.scope === 'whatsapp_business_messaging')?.target_ids?.[0];

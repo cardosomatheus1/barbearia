@@ -70,6 +70,9 @@ const FALHA: Record<string, string> = {
   sem_app: 'A conexão automática não está configurada nesta instalação.',
   codigo_invalido: 'O código da Meta não vale mais. Ele expira em 30 segundos — tente de novo.',
   meta_recusou: 'A Meta recusou a conexão. O motivo é o que ela respondeu, abaixo.',
+  // Separado da conexão de propósito: o número pode estar conectado e o texto
+  // recusado, e era essa mistura que fazia a tela acusar o estado errado.
+  meta_recusou_texto: 'A Meta recusou o texto. O motivo é o que ela respondeu, abaixo.',
   numero_invalido: 'Confira os identificadores: eles são só números, e vêm do painel da Meta.',
   nome_invalido: 'O nome do texto aceita só minúsculas, números e sublinhado.',
   nao_configurado: 'Cadastre o número antes.',
@@ -407,7 +410,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
               trazia na primeira. */}
           {motivoDaMeta ? (
             <p className="whatsapp__motivo">
-              {falha === 'meta_recusou' ? 'Ela disse' : 'A resposta foi'}: “{motivoDaMeta}”
+              {falha?.startsWith('meta_recusou') ? 'Ela disse' : 'A resposta foi'}: “{motivoDaMeta}”
             </p>
           ) : null}
           {/* A frase dela diz **o quê**; esta diz **onde se resolve**. Sem a

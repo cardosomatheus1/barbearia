@@ -94,6 +94,17 @@ interface ErroDaMeta {
   readonly error?: {
     readonly message?: string;
     readonly code?: number;
+    /**
+     * O que distingue duas recusas com o mesmo `code`.
+     *
+     * A Meta reusa `code: 100` para quase tudo, e é o `error_subcode` que
+     * separa "permissão faltando" de "parâmetro errado". Sem ele, a recusa é
+     * indistinguível de dentro, e a investigação vira tentativa.
+     */
+    readonly error_subcode?: number;
+    readonly type?: string;
+    /** O único identificador que o suporte da Meta aceita num chamado. */
+    readonly fbtrace_id?: string;
     readonly error_user_msg?: string;
   };
 }
@@ -300,6 +311,28 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
 
     if (!resposta.ok) {
       const erro = (json as ErroDaMeta | null)?.error;
+      /**
+       * A recusa inteira no log, e ela faltava neste caminho.
+       *
+       * O caminho da conexão já registrava; o do provedor — que é quem cria
+       * template e manda mensagem — descartava tudo menos a frase. Quando a
+       * Meta recusou um texto em produção, o log da API não tinha uma linha
+       * sequer sobre isso, e as perguntas que decidem o diagnóstico
+       * (`error_subcode`, `type`, `fbtrace_id`) ficaram sem resposta.
+       *
+       * O caminho entra para dizer **qual** chamada caiu, e ele carrega o id da
+       * conta. A URL completa não: o token vai no cabeçalho, mas a query pode
+       * crescer, e log é onde credencial fica em claro sem ninguém decidir.
+       */
+      console.error('[whatsapp] a Meta recusou', {
+        passo: url.pathname,
+        status: resposta.status,
+        codigo: erro?.code ?? null,
+        subcodigo: erro?.error_subcode ?? null,
+        tipo: erro?.type ?? null,
+        fbtrace: erro?.fbtrace_id ?? null,
+        mensagem: erro?.error_user_msg ?? erro?.message ?? null,
+      });
       throw new WhatsAppMetaError(
         erro?.code ?? null,
         erro?.error_user_msg ?? erro?.message ?? `a Meta respondeu ${resposta.status}`,
