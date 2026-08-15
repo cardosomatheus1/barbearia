@@ -1,0 +1,61 @@
+# O porteiro: TLS automático e a única porta aberta na internet.
+#
+# ## Por que Caddy e não nginx
+#
+# O que este produto precisa de um proxy reverso cabe em quinze linhas: dois
+# nomes, TLS, e encaminhar. O nginx faria o mesmo com um `certbot` ao lado, um
+# `cron` de renovação e um recarregamento que alguém precisa lembrar de fazer —
+# três peças a mais para a mesma coisa, e a que mais quebra em produção pequena
+# é justamente a renovação do certificado, três meses depois, quando ninguém
+# está olhando.
+#
+# O Caddy pede o certificado ao Let's Encrypt sozinho na primeira requisição e o
+# renova sozinho. Não é preferência de ferramenta: é uma peça a menos que pode
+# falhar num domingo.
+#
+# ## Dois nomes, e o de dentro não existe aqui
+#
+# Só o site é publicado. A API é falada de **servidor para servidor**, dentro da
+# rede do compose (`http://api:3000`), e por isso não tem nome nem porta na
+# internet — quem quiser integrar usa a chave de API pelo mesmo domínio, por
+# `/api/*`. Publicar a API num nome próprio dobraria a superfície exposta para
+# entregar exatamente o que já sai por aqui.
+
+{
+	# Onde o Let's Encrypt avisa que algo deu errado com o certificado. É o
+	# único endereço de e-mail deste arquivo, e é o do dono do domínio.
+	email {$ACME_EMAIL}
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	# A API pelo mesmo domínio: `/api/v1/...` chega como `/v1/...` do outro
+	# lado. O prefixo existe para o webhook do adquirente e para a chave de
+	# API terem um endereço público estável sem um segundo nome de DNS.
+	handle_path /api/* {
+		reverse_proxy api:3000
+	}
+
+	# Todo o resto é o site, que faz SSR e fala com a API por dentro.
+	handle {
+		reverse_proxy web:3001
+	}
+
+	# Os cabeçalhos de segurança saem da aplicação (bloco 81) — CSP com nonce
+	# no web, `default-src 'none'` na API. O que o proxy acrescenta é só o que
+	# ele sabe e a aplicação não: que a conexão chegou por TLS.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# O Caddy anuncia a própria versão por padrão. Não é vulnerabilidade,
+		# é informação de graça para quem procura alvo por versão.
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/acesso.log {
+			roll_size 20mb
+			roll_keep 5
+		}
+	}
+}

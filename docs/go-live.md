@@ -190,11 +190,17 @@ existe, o que falta e por quê.
 
 ## 3. O que de fato bloqueia
 
-### 3.1 Não há caminho de deploy
+### 3.1 O caminho de deploy — resolvido em código, aberto em contrato
 
-É a lacuna 20, e é a única da lista que impede a operação: **não há ambiente de
-staging nem passo de deploy**. A esteira roda o portão e para aí. Ir ao ar exige
-decidir onde, e isso é infraestrutura contratada — não código.
+Era a lacuna 20 e a única da lista que impedia a operação. O que dependia de
+código está pronto e mora em [`docs/deploy.md`](deploy.md): `deploy/instalar.sh`
+leva um VPS Ubuntu vazio ao produto no ar em um comando — Docker, os oito
+segredos gerados na máquina, as 83 migrações, cinco serviços, TLS automático e
+backup diário agendado. `deploy/atualizar.sh` faz o backup **antes** de migrar,
+e `deploy/voltar.sh` sobe a versão anterior sem tocar no banco.
+
+O que falta é comercial e não código: **a máquina contratada e o domínio**. E
+uma coisa continua sem ensaio, que é a §3.5.
 
 ### 3.2 O `.env.example` estava incompleto — resolvido
 
@@ -206,6 +212,17 @@ não cobraria nem emitiria nota.
 
 Corrigido, e agora há guarda derivada (`scripts/env-example.test.mjs`) que lê
 `process.env[...]` do fonte e reprova o que não estiver declarado.
+
+### 3.5 O backup mora na mesma máquina
+
+`deploy/backup.sh` roda todo dia, confere o arquivo antes de rotacionar e avisa
+em **toda execução** enquanto `BACKUP_REMOTO` não estiver configurado. O aviso é
+deliberado: backup no mesmo disco cobre o erro humano e não cobre o caso que
+tira a barbearia do ar, que é a máquina sumir.
+
+Enviar para fora é uma linha (`rclone`), e ensaiar a volta **naquele** servidor
+é o item que continua aberto no go/no-go. Restaurar aqui prova o formato do
+dump; não prova a máquina de verdade.
 
 ### 3.3 Um erro cru sob contenção, visto uma vez
 
@@ -232,9 +249,10 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 ## 4. Go / no-go
 
 - [x] Os seis percursos verdes
-- [ ] Caminho de deploy definido, com ambiente de staging
+- [x] Caminho de deploy definido — um comando, com volta atrás pronta
+- [ ] VPS e domínio contratados, e o comando rodado uma vez
 - [x] Rollback de migração escrito e ensaiado
-- [ ] Restauração ensaiada **no ambiente de produção**, não só aqui
+- [ ] Restauração ensaiada **no ambiente de produção**, não só aqui (§3.5)
 - [x] Decisão escrita sobre fiscal: nasce **desligado por conta**, e liga pelo
       toggle do Super Admin quando houver emissor contratado
 - [ ] Decisão escrita sobre cobrança (`PSP_MODO`)

@@ -1,0 +1,166 @@
+# O produto no ar, numa máquina só.
+#
+#   cd /opt/barbearia && docker compose -f deploy/compose.yml up -d
+#
+# ## O que este arquivo tem que o `docker-compose.yml` da raiz não tem
+#
+# Aquele é para **olhar o produto**: sobe tudo, semeia uma barbearia de mentira
+# e publica nas portas do laço. Este é para **operar**: volume que sobrevive ao
+# `down`, reinício automático, TLS, backup, e nenhuma porta na internet além das
+# 80 e 443 do porteiro.
+#
+# As diferenças que mais importam, e o motivo de cada uma:
+#
+# | Aqui | Lá | Por quê |
+# |---|---|---|
+# | volume nomeado no banco | efêmero | `docker compose down` não pode levar a base de clientes junto |
+# | `restart: unless-stopped` | nenhum | o VPS reinicia sozinho depois de uma atualização de kernel |
+# | sem `ports` na API e no web | `127.0.0.1:3000` | quem fala com a internet é o Caddy, e só ele |
+# | sem o perfil `demo` | tem | a semente cria uma conta de dono com senha publicada no repositório |
+# | `NODE_ENV=production` | não | é o que liga `secure` no cookie de sessão |
+#
+# ## Uma máquina, e isso é decisão
+#
+# Banco e aplicação no mesmo host é o que dá para operar com uma pessoa. O custo
+# está escrito: o backup é a única cópia dos dados, e por isso ele sai da máquina
+# (`deploy/backup.sh`). Quando a barbearia número trinta chegar, o banco vira
+# serviço gerenciado — e a única linha que muda é `DATABASE_URL`.
+
+name: barbearia
+
+x-imagem: &imagem
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  restart: unless-stopped
+
+x-ambiente: &ambiente
+  NODE_ENV: production
+  # Sem nenhum `:-` de reserva: todas falham alto quando ausentes, e é assim
+  # que o produto foi escrito. Um padrão fraco aqui deixaria segredo em repouso
+  # cifrado com chave conhecida, e ninguém descobriria.
+  APP_DB_PASSWORD: ${APP_DB_PASSWORD:?rode deploy/instalar.sh para gerar o .env}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta no .env}
+  STAFF_EMAIL_PEPPER: ${STAFF_EMAIL_PEPPER:?falta no .env}
+  MFA_SECRET_KEY: ${MFA_SECRET_KEY:?falta no .env}
+  API_KEY_PEPPER: ${API_KEY_PEPPER:?falta no .env}
+  WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?falta no .env}
+  WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
+  MARKETPLACE_ORIGIN_SECRET: ${MARKETPLACE_ORIGIN_SECRET:?falta no .env}
+  DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
+  ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
+  # De servidor para servidor, dentro da rede do compose.
+  API_URL: http://api:3000
+  # O endereço público, e ele **sai em mensagem**: convite de vaga, pedido de
+  # avaliação, link da nota e o retorno do checkout da Stripe. Errado aqui, o
+  # cliente recebe um endereço que não abre.
+  WEB_URL: https://${DOMINIO:?falta no .env}
+  # Os interruptores das integrações. `nenhum` é o padrão de fábrica e é
+  # operação legítima: a plataforma fatura pelo extrato e a nota não é
+  # oferecida. Trocar aqui é o que liga cada uma.
+  PSP_MODO: ${PSP_MODO:-nenhum}
+  FISCAL_MODO: ${FISCAL_MODO:-nenhum}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-}
+  WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+  WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta no .env}
+      POSTGRES_DB: postgres
+      # Fuso do processo em UTC, como todo `timestamptz` do schema. O fuso que
+      # decide grade e dia da venda vem da **unidade**, nunca do servidor.
+      TZ: UTC
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    # Sem `ports`: o banco não tem endereço na internet. Quem precisa dele
+    # entra na máquina e usa `docker compose exec`.
+
+  preparar:
+    <<: *imagem
+    restart: 'no'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *ambiente
+    # Cria o banco, o role sem BYPASSRLS e aplica as migrações que faltam.
+    # Serviço próprio e não um passo dentro da API: migração que roda junto com
+    # a aplicação roda uma vez por réplica.
+    command: >
+      bash -c '
+        set -e
+        psql "$$ADMIN_DATABASE_URL" -q -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'barbearia'"'"'" | grep -q 1 \
+          || psql "$$ADMIN_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE barbearia"
+        scripts/bootstrap-role.sh > /dev/null
+        for m in packages/db/migrations/*.sql; do
+          psql "postgres://postgres:$$POSTGRES_PASSWORD@db:5432/barbearia" -q -v ON_ERROR_STOP=1 -f "$$m"
+        done
+        echo "migrações aplicadas"
+      '
+
+  api:
+    <<: *imagem
+    depends_on:
+      preparar:
+        condition: service_completed_successfully
+    environment: *ambiente
+    command: node apps/api/dist/main.js
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/health/pronto | grep -q ok']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  worker:
+    <<: *imagem
+    depends_on:
+      preparar:
+        condition: service_completed_successfully
+    environment: *ambiente
+    command: node apps/worker/dist/main.js
+
+  web:
+    <<: *imagem
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *ambiente
+    command: pnpm --filter @barbearia/web exec next start -p 3001 -H 0.0.0.0
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+      - api
+    environment:
+      DOMINIO: ${DOMINIO:?falta no .env}
+      ACME_EMAIL: ${ACME_EMAIL:?falta no .env}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # O certificado emitido mora aqui. Sem volume, cada `up` pediria um novo
+      # ao Let's Encrypt — que tem limite semanal por domínio, e estourá-lo
+      # deixa o site sem TLS por dias.
+      - caddy-dados:/data
+      - caddy-config:/config
+      - caddy-log:/var/log/caddy
+
+volumes:
+  dados:
+  caddy-dados:
+  caddy-config:
+  caddy-log:
