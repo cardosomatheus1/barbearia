@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -34,7 +35,7 @@ import { describe, expect, it } from 'vitest';
  * é um deploy sem volta.
  */
 
-const RAIZ = new URL('../../..', import.meta.url).pathname;
+const RAIZ = join(import.meta.dirname, '..', '..', '..');
 
 const MIGRACOES = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'packages/db/migrations'], {
   encoding: 'utf8',

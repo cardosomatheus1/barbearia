@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -27,10 +28,10 @@ import { describe, expect, it } from 'vitest';
  * sintoma é alguém perguntando por que a nota fiscal não está no painel.
  */
 
-const RAIZ = new URL('..', import.meta.url).pathname;
+const RAIZ = join(import.meta.dirname, '..');
 
-const catalogo = readFileSync(`${RAIZ}packages/platform/src/recursos.ts`, 'utf8');
-const secoes = readFileSync(`${RAIZ}apps/web/src/app/admin/secoes.ts`, 'utf8');
+const catalogo = readFileSync(join(RAIZ, 'packages', 'platform', 'src', 'recursos.ts'), 'utf8');
+const secoes = readFileSync(join(RAIZ, 'apps', 'web', 'src', 'app', 'admin', 'secoes.ts'), 'utf8');
 
 /** `export const RECURSOS = ['fila', ...] as const;` */
 function codigosDoCatalogo() {

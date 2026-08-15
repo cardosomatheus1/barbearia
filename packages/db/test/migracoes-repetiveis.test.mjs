@@ -40,11 +40,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  */
 
 const ADMIN = process.env.ADMIN_DATABASE_URL;
-const RAIZ_DB = new URL('..', import.meta.url).pathname;
+const RAIZ_DB = join(import.meta.dirname, '..');
 const MIGRATE = join(RAIZ_DB, 'scripts', 'migrate.sh');
 const PASTA_MIGRACOES = join(RAIZ_DB, 'migrations');
 /** As migrações dão `GRANT` ao role da aplicação: sem ele, nem a primeira roda. */
-const BOOTSTRAP = new URL('../../../scripts/bootstrap-role.sh', import.meta.url).pathname;
+const BOOTSTRAP = join(import.meta.dirname, '..', '..', '..', 'scripts', 'bootstrap-role.sh');
 
 /** Depois da baseline, para provar que banco adotado ainda recebe o que é novo. */
 const POSTERIOR = join(PASTA_MIGRACOES, '9999_teste_do_livro_caixa.sql');

@@ -29,7 +29,7 @@ import { describe, expect, it } from 'vitest';
  * se parecer com este.
  */
 
-const RAIZ = new URL('..', import.meta.url).pathname;
+const RAIZ = join(import.meta.dirname, '..');
 const SCRIPT = join(RAIZ, 'deploy', 'segredos.sh');
 
 const OBRIGATORIOS = [

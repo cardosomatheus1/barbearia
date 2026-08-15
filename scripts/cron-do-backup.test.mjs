@@ -36,7 +36,7 @@ import { describe, expect, it } from 'vitest';
  * importa para o defeito — **`-l` sai com 1 quando não há crontab**.
  */
 
-const RAIZ = new URL('..', import.meta.url).pathname;
+const RAIZ = join(import.meta.dirname, '..');
 const SCRIPT = join(RAIZ, 'deploy', 'cron-do-backup.sh');
 
 /** Um `crontab` de mentira, guardado num arquivo, com o código de saída que importa. */
