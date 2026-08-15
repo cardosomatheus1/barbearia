@@ -27,6 +27,21 @@
 	email {$ACME_EMAIL}
 }
 
+# O `www` existe e **redireciona**, em vez de servir a mesma coisa.
+#
+# Duas noções do mesmo endereço é a lista paralela de sempre, agora em URL: o
+# cliente salva um, a barbearia divulga o outro, e a partir daí toda referência
+# — link da mensagem, retorno do checkout, `Referer` da origem do marketplace —
+# passa a existir em duas formas que não se reconhecem. O canônico é o domínio
+# sem `www`, que é o que a barbearia diz em voz alta.
+#
+# Ele fica aqui mesmo sem o registro de DNS: sem o registro, ninguém chega e o
+# bloco é inerte. Com o registro e sem o bloco, quem digita `www` recebe erro de
+# certificado — que é o pior dos três desfechos, porque parece golpe.
+www.{$DOMINIO} {
+	redir https://{$DOMINIO}{uri} permanent
+}
+
 {$DOMINIO} {
 	encode zstd gzip
 
