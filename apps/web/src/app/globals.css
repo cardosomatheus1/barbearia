@@ -7393,6 +7393,17 @@ main { padding-bottom: var(--space-8); }
    A cor diz a faixa, e o número diz o valor — cor sozinha não serve a quem tem
    baixa visão, e é por isso que cada célula escreve o percentual.
    --------------------------------------------------------------------------- */
+/* O estado de uma campanha (bloco 82).
+
+   Em letras, com a cor só reforçando — mesmo padrão do estado da entrega de
+   webhook: "Enviando" em âmbar sem a palavra não é informação para quem tem
+   baixa visão. `enviando` é o único que pede atenção, porque é o estado em que
+   a tela ainda vai mudar sozinha. */
+.campanha-estado { font-weight: var(--font-weight-medium); }
+.campanha-estado--rascunho { color: var(--color-text-muted); }
+.campanha-estado--enviando { color: var(--color-accent); }
+.campanha-estado--enviada { color: var(--color-success); }
+
 .heatmap {
   display: grid;
   grid-template-columns: auto repeat(7, minmax(3rem, 1fr));

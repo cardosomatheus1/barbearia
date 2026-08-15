@@ -174,6 +174,15 @@ export type AuditAction =
   | 'automation.changed'
   /** Uma campanha criada, com o tamanho do público (bloco 57). */
   | 'campaign.created'
+  /**
+   * O disparo de uma campanha (bloco 82).
+   *
+   * Separada da criação porque são duas decisões: montar o público é
+   * reversível — a campanha fica em rascunho e ninguém recebeu nada —, e
+   * mandar não é. A pergunta do dia seguinte é "quem mandou mensagem para
+   * quatrocentos clientes?", e ela não tem resposta na linha da criação.
+   */
+  | 'campaign.sent'
   /** Multiunidade (bloco 58). */
   | 'team.locations_changed'
   | 'location.created'
@@ -479,6 +488,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'whatsapp.template_submitted',
   'automation.changed',
   'campaign.created',
+  'campaign.sent',
   'team.locations_changed',
   'location.created',
   'location.closed',

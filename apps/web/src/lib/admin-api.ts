@@ -1,4 +1,4 @@
-import type { Conversa, ServiceTemplate } from '@barbearia/core';
+import type { Conversa, EstadoDeCampanha, ServiceTemplate } from '@barbearia/core';
 
 /**
  * Cliente da API do painel.
@@ -3255,7 +3255,15 @@ export interface CampanhaNaTelaDoAdmin {
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
   readonly tipo: string;
-  readonly estado: string;
+  /**
+   * A união, e não `string`.
+   *
+   * Com `string` o compilador aceitava indexar o mapa de rótulos com qualquer
+   * coisa, e o estado novo que alguém acrescentasse chegaria à tela como
+   * `undefined` — a caixa em branco no lugar do rótulo. É a mesma razão de
+   * `Record<Uniao, T>` num mapa de erro.
+   */
+  readonly estado: EstadoDeCampanha;
   readonly criadaEm: string;
   readonly publico: number;
   readonly enviados: number;
@@ -3283,6 +3291,9 @@ export const criarCampanhaNaApi = (
     janelaDias: number;
   },
 ) => chamar<{ id: string; publico: number }>('POST', '/v1/admin/campanhas', corpo, token);
+
+export const enviarCampanhaNaApi = (token: string, id: string) =>
+  chamar<{ estado: 'enviando' }>('POST', `/v1/admin/campanhas/${id}/enviar`, {}, token);
 
 // -- Multiunidade (bloco 58) --------------------------------------------------
 

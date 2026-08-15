@@ -206,6 +206,20 @@ export function decidirDisparo(params: {
   readonly fatoEm: Date;
   readonly agora: Date;
   readonly timeZone: string;
+  /**
+   * Força a natureza, em vez de derivá-la do tipo (bloco 82).
+   *
+   * A campanha passa `'promocional'` **sempre**, e é a camada que não depende
+   * de a lista de tipos permitidos continuar certa: `naturezaDe` chama de
+   * transacional tudo que não é `retorno`, então um tipo novo que alguém
+   * acrescentasse a `TIPOS_DE_CAMPANHA` sem mexer em `naturezaDe` voltaria a
+   * furar o opt-out em silêncio.
+   *
+   * Só aperta, nunca afrouxa: não existe caminho para declarar transacional o
+   * que o tipo diz ser promoção — isso seria o interruptor que desliga o
+   * consentimento, com outro nome.
+   */
+  readonly natureza?: 'promocional';
 }): DecisaoDeDisparo {
   const nao = (motivo: MotivoDeNaoDisparar): DecisaoDeDisparo => ({
     disparar: false,
@@ -226,7 +240,7 @@ export function decidirDisparo(params: {
    * que pergunta como foi o atendimento é transacional; "sentimos sua falta" é
    * promoção.
    */
-  if (naturezaDe(params.tipo) === 'promocional') {
+  if (params.natureza === 'promocional' || naturezaDe(params.tipo) === 'promocional') {
     if (!params.aceitaPromocional) return nao('optou_por_nao_receber');
     if (params.promocionaisNoMes >= TETO_PROMOCIONAL_MES) return nao('teto_do_mes');
   }

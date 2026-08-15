@@ -118,6 +118,10 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
   'automation.changed': 'mexeu numa automação de mensagem',
   'campaign.created': 'criou uma campanha',
+  // Separada da criação porque são duas decisões: montar o público é
+  // reversível, mandar não é. "Quem mandou mensagem para quatrocentos
+  // clientes?" não tem resposta na linha da criação.
+  'campaign.sent': 'mandou uma campanha',
   'team.locations_changed': 'mudou de quais unidades alguém cuida',
   'stock.transferred': 'transferiu produto entre unidades',
   'location.created': 'abriu uma unidade',

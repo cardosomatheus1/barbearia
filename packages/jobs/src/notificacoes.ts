@@ -26,7 +26,26 @@ import { chaveDaFalta } from './faltas.js';
  * estava sendo executada.
  */
 
-export interface MensagemDeAgendamento {
+/**
+ * De quem é a mensagem, e por qual número ela pode sair (bloco 82).
+ *
+ * As duas coisas viajam juntas porque o canal da casa é **por unidade**: o
+ * cadastro do WhatsApp, o token cifrado e os templates aprovados moram em
+ * `whatsapp_settings`, com uma linha por `location_id`. Sem elas, o provedor
+ * recebe uma mensagem pronta e não tem como descobrir por qual número mandá-la.
+ *
+ * Só as formas que carregam um `TipoDeNotificacao` estendem isto, e é o
+ * critério certo: a Meta exige **um template aprovado por tipo**, e uma
+ * mensagem sem tipo não tem template a escolher. Convite de vaga, recado,
+ * aviso do clube e nota continuam pelo canal de reserva — não por esquecimento,
+ * mas porque `notification_kind` não os nomeia.
+ */
+export interface DeQuem {
+  readonly tenantId: string;
+  readonly locationId: string;
+}
+
+export interface MensagemDeAgendamento extends DeQuem {
   readonly phoneE164: string;
   readonly tipo: TipoDeNotificacao;
   readonly clienteNome: string;
@@ -35,7 +54,7 @@ export interface MensagemDeAgendamento {
   readonly quandoTexto: string;
 }
 
-export interface MensagemDeFila {
+export interface MensagemDeFila extends DeQuem {
   readonly phoneE164: string;
   readonly clienteNome: string;
   readonly barbearia: string;
@@ -137,7 +156,24 @@ export interface MensagemDeNota {
  * `tipo` viaja porque o WhatsApp oficial exige **um template aprovado por tipo
  * de mensagem**, e é por ele que a implementação de verdade escolhe qual usar.
  */
-export interface MensagemDeAutomacao {
+export interface MensagemDeAutomacao extends DeQuem {
+  readonly phoneE164: string;
+  readonly clienteNome: string;
+  readonly barbearia: string;
+  readonly tipo: TipoDeNotificacao;
+}
+
+/**
+ * A mensagem de uma campanha.
+ *
+ * Tem a mesma forma da automação — e é um tipo próprio de propósito. As duas
+ * são promocionais e passam pelas mesmas travas, mas quem as decide é
+ * diferente: a automação dispara sozinha quando um fato acontece, a campanha é
+ * o dono escolhendo um público hoje. Reaproveitar `enviarDeAutomacao` faria o
+ * provedor de verdade — que escolhe o **template aprovado na Meta** pelo método
+ * chamado — mandar campanha com o texto da automação.
+ */
+export interface MensagemDeCampanha extends DeQuem {
   readonly phoneE164: string;
   readonly clienteNome: string;
   readonly barbearia: string;
@@ -152,6 +188,15 @@ export interface NotificationProvider {
   enviarDoClube(mensagem: MensagemDoClube): Promise<void>;
   enviarDeNota(mensagem: MensagemDeNota): Promise<void>;
   enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void>;
+  /**
+   * Devolve o `wamid` quando a mensagem saiu pela Meta, `null` pelo reserva.
+   *
+   * Só esta forma devolve algo, e é assimetria de propósito: é a campanha que
+   * precisa ligar cada alvo ao webhook de entrega, porque a tela dela promete
+   * "entregues" e "lidos". Os outros avisos gravam o próprio envio em
+   * `notifications` e não têm coluna esperando por id nenhum.
+   */
+  enviarDeCampanha(mensagem: MensagemDeCampanha): Promise<string | null>;
 }
 
 export class FakeNotificationProvider implements NotificationProvider {
@@ -162,6 +207,7 @@ export class FakeNotificationProvider implements NotificationProvider {
   readonly avisosDoClube: MensagemDoClube[] = [];
   readonly notas: MensagemDeNota[] = [];
   readonly automacoes: MensagemDeAutomacao[] = [];
+  readonly campanhas: MensagemDeCampanha[] = [];
   /** Para provar o caminho de falha sem depender de rede fora do ar. */
   falharProxima = false;
 
@@ -198,6 +244,12 @@ export class FakeNotificationProvider implements NotificationProvider {
   async enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void> {
     this.derrubarSePedido();
     this.automacoes.push(mensagem);
+  }
+
+  async enviarDeCampanha(mensagem: MensagemDeCampanha): Promise<string | null> {
+    this.derrubarSePedido();
+    this.campanhas.push(mensagem);
+    return null;
   }
 
   private derrubarSePedido(): void {
@@ -300,6 +352,17 @@ export class ConsoleNotificationProvider implements NotificationProvider {
       `[aviso] automacao_${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia})`,
     );
+  }
+
+  /** Quem recebeu é dado de cliente; o log fica com a contagem e o tipo. */
+  async enviarDeCampanha(mensagem: MensagemDeCampanha): Promise<string | null> {
+    this.log(
+      `[aviso] campanha_${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
+        `(${mensagem.barbearia})`,
+    );
+    // O canal de reserva não tem id de mensagem, e inventar um faria a tela
+    // contar como "entregue" o que a Meta nunca viu.
+    return null;
   }
 }
 
@@ -417,6 +480,7 @@ interface EstadoDoAviso {
   starts_at: Date;
   status: string;
   timezone: string;
+  location_id: string;
   customer_id: string | null;
   customer_name: string | null;
   phone: string | null;
@@ -450,7 +514,7 @@ export async function executarAvisoDeAgendamento(params: {
 }): Promise<{ readonly enviado: boolean; readonly motivo: MotivoDeNaoEnviar | null }> {
   return withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<EstadoDoAviso[]>`
-      SELECT a.starts_at, a.status::text AS status, l.timezone,
+      SELECT a.starts_at, a.status::text AS status, l.timezone, a.location_id,
              a.customer_id, c.name AS customer_name, c.phone_e164 AS phone,
              c.accepts_marketing,
              p.name AS professional_name, t.name AS tenant_name,
@@ -487,6 +551,8 @@ export async function executarAvisoDeAgendamento(params: {
     if (!decisao.enviar) return registrar(tx, params, estado, decisao.motivo);
 
     await params.provider.enviarDeAgendamento({
+      tenantId: params.tenantId,
+      locationId: estado.location_id,
       phoneE164: estado.phone ?? '',
       tipo: params.tipo,
       clienteNome: estado.customer_name ?? 'cliente',
@@ -568,9 +634,10 @@ export async function executarAvisoDeFila(params: {
         tenant_name: string;
         posicao: bigint;
         ja_enviada: boolean;
+        location_id: string;
       }[]
     >`
-      SELECT q.status::text AS status, q.customer_id, c.name AS customer_name,
+      SELECT q.status::text AS status, q.customer_id, c.name AS customer_name, q.location_id,
              c.phone_e164 AS phone, t.name AS tenant_name,
              (
                SELECT count(*) + 1 FROM queue_entries anterior
@@ -611,6 +678,8 @@ export async function executarAvisoDeFila(params: {
     }
 
     await params.provider.enviarDeFila({
+      tenantId: params.tenantId,
+      locationId: entrada.location_id,
       phoneE164: entrada.phone,
       clienteNome: entrada.customer_name,
       barbearia: entrada.tenant_name,
@@ -657,11 +726,12 @@ export async function varrerRetornos(params: {
         ultima_visita: Date | null;
         promocionais_no_mes: bigint;
         ja_enviada: boolean;
+        location_id: string;
       }[]
     >`
       SELECT c.id AS customer_id, c.name AS customer_name, c.phone_e164 AS phone,
              c.accepts_marketing, t.name AS tenant_name,
-             l.timezone, l.comeback_after_days,
+             l.timezone, l.comeback_after_days, l.location_id,
              (SELECT max(a.starts_at) FROM appointments a
                WHERE a.customer_id = c.id AND a.status = 'completed') AS ultima_visita,
              (SELECT count(*) FROM notifications n
@@ -682,7 +752,7 @@ export async function varrerRetornos(params: {
         -- consulta — a mesma pessoa receberia a mensagem em dobro na mesma
         -- varredura. É a unidade principal, a mesma que a tela mostra.
         JOIN LATERAL (
-          SELECT timezone, comeback_after_days, notify_comeback
+          SELECT id AS location_id, timezone, comeback_after_days, notify_comeback
             FROM locations ORDER BY created_at LIMIT 1
         ) l ON true
        WHERE c.phone_e164 IS NOT NULL
@@ -708,6 +778,8 @@ export async function varrerRetornos(params: {
       if (!decisao.enviar) continue;
 
       await params.provider.enviarDeAgendamento({
+        tenantId: params.tenantId,
+        locationId: linha.location_id,
         phoneE164: linha.phone,
         tipo: 'retorno',
         clienteNome: linha.customer_name,

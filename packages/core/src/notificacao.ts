@@ -53,6 +53,35 @@ export function naturezaDe(tipo: TipoDeNotificacao): NaturezaDaMensagem {
   return tipo === 'retorno' ? 'promocional' : 'transacional';
 }
 
+/**
+ * Os tipos que uma **campanha** pode usar (bloco 82).
+ *
+ * Uma campanha é marketing por construção: é o dono escolhendo um público e
+ * mandando mensagem para ele hoje. Deixar o formulário oferecer os seis tipos
+ * fazia duas coisas erradas ao mesmo tempo, e a revisão de segurança achou as
+ * duas na mesma linha:
+ *
+ * - **Furava o opt-out.** `naturezaDe` chama de transacional tudo que não é
+ *   `retorno`, e a checagem de consentimento e o teto do mês só rodam sobre
+ *   promocional. Uma campanha com `lembrete_24h` mandava para a base inteira,
+ *   incluindo quem revogou o consentimento — o `customer_consents` inteiro
+ *   contornado por um seletor. E nenhum teste podia pegar isso: todos fixavam
+ *   `retorno`, que é justamente o único gated.
+ * - **Mentia no texto.** "Seu horário é amanhã" para quem não tem horário
+ *   marcado, "sua vez chegou" para quem não está na fila, e a senha de
+ *   primeiro acesso — que é credencial — como peça de marketing.
+ *
+ * A lista tem um item só hoje, e isso é a verdade do produto, não uma
+ * limitação escondida: existe um template de campanha. Quando houver um
+ * segundo, ele entra aqui **e** em `naturezaDe`, junto.
+ */
+export const TIPOS_DE_CAMPANHA = ['retorno'] as const;
+export type TipoDeCampanha = (typeof TIPOS_DE_CAMPANHA)[number];
+
+export function tipoDeCampanhaValido(tipo: string): tipo is TipoDeCampanha {
+  return (TIPOS_DE_CAMPANHA as readonly string[]).includes(tipo);
+}
+
 /** Antecedência de cada lembrete, em minutos. */
 export const ANTECEDENCIA: Readonly<Partial<Record<TipoDeNotificacao, number>>> = {
   lembrete_24h: 24 * 60,

@@ -127,6 +127,16 @@ export interface Contexto {
    */
   readonly rodarAutomacoes: (tenantId: string, agora: Date) => Promise<void>;
   /**
+   * O despacho de uma campanha (bloco 82), injetado.
+   *
+   * Mesma razão de `rodarAutomacoes`: o público mora em `packages/crm`, a
+   * decisão de mandar é de `packages/core` e a mensagem sai pelo `provider`.
+   * Obrigatória no tipo — opcional, o primeiro worker novo a esqueceria e o
+   * botão "Enviar" marcaria a campanha como `enviando` para sempre, sem nada
+   * ficar vermelho e sem ninguém receber nada.
+   */
+  readonly enviarCampanha: (tenantId: string, campanhaId: string, agora: Date) => Promise<void>;
+  /**
    * O toque no botão da mensagem virando ação (bloco 55), injetado.
    *
    * Mesma razão de `varrerRetencao` e de `entregarNotas`: ela lê em
@@ -447,6 +457,18 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    */
   'automacao.varrer': async (tarefa, contexto) => {
     await contexto.rodarAutomacoes(tarefa.tenantId, contexto.relogio.agora());
+  },
+
+  /**
+   * O despacho de uma campanha (bloco 82).
+   *
+   * A tarefa nasce dentro da transação que põe a campanha em `enviando`, e
+   * carrega **o id** — o público é dado de cliente, e `jobs` não tem RLS.
+   */
+  'campanha.enviar': async (tarefa, contexto) => {
+    const campanhaId = String(tarefa.payload['campanhaId'] ?? '');
+    if (!campanhaId) throw new Error('tarefa de campanha sem campanha');
+    await contexto.enviarCampanha(tarefa.tenantId, campanhaId, contexto.relogio.agora());
   },
 
   'fiscal.entregar': async (tarefa, contexto) => {

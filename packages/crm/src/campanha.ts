@@ -4,11 +4,14 @@ import {
   FILTROS_DE_CAMPANHA,
   ROTULO_DO_FILTRO,
   SEGMENTO_DO_FILTRO,
+  TIPOS_DE_CAMPANHA,
+  tipoDeCampanhaValido,
   type FiltroDeCampanha,
   type Segmento,
   type TipoDeNotificacao,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import { enfileirarPara } from '@barbearia/jobs';
 import { segmentosDaBase } from './segmento.js';
 
 /**
@@ -177,6 +180,18 @@ export async function criarCampanha(params: {
   }
   if (params.filtro === 'celula_fria' && (params.diaDaSemana === null || params.valorDoFiltro === null)) {
     throw new CampanhaError('invalida', 'A célula precisa de dia e hora.');
+  }
+  /**
+   * O tipo é conferido **aqui também**, e não só no schema da borda.
+   *
+   * A borda garante forma; que uma campanha só pode usar texto de campanha é
+   * regra de domínio. Sem esta linha, qualquer segundo chamador — uma rota
+   * nova, a API pública, um script — criaria a campanha com `senha_de_acesso`,
+   * que é credencial, ou com `lembrete_24h`, que promete um horário que não
+   * existe.
+   */
+  if (!tipoDeCampanhaValido(params.tipo)) {
+    throw new CampanhaError('invalida', 'Este texto não serve para campanha.');
   }
 
   return withTenant(params.tenantId, async (tx) => {
@@ -358,6 +373,56 @@ export async function alvosAEnviar(
 }
 
 /**
+ * O botão "Enviar": marca a campanha e **enfileira** o despacho.
+ *
+ * ## Por que fila, e não a própria requisição
+ *
+ * Um público de trezentas pessoas é trezentas idas ao provedor de mensagem.
+ * Numa requisição, o balcão fica com a tela girando e um `timeout` no meio
+ * deixa metade enviada sem ninguém saber qual metade. A tarefa é enfileirada
+ * **dentro da transação** que muda o estado, como todo o resto do produto:
+ * enfileirar depois do commit abre a janela em que a campanha está "enviando"
+ * e nada foi agendado.
+ *
+ * ## Por que o estado é a trava
+ *
+ * `AND status = 'rascunho'` no `WHERE` é o que segura o segundo toque — de
+ * outro aparelho, de outra sessão, com outra chave de idempotência. Uma
+ * campanha despachada duas vezes é a barbearia mandando a mesma promoção duas
+ * vezes para a mesma pessoa, que é como se queima o número.
+ */
+export async function marcarParaEnvio(params: {
+  readonly tenantId: string;
+  readonly campanhaId: string;
+  readonly staffId: string;
+  readonly staffName: string;
+}): Promise<boolean> {
+  return withTenant(params.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      UPDATE campaigns SET status = 'enviando'
+       WHERE id = ${params.campanhaId}::uuid AND status = 'rascunho'
+    `;
+    if (afetadas !== 1) return false;
+
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'campaign.sent',
+      entity: 'campaigns',
+      entityId: params.campanhaId,
+    });
+
+    await enfileirarPara(tx, params.tenantId, {
+      kind: 'campanha.enviar',
+      // Id, nunca conteúdo: `jobs` não tem RLS, e o público é dado de cliente.
+      payload: { campanhaId: params.campanhaId },
+      idempotencyKey: `campanha:${params.campanhaId}`,
+    });
+    return true;
+  });
+}
+
+/**
  * Decide e carimba cada alvo, com as mesmas proteções da automação.
  *
  * Devolve quantos saíram. O que **não** sai fica com o motivo escrito, pela
@@ -369,7 +434,15 @@ export async function despacharCampanha(params: {
   readonly campanhaId: string;
   readonly agora: Date;
   readonly timeZone: string;
-  readonly enviar: (alvo: AlvoAEnviar) => Promise<void>;
+  /**
+   * Manda, e devolve o `wamid` quando a mensagem saiu pela Meta.
+   *
+   * `null` é envio pelo canal de reserva, e não falha. O id é o que liga o
+   * alvo ao webhook de entrega — sem ele, "entregues" e "lidos" na tela da
+   * campanha seriam zero para sempre, que é o indicador que nunca preenche da
+   * §6 pergunta 5. A coluna existe desde o bloco 60 e ninguém a escrevia.
+   */
+  readonly enviar: (alvo: AlvoAEnviar) => Promise<string | null>;
 }): Promise<{ readonly enviados: number; readonly pulados: number }> {
   const alvos = await alvosAEnviar(params.tenantId, params.campanhaId);
   let enviados = 0;
@@ -395,6 +468,22 @@ export async function despacharCampanha(params: {
     const decisao = decidirDisparo({
       ativa: true,
       tipo: alvo.tipo,
+      /**
+       * Campanha é promoção, sempre — nunca derivada do tipo.
+       *
+       * `naturezaDe` chama de transacional tudo que não é `retorno`, e o tipo
+       * da campanha vem do formulário. Sem esta linha, uma campanha declarada
+       * como `lembrete_24h` pulava a checagem de consentimento e o teto do mês
+       * e mandava para a base inteira, incluindo quem revogou o marketing — o
+       * `customer_consents` inteiro contornado por um seletor de tela.
+       *
+       * A borda também recusa o tipo (`TIPOS_DE_CAMPANHA`), e as duas camadas
+       * existem porque uma delas é a que sobrevive: acrescentar um tipo àquela
+       * lista sem mexer em `naturezaDe` reabriria o furo em silêncio.
+       *
+       * Achado da `/security-review` deste bloco.
+       */
+      natureza: 'promocional',
       jaDisparouPorEsteFato: false,
       jaRecebeuHoje: Number(contagem?.hoje ?? 0) > 0,
       temTelefone: true,
@@ -436,8 +525,25 @@ export async function despacharCampanha(params: {
     });
     if (!nosso) continue;
 
-    await params.enviar(alvo);
+    const wamid = await params.enviar(alvo);
     enviados += 1;
+
+    /**
+     * O `wamid` numa gravação **depois** do envio, e não junto do carimbo.
+     *
+     * O carimbo vem antes por decisão do bloco 54 — carimbar depois perde o
+     * carimbo se o processo cair, e a volta seguinte remanda. O id só existe
+     * depois de a Meta responder, então ele não cabe naquela instrução. Perdê-lo
+     * custa a linha de "entregue" desta pessoa; perder o carimbo custaria a
+     * mensagem duas vezes, e entre as duas o produto escolhe a primeira.
+     */
+    if (wamid) {
+      await withTenant(params.tenantId, async (tx) => {
+        await tx.$executeRaw`
+          UPDATE campaign_targets SET wamid = ${wamid} WHERE id = ${alvo.id}::uuid
+        `;
+      });
+    }
   }
 
   await withTenant(params.tenantId, async (tx) => {

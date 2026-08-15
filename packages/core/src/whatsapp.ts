@@ -10,9 +10,23 @@
  * A mensagem que chega de um número desconhecido é a que o cliente ignora ou
  * bloqueia. O número da barbearia ele já tem na agenda — é para onde ele liga
  * quando quer remarcar. O custo dessa escolha é real e não se esconde: a
- * verificação de empresa na Meta entra no caminho de quem está se cadastrando, e
- * é etapa burocrática que dá para abandonar no meio. Por isso o estado do
- * cadastro é explícito, e a barbearia opera sem ele.
+ * barbearia precisa criar o portfólio na Meta, conectar a WABA e **confirmar a
+ * posse do número** por código de SMS. Por isso o estado do cadastro é
+ * explícito, e a barbearia opera sem ele.
+ *
+ * ## O que **não** é exigido para começar
+ *
+ * *Business Verification* — razão social, endereço, documentos da empresa — não
+ * entra no caminho de quem está se cadastrando. Uma conta nova já manda para
+ * clientes de verdade, com **teto de 250 destinatários únicos por dia** em
+ * conversa iniciada pela casa; o teto sobe para 2.000 e além conforme o volume
+ * entregue, e é só aí que a verificação documental pode ser cobrada.
+ *
+ * Isto é decisão de produto e não trivia: 250 por dia é folgado para uma
+ * barbearia — a campanha maior que este produto monta é a base inteira, e uma
+ * base de barbearia de bairro tem centenas, não milhares. A consequência é que
+ * o onboarding do canal cabe numa tarde, e a tela precisa dizer isso em vez de
+ * mandar esperar.
  *
  * ## Cloud API direto
  *
@@ -59,8 +73,21 @@ export const ROTULO_DO_WHATSAPP: Readonly<Record<EstadoDoWhatsApp, string>> = {
 export const EXPLICACAO_DO_WHATSAPP: Readonly<Record<EstadoDoWhatsApp, string>> = {
   nao_configurado:
     'Os avisos saem pelo canal antigo. Cadastre o número para eles saírem pelo WhatsApp da casa.',
+  /**
+   * O que falta é **confirmar o número**, não esperar pela Meta.
+   *
+   * Até o bloco 82 esta frase dizia "a Meta está verificando a empresa, ela
+   * avisa por e-mail" — e isso mandava a barbearia sentar e esperar. A
+   * verificação de empresa (*Business Verification*) deixou de ser exigida para
+   * começar a mandar mensagem: o que falta neste estado é a pessoa confirmar a
+   * posse do número com o código que chega por SMS ou ligação, que ela faz
+   * agora e sozinha.
+   *
+   * Frase que manda esperar sobre um passo que é para fazer é a pior classe de
+   * texto de interface: ela não erra um número, ela para o trabalho.
+   */
   aguardando_verificacao:
-    'A Meta está verificando a empresa. Costuma levar de algumas horas a alguns dias, e ela avisa por e-mail.',
+    'Falta confirmar o número no painel da Meta: ela manda um código por SMS ou ligação, e é você quem digita. Leva um minuto — não é preciso esperar aprovação nenhuma.',
   ativo: 'Os avisos saem pelo número da barbearia.',
   suspenso: 'A Meta suspendeu o número. O motivo está abaixo — os avisos voltaram ao canal antigo.',
 };

@@ -1,6 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { atribuirReceita, campanhasDaCasa, criarCampanha, despacharCampanha } from './campanha.js';
+import {
+  atribuirReceita,
+  campanhasDaCasa,
+  criarCampanha,
+  despacharCampanha,
+  marcarParaEnvio,
+} from './campanha.js';
 
 /**
  * Campanhas contra Postgres real (bloco 57, SPEC §4.13).
@@ -206,7 +212,7 @@ describeIfDb('campanhas', () => {
       campanhaId: primeira.id,
       agora: AGORA,
       timeZone: 'America/Bahia',
-      enviar: async () => {},
+      enviar: async () => null,
     });
 
     const segunda = await campanha({ nome: 'B' });
@@ -229,7 +235,7 @@ describeIfDb('campanhas', () => {
       campanhaId: criada.id,
       agora: AGORA,
       timeZone: 'America/Bahia',
-      enviar: async () => {},
+      enviar: async () => null,
     });
 
     const lista = await campanhasDaCasa(TENANT);
@@ -257,7 +263,7 @@ describeIfDb('campanhas', () => {
       campanhaId: criada.id,
       agora: AGORA,
       timeZone: 'America/Bahia',
-      enviar: async () => {},
+      enviar: async () => null,
     });
 
     // O carimbo é o relógio injetado, então a janela é contada a partir dele.
@@ -283,7 +289,7 @@ describeIfDb('campanhas', () => {
       campanhaId: criada.id,
       agora: AGORA,
       timeZone: 'America/Bahia',
-      enviar: async () => {},
+      enviar: async () => null,
     });
 
     const tarde = new Date(AGORA.getTime() + 60 * 86_400_000).toISOString();
@@ -363,6 +369,152 @@ describeIfDb('campanhas', () => {
 
     const criada = await campanha({ nome: 'Obrigado', filtro: 'vip' });
     expect(criada.publico).toBe(0);
+  });
+
+  it('campanha é promoção mesmo com tipo transacional — o opt-out vale', async () => {
+    /**
+     * O furo que a `/security-review` deste bloco achou, e por que nenhum
+     * teste podia pegá-lo antes: `naturezaDe` chama de **transacional** tudo
+     * que não é `retorno`, e o opt-out e o teto do mês só rodam sobre
+     * promocional. Com o seletor da tela oferecendo os seis tipos, uma
+     * campanha declarada `lembrete_24h` mandava para a base inteira, incluindo
+     * quem revogou o consentimento de marketing.
+     *
+     * O teste que existia — "o envio respeita o opt-out" — passava porque o
+     * helper `campanha()` fixa `tipo: 'retorno'`, que é justamente o único
+     * gated. **A semente precisa satisfazer tudo menos a regra sob teste**: aqui
+     * ela cria a campanha pelo caminho que a borda recusaria, para provar a
+     * camada de baixo.
+     */
+    await exec(`UPDATE customers SET accepts_marketing = false`);
+
+    const criada = await campanha();
+    // A borda e `criarCampanha` recusam o tipo transacional; a gravação direta
+    // é o que permite exercitar a segunda camada, que é a que sobrevive a
+    // alguém acrescentar um tipo à lista sem mexer em `naturezaDe`.
+    await exec(`UPDATE campaigns SET kind = 'lembrete_24h' WHERE id = '${criada.id}'`);
+
+    const resultado = await despacharCampanha({
+      tenantId: TENANT,
+      campanhaId: criada.id,
+      agora: AGORA,
+      timeZone: 'America/Bahia',
+      enviar: async () => {
+        throw new Error('não pode sair para quem revogou o marketing');
+      },
+    });
+
+    expect(resultado.enviados).toBe(0);
+    const motivos = await admin.$queryRawUnsafe<{ skipped_reason: string }[]>(
+      `SELECT DISTINCT skipped_reason FROM campaign_targets`,
+    );
+    expect(motivos.map((m) => m.skipped_reason)).toEqual(['optou_por_nao_receber']);
+  });
+
+  it('a borda do domínio recusa texto que não é de campanha', async () => {
+    // "Seu horário é amanhã" para quem não tem horário, e a senha de primeiro
+    // acesso — que é credencial — como peça de marketing.
+    await expect(campanha({ tipo: 'lembrete_24h' })).rejects.toThrow(/não serve para campanha/);
+    await expect(campanha({ tipo: 'senha_de_acesso' })).rejects.toThrow(/não serve para campanha/);
+  });
+
+  it('o botão "Enviar" enfileira o despacho dentro da própria transação', async () => {
+    /**
+     * As três coisas são o mesmo fato: a campanha sai de rascunho, a trilha
+     * registra quem mandou, e a tarefa nasce. Enfileirar depois do commit
+     * abriria a janela em que a tela diz "enviando" e nada está agendado.
+     */
+    const criada = await campanha();
+    expect(await marcarParaEnvio({ tenantId: TENANT, campanhaId: criada.id, ...operador })).toBe(
+      true,
+    );
+
+    const tarefas = await admin.$queryRawUnsafe<{ kind: string; payload: { campanhaId: string } }[]>(
+      `SELECT kind, payload FROM jobs WHERE tenant_id = '${TENANT}'::uuid`,
+    );
+    expect(tarefas).toEqual([
+      { kind: 'campanha.enviar', payload: { campanhaId: criada.id } },
+    ]);
+
+    const trilha = await admin.$queryRawUnsafe<{ action: string }[]>(
+      `SELECT action FROM audit_log WHERE entity = 'campaigns' ORDER BY created_at`,
+    );
+    expect(trilha.map((l) => l.action)).toEqual(['campaign.created', 'campaign.sent']);
+  });
+
+  it('o segundo toque não manda a mesma promoção de novo', async () => {
+    /**
+     * Quem barra é o **estado**, não uma chave: `AND status = 'rascunho'` no
+     * `WHERE` segura o toque de outro aparelho, de outra sessão e com chave
+     * nova — que é o que uma chave gerada pelo cliente não garante. É o
+     * precedente do registro de sinal do bloco 38.
+     *
+     * Mandar duas vezes é como se queima o número: a mesma promoção chegando
+     * em duplicidade é o que faz o cliente marcar como spam, e o índice de
+     * qualidade caindo faz a Meta pausar o template da casa inteira.
+     */
+    const criada = await campanha();
+    await marcarParaEnvio({ tenantId: TENANT, campanhaId: criada.id, ...operador });
+    expect(await marcarParaEnvio({ tenantId: TENANT, campanhaId: criada.id, ...operador })).toBe(
+      false,
+    );
+
+    const tarefas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM jobs WHERE kind = 'campanha.enviar'`,
+    );
+    expect(Number(tarefas[0]!.n)).toBe(1);
+  });
+
+  it('campanha de outra barbearia não é despachável — a RLS não vê a linha', async () => {
+    const criada = await campanha();
+    const RIVAL = '57575757-2222-2222-2222-222222222222';
+    await exec(`INSERT INTO tenants (id, name) VALUES ('${RIVAL}', 'Rival')`);
+
+    expect(
+      await marcarParaEnvio({ tenantId: RIVAL, campanhaId: criada.id, ...operador }),
+    ).toBe(false);
+  });
+
+  it('o wamid volta para o alvo — é ele que liga o envio ao "entregue"', async () => {
+    /**
+     * A coluna existe desde o bloco 60 e ninguém a escrevia: "entregues" e
+     * "lidos" na tela da campanha saem de um `JOIN` com `whatsapp_messages`
+     * por `wamid`, e sem ele os dois números eram zero para sempre. Indicador
+     * que nunca preenche é pior que indicador ausente — ele ocupa espaço
+     * prometendo uma resposta que nunca vem (§6, pergunta 5).
+     */
+    const criada = await campanha();
+    await despacharCampanha({
+      tenantId: TENANT,
+      campanhaId: criada.id,
+      agora: AGORA,
+      timeZone: 'America/Bahia',
+      enviar: async (alvo) => `wamid.${alvo.customerId}`,
+    });
+
+    const alvos = await admin.$queryRawUnsafe<{ wamid: string | null }[]>(
+      `SELECT wamid FROM campaign_targets ORDER BY wamid`,
+    );
+    expect(alvos.every((a) => a.wamid?.startsWith('wamid.'))).toBe(true);
+  });
+
+  it('envio pelo canal de reserva não inventa wamid', async () => {
+    // `null` é o canal de reserva, e não falha: a SPEC §4.12 pede fallback em
+    // letras. Um id inventado faria a tela contar como "entregue" o que a Meta
+    // nunca viu.
+    const criada = await campanha();
+    await despacharCampanha({
+      tenantId: TENANT,
+      campanhaId: criada.id,
+      agora: AGORA,
+      timeZone: 'America/Bahia',
+      enviar: async () => null,
+    });
+
+    const alvos = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM campaign_targets WHERE wamid IS NOT NULL`,
+    );
+    expect(Number(alvos[0]!.n)).toBe(0);
   });
 
   it('crédito exige mensagem enviada — o banco recusa o contrário', async () => {

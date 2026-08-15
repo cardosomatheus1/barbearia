@@ -280,6 +280,44 @@ export const ROTULO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string>> = {
 };
 
 /**
+ * Em que pé está uma campanha (bloco 82).
+ *
+ * Mora aqui e não escrito na tela pelo mesmo motivo do público: é vocabulário
+ * de transição (§6, pergunta 2), e "Enviando" numa tela com "Em andamento" na
+ * outra é o que faz a recepção achar que são duas coisas.
+ *
+ * `enviando` é estado de verdade e não um instante: o despacho é trabalho de
+ * fila, e um público de trezentas pessoas leva o tempo que levar.
+ */
+export const ESTADOS_DE_CAMPANHA = ['rascunho', 'enviando', 'enviada'] as const;
+export type EstadoDeCampanha = (typeof ESTADOS_DE_CAMPANHA)[number];
+
+export const ROTULO_DA_CAMPANHA: Readonly<Record<EstadoDeCampanha, string>> = {
+  rascunho: 'Rascunho',
+  enviando: 'Enviando',
+  enviada: 'Enviada',
+};
+
+/**
+ * O que a tela diz de cada estado.
+ *
+ * `rascunho` diz o que **falta fazer**, porque é o único estado com saída pela
+ * mão de quem opera. Os outros dois explicam a espera: sem essa frase, a
+ * campanha em `enviando` com zero enviados lê como defeito, e é só a fila que
+ * ainda não passou.
+ */
+export const EXPLICACAO_DA_CAMPANHA: Readonly<Record<EstadoDeCampanha, string>> = {
+  rascunho: 'O público já está congelado. Ninguém recebeu nada ainda.',
+  enviando: 'Na fila. As mensagens saem aos poucos, e nunca entre 21h e 8h.',
+  enviada: 'Todo o público já foi decidido — enviado ou pulado, com o motivo.',
+};
+
+/** Só o rascunho pode ser mandado. É o que segura o segundo toque. */
+export function campanhaEnviavel(estado: EstadoDeCampanha): boolean {
+  return estado === 'rascunho';
+}
+
+/**
  * Os três filtros que saem do segmento derivado, e não de uma condição em SQL.
  *
  * `novo`, `ativo`, `frequente` e `assinante` ficam de fora **de propósito**: são

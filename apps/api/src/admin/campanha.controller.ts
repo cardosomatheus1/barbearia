@@ -1,5 +1,11 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { CampanhaError, campanhasDaCasa, criarCampanha, type FiltroDeCampanha } from '@barbearia/crm';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  CampanhaError,
+  campanhasDaCasa,
+  criarCampanha,
+  marcarParaEnvio,
+  type FiltroDeCampanha,
+} from '@barbearia/crm';
 import { gradeDeOcupacao } from '@barbearia/scheduling';
 import type { TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -7,7 +13,7 @@ import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
-import { campanhaSchema } from './campanha.schemas.js';
+import { campanhaIdSchema, campanhaSchema } from './campanha.schemas.js';
 import { unidadeDoBalcao } from './unidade.js';
 
 /**
@@ -78,5 +84,51 @@ export class CampanhaController {
     } catch (erro) {
       return toHttp(erro);
     }
+  }
+
+  /**
+   * O botão "Enviar".
+   *
+   * A rota **não manda mensagem**: ela põe a campanha em `enviando` e enfileira
+   * o despacho, dentro da mesma transação. Um público de trezentas pessoas são
+   * trezentas idas ao provedor, e numa requisição isso é a tela girando no
+   * balcão com um `timeout` no meio deixando metade enviada sem ninguém saber
+   * qual metade.
+   *
+   * Sem `Idempotency-Key`: quem barra o segundo toque é o **estado**, e ele é
+   * mais forte que a chave — segura o toque de outro aparelho, de outra sessão
+   * e com chave nova. É a mesma decisão do registro de sinal do bloco 38.
+   *
+   * `marketing.send` e nada mais: o despacho não move centavo e não devolve
+   * cadastro nenhum — a resposta é o estado da campanha.
+   */
+  @Exige('marketing.send')
+  @Post(':id/enviar')
+  async enviar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(campanhaIdSchema)) id: string,
+  ) {
+    const marcada = await marcarParaEnvio({
+      tenantId: staff.tenantId,
+      campanhaId: id,
+      staffId: staff.staffUserId,
+      staffName: staff.name,
+    });
+
+    /**
+     * A recusa tem **uma** mensagem para os dois casos.
+     *
+     * "Já foi enviada" e "não existe" são a mesma frase de propósito: a
+     * segunda confirmaria o id para quem o adivinhou. É o precedente do OTP e
+     * o da unidade que não é sua.
+     */
+    if (!marcada) {
+      throw new DomainError(
+        'ja_enviada',
+        409,
+        'Esta campanha não está mais em rascunho. Só um rascunho pode ser enviado.',
+      );
+    }
+    return { estado: 'enviando' as const };
   }
 }

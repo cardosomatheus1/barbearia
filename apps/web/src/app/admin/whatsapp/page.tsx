@@ -150,9 +150,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           {FALHA[falha] ?? FALHA['request_failed']}
         </div>
       ) : null}
+      {/* "Confirme o número", e não "espere o e-mail": o que falta é um passo
+          para fazer agora, e mandar esperar por ele para o trabalho. */}
       {feito === 'cadastro' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Cadastro salvo. A Meta avisa por e-mail quando a verificação terminar.
+          Cadastro salvo. Falta confirmar o número no painel da Meta com o código que ela manda
+          por SMS.
         </div>
       ) : null}
       {feito === 'template' ? (
@@ -175,6 +178,17 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         {cadastro?.numeroVisivel ? (
           <p className="cartao-balcao__texto">Número: {cadastro.numeroVisivel}</p>
         ) : null}
+        {/*
+          O teto é dito antes de alguém montar a campanha, e não depois de a
+          Meta recusar a de número 251. Número de relatório que ignora parte do
+          dado diz isso na tela; aqui é a mesma regra aplicada a um limite —
+          descobrir pelo erro é descobrir com o trabalho já feito.
+        */}
+        <p className="cartao-balcao__texto">
+          Uma conta nova manda para até <strong>250 pessoas diferentes por dia</strong> quando é a
+          casa que começa a conversa. O teto sobe sozinho conforme as mensagens são entregues, e
+          não é preciso mandar documento nenhum da empresa para começar.
+        </p>
       </section>
 
       {podeMexer ? (

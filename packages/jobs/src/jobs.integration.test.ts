@@ -108,6 +108,7 @@ let notasProcessadas: { tenantId: string; invoiceId: string }[] = [];
 let entregasDeNota: { tenantId: string; agora: Date }[] = [];
 let respostasDeWhatsApp: { tenantId: string; inboundId: string }[] = [];
 let automacoesRodadas: { tenantId: string; agora: Date }[] = [];
+let campanhasDespachadas: { tenantId: string; campanhaId: string }[] = [];
 let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' =
   'autorizada';
 
@@ -124,6 +125,9 @@ const ligacoesDaPlataforma = () => ({
   },
   rodarAutomacoes: async (tenantId: string, agora: Date) => {
     automacoesRodadas.push({ tenantId, agora });
+  },
+  enviarCampanha: async (tenantId: string, campanhaId: string) => {
+    campanhasDespachadas.push({ tenantId, campanhaId });
   },
   avisarDeCobranca: async (aviso: {
     readonly tenantId: string;
@@ -797,6 +801,37 @@ describeIfDb('fila de trabalho', () => {
     // cobra por chamada.
     expect(proximas[0]!.run_after.getTime()).toBe(COMECA_EM.getTime() + 5 * 60_000);
     estadoDaNotaDoFake = 'autorizada';
+  });
+
+  it('a tarefa de campanha leva o id para quem sabe despachar', async () => {
+    /**
+     * O que este teste prende é a **ligação**, e ela é a razão do bloco:
+     * `despacharCampanha` existia, tinha suíte verde e não tinha chamador
+     * nenhum. O botão "Enviar" punha a campanha em `enviando` e ninguém
+     * recebia nada.
+     *
+     * O id vai no payload e não o público: `jobs` não tem RLS, e telefone de
+     * cliente numa tabela sem política é dado pessoal legível sem tenant.
+     */
+    campanhasDespachadas = [];
+    await enfileirarNoTenant({
+      kind: 'campanha.enviar',
+      payload: { campanhaId: 'cc000000-0000-0000-0000-000000000001' },
+      idempotencyKey: 'campanha:cc1',
+    });
+
+    await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(campanhasDespachadas).toEqual([
+      { tenantId: TENANT, campanhaId: 'cc000000-0000-0000-0000-000000000001' },
+    ]);
   });
 
   it('provedor fora do ar devolve a tarefa à fila', async () => {

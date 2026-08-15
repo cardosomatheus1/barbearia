@@ -1,13 +1,16 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  EXPLICACAO_DA_CAMPANHA,
   FILTROS_DE_CAMPANHA,
   JANELA_MAXIMA_DIAS,
   NOME_DO_DIA,
   NUMERO_DO_FILTRO,
+  ROTULO_DA_CAMPANHA,
   ROTULO_DA_FAIXA,
   ROTULO_DO_FILTRO,
-  TIPOS_DE_NOTIFICACAO,
+  TIPOS_DE_CAMPANHA,
+  campanhaEnviavel,
   nomeDaCelula,
 } from '@barbearia/core';
 import {
@@ -21,7 +24,7 @@ import {
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reaisDoCampo } from '@/lib/dinheiro';
-import { acaoCriarCampanha, acaoSair } from '../acoes';
+import { acaoCriarCampanha, acaoEnviarCampanha, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -208,7 +211,22 @@ function Segmentos({
   );
 }
 
-function Campanha({ campanha }: { readonly campanha: CampanhaNaTelaDoAdmin }) {
+/**
+ * Uma campanha, com a saída do estado em que ela está.
+ *
+ * O botão "Enviar" nasceu aqui no bloco 82, e a falta dele era o defeito da §6
+ * pergunta 3 na forma mais cara: `rascunho` era alcançável, era o estado em que
+ * **toda** campanha nascia, e não tinha caminho para fora na tela. A pessoa
+ * montava o público, via "3 pessoas", e não havia o que apertar.
+ */
+function Campanha({
+  campanha,
+  podeMexer,
+}: {
+  readonly campanha: CampanhaNaTelaDoAdmin;
+  readonly podeMexer: boolean;
+}) {
+  const estado = campanha.estado;
   return (
     <li>
       <article className="item-cadastro">
@@ -216,12 +234,18 @@ function Campanha({ campanha }: { readonly campanha: CampanhaNaTelaDoAdmin }) {
           <div className="item-cadastro__quem">
             <h3 className="item-cadastro__nome">{campanha.nome}</h3>
             <p className="item-cadastro__linha">
-              {nomeDoFiltro(campanha.filtro)}
+              {/* O estado é dito em letras e a cor só reforça: quem tem baixa
+                  visão precisa da palavra. Mesmo padrão da entrega do bloco 79. */}
+              <span className={`campanha-estado campanha-estado--${estado}`}>
+                {ROTULO_DA_CAMPANHA[estado]}
+              </span>{' '}
+              · {nomeDoFiltro(campanha.filtro)}
               {campanha.diaDaSemana !== null && campanha.valorDoFiltro !== null
                 ? ` · ${nomeDaCelula({ diaDaSemana: campanha.diaDaSemana, hora: campanha.valorDoFiltro })}`
                 : ''}{' '}
               · {campanha.publico} pessoa{campanha.publico === 1 ? '' : 's'}
             </p>
+            <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
             {/* As seis colunas da SPEC §4.13, na ordem em que ela as escreve. */}
             <p className="item-cadastro__linha">
               {campanha.enviados} enviados · {campanha.entregues} entregues · {campanha.lidos}{' '}
@@ -231,6 +255,15 @@ function Campanha({ campanha }: { readonly campanha: CampanhaNaTelaDoAdmin }) {
               <strong>{reais(campanha.receitaCents)}</strong> de receita atribuída
             </p>
           </div>
+
+          {podeMexer && campanhaEnviavel(estado) ? (
+            <form action={acaoEnviarCampanha}>
+              <input name="id" type="hidden" value={campanha.id} />
+              <button className="ui-button ui-button--primary" type="submit">
+                Enviar para {campanha.publico}
+              </button>
+            </form>
+          ) : null}
         </div>
       </article>
     </li>
@@ -255,7 +288,9 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const diaEscolhido = first(query['dia']);
   const horaEscolhida = first(query['hora']);
   const erro = first(query['erro']);
-  const criada = first(query['feito']) === 'criada';
+  const feito = first(query['feito']);
+  const criada = feito === 'criada';
+  const enviando = feito === 'enviando';
   const publico = first(query['publico']);
 
   return (
@@ -279,12 +314,23 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          Não deu para criar a campanha. Confira o nome e o público.
+          {erro === 'ja_enviada'
+            ? 'Esta campanha não está mais em rascunho. Só um rascunho pode ser enviado.'
+            : 'Não deu para criar a campanha. Confira o nome e o público.'}
         </div>
       ) : null}
       {criada ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Campanha criada com {publico ?? 0} pessoa{publico === '1' ? '' : 's'} no público.
+          Campanha criada com {publico ?? 0} pessoa{publico === '1' ? '' : 's'} no público. Ela
+          fica em rascunho até você apertar <strong>Enviar</strong>.
+        </div>
+      ) : null}
+      {/* "Entrou na fila", e não "enviada": prometer o segundo faria a pessoa
+          recarregar procurando um número que ainda vai demorar. */}
+      {enviando ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          A campanha entrou na fila. As mensagens saem aos poucos, e nunca entre 21h e 8h — os
+          números abaixo vão se preenchendo.
         </div>
       ) : null}
 
@@ -394,12 +440,16 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 Qual mensagem
               </label>
               <select className="ui-field__input" defaultValue="retorno" id="tipo" name="tipo">
-                {TIPOS_DE_NOTIFICACAO.map((t) => (
+                {TIPOS_DE_CAMPANHA.map((t) => (
                   <option key={t} value={t}>
                     {NOME_DO_AVISO[t] ?? t}
                   </option>
                 ))}
               </select>
+              <p className="ui-field__hint">
+                Só textos de campanha aparecem aqui. Lembrete e confirmação são do agendamento —
+                mandá-los como campanha prometeria um horário que a pessoa não tem.
+              </p>
             </div>
 
             <div className="ui-field">
@@ -438,7 +488,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
         ) : (
           <ul className="lista-cadastro">
             {campanhas.map((c) => (
-              <Campanha campanha={c} key={c.id} />
+              <Campanha campanha={c} key={c.id} podeMexer={podeMexer} />
             ))}
           </ul>
         )}

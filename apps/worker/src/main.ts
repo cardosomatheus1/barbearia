@@ -2,9 +2,13 @@ import { entregarWebhook, expirarDesafiosDeOtp, varrerEntregasPendentes } from '
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import {
   atribuirObjetivos,
+  atribuirReceita,
+  despacharCampanha,
   disparosAEnviar,
+  enviarPeloWhatsApp,
   executarResposta,
   marcarDisparoEnviado,
+  provedorDoWhatsApp,
   respostaParaEnviar,
   varrerAutomacoes,
   varrerRetencao,
@@ -34,6 +38,7 @@ import {
   type CobrancaDoClubeProvider,
   type MotivoDoAvisoDoClube,
   type SplitProvider,
+  type TipoDeNotificacao,
 } from '@barbearia/core';
 import {
   avisarDaOperacao,
@@ -47,6 +52,15 @@ import {
   ConsoleNotificationProvider,
   RELOGIO_REAL,
   rodarWorker,
+  type MensagemDeAgendamento,
+  type MensagemDeAutomacao,
+  type MensagemDeCampanha,
+  type MensagemDeFila,
+  type MensagemDeNota,
+  type MensagemDeRecado,
+  type MensagemDeVaga,
+  type MensagemDoClube,
+  type NotificationProvider,
   type ResultadoDaRodada,
 } from '@barbearia/jobs';
 
@@ -155,7 +169,135 @@ const { psp, cobranca } = ligarAdquirente();
  * impresso no log — e ele carrega o token em claro, que é credencial. Achado da
  * revisão de segurança do bloco 39.
  */
-const provider = new ConsoleNotificationProvider();
+/**
+ * O canal da casa por cima do canal de reserva (bloco 82).
+ *
+ * ## Por que o roteamento é aqui, e não em cada chamador
+ *
+ * Antes deste bloco, `enviarPeloWhatsApp` não tinha chamador nenhum fora do
+ * teste: a barbearia cadastrava o número, via "Ativo" na tela, aprovava o
+ * template — e toda mensagem continuava saindo pelo log. A primeira versão do
+ * conserto ligou os dois caminhos que já resolviam a unidade (campanha e
+ * automação) e deixou o lembrete de 24h de fora, o que é o defeito da §6
+ * pergunta 6: duas telas afirmando coisas diferentes sobre o mesmo fato.
+ *
+ * Com o roteamento **no provedor**, existe um lugar só que decide o canal — e
+ * é a mesma razão de haver um provedor só no processo: um caminho que decide
+ * sozinho é o caminho que não troca junto quando o canal muda.
+ *
+ * ## Reserva não é falha
+ *
+ * `enviarPeloWhatsApp` devolve `null` quando o canal não está disponível —
+ * `WHATSAPP_MODO=nenhum`, cadastro em branco, número não verificado, template
+ * não aprovado — e aí a mensagem cai para o console, que é o que a SPEC §4.12
+ * pede em letras. Transformar indisponibilidade em exceção faria a tarefa da
+ * fila morrer em vez de usar o outro caminho.
+ *
+ * As variáveis posicionais são **nome e barbearia, nessa ordem**, para toda
+ * mensagem. Um `{{1}}` que signifique uma coisa no lembrete e outra na campanha
+ * é como a mensagem sai com o nome da casa onde deveria estar o do cliente.
+ */
+class CanalDaCasa implements NotificationProvider {
+  constructor(private readonly reserva: NotificationProvider) {}
+
+  private async pelaCasa(params: {
+    readonly tenantId: string;
+    readonly locationId: string;
+    readonly tipo: TipoDeNotificacao;
+    readonly telefone: string;
+    readonly clienteNome: string;
+    readonly barbearia: string;
+    readonly appointmentId?: string | null;
+  }): Promise<string | null> {
+    const zap = await provedorDoWhatsApp(params.tenantId, params.locationId);
+    if (!zap) return null;
+    const enviada = await enviarPeloWhatsApp({
+      tenantId: params.tenantId,
+      locationId: params.locationId,
+      tipo: params.tipo,
+      telefone: params.telefone,
+      variaveis: [params.clienteNome, params.barbearia],
+      // `notifications` já guarda quem recebeu; `whatsapp_messages` guarda o
+      // vínculo com o template, e é por ele que a entrega é conciliada.
+      customerId: null,
+      appointmentId: params.appointmentId ?? null,
+      provider: zap,
+    });
+    return enviada?.wamid ?? null;
+  }
+
+  async enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void> {
+    const foi = await this.pelaCasa({
+      tenantId: mensagem.tenantId,
+      locationId: mensagem.locationId,
+      tipo: mensagem.tipo,
+      telefone: mensagem.phoneE164,
+      clienteNome: mensagem.clienteNome,
+      barbearia: mensagem.barbearia,
+    });
+    if (!foi) await this.reserva.enviarDeAgendamento(mensagem);
+  }
+
+  async enviarDeFila(mensagem: MensagemDeFila): Promise<void> {
+    const foi = await this.pelaCasa({
+      tenantId: mensagem.tenantId,
+      locationId: mensagem.locationId,
+      tipo: 'sua_vez',
+      telefone: mensagem.phoneE164,
+      clienteNome: mensagem.clienteNome,
+      barbearia: mensagem.barbearia,
+    });
+    if (!foi) await this.reserva.enviarDeFila(mensagem);
+  }
+
+  async enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void> {
+    const foi = await this.pelaCasa({
+      tenantId: mensagem.tenantId,
+      locationId: mensagem.locationId,
+      tipo: mensagem.tipo,
+      telefone: mensagem.phoneE164,
+      clienteNome: mensagem.clienteNome,
+      barbearia: mensagem.barbearia,
+    });
+    if (!foi) await this.reserva.enviarDeAutomacao(mensagem);
+  }
+
+  async enviarDeCampanha(mensagem: MensagemDeCampanha): Promise<string | null> {
+    const wamid = await this.pelaCasa({
+      tenantId: mensagem.tenantId,
+      locationId: mensagem.locationId,
+      tipo: mensagem.tipo,
+      telefone: mensagem.phoneE164,
+      clienteNome: mensagem.clienteNome,
+      barbearia: mensagem.barbearia,
+    });
+    if (wamid) return wamid;
+    return this.reserva.enviarDeCampanha(mensagem);
+  }
+
+  /**
+   * As quatro que **não** passam pelo canal da casa, e o motivo é um só.
+   *
+   * A Meta exige um template aprovado por tipo, e `notification_kind` não
+   * nomeia convite de vaga, recado, aviso do clube nem nota fiscal. Sem tipo
+   * não há template a escolher — então elas não têm por onde sair, e delegar é
+   * a resposta certa, não um esquecimento.
+   */
+  enviarDeVaga(mensagem: MensagemDeVaga): Promise<void> {
+    return this.reserva.enviarDeVaga(mensagem);
+  }
+  enviarDeRecado(mensagem: MensagemDeRecado): Promise<void> {
+    return this.reserva.enviarDeRecado(mensagem);
+  }
+  enviarDoClube(mensagem: MensagemDoClube): Promise<void> {
+    return this.reserva.enviarDoClube(mensagem);
+  }
+  enviarDeNota(mensagem: MensagemDeNota): Promise<void> {
+    return this.reserva.enviarDeNota(mensagem);
+  }
+}
+
+const provider: NotificationProvider = new CanalDaCasa(new ConsoleNotificationProvider());
 
 /**
  * O adquirente do clube — hoje, o de mentira.
@@ -303,7 +445,11 @@ async function main(): Promise<void> {
         for (const disparo of fila) {
           const nossa = await marcarDisparoEnviado({ tenantId, disparoId: disparo.id });
           if (!nossa) continue;
+          // Quem escolhe o canal é o provedor. Decidir aqui faria deste o único
+          // caminho que não troca junto no dia em que o canal mudar.
           await provider.enviarDeAutomacao({
+            tenantId,
+            locationId: local.id,
             phoneE164: disparo.telefone,
             clienteNome: disparo.clienteNome,
             barbearia: disparo.barbearia,
@@ -318,6 +464,59 @@ async function main(): Promise<void> {
           // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.
           console.log('[automacao]', { tenantId, marcados: varrida.marcados, enviados });
         }
+      },
+
+      /**
+       * O despacho de uma campanha (bloco 82).
+       *
+       * A tarefa nasce dentro da transação que põe a campanha em `enviando`, e
+       * não se reprograma: a fila já retenta com espera crescente e
+       * `soltarOrfas` devolve o que ficou preso. Uma varredura por cima seria a
+       * segunda noção de "quando tentar de novo" — ela pegaria a campanha cuja
+       * tarefa está em espera e despacharia antes da hora, derrubando o
+       * intervalo que a espera existe para dar.
+       *
+       * O que segura o envio duplo é o estado do alvo (`sent_at IS NULL`), lá
+       * dentro: uma retentativa continua de onde parou em vez de recomeçar.
+       */
+      enviarCampanha: async (tenantId, campanhaId, agora) => {
+        const local = await primaryLocation(tenantId);
+        if (!local) return;
+
+        const resultado = await despacharCampanha({
+          tenantId,
+          campanhaId,
+          agora,
+          timeZone: local.timezone,
+          enviar: (alvo) =>
+            provider.enviarDeCampanha({
+              tenantId,
+              locationId: local.id,
+              phoneE164: alvo.telefone,
+              clienteNome: alvo.clienteNome,
+              barbearia: alvo.barbearia,
+              tipo: alvo.tipo,
+            }),
+        });
+
+        /**
+         * A receita atribuída, na mesma volta.
+         *
+         * Ela varre os alvos já enviados de **todas** as campanhas da casa, e
+         * não só desta: uma venda que fecha hoje pode ser de um envio de
+         * semana passada. Ficar pendurada no despacho é o que a tira de órfã —
+         * antes deste bloco ela não tinha chamador nenhum, e a única coluna que
+         * importa numa campanha ficava vazia para sempre.
+         */
+        const atribuidos = await atribuirReceita({ tenantId, agora });
+
+        // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.
+        console.log('[campanha]', {
+          tenantId,
+          enviados: resultado.enviados,
+          pulados: resultado.pulados,
+          atribuidos,
+        });
       },
 
       entregarNotas: async (tenantId, agora) => {

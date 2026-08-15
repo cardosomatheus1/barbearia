@@ -50,6 +50,7 @@ import {
   salvarAutomacaoNaApi,
   abrirUnidadeNaApi,
   criarCampanhaNaApi,
+  enviarCampanhaNaApi,
   definirUnidadeAtivaNaApi,
   definirUnidadesNaApi,
   escolherUnidadeNaApi,
@@ -2849,6 +2850,21 @@ export async function acaoCriarCampanha(form: FormData): Promise<void> {
   });
   if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
   redirect(`${ROTA_CAMPANHAS}?feito=criada&publico=${resultado.dados.publico}`);
+}
+
+/**
+ * O botão "Enviar" (bloco 82).
+ *
+ * A rota não manda mensagem: ela põe a campanha em `enviando` e enfileira o
+ * despacho. Por isso a volta diz "entrou na fila" e não "enviada" — prometer o
+ * segundo faria a pessoa recarregar a tela procurando um número que ainda vai
+ * demorar, e concluir que quebrou.
+ */
+export async function acaoEnviarCampanha(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await enviarCampanhaNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
+  redirect(`${ROTA_CAMPANHAS}?feito=enviando`);
 }
 
 
