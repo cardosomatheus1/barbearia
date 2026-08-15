@@ -152,7 +152,13 @@ if [ -n "$RAPIDO" ] && [ -n "$AFETADOS" ]; then
   done <<<"$AFETADOS"
   [ ${#FILTROS[@]} -gt 0 ] && lancar "typecheck" pnpm "${FILTROS[@]}" typecheck
 else
-  lancar "typecheck" pnpm --filter '!@barbearia/web' -r typecheck
+  # `!barbearia` exclui a **raiz**, e sem ela a linha inteira não valia nada:
+  # o pacote raiz casa com o filtro, e o `typecheck` dele é `pnpm -r typecheck`
+  # — que recursa nos quinze, web incluído. O par build+typecheck logo abaixo
+  # existia para evitar a corrida do `.next/types`, e ela acontecia assim mesmo,
+  # de vez em quando, com o `TS6053` que o comentário acima descreve. Portão que
+  # inventa falha treina todo mundo a ignorar vermelho.
+  lancar "typecheck" pnpm --filter '!@barbearia/web' --filter '!barbearia' -r typecheck
 fi
 
 precisa "@barbearia/web" && lancar "build do web + typecheck" \

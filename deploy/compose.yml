@@ -65,6 +65,20 @@ x-ambiente: &ambiente
   PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-}
   WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
   WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+  # O canal de mensagem deste processo (bloco 82). `nenhum` é o padrão de
+  # fábrica: tudo continua saindo pelo canal de reserva, e nada vai para a
+  # internet sem alguém ter decidido.
+  WHATSAPP_MODO: ${WHATSAPP_MODO:-nenhum}
+  # O app da plataforma na Meta, para o Embedded Signup (bloco 83). Vazios, a
+  # tela não desenha o botão e o cadastro à mão continua sendo o caminho.
+  #
+  # **Sem estas quatro linhas, pôr as variáveis no `.env` não faz nada**: o
+  # compose só entrega ao contêiner o que ele repassa aqui, e o processo leria
+  # `undefined` com o `.env` preenchido — o defeito do campo que o motor aceita
+  # e ninguém preenche, na sua forma mais silenciosa.
+  META_APP_ID: ${META_APP_ID:-}
+  META_CONFIG_ID: ${META_CONFIG_ID:-}
+  META_APP_SECRET: ${META_APP_SECRET:-}
 
 services:
   db:

@@ -129,3 +129,64 @@ describe('o .env.example é a lista', () => {
     expect(acha(`const c = process.env['JA_ESTA'];`)).toEqual([]);
   });
 });
+
+describe('o compose entrega ao contêiner o que o código lê', () => {
+  /**
+   * A terceira lista, e a que faltava.
+   *
+   * O `.env.example` já era conferido contra o **fonte**. O que ninguém
+   * conferia era o `deploy/compose.yml`: ele só entrega ao processo o que
+   * repassa explicitamente, e uma variável ausente ali chega como `undefined`
+   * **com o `.env` preenchido**.
+   *
+   * É a forma mais silenciosa do defeito do campo que o motor aceita e ninguém
+   * preenche: o operador cola a variável, reinicia, e o produto se comporta
+   * como se ela não existisse — sem erro, sem log, sem nada vermelho. Foi
+   * exatamente o que aconteceu com `WHATSAPP_MODO` e as três `META_*` no dia
+   * em que elas nasceram.
+   */
+  const compose = readFileSync(new URL('../deploy/compose.yml', import.meta.url), 'utf8');
+
+  /**
+   * O que a instalação **não** precisa conhecer.
+   *
+   * `ADMIN_DATABASE_URL` e `APP_DB_PASSWORD` o compose monta sozinho; o resto é
+   * de teste, de medição ou da máquina de quem desenvolve. A lista é curta de
+   * propósito: ela é o lugar onde uma variável de produção se esconderia.
+   */
+  const FORA_DO_COMPOSE = new Set([
+    'NODE_ENV',
+    'SEED_DATABASE_URL',
+    'PORT',
+    'WORKER_INTERVALO_MS',
+    'RATE_LIMIT_SHORT',
+    'RATE_LIMIT_LONG',
+    'PULAR_BUILD_DAS_DEPENDENCIAS',
+    'SEMENTE_BARBEARIA',
+    'SEMENTE_DONO',
+    'SEMENTE_EMAIL',
+    'SEMENTE_SENHA',
+    'SEMENTE_TELEFONE',
+    'MEDICAO_PRINTS',
+    'DB_PILOTO',
+    'RECRIAR',
+    'SEMEAR',
+    'DESTINO',
+    'TZ',
+  ]);
+
+  it('toda variável do .env.example chega ao contêiner', () => {
+    const exemplo = readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
+    const declaradas = [...exemplo.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]);
+
+    const ausentes = declaradas.filter(
+      (nome) => !FORA_DO_COMPOSE.has(nome) && !new RegExp(`^\\s*${nome}:`, 'm').test(compose),
+    );
+
+    expect(
+      ausentes,
+      'estas estão no .env.example e o compose não as repassa: preenchê-las no ' +
+        '.env do servidor não faria efeito nenhum, e nada ficaria vermelho',
+    ).toEqual([]);
+  });
+});
