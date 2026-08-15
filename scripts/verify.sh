@@ -173,6 +173,9 @@ lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
 lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
 lancar "recurso do menu × catálogo" npx vitest run scripts/recursos-da-navegacao.test.mjs
 lancar "segredos do deploy" npx vitest run scripts/segredos-do-deploy.test.mjs
+# Máquina recém-instalada não tem crontab, e era esse o caso que instalava um
+# crontab vazio e deixava o backup diário — a única cópia dos dados — sem existir.
+lancar "cron do backup" npx vitest run scripts/cron-do-backup.test.mjs
 lancar "trava da semente" npx vitest run scripts/semente-permitida.test.mjs
 # Migração destrutiva tira do rollback a forma barata dele: a volta deixa de ser
 # "sobe a imagem anterior" e vira "restaura backup e perde o que veio depois".
@@ -180,6 +183,11 @@ lancar "migração aditiva" npx vitest run packages/db/test/migracao-aditiva.tes
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
+
+  # Precisa de Postgres de verdade: o que se prova é que a **segunda** passada
+  # das migrações não quebra. Era ela que abortava o compose e derrubava o site
+  # a cada atualização.
+  lancar "migrações repetíveis" npx vitest run packages/db/test/migracoes-repetiveis.test.mjs
 
   for entrada in "${NOMES[@]}"; do
     pacote="${entrada%%:*}"

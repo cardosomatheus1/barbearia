@@ -96,16 +96,20 @@ services:
     # Cria o banco, o role sem BYPASSRLS e aplica as migrações que faltam.
     # Serviço próprio e não um passo dentro da API: migração que roda junto com
     # a aplicação roda uma vez por réplica.
+    #
+    # Quem decide o que falta é `packages/db/scripts/migrate.sh`, e o laço que
+    # existia aqui virou uma chamada a ele de propósito: eram duas cópias da
+    # mesma ideia, e a daqui aplicava **todas** as migrações a cada subida. Na
+    # segunda, o `0001` reencontrava o próprio tipo e saía com 3 — e como `api`,
+    # `worker` e `web` esperam este serviço com `service_completed_successfully`,
+    # o compose abortava a subida e o Caddy não subia. Atualizar derrubava o site.
     command: >
       bash -c '
         set -e
         psql "$$ADMIN_DATABASE_URL" -q -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'barbearia'"'"'" | grep -q 1 \
           || psql "$$ADMIN_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE barbearia"
         scripts/bootstrap-role.sh > /dev/null
-        for m in packages/db/migrations/*.sql; do
-          psql "postgres://postgres:$$POSTGRES_PASSWORD@db:5432/barbearia" -q -v ON_ERROR_STOP=1 -f "$$m"
-        done
-        echo "migrações aplicadas"
+        DATABASE_URL="postgres://postgres:$$POSTGRES_PASSWORD@db:5432/barbearia" packages/db/scripts/migrate.sh
       '
 
   api:
