@@ -9,7 +9,7 @@ import {
   OBJETIVOS,
   ROTULO_DO_GATILHO,
   ROTULO_DO_OBJETIVO,
-  TIPOS_DE_NOTIFICACAO,
+  TIPOS_DE_CAMPANHA,
   type Gatilho,
   type Objetivo,
 } from '@barbearia/core';
@@ -335,8 +335,12 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               <label className="ui-field__label" htmlFor="tipo">
                 Qual mensagem
               </label>
+              {/* `TIPOS_DE_CAMPANHA` e não os seis avisos: a automação fala com quem
+                  **não tem horário marcado**, então lembrete e confirmação mentiriam
+                  no texto — e `senha_de_acesso` é credencial. É a mesma lista que a
+                  campanha já usava; a automação tinha ficado de fora. */}
               <select className="ui-field__input" defaultValue="retorno" id="tipo" name="tipo">
-                {TIPOS_DE_NOTIFICACAO.map((t) => (
+                {TIPOS_DE_CAMPANHA.map((t) => (
                   <option key={t} value={t}>
                     {NOME_DO_AVISO[t] ?? t}
                     {aprovados.has(t) ? '' : ' — sem texto aprovado'}

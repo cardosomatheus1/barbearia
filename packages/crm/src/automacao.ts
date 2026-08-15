@@ -7,6 +7,7 @@ import {
   type Gatilho,
   type Objetivo,
   type TipoDeNotificacao,
+  tipoDeCampanhaValido,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 
@@ -129,6 +130,25 @@ export async function salvarAutomacao(params: {
     janelaDias: params.janelaDias,
   });
   if (falha) throw new AutomacaoError('invalida', falha);
+  /**
+   * Automação usa a **mesma** lista fechada da campanha, e faltava.
+   *
+   * `TIPOS_DE_CAMPANHA` nasceu porque um seletor com os seis tipos deixava a
+   * campanha escolher `lembrete_24h` — transacional, que ignora o opt-out de
+   * marketing — e mandar para a base inteira, inclusive para quem revogou o
+   * consentimento. A automação ficou de fora do conserto, com o mesmo seletor e
+   * a mesma consequência: ela dispara sozinha, o que é pior.
+   *
+   * E mente no texto pelo mesmo motivo do bloco 87: `MensagemDeAutomacao` não
+   * carrega hora nem profissional — quem recebe uma automação **não tem horário
+   * marcado**. Um `lembrete_24h` sairia como "seu corte é amanhã às  com ".
+   *
+   * `senha_de_acesso` é o caso mais grave: é credencial, e estava disponível
+   * como peça de marketing recorrente.
+   */
+  if (!tipoDeCampanhaValido(params.tipo)) {
+    throw new AutomacaoError('invalida', 'Este texto não serve para automação.');
+  }
 
   return withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ id: string }[]>`

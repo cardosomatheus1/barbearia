@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GATILHOS, JANELA_MAXIMA_DIAS, OBJETIVOS, TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
+import { GATILHOS, JANELA_MAXIMA_DIAS, OBJETIVOS, TIPOS_DE_CAMPANHA } from '@barbearia/core';
 
 /**
  * A borda da automação (bloco 56).
@@ -19,7 +19,14 @@ export const automacaoSchema = z.object({
    */
   limiar: z.number().int().positive().nullable(),
   atrasoMinutos: z.number().int().min(0).max(10_080),
-  tipo: z.enum(TIPOS_DE_NOTIFICACAO),
+  /**
+   * A mesma lista fechada da campanha, e pela mesma razão.
+   *
+   * Com os seis tipos, a automação escolhia `lembrete_24h` — transacional, que
+   * ignora o opt-out de marketing — e disparava sozinha para quem revogou o
+   * consentimento. E `senha_de_acesso` é credencial.
+   */
+  tipo: z.enum(TIPOS_DE_CAMPANHA),
   objetivo: z.enum(OBJETIVOS),
   janelaDias: z.number().int().min(1).max(JANELA_MAXIMA_DIAS),
   ativa: z.boolean(),

@@ -85,6 +85,24 @@ describeIfDb('automação', () => {
       ...extra,
     });
 
+  /**
+   * Automação não manda texto transacional, e o motivo é o mesmo da campanha.
+   *
+   * `lembrete_24h` ignora o opt-out de marketing por ser o serviço contratado.
+   * Numa automação — que dispara sozinha, para quem **não tem horário marcado**
+   * — ele vira promoção mandada a quem revogou o consentimento, com um texto
+   * que promete um horário que não existe. E `senha_de_acesso` é credencial.
+   *
+   * A campanha fechou essa lista no bloco 82; a automação ficou de fora, com o
+   * mesmo seletor e a mesma consequência.
+   */
+  it('automação recusa texto que não é de campanha', async () => {
+    await expect(automacao({ tipo: 'lembrete_24h' })).rejects.toMatchObject({ code: 'invalida' });
+    await expect(automacao({ tipo: 'senha_de_acesso' })).rejects.toMatchObject({
+      code: 'invalida',
+    });
+  });
+
   /** Um atendimento concluído há tantos dias. */
   const atendimento = async (customerId: string, diasAtras: number, id: string) => {
     const inicio = new Date(AGORA.getTime() - diasAtras * 86_400_000);
