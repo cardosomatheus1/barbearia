@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Do VPS vazio ao produto no ar, num comando.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/<branch>/deploy/instalar.sh | bash -s -- barbearia.com.br voce@email.com
+#   curl -fsSL https://raw.githubusercontent.com/cardosomatheus1/barbearia/claude/barbershop-app-research-xvejhy/deploy/instalar.sh \
+#     | bash -s -- barbearia.com.br voce@email.com
 #
 # ou, com o repositório já clonado:
 #
@@ -18,7 +19,14 @@ DOMINIO="${1:-}"
 EMAIL="${2:-}"
 DESTINO="${DESTINO:-/opt/barbearia}"
 REPO="${REPO:-https://github.com/cardosomatheus1/barbearia.git}"
-BRANCH="${BRANCH:-main}"
+# Vazio significa "a branch padrão do repositório", resolvida no remoto.
+#
+# A primeira versão escrevia `main` como padrão, e a branch padrão deste
+# repositório não é `main`: o clone falharia com "Remote branch main not found",
+# no servidor de quem está instalando pela primeira vez. Nome de branch escrito
+# à mão é a mesma lista paralela de sempre — quem renomear a branch amanhã
+# quebra o instalador sem saber que ele existe.
+BRANCH="${BRANCH:-}"
 
 verde() { printf '\033[32m%s\033[0m\n' "$1"; }
 amarelo() { printf '\033[33m%s\033[0m\n' "$1"; }
@@ -64,16 +72,20 @@ verde "  ok  $(docker --version)"
 # 3. O código
 # ---------------------------------------------------------------------------
 titulo "código em $DESTINO"
+command -v git > /dev/null || { apt-get update -qq && apt-get install -y -qq git; }
+if [ -z "$BRANCH" ]; then
+  # `--symref` pergunta ao remoto para onde o HEAD dele aponta, sem clonar.
+  BRANCH="$(git ls-remote --symref "$REPO" HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2; exit}')"
+  [ -n "$BRANCH" ] || morrer "não consegui descobrir a branch padrão de $REPO"
+fi
 if [ -d "$DESTINO/.git" ]; then
   git -C "$DESTINO" fetch --quiet origin "$BRANCH"
-  git -C "$DESTINO" checkout --quiet "$BRANCH"
-  git -C "$DESTINO" reset --hard --quiet "origin/$BRANCH"
+  git -C "$DESTINO" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
 else
-  command -v git > /dev/null || { apt-get update -qq && apt-get install -y -qq git; }
   git clone --quiet --branch "$BRANCH" "$REPO" "$DESTINO"
 fi
 cd "$DESTINO"
-verde "  ok  $(git -C "$DESTINO" rev-parse --short HEAD)"
+verde "  ok  $BRANCH @ $(git -C "$DESTINO" rev-parse --short HEAD)"
 
 # ---------------------------------------------------------------------------
 # 4. Os segredos

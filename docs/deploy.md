@@ -54,9 +54,14 @@ com uma frase em vez de deixar isso para depois.
 Na máquina, como root:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cardosomatheus1/barbearia/main/deploy/instalar.sh \
+curl -fsSL https://raw.githubusercontent.com/cardosomatheus1/barbearia/claude/barbershop-app-research-xvejhy/deploy/instalar.sh \
   | bash -s -- barbearia.com.br voce@email.com
 ```
+
+> O endereço acima carrega o script de uma branch específica porque é preciso
+> nomear uma para baixar o arquivo. O que ele **instala** é a branch padrão do
+> repositório, resolvida no remoto — nome de branch escrito no script seria a
+> lista paralela de sempre, e quebraria no dia em que alguém renomeasse.
 
 Ele instala o Docker se faltar, clona o repositório em `/opt/barbearia`, **gera
 os oito segredos**, aplica as 83 migrações, sobe os cinco serviços, espera o
