@@ -52,6 +52,20 @@ fi
 
 DOMINIO="$(grep -E '^DOMINIO=' "$DESTINO/.env" | cut -d= -f2 | tr -d '"' || true)"
 
+# O histórico é escrito com o papel `postgres`, porque ele atravessa a RLS que o
+# role da aplicação não pode atravessar — mas dentro do banco **da aplicação**.
+#
+# O `ADMIN_DATABASE_URL` do compose não serve para isso e não deveria mesmo: ele
+# aponta para o banco `postgres`, de manutenção, que é o que o `preparar` usa
+# para dar `CREATE DATABASE barbearia`. A semente lê `ADMIN_DATABASE_URL` e
+# encontrava ali um banco sem tabela nenhuma — `relation "tenant_slugs" does not
+# exist`, depois de já ter criado a barbearia pela API.
+#
+# No compose de desenvolvimento as duas URLs caem no mesmo banco, e por isso o
+# defeito não aparece lá: ele é só da instalação de verdade.
+SENHA_PG="$(grep -E '^POSTGRES_PASSWORD=' "$DESTINO/.env" | cut -d= -f2 | tr -d '"' || true)"
+BANCO_DO_HISTORICO="postgres://postgres:$SENHA_PG@db:5432/barbearia"
+
 printf '\n\033[1m==> semeando "%s"\033[0m\n' "$NOME_DA_CASA"
 printf '    dono:   %s <%s>\n' "$DONO" "$EMAIL"
 printf '    leva alguns minutos: são 245 dias de movimento, dia a dia.\n\n'
@@ -66,6 +80,7 @@ $COMPOSE run --rm \
   -e SEMENTE_SENHA="$SEMENTE_SENHA" \
   -e SEMENTE_TELEFONE="$TELEFONE" \
   -e WEB_URL="https://$DOMINIO" \
+  -e ADMIN_DATABASE_URL="$BANCO_DO_HISTORICO" \
   api node scripts/semear-demo.mjs
 
 printf '\n\033[32m==> pronto\033[0m\n'
