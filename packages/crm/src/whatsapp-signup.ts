@@ -109,14 +109,95 @@ export function modoDoOnboarding(bruto = process.env['WHATSAPP_ONBOARDING']): Mo
  * "existe" e nunca como valor.
  */
 export function signupNaTela(
+  params: { readonly redirectUri: string; readonly state: string },
   credenciais = credenciaisDaPlataforma(),
   modo = modoDoOnboarding(),
-): { readonly appId: string; readonly configId: string; readonly modo: ModoDoOnboarding } | null {
+): { readonly endereco: string; readonly modo: ModoDoOnboarding } | null {
   if (!credenciais) return null;
-  // O modo viaja para a tela porque ela decide duas coisas com ele: o que
-  // mandar no `extras` do FB.login, e **o que avisar** antes do botão — num
-  // fluxo o número sai do WhatsApp, no outro ele fica.
-  return { appId: credenciais.appId, configId: credenciais.configId, modo };
+
+  /**
+   * A tela recebe o **endereço pronto**, e não as credenciais.
+   *
+   * Antes ela recebia `appId` e `configId` para montar a chamada do SDK no
+   * navegador. Sem SDK, montar a URL virou trabalho de servidor — e a tela
+   * deixou de precisar saber qualquer coisa sobre a Meta.
+   *
+   * O modo continua viajando porque ela decide uma coisa com ele: **o que
+   * avisar** antes do botão. Num fluxo o número sai do WhatsApp, no outro ele
+   * fica, e avisar errado é a barbearia perder o canal que usa todo dia.
+   */
+  return {
+    endereco: enderecoDoSignup({
+      credenciais,
+      modo,
+      redirectUri: params.redirectUri,
+      state: params.state,
+    }),
+    modo,
+  };
+}
+
+/**
+ * O endereço da janela de conexão, montado no servidor (bloco 86).
+ *
+ * ## Por que deixou de ser JavaScript
+ *
+ * A versão anterior usava o SDK da Meta: um `<script>` sob nonce chamava
+ * `FB.login`, que abre uma janela filha e devolve o código por callback. No
+ * computador funciona. **No celular não**: a janela vira uma aba, o SDK não
+ * consegue falar com a página que a abriu, e o callback nunca dispara. A Meta
+ * conclui, mostra "feche esta aba", e a nossa tela fica igual.
+ *
+ * Aconteceu duas vezes na primeira conexão de verdade deste produto — a segunda
+ * já com o conserto que eu achava que resolvia, e que atacava o lugar errado: o
+ * problema não era a resposta se perder no caminho de volta, era o código nunca
+ * chegar.
+ *
+ * O fluxo de redirecionamento é navegação comum. Funciona em qualquer
+ * navegador, não pede JavaScript, e por isso **apaga o único script que este
+ * produto mandava ao navegador** — junto com a exceção de política de conteúdo
+ * que ele exigia. O caminho mais robusto era também o mais simples, e o SDK foi
+ * a escolha errada desde o começo.
+ *
+ * ## O `state`
+ *
+ * Vai e volta sem ser tocado, e é o que impede alguém de fazer a barbearia
+ * conectar uma conta que não é dela: sem ele, um link montado por terceiro
+ * levaria o código de outra pessoa para dentro deste cadastro. Quem o guarda e
+ * o confere é a tela, num cookie `httpOnly` — o precedente da senha de primeiro
+ * acesso.
+ */
+export function enderecoDoSignup(params: {
+  readonly credenciais: CredenciaisDaPlataforma;
+  readonly modo: ModoDoOnboarding;
+  readonly redirectUri: string;
+  readonly state: string;
+}): string {
+  const url = new URL(`https://www.facebook.com/${VERSAO}/dialog/oauth`);
+  url.searchParams.set('client_id', params.credenciais.appId);
+  url.searchParams.set('config_id', params.credenciais.configId);
+  url.searchParams.set('redirect_uri', params.redirectUri);
+  url.searchParams.set('state', params.state);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('override_default_response_type', 'true');
+
+  /**
+   * O mesmo `extras` do SDK, como texto.
+   *
+   * `featureType` é o que separa os dois fluxos: com ele a Meta abre o
+   * onboarding do aplicativo WhatsApp Business e o número **continua**
+   * funcionando lá; sem ele, o número é tomado pela Cloud API.
+   */
+  url.searchParams.set(
+    'extras',
+    JSON.stringify(
+      params.modo === 'coexistencia'
+        ? { setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3' }
+        : { setup: {} },
+    ),
+  );
+
+  return url.toString();
 }
 
 export class SignupError extends Error {

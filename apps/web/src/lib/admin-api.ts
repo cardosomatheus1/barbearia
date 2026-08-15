@@ -3175,8 +3175,8 @@ export interface TemplateNaTelaDoAdmin {
  * em nome do app inteiro e não sai do servidor da API.
  */
 export interface SignupDoWhatsAppNaTela {
-  readonly appId: string;
-  readonly configId: string;
+  /** O endereço da Meta, montado no servidor e já com o `state`. */
+  readonly endereco: string;
   /**
    * Qual fluxo a janela da Meta abre — e o que a tela precisa avisar.
    *
@@ -3188,12 +3188,27 @@ export interface SignupDoWhatsAppNaTela {
   readonly modo: 'padrao' | 'coexistencia';
 }
 
-export const signupDoWhatsAppNaApi = (token: string) =>
-  chamar<{ signup: SignupDoWhatsAppNaTela | null }>('GET', '/v1/admin/whatsapp/signup', undefined, token);
+export const signupDoWhatsAppNaApi = (
+  token: string,
+  params: { redirectUri: string; state: string },
+) =>
+  chamar<{ signup: SignupDoWhatsAppNaTela | null }>(
+    'GET',
+    `/v1/admin/whatsapp/signup?redirectUri=${encodeURIComponent(params.redirectUri)}&state=${params.state}`,
+    undefined,
+    token,
+  );
 
 export const conectarWhatsAppNaApi = (
   token: string,
-  corpo: { code: string; wabaId: string; phoneNumberId: string; numeroVisivel: string | null },
+  corpo: {
+    code: string;
+    // Opcionais desde o bloco 84: no redirecionamento eles não vêm, e quem os
+    // descobre é o servidor, pelo token.
+    wabaId?: string;
+    phoneNumberId?: string;
+    numeroVisivel: string | null;
+  },
 ) => chamar<{ cadastro: unknown }>('POST', '/v1/admin/whatsapp/conectar', corpo, token);
 
 export const cadastroDoWhatsAppNaApi = (token: string) =>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   WhatsAppError,
   SignupError,
@@ -18,6 +18,7 @@ import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
   cadastroDoWhatsAppSchema,
+  signupDaTelaSchema,
   signupDoWhatsAppSchema,
   templateSchema,
 } from './whatsapp.schemas.js';
@@ -149,8 +150,19 @@ export class WhatsAppController {
    */
   @Exige('whatsapp.manage')
   @Get('signup')
-  async signup() {
-    return { signup: signupNaTela() };
+  async signup(
+    @Query(new ZodValidationPipe(signupDaTelaSchema)) query: { redirectUri: string; state: string },
+  ) {
+    /**
+     * O endereço da Meta sai pronto daqui, e o `redirectUri` vem da tela.
+     *
+     * Ela é quem sabe em que domínio está — a API serve a mesma instalação por
+     * mais de um endereço em desenvolvimento. O que ela manda é conferido: só
+     * `https` e só o caminho de volta que existe, senão esta rota viraria um
+     * jeito de fazer a Meta redirecionar para onde alguém quiser com um código
+     * válido na mão.
+     */
+    return { signup: signupNaTela({ redirectUri: query.redirectUri, state: query.state }) };
   }
 
   /**

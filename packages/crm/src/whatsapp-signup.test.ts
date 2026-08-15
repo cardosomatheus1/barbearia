@@ -4,6 +4,7 @@ import {
   assinarWebhook,
   conectarPeloSignup,
   credenciaisDaPlataforma,
+  enderecoDoSignup,
   modoDoOnboarding,
   registrarNumero,
   signupNaTela,
@@ -18,6 +19,11 @@ import {
  * barbearias, e um único caminho que o devolva à tela o entrega a quem abrir o
  * código-fonte da página.
  */
+
+const RETORNO = {
+  redirectUri: 'https://barberdock.com.br/admin/whatsapp/conectado',
+  state: 'a'.repeat(32),
+};
 
 const CREDENCIAIS = { appId: '1957444791626828', appSecret: 'segredo-do-app', configId: '1043274278612160' };
 
@@ -65,22 +71,21 @@ describe('o que a tela recebe', () => {
      * dentro de um HTML que fica no histórico do navegador. É o precedente do
      * token da barbearia, que a tela recebe como "existe" e nunca como valor.
      */
-    const naTela = signupNaTela(CREDENCIAIS, 'padrao');
+    const naTela = signupNaTela(RETORNO, CREDENCIAIS, 'padrao');
     // `modo` entrou no bloco 85 e é público por natureza — ele diz qual fluxo a
     // janela abre, não uma credencial. O que este teste prende continua sendo o
     // que **não** sai, e por isso a asserção do segredo é sobre o objeto
     // inteiro serializado, e não sobre os campos que eu lembrei de listar.
-    expect(naTela).toEqual({
-      appId: CREDENCIAIS.appId,
-      configId: CREDENCIAIS.configId,
-      modo: 'padrao',
-    });
+    expect(naTela?.modo).toBe('padrao');
+    // O endereço leva `client_id` e `config_id`, que são públicos por desenho —
+    // eles vão na barra do navegador de quem se cadastra. O `appSecret` não vai
+    // a lugar nenhum que o navegador alcance.
     expect(JSON.stringify(naTela)).not.toContain('segredo-do-app');
   });
 
   it('sem app configurado, a tela não desenha o botão', () => {
     // Botão que abre uma janela vazia é pior que botão nenhum.
-    expect(signupNaTela(null)).toBeNull();
+    expect(signupNaTela(RETORNO, null)).toBeNull();
   });
 });
 
@@ -331,15 +336,62 @@ describe('o fluxo que a janela abre', () => {
      * dois casos — "o número sai do aplicativo" contra "o número continua
      * funcionando". Avisar errado é a barbearia perder o canal que usa todo dia.
      */
-    expect(signupNaTela(CREDENCIAIS, 'coexistencia')).toEqual({
-      appId: CREDENCIAIS.appId,
-      configId: CREDENCIAIS.configId,
-      modo: 'coexistencia',
-    });
-    expect(signupNaTela(CREDENCIAIS, 'padrao')?.modo).toBe('padrao');
+    expect(signupNaTela(RETORNO, CREDENCIAIS, 'coexistencia')?.modo).toBe('coexistencia');
+    expect(signupNaTela(RETORNO, CREDENCIAIS, 'padrao')?.modo).toBe('padrao');
   });
 
   it('sem app configurado não há botão, em qualquer modo', () => {
-    expect(signupNaTela(null, 'coexistencia')).toBeNull();
+    expect(signupNaTela(RETORNO, null, 'coexistencia')).toBeNull();
+  });
+});
+
+describe('o endereço da janela de conexão', () => {
+  /**
+   * O fluxo de redirecionamento (bloco 86), que substituiu o SDK.
+   *
+   * O SDK abria uma janela filha e devolvia o código por callback — e no
+   * celular a janela vira uma aba, o callback nunca dispara e a nossa tela fica
+   * igual enquanto a Meta diz que conectou. Aconteceu duas vezes na primeira
+   * conexão de verdade deste produto.
+   *
+   * Navegação comum funciona em qualquer navegador. Estes testes prendem o que
+   * o endereço precisa carregar para a volta acontecer.
+   */
+  const endereco = (modo: 'padrao' | 'coexistencia') =>
+    new URL(enderecoDoSignup({ credenciais: CREDENCIAIS, modo, ...RETORNO }));
+
+  it('vai para o diálogo da Meta, com o retorno e o state', () => {
+    const u = endereco('padrao');
+    expect(u.origin + u.pathname).toBe('https://www.facebook.com/v21.0/dialog/oauth');
+    expect(u.searchParams.get('client_id')).toBe(CREDENCIAIS.appId);
+    expect(u.searchParams.get('config_id')).toBe(CREDENCIAIS.configId);
+    expect(u.searchParams.get('redirect_uri')).toBe(RETORNO.redirectUri);
+    expect(u.searchParams.get('state')).toBe(RETORNO.state);
+    expect(u.searchParams.get('response_type')).toBe('code');
+    expect(u.searchParams.get('override_default_response_type')).toBe('true');
+  });
+
+  it('o segredo do app não vai para a barra do navegador', () => {
+    // O endereço aparece inteiro na barra de quem se cadastra, e fica no
+    // histórico. `client_id` e `config_id` são públicos por desenho; o segredo
+    // que assina em nome do app inteiro, não.
+    expect(endereco('padrao').toString()).not.toContain(CREDENCIAIS.appSecret);
+    expect(endereco('coexistencia').toString()).not.toContain(CREDENCIAIS.appSecret);
+  });
+
+  it('a coexistência é dita no extras, e é ela que preserva o número', () => {
+    /**
+     * `featureType` é o que separa os dois fluxos. Sem ele a Meta **toma** o
+     * número: ele sai do aplicativo WhatsApp da barbearia e não volta.
+     */
+    const comum = JSON.parse(endereco('padrao').searchParams.get('extras') ?? '{}');
+    expect(comum).toEqual({ setup: {} });
+
+    const junto = JSON.parse(endereco('coexistencia').searchParams.get('extras') ?? '{}');
+    expect(junto).toEqual({
+      setup: {},
+      featureType: 'whatsapp_business_app_onboarding',
+      sessionInfoVersion: '3',
+    });
   });
 });

@@ -358,3 +358,41 @@ export async function lerCodigosDeRecuperacao(): Promise<string[] | null> {
   }
   return null;
 }
+
+/**
+ * O `state` da conexão com a Meta, guardado entre a ida e a volta (bloco 86).
+ *
+ * O fluxo de redirecionamento manda a pessoa para a Meta e ela volta para uma
+ * rota nossa com `?code=&state=`. Sem conferir o `state`, um link montado por
+ * terceiro faria esta barbearia conectar **uma conta que não é dela** — e o
+ * token de outra pessoa ficaria cifrado no nosso banco, com a tela dizendo que
+ * está tudo certo.
+ *
+ * `httpOnly` mantém fora do JavaScript. `sameSite: 'lax'` e não `strict`, e é a
+ * diferença que importa aqui: a volta é uma navegação vinda de outro site, e
+ * `strict` não manda o cookie nesse caso — o `state` chegaria vazio e a conexão
+ * seria recusada sempre. O caminho restrito faz o resto do trabalho.
+ */
+const ESTADO_DA_META = 'barbearia_meta_state';
+const SEGUNDOS_DA_CONEXAO = 15 * 60;
+
+export async function guardarEstadoDaMeta(estado: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(ESTADO_DA_META, estado, {
+    httpOnly: true,
+    path: '/admin/whatsapp',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    // Quinze minutos: é quanto leva preencher o fluxo da Meta sem pressa, e
+    // curto o bastante para um cookie esquecido não valer nada amanhã.
+    maxAge: SEGUNDOS_DA_CONEXAO,
+  });
+}
+
+/** Lê e **apaga**: um `state` vale uma vez, como o código que ele acompanha. */
+export async function tomarEstadoDaMeta(): Promise<string | null> {
+  const jar = await cookies();
+  const valor = jar.get(ESTADO_DA_META)?.value ?? null;
+  jar.set(ESTADO_DA_META, '', { httpOnly: true, path: '/admin/whatsapp', maxAge: 0 });
+  return valor;
+}

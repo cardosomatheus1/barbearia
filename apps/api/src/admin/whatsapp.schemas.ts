@@ -60,3 +60,25 @@ export const signupDoWhatsAppSchema = z.object({
   phoneNumberId: z.string().regex(/^[0-9]{5,32}$/).optional(),
   numeroVisivel: z.string().trim().max(32).nullable().optional(),
 });
+
+/**
+ * O que a tela precisa mandar para receber o endereço da Meta (bloco 86).
+ *
+ * O `redirectUri` é conferido, e não repassado como veio: sem isso esta rota
+ * viraria um jeito de fazer a Meta redirecionar para onde alguém quiser — com
+ * um código de autorização válido na mão de quem montou o endereço.
+ *
+ * Só `https`, e só o caminho de volta que existe. O domínio não é fixado aqui
+ * porque a mesma instalação é servida por mais de um endereço em
+ * desenvolvimento, e quem o informa já passou pelo login do painel.
+ */
+export const signupDaTelaSchema = z.object({
+  redirectUri: z
+    .string()
+    .url()
+    .refine(
+      (v) => v.startsWith('https://') && new URL(v).pathname === '/admin/whatsapp/conectado',
+      'o retorno precisa ser https e apontar para a volta da conexão',
+    ),
+  state: z.string().regex(/^[a-f0-9]{32}$/),
+});

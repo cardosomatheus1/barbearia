@@ -33,29 +33,27 @@ import { NextResponse, type NextRequest } from 'next/server';
  * `CLAUDE.md` diz que carrega o peso do layout.
  */
 /**
- * A janela da Meta, e por que ela é **uma rota só** (bloco 83).
+ * A licença da Meta saiu no bloco 86, e o motivo vale registrar.
  *
- * O Embedded Signup roda o SDK da Meta no navegador: o script vem de
- * `connect.facebook.net`, ele conversa com `graph.facebook.com` e desenha um
- * `iframe` de `www.facebook.com` para conversar com a janela que abriu. Nada
- * disso passa por uma política de `'self'`.
+ * Ela existia porque a conexão do WhatsApp rodava o SDK da Meta no navegador —
+ * script de terceiro, chamada a `graph.facebook.com` e um `iframe`. Era uma
+ * exceção de política numa rota só, com teste que impedia alguém de abri-la
+ * globalmente.
  *
- * Abrir as três diretivas **globalmente** por causa de uma tela seria pagar em
- * toda página — inclusive na pública, que é anônima e indexada — por algo que
- * só existe atrás de login, e que a maior parte das barbearias usa uma vez.
- * Então a licença é por caminho, e é o único caminho do produto que a tem.
+ * O SDK **não funcionava no celular**: a janela virava uma aba, o callback
+ * nunca disparava, e a tela ficava igual. Trocado por redirecionamento — que é
+ * navegação comum —, o produto voltou a não mandar JavaScript nenhum ao
+ * navegador, e a exceção deixou de ter razão de existir.
+ *
+ * O caminho mais robusto era também o que fechava a política de volta.
  */
-const TELA_DO_SIGNUP = '/admin/whatsapp';
-const META = ['https://connect.facebook.net', 'https://www.facebook.com', 'https://graph.facebook.com'];
-
-function politica(nonce: string, comMeta: boolean): string {
-  const daMeta = comMeta ? ` ${META.join(' ')}` : '';
+function politica(nonce: string): string {
   return [
     "default-src 'self'",
     // `strict-dynamic` para o carregador do Next puxar os próprios pedaços sem
     // que cada um precise de nonce. Navegador que não o entende cai em 'self',
     // que continua recusando script de terceiro.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${daMeta}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     // O produto tem seis `style={{...}}` que desenham barra de progresso a
     // partir de um número calculado no servidor. Atributo de estilo não executa
     // nada; fechá-lo custaria seis classes geradas e não fecharia buraco algum.
@@ -63,7 +61,7 @@ function politica(nonce: string, comMeta: boolean): string {
     "img-src 'self' data: https:",
     // A página fala com a API **pelo servidor**. Nada sai do navegador — a
     // exceção é a tela de conexão do WhatsApp, e ela é uma só.
-    `connect-src 'self'${daMeta}`,
+    "connect-src 'self'",
     "font-src 'self'",
     "object-src 'none'",
     // Sem isto, uma injeção de `<base>` reescreve para onde todo link relativo
@@ -71,9 +69,6 @@ function politica(nonce: string, comMeta: boolean): string {
     "base-uri 'self'",
     // O formulário do painel posta para o próprio servidor de tela, sempre.
     "form-action 'self'",
-    // Sem `frame-src` declarado, o padrão é `default-src 'self'` — e o SDK da
-    // Meta desenha um iframe para falar com a janela que abriu.
-    `frame-src 'self'${daMeta}`,
     "frame-ancestors 'none'",
     'upgrade-insecure-requests',
   ].join('; ');
@@ -83,7 +78,7 @@ export function middleware(requisicao: NextRequest): NextResponse {
   // `crypto` é global no runtime do middleware. O hífen sai porque o valor do
   // nonce é comparado literalmente e precisa ser do alfabeto base64.
   const nonce = crypto.randomUUID().replaceAll('-', '');
-  const csp = politica(nonce, requisicao.nextUrl.pathname === TELA_DO_SIGNUP);
+  const csp = politica(nonce);
 
   const cabecalhos = new Headers(requisicao.headers);
   cabecalhos.set('x-nonce', nonce);

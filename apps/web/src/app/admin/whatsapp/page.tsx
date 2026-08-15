@@ -15,10 +15,13 @@ import {
   type SignupDoWhatsAppNaTela,
   type TemplateNaTelaDoAdmin,
 } from '@/lib/admin-api';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
-import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { guardarEstadoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
+import { randomBytes } from 'node:crypto';
+
+/** O endereço público desta instalação, para compor a volta da Meta. */
+const WEB_URL = process.env['WEB_URL'] ?? 'http://localhost:3001';
 import {
   acaoConectarWhatsApp,
   acaoSalvarCadastroDoWhatsApp,
@@ -61,6 +64,14 @@ const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
 const FALHA: Record<string, string> = {
+  // A volta da Meta, no fluxo de redirecionamento (bloco 86).
+  desistiu: 'Você saiu do fluxo da Meta antes de terminar. Pode tentar de novo quando quiser.',
+  sem_codigo: 'A Meta não devolveu o código da conexão. Tente de novo.',
+  estado_invalido:
+    'Esta volta não bate com a conexão que começou aqui. Comece de novo por segurança — e se repetir, use o cadastro à mão logo abaixo.',
+  sem_app: 'A conexão automática não está configurada nesta instalação.',
+  codigo_invalido: 'O código da Meta não vale mais. Ele expira em 30 segundos — tente de novo.',
+  meta_recusou: 'A Meta recusou a conexão. A mensagem dela está no painel da Meta.',
   numero_invalido: 'Confira os identificadores: eles são só números, e vêm do painel da Meta.',
   nome_invalido: 'O nome do texto aceita só minúsculas, números e sublinhado.',
   nao_configurado: 'Cadastre o número antes.',
@@ -181,178 +192,63 @@ function Caminho({
   );
 }
 
-/**
- * O botão que conecta o WhatsApp sem copiar identificador (bloco 83).
- *
- * ## O primeiro JavaScript que este produto manda ao navegador
- *
- * O painel inteiro é renderizado no servidor e não tem componente de cliente —
- * é decisão de arquitetura, e ela continua valendo. O que entra aqui não é um
- * componente React de cliente: é um `<script>` sob nonce numa tela só, atrás de
- * login, que não vai no pacote de ninguém e não existe em nenhuma outra rota.
- * A razão da regra — não entregar o ERP ao visitante anônimo (defeito D10) —
- * não é tocada.
- *
- * Não havia alternativa: o `FB.login` roda no navegador de quem se cadastra, e
- * é a Meta quem define esse contrato.
- *
- * ## Por que o formulário fica de pé sozinho
- *
- * O script preenche campos e submete um formulário normal, que posta para uma
- * *server action* como todo o resto do painel. Se o script não carregar, o que
- * sobra é o cadastro à mão logo abaixo — degrada para o caminho do bloco 55 em
- * vez de virar uma tela morta.
- */
 function Conectar({
-  nonce,
-  signup,
+  endereco,
+  modo,
 }: {
-  readonly nonce: string;
-  readonly signup: SignupDoWhatsAppNaTela;
+  readonly endereco: string;
+  readonly modo: 'padrao' | 'coexistencia';
 }) {
   return (
     <section className="cartao-balcao">
       <h2 className="cartao-balcao__titulo">Conectar o WhatsApp</h2>
       <p className="cartao-balcao__texto">
-        A janela da Meta abre aqui mesmo: você entra na sua conta, escolhe a empresa e o número, e
-        confirma o código que chega por SMS. Os identificadores vêm sozinhos — não é preciso copiar
-        nada de lugar nenhum.
+        Você vai para a página oficial da Meta, entra na sua conta, escolhe a empresa e o número, e
+        confirma o código que chega por SMS. No fim ela traz você de volta para cá, já conectado —
+        não é preciso copiar identificador nenhum.
       </p>
 
-      <form action={acaoConectarWhatsApp} id="conectar-whatsapp">
-        <input name="code" type="hidden" />
-        <input name="wabaId" type="hidden" />
-        <input name="phoneNumberId" type="hidden" />
-        <input name="numeroVisivel" type="hidden" />
-        <button
-          className="ui-button ui-button--primary ui-button--block"
-          id="conectar-whatsapp-botao"
-          type="button"
-        >
-          Conectar WhatsApp
-        </button>
-      </form>
+      {/*
+        O que acontece com o número, **antes** do botão.
 
-      <p className="cartao-balcao__texto" id="conectar-whatsapp-espera" role="status" />
+        É a informação mais cara desta tela: no fluxo padrão o número sai do
+        aplicativo WhatsApp e deixa de funcionar lá. Uma barbearia que conecta o
+        número do atendimento sem saber disso perde o canal que usa todo dia, e
+        não há como desfazer.
+      */}
+      {modo === 'coexistencia' ? (
+        <p className="cartao-balcao__texto">
+          <strong>O número continua funcionando no seu WhatsApp Business.</strong> Você segue
+          conversando pelo aplicativo, e o produto passa a mandar os avisos pelo mesmo número — a
+          Meta mantém as conversas em dia entre os dois.
+        </p>
+      ) : (
+        <p className="cartao-balcao__texto item-cadastro__risco">
+          <strong>Atenção: o número que você informar sai do aplicativo WhatsApp</strong> e passa a
+          ser usado só pelo produto. Não use o número que a barbearia usa para conversar com
+          cliente — use um chip dedicado ao atendimento automático.
+        </p>
+      )}
 
-      <script
-        // O nonce é o do middleware. Sem ele a política recusa este script, que
-        // é exatamente o que ela existe para fazer com script inline.
-        dangerouslySetInnerHTML={{
-          __html: `(function(){
-  var form = document.getElementById('conectar-whatsapp');
-  var botao = document.getElementById('conectar-whatsapp-botao');
-  var espera = document.getElementById('conectar-whatsapp-espera');
-  if (!form || !botao) return;
+      {/*
+        Um link, e não um botão com JavaScript.
 
-  // A janela da Meta manda os ids por 'message'; o FB.login devolve o código.
-  // As duas metades chegam separadas, e a conexão só acontece com as duas.
-  var dados = null;
-  var parou = null;
-  // Lista fechada de origens, e não 'termina com facebook.com': a segunda casa
-  // com 'evilfacebook.com', e quem manda a mensagem decide o que vira cadastro.
-  // 'm.facebook.com' entrou no bloco 84: é a origem que o celular usa, e sem
-  // ela a mensagem chegava e era descartada. Continua sendo lista fechada —
-  // 'termina com facebook.com' casa com 'evilfacebook.com'.
-  var DA_META = [
-    'https://www.facebook.com', 'https://web.facebook.com',
-    'https://business.facebook.com', 'https://m.facebook.com',
-  ];
-  window.addEventListener('message', function (evento) {
-    if (DA_META.indexOf(evento.origin) === -1) return;
-    try {
-      var corpo = JSON.parse(evento.data);
-      if (corpo.type !== 'WA_EMBEDDED_SIGNUP') return;
-      // 'FINISH' é o fluxo inteiro; 'FINISH_ONLY_WABA' é quem criou a conta e
-      // não chegou a acrescentar número. O segundo não serve para mandar nada,
-      // e tratá-lo como sucesso gravaria um cadastro sem 'phone_number_id' —
-      // "Ativo" na tela com toda mensagem caindo no canal de reserva.
-      // 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' é o encerramento da
-      // coexistência, e ele traz a conta mas nem sempre o número — o servidor
-      // descobre o resto pelo token, que é o caminho que não depende disto.
-      if (corpo.event === 'FINISH' || corpo.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING')
-        dados = corpo.data;
-      else if (corpo.event === 'FINISH_ONLY_WABA') parou = 'sem_numero';
-      else if (corpo.event === 'CANCEL') parou = corpo.data && corpo.data.current_step;
-    } catch (e) { /* mensagem que não é do fluxo; ignorar */ }
-  });
+        A versão anterior usava o SDK da Meta, que abre uma janela filha e
+        devolve o código por callback. No celular a janela vira uma aba, o SDK
+        não alcança a página que a abriu, e o callback nunca dispara — a Meta
+        conclui e a nossa tela fica igual. Aconteceu duas vezes na primeira
+        conexão de verdade deste produto.
 
-  function enviar(code) {
-    // O código basta, e é o conserto do celular (bloco 84). A versão anterior
-    // desistia sem os ids que a janela da Meta manda por evento: no computador
-    // eles chegam, no celular o fluxo abre numa aba separada e a mensagem não
-    // volta — a conexão terminava do lado da Meta e a nossa tela não mudava
-    // nada, nem dizia por quê. Agora o que a janela ouviu viaja como dica, e o
-    // servidor descobre a conta e o número pelo próprio token.
-    //
-    // Sem crase neste comentário: ele mora dentro de um template literal, e
-    // crase o fecha. Mesma armadilha do SQL e do CSS deste repositório.
-    form.elements['code'].value = code;
-    form.elements['wabaId'].value = (dados && dados.waba_id) || '';
-    form.elements['phoneNumberId'].value = (dados && dados.phone_number_id) || '';
-    form.elements['numeroVisivel'].value = (dados && dados.business_phone_number) || '';
-    // O código vale **30 segundos**. A troca acontece no servidor e há um
-    // salto a mais no caminho (a tela posta para a própria action, que chama a
-    // API), então não há nada a fazer entre receber e submeter.
-    espera.textContent = 'Conectando…';
-    form.requestSubmit();
-  }
-
-  botao.addEventListener('click', function () {
-    if (!window.FB) {
-      espera.textContent = 'Não deu para abrir a janela da Meta. Cadastre os identificadores abaixo.';
-      return;
-    }
-    window.FB.login(function (resposta) {
-      var code = resposta && resposta.authResponse && resposta.authResponse.code;
-      if (code) enviar(code);
-      else if (parou === 'sem_numero')
-        espera.textContent =
-          'A conta foi criada, mas nenhum número foi acrescentado a ela. Abra de novo e informe o número da barbearia.';
-      else
-        espera.textContent =
-          'A conexão não foi concluída' + (parou ? ' (parou em: ' + parou + ')' : '') +
-          '. Tente de novo — ou use "Cadastrar os identificadores à mão", logo abaixo.';
-    }, {
-      config_id: ${JSON.stringify(signup.configId)},
-      response_type: 'code',
-      override_default_response_type: true,
-      // setup é exigido pela Meta na v4; sem ele a janela abre no fluxo antigo,
-      // que não devolve os ids pelo evento.
-      //
-      // featureType é o que separa os dois fluxos: com ele a Meta abre o
-      // onboarding do aplicativo WhatsApp Business, e o número continua
-      // funcionando lá. Sem ele, o número é tomado pela Cloud API. Quem decide
-      // é o modo, porque a habilitação depende de credenciamento na Meta.
-      //
-      // Sem crase aqui: este comentário mora dentro de um template literal.
-      extras: ${JSON.stringify(
-        signup.modo === 'coexistencia'
-          ? {
-              setup: {},
-              featureType: 'whatsapp_business_app_onboarding',
-              sessionInfoVersion: '3',
-            }
-          : { setup: {} },
-      )},
-    });
-  });
-
-  window.fbAsyncInit = function () {
-    window.FB.init({ appId: ${JSON.stringify(signup.appId)}, xfbml: false, version: 'v21.0' });
-  };
-  var sdk = document.createElement('script');
-  sdk.src = 'https://connect.facebook.net/en_US/sdk.js';
-  sdk.async = true;
-  document.head.appendChild(sdk);
-})();`,
-        }}
-        nonce={nonce}
-      />
+        Navegação comum funciona em qualquer navegador. E apaga o único script
+        que este produto mandava ao navegador, junto com a exceção de política
+        de conteúdo que ele exigia: o caminho mais robusto era o mais simples.
+      */}
+      <a className="ui-button ui-button--primary ui-button--block" href={endereco}>
+        Conectar WhatsApp
+      </a>
     </section>
   );
 }
-
 
 /**
  * O cadastro à mão, que virou o caminho de escape (bloco 83).
@@ -447,10 +343,21 @@ export default async function WhatsAppPage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
   const query = await searchParams;
 
+  /**
+   * O `state` da ida à Meta, sorteado a cada carga e guardado num cookie.
+   *
+   * Ele volta sem ser tocado, e a rota de retorno compara os dois. Sem isso, um
+   * link montado por terceiro faria esta barbearia conectar **uma conta que não
+   * é dela** — o token de outra pessoa ficaria cifrado no nosso banco com a
+   * tela dizendo que está tudo certo.
+   */
+  const state = randomBytes(16).toString('hex');
+  await guardarEstadoDaMeta(state);
+
   const [cadastroResposta, templatesResposta, signupResposta] = await Promise.all([
     cadastroDoWhatsAppNaApi(token),
     templatesDoWhatsAppNaApi(token),
-    signupDoWhatsAppNaApi(token),
+    signupDoWhatsAppNaApi(token, { redirectUri: `${WEB_URL}/admin/whatsapp/conectado`, state }),
   ]);
 
   const cadastro = cadastroResposta.ok ? cadastroResposta.dados.cadastro : null;
@@ -458,7 +365,6 @@ export default async function WhatsAppPage({ searchParams }: Props) {
   // `null` quando o app da plataforma não foi configurado: aí a tela não
   // desenha o botão, porque botão que abre janela vazia é pior que botão nenhum.
   const signup = signupResposta.ok ? signupResposta.dados.signup : null;
-  const nonce = (await headers()).get('x-nonce') ?? '';
   const podeMexer = podeNaTela(estado, 'whatsapp.manage');
   const atual = cadastro?.estado ?? 'nao_configurado';
   const falha = first(query['erro']);
@@ -539,7 +445,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         </p>
       </section>
 
-      {podeMexer && signup ? <Conectar nonce={nonce} signup={signup} /> : null}
+      {podeMexer && signup ? <Conectar endereco={signup.endereco} modo={signup.modo} /> : null}
 
       {/*
         Com o botão de conexão na tela, o formulário técnico vai para dentro de
