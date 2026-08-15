@@ -26,10 +26,21 @@ export const cadastroDoWhatsAppSchema = z.object({
 
 export const templateSchema = z.object({
   tipo: z.enum(TIPOS_DE_NOTIFICACAO),
+  /**
+   * Opcional: por padrão o nome na Meta é o próprio tipo do aviso.
+   *
+   * A regra dela é minúsculas, números e sublinhado — identificador de sistema,
+   * e o balcão estava sendo obrigado a digitá-lo. "Lembrete 24h" voltava como
+   * "Parâmetro inválido: nome", que é a borda recusando o que qualquer pessoa
+   * escreveria.
+   *
+   * Continua aceito para quem já tem um nome aprovado do lado de lá.
+   */
   nome: z
     .string()
     .trim()
-    .regex(/^[a-z0-9_]{1,512}$/, 'Só minúsculas, números e sublinhado'),
+    .regex(/^[a-z0-9_]{1,512}$/, 'Só minúsculas, números e sublinhado')
+    .optional(),
   corpo: z.string().trim().min(5).max(1024),
 });
 

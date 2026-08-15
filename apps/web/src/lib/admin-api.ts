@@ -3250,7 +3250,7 @@ export const templatesDoWhatsAppNaApi = (token: string) =>
 
 export const submeterTemplateNaApi = (
   token: string,
-  corpo: { tipo: string; nome: string; corpo: string },
+  corpo: { tipo: string; corpo: string },
 ) => chamar<TemplateNaTelaDoAdmin>('POST', '/v1/admin/whatsapp/templates', corpo, token);
 
 // -- automação (bloco 56) ----------------------------------------------------

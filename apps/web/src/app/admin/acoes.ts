@@ -2967,7 +2967,6 @@ export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await submeterTemplateNaApi(token, {
     tipo: texto(form, 'tipo'),
-    nome: texto(form, 'nome'),
     corpo: texto(form, 'corpo'),
   });
   if (!resultado.ok) {

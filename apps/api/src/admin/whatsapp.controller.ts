@@ -248,7 +248,7 @@ export class WhatsAppController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(templateSchema)) body: {
       tipo: TipoDeNotificacao;
-      nome: string;
+      nome?: string;
       corpo: string;
     },
   ) {
@@ -258,7 +258,8 @@ export class WhatsAppController {
         tenantId: staff.tenantId,
         locationId: local.id,
         tipo: body.tipo,
-        nome: body.nome,
+        // Ausente é o caminho normal: o nome sai do tipo do aviso.
+        ...(body.nome ? { nome: body.nome } : {}),
         corpo: body.corpo,
         // O de verdade quando há canal ligado; o de mentira só como último
         // recurso, para a tela continuar exercitável sem conta na Meta.

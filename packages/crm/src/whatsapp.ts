@@ -368,14 +368,29 @@ export async function submeterTemplate(params: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly tipo: TipoDeNotificacao;
-  readonly nome: string;
+  /**
+   * O nome do template na Meta — e por padrão **é o próprio tipo do aviso**.
+   *
+   * A regra da Meta é minúsculas, números e sublinhado, sem acento e sem
+   * espaço. É identificador de sistema, e o balcão estava sendo obrigado a
+   * digitá-lo: "Lembrete 24h" batia na validação e voltava como "Parâmetro
+   * inválido: nome", sobre um campo que a pessoa não tem como acertar sem
+   * conhecer a documentação da Meta.
+   *
+   * Os tipos deste produto já são nomes válidos (`lembrete_24h`,
+   * `convite_retorno`), e a tela diz "um por aviso" — então o nome é derivado e
+   * o campo saiu. Continua aceito por parâmetro para quem tem um nome já
+   * aprovado do lado de lá e precisa casar com ele.
+   */
+  readonly nome?: string;
   readonly idioma?: string;
   readonly corpo: string;
   readonly provider: WhatsAppProvider;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<TemplateNaTela> {
-  if (!NOME_DO_TEMPLATE.test(params.nome)) recusar('nome_invalido');
+  const nome = params.nome ?? params.tipo;
+  if (!NOME_DO_TEMPLATE.test(nome)) recusar('nome_invalido');
   const idioma = params.idioma ?? 'pt_BR';
   const botoes = BOTOES_DO_AVISO[params.tipo];
 
@@ -385,7 +400,7 @@ export async function submeterTemplate(params: {
         (tenant_id, location_id, kind, name, language, status, body, buttons)
       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${params.locationId}::uuid, ${params.tipo}::notification_kind,
-             ${params.nome}, ${idioma}, 'pendente', ${params.corpo},
+             ${nome}, ${idioma}, 'pendente', ${params.corpo},
              ${JSON.stringify(botoes)}::jsonb
        WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
       ON CONFLICT (location_id, name, language) DO UPDATE SET
@@ -405,13 +420,13 @@ export async function submeterTemplate(params: {
       action: 'whatsapp.template_submitted',
       entity: 'whatsapp_templates',
       entityId: linha.id,
-      after: { nome: params.nome, tipo: params.tipo },
+      after: { nome, tipo: params.tipo },
     });
     return linha.id;
   });
 
   const resposta = await params.provider.submeterTemplate({
-    nome: params.nome,
+    nome,
     idioma,
     corpo: params.corpo,
     botoes,
@@ -499,6 +514,21 @@ export interface PedidoDeMensagem {
  * unicidade dele: uma retentativa que já tinha enviado grava o mesmo id e
  * esbarra na constraint em vez de contar duas vezes.
  */
+/**
+ * A maior posição de variável usada no corpo, que é o que a Meta conta.
+ *
+ * Posição e não ocorrência: um texto que usa `{{1}}` duas vezes pede **uma**
+ * variável, e um que usa só `{{2}}` pede duas — a Meta preenche por índice.
+ */
+export function variaveisDoCorpo(corpo: string): number {
+  let maior = 0;
+  for (const achado of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    const posicao = Number(achado[1]);
+    if (Number.isFinite(posicao) && posicao > maior) maior = posicao;
+  }
+  return maior;
+}
+
 export async function enviarPeloWhatsApp(
   pedido: PedidoDeMensagem,
 ): Promise<{ readonly wamid: string } | null> {
@@ -507,9 +537,9 @@ export async function enviarPeloWhatsApp(
 
   const template = await withTenant(pedido.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
-      { id: string; name: string; language: string; status: EstadoDoTemplate }[]
+      { id: string; name: string; language: string; status: EstadoDoTemplate; body: string }[]
     >`
-      SELECT id, name, language, status::text AS status
+      SELECT id, name, language, status::text AS status, body
         FROM whatsapp_templates
        WHERE location_id = ${pedido.locationId}::uuid
          AND kind = ${pedido.tipo}::notification_kind
@@ -520,6 +550,26 @@ export async function enviarPeloWhatsApp(
   });
   if (!template || !templateUtilizavel(template.status)) return null;
 
+  /**
+   * Quantas variáveis o texto **aprovado** pede — e é ele quem manda.
+   *
+   * A Meta recusa o envio quando a quantidade de parâmetros não bate com a do
+   * template: mandar três para um texto sem nenhuma variável falha igual a
+   * mandar nenhuma para um texto que tem três.
+   *
+   * Escrever variável é opcional, e a barbearia que escreve "seu agendamento
+   * está confirmado, te esperamos em breve!" tem um texto perfeitamente válido.
+   * Sem esta conta, ele seria **aprovado** pela Meta e falharia em todo envio —
+   * a pior combinação possível, porque a tela diria "aprovado" e o cliente não
+   * receberia nada.
+   *
+   * Pedidas a mais são cortadas; pedidas a menos deixam o canal indisponível,
+   * que cai no de reserva em vez de queimar a chamada.
+   */
+  const pedidas = variaveisDoCorpo(template.body);
+  if (pedidas > pedido.variaveis.length) return null;
+  const variaveis = pedido.variaveis.slice(0, pedidas);
+
   const botoes = BOTOES_DO_AVISO[pedido.tipo];
   const respostas = pedido.appointmentId
     ? botoes.map((botao) => ({ botao, payload: montarPayload(botao, pedido.appointmentId!) }))
@@ -529,7 +579,7 @@ export async function enviarPeloWhatsApp(
     para: pedido.telefone,
     template: template.name,
     idioma: template.language,
-    variaveis: pedido.variaveis,
+    variaveis,
     respostas,
   });
 

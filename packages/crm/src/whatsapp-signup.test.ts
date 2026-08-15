@@ -247,21 +247,21 @@ describe('a descoberta da conta e do número pelo token', () => {
    * que **funcionou** ainda não conectou nada.
    */
   /**
-   * Código já usado é a nossa própria conexão de segundos atrás.
+   * Código já usado **sem** cadastro gravado continua sendo recusa.
    *
-   * O navegador pede a volta duas vezes — recarga, pré-carregamento, o toque a
-   * mais de quem achou que não funcionou —, e a segunda chega com o mesmo
-   * código. A primeira já gravou o cadastro; tratar a segunda como falha pinta
-   * de vermelho uma conexão que deu certo, e foi o que apareceu em produção: a
-   * tela mostrando o número recém-salvo embaixo de um aviso de recusa.
+   * A tolerância do bloco 87 existe para a segunda volta do navegador: a
+   * primeira gravou o cadastro, e pintar de vermelho uma conexão que deu certo
+   * era o defeito. Mas ela vale só quando há o que devolver — sem cadastro, a
+   * frase da Meta tem que subir, senão a tolerância vira "conectou" sobre nada.
+   *
+   * A outra metade — código usado **com** cadastro — precisa de banco e mora na
+   * suíte de integração deste pacote.
    */
-  it('código já usado devolve o cadastro que a primeira volta gravou', async () => {
+  it('código já usado sem cadastro gravado continua recusando', async () => {
     const { buscar } = redeEmSequencia([
       { status: 400, corpo: { error: { message: 'This authorization code has been used.' } } },
     ]);
 
-    // Sem banco aqui: o que se prova é que a recusa **não** sobe como erro
-    // quando a mensagem é essa. A leitura do cadastro tem suíte de integração.
     const erro = await conectarPeloSignup({
       tenantId: '00000000-0000-0000-0000-000000000001',
       locationId: '00000000-0000-0000-0000-000000000002',
@@ -273,8 +273,8 @@ describe('a descoberta da conta e do número pelo token', () => {
       buscar,
     }).then(() => null, (e: Error) => e);
 
-    // O caminho segue para o banco: o que não pode é morrer com a recusa da Meta.
-    expect(erro === null || !/has been used/i.test(erro.message)).toBe(true);
+    expect(erro).not.toBeNull();
+    expect(erro?.message).toMatch(/has been used/i);
   });
 
   it('a troca leva o endereço de volta quando houve redirecionamento', async () => {

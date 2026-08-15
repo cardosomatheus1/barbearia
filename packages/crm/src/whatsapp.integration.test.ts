@@ -119,7 +119,10 @@ describeIfDb('WhatsApp oficial', () => {
     );
   };
 
-  const aprovarTemplate = async (tipo = 'lembrete_24h') => {
+  const aprovarTemplate = async (
+    tipo = 'lembrete_24h',
+    corpo = 'Olá {{1}}, seu corte é amanhã às {{2}}.',
+  ) => {
     const provedor = new FakeWhatsAppProvider();
     provedor.proximoEstadoDoTemplate = 'aprovado';
     return submeterTemplate({
@@ -127,7 +130,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       tipo: tipo as 'lembrete_24h',
       nome: `${tipo}_v1`,
-      corpo: 'Olá {{1}}, seu corte é amanhã às {{2}}.',
+      corpo,
       provider: provedor,
       ...operador,
     });
@@ -293,6 +296,55 @@ describeIfDb('WhatsApp oficial', () => {
     expect(resultado).toBeNull();
   });
 
+  /**
+   * Texto sem variável nenhuma é texto válido, e precisa **sair**.
+   *
+   * "Seu agendamento está confirmado, te esperamos em breve!" é o que uma
+   * barbearia escreve, e a Meta aprova. O envio mandava as três variáveis do
+   * motor assim mesmo, e a Meta recusa quando a quantidade não bate com a do
+   * template — aprovado na tela, falhando em todo envio, que é a pior
+   * combinação possível: a tela diz "aprovado" e o cliente não recebe nada.
+   */
+  it('texto sem variável sai com zero parâmetros', async () => {
+    await ativar();
+    await aprovarTemplate('lembrete_24h', 'Seu agendamento está confirmado, te esperamos!');
+
+    const provedor = new FakeWhatsAppProvider();
+    const resultado = await enviarPeloWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'lembrete_24h',
+      telefone: TELEFONE_DO_CARLOS,
+      // O motor sempre oferece as três; quem manda é o texto aprovado.
+      variaveis: ['Carlos', '15h', 'Gleidson'],
+      customerId: CARLOS,
+      appointmentId: HORARIO_DO_CARLOS,
+      provider: provedor,
+    });
+
+    expect(resultado).not.toBeNull();
+    expect(provedor.enviadas.at(-1)?.variaveis).toEqual([]);
+  });
+
+  it('texto com duas variáveis leva duas, não as três do motor', async () => {
+    await ativar();
+    await aprovarTemplate();
+
+    const provedor = new FakeWhatsAppProvider();
+    await enviarPeloWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'lembrete_24h',
+      telefone: TELEFONE_DO_CARLOS,
+      variaveis: ['Carlos', '15h', 'Gleidson'],
+      customerId: CARLOS,
+      appointmentId: HORARIO_DO_CARLOS,
+      provider: provedor,
+    });
+
+    expect(provedor.enviadas.at(-1)?.variaveis).toEqual(['Carlos', '15h']);
+  });
+
   it('sem template aprovado, o envio devolve nulo', async () => {
     await ativar();
     const resultado = await enviarPeloWhatsApp({
@@ -355,7 +407,10 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       tipo: 'lembrete_24h',
       telefone: TELEFONE_DO_CARLOS,
-      variaveis: ['Carlos'],
+      // As duas que o texto aprovado pede. Com uma só, o canal fica
+      // indisponível de propósito — a Meta recusa quando falta parâmetro —, e
+      // este teste é sobre a ordem dos eventos, não sobre isso.
+      variaveis: ['Carlos', '15h'],
       customerId: CARLOS,
       appointmentId: HORARIO_DO_CARLOS,
       provider: new FakeWhatsAppProvider(),

@@ -532,20 +532,6 @@ export default async function WhatsAppPage({ searchParams }: Props) {
               </div>
 
               <div className="ui-field">
-                <label className="ui-field__label" htmlFor="nome">
-                  Nome na Meta
-                </label>
-                <input
-                  className="ui-field__input"
-                  id="nome"
-                  name="nome"
-                  placeholder="lembrete_24h_v1"
-                  required
-                />
-                <p className="ui-field__hint">Só minúsculas, números e sublinhado.</p>
-              </div>
-
-              <div className="ui-field">
                 <label className="ui-field__label" htmlFor="corpo">
                   O texto
                 </label>
@@ -558,8 +544,38 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                   rows={3}
                 />
                 <p className="ui-field__hint">
-                  As variáveis são posicionais: <code>{'{{1}}'}</code> é o nome do cliente,{' '}
-                  <code>{'{{2}}'}</code> a hora, <code>{'{{3}}'}</code> o profissional.
+                  Escreva como você falaria com o cliente. Se quiser que o produto encaixe o
+                  dado de cada pessoa, use estes três atalhos — nesta ordem, e só os que
+                  precisar:
+                </p>
+                {/* Em lista e não em prosa: são três coisas para consultar de relance
+                    enquanto se escreve, e a versão em oração era a frase que a pessoa lia
+                    duas vezes sem entender. Vale a mesma decisão que a tela de automação
+                    tomou com os sete significados de gatilho. */}
+                <dl className="significados">
+                  <div className="significados__par">
+                    <dt>
+                      <code>{'{{1}}'}</code>
+                    </dt>
+                    <dd>o nome do cliente</dd>
+                  </div>
+                  <div className="significados__par">
+                    <dt>
+                      <code>{'{{2}}'}</code>
+                    </dt>
+                    <dd>a hora do agendamento</dd>
+                  </div>
+                  <div className="significados__par">
+                    <dt>
+                      <code>{'{{3}}'}</code>
+                    </dt>
+                    <dd>o nome do profissional</dd>
+                  </div>
+                </dl>
+                <p className="ui-field__hint">
+                  Texto sem nenhum atalho também vale: “Seu agendamento está confirmado, te
+                  esperamos em breve!” é um texto válido e a Meta aprova. Os atalhos só
+                  deixam a mensagem pessoal.
                 </p>
               </div>
 
