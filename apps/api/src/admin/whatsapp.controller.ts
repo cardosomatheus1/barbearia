@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   WhatsAppError,
+  WhatsAppMetaError,
   SignupError,
   cadastroDoWhatsApp,
   conectarPeloSignup,
@@ -73,6 +74,25 @@ function toHttp(erro: unknown): never {
    */
   if (erro instanceof SignupError) {
     throw new DomainError(erro.code, STATUS_DO_SIGNUP[erro.code] ?? 400, erro.message);
+  }
+  /**
+   * A recusa do provedor de verdade, pelo mesmo caminho — e ela faltava.
+   *
+   * `WhatsAppMetaError` é o que a Cloud API devolve quando o template é
+   * recusado, o token não vale mais ou a conta não tem permissão. Sem esta
+   * linha ele caía no `throw erro` abaixo, virava 500 do Nest, e a tela dizia
+   * "Não deu para salvar. Tente de novo." — sobre um problema que **tentar de
+   * novo não resolve**, com a frase da Meta jogada fora no meio do caminho.
+   *
+   * A decisão de mostrar a frase dela já está escrita acima, para o signup, e
+   * vale igual aqui: quem está do outro lado é o dono da barbearia mexendo na
+   * própria conta.
+   *
+   * 502 e não 400: quem recusou foi o serviço de fora, e o pedido do balcão
+   * estava bem formado.
+   */
+  if (erro instanceof WhatsAppMetaError) {
+    throw new DomainError('meta_recusou', 502, erro.message);
   }
   throw erro;
 }

@@ -402,7 +402,11 @@ export default async function WhatsAppPage({ searchParams }: Props) {
               procurar no painel dela, que tem dezenas de telas. Cada tentativa
               custava uma volta inteira para descobrir o que a resposta já
               trazia na primeira. */}
-          {motivoDaMeta ? <p className="whatsapp__motivo">Ela disse: “{motivoDaMeta}”</p> : null}
+          {motivoDaMeta ? (
+            <p className="whatsapp__motivo">
+              {falha === 'meta_recusou' ? 'Ela disse' : 'A resposta foi'}: “{motivoDaMeta}”
+            </p>
+          ) : null}
         </div>
       ) : null}
       <Caminho

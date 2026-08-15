@@ -187,6 +187,7 @@ import {
   apagarSessaoGestor,
   guardarConflitoDaAgenda,
   guardarEstadoDaMeta,
+  guardarMotivoDaMeta,
   guardarConflitoDeJornada,
   guardarLinkDaFila,
   guardarSenhaDeUmaVez,
@@ -2955,7 +2956,10 @@ export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
     phoneNumberId: texto(form, 'phoneNumberId'),
     numeroVisivel: texto(form, 'numeroVisivel') || null,
   });
-  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  if (!resultado.ok) {
+    await guardarMotivoDaMeta(resultado.message);
+    falhar(ROTA_WHATSAPP, resultado.code);
+  }
   redirect(`${ROTA_WHATSAPP}?feito=conectado`);
 }
 
@@ -2966,7 +2970,12 @@ export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
     nome: texto(form, 'nome'),
     corpo: texto(form, 'corpo'),
   });
-  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  if (!resultado.ok) {
+    // A frase de quem recusou vai junto. "Tente de novo" sobre um texto que a
+    // Meta reprovou é a tela pedindo que se repita o que já não funcionou.
+    await guardarMotivoDaMeta(resultado.message);
+    falhar(ROTA_WHATSAPP, resultado.code);
+  }
   redirect(`${ROTA_WHATSAPP}?feito=template`);
 }
 
