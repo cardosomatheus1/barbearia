@@ -59,8 +59,8 @@ function politica(nonce: string): string {
     // nada; fechá-lo custaria seis classes geradas e não fecharia buraco algum.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
-    // A página fala com a API **pelo servidor**. Nada sai do navegador — a
-    // exceção é a tela de conexão do WhatsApp, e ela é uma só.
+    // A página fala com a API **pelo servidor**. Nada sai do navegador, e desde
+    // o bloco 86 não há exceção: a conexão do WhatsApp virou redirecionamento.
     "connect-src 'self'",
     "font-src 'self'",
     "object-src 'none'",

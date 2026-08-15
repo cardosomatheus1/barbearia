@@ -396,3 +396,51 @@ export async function tomarEstadoDaMeta(): Promise<string | null> {
   jar.set(ESTADO_DA_META, '', { httpOnly: true, path: '/admin/whatsapp', maxAge: 0 });
   return valor;
 }
+
+/**
+ * O código de autorização da Meta, da volta para a troca (bloco 86).
+ *
+ * ## Por que ele precisa esperar uma segunda navegação
+ *
+ * A sessão do gestor é `sameSite: 'strict'` — decisão do bloco 25, e ela
+ * continua certa: o token que altera catálogo, equipe e preço não acompanha
+ * navegação vinda de fora. A consequência é que **a volta da Meta chega sem
+ * sessão nenhuma**, e o navegador não está errado: quem iniciou a navegação foi
+ * `facebook.com`.
+ *
+ * Redirecionar do servidor não resolve. O navegador julga a cadeia inteira pelo
+ * que a iniciou, então todo salto seguinte continua sendo "veio de fora" — foi
+ * exatamente o que se viu em produção: a volta funcionava, caía em
+ * `/admin/entrar`, e a tela de login aparecia para quem estava logado. Parecia
+ * que o produto deslogava sozinho.
+ *
+ * O que resolve é a navegação seguinte partir de **uma página nossa**: aí o site
+ * de origem é o nosso, o cookie `strict` viaja, e nada precisou ser afrouxado.
+ * Este cookie é o que atravessa esses poucos segundos.
+ *
+ * `lax` porque ele é **gravado** numa resposta a uma navegação de fora e lido na
+ * seguinte; `httpOnly` e caminho restrito como todos os outros; e dois minutos
+ * porque a própria Meta expira o código em bem menos que isso — o cookie não
+ * pode sobreviver ao que ele carrega.
+ */
+const CODIGO_DA_META = 'barbearia_meta_code';
+const SEGUNDOS_DO_CODIGO = 120;
+
+export async function guardarCodigoDaMeta(codigo: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(CODIGO_DA_META, codigo, {
+    httpOnly: true,
+    path: '/admin/whatsapp',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SEGUNDOS_DO_CODIGO,
+  });
+}
+
+/** Lê e **apaga**: o código vale uma troca só, e a Meta recusa a segunda. */
+export async function tomarCodigoDaMeta(): Promise<string | null> {
+  const jar = await cookies();
+  const valor = jar.get(CODIGO_DA_META)?.value ?? null;
+  jar.set(CODIGO_DA_META, '', { httpOnly: true, path: '/admin/whatsapp', maxAge: 0 });
+  return valor;
+}
