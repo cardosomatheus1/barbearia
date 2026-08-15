@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
-import { normalizePhone, InvalidPhoneError } from '@barbearia/core';
+import { normalizePhone, InvalidPhoneError, SLUGS_RESERVADOS } from '@barbearia/core';
 import { emailKey, hashPassword, verifyPassword } from './password.js';
 import { limparFalhasDeLogin, reservarTentativaDeLogin } from './forca-bruta.js';
 import { seedRolePermissions } from './team.js';
@@ -118,6 +118,15 @@ async function freeSlug(tx: TransactionClient, base: string): Promise<string> {
   // laço aberto sobre nomes muito comuns viraria varredura.
   for (let i = 0; i < 20; i += 1) {
     const candidato = i === 0 ? raiz : `${raiz}-${i + 1}`;
+    // Nome de rota é tratado como endereço ocupado, e não como erro de cadastro:
+    // quem se chama "Plataforma" tem um nome legítimo, e recusar a criação da
+    // conta por causa dele seria parar a barbearia na porta. O sufixo é o mesmo
+    // que o conflito de nome repetido já produz, e sai `plataforma-2`.
+    //
+    // Sem isto o slug reservado só é conferido no legado (`@barbearia/crm`) — o
+    // caminho por onde **menos** slug entra. O primário nasce aqui, é permanente
+    // e é o que vai para o cartão.
+    if (SLUGS_RESERVADOS.has(candidato)) continue;
     const existe = await tx.$queryRaw<{ slug: string }[]>`
       SELECT slug FROM tenant_slugs WHERE slug = ${candidato}
     `;

@@ -172,6 +172,10 @@ lancar "resolvedor de afetados" npx vitest run scripts/afetados.test.mjs
 lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
 lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
 lancar "recurso do menu × catálogo" npx vitest run scripts/recursos-da-navegacao.test.mjs
+# Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
+# nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
+# "meu link não abre". Quatro rotas já tinham passado por baixo da lista.
+lancar "rota de primeiro nível × slug reservado" npx vitest run scripts/rotas-reservadas.test.mjs
 lancar "segredos do deploy" npx vitest run scripts/segredos-do-deploy.test.mjs
 # Máquina recém-instalada não tem crontab, e era esse o caso que instalava um
 # crontab vazio e deixava o backup diário — a única cópia dos dados — sem existir.

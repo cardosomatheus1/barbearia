@@ -125,6 +125,21 @@ describeIfDb('conta de gestor', () => {
     expect(dois.slug).toBe('domari-barber-club-2');
   });
 
+  it('barbearia com nome de rota não fica com o endereço da rota', async () => {
+    // "Plataforma" é nome legítimo de barbearia, e `slugify` devolve exatamente
+    // `plataforma` — que é o painel do Super Admin em `apps/web/src/app`. O Next
+    // prefere o segmento estático, então esse slug entregaria a barbearia um
+    // endereço que nunca abre a página dela, sem erro nenhum em lugar nenhum.
+    //
+    // O desvio é o sufixo, e não a recusa: barrar o cadastro pararia a barbearia
+    // na porta por causa do próprio nome. `scripts/rotas-reservadas.test.mjs`
+    // é quem garante que a lista consultada aqui acompanha as rotas de verdade.
+    expect(slugify('Plataforma')).toBe('plataforma');
+
+    const conta = await cadastrar({ ...CONTA, businessName: 'Plataforma' });
+    expect(conta.slug).toBe('plataforma-2');
+  });
+
   it('recusa senha curta antes de tocar no banco', async () => {
     await expect(signUpOwner({ ...CONTA, password: 'curta' })).rejects.toMatchObject({
       code: 'weak_password',

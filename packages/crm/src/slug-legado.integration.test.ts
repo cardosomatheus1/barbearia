@@ -108,7 +108,14 @@ describeIfDb('slug legado', () => {
   it('recusa endereço que a aplicação usa como rota', async () => {
     // `/admin` é o painel. Um slug com esse nome faria a página pública da
     // barbearia disputar o endereço com ele.
-    for (const reservado of ['admin', 'api', '_next']) {
+    //
+    // `plataforma` e `ir` estão aqui porque a lista já ficou para trás uma vez:
+    // ela nasceu com sete nomes e o `apps/web` cresceu quatro rotas por baixo,
+    // sem nada acusar. Quem guarda contra isso agora é
+    // `scripts/rotas-reservadas.test.mjs`, que deriva os nomes das pastas de
+    // `apps/web/src/app`; estes dois estão neste laço para que a recusa também
+    // seja provada de ponta a ponta, contra o banco, para uma rota de verdade.
+    for (const reservado of ['admin', 'api', '_next', 'plataforma', 'ir']) {
       const erro = await adicionar(reservado).catch((e: SlugError) => e);
       expect((erro as SlugError).code).toBe('reservado');
     }

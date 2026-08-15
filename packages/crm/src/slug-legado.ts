@@ -1,3 +1,4 @@
+import { SLUGS_RESERVADOS } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
 
@@ -27,15 +28,6 @@ export class SlugError extends Error {
 }
 
 /**
- * Nomes que a aplicação usa como rota própria.
- *
- * Um slug `admin` faria a página pública da barbearia disputar o endereço com o
- * painel. A lista é curta de propósito: só o que hoje existe como rota de
- * primeiro nível.
- */
-const RESERVADOS = new Set(['admin', 'api', 'app', 'www', 'static', '_next', 'assets']);
-
-/**
  * Minúscula, número e hífen; nunca hífen na ponta. De 2 a 60 caracteres.
  *
  * O piso de 2 é o que `slugify` produz para o nome mais curto que uma barbearia
@@ -53,7 +45,7 @@ const FORMATO = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])$/;
  * que ninguém consegue reproduzir depois.
  */
 export function slugLegadoValido(slug: string): boolean {
-  return FORMATO.test(slug) && !RESERVADOS.has(slug);
+  return FORMATO.test(slug) && !SLUGS_RESERVADOS.has(slug);
 }
 
 export async function adicionarSlugLegado(params: {
@@ -65,7 +57,7 @@ export async function adicionarSlugLegado(params: {
 }): Promise<{ readonly slug: string }> {
   const slug = params.slug.trim().toLowerCase();
 
-  if (RESERVADOS.has(slug)) throw new SlugError('reservado');
+  if (SLUGS_RESERVADOS.has(slug)) throw new SlugError('reservado');
   if (!FORMATO.test(slug)) throw new SlugError('formato_invalido');
 
   return withTenant(params.tenantId, async (tx) => {
