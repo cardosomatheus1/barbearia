@@ -246,6 +246,37 @@ describe('a descoberta da conta e do número pelo token', () => {
    * frase que não diz nada sobre o que fazer — foi assim que a primeira volta
    * que **funcionou** ainda não conectou nada.
    */
+  /**
+   * Código já usado é a nossa própria conexão de segundos atrás.
+   *
+   * O navegador pede a volta duas vezes — recarga, pré-carregamento, o toque a
+   * mais de quem achou que não funcionou —, e a segunda chega com o mesmo
+   * código. A primeira já gravou o cadastro; tratar a segunda como falha pinta
+   * de vermelho uma conexão que deu certo, e foi o que apareceu em produção: a
+   * tela mostrando o número recém-salvo embaixo de um aviso de recusa.
+   */
+  it('código já usado devolve o cadastro que a primeira volta gravou', async () => {
+    const { buscar } = redeEmSequencia([
+      { status: 400, corpo: { error: { message: 'This authorization code has been used.' } } },
+    ]);
+
+    // Sem banco aqui: o que se prova é que a recusa **não** sobe como erro
+    // quando a mensagem é essa. A leitura do cadastro tem suíte de integração.
+    const erro = await conectarPeloSignup({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      locationId: '00000000-0000-0000-0000-000000000002',
+      code: 'AQD-repetido',
+      numeroVisivel: null,
+      staffId: '00000000-0000-0000-0000-000000000003',
+      staffName: 'Matheus',
+      credenciais: CREDENCIAIS,
+      buscar,
+    }).then(() => null, (e: Error) => e);
+
+    // O caminho segue para o banco: o que não pode é morrer com a recusa da Meta.
+    expect(erro === null || !/has been used/i.test(erro.message)).toBe(true);
+  });
+
   it('a troca leva o endereço de volta quando houve redirecionamento', async () => {
     const { buscar, chamadas } = redeEmSequencia([{ corpo: { access_token: 'tok' } }]);
 

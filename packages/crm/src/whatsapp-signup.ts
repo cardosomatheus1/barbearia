@@ -29,7 +29,11 @@
  * cadastro não é isso.
  */
 
-import { salvarCadastroDoWhatsApp, type CadastroDoWhatsApp } from './whatsapp.js';
+import {
+  cadastroDoWhatsApp,
+  salvarCadastroDoWhatsApp,
+  type CadastroDoWhatsApp,
+} from './whatsapp.js';
 
 const VERSAO = 'v21.0';
 const BASE = `https://graph.facebook.com/${VERSAO}`;
@@ -507,7 +511,35 @@ export async function conectarPeloSignup(params: {
   }
   const buscar = params.buscar ?? fetch;
 
-  const token = await trocarCodigoPorToken(params.code, credenciais, buscar, params.redirectUri);
+  /**
+   * Código já usado é a **nossa própria** conexão, e por isso é sucesso.
+   *
+   * O código vale uma troca só. Quando a Meta responde que ele já foi usado,
+   * quem o usou fomos nós, segundos antes — o navegador pediu a volta duas
+   * vezes (recarga, pré-carregamento, o toque a mais de quem achou que não
+   * tinha funcionado), e a segunda chega aqui com o mesmo código.
+   *
+   * A primeira gravou o cadastro. Tratar a segunda como falha pinta de vermelho
+   * uma conexão que **deu certo** — foi o que apareceu em produção: a tela
+   * mostrando o número novo, recém-salvo, embaixo de um aviso de recusa.
+   *
+   * É o mesmo raciocínio de `registrarNumero` logo abaixo: número já
+   * registrado é reconexão, e reconexão é sucesso do ponto de vista de quem
+   * clicou. O que decide se o canal funciona é o cadastro gravado, e a
+   * confirmação é o cadastro existir — não a segunda troca ter dado certo.
+   */
+  let token: string;
+  try {
+    token = await trocarCodigoPorToken(params.code, credenciais, buscar, params.redirectUri);
+  } catch (erro) {
+    const jaUsado =
+      erro instanceof SignupError && /already been used|has been used/i.test(erro.message);
+    if (!jaUsado) throw erro;
+
+    const gravado = await cadastroDoWhatsApp(params.tenantId, params.locationId);
+    if (gravado === null) throw erro;
+    return gravado;
+  }
 
   const wabaId = params.wabaId ?? (await descobrirWaba(token, credenciais, buscar));
   const numero = params.phoneNumberId
