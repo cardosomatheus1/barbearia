@@ -4343,7 +4343,9 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio'],
 .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'],
 .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'],
+.casco:has([data-modulo-atual='marketing']) .trilho__botao[data-modulo='marketing'],
 .casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros'],
+.casco:has([data-modulo-atual='integracoes']) .trilho__botao[data-modulo='integracoes'],
 .casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao'] {
   color: var(--color-accent);
   background: linear-gradient(
@@ -4356,12 +4358,16 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio'] svg,
 .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'] svg,
 .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'] svg,
+.casco:has([data-modulo-atual='marketing']) .trilho__botao[data-modulo='marketing'] svg,
 .casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros'] svg,
+.casco:has([data-modulo-atual='integracoes']) .trilho__botao[data-modulo='integracoes'] svg,
 .casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao'] svg { opacity: 1; }
 .casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio']::after,
 .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
 .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
+.casco:has([data-modulo-atual='marketing']) .trilho__botao[data-modulo='marketing']::after,
 .casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros']::after,
+.casco:has([data-modulo-atual='integracoes']) .trilho__botao[data-modulo='integracoes']::after,
 .casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao']::after {
   content: '';
   position: absolute;
@@ -4410,8 +4416,14 @@ main { padding-bottom: var(--space-8); }
 .casco:has([data-modulo-atual='inicio']) .contexto__bloco[data-modulo='inicio'],
 .casco:has([data-modulo-atual='atendimento']) .contexto__bloco[data-modulo='atendimento'],
 .casco:has([data-modulo-atual='financeiro']) .contexto__bloco[data-modulo='financeiro'],
+.casco:has([data-modulo-atual='marketing']) .contexto__bloco[data-modulo='marketing'],
 .casco:has([data-modulo-atual='cadastros']) .contexto__bloco[data-modulo='cadastros'],
-.casco:has([data-modulo-atual='administracao']) .contexto__bloco[data-modulo='administracao'] {
+.casco:has([data-modulo-atual='integracoes']) .contexto__bloco[data-modulo='integracoes'],
+.casco:has([data-modulo-atual='administracao']) .contexto__bloco[data-modulo='administracao'] { display: block; min-width: 0; }
+
+/* Quem rola é a faixa, não o bloco: o nome do módulo fica fora dela, na linha
+   de cima, e os cartões ficam com a largura inteira. */
+.contexto__faixa {
   display: flex;
   flex-direction: row;
   gap: var(--space-2);
@@ -4424,11 +4436,14 @@ main { padding-bottom: var(--space-8); }
    celular seria decidir que não importavam. */
 .contexto__grupo {
   margin: 0 0 var(--space-2);
-  font-size: var(--font-size-xs);
+  /* Um degrau acima do subgrupo, em tamanho **e** em cor. Os dois em `xs`
+     apagado deixavam "MARKETING" e "ENVIOS" com o mesmo peso, e dois títulos
+     de mesma aparência em sequência não formam hierarquia nenhuma. */
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: var(--font-weight-bold);
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
 }
 .contexto__link {
   flex: none;
@@ -4448,6 +4463,42 @@ main { padding-bottom: var(--space-8); }
   border-color: var(--color-border-strong);
   color: var(--color-text-primary);
 }
+/* ----------------------------------------------------------------------------
+   O subgrupo dentro do módulo.
+
+   Um módulo com nove telas é uma lista, e lista é o que ninguém lê até o fim —
+   "Administração" tinha dezesseis e a última só aparecia rolando. O rótulo de
+   subgrupo quebra a lista em blocos de três ou quatro.
+
+   Ele participa dos **dois** layouts sem virar dois componentes: no celular a
+   faixa rola na horizontal e o rótulo é uma coluna estreita e vertical entre os
+   cartões; no notebook a lista é vertical e ele volta a ser um título comum. É a
+   mesma decisão do bloco de contexto — condicional por seção, nunca por largura.
+   -------------------------------------------------------------------------- */
+.contexto__secao {
+  flex: none;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0 var(--space-1);
+  border-left: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  /* Horizontal e estreito, nunca girado: a primeira versão usava
+     `writing-mode: vertical-rl`, e um rótulo de quatro palavras virava uma
+     coluna de 370px de altura que esticava a faixa inteira e deixava buraco
+     ao lado de cada cartão. Rótulo curto em duas linhas custa a largura de
+     uma palavra e continua legível na direção em que se lê. */
+  max-width: 5.5rem;
+  line-height: 1.15;
+  text-align: center;
+}
+/* O primeiro de cada bloco não precisa de traço: não há o que separar dele. */
+.contexto__secao:first-of-type { border-left: 0; }
+
 .contexto__link-nome { font-size: var(--font-size-sm); white-space: nowrap; }
 .contexto__link-nota {
   font-size: var(--font-size-xs);
@@ -4611,7 +4662,9 @@ main { padding-bottom: var(--space-8); }
   .casco:has([data-modulo-atual='inicio']) .trilho__botao[data-modulo='inicio']::after,
   .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
   .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
+  .casco:has([data-modulo-atual='marketing']) .trilho__botao[data-modulo='marketing']::after,
   .casco:has([data-modulo-atual='cadastros']) .trilho__botao[data-modulo='cadastros']::after,
+  .casco:has([data-modulo-atual='integracoes']) .trilho__botao[data-modulo='integracoes']::after,
   .casco:has([data-modulo-atual='administracao']) .trilho__botao[data-modulo='administracao']::after {
     left: calc(var(--space-3) * -1);
     right: auto;
@@ -4637,16 +4690,25 @@ main { padding-bottom: var(--space-8); }
     border-bottom: 1px solid var(--color-border);
   }
   .contexto__lista { padding: var(--space-2); overflow-y: auto; }
-  .casco:has([data-modulo-atual='inicio']) .contexto__bloco[data-modulo='inicio'],
-  .casco:has([data-modulo-atual='atendimento']) .contexto__bloco[data-modulo='atendimento'],
-  .casco:has([data-modulo-atual='financeiro']) .contexto__bloco[data-modulo='financeiro'],
-  .casco:has([data-modulo-atual='cadastros']) .contexto__bloco[data-modulo='cadastros'],
-  .casco:has([data-modulo-atual='administracao']) .contexto__bloco[data-modulo='administracao'] {
-    flex-direction: column;
-    gap: 2px;
-    overflow: visible;
-  }
+  /* O bloco já é `block` na base; repetir `display` aqui faria a guarda de
+     "não esconder no celular" ler isto como conteúdo revivido só no notebook —
+     e ela estaria certa por mérito. O que muda com a largura é a **direção**
+     da faixa. */
+  .contexto__faixa { flex-direction: column; gap: 2px; overflow: visible; }
   .contexto__grupo { margin: var(--space-3) var(--space-2) var(--space-2); }
+  .contexto__secao {
+    max-width: none;
+    text-align: left;
+    place-items: start;
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+    margin: var(--space-3) var(--space-2) var(--space-1);
+    padding: var(--space-2) 0 0;
+    letter-spacing: 0.08em;
+  }
+  /* O primeiro subgrupo encosta no nome do módulo: o traço ali seria uma
+     segunda linha logo abaixo da que o cabeçalho já desenha. */
+  .contexto__secao:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
   .contexto__link {
     border-color: transparent;
     background: transparent;

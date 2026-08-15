@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 /**
  * O casco: a moldura fixa do painel.
@@ -50,7 +50,11 @@ const ICONE: Readonly<Record<Modulo, ReactNode>> = {
   inicio: traco('M4 4h6v7H4zM14 4h6v4h-6zM4 15h6v5H4zM14 12h6v8h-6z'),
   atendimento: traco('M5 4v3M19 4v3M4 9h16M5 6h14v14H5z'),
   financeiro: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
+  // Um megafone: o módulo é sobre o que a casa **manda** para fora.
+  marketing: traco('M4 10v4h3l6 4V6l-6 4H4zM17 9a4 4 0 010 6'),
   cadastros: traco('M4 5h16v14H4zM8 9h8M8 13h8M8 17h5'),
+  // Dois elos: o que fala com o mundo lá fora.
+  integracoes: traco('M9 15l6-6M10 6l1.5-1.5a4 4 0 015.5 5.5L15.5 11M8.5 13L7 14.5a4 4 0 005.5 5.5L14 18.5'),
   administracao: traco('M4 7h10M18 7h2M4 12h2M10 12h10M4 17h8M16 17h4'),
 };
 
@@ -110,17 +114,32 @@ export function Casco({
           {modulos.map((modulo) => (
             <div className="contexto__bloco" data-modulo={modulo.id} key={modulo.id}>
               <p className="contexto__grupo">{modulo.nome}</p>
-              {modulo.telas.map((tela) => (
-                <a
-                  className="contexto__link"
-                  data-para={tela.secao}
-                  href={tela.href}
-                  key={tela.href}
-                >
-                  <span className="contexto__link-nome">{tela.nome}</span>
-                  <span className="contexto__link-nota">{tela.nota}</span>
-                </a>
+              {/*
+                Os links numa faixa própria, e não soltos ao lado do título.
+                No celular o bloco é uma tira que rola na horizontal: com o nome
+                do módulo dentro dela, "CADASTROS" comia 40% dos 360px e o
+                primeiro cartão já nascia cortado. Fora da faixa, o título ocupa
+                a linha inteira e os cartões ficam com a tela toda.
+              */}
+              <div className="contexto__faixa">
+              {modulo.telas.map((tela, i) => (
+                <Fragment key={tela.href}>
+                  {/*
+                    O rótulo do subgrupo sai quando o grupo **muda**, e não de
+                    uma segunda lista ao lado: a ordem da tela é a ordem do
+                    registro, e um grupo escrito duas vezes vira dois rótulos
+                    iguais na tela — erro visível, que é o que se quer.
+                  */}
+                  {tela.grupo && tela.grupo !== modulo.telas[i - 1]?.grupo ? (
+                    <p className="contexto__secao">{tela.grupo}</p>
+                  ) : null}
+                  <a className="contexto__link" data-para={tela.secao} href={tela.href}>
+                    <span className="contexto__link-nome">{tela.nome}</span>
+                    <span className="contexto__link-nota">{tela.nota}</span>
+                  </a>
+                </Fragment>
               ))}
+              </div>
             </div>
           ))}
         </div>

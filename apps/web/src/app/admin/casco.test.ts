@@ -110,6 +110,70 @@ describe('toda tela do painel declara onde está', () => {
   });
 });
 
+describe('os subgrupos do menu', () => {
+  /**
+   * O registro pelo tipo largo, e não `MODULOS` direto.
+   *
+   * `MODULOS` é `as const` — cada destino tem um tipo próprio, sem `grupo`
+   * naqueles que não o declaram, e `tela.grupo` ali não compila. `modulosVisiveis`
+   * já devolve `ModuloDoPainel[]`; passar todos os recursos ligados dá o
+   * registro inteiro sem um segundo nome exportado para a mesma lista.
+   *
+   * Passando tudo ligado de propósito: um recurso desligado esconderia telas e
+   * as guardas de agrupamento deixariam de ver o registro completo.
+   */
+  const TODOS = modulosVisiveis(DESTINOS_GATEADOS.map((d) => d.recurso));
+
+  it('nenhum grupo tem o nome de uma tela do próprio módulo', () => {
+    /**
+     * "Resultado > Resultado" põe dois rótulos iguais na mesma coluna, e só um
+     * deles é link. Quem opera lê a coluna de cima para baixo e não tem como
+     * saber qual é qual — é a §6 pergunta 2 dentro de uma tela só.
+     */
+    const colisoes: string[] = [];
+    for (const modulo of TODOS) {
+      const nomes = new Set(modulo.telas.map((t) => t.nome.toLowerCase()));
+      for (const tela of modulo.telas) {
+        if (tela.grupo && nomes.has(tela.grupo.toLowerCase())) {
+          colisoes.push(`${modulo.id}: grupo "${tela.grupo}" tem o nome de uma tela`);
+        }
+      }
+    }
+    expect([...new Set(colisoes)]).toEqual([]);
+  });
+
+  it('cada grupo aparece uma vez só, e em telas seguidas', () => {
+    /**
+     * O casco emite o rótulo quando o grupo **muda**. Um grupo interrompido e
+     * retomado desenharia o mesmo título duas vezes na mesma coluna — e o
+     * segundo bloco pareceria outra coisa com o mesmo nome.
+     */
+    const repetidos: string[] = [];
+    for (const modulo of TODOS) {
+      const vistos = new Set<string>();
+      let anterior: string | undefined;
+      for (const tela of modulo.telas) {
+        const grupo = tela.grupo;
+        if (grupo !== anterior && grupo !== undefined) {
+          if (vistos.has(grupo)) repetidos.push(`${modulo.id}: "${grupo}" volta depois de outro grupo`);
+          vistos.add(grupo);
+        }
+        anterior = grupo;
+      }
+    }
+    expect(repetidos).toEqual([]);
+  });
+
+  it('ou o módulo agrupa tudo, ou não agrupa nada', () => {
+    // Metade agrupada e metade solta produz telas órfãs boiando abaixo do
+    // último subgrupo, que a pessoa lê como se pertencessem a ele.
+    for (const modulo of TODOS) {
+      const comGrupo = modulo.telas.filter((t) => t.grupo).length;
+      expect([0, modulo.telas.length], `${modulo.id} agrupa pela metade`).toContain(comGrupo);
+    }
+  });
+});
+
 describe('o CSS acompanha o casco', () => {
   const css = readFileSync(join(AQUI, '..', 'globals.css'), 'utf8');
 
@@ -137,6 +201,60 @@ describe('o CSS acompanha o casco', () => {
     const listadas = new Set<string>(MODULOS.flatMap((m) => m.telas.map((t) => t.secao)));
 
     expect(semRegra.filter((s) => listadas.has(s))).toEqual([]);
+  });
+
+  it('cada módulo tem as regras que o acendem no trilho e revelam o contexto', () => {
+    /**
+     * O CSS **precisa** enumerar módulo, e é a mesma limitação de seletor da
+     * seção: casar `data-modulo-atual` com `data-modulo` é comparar o valor de
+     * dois atributos. O que dá para fazer é cobrar a lista, e é o que faltava.
+     *
+     * O bloco 82 partiu "Administração" — dezesseis destinos — em Marketing,
+     * Integrações e Administração. Sem esta guarda, um módulo novo entraria no
+     * registro, apareceria no trilho, e **não acenderia**: o ícone ficaria
+     * apagado e o bloco de contexto dele nunca apareceria, que é o defeito de
+     * `lgpd` e `plano` um nível acima. Nada ficaria vermelho.
+     *
+     * As quatro formas são as que existem no arquivo, e a última mora dentro da
+     * media query de 1024px — o notebook, onde o trilho vira coluna.
+     */
+    const formas = (m: string) => [
+      `.casco:has([data-modulo-atual='${m}']) .trilho__botao[data-modulo='${m}']`,
+      `.casco:has([data-modulo-atual='${m}']) .trilho__botao[data-modulo='${m}'] svg`,
+      `.casco:has([data-modulo-atual='${m}']) .trilho__botao[data-modulo='${m}']::after`,
+      `.casco:has([data-modulo-atual='${m}']) .contexto__bloco[data-modulo='${m}']`,
+    ];
+
+    /**
+     * Conta ocorrências, não presença — e a primeira versão desta guarda
+     * passava sem isso.
+     *
+     * Duas das quatro formas existem em **dois** lugares: uma vez na base e
+     * outra dentro da media query de 1024px. Perguntando `includes`, apagar a
+     * regra do notebook deixava a guarda verde pela cópia do celular — a tela
+     * larga é justamente onde o trilho vira coluna e o traço do módulo aceso
+     * muda de lado.
+     *
+     * O número esperado não é escrito: é o de qualquer outro módulo. Assim uma
+     * forma nova, num lugar novo, nasce cobrada em todos eles.
+     */
+    const quantas = (agulha: string) => css.split(agulha).length - 1;
+    const referencia = formas(MODULOS[0]?.id ?? 'inicio').map(quantas);
+    expect(referencia.every((n) => n > 0), 'o módulo de referência não tem regra nenhuma').toBe(true);
+
+    const divergentes: string[] = [];
+    for (const modulo of MODULOS) {
+      formas(modulo.id).forEach((forma, i) => {
+        const achadas = quantas(forma);
+        if (achadas !== referencia[i]) {
+          divergentes.push(`${modulo.id}: ${achadas} de ${referencia[i]} — ${forma}`);
+        }
+      });
+    }
+    expect(
+      divergentes,
+      'módulo sem regra de CSS: o ícone não acende, ou o bloco de contexto não aparece numa das larguras.',
+    ).toEqual([]);
   });
 
   it('o CSS não volta a enumerar seção para acender módulo', () => {

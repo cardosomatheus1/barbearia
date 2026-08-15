@@ -2,12 +2,50 @@
  * Arquitetura de navegação do painel.
  *
  * A regra aqui é simples: o menu deve refletir a pergunta que o gestor está
- * tentando responder, e não a estrutura interna do código. Por isso o painel
- * é dividido em cinco áreas claras: visão geral, atendimento, financeiro,
- * cadastros e administração.
+ * tentando responder, e não a estrutura interna do código.
+ *
+ * ## Por que sete módulos, e não cinco
+ *
+ * A primeira divisão tinha cinco áreas, e uma delas — "Administração" —
+ * carregava **dezesseis dos quarenta destinos**. Um módulo que junta a folha de
+ * permissões, o token da API, a política de privacidade e a campanha de
+ * retorno não está organizando nada: está sendo o lugar onde cai o que não
+ * coube nos outros quatro. No notebook a lista passava da dobra, e a última
+ * tela — plano e cobrança — só aparecia rolando.
+ *
+ * O corte novo é pela **pergunta que a pessoa está fazendo**:
+ *
+ * | Módulo | A pergunta |
+ * |---|---|
+ * | Visão geral | como está o negócio? |
+ * | Atendimento | o que está acontecendo agora? |
+ * | Financeiro | quanto entrou, quanto saiu, quanto sobrou? |
+ * | Marketing | quem não está voltando, e o que a casa manda? |
+ * | Cadastros | o que a casa vende e com o quê? |
+ * | Integrações | o que fala com o mundo lá fora? |
+ * | Administração | quem pode o quê, e as obrigações da empresa |
+ *
+ * Marketing e Integrações são os dois que saíram de dentro de Administração, e
+ * os dois eram exatamente o que estava escondido lá: campanha e automação são a
+ * ferramenta de trazer cliente de volta, e ninguém as procura no mesmo lugar
+ * onde troca a senha.
+ *
+ * ## O terceiro nível: `grupo`
+ *
+ * Módulo com seis ou nove telas vira lista, e lista é o que ninguém lê até o
+ * fim. O `grupo` quebra a lista em blocos curtos — *O dia*, *Voz do cliente* —
+ * e ele é **dado**, não desenho: o casco emite o rótulo quando o grupo muda, e
+ * a ordem do registro é a ordem da tela.
  */
 
-export type Modulo = 'inicio' | 'atendimento' | 'financeiro' | 'cadastros' | 'administracao';
+export type Modulo =
+  | 'inicio'
+  | 'atendimento'
+  | 'financeiro'
+  | 'marketing'
+  | 'cadastros'
+  | 'integracoes'
+  | 'administracao';
 
 export interface Destino {
   readonly href: string;
@@ -25,6 +63,15 @@ export interface Destino {
    * código inexistente esconderia a tela para sempre, e em silêncio.
    */
   readonly recurso?: string;
+  /**
+   * O subgrupo dentro do módulo, quando ele tem telas o bastante para pedir um.
+   *
+   * Ausente é legítimo: módulo curto não precisa de divisão, e inventar um
+   * rótulo para quatro itens é hierarquia que não ajuda ninguém. Telas do mesmo
+   * grupo ficam **juntas na ordem do registro** — o casco não reordena nada, e
+   * um grupo que aparecesse duas vezes seria erro de escrita visível na tela.
+   */
+  readonly grupo?: string;
 }
 
 export interface ModuloDoPainel {
@@ -41,6 +88,7 @@ export const MODULOS = [
     nome: 'Visão geral',
     telas: [
       { href: '/admin/painel', nome: 'Painel', secao: 'painel', nota: 'indicadores e visão do negócio' },
+      { href: '/admin/assistente', nome: 'Assistente', secao: 'assistente', nota: 'pergunte em português' },
     ],
     dentro: [],
   },
@@ -48,13 +96,12 @@ export const MODULOS = [
     id: 'atendimento',
     nome: 'Atendimento',
     telas: [
-      { href: '/admin/dia', nome: 'Hoje', secao: 'dia', nota: 'operação do dia em tempo real' },
-      { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', nota: 'dia, semana e próximos horários' },
-      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'clientes que chegaram sem marcar', recurso: 'fila' },
-      { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'retornos e pendências de clientes', recurso: 'avisos' },
-      { href: '/admin/recados', nome: 'Recados', secao: 'recados', nota: 'sugestões e reclamações de clientes' },
-      { href: '/admin/recepcao', nome: 'Recepção', secao: 'recepcao', nota: 'perguntas que o site não soube responder' },
-      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', nota: 'notas dos atendimentos e nota baixa a tratar' },
+      { href: '/admin/dia', nome: 'Hoje', secao: 'dia', nota: 'operação do dia em tempo real', grupo: 'O dia' },
+      { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', nota: 'dia, semana e próximos horários', grupo: 'O dia' },
+      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'clientes que chegaram sem marcar', grupo: 'O dia', recurso: 'fila' },
+      { href: '/admin/recados', nome: 'Recados', secao: 'recados', nota: 'sugestões e reclamações de clientes', grupo: 'Voz do cliente' },
+      { href: '/admin/recepcao', nome: 'Recepção', secao: 'recepcao', nota: 'perguntas que o site não soube responder', grupo: 'Voz do cliente' },
+      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', nota: 'notas dos atendimentos e nota baixa a tratar', grupo: 'Voz do cliente' },
     ],
     dentro: ['cliente', 'meu-dia'],
   },
@@ -62,29 +109,51 @@ export const MODULOS = [
     id: 'financeiro',
     nome: 'Financeiro',
     telas: [
-      { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', nota: 'abertura, movimentos e fechamento' },
-      { href: '/admin/comanda', nome: 'Comandas', secao: 'comanda', nota: 'cobrança dos atendimentos' },
-      { href: '/admin/fiado', nome: 'Pendências', secao: 'fiado', nota: 'valores em aberto de clientes' },
-      { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', nota: 'o que a casa deve e tem a receber' },
-      { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', nota: 'o que a casa precisa pagar' },
-      { href: '/admin/dre', nome: 'Resultado', secao: 'dre', nota: 'o que sobrou depois de tudo' },
-      { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', nota: 'pontos, visitas ou cashback' },
+      { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', nota: 'abertura, movimentos e fechamento', grupo: 'Balcão' },
+      { href: '/admin/comanda', nome: 'Comandas', secao: 'comanda', nota: 'cobrança dos atendimentos', grupo: 'Balcão' },
+      { href: '/admin/fiado', nome: 'Pendências', secao: 'fiado', nota: 'valores em aberto de clientes', grupo: 'Balcão' },
+      { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', nota: 'o que a casa deve e tem a receber', grupo: 'Fechamento' },
+      { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', nota: 'o que a casa precisa pagar', grupo: 'Fechamento' },
+      { href: '/admin/dre', nome: 'Resultado', secao: 'dre', nota: 'o que sobrou depois de tudo', grupo: 'Fechamento' },
     ],
     dentro: ['meus-numeros'],
+  },
+  {
+    id: 'marketing',
+    nome: 'Marketing',
+    telas: [
+      { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar', grupo: 'Envios' },
+      { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha', grupo: 'Envios' },
+      { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'confirmação, lembrete e retorno', grupo: 'Envios', recurso: 'avisos' },
+      { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', nota: 'quem está indo embora, e por quê', grupo: 'Retorno' },
+      { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', nota: 'pontos, visitas ou cashback', grupo: 'Retorno' },
+    ],
+    dentro: [],
   },
   {
     id: 'cadastros',
     nome: 'Cadastros',
     telas: [
-      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', nota: 'preço, duração e regras do serviço' },
-      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', nota: 'cobrar menos na hora vazia e mais na cheia' },
-      { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', nota: 'combos pagos adiantado, como 5 cortes' },
-      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', nota: 'produtos, contagem e ficha de consumo' },
-      { href: '/admin/clube', nome: 'Clube', secao: 'clube', nota: 'planos de assinatura e quem assina' },
-      { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', nota: 'barbeiros, jornadas e metas' },
-      { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', nota: 'cadeiras, lavatórios e salas' },
-      { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', nota: 'logo e imagens da página pública' },
-      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', nota: 'o cardápio padrão da rede e o que esta casa adotou' },
+      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', nota: 'preço, duração e regras do serviço', grupo: 'Catálogo' },
+      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'Catálogo' },
+      { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', nota: 'combos pagos adiantado, como 5 cortes', grupo: 'Catálogo' },
+      { href: '/admin/clube', nome: 'Clube', secao: 'clube', nota: 'planos de assinatura e quem assina', grupo: 'Catálogo' },
+      { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', nota: 'barbeiros, jornadas e metas', grupo: 'Estrutura' },
+      { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', nota: 'cadeiras, lavatórios e salas', grupo: 'Estrutura' },
+      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', nota: 'produtos, contagem e ficha de consumo', grupo: 'Estrutura' },
+      { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', nota: 'logo e imagens da página pública', grupo: 'Marca' },
+      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', nota: 'o cardápio padrão da rede e o que esta casa adotou', grupo: 'Marca' },
+    ],
+    dentro: [],
+  },
+  {
+    id: 'integracoes',
+    nome: 'Integrações',
+    telas: [
+      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'número da casa e textos aprovados' },
+      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas', recurso: 'fiscal' },
+      { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', nota: 'integração do seu site ou do seu ERP' },
+      { href: '/admin/webhooks', nome: 'Webhooks', secao: 'webhooks', nota: 'avisar outro sistema quando algo acontece aqui' },
     ],
     dentro: [],
   },
@@ -92,22 +161,14 @@ export const MODULOS = [
     id: 'administracao',
     nome: 'Administração',
     telas: [
-      { href: '/admin/equipe', nome: 'Usuários e acessos', secao: 'equipe', nota: 'contas, papéis e permissões' },
-      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', nota: 'lojas da rede, quem opera cada uma e estoque entre elas' },
-      { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'horários, políticas e preferências' },
-      { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'senha e segundo fator' },
-      { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', nota: 'integração do seu site ou do seu ERP' },
-      { href: '/admin/webhooks', nome: 'Webhooks', secao: 'webhooks', nota: 'avisar outro sistema quando algo acontece aqui' },
-      { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', nota: 'histórico de alterações' },
-      { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema', recurso: 'importacao' },
-      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas', recurso: 'fiscal' },
-      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'número da casa e textos aprovados' },
-      { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha' },
-      { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar' },
-      { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', nota: 'quem está indo embora, e por quê' },
-      { href: '/admin/assistente', nome: 'Assistente', secao: 'assistente', nota: 'pergunte em português' },
-      { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', nota: 'solicitações e dados de clientes' },
-      { href: '/admin/plano', nome: 'Plano e cobrança', secao: 'plano', nota: 'assinatura, uso e limites' },
+      { href: '/admin/equipe', nome: 'Usuários e acessos', secao: 'equipe', nota: 'contas, papéis e permissões', grupo: 'A conta' },
+      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', nota: 'lojas da rede, quem opera cada uma e estoque entre elas', grupo: 'A conta' },
+      { href: '/admin/plano', nome: 'Plano e cobrança', secao: 'plano', nota: 'assinatura, uso e limites', grupo: 'A conta' },
+      { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'horários, políticas e preferências', grupo: 'Preferências' },
+      { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'senha e segundo fator', grupo: 'Preferências' },
+      { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema', grupo: 'Preferências', recurso: 'importacao' },
+      { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', nota: 'solicitações e dados de clientes', grupo: 'Obrigações' },
+      { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', nota: 'histórico de alterações', grupo: 'Obrigações' },
     ],
     dentro: ['onboarding'],
   },
