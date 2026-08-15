@@ -7425,23 +7425,29 @@ main { padding-bottom: var(--space-8); }
    quebrar linha e nunca esticar a tela. */
 .textos-aprovados__corpo { overflow-wrap: anywhere; }
 
-/* Duas colunas de texto curto — nome à esquerda, significado à direita. Rola
-   dentro do próprio recipiente, como toda tabela deste produto. */
-.tabela-simples {
-  border-collapse: collapse;
-  margin-top: var(--space-2);
+/* O que o número significa em cada gatilho.
+
+   Empilhado por padrão e em duas colunas a partir de 768px. A primeira versão
+   era tabela dentro de `.ui-scroll-x`: a página não rolava de lado, mas a
+   coluna do significado ficava fora da tela em 360px — e era ela que a lista
+   existia para mostrar. Nunca esconder conteúdo no celular: refluir. */
+.significados {
+  margin: var(--space-2) 0 0;
+  display: grid;
+  gap: var(--space-2);
   font-size: var(--font-size-sm);
 }
 
-.tabela-simples th,
-.tabela-simples td {
-  text-align: left;
-  padding: var(--space-1) var(--space-3) var(--space-1) 0;
-  vertical-align: top;
-}
+.significados__par { display: grid; gap: 0; }
+.significados dt { font-weight: var(--font-weight-medium); }
+.significados dd { margin: 0; color: var(--color-text-muted); }
 
-.tabela-simples th { font-weight: var(--font-weight-medium); }
-.tabela-simples td { color: var(--color-text-muted); }
+@media (min-width: 48em) {
+  .significados__par {
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}
 
 /* O caminho até a mensagem chegar (bloco 83).
 

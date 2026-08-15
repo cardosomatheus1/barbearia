@@ -287,18 +287,26 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               <p className="ui-field__hint">
                 Gatilho que não pede número: deixe em branco. O que o número significa em cada um:
               </p>
-              <div className="ui-scroll-x">
-                <table className="tabela-simples">
-                  <tbody>
-                    {GATILHOS.filter((g) => LIMIAR_DO_GATILHO[g]).map((g) => (
-                      <tr key={g}>
-                        <th scope="row">{ROTULO_DO_GATILHO[g]}</th>
-                        <td>{LIMIAR_DO_GATILHO[g]}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {/*
+                Lista de definição que **empilha**, e não tabela.
+
+                A primeira versão era uma tabela de duas colunas dentro de um
+                `.ui-scroll-x`. A página não rolava de lado — a medição confirmou
+                —, mas a segunda coluna ficava fora da tela em 360px, e era ela
+                que carregava o significado. Uma tabela que exige arrastar para
+                ler a resposta é pior que a dica que ela substituiu.
+
+                Empilhado no celular, duas colunas a partir de 768px: mesma
+                informação, sem gesto nenhum.
+              */}
+              <dl className="significados">
+                {GATILHOS.filter((g) => LIMIAR_DO_GATILHO[g]).map((g) => (
+                  <div className="significados__par" key={g}>
+                    <dt>{ROTULO_DO_GATILHO[g]}</dt>
+                    <dd>{LIMIAR_DO_GATILHO[g]}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
 
             <div className="ui-field">

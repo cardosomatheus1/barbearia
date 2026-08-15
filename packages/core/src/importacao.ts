@@ -107,6 +107,48 @@ const ALIASES: Readonly<Record<Campo, readonly string[]>> = {
   observacao: ['observacao', 'observacoes', 'obs', 'anotacao', 'anotacoes', 'notas', 'notes'],
 };
 
+/**
+ * Os cabeçalhos que o produto reconhece, para a tela mostrar (bloco 83).
+ *
+ * Derivado de `ALIASES`, nunca escrito ao lado: a tela dizia só "precisa ter
+ * uma coluna de nome e uma de celular", e a pessoa ficava adivinhando se
+ * `WhatsApp` ou `Nome do Cliente` serviam — quando os dois servem. Uma lista
+ * escrita à mão na tela ficaria para trás no primeiro alias novo, que é o
+ * defeito que este repositório já pagou cinco vezes.
+ */
+export const CABECALHOS_ACEITOS: Readonly<Record<Campo, readonly string[]>> = ALIASES;
+
+/**
+ * O cabeçalho do arquivo modelo, e ele **é** um cabeçalho aceito.
+ *
+ * O primeiro alias de cada campo: por construção, o modelo que a barbearia
+ * baixa passa pela detecção. Um modelo escrito à mão poderia divergir do
+ * parser, e aí o produto entregaria um arquivo que ele próprio recusa.
+ */
+export function cabecalhoDoModelo(): readonly string[] {
+  return (Object.keys(ALIASES) as Campo[]).map((campo) => {
+    const primeiro = ALIASES[campo][0];
+    if (primeiro === undefined) throw new Error(`campo sem alias: ${campo}`);
+    return primeiro;
+  });
+}
+
+/**
+ * O arquivo modelo inteiro, com duas linhas de exemplo.
+ *
+ * Conteúdo real e não `João da Silva / 11111111111`: telefone com máscara e
+ * nome composto são o que revela se a importação entende o que a pessoa
+ * realmente tem na planilha antiga.
+ */
+export function csvDoModelo(): string {
+  const linhas = [
+    cabecalhoDoModelo().join(','),
+    'Carlos Souza,(71) 98888-7777,1990-03-14,Prefere máquina 2 dos lados',
+    'Ana Paula Ribeiro,+55 71 97777-6666,,',
+  ];
+  return `${linhas.join('\n')}\n`;
+}
+
 /** Sem acento, sem caixa, sem pontuação — o cabeçalho real tem de tudo. */
 export function normalizarCabecalho(texto: string): string {
   return texto

@@ -105,7 +105,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-  }, 60_000);
+  }, 180_000);
 
   afterAll(() => {
     rmSync(POSTERIOR, { force: true });
@@ -121,7 +121,14 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
     // arquivo fica vermelho com os cinco testes verdes — reprovado pela
     // limpeza, que é o pior formato de vermelho que existe: ele não aponta
     // defeito nenhum e ensina a ignorar a cor.
-  }, 60_000);
+    //
+    // **60s não bastavam, e o número aqui é medido.** No portão inteiro os
+    // cinco testes levaram 340s e o gancho estourou os 60 — exatamente o
+    // vermelho que o parágrafo acima descreve, e ele apareceu duas vezes
+    // seguidas antes de alguém ler a saída inteira em vez do `tail`. A folga
+    // passa a ser a mesma dos testes deste arquivo: se uma passada de migração
+    // ganha 180s, apagar cinco bancos sob a mesma contenção ganha igual.
+  }, 180_000);
 
   it(
     'a segunda passada não quebra — e é ela que derrubava o site',

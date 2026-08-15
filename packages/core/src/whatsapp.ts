@@ -58,7 +58,15 @@ export type EstadoDoWhatsApp = (typeof ESTADOS_DO_WHATSAPP)[number];
 
 export const ROTULO_DO_WHATSAPP: Readonly<Record<EstadoDoWhatsApp, string>> = {
   nao_configurado: 'Não configurado',
-  aguardando_verificacao: 'Na Meta',
+  /**
+   * "Falta confirmar o número", e não "Na Meta" (bloco 83).
+   *
+   * O rótulo antigo dizia onde a coisa estava, e isso soava como espera. O que
+   * este estado significa é que **a pessoa tem um passo a dar** — digitar o
+   * código do SMS —, e o título da seção é a primeira coisa que ela lê. Ele
+   * contradizia a explicação logo abaixo, que já foi corrigida neste bloco.
+   */
+  aguardando_verificacao: 'Falta confirmar o número',
   ativo: 'Ativo',
   suspenso: 'Suspenso',
 };

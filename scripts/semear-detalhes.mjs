@@ -1113,7 +1113,7 @@ function integracoes(url, { tenant, local, balcao }) {
   const whats = `
     INSERT INTO whatsapp_settings (location_id, tenant_id, status, display_phone, status_reason)
     VALUES (${lit(local)}, ${lit(tenant)}, 'aguardando_verificacao', '+55 71 3333-4444',
-            'Verificacao de empresa em analise na Meta')
+            'Falta digitar o codigo que a Meta mandou por SMS')
     ON CONFLICT (location_id) DO NOTHING;`;
 
   const modelos = [

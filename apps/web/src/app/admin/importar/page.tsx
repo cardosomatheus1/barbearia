@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { CABECALHOS_ACEITOS } from '@barbearia/core';
 import {
   lerImportacao,
   listarImportacoes,
@@ -38,6 +39,17 @@ import { secao } from '../secoes';
 export const metadata: Metadata = {
   title: 'Trazer minha base',
   robots: { index: false, follow: false },
+};
+
+/**
+ * O nome de cada campo na tela. Só o rótulo: a lista de aliases vem do
+ * catálogo, e é ela que não pode ficar velha.
+ */
+const NOME_DO_CAMPO: Readonly<Record<'nome' | 'telefone' | 'nascimento' | 'observacao', string>> = {
+  nome: 'Nome',
+  telefone: 'Celular',
+  nascimento: 'Aniversário',
+  observacao: 'Observações',
 };
 
 interface Props {
@@ -294,6 +306,46 @@ export default async function ImportarPage({ searchParams }: Props) {
             Conferir arquivo
           </button>
         </form>
+
+        {/*
+          Os cabeçalhos aceitos, **derivados do parser**.
+
+          A tela dizia só "uma coluna de nome e uma de celular", e quem exporta
+          de outro sistema ficava adivinhando se `WhatsApp` ou `Nome do Cliente`
+          serviam — quando os dois servem, e mais uma dúzia. Escrever a lista
+          aqui à mão a deixaria para trás no primeiro alias novo: é o defeito
+          das listas paralelas que este repositório já pagou cinco vezes.
+        */}
+        <details className="dobra importar__cabecalhos">
+          <summary>Como o cabeçalho precisa se chamar</summary>
+          <p className="cartao-balcao__texto">
+            Não precisa renomear nada se a sua planilha já usa um destes — a comparação ignora
+            acento, maiúscula e pontuação, e entende cabeçalho composto como{' '}
+            <em>Telefone (WhatsApp)</em>.
+          </p>
+          <dl className="significados">
+            {(Object.keys(CABECALHOS_ACEITOS) as (keyof typeof CABECALHOS_ACEITOS)[]).map((campo) => (
+              <div className="significados__par" key={campo}>
+                <dt>
+                  {NOME_DO_CAMPO[campo]}
+                  {campo === 'nome' || campo === 'telefone' ? ' (obrigatório)' : ''}
+                </dt>
+                <dd>{CABECALHOS_ACEITOS[campo].join(' · ')}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+
+        {/*
+          O modelo é gerado a partir do mesmo mapa de aliases que a detecção
+          usa, então ele passa pela conferência por construção. Um arquivo
+          escrito à mão poderia divergir do parser — e o produto entregaria à
+          barbearia um arquivo que ele próprio recusa.
+        */}
+        <p className="cartao-balcao__texto">
+          Não tem como exportar do sistema antigo?{' '}
+          <a href="/admin/importar/modelo.csv">Baixe a planilha modelo</a> — preencha e envie aqui.
+        </p>
       </section>
       ) : null}
 

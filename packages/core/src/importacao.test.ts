@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { lerCsv } from './csv.js';
 import {
+  CABECALHOS_ACEITOS,
   analisar,
   aplicaveis,
+  cabecalhoDoModelo,
+  csvDoModelo,
   detectarColunas,
   fraseDoPreview,
   lerNascimento,
@@ -277,5 +280,48 @@ describe('normalização de cabeçalho', () => {
   it('tira acento, caixa e pontuação', () => {
     expect(normalizarCabecalho('Observações:')).toBe('observacoes');
     expect(normalizarCabecalho('  DATA_DE_NASCIMENTO  ')).toBe('data de nascimento');
+  });
+});
+
+describe('a planilha modelo', () => {
+  /**
+   * O modelo é gerado do **mesmo** mapa de aliases que a detecção usa, e este
+   * teste é o que amarra os dois. Um modelo escrito à mão poderia divergir do
+   * parser — e aí o produto entregaria à barbearia um arquivo que ele próprio
+   * recusa, que é o pior desfecho possível para uma tela feita para tirar
+   * dúvida.
+   */
+  it('o cabeçalho do modelo é detectado pelo próprio parser', () => {
+    const colunas = detectarColunas(cabecalhoDoModelo());
+    expect(colunas.nome).not.toBeNull();
+    expect(colunas.telefone).not.toBeNull();
+    expect(colunas.nascimento).not.toBeNull();
+    expect(colunas.observacao).not.toBeNull();
+  });
+
+  it('cada coluna do modelo cai num campo diferente', () => {
+    // Sem isto, dois campos poderiam disputar a mesma coluna e o modelo teria
+    // uma coluna que ninguém lê.
+    const colunas = detectarColunas(cabecalhoDoModelo());
+    const usados = [colunas.nome, colunas.telefone, colunas.nascimento, colunas.observacao];
+    expect(new Set(usados).size).toBe(usados.length);
+  });
+
+  it('as linhas de exemplo são conteúdo real, não preenchimento', () => {
+    /**
+     * Telefone com máscara e sem, nome composto, e uma linha com campo
+     * opcional vazio: é o que revela se a importação entende o que a pessoa
+     * tem de verdade na planilha antiga. `João da Silva / 11111111111` passa
+     * em qualquer parser e não prova nada.
+     */
+    const csv = csvDoModelo();
+    expect(csv).toContain('(71) 98888-7777');
+    expect(csv).toContain('+55 71 97777-6666');
+    expect(csv.trimEnd().split('\n')).toHaveLength(3);
+  });
+
+  it('todo campo do catálogo aparece no modelo', () => {
+    // Alias novo entra na tela e no modelo sem ninguém lembrar dos dois.
+    expect(cabecalhoDoModelo()).toHaveLength(Object.keys(CABECALHOS_ACEITOS).length);
   });
 });
