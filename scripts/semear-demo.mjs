@@ -27,52 +27,53 @@
 
 import { semearDetalhes } from './semear-detalhes.mjs';
 import { CARDAPIO, JORNADA_DA_SEMANA, semearFundo } from './semear-fundo.mjs';
+import { podeSemear, SENHA_PUBLICADA } from './semente-permitida.mjs';
 
 const API = process.env.API_URL ?? 'http://127.0.0.1:3000';
 
 /**
- * A trava de ambiente, e por que ela não é paranoia.
+ * Quem é o dono, e como a barbearia se chama.
  *
- * Este script cria uma conta de **dono** com senha conhecida e publicada no
- * repositório. A frase que ele imprime no fim — "não servem em lugar nenhum
- * além desta máquina" — era uma suposição sobre onde o comando foi digitado,
- * não uma verificação: `API_URL` vinha do compose e apontava para `api:3000`
- * independentemente de o compose estar num notebook ou num VPS.
- *
- * Quem alcançasse a porta entrava como dono: base de clientes com telefone e
- * ficha, caixa, comanda, fiado, exportação LGPD, chaves de API e cadastro de
- * webhook — que é o ponto de saída de rede do produto.
- *
- * A conferência é pelo **host**, que é o que decide para onde os dados vão.
- */
-const LOCAIS = ['localhost', '127.0.0.1', '::1', 'api', 'host.docker.internal'];
-const alvo = new URL(API).hostname;
-if (!LOCAIS.includes(alvo)) {
-  console.error(
-    `[semear] recusado: ${alvo} não é uma máquina local.\n` +
-      '  Este script cria um dono com senha conhecida e publicada. Ele existe\n' +
-      '  para demonstração local — num alvo remoto, seria uma porta aberta.',
-  );
-  process.exit(1);
-}
-const WEB = process.env.WEB_URL ?? 'http://127.0.0.1:3001';
-
-/**
- * A conta de entrada.
- *
- * `teste@teste.com` e não `teste`: o login valida formato de e-mail na borda.
- * `testeteste` e não `teste`: `MIN_PASSWORD` são dez caracteres no domínio, e
- * a demonstração não é motivo para baixar o piso de senha do produto inteiro.
+ * Tudo vem do ambiente, com o padrão sendo a demonstração de sempre — assim a
+ * medição, o `docker compose --profile demo` e quem clonou o repositório para
+ * olhar continuam com um comando só. E a mesma semente passa a servir para
+ * encher uma instalação de verdade, que é o que ninguém tinha como fazer sem
+ * copiar oitocentas linhas.
  */
 const DONO = {
-  name: 'Rogério Menezes',
-  email: 'teste@teste.com',
-  password: 'testeteste',
-  phone: '(71) 99999-0000',
-  businessName: 'Barbearia Domari',
+  name: process.env.SEMENTE_DONO ?? 'Rogério Menezes',
+  email: process.env.SEMENTE_EMAIL ?? 'teste@teste.com',
+  /**
+   * `testeteste` e não `teste`: `MIN_PASSWORD` são dez caracteres no domínio, e
+   * a demonstração não é motivo para baixar o piso de senha do produto inteiro.
+   */
+  password: process.env.SEMENTE_SENHA ?? SENHA_PUBLICADA,
+  phone: process.env.SEMENTE_TELEFONE ?? '(71) 99999-0000',
+  businessName: process.env.SEMENTE_BARBEARIA ?? 'Barbearia Domari',
 };
 
-const SENHA_DA_EQUIPE = 'testeteste';
+/**
+ * A trava, e ela é sobre a **senha** — não sobre o endereço.
+ *
+ * A versão anterior conferia o host de `API_URL` e permitia `api`, que é o nome
+ * do serviço no compose: rodar isto no VPS de produção passava pela trava sem
+ * tropeçar, que é literalmente o defeito descrito no comentário dela. O
+ * critério está em `semente-permitida.mjs`, onde tem teste.
+ */
+const veredito = podeSemear({
+  host: new URL(API).hostname,
+  senha: DONO.password,
+  nodeEnv: process.env.NODE_ENV,
+  webUrl: process.env.WEB_URL,
+});
+if (!veredito.ok) {
+  console.error(`[semear] recusado: ${veredito.motivo}`);
+  process.exit(1);
+}
+
+const WEB = process.env.WEB_URL ?? 'http://127.0.0.1:3001';
+
+const SENHA_DA_EQUIPE = process.env.SEMENTE_SENHA ?? SENHA_PUBLICADA;
 
 /**
  * Fotos de verdade, do Unsplash.

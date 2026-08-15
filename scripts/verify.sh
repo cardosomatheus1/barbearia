@@ -173,6 +173,7 @@ lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
 lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
 lancar "recurso do menu × catálogo" npx vitest run scripts/recursos-da-navegacao.test.mjs
 lancar "segredos do deploy" npx vitest run scripts/segredos-do-deploy.test.mjs
+lancar "trava da semente" npx vitest run scripts/semente-permitida.test.mjs
 # Migração destrutiva tira do rollback a forma barata dele: a volta deixa de ser
 # "sobe a imagem anterior" e vira "restaura backup e perde o que veio depois".
 lancar "migração aditiva" npx vitest run packages/db/test/migracao-aditiva.test.mjs
