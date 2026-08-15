@@ -67,9 +67,25 @@ describe('a tradução do estado da Stripe', () => {
     expect(estadoDoPagamento('requires_action')).toBe('aguardando');
   });
 
-  it('cancelado é expirado, e sem meio é recusado', () => {
+  it('cancelado é expirado', () => {
     expect(estadoDoPagamento('canceled')).toBe('expirado');
-    expect(estadoDoPagamento('requires_payment_method')).toBe('recusado');
+  });
+
+  it('`requires_payment_method` só é recusa depois de uma tentativa', () => {
+    /**
+     * A Stripe usa o mesmo status para duas coisas opostas: o intent
+     * **recém-criado**, que ainda não falhou em nada, e o que tentou e o cartão
+     * não passou. O código devolvia `recusado` para os dois — e contra a conta
+     * de verdade isso apareceu na primeira chamada: um PaymentIntent de cartão
+     * nasce assim, então toda cobrança de cartão nascia recusada, e a
+     * conciliação por polling encerraria uma cobrança que está apenas
+     * esperando o cliente.
+     *
+     * `last_payment_error` é o discriminador, e ele vem da própria resposta.
+     */
+    expect(estadoDoPagamento('requires_payment_method')).toBe('aguardando');
+    expect(estadoDoPagamento('requires_payment_method', false)).toBe('aguardando');
+    expect(estadoDoPagamento('requires_payment_method', true)).toBe('recusado');
   });
 
   it('a cobrança da plataforma tem `pendente`, e não só dois estados', () => {
@@ -400,5 +416,123 @@ describe('devolver o dinheiro da barbearia', () => {
     await expect(new StripePspProvider(queda.cliente).estornar(ESTORNO)).rejects.toMatchObject({
       name: 'StripeError',
     });
+  });
+});
+
+/**
+ * Os três defeitos que só a conta de verdade mostrou.
+ *
+ * A suíte acima confere **o que sai** na requisição, e é boa nisso. O que ela
+ * não consegue ver é o que **não sai**: um campo obrigatório ausente não aparece
+ * em nenhuma asserção sobre o corpo, e a rede de mentira responde 200 para
+ * qualquer coisa. A primeira chamada contra a API de teste da Stripe devolveu
+ * três 400 em cima de código que passava inteiro aqui.
+ *
+ * Por isso estes testes são escritos pelo avesso: eles cobram a presença do que
+ * faltava, e a asserção é sobre o corpo enviado — que é o que a Stripe recusou.
+ */
+describe('o que a conta de verdade recusou', () => {
+  const anterior = process.env['STRIPE_SECRET_KEY'];
+  const webAnterior = process.env['WEB_URL'];
+  beforeEach(() => {
+    process.env['STRIPE_SECRET_KEY'] = 'sk_test_de_mentira';
+    process.env['WEB_URL'] = 'https://barbearia.example';
+  });
+  afterEach(() => {
+    if (anterior === undefined) delete process.env['STRIPE_SECRET_KEY'];
+    else process.env['STRIPE_SECRET_KEY'] = anterior;
+    if (webAnterior === undefined) delete process.env['WEB_URL'];
+    else process.env['WEB_URL'] = webAnterior;
+  });
+
+  it('o link leva `success_url`, sem o qual a Stripe recusa a sessão inteira', async () => {
+    // 400 `parameter_missing`: o meio "link" nunca funcionou, e nada aqui ficava
+    // vermelho porque o teste conferia o que saía e este campo não saía.
+    const { cliente, chamadas } = stripeDeMentira([
+      { status: 200, json: { id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' } },
+    ]);
+
+    const criada = await new StripePaymentProvider(cliente).criarCobranca({
+      ...PEDIDO,
+      meio: 'link',
+    });
+    expect(criada.url).toContain('checkout.stripe.com');
+
+    const corpo = chamadas[0]?.corpo ?? '';
+    expect(corpo).toContain(encodeURIComponent('https://barbearia.example/pagamento?pago=1'));
+    // E a volta de quem desiste: opcional na Stripe, obrigatória aqui.
+    expect(corpo).toContain('cancel_url');
+  });
+
+  it('sem meio salvo, a recusa é daqui e a Stripe nem é chamada', async () => {
+    /**
+     * String vazia é 400 `parameter_invalid_empty`; omitir o campo é 400
+     * `payment_intent_unexpected_state`, porque a Stripe não adivinha o cartão
+     * do cliente. Os dois são 400 e nenhum é 402 — a régua leria "esta
+     * barbearia não tem cartão salvo" como adquirente fora do ar e gastaria
+     * D+1, D+3 e D+7 em chamadas que já sabem a resposta.
+     */
+    const { cliente, chamadas } = stripeDeMentira([
+      { status: 200, json: { id: 'pi_9', status: 'succeeded' } },
+    ]);
+
+    const r = await new StripePspProvider(cliente).cobrar({
+      tenantId: '11111111-1111-4111-8111-111111111111',
+      faturaId: '22222222-2222-4222-8222-222222222222',
+      valorCents: 9900,
+      pspCustomerId: 'cus_1',
+      pspMethodId: null,
+    });
+
+    expect(r).toMatchObject({ estado: 'recusada', chargeId: '' });
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it('com meio salvo, ele vai', async () => {
+    // A outra metade: sem esta, o conserto acima passaria removendo o campo
+    // sempre — e a régua cobraria no cartão errado.
+    const { cliente, chamadas } = stripeDeMentira([
+      { status: 200, json: { id: 'pi_10', status: 'succeeded' } },
+    ]);
+
+    await new StripePspProvider(cliente).cobrar({
+      tenantId: '11111111-1111-4111-8111-111111111111',
+      faturaId: '33333333-3333-4333-8333-333333333333',
+      valorCents: 9900,
+      pspCustomerId: 'cus_1',
+      pspMethodId: 'pm_42',
+    });
+
+    expect(chamadas[0]?.corpo ?? '').toContain('payment_method=pm_42');
+  });
+
+  it('a cobrança de cartão nasce aguardando, não recusada', async () => {
+    // O estado inicial de todo PaymentIntent de cartão é
+    // `requires_payment_method`. Nascendo `recusado`, a conciliação encerraria
+    // a cobrança antes de o cliente abrir o link.
+    const { cliente } = stripeDeMentira([
+      { status: 200, json: { id: 'pi_11', status: 'requires_payment_method' } },
+    ]);
+
+    const criada = await new StripePaymentProvider(cliente).criarCobranca({
+      ...PEDIDO,
+      meio: 'cartao',
+    });
+    expect(criada.estado).toBe('aguardando');
+  });
+
+  it('e vira recusada quando a tentativa falhou', async () => {
+    const { cliente } = stripeDeMentira([
+      {
+        status: 200,
+        json: {
+          id: 'pi_12',
+          status: 'requires_payment_method',
+          last_payment_error: { code: 'card_declined' },
+        },
+      },
+    ]);
+
+    expect(await new StripePaymentProvider(cliente).consultar('pi_12')).toBe('recusado');
   });
 });

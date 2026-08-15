@@ -27,24 +27,59 @@ import {
 const noCaminho = (id: string): string => encodeURIComponent(id);
 
 /**
+ * Para onde a Stripe manda o cliente depois do checkout.
+ *
+ * `WEB_URL` é a variável que o produto já usa para compor link em mensagem —
+ * convite de vaga, pedido de avaliação, link da nota. A mesma aqui, e não uma
+ * nova: duas variáveis para "onde o produto está no ar" divergem no primeiro
+ * ambiente novo, e o sintoma seria o cliente pagando e caindo numa página que
+ * não existe.
+ *
+ * O destino é uma página do produto e não a da barbearia porque quem paga por
+ * link **não está no balcão** e pode nem ser cliente cadastrado: ele recebeu
+ * um endereço por WhatsApp. A página diz o que aconteceu e nada mais — ela não
+ * pode afirmar "pago", porque a Stripe redireciona assim que o checkout
+ * termina e o banco ainda pode estar confirmando.
+ */
+function paginaDeRetorno(): string {
+  const base = process.env['WEB_URL'] ?? 'http://localhost:3001';
+  return `${base.replace(/\/$/, '')}/pagamento`;
+}
+
+/**
  * As duas pontas da Stripe, sobre o mesmo cliente (bloco 34).
  *
  * Este arquivo fecha a lacuna "adquirente de verdade", declarada desde o bloco
  * 29: a integração inteira existia — contrato, webhook assinado, conciliação,
  * trilha do que o provedor disse — e o único provedor era o de mentira.
  *
- * ## O que continua não estando provado, e está escrito
+ * ## O que a conta de verdade respondeu, e o que ela recusou
  *
- * Não há conta contratada nem rede para a Stripe neste ambiente. O que os
- * testes provam é o contrato do lado de cá: o que sai na requisição e como a
- * resposta é lida. Que a Stripe aceita estas chamadas depende de conta, e
- * nenhum teste local substitui isso — por isso o `FakePaymentProvider` continua
- * sendo o provedor de desenvolvimento e a conciliação por polling continua
- * sendo a rede de segurança.
+ * Este arquivo passou a existir contra uma rede injetada: os testes provam o
+ * que **sai** na requisição e como a resposta é lida, e isso é bom para a
+ * classe de erro que mais dói — mandar o campo errado, ler o campo errado.
+ * Havia uma classe inteira fora do alcance deles, e ela é a que este cabeçalho
+ * declarava como não provada: **o que não sai**. Campo obrigatório ausente não
+ * aparece em nenhuma asserção sobre o corpo, e uma rede de mentira responde 200
+ * para qualquer coisa.
  *
- * Duas coisas específicas do Brasil precisam ser confirmadas contra a conta
- * quando ela existir, e estão na tabela de lacunas: a disponibilidade do Pix e
- * o prazo de expiração que a Stripe permite para ele.
+ * A primeira rodada contra a conta em `test mode` devolveu três 400 em cima de
+ * código com a suíte inteira verde:
+ *
+ * | O que | O sintoma que teria chegado ao balcão |
+ * |---|---|
+ * | `success_url` ausente | o meio "link" **nunca funcionou**: a sessão nem era criada |
+ * | `requires_payment_method` lido como recusa | toda cobrança de cartão nascia recusada, e a conciliação a encerraria antes de o cliente abrir o link |
+ * | `payment_method` nulo virando string vazia | "sem cartão salvo" chegando à régua como adquirente fora do ar, gastando D+1, D+3 e D+7 |
+ *
+ * Os três estão consertados e cada um tem teste. O que a conta **recusa** é o
+ * Pix, enquanto ele não for ativado no painel dela — e com ele fica sem
+ * resposta qual expiração a Stripe permite para o QR Code, que o código lê de
+ * `pix_display_qr_code.expires_at` e nunca viu preenchido. Está na tabela de
+ * lacunas.
+ *
+ * O `FakePaymentProvider` continua sendo o provedor de desenvolvimento e a
+ * conciliação por polling continua sendo a rede de segurança.
  */
 
 /**
@@ -59,17 +94,30 @@ const noCaminho = (id: string): string => encodeURIComponent(id);
  * Estado desconhecido vira `aguardando` e **não** `recusado`: a Stripe
  * acrescenta estado, e tratar o que não se conhece como recusa faria uma
  * cobrança boa ser cancelada no dia em que ela publicasse um estado novo.
+ *
+ * ## `requires_payment_method` é dois estados com um nome só
+ *
+ * O comentário anterior aqui dizia a coisa certa — *"só é recusa depois de uma
+ * tentativa"* — e o código fazia o contrário: devolvia `recusado` sempre. A
+ * Stripe usa esse mesmo status para o intent **recém-criado**, que ainda não
+ * falhou em nada, e para o que **tentou e o cartão não passou**. Contra a conta
+ * de verdade isso apareceu na primeira chamada: um `PaymentIntent` de cartão
+ * nasce `requires_payment_method`, e a conciliação por polling encerraria como
+ * recusada uma cobrança que está apenas esperando o cliente.
+ *
+ * Quem separa os dois é `last_payment_error`: ele só existe depois de uma
+ * tentativa. É o único discriminador que a própria resposta oferece — e nenhum
+ * teste com rede de mentira o encontraria, porque quem escreve a resposta falsa
+ * é quem já acha que sabe o que ela contém.
  */
-export function estadoDoPagamento(status: string): EstadoDoPagamento {
+export function estadoDoPagamento(status: string, houveTentativa = false): EstadoDoPagamento {
   switch (status) {
     case 'succeeded':
       return 'pago';
     case 'canceled':
       return 'expirado';
     case 'requires_payment_method':
-      // Só é recusa depois de uma tentativa. Antes dela é o estado inicial de
-      // um PaymentIntent sem meio anexado, que ainda não falhou em nada.
-      return 'recusado';
+      return houveTentativa ? 'recusado' : 'aguardando';
     default:
       return 'aguardando';
   }
@@ -78,6 +126,8 @@ export function estadoDoPagamento(status: string): EstadoDoPagamento {
 interface PaymentIntent {
   id: string;
   status: string;
+  /** Só existe depois de uma tentativa de pagamento — é o que separa a recusa. */
+  last_payment_error?: { code?: string } | null;
   next_action?: {
     pix_display_qr_code?: { data?: string; expires_at?: number };
   };
@@ -136,7 +186,7 @@ export class StripePaymentProvider implements PaymentProvider {
 
     const qr = intent.next_action?.pix_display_qr_code;
     return {
-      estado: estadoDoPagamento(intent.status),
+      estado: estadoDoPagamento(intent.status, intent.last_payment_error != null),
       pagamentoId: intent.id,
       ...(qr?.data ? { pixCopiaECola: qr.data } : {}),
       ...(qr?.expires_at ? { expiraEm: new Date(qr.expires_at * 1000) } : {}),
@@ -149,6 +199,20 @@ export class StripePaymentProvider implements PaymentProvider {
       {
         mode: 'payment',
         currency: 'brl',
+        /**
+         * Obrigatório, e faltava: o link **nunca funcionou**.
+         *
+         * A Stripe recusa `mode=payment` sem `success_url` com 400
+         * `parameter_missing`, e a primeira chamada contra a conta de verdade
+         * bateu nisso. O teste com rede de mentira não tinha como pegar — ele
+         * confere o que sai, e o que faltava não saía.
+         *
+         * `cancel_url` é opcional na Stripe e obrigatório aqui: sem ele, quem
+         * desiste no meio fica parado na página dela sem caminho de volta, que
+         * é o "estado sem saída na interface" da §6 do outro lado da fronteira.
+         */
+        success_url: `${paginaDeRetorno()}?pago=1`,
+        cancel_url: paginaDeRetorno(),
         // `price_data` inline em vez de um catálogo de preços na Stripe: o
         // preço já é decidido pela comanda, e espelhá-lo lá criaria uma
         // segunda fonte da verdade para número que muda a cada venda.
@@ -186,7 +250,7 @@ export class StripePaymentProvider implements PaymentProvider {
     }
 
     const intent = await this.cliente.get<PaymentIntent>(`/payment_intents/${noCaminho(pagamentoId)}`);
-    return estadoDoPagamento(intent.status);
+    return estadoDoPagamento(intent.status, intent.last_payment_error != null);
   }
 
   /**
@@ -235,6 +299,26 @@ export class StripePspProvider implements PspProvider {
   constructor(private readonly cliente: StripeCliente = new StripeCliente()) {}
 
   async cobrar(pedido: PedidoDeCobranca): Promise<RespostaDaCobranca> {
+    /**
+     * Sem meio salvo, a recusa é **daqui** — e é definitiva.
+     *
+     * `pspMethodId` é `string | null` no contrato, e o nulo virava string vazia
+     * no corpo `form-urlencoded`. Contra a conta de verdade isso é 400
+     * `parameter_invalid_empty`; omitindo o campo, é 400
+     * `payment_intent_unexpected_state`, porque a Stripe não adivinha o cartão
+     * do cliente sem `invoice_settings.default_payment_method`. Os dois são 400
+     * e nenhum é 402 — então a régua leria "esta barbearia não tem cartão
+     * salvo" como adquirente fora do ar e gastaria D+1, D+3 e D+7 em chamadas
+     * que já sabem a resposta.
+     *
+     * `PspCobrancaProvider` já recusa antes de chegar aqui, e é ele que a régua
+     * usa. Esta guarda é para a chamada direta — o caminho que a segunda régua,
+     * daqui a dez blocos, vai escrever sem lembrar daquela.
+     */
+    if (!pedido.pspMethodId) {
+      return { estado: 'recusada', chargeId: '', motivo: 'sem_meio_de_pagamento' };
+    }
+
     try {
       const intent = await this.cliente.post<PaymentIntent>(
         '/payment_intents',

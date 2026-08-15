@@ -88,7 +88,16 @@ describe('migração aditiva', () => {
         'e o rollback deixa de ser "sobe a imagem anterior" para virar "restaura backup e perde o que veio depois". ' +
         'Se for mesmo necessário, é operação de duas fases em dois deploys.',
     ).toEqual([]);
-  });
+    /**
+     * Gancho com folga, e não é tolerância a lentidão.
+     *
+     * Sozinha, a varredura das 83 migrações leva 200 ms. Dentro do `pnpm
+     * verify` ela disputa disco com dez suítes em paralelo e passou de 17 s —
+     * estourando os 5 s do padrão e reprovando o portão por um conteúdo que
+     * está certo. É o mesmo caso de `env-example.test.mjs` e o mesmo conserto:
+     * o que se mede aqui é o texto das migrações, nunca o relógio.
+     */
+  }, 60_000);
 
   it('a varredura acusa cada uma das formas destrutivas', () => {
     /**

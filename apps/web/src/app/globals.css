@@ -213,6 +213,45 @@ main { padding-bottom: var(--space-8); }
 
 .vazio-pagina { padding: var(--space-8) var(--space-4); }
 
+/* ----------------------------------------------------------------------------
+   Retorno do pagamento.
+
+   A única tela do produto cujo endereço quem escolhe é o adquirente: a Stripe
+   manda para cá quem terminou (ou desistiu de) um checkout aberto por link no
+   WhatsApp. Quem chega não tem sessão, não tem contexto e pode nem ser cliente
+   cadastrado — e o caminho de saída dele é fechar a aba, que é o que o texto
+   diz.
+
+   Por isso o cartão é centrado e curto: não há segunda coisa a fazer aqui, e
+   qualquer link que oferecêssemos levaria a alguma tela que não é dele.
+   -------------------------------------------------------------------------- */
+
+.recibo {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-4);
+}
+.recibo__cartao {
+  width: 100%;
+  max-width: var(--size-readable);
+  padding: var(--space-6);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+}
+/* O traço no lugar de um emoji: é o mesmo desenho do trilho do painel. */
+.recibo__marca { color: var(--color-accent); }
+.recibo__titulo { margin: 0; font-size: var(--font-size-2xl); letter-spacing: -0.01em; }
+.recibo__texto { margin: 0; color: var(--color-text-muted); max-width: var(--size-readable); }
+
 
 /* ----------------------------------------------------------------------------
    Foto.

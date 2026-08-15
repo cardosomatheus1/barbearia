@@ -2706,6 +2706,9 @@ async function main() {
     // A porta do produto. Não pertence a barbearia nenhuma e não precisa de
     // sessão — é a única tela medida sem nada preparado antes.
     { nome: 'landing', url: '/' },
+    // Onde a Stripe deixa quem pagou por link. Sem sessão e sem dado: é a
+    // única tela do produto cujo endereço quem escolhe é o adquirente.
+    { nome: 'retorno do pagamento', url: '/pagamento?pago=1' },
     { nome: 'pública', url: `/${slug}` },
     { nome: 'agendar', url: `/${slug}/agendar` },
     { nome: 'entrar (cliente)', url: `/${slug}/entrar` },
