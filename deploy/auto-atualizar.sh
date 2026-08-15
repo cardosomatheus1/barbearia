@@ -78,7 +78,9 @@ flock -n 9 || exit 0
 
 cd "$DESTINO"
 
-BRANCH="$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+# `|| true` porque não achar é uma resposta: um clone sem `origin/HEAD` faria o
+# `pipefail` matar o cron em silêncio — e num cron ninguém está olhando.
+BRANCH="$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)"
 BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 AQUI="$(git rev-parse HEAD)"
 
@@ -150,7 +152,8 @@ fi
 #   - a versão nova subiu e não responde: aí sim, volta.
 echo "$LA" >> "$FALHOS"
 
-if curl -fsS --max-time 10 "https://$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"')/" > /dev/null 2>&1; then
+DOMINIO_NO_ENV="$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"' || true)"
+if [ -n "$DOMINIO_NO_ENV" ] && curl -fsS --max-time 10 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
   registrar "FALHOU ao atualizar para ${LA:0:7}, mas o site responde. Nada foi revertido — veja o log acima."
   exit 1
 fi

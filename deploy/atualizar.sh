@@ -21,7 +21,7 @@ set -euo pipefail
 DESTINO="${DESTINO:-/opt/barbearia}"
 # A branch padrão do repositório, e não um nome escrito aqui: quem renomear a
 # branch quebraria a atualização de um servidor que já está no ar.
-BRANCH="${BRANCH:-$(git -C "${DESTINO:-/opt/barbearia}" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|^origin/||')}"
+BRANCH="${BRANCH:-$(git -C "${DESTINO:-/opt/barbearia}" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)}"
 BRANCH="${BRANCH:-main}"
 COMPOSE="docker compose -f $DESTINO/deploy/compose.yml --env-file $DESTINO/.env"
 
@@ -55,9 +55,10 @@ $COMPOSE run --rm preparar || morrer "migração falhou. A versão anterior cont
 titulo "subindo"
 $COMPOSE up -d --no-deps api worker web
 
+DOMINIO_NO_ENV="$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"' || true)"
 titulo "conferindo"
 for i in $(seq 1 30); do
-  if curl -fsS --max-time 5 "https://$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"')/" > /dev/null 2>&1; then
+  if curl -fsS --max-time 5 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
     verde "  ok  o site responde"
     exit 0
   fi

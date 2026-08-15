@@ -75,7 +75,7 @@ titulo "código em $DESTINO"
 command -v git > /dev/null || { apt-get update -qq && apt-get install -y -qq git; }
 if [ -z "$BRANCH" ]; then
   # `--symref` pergunta ao remoto para onde o HEAD dele aponta, sem clonar.
-  BRANCH="$(git ls-remote --symref "$REPO" HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2; exit}')"
+  BRANCH="$(git ls-remote --symref "$REPO" HEAD 2>/dev/null | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2; exit}' || true)"
   [ -n "$BRANCH" ] || morrer "não consegui descobrir a branch padrão de $REPO"
 fi
 if [ -d "$DESTINO/.git" ]; then
@@ -101,39 +101,13 @@ verde "  ok  $BRANCH @ $(git -C "$DESTINO" rev-parse --short HEAD)"
 #   - as duas senhas de banco são a única forma de abrir o volume que já existe.
 # ---------------------------------------------------------------------------
 titulo "segredos"
+# Arquivo próprio, e é por isso que ele tem teste. Aqui dentro, este bloco tinha
+# um defeito que só aparecia na **primeira** execução — o `grep` de uma variável
+# ainda inexistente saía com 1, o `pipefail` propagava, e o `set -e` matava o
+# instalador em silêncio, antes de imprimir a primeira linha. O caso que o
+# instalador existe para servir era o único que ele não servia.
+"$DESTINO/deploy/segredos.sh" "$DESTINO/.env" "$DOMINIO" "$EMAIL"
 ENV="$DESTINO/.env"
-touch "$ENV"; chmod 600 "$ENV"
-
-ler() { grep -E "^$1=" "$ENV" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"'; }
-guardar() { # nome, valor
-  if grep -qE "^$1=" "$ENV"; then
-    sed -i "s|^$1=.*|$1=\"$2\"|" "$ENV"
-  else
-    printf '%s="%s"\n' "$1" "$2" >> "$ENV"
-  fi
-}
-manter() { # nome, gerador
-  local atual; atual="$(ler "$1")"
-  if [ -n "$atual" ] && [ "$atual" != "gere-com-openssl-rand-hex-32" ]; then
-    printf '  ==  %s (preservado)\n' "$1"
-  else
-    guardar "$1" "$(eval "$2")"
-    printf '  ++  %s (gerado)\n' "$1"
-  fi
-}
-
-manter POSTGRES_PASSWORD          "openssl rand -hex 24"
-manter APP_DB_PASSWORD            "openssl rand -hex 24"
-manter STAFF_EMAIL_PEPPER         "openssl rand -hex 32"
-manter MARKETPLACE_ORIGIN_SECRET  "openssl rand -hex 32"
-manter API_KEY_PEPPER             "openssl rand -hex 32"
-manter MFA_SECRET_KEY             "openssl rand -base64 32"
-manter WEBHOOK_SECRET_KEY         "openssl rand -base64 32"
-manter WHATSAPP_TOKEN_KEY         "openssl rand -base64 32"
-guardar DOMINIO "$DOMINIO"
-guardar ACME_EMAIL "$EMAIL"
-grep -qE '^PSP_MODO=' "$ENV" || guardar PSP_MODO nenhum
-grep -qE '^FISCAL_MODO=' "$ENV" || guardar FISCAL_MODO nenhum
 
 # ---------------------------------------------------------------------------
 # 5. O firewall

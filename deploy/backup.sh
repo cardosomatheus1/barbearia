@@ -36,7 +36,7 @@ arquivo="$PASTA/barbearia-$carimbo.dump"
 # versão, e uma incompatibilidade de versão só aparece na hora de restaurar.
 $COMPOSE exec -T db pg_dump --format=custom --username postgres barbearia > "$arquivo"
 
-tamanho="$(du -h "$arquivo" | cut -f1)"
+tamanho="$(du -h "$arquivo" | cut -f1 || true)"
 
 # Um dump vazio é o pior desfecho possível: o cron fica verde por meses e a
 # descoberta acontece no dia da restauração. O piso é grosseiro de propósito —
