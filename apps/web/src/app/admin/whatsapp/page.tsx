@@ -6,6 +6,7 @@ import {
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
   TIPOS_DE_NOTIFICACAO,
+  VARIAVEIS_DO_AVISO,
   type BotaoDaMensagem,
 } from '@barbearia/core';
 import {
@@ -544,38 +545,35 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                   rows={3}
                 />
                 <p className="ui-field__hint">
-                  Escreva como você falaria com o cliente. Se quiser que o produto encaixe o
-                  dado de cada pessoa, use estes três atalhos — nesta ordem, e só os que
-                  precisar:
+                  Escreva como você falaria com o cliente. Você não liga nada a ninguém: o
+                  produto já sabe de quem é cada mensagem e encaixa o dado na hora de
+                  enviar. O que você marca é <strong>onde</strong> ele entra.
                 </p>
-                {/* Em lista e não em prosa: são três coisas para consultar de relance
-                    enquanto se escreve, e a versão em oração era a frase que a pessoa lia
-                    duas vezes sem entender. Vale a mesma decisão que a tela de automação
-                    tomou com os sete significados de gatilho. */}
+                {/* Derivado de `VARIAVEIS_DO_AVISO`, e é o que impede esta tela de
+                    mentir de novo: ela prometia hora em `{{2}}` e profissional em
+                    `{{3}}` enquanto o worker mandava nome do cliente e nome da
+                    barbearia — dois valores, para todo tipo. Escrito nos dois lugares,
+                    o par divergiu sem nada ficar vermelho. */}
                 <dl className="significados">
-                  <div className="significados__par">
-                    <dt>
-                      <code>{'{{1}}'}</code>
-                    </dt>
-                    <dd>o nome do cliente</dd>
-                  </div>
-                  <div className="significados__par">
-                    <dt>
-                      <code>{'{{2}}'}</code>
-                    </dt>
-                    <dd>a hora do agendamento</dd>
-                  </div>
-                  <div className="significados__par">
-                    <dt>
-                      <code>{'{{3}}'}</code>
-                    </dt>
-                    <dd>o nome do profissional</dd>
-                  </div>
+                  {TIPOS_DE_NOTIFICACAO.map((tipo) => (
+                    <div className="significados__par" key={tipo}>
+                      <dt>{NOME_DO_AVISO[tipo] ?? tipo}</dt>
+                      <dd>
+                        {VARIAVEIS_DO_AVISO[tipo].map((qual, i) => (
+                          <span key={qual}>
+                            {i > 0 ? ' · ' : ''}
+                            <code>{`{{${i + 1}}}`}</code> {qual}
+                          </span>
+                        ))}
+                      </dd>
+                    </div>
+                  ))}
                 </dl>
                 <p className="ui-field__hint">
                   Texto sem nenhum atalho também vale: “Seu agendamento está confirmado, te
-                  esperamos em breve!” é um texto válido e a Meta aprova. Os atalhos só
-                  deixam a mensagem pessoal.
+                  esperamos em breve!” é um texto válido e a Meta aprova. E não invente
+                  posição que não está na lista — a Meta recusa o envio, e a mensagem não
+                  sai para ninguém.
                 </p>
               </div>
 

@@ -39,6 +39,7 @@ import {
   type MotivoDoAvisoDoClube,
   type SplitProvider,
   type TipoDeNotificacao,
+  VARIAVEIS_DO_AVISO,
 } from '@barbearia/core';
 import {
   avisarDaOperacao,
@@ -193,9 +194,16 @@ const { psp, cobranca } = ligarAdquirente();
  * pede em letras. Transformar indisponibilidade em exceção faria a tarefa da
  * fila morrer em vez de usar o outro caminho.
  *
- * As variáveis posicionais são **nome e barbearia, nessa ordem**, para toda
- * mensagem. Um `{{1}}` que signifique uma coisa no lembrete e outra na campanha
- * é como a mensagem sai com o nome da casa onde deveria estar o do cliente.
+ * ## As variáveis posicionais saem de `VARIAVEIS_DO_AVISO`
+ *
+ * A Meta preenche por **posição**, e a ordem daqui precisa ser a mesma que a
+ * tela de cadastro do texto mostra. Escritas nos dois lugares, elas divergiram:
+ * a tela prometia hora e profissional, e aqui saíam nome e **nome da
+ * barbearia** — quem escrevesse "seu corte é amanhã às {{2}}" mandava ao
+ * cliente "seu corte é amanhã às Barbearia Matheus".
+ *
+ * E o pior era o dado descartado: `quandoTexto` e `profissional` já chegavam
+ * dentro da mensagem de agendamento e não eram lidos.
  */
 class CanalDaCasa implements NotificationProvider {
   constructor(private readonly reserva: NotificationProvider) {}
@@ -207,16 +215,35 @@ class CanalDaCasa implements NotificationProvider {
     readonly telefone: string;
     readonly clienteNome: string;
     readonly barbearia: string;
+    /** Só as mensagens de horário marcado têm os dois. */
+    readonly quandoTexto?: string | undefined;
+    readonly profissional?: string | undefined;
     readonly appointmentId?: string | null;
   }): Promise<string | null> {
     const zap = await provedorDoWhatsApp(params.tenantId, params.locationId);
     if (!zap) return null;
+
+    /**
+     * A ordem é a de `VARIAVEIS_DO_AVISO`, e a correspondência é por posição.
+     *
+     * Quando o tipo pede hora e profissional e a mensagem não os traz — não
+     * deveria acontecer, e o tipo não consegue provar —, o que falta vira
+     * string vazia em vez de sumir: uma lista mais curta faz a Meta recusar o
+     * envio inteiro, e a pessoa recebe nada em vez de uma frase incompleta.
+     */
+    const valores: Record<string, string> = {
+      'o nome do cliente': params.clienteNome,
+      'o nome da barbearia': params.barbearia,
+      'a hora do agendamento': params.quandoTexto ?? '',
+      'o nome do profissional': params.profissional ?? '',
+    };
+
     const enviada = await enviarPeloWhatsApp({
       tenantId: params.tenantId,
       locationId: params.locationId,
       tipo: params.tipo,
       telefone: params.telefone,
-      variaveis: [params.clienteNome, params.barbearia],
+      variaveis: VARIAVEIS_DO_AVISO[params.tipo].map((qual) => valores[qual] ?? ''),
       // `notifications` já guarda quem recebeu; `whatsapp_messages` guarda o
       // vínculo com o template, e é por ele que a entrega é conciliada.
       customerId: null,
@@ -234,6 +261,9 @@ class CanalDaCasa implements NotificationProvider {
       telefone: mensagem.phoneE164,
       clienteNome: mensagem.clienteNome,
       barbearia: mensagem.barbearia,
+      // Os dois já vinham na mensagem e eram descartados aqui.
+      quandoTexto: mensagem.quandoTexto,
+      profissional: mensagem.profissional,
     });
     if (!foi) await this.reserva.enviarDeAgendamento(mensagem);
   }

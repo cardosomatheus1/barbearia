@@ -38,6 +38,41 @@ export const TIPOS_DE_NOTIFICACAO = [
 ] as const;
 export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
 
+/**
+ * O que cada `{{n}}` do template vira, por tipo de aviso — **em um lugar só**.
+ *
+ * A Meta preenche as variáveis por **posição**, não por nome: quem manda a
+ * mensagem passa uma lista, e a primeira entra em `{{1}}`. Isso significa que a
+ * ordem daqui e a ordem que o worker monta são a mesma coisa dita duas vezes, e
+ * é o tipo de par que diverge sem nada ficar vermelho.
+ *
+ * Divergiu: a tela de cadastro do texto dizia que `{{2}}` era a hora e `{{3}}` o
+ * profissional, e o worker mandava **nome do cliente e nome da barbearia**, dois
+ * valores, para todo tipo. Quem escrevesse "seu corte é amanhã às {{2}}" mandava
+ * ao cliente "seu corte é amanhã às Barbearia Matheus", e quem usasse `{{3}}`
+ * não mandava nada — a Meta recusa quando a quantidade não bate.
+ *
+ * Pior: `quandoTexto` e `profissional` **já viajavam** dentro da mensagem de
+ * agendamento e eram descartados na hora de montar as variáveis. O dado existia
+ * e ninguém lia, que é o defeito da §6 pergunta 4.
+ *
+ * Por tipo e não uma lista só porque o template é por tipo: `{{2}}` no lembrete
+ * e `{{2}}` na campanha são textos diferentes, aprovados em separado. O que não
+ * pode variar é dentro do mesmo tipo.
+ */
+export const VARIAVEIS_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly string[]>> = {
+  // Os três que falam de um horário marcado: é o que o cliente precisa ler.
+  confirmacao: ['o nome do cliente', 'a hora do agendamento', 'o nome do profissional'],
+  lembrete_24h: ['o nome do cliente', 'a hora do agendamento', 'o nome do profissional'],
+  lembrete_2h: ['o nome do cliente', 'a hora do agendamento', 'o nome do profissional'],
+  // A fila não tem hora nem profissional decidido: a pessoa está na barbearia
+  // esperando, e o que importa é quem chama.
+  sua_vez: ['o nome do cliente', 'o nome da barbearia'],
+  senha_de_acesso: ['o nome do cliente', 'o nome da barbearia'],
+  // Campanha e automação falam com quem não tem horário marcado.
+  retorno: ['o nome do cliente', 'o nome da barbearia'],
+};
+
 export type NaturezaDaMensagem = 'transacional' | 'promocional';
 
 /**
