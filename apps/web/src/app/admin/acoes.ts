@@ -50,6 +50,7 @@ import {
   salvarAutomacaoNaApi,
   abrirUnidadeNaApi,
   criarCampanhaNaApi,
+  conectarWhatsAppNaApi,
   enviarCampanhaNaApi,
   definirUnidadeAtivaNaApi,
   definirUnidadesNaApi,
@@ -2902,6 +2903,25 @@ export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void
   });
   if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
   redirect(`${ROTA_WHATSAPP}?feito=cadastro`);
+}
+
+/**
+ * A volta do Embedded Signup (bloco 83).
+ *
+ * O formulário é preenchido pelo script da janela da Meta e submetido por ele:
+ * o navegador nunca vê o `META_APP_SECRET`, então a troca do código pelo token
+ * só pode acontecer do lado do servidor — que é aqui, e depois na API.
+ */
+export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await conectarWhatsAppNaApi(token, {
+    code: texto(form, 'code'),
+    wabaId: texto(form, 'wabaId'),
+    phoneNumberId: texto(form, 'phoneNumberId'),
+    numeroVisivel: texto(form, 'numeroVisivel') || null,
+  });
+  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  redirect(`${ROTA_WHATSAPP}?feito=conectado`);
 }
 
 export async function acaoSubmeterTemplate(form: FormData): Promise<void> {

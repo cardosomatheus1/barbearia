@@ -13,7 +13,12 @@ import {
   type Gatilho,
   type Objetivo,
 } from '@barbearia/core';
-import { automacoesNaApi, type AutomacaoNaTelaDoAdmin } from '@/lib/admin-api';
+import {
+  automacoesNaApi,
+  cadastroDoWhatsAppNaApi,
+  templatesDoWhatsAppNaApi,
+  type AutomacaoNaTelaDoAdmin,
+} from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSalvarAutomacao, acaoSair } from '../acoes';
@@ -108,7 +113,26 @@ export default async function AutomacoesPage({ searchParams }: Props) {
   const query = await searchParams;
   const podeMexer = podeNaTela(estado, 'marketing.send');
 
-  const resposta = podeMexer ? await automacoesNaApi(token) : null;
+  /**
+   * O estado do canal, quando quem abriu pode resolvê-lo.
+   *
+   * `null` é "não dá para saber daqui" — a recepção não tem `whatsapp.manage`
+   * —, e aí o aviso não aparece: mandar alguém para uma tela que ela não abre é
+   * pior que não avisar.
+   */
+  const podeVerCanal = podeNaTela(estado, 'whatsapp.manage');
+  const [resposta, canal, templates] = await Promise.all([
+    podeMexer ? automacoesNaApi(token) : Promise.resolve(null),
+    podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
+    podeVerCanal ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
+  ]);
+  const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
+  // Só o aprovado sai. Mostrar rascunho e pendente aqui prometeria mensagem que
+  // a Meta ainda não deixa mandar.
+  const textos = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.estado === 'aprovado',
+  );
+  const aprovados = new Set(textos.map((t) => t.tipo));
   const automacoes = resposta?.ok ? resposta.dados.automacoes : [];
   const erro = first(query['erro']);
   const salva = first(query['feito']) === 'salva';
@@ -144,6 +168,19 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         </div>
       ) : null}
 
+      {/*
+        A tela que promete envio diz de que ele depende (§6, pergunta 6).
+        Sem isto, a barbearia liga a automação, lê "salva", e nada chega —
+        porque o canal não está de pé três telas adiante.
+      */}
+      {canalDePe === false ? (
+        <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+          O WhatsApp da casa ainda não está pronto, então nada chega ao cliente.{' '}
+          <a href="/admin/whatsapp">Conectar o número e aprovar um texto</a> — são três passos, e
+          a tela diz em qual você está.
+        </div>
+      ) : null}
+
       <section className="cartao-balcao">
         <h2 className="cartao-balcao__titulo">O que está ligado</h2>
         <p className="cartao-balcao__texto">
@@ -168,6 +205,17 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       {podeMexer ? (
         <section className="cartao-balcao">
           <h2 className="cartao-balcao__titulo">Nova automação</h2>
+          {/*
+            Uma automação é uma frase, e a tela passou a dizê-la antes dos
+            campos. A versão anterior era oito campos técnicos em fila —
+            "limiar", "atrasoMinutos", "janelaDias" — sem nada explicando o que
+            se estava montando, e quem abria não sabia se tinha terminado.
+          */}
+          <p className="cartao-balcao__texto">
+            Uma automação é uma frase: <strong>quando</strong> ela dispara,{' '}
+            <strong>o que</strong> a pessoa recebe, e <strong>o que</strong> isso precisa
+            produzir. Depois de ligada ela roda sozinha, todo dia, sem você abrir esta tela.
+          </p>
           <form action={acaoSalvarAutomacao} className="formulario">
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="nome">
@@ -184,9 +232,12 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               <p className="ui-field__hint">Só para você reconhecer depois.</p>
             </div>
 
+            <fieldset className="passo">
+              <legend className="passo__titulo">1. Quando ela dispara</legend>
+
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="gatilho">
-                Quando disparar
+                O gatilho
               </label>
               <select className="ui-field__input" id="gatilho" name="gatilho" required>
                 {/*
@@ -212,7 +263,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="limiar">
-                O número do gatilho
+                O número que o gatilho pede
               </label>
               <input
                 className="ui-field__input"
@@ -221,15 +272,38 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 name="limiar"
                 placeholder="30"
               />
+              {/*
+                O significado do número fica **visível**, e não só dentro da
+                opção. A versão anterior dizia "está escrito na opção que você
+                escolheu acima" — e não estava: assim que o seletor fecha, o
+                texto da opção some, e a pessoa fica olhando um campo chamado
+                "número" sem saber número de quê.
+
+                Uma tabela curta e não um parágrafo: o produto já rejeitou a
+                dica que lista sete significados em prosa, e com razão. O que
+                muda aqui é a **forma** — sete linhas de duas colunas se
+                varrem com o olho; sete orações não.
+              */}
               <p className="ui-field__hint">
-                O que ele significa está escrito na opção que você escolheu acima. Gatilho que
-                não pede número: deixe em branco.
+                Gatilho que não pede número: deixe em branco. O que o número significa em cada um:
               </p>
+              <div className="ui-scroll-x">
+                <table className="tabela-simples">
+                  <tbody>
+                    {GATILHOS.filter((g) => LIMIAR_DO_GATILHO[g]).map((g) => (
+                      <tr key={g}>
+                        <th scope="row">{ROTULO_DO_GATILHO[g]}</th>
+                        <td>{LIMIAR_DO_GATILHO[g]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="atrasoMinutos">
-                Esperar quantos minutos depois do fato
+                Esperar quantos minutos
               </label>
               <input
                 className="ui-field__input"
@@ -244,6 +318,11 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               </p>
             </div>
 
+            </fieldset>
+
+            <fieldset className="passo">
+              <legend className="passo__titulo">2. O que a pessoa recebe</legend>
+
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="tipo">
                 Qual mensagem
@@ -252,17 +331,60 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 {TIPOS_DE_NOTIFICACAO.map((t) => (
                   <option key={t} value={t}>
                     {NOME_DO_AVISO[t] ?? t}
+                    {aprovados.has(t) ? '' : ' — sem texto aprovado'}
                   </option>
                 ))}
               </select>
-              <p className="ui-field__hint">
-                O texto sai do template aprovado pela Meta, em WhatsApp.
-              </p>
+              {/*
+                **Onde está a mensagem.** Era a pergunta que esta tela não
+                respondia: ela oferecia seis nomes abstratos, e o texto que o
+                cliente lê mora em outra tela, cadastrado como template que a
+                Meta aprova. Quem montava uma automação nunca via o que ia sair.
+
+                Não dá para escrever o texto aqui — a Meta exige aprovar cada um
+                antes, e um campo livre nesta tela prometeria algo que o canal
+                recusa. O que dá, e é o que faltava, é **mostrar o que existe**.
+              */}
+              {textos.length === 0 ? (
+                <p className="ui-field__hint">
+                  Você ainda não tem nenhum texto aprovado, então nada vai sair.{' '}
+                  <a href="/admin/whatsapp">Escreva o texto em WhatsApp</a> — a Meta precisa
+                  aprovar cada um antes de ele poder ser enviado.
+                </p>
+              ) : (
+                <>
+                  <p className="ui-field__hint">
+                    É este o texto que o cliente vai ler.{' '}
+                    <a href="/admin/whatsapp">Escrever ou mudar em WhatsApp</a>.
+                  </p>
+                  <ul className="textos-aprovados">
+                    {textos.map((t) => (
+                      <li key={t.id}>
+                        <span className="textos-aprovados__nome">
+                          {NOME_DO_AVISO[t.tipo] ?? t.tipo}
+                        </span>
+                        <span className="textos-aprovados__corpo">{t.corpo}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
+
+            </fieldset>
+
+            <fieldset className="passo">
+              <legend className="passo__titulo">3. O que isso precisa produzir</legend>
+              <p className="passo__texto">
+                Sem objetivo, uma automação é uma mensagem que ninguém consegue defender nem
+                matar: ela some no meio do custo e fica ligada para sempre. A lista acima mostra
+                enviadas e alcançadas lado a lado — é por esses dois números que você desliga o
+                que não funciona.
+              </p>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="objetivo">
-                O que ela precisa produzir
+                O que precisa acontecer
               </label>
               <select className="ui-field__input" id="objetivo" name="objetivo" required>
                 {OBJETIVOS.map((o) => (
@@ -275,7 +397,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="janelaDias">
-                Em quantos dias
+                Em quantos dias isso vale
               </label>
               <input
                 className="ui-field__input"
@@ -291,6 +413,8 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 um corte que a pessoa marcaria de qualquer jeito.
               </p>
             </div>
+
+            </fieldset>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="ativa">

@@ -14,8 +14,10 @@ import {
   nomeDaCelula,
 } from '@barbearia/core';
 import {
+  cadastroDoWhatsAppNaApi,
   campanhasNaApi,
   segmentosNaApi,
+  templatesDoWhatsAppNaApi,
   type CampanhaNaTelaDoAdmin,
   type CelulaNaTelaDoAdmin,
   type ClienteEmRiscoNaTela,
@@ -118,11 +120,16 @@ function Heatmap({ grade }: { readonly grade: readonly CelulaNaTelaDoAdmin[] }) 
 
               /* A célula fria é um link que preenche o formulário abaixo. As
                  outras não são clicáveis: não há campanha a fazer sobre uma
-                 hora cheia, e uma hora fechada não tem o que encher. */
+                 hora cheia, e uma hora fechada não tem o que encher.
+
+                 O `#nova-campanha` não é enfeite: sem ele o navegador recarrega
+                 e **fica no topo**, com o formulário preenchido três telas
+                 abaixo. Da cadeira de quem clicou, nada acontece — e foi
+                 exatamente assim que o defeito foi relatado. */
               return faixa === 'fria' ? (
                 <a
                   className={`heatmap__celula heatmap__celula--${faixa}`}
-                  href={`/admin/campanhas?dia=${dia}&hora=${hora}`}
+                  href={`/admin/campanhas?dia=${dia}&hora=${hora}#nova-campanha`}
                   key={`${dia}:${hora}`}
                   title={rotulo}
                 >
@@ -278,10 +285,26 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const query = await searchParams;
   const podeMexer = podeNaTela(estado, 'marketing.send');
 
-  const [resposta, base] = await Promise.all([
+  /**
+   * O estado do canal, quando quem abriu pode resolvê-lo.
+   *
+   * `null` significa "não dá para saber daqui" — a recepção não tem
+   * `whatsapp.manage` —, e aí o aviso não aparece: mandar alguém para uma tela
+   * que ela não abre é pior que não avisar.
+   */
+  const podeVerCanal = podeNaTela(estado, 'whatsapp.manage');
+  const [resposta, base, canal, templates] = await Promise.all([
     podeMexer ? campanhasNaApi(token) : Promise.resolve(null),
     podeNaTela(estado, 'customers.view') ? segmentosNaApi(token) : Promise.resolve(null),
+    podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
+    podeVerCanal ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
   ]);
+  const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
+  // Só o aprovado sai; mostrar rascunho prometeria o que a Meta ainda recusa.
+  const textos = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
+  );
+  const aprovados = new Set(textos.map((t) => t.tipo));
   const campanhas = resposta?.ok ? resposta.dados.campanhas : [];
   const grade = resposta?.ok ? resposta.dados.grade : [];
 
@@ -292,6 +315,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const criada = feito === 'criada';
   const enviando = feito === 'enviando';
   const publico = first(query['publico']);
+  const temHoraFria = grade.some((c) => c.faixa === 'fria');
 
   return (
     <main className="ui-container painel__conteudo" {...secao('campanhas')}>
@@ -334,10 +358,34 @@ export default async function CampanhasPage({ searchParams }: Props) {
         </div>
       ) : null}
 
+      {/*
+        A tela que promete envio diz de que ele depende (§6, pergunta 6).
+        Sem isto, a barbearia monta o público, aperta Enviar, lê "entrou na
+        fila" — e nada chega, porque o canal não está de pé três telas adiante.
+        Só para quem pode resolver: mandar a recepção para uma tela que ela não
+        abre seria pior que não avisar.
+      */}
+      {canalDePe === false ? (
+        <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+          O WhatsApp da casa ainda não está pronto, então nada chega ao cliente.{' '}
+          <a href="/admin/whatsapp">Conectar o número e aprovar um texto</a> — são três passos, e
+          a tela diz em qual você está.
+        </div>
+      ) : null}
+
       <section className="cartao-balcao">
         <h2 className="cartao-balcao__titulo">Ocupação das últimas oito semanas</h2>
+        {/*
+          A frase depende de haver célula fria. "Toque numa hora vazia" sobre uma
+          grade sem nenhuma é a tela convidando para um gesto que não faz nada —
+          e foi assim que o defeito do heatmap chegou: o convite estava lá, o
+          link não existia naquela célula, e quem clicou concluiu que o produto
+          estava quebrado.
+        */}
         <p className="cartao-balcao__texto">
-          Toque numa hora vazia para montar uma campanha com quem costuma vir naquele horário.
+          {temHoraFria
+            ? 'As horas em azul estão vazias. Toque numa delas para montar uma campanha, já preenchida, com quem costuma vir naquele horário.'
+            : 'Nenhuma hora está vazia o bastante para virar campanha agora — as horas em azul é que são clicáveis. Você pode montar uma campanha por outro público logo abaixo.'}
         </p>
         {grade.length === 0 ? (
           <p className="cartao-balcao__texto">
@@ -352,8 +400,19 @@ export default async function CampanhasPage({ searchParams }: Props) {
       {base?.ok ? <Segmentos emRisco={base.dados.emRisco} segmentos={base.dados.segmentos} /> : null}
 
       {podeMexer ? (
-        <section className="cartao-balcao">
+        <section className="cartao-balcao" id="nova-campanha">
           <h2 className="cartao-balcao__titulo">Nova campanha</h2>
+          {/*
+            Uma campanha é uma frase, e a tela passou a dizê-la antes dos
+            campos. A versão anterior era seis campos técnicos em fila —
+            "valorDoFiltro", "diaDaSemana", "janelaDias" — sem nada explicando o
+            que se estava montando, e quem abria não sabia se tinha terminado.
+          */}
+          <p className="cartao-balcao__texto">
+            Uma campanha é uma frase: <strong>quem</strong> recebe,{' '}
+            <strong>o quê</strong>, e <strong>como você vai saber</strong> se valeu. Os três
+            passos abaixo montam essa frase — e ninguém recebe nada até você apertar Enviar.
+          </p>
           <form action={acaoCriarCampanha} className="formulario">
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="nome">
@@ -372,13 +431,18 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 id="nome"
                 maxLength={80}
                 name="nome"
+                placeholder="Encher a terça à tarde"
                 required
               />
+              <p className="ui-field__hint">Só para você reconhecer na lista depois.</p>
             </div>
+
+            <fieldset className="passo">
+              <legend className="passo__titulo">1. Quem recebe</legend>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="filtro">
-                Quem recebe
+                O público
               </label>
               <select
                 className="ui-field__input"
@@ -401,7 +465,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="valorDoFiltro">
-                O número do filtro
+                O número que o público pede
               </label>
               <input
                 className="ui-field__input"
@@ -411,8 +475,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 name="valorDoFiltro"
               />
               <p className="ui-field__hint">
-                Só os públicos marcados com &quot;pede&quot; usam este campo. Os outros ignoram o
-                que estiver aqui.
+                Só os públicos marcados com &quot;pede&quot; usam este campo — a própria opção diz
+                o que o número significa. Nos outros, deixe em branco.
               </p>
             </div>
 
@@ -435,6 +499,11 @@ export default async function CampanhasPage({ searchParams }: Props) {
               </select>
             </div>
 
+            </fieldset>
+
+            <fieldset className="passo">
+              <legend className="passo__titulo">2. O que eles recebem</legend>
+
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="tipo">
                 Qual mensagem
@@ -443,6 +512,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 {TIPOS_DE_CAMPANHA.map((t) => (
                   <option key={t} value={t}>
                     {NOME_DO_AVISO[t] ?? t}
+                    {aprovados.has(t) ? '' : ' — sem texto aprovado'}
                   </option>
                 ))}
               </select>
@@ -450,7 +520,43 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 Só textos de campanha aparecem aqui. Lembrete e confirmação são do agendamento —
                 mandá-los como campanha prometeria um horário que a pessoa não tem.
               </p>
+              {/* Onde está a mensagem: o texto mora no template que a Meta
+                  aprova, e sem mostrá-lo aqui quem monta a campanha nunca vê o
+                  que vai sair. */}
+              {textos.length === 0 ? (
+                <p className="ui-field__hint">
+                  Você ainda não tem nenhum texto aprovado, então nada vai sair.{' '}
+                  <a href="/admin/whatsapp">Escreva o texto em WhatsApp</a> — a Meta precisa
+                  aprovar cada um antes de ele poder ser enviado.
+                </p>
+              ) : (
+                <>
+                  <p className="ui-field__hint">
+                    É este o texto que o cliente vai ler.{' '}
+                    <a href="/admin/whatsapp">Escrever ou mudar em WhatsApp</a>.
+                  </p>
+                  <ul className="textos-aprovados">
+                    {textos.map((t) => (
+                      <li key={t.id}>
+                        <span className="textos-aprovados__nome">
+                          {NOME_DO_AVISO[t.tipo] ?? t.tipo}
+                        </span>
+                        <span className="textos-aprovados__corpo">{t.corpo}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
+
+            </fieldset>
+
+            <fieldset className="passo">
+              <legend className="passo__titulo">3. Como você vai saber se valeu</legend>
+              <p className="passo__texto">
+                Toda venda que a pessoa fizer dentro desta janela entra na receita desta campanha
+                — é a última coluna da lista, e a única que responde se ela pagou o que custou.
+              </p>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="janelaDias">
@@ -470,6 +576,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 qualquer jeito.
               </p>
             </div>
+
+            </fieldset>
 
             <button className="ui-button ui-button--primary ui-button--block" type="submit">
               Criar campanha

@@ -3167,6 +3167,26 @@ export interface TemplateNaTelaDoAdmin {
   readonly motivoDaRecusa: string | null;
 }
 
+/**
+ * O que a tela precisa para desenhar o botão de conexão (bloco 83).
+ *
+ * `null` quando o app da plataforma não foi configurado — e aí a tela não
+ * desenha o botão. O `appSecret` **não** está aqui e nunca estará: ele assina
+ * em nome do app inteiro e não sai do servidor da API.
+ */
+export interface SignupDoWhatsAppNaTela {
+  readonly appId: string;
+  readonly configId: string;
+}
+
+export const signupDoWhatsAppNaApi = (token: string) =>
+  chamar<{ signup: SignupDoWhatsAppNaTela | null }>('GET', '/v1/admin/whatsapp/signup', undefined, token);
+
+export const conectarWhatsAppNaApi = (
+  token: string,
+  corpo: { code: string; wabaId: string; phoneNumberId: string; numeroVisivel: string | null },
+) => chamar<{ cadastro: unknown }>('POST', '/v1/admin/whatsapp/conectar', corpo, token);
+
 export const cadastroDoWhatsAppNaApi = (token: string) =>
   chamar<{ cadastro: CadastroDoWhatsAppNaTela | null }>(
     'GET',

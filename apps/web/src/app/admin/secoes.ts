@@ -122,6 +122,19 @@ export const MODULOS = [
     id: 'marketing',
     nome: 'Marketing',
     telas: [
+      /**
+       * O WhatsApp abre o grupo, e é onde ele passou a morar (bloco 83).
+       *
+       * Ele estava em "Integrações", ao lado de nota fiscal, chave de API e
+       * webhook — que são coisas de quem liga sistema em sistema. Mas quem abre
+       * a tela do WhatsApp é quem vai mandar campanha, e ela é **pré-requisito
+       * das duas telas abaixo**: sem número conectado e texto aprovado, nem
+       * automação nem campanha chegam a ninguém.
+       *
+       * Primeiro do grupo por causa disso: a ordem do menu passa a ser a ordem
+       * em que se faz o trabalho.
+       */
+      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'o número por onde tudo sai — conecte antes de enviar', grupo: 'Envios' },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar', grupo: 'Envios' },
       { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha', grupo: 'Envios' },
       { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'confirmação, lembrete e retorno', grupo: 'Envios', recurso: 'avisos' },
@@ -150,7 +163,6 @@ export const MODULOS = [
     id: 'integracoes',
     nome: 'Integrações',
     telas: [
-      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'número da casa e textos aprovados' },
       { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas', recurso: 'fiscal' },
       { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', nota: 'integração do seu site ou do seu ERP' },
       { href: '/admin/webhooks', nome: 'Webhooks', secao: 'webhooks', nota: 'avisar outro sistema quando algo acontece aqui' },

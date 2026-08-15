@@ -53,6 +53,39 @@ describe('a política de conteúdo da tela', () => {
     expect(csp).toContain("frame-ancestors 'none'");
   });
 
+  it('a licença da Meta vale numa tela só', () => {
+    /**
+     * O Embedded Signup (bloco 83) precisa do SDK da Meta rodando no navegador:
+     * script de `connect.facebook.net`, chamada a `graph.facebook.com` e um
+     * `iframe` de `www.facebook.com`. Nada disso passa por `'self'`.
+     *
+     * A licença é **por caminho**, e este teste é o que impede alguém de
+     * simplificar isso abrindo a política global: aí toda página do produto —
+     * inclusive a pública, anônima e indexada — passaria a aceitar script de
+     * terceiro por causa de uma tela que a barbearia usa uma vez.
+     */
+    const conexao = pedir('/admin/whatsapp').headers.get('content-security-policy') ?? '';
+    expect(conexao).toContain('https://connect.facebook.net');
+    expect(conexao).toContain('https://graph.facebook.com');
+    expect(conexao).toContain('https://www.facebook.com');
+
+    for (const caminho of ['/domari', '/admin/dia', '/admin/campanhas', '/admin/whatsapp/']) {
+      const outra = pedir(caminho).headers.get('content-security-policy') ?? '';
+      expect(outra, caminho).not.toContain('facebook');
+    }
+  });
+
+  it('nem mesmo a tela da Meta ganha script embutido sem nonce', () => {
+    // A licença acrescenta origens, e **não** relaxa a regra que a política
+    // inteira existe para impor.
+    const csp = pedir('/admin/whatsapp').headers.get('content-security-policy') ?? '';
+    const scripts = csp.split('; ').find((d) => d.startsWith('script-src')) ?? '';
+    expect(scripts).not.toContain('unsafe-inline');
+    expect(scripts).not.toContain('unsafe-eval');
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("object-src 'none'");
+  });
+
   it('a foto que a barbearia cadastra continua carregando', () => {
     /**
      * `img-src` é a única diretiva larga, e é decisão de produto: a foto do

@@ -32,3 +32,20 @@ export const templateSchema = z.object({
     .regex(/^[a-z0-9_]{1,512}$/, 'Só minúsculas, números e sublinhado'),
   corpo: z.string().trim().min(5).max(1024),
 });
+
+/**
+ * O que a janela da Meta devolve ao navegador (bloco 83).
+ *
+ * O `code` vale uma vez e é trocado no servidor pelo token — o `appSecret`
+ * nunca chega ao navegador, então não há como o cliente fazer a troca sozinho.
+ *
+ * Os dois ids têm o mesmo formato que `salvarCadastroDoWhatsApp` exige, e a
+ * conferência é repetida lá dentro de propósito: a borda garante forma, e o
+ * domínio é quem responde por gravar.
+ */
+export const signupDoWhatsAppSchema = z.object({
+  code: z.string().trim().min(1).max(512),
+  wabaId: z.string().regex(/^[0-9]{5,32}$/),
+  phoneNumberId: z.string().regex(/^[0-9]{5,32}$/),
+  numeroVisivel: z.string().trim().max(32).nullable().optional(),
+});

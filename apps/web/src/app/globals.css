@@ -7393,6 +7393,141 @@ main { padding-bottom: var(--space-8); }
    A cor diz a faixa, e o número diz o valor — cor sozinha não serve a quem tem
    baixa visão, e é por isso que cada célula escreve o percentual.
    --------------------------------------------------------------------------- */
+/* O texto que o cliente vai ler, dentro do formulário (bloco 83).
+
+   A pergunta que a tela não respondia era "e a mensagem, não tem lugar pra
+   colocar?". Não tem, e não pode ter: a Meta aprova cada texto antes, e um
+   campo livre aqui prometeria o que o canal recusa. O que faltava era **mostrar
+   o que existe**, com o caminho para escrevê-lo. */
+.textos-aprovados {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.textos-aprovados li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.textos-aprovados__nome {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+
+/* O corpo do template é texto de verdade, com `{{1}}` dentro: ele precisa
+   quebrar linha e nunca esticar a tela. */
+.textos-aprovados__corpo { overflow-wrap: anywhere; }
+
+/* Duas colunas de texto curto — nome à esquerda, significado à direita. Rola
+   dentro do próprio recipiente, como toda tabela deste produto. */
+.tabela-simples {
+  border-collapse: collapse;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.tabela-simples th,
+.tabela-simples td {
+  text-align: left;
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  vertical-align: top;
+}
+
+.tabela-simples th { font-weight: var(--font-weight-medium); }
+.tabela-simples td { color: var(--color-text-muted); }
+
+/* O caminho até a mensagem chegar (bloco 83).
+
+   Lista ordenada de verdade (`ol`), porque a ordem **é** a informação: não dá
+   para aprovar texto antes de conectar o número. Estrutura que codifica algo
+   verdadeiro sobre o conteúdo, e não numeração decorativa.
+
+   O estado vai em letras — "Feito" / "Passo 2" —, e a cor só reforça. Um passo
+   verde sem palavra não é informação para quem tem baixa visão, e é a mesma
+   decisão do estado da entrega de webhook e do estado da campanha. */
+.caminho {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.caminho__passo {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border);
+}
+
+.caminho__passo--feito { border-left-color: var(--color-success); }
+
+.caminho__marca {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.caminho__passo--feito .caminho__marca { color: var(--color-success); }
+
+.caminho__titulo { font-weight: var(--font-weight-medium); }
+
+.caminho__texto {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Um passo de formulário longo (bloco 83).
+
+   Campanha e automação são frases de três partes — quem, o quê, como medir —, e
+   a versão anterior era uma fila de seis a oito campos técnicos sem nada
+   dizendo o que se estava montando. `fieldset`/`legend` e não `div`/`h3`: o
+   leitor de tela anuncia a legenda ao entrar em **cada** campo do grupo, então
+   "O número que o público pede" é lido dentro de "1. Quem recebe" em vez de
+   solto. Semântica que já existia e não estava sendo usada.
+
+   Sem borda de caixa: o `cartao-balcao` em volta já é a caixa, e caixa dentro
+   de caixa em 360px come a largura que o campo precisa. O que separa os passos
+   é o espaço e o peso do título — hierarquia por tamanho antes de cor. */
+.passo {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.passo__titulo {
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.passo__texto {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O que separa um passo do seguinte, sem desenhar linha: o formulário já tem
+   `gap`, e o passo só precisa respirar mais que os campos dentro dele. */
+.formulario .passo + .passo,
+.formulario .passo + .ui-field {
+  margin-top: var(--space-3);
+}
+
 /* O estado de uma campanha (bloco 82).
 
    Em letras, com a cor só reforçando — mesmo padrão do estado da entrega de

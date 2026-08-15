@@ -11,6 +11,7 @@ export * from './recepcao.js';
 export * from './segmento.js';
 export * from './whatsapp.js';
 export * from './whatsapp-meta.js';
+export * from './whatsapp-signup.js';
 export * from './automacao.js';
 export * from './campanha.js';
 export * from './fotos.js';
