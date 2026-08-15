@@ -170,8 +170,8 @@ export class WhatsAppController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(signupDoWhatsAppSchema)) body: {
       code: string;
-      wabaId: string;
-      phoneNumberId: string;
+      wabaId?: string;
+      phoneNumberId?: string;
       numeroVisivel?: string | null;
     },
   ) {
@@ -182,6 +182,7 @@ export class WhatsAppController {
           tenantId: staff.tenantId,
           locationId: local.id,
           code: body.code,
+          // Ausentes é o caso do celular: o domínio os descobre pelo token.
           wabaId: body.wabaId,
           phoneNumberId: body.phoneNumberId,
           numeroVisivel: body.numeroVisivel ?? null,

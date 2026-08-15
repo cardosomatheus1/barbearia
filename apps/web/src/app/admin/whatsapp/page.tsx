@@ -251,7 +251,13 @@ function Conectar({
   var parou = null;
   // Lista fechada de origens, e não 'termina com facebook.com': a segunda casa
   // com 'evilfacebook.com', e quem manda a mensagem decide o que vira cadastro.
-  var DA_META = ['https://www.facebook.com', 'https://web.facebook.com', 'https://business.facebook.com'];
+  // 'm.facebook.com' entrou no bloco 84: é a origem que o celular usa, e sem
+  // ela a mensagem chegava e era descartada. Continua sendo lista fechada —
+  // 'termina com facebook.com' casa com 'evilfacebook.com'.
+  var DA_META = [
+    'https://www.facebook.com', 'https://web.facebook.com',
+    'https://business.facebook.com', 'https://m.facebook.com',
+  ];
   window.addEventListener('message', function (evento) {
     if (DA_META.indexOf(evento.origin) === -1) return;
     try {
@@ -268,17 +274,19 @@ function Conectar({
   });
 
   function enviar(code) {
-    if (!dados) {
-      espera.textContent =
-        parou === 'sem_numero'
-          ? 'A conta foi criada, mas nenhum número foi acrescentado a ela. Abra de novo e acrescente o número da barbearia.'
-          : 'A janela fechou antes de terminar' + (parou ? ' (parou em: ' + parou + ')' : '') + '. Tente de novo.';
-      return;
-    }
+    // O código basta, e é o conserto do celular (bloco 84). A versão anterior
+    // desistia sem os ids que a janela da Meta manda por evento: no computador
+    // eles chegam, no celular o fluxo abre numa aba separada e a mensagem não
+    // volta — a conexão terminava do lado da Meta e a nossa tela não mudava
+    // nada, nem dizia por quê. Agora o que a janela ouviu viaja como dica, e o
+    // servidor descobre a conta e o número pelo próprio token.
+    //
+    // Sem crase neste comentário: ele mora dentro de um template literal, e
+    // crase o fecha. Mesma armadilha do SQL e do CSS deste repositório.
     form.elements['code'].value = code;
-    form.elements['wabaId'].value = dados.waba_id || '';
-    form.elements['phoneNumberId'].value = dados.phone_number_id || '';
-    form.elements['numeroVisivel'].value = dados.business_phone_number || '';
+    form.elements['wabaId'].value = (dados && dados.waba_id) || '';
+    form.elements['phoneNumberId'].value = (dados && dados.phone_number_id) || '';
+    form.elements['numeroVisivel'].value = (dados && dados.business_phone_number) || '';
     // O código vale **30 segundos**. A troca acontece no servidor e há um
     // salto a mais no caminho (a tela posta para a própria action, que chama a
     // API), então não há nada a fazer entre receber e submeter.
@@ -294,7 +302,13 @@ function Conectar({
     window.FB.login(function (resposta) {
       var code = resposta && resposta.authResponse && resposta.authResponse.code;
       if (code) enviar(code);
-      else espera.textContent = 'Você fechou a janela antes de terminar.';
+      else if (parou === 'sem_numero')
+        espera.textContent =
+          'A conta foi criada, mas nenhum número foi acrescentado a ela. Abra de novo e informe o número da barbearia.';
+      else
+        espera.textContent =
+          'A conexão não foi concluída' + (parou ? ' (parou em: ' + parou + ')' : '') +
+          '. Tente de novo — ou use "Cadastrar os identificadores à mão", logo abaixo.';
     }, {
       config_id: ${JSON.stringify(signup.configId)},
       response_type: 'code',

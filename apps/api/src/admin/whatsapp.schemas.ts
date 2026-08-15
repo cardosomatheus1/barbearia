@@ -45,7 +45,18 @@ export const templateSchema = z.object({
  */
 export const signupDoWhatsAppSchema = z.object({
   code: z.string().trim().min(1).max(512),
-  wabaId: z.string().regex(/^[0-9]{5,32}$/),
-  phoneNumberId: z.string().regex(/^[0-9]{5,32}$/),
+  /**
+   * Opcionais desde o bloco 84, e é o conserto do celular.
+   *
+   * Eles chegavam do evento `message` da janela da Meta — que no computador
+   * roda numa janela filha e no celular numa **aba separada**, onde a mensagem
+   * não volta. Exigi-los aqui fazia a conexão morrer calada no aparelho em que
+   * a barbearia realmente opera.
+   *
+   * Ausentes, o servidor os descobre pelo token. O formato continua conferido:
+   * o que chega vira dica, e dica malformada é recusada como qualquer entrada.
+   */
+  wabaId: z.string().regex(/^[0-9]{5,32}$/).optional(),
+  phoneNumberId: z.string().regex(/^[0-9]{5,32}$/).optional(),
   numeroVisivel: z.string().trim().max(32).nullable().optional(),
 });

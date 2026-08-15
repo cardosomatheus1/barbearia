@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SignupError,
   assinarWebhook,
+  conectarPeloSignup,
   credenciaisDaPlataforma,
   registrarNumero,
   signupNaTela,
@@ -150,5 +151,143 @@ describe('assinar o webhook e registrar o número', () => {
       messaging_product: 'whatsapp',
       pin: '123456',
     });
+  });
+});
+
+describe('a descoberta da conta e do número pelo token', () => {
+  /**
+   * O conserto do celular (bloco 84).
+   *
+   * A documentação da Meta manda o navegador ouvir um evento e mandar os ids
+   * para o servidor. No computador funciona; no celular o fluxo abre numa aba
+   * separada e a mensagem não volta — e foi o que aconteceu na primeira
+   * conexão de verdade deste produto: a Meta concluiu, e a nossa tela não
+   * mudou nada nem disse por quê.
+   *
+   * Estes testes prendem o caminho que **não** depende de mensagem entre abas.
+   * As respostas são as da documentação do `debug_token` e do `phone_numbers`.
+   */
+  function redeEmSequencia(respostas: { status?: number; corpo: unknown }[]) {
+    const chamadas: { url: string; init: RequestInit }[] = [];
+    let i = 0;
+    const buscar = (async (url: string | URL, init?: RequestInit) => {
+      chamadas.push({ url: String(url), init: init ?? {} });
+      const r = respostas[i++] ?? { corpo: {} };
+      return new Response(JSON.stringify(r.corpo), { status: r.status ?? 200 });
+    }) as unknown as typeof fetch;
+    return { buscar, chamadas };
+  }
+
+  it('sem os ids, o servidor os descobre — é o caminho do celular', async () => {
+    const { buscar, chamadas } = redeEmSequencia([
+      { corpo: { access_token: 'EAAG-token-da-casa' } },
+      {
+        corpo: {
+          data: {
+            granular_scopes: [
+              { scope: 'whatsapp_business_messaging', target_ids: ['102290129340398'] },
+              { scope: 'whatsapp_business_management', target_ids: ['102290129340398'] },
+            ],
+          },
+        },
+      },
+      { corpo: { data: [{ id: '106540352242922', display_phone_number: '+55 71 98888-7777' }] } },
+      { corpo: { success: true } },
+      { corpo: { success: true } },
+    ]);
+
+    // `salvarCadastroDoWhatsApp` vai ao banco, então o que se prova aqui é a
+    // conversa com a Meta: a gravação tem suíte de integração própria.
+    await conectarPeloSignup({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      locationId: '00000000-0000-0000-0000-000000000002',
+      code: 'AQD-codigo',
+      numeroVisivel: null,
+      staffId: '00000000-0000-0000-0000-000000000003',
+      staffName: 'Matheus',
+      credenciais: CREDENCIAIS,
+      buscar,
+    }).catch(() => undefined);
+
+    const urls = chamadas.map((c) => c.url);
+    expect(urls[0]).toContain('/oauth/access_token');
+    // O token do app é id|segredo, e vai só para o `debug_token`.
+    expect(urls[1]).toContain('/debug_token');
+    expect(urls[1]).toContain('input_token=EAAG-token-da-casa');
+    expect(urls[1]).toContain(encodeURIComponent(`${CREDENCIAIS.appId}|${CREDENCIAIS.appSecret}`));
+    // A conta descoberta é a que decide o resto.
+    expect(urls[2]).toBe('https://graph.facebook.com/v21.0/102290129340398/phone_numbers');
+    expect(urls[3]).toBe('https://graph.facebook.com/v21.0/102290129340398/subscribed_apps');
+    expect(urls[4]).toBe('https://graph.facebook.com/v21.0/106540352242922/register');
+  });
+
+  it('com os ids em mãos, não pergunta nada — é o caminho do computador', async () => {
+    const { buscar, chamadas } = redeEmSequencia([
+      { corpo: { access_token: 'tok' } },
+      { corpo: { success: true } },
+      { corpo: { success: true } },
+    ]);
+
+    await conectarPeloSignup({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      locationId: '00000000-0000-0000-0000-000000000002',
+      code: 'AQD',
+      wabaId: '102290129340398',
+      phoneNumberId: '106540352242922',
+      numeroVisivel: '+55 71 98888-7777',
+      staffId: '00000000-0000-0000-0000-000000000003',
+      staffName: 'Matheus',
+      credenciais: CREDENCIAIS,
+      buscar,
+    }).catch(() => undefined);
+
+    // Uma ida a menos: sem `debug_token` e sem `phone_numbers`.
+    expect(chamadas.map((c) => c.url).some((u) => u.includes('debug_token'))).toBe(false);
+  });
+
+  it('conta sem número diz o que fazer, e não o que faltou', async () => {
+    /**
+     * É o `FINISH_ONLY_WABA` visto do lado do servidor. Quem está do outro lado
+     * não sabe o que é uma conta sem número — sabe que apertou um botão e não
+     * terminou.
+     */
+    const { buscar } = redeEmSequencia([
+      { corpo: { access_token: 'tok' } },
+      { corpo: { data: { granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['1'] }] } } },
+      { corpo: { data: [] } },
+    ]);
+
+    const erro = await conectarPeloSignup({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      locationId: '00000000-0000-0000-0000-000000000002',
+      code: 'AQD',
+      numeroVisivel: null,
+      staffId: '00000000-0000-0000-0000-000000000003',
+      staffName: 'Matheus',
+      credenciais: CREDENCIAIS,
+      buscar,
+    }).catch((e: unknown) => e as SignupError);
+
+    expect((erro as SignupError).message).toMatch(/nenhum número de telefone foi acrescentado/);
+  });
+
+  it('token que não nomeia conta nenhuma falha com frase acionável', async () => {
+    const { buscar } = redeEmSequencia([
+      { corpo: { access_token: 'tok' } },
+      { corpo: { data: { granular_scopes: [{ scope: 'public_profile' }] } } },
+    ]);
+
+    const erro = await conectarPeloSignup({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      locationId: '00000000-0000-0000-0000-000000000002',
+      code: 'AQD',
+      numeroVisivel: null,
+      staffId: '00000000-0000-0000-0000-000000000003',
+      staffName: 'Matheus',
+      credenciais: CREDENCIAIS,
+      buscar,
+    }).catch((e: unknown) => e as SignupError);
+
+    expect((erro as SignupError).message).toMatch(/não disse a qual conta/);
   });
 });

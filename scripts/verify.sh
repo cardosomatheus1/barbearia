@@ -176,6 +176,9 @@ lancar "resolvedor de afetados" npx vitest run scripts/afetados.test.mjs
 # Crase dentro de consulta fecha o tagged template e o erro sai como sintaxe em
 # cima de uma linha de prosa. Custou três voltas de build em três blocos.
 lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
+# Terceira vez que crase dentro de template literal custa uma volta de build: SQL,
+# CSS e agora o script do Embedded Signup. O erro sai como sintaxe sobre prosa.
+lancar "crase em script inline" npx vitest run scripts/crase-em-script-inline.test.mjs
 lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
 lancar "recurso do menu × catálogo" npx vitest run scripts/recursos-da-navegacao.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem

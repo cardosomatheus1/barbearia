@@ -193,6 +193,101 @@ export async function registrarNumero(
   );
 }
 
+
+/**
+ * A conta e o número, **descobertos pelo token** (bloco 84).
+ *
+ * ## Por que isto existe
+ *
+ * A documentação da Meta manda o navegador ouvir um evento `message` e mandar
+ * `waba_id` e `phone_number_id` para o servidor. Funciona no computador, onde o
+ * fluxo roda numa janela filha — e **não funciona no celular**, onde ele abre
+ * numa aba separada: a Meta conclui, a tela do cliente diz "conectado", e a
+ * nossa página fica esperando um recado que nunca chega. Sem erro, sem
+ * mensagem, sem nada mudando.
+ *
+ * Foi o que aconteceu na primeira conexão de verdade deste produto.
+ *
+ * ## O conserto não é remendar a origem
+ *
+ * A suspeita imediata era a lista de origens confiáveis — no celular a Meta usa
+ * `m.facebook.com`, que não estava nela. Pode ser; mas consertar só isso
+ * deixaria o caminho inteiro dependendo de uma mensagem entre abas, que é
+ * frágil por natureza e que nenhum teste nosso alcança.
+ *
+ * O token concedido **já diz** sobre quais contas ele vale: `debug_token`
+ * devolve as permissões granulares com os `target_ids`, e o `phone_numbers`
+ * da conta devolve o número. Então o navegador passa a ter uma
+ * responsabilidade só — entregar o código —, e o que ele mandar de ids vira
+ * **dica**, nunca requisito.
+ */
+async function descobrirWaba(
+  token: string,
+  credenciais: CredenciaisDaPlataforma,
+  buscar: typeof fetch,
+): Promise<string> {
+  const url = new URL(`${BASE}/debug_token`);
+  url.searchParams.set('input_token', token);
+  // O token do app, que é como a Meta o documenta: id|segredo. Ele não sai
+  // daqui, como o segredo que o compõe.
+  url.searchParams.set('access_token', `${credenciais.appId}|${credenciais.appSecret}`);
+
+  const corpo = await chamar(url, { method: 'GET' }, buscar);
+  const granulares = (
+    corpo as {
+      data?: { granular_scopes?: { scope?: string; target_ids?: (string | number)[] }[] };
+    }
+  ).data?.granular_scopes;
+
+  /**
+   * `whatsapp_business_management` é a permissão que nomeia a conta.
+   *
+   * `messaging` também traz alvo, e serve de reserva: a barbearia pode ter
+   * concedido as duas ou só uma, dependendo do que o `config_id` pede.
+   */
+  const alvo =
+    granulares?.find((g) => g.scope === 'whatsapp_business_management')?.target_ids?.[0] ??
+    granulares?.find((g) => g.scope === 'whatsapp_business_messaging')?.target_ids?.[0];
+
+  if (alvo === undefined) {
+    throw new SignupError(
+      'meta_recusou',
+      'A Meta não disse a qual conta este acesso pertence. Refaça a conexão e escolha a conta do WhatsApp no fim do fluxo.',
+    );
+  }
+  return String(alvo);
+}
+
+async function descobrirNumero(
+  wabaId: string,
+  token: string,
+  buscar: typeof fetch,
+): Promise<{ readonly id: string; readonly visivel: string | null }> {
+  const url = new URL(`${BASE}/${wabaId}/phone_numbers`);
+  const corpo = await chamar(
+    url,
+    { method: 'GET', headers: { authorization: `Bearer ${token}` } },
+    buscar,
+  );
+
+  const numeros = (corpo as { data?: { id?: string; display_phone_number?: string }[] }).data;
+  const primeiro = numeros?.[0];
+  if (!primeiro?.id) {
+    /**
+     * Conta criada sem número é o `FINISH_ONLY_WABA` visto do outro lado.
+     *
+     * A frase diz o que fazer, e não o que faltou: quem está do outro lado não
+     * sabe o que é uma WABA sem número, sabe que apertou um botão e não
+     * terminou.
+     */
+    throw new SignupError(
+      'meta_recusou',
+      'A conta foi criada, mas nenhum número de telefone foi acrescentado a ela. Refaça a conexão e informe o número da barbearia no fim do fluxo.',
+    );
+  }
+  return { id: primeiro.id, visivel: primeiro.display_phone_number ?? null };
+}
+
 /**
  * O fluxo inteiro, do código ao cadastro salvo.
  *
@@ -209,9 +304,16 @@ export async function conectarPeloSignup(params: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly code: string;
-  readonly wabaId: string;
-  readonly phoneNumberId: string;
-  readonly numeroVisivel: string | null;
+  /**
+   * O que o navegador conseguiu ouvir, e é **dica**.
+   *
+   * No computador o evento `message` traz os dois; no celular não traz nenhum.
+   * Ausentes, o servidor os descobre pelo token — que é o caminho que não
+   * depende de mensagem entre abas.
+   */
+  readonly wabaId?: string | undefined;
+  readonly phoneNumberId?: string | undefined;
+  readonly numeroVisivel?: string | null | undefined;
   readonly staffId: string;
   readonly staffName: string;
   readonly credenciais?: CredenciaisDaPlataforma | null;
@@ -227,10 +329,16 @@ export async function conectarPeloSignup(params: {
   const buscar = params.buscar ?? fetch;
 
   const token = await trocarCodigoPorToken(params.code, credenciais, buscar);
-  await assinarWebhook(params.wabaId, token, buscar);
+
+  const wabaId = params.wabaId ?? (await descobrirWaba(token, credenciais, buscar));
+  const numero = params.phoneNumberId
+    ? { id: params.phoneNumberId, visivel: params.numeroVisivel ?? null }
+    : await descobrirNumero(wabaId, token, buscar);
+
+  await assinarWebhook(wabaId, token, buscar);
 
   try {
-    await registrarNumero(params.phoneNumberId, token, pinDaUnidade(params.locationId), buscar);
+    await registrarNumero(numero.id, token, pinDaUnidade(params.locationId), buscar);
   } catch {
     // Número já registrado é o caso de reconexão, e é sucesso do ponto de vista
     // de quem clicou. O que decide se o canal funciona é o cadastro gravado.
@@ -239,9 +347,9 @@ export async function conectarPeloSignup(params: {
   return salvarCadastroDoWhatsApp({
     tenantId: params.tenantId,
     locationId: params.locationId,
-    phoneNumberId: params.phoneNumberId,
-    wabaId: params.wabaId,
-    numeroVisivel: params.numeroVisivel,
+    phoneNumberId: numero.id,
+    wabaId,
+    numeroVisivel: params.numeroVisivel ?? numero.visivel,
     token,
     staffId: params.staffId,
     staffName: params.staffName,
