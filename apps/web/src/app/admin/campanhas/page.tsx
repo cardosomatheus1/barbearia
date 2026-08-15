@@ -5,6 +5,7 @@ import {
   FILTROS_DE_CAMPANHA,
   JANELA_MAXIMA_DIAS,
   NOME_DO_DIA,
+  DIAS_SUMIDO_PADRAO,
   NUMERO_DO_FILTRO,
   ROTULO_DA_CAMPANHA,
   ROTULO_DA_FAIXA,
@@ -310,6 +311,15 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
   const diaEscolhido = first(query['dia']);
   const horaEscolhida = first(query['hora']);
+  /**
+   * Se este formulário está sendo aberto por um toque no mapa de ocupação.
+   *
+   * `first` devolve **`undefined`** quando o parâmetro não veio, e comparar com
+   * `null` dava falso sempre: o rótulo dizia "A hora da célula" sobre um campo
+   * preenchido com dias. Um `== null` resolveria e esconderia a diferença; a
+   * pergunta que a tela faz é outra e merece nome.
+   */
+  const veioDoMapa = horaEscolhida !== undefined && horaEscolhida !== null;
   const erro = first(query['erro']);
   const feito = first(query['feito']);
   const criada = feito === 'criada';
@@ -437,8 +447,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
               <p className="ui-field__hint">Só para você reconhecer na lista depois.</p>
             </div>
 
-            <fieldset className="passo">
-              <legend className="passo__titulo">1. Quem recebe</legend>
+            <fieldset className="etapa">
+              <legend className="etapa__titulo">1. Quem recebe</legend>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="filtro">
@@ -465,18 +475,19 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="valorDoFiltro">
-                O número que o público pede
+                {veioDoMapa ? 'A hora da célula' : 'A partir de quantos dias sem vir'}
               </label>
               <input
                 className="ui-field__input"
-                defaultValue={horaEscolhida ?? ''}
+                defaultValue={horaEscolhida ?? DIAS_SUMIDO_PADRAO}
                 id="valorDoFiltro"
                 inputMode="numeric"
                 name="valorDoFiltro"
               />
               <p className="ui-field__hint">
-                Só os públicos marcados com &quot;pede&quot; usam este campo — a própria opção diz
-                o que o número significa. Nos outros, deixe em branco.
+                {veioDoMapa
+                  ? 'Veio do mapa acima — é a hora que você tocou. Só "Quem costuma vir naquele horário" usa este campo.'
+                  : `Vale para "Quem sumiu": ${DIAS_SUMIDO_PADRAO} dias chama quem não aparece há dois meses. Os outros públicos ignoram este campo.`}
               </p>
             </div>
 
@@ -501,8 +512,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
             </fieldset>
 
-            <fieldset className="passo">
-              <legend className="passo__titulo">2. O que eles recebem</legend>
+            <fieldset className="etapa">
+              <legend className="etapa__titulo">2. O que eles recebem</legend>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="tipo">
@@ -551,9 +562,9 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
             </fieldset>
 
-            <fieldset className="passo">
-              <legend className="passo__titulo">3. Como você vai saber se valeu</legend>
-              <p className="passo__texto">
+            <fieldset className="etapa">
+              <legend className="etapa__titulo">3. Como você vai saber se valeu</legend>
+              <p className="etapa__texto">
                 Toda venda que a pessoa fizer dentro desta janela entra na receita desta campanha
                 — é a última coluna da lista, e a única que responde se ela pagou o que custou.
               </p>

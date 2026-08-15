@@ -43,8 +43,53 @@ export const templateSchema = z.object({
  * conferência é repetida lá dentro de propósito: a borda garante forma, e o
  * domínio é quem responde por gravar.
  */
+/**
+ * Para onde a Meta manda a pessoa de volta, conferido uma vez só.
+ *
+ * Ele aparece em duas rotas — a que **emite** o endereço da Meta e a que
+ * **troca** o código por token — e nas duas precisa ser o mesmo valor, porque a
+ * Meta compara os dois byte a byte. Escrito duas vezes, seria a lista paralela
+ * de sempre: a primeira divergência aceitaria na ida o que recusa na volta.
+ *
+ * A conferência existe porque sem ela a rota de emissão viraria um jeito de
+ * fazer a Meta redirecionar para onde alguém quiser — com um código de
+ * autorização válido na mão de quem montou o endereço.
+ *
+ * O domínio não é fixado porque a mesma instalação é servida por mais de um
+ * endereço em desenvolvimento, e quem o informa já passou pelo login do painel.
+ */
+const enderecoDeVolta = z
+  .string()
+  .url()
+  .refine((v) => {
+    const u = new URL(v);
+    /**
+     * `https`, e a exceção é a própria máquina.
+     *
+     * Em produção o retorno tem que ser cifrado: ele carrega o código de
+     * autorização na barra do navegador. Em desenvolvimento o produto roda em
+     * `http://127.0.0.1`, e exigir `https` ali tornava este caminho
+     * **impossível de exercitar antes de subir** — que é como ele chegou ao
+     * ar quebrado da primeira vez.
+     *
+     * A Meta aceita `localhost` pela mesma razão.
+     */
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    const cifrado = u.protocol === 'https:' || (local && u.protocol === 'http:');
+    return cifrado && u.pathname === '/admin/whatsapp/conectado';
+  }, 'o retorno precisa ser https (ou local) e apontar para a volta da conexão');
+
 export const signupDoWhatsAppSchema = z.object({
   code: z.string().trim().min(1).max(512),
+  /**
+   * O mesmo endereço que abriu a janela da Meta, e é **obrigatório** que seja
+   * idêntico — a Meta recusa a troca quando ele falta ou difere.
+   *
+   * Opcional aqui porque o fluxo antigo (a janela do SDK, e o cadastro à mão)
+   * troca o código **sem** endereço de volta, e mandar um quando não houve
+   * redirecionamento é o mesmo erro ao contrário.
+   */
+  redirectUri: enderecoDeVolta.optional(),
   /**
    * Opcionais desde o bloco 84, e é o conserto do celular.
    *
@@ -64,39 +109,15 @@ export const signupDoWhatsAppSchema = z.object({
 /**
  * O que a tela precisa mandar para receber o endereço da Meta (bloco 86).
  *
- * O `redirectUri` é conferido, e não repassado como veio: sem isso esta rota
- * viraria um jeito de fazer a Meta redirecionar para onde alguém quiser — com
- * um código de autorização válido na mão de quem montou o endereço.
- *
- * Só `https`, e só o caminho de volta que existe. O domínio não é fixado aqui
- * porque a mesma instalação é servida por mais de um endereço em
- * desenvolvimento, e quem o informa já passou pelo login do painel.
+ * O `redirectUri` é conferido, e não repassado como veio — a conferência é a
+ * mesma de `signupDoWhatsAppSchema`, e de propósito: os dois lados da viagem
+ * precisam concordar sobre o que é um endereço de volta aceitável.
  */
 export const signupDaTelaSchema = z.object({
   /**
    * Opcionais: a tela pede só o modo ao renderizar, e o endereço na hora de ir.
    * Quando vêm, são conferidos — a validação não afrouxa por serem opcionais.
    */
-  redirectUri: z
-    .string()
-    .url()
-    .refine((v) => {
-      const u = new URL(v);
-      /**
-       * `https`, e a exceção é a própria máquina.
-       *
-       * Em produção o retorno tem que ser cifrado: ele carrega o código de
-       * autorização na barra do navegador. Em desenvolvimento o produto roda em
-       * `http://127.0.0.1`, e exigir `https` ali tornava este caminho
-       * **impossível de exercitar antes de subir** — que é como ele chegou ao
-       * ar quebrado da primeira vez.
-       *
-       * A Meta aceita `localhost` pela mesma razão.
-       */
-      const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
-      const cifrado = u.protocol === 'https:' || (local && u.protocol === 'http:');
-      return cifrado && u.pathname === '/admin/whatsapp/conectado';
-    }, 'o retorno precisa ser https (ou local) e apontar para a volta da conexão')
-    .optional(),
+  redirectUri: enderecoDeVolta.optional(),
   state: z.string().regex(/^[a-f0-9]{32}$/).optional(),
 });

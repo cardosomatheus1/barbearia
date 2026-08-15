@@ -235,6 +235,41 @@ describe('a descoberta da conta e do número pelo token', () => {
     expect(urls[4]).toBe('https://graph.facebook.com/v21.0/106540352242922/register');
   });
 
+  /**
+   * O `redirect_uri` na troca, que é a diferença entre os dois fluxos.
+   *
+   * A Meta compara este valor com o que estava no `dialog/oauth` **byte a
+   * byte**: falta ou diferença recusa a troca. E no fluxo de janela do SDK não
+   * há redirecionamento nenhum, então mandá-lo é o mesmo erro ao contrário.
+   *
+   * Os dois desfechos chegam à tela como "a Meta recusou a conexão", que é a
+   * frase que não diz nada sobre o que fazer — foi assim que a primeira volta
+   * que **funcionou** ainda não conectou nada.
+   */
+  it('a troca leva o endereço de volta quando houve redirecionamento', async () => {
+    const { buscar, chamadas } = redeEmSequencia([{ corpo: { access_token: 'tok' } }]);
+
+    await trocarCodigoPorToken(
+      'AQD-codigo',
+      CREDENCIAIS,
+      buscar,
+      'https://barbearia.exemplo/admin/whatsapp/conectado',
+    );
+
+    const url = new URL(chamadas[0]!.url);
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'https://barbearia.exemplo/admin/whatsapp/conectado',
+    );
+  });
+
+  it('sem redirecionamento, a troca não manda endereço nenhum', async () => {
+    const { buscar, chamadas } = redeEmSequencia([{ corpo: { access_token: 'tok' } }]);
+
+    await trocarCodigoPorToken('AQD-codigo', CREDENCIAIS, buscar);
+
+    expect(new URL(chamadas[0]!.url).searchParams.has('redirect_uri')).toBe(false);
+  });
+
   it('com os ids em mãos, não pergunta nada — é o caminho do computador', async () => {
     const { buscar, chamadas } = redeEmSequencia([
       { corpo: { access_token: 'tok' } },

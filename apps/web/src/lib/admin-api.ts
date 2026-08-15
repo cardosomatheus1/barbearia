@@ -3210,6 +3210,10 @@ export const conectarWhatsAppNaApi = (
   token: string,
   corpo: {
     code: string;
+    // O mesmo endereço que abriu a janela: a Meta o compara byte a byte e
+    // recusa a troca quando ele falta. Ausente é o fluxo de janela do SDK,
+    // onde mandá-lo é o mesmo erro na direção contrária.
+    redirectUri?: string;
     // Opcionais desde o bloco 84: no redirecionamento eles não vêm, e quem os
     // descobre é o servidor, pelo token.
     wabaId?: string;

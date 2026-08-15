@@ -263,11 +263,25 @@ export async function trocarCodigoPorToken(
   code: string,
   credenciais: CredenciaisDaPlataforma,
   buscar: typeof fetch = fetch,
+  /**
+   * O mesmo endereço que abriu a janela, quando houve redirecionamento.
+   *
+   * A Meta compara este valor com o que estava no `dialog/oauth` **byte a
+   * byte**, e recusa a troca se ele faltar ou diferir. No fluxo de janela do
+   * SDK não existe redirecionamento e ele **não** pode ser mandado — os dois
+   * erros são o mesmo, em direções opostas, e os dois aparecem como "a Meta
+   * recusou a conexão" numa tela que não sabe dizer mais nada.
+   *
+   * Foi o que sobrou depois de a volta passar a funcionar: a pessoa voltava
+   * logada, autorizava na Meta, e a troca morria aqui.
+   */
+  redirectUri?: string | undefined,
 ): Promise<string> {
   const url = new URL(`${BASE}/oauth/access_token`);
   url.searchParams.set('client_id', credenciais.appId);
   url.searchParams.set('client_secret', credenciais.appSecret);
   url.searchParams.set('code', code);
+  if (redirectUri) url.searchParams.set('redirect_uri', redirectUri);
 
   const corpo = await chamar(url, { method: 'GET' }, buscar);
   const token = corpo['access_token'];
@@ -446,6 +460,14 @@ export async function conectarPeloSignup(params: {
   readonly wabaId?: string | undefined;
   readonly phoneNumberId?: string | undefined;
   readonly numeroVisivel?: string | null | undefined;
+  /**
+   * O endereço de volta, quando a conexão veio por redirecionamento.
+   *
+   * Ausente no fluxo de janela e no cadastro à mão, e a diferença não é
+   * cosmética: a Meta exige que ele esteja presente e idêntico num caso, e
+   * ausente no outro.
+   */
+  readonly redirectUri?: string | undefined;
   readonly staffId: string;
   readonly staffName: string;
   readonly credenciais?: CredenciaisDaPlataforma | null;
@@ -460,7 +482,7 @@ export async function conectarPeloSignup(params: {
   }
   const buscar = params.buscar ?? fetch;
 
-  const token = await trocarCodigoPorToken(params.code, credenciais, buscar);
+  const token = await trocarCodigoPorToken(params.code, credenciais, buscar, params.redirectUri);
 
   const wabaId = params.wabaId ?? (await descobrirWaba(token, credenciais, buscar));
   const numero = params.phoneNumberId

@@ -337,6 +337,21 @@ export const SEGMENTO_DO_FILTRO: Readonly<Partial<Record<FiltroDeCampanha, Segme
  * dica teria que listar os sete significados de uma vez e vira parágrafo que
  * ninguém lê. Nulo quando o público não usa número nenhum.
  */
+/**
+ * Quantos dias sem vir é o padrão de "Quem sumiu".
+ *
+ * Dois meses: o ciclo mediano deste produto fica entre 20 e 45 dias, então 60
+ * é depois do ritmo de quase todo mundo sem ser tarde demais para a mensagem
+ * fazer diferença.
+ *
+ * Existe porque o campo nascia **vazio**, e vazio virava zero na consulta —
+ * "quem não vem há zero dias" é a base inteira. A campanha ia para todo mundo,
+ * com o público congelado e sem desfazer, e o jeito de descobrir era a conta da
+ * mensagem no fim do mês. O domínio agora recusa o nulo; este número é o que
+ * faz a tela não chegar lá.
+ */
+export const DIAS_SUMIDO_PADRAO = 60;
+
 export const NUMERO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string | null>> = {
   inativos: 'dias sem vir',
   aniversariantes: null,

@@ -70,6 +70,27 @@ export const fieldCss = `
  */
 .ui-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 
+/*
+ * O mesmo piso para fieldset, e ele precisa de linha própria.
+ *
+ * O navegador dá a todo fieldset um min-inline-size: min-content que
+ * min-width: 0 não desfaz — é regra do estilo do próprio navegador, não do
+ * layout. Então um fieldset se recusa a encolher abaixo do conteúdo mais
+ * comprido que carrega, e o conteúdo mais comprido de um formulário costuma
+ * ser a opção de um select.
+ *
+ * Foi o que estourou a tela de campanha no celular assim que ela ganhou
+ * fieldset/legend para separar os três passos: os campos lá dentro já tinham o
+ * min-width: 0 acima, e a caixa em volta deles é que não encolhia. A página
+ * inteira passou a rolar de lado, com o texto de ajuda cortado na direita.
+ *
+ * Aqui e não em globals.css pelo mesmo motivo da regra acima: o formulário do
+ * bloco que vier daqui a dez já nasce coberto.
+ *
+ * Sem crase: isto é o conteúdo de um template literal, e a crase o fecha.
+ */
+fieldset { min-inline-size: 0; }
+
 .ui-field__label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);

@@ -182,6 +182,20 @@ export async function criarCampanha(params: {
     throw new CampanhaError('invalida', 'A célula precisa de dia e hora.');
   }
   /**
+   * "Quem sumiu" sem número não é a base inteira — é recusa.
+   *
+   * O campo chegava vazio e virava zero na consulta, e "quem não vem há zero
+   * dias" **é todo mundo**: a campanha ia para a base inteira, com o público
+   * congelado, sem nada ter falhado e sem como desfazer. O jeito de descobrir
+   * era a conta da mensagem no fim do mês.
+   *
+   * `celula_fria` já recusava por dia e hora desde o bloco 82; este é o outro
+   * público que pede número, e ficou de fora.
+   */
+  if (params.filtro === 'inativos' && params.valorDoFiltro === null) {
+    throw new CampanhaError('invalida', 'Diga a partir de quantos dias sem vir.');
+  }
+  /**
    * O tipo é conferido **aqui também**, e não só no schema da borda.
    *
    * A borda garante forma; que uma campanha só pode usar texto de campanha é

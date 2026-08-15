@@ -232,8 +232,8 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               <p className="ui-field__hint">Só para você reconhecer depois.</p>
             </div>
 
-            <fieldset className="passo">
-              <legend className="passo__titulo">1. Quando ela dispara</legend>
+            <fieldset className="etapa">
+              <legend className="etapa__titulo">1. Quando ela dispara</legend>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="gatilho">
@@ -328,8 +328,8 @@ export default async function AutomacoesPage({ searchParams }: Props) {
 
             </fieldset>
 
-            <fieldset className="passo">
-              <legend className="passo__titulo">2. O que a pessoa recebe</legend>
+            <fieldset className="etapa">
+              <legend className="etapa__titulo">2. O que a pessoa recebe</legend>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="tipo">
@@ -381,9 +381,9 @@ export default async function AutomacoesPage({ searchParams }: Props) {
 
             </fieldset>
 
-            <fieldset className="passo">
-              <legend className="passo__titulo">3. O que isso precisa produzir</legend>
-              <p className="passo__texto">
+            <fieldset className="etapa">
+              <legend className="etapa__titulo">3. O que isso precisa produzir</legend>
+              <p className="etapa__texto">
                 Sem objetivo, uma automação é uma mensagem que ninguém consegue defender nem
                 matar: ela some no meio do custo e fica ligada para sempre. A lista acima mostra
                 enviadas e alcançadas lado a lado — é por esses dois números que você desliga o

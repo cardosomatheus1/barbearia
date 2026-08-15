@@ -185,6 +185,7 @@ export class WhatsAppController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(signupDoWhatsAppSchema)) body: {
       code: string;
+      redirectUri?: string;
       wabaId?: string;
       phoneNumberId?: string;
       numeroVisivel?: string | null;
@@ -197,6 +198,10 @@ export class WhatsAppController {
           tenantId: staff.tenantId,
           locationId: local.id,
           code: body.code,
+          // Presente é o caso do redirecionamento, e a Meta o exige idêntico ao
+          // que abriu a janela. Ausente é a janela do SDK, onde mandá-lo é o
+          // mesmo erro ao contrário.
+          redirectUri: body.redirectUri,
           // Ausentes é o caso do celular: o domínio os descobre pelo token.
           wabaId: body.wabaId,
           phoneNumberId: body.phoneNumberId,

@@ -3,8 +3,6 @@
 import { randomBytes } from 'node:crypto';
 import { redirect } from 'next/navigation';
 
-/** O endereço público desta instalação, para compor a volta da Meta. */
-const WEB_URL = process.env['WEB_URL'] ?? 'http://localhost:3001';
 import {
   ajustarConfianca,
   devolverSinalDoHorario,
@@ -170,6 +168,7 @@ import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
 import { limiarDeFaltas } from '@/lib/sinal';
 import { destinoDoBalcao } from '@/lib/destino';
+import { VOLTA_DA_META } from '@/lib/meta';
 
 /**
  * A modalidade vinda do `select`, conferida antes de virar corpo de requisição.
@@ -2937,7 +2936,7 @@ export async function acaoIrParaMeta(): Promise<void> {
   await guardarEstadoDaMeta(state);
 
   const resposta = await signupDoWhatsAppNaApi(token, {
-    redirectUri: `${WEB_URL}/admin/whatsapp/conectado`,
+    redirectUri: VOLTA_DA_META,
     state,
   });
   if (!resposta.ok || !resposta.dados.signup?.endereco) {

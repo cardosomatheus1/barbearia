@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { conectarWhatsAppNaApi } from '@/lib/admin-api';
+import { VOLTA_DA_META } from '@/lib/meta';
 import {
   guardarCodigoDaMeta,
   lerSessaoGestor,
@@ -112,6 +113,10 @@ export async function GET(requisicao: Request): Promise<Response> {
 
     const resultado = await conectarWhatsAppNaApi(token, {
       code: guardado,
+      // O mesmo endereço da ida, da mesma constante, porque a Meta compara os
+      // dois byte a byte — e a divergência só falharia aqui, depois de a pessoa
+      // já ter autorizado do outro lado.
+      redirectUri: VOLTA_DA_META,
       // Os ids não vêm no redirecionamento: quem os descobre é o servidor, pelo
       // token, como no bloco 84. É o mesmo caminho que já não dependia do
       // navegador.

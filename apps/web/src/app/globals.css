@@ -7404,11 +7404,15 @@ main { padding-bottom: var(--space-8); }
   margin: var(--space-3) 0 0;
   padding: 0;
   display: grid;
+  /* Mesmo piso de `.passo`: coluna de grade nasce em `min-content`, e o nome de
+     um template aprovado é uma palavra só que a Meta não deixa ter espaço. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 
 .textos-aprovados li {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   padding: var(--space-3);
   border-radius: var(--radius-md);
@@ -7504,15 +7508,34 @@ main { padding-bottom: var(--space-8); }
    Sem borda de caixa: o `cartao-balcao` em volta já é a caixa, e caixa dentro
    de caixa em 360px come a largura que o campo precisa. O que separa os passos
    é o espaço e o peso do título — hierarquia por tamanho antes de cor. */
-.passo {
+/* `etapa` e não `passo`, e o nome é a correção.
+
+   `.passo` já era a pílula da régua de agendamento — `display: flex`, borda
+   arredondada e, o que estourou a tela, `white-space: nowrap`. Reusar o nome
+   fez cada campo deste formulário herdar "não quebre linha": a frase de ajuda
+   saía numa linha só de mil pixels dentro de um cartão de 324, cortada na
+   direita, e o campo do passo 3 nascia com a largura do texto.
+
+   Não apareceu na medição porque `.trabalho` recorta (`overflow-x: clip`) na
+   largura de celular: a página não rolava de lado, o conteúdo era **cortado** —
+   que é pior, porque some sem deixar rastro.
+
+   É a mesma lição do nome repetido num barril de exportação, agora em CSS: a
+   diferença é que aqui ninguém reclama. O `tsc` não olha classe. */
+.etapa {
   border: 0;
   padding: 0;
   margin: 0;
   display: grid;
+  /* Coluna de grade nasce com piso de `min-content`, e o `min-content` de um
+     campo é o texto mais comprido que ele carrega. Com o `nowrap` fora, isto é
+     cinto e suspensório — e o suspensório fica, porque a frase de ajuda de
+     amanhã pode trazer um endereço sem espaço. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
-.passo__titulo {
+.etapa__titulo {
   padding: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
@@ -7521,7 +7544,7 @@ main { padding-bottom: var(--space-8); }
   color: var(--color-text-muted);
 }
 
-.passo__texto {
+.etapa__texto {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
@@ -7529,8 +7552,8 @@ main { padding-bottom: var(--space-8); }
 
 /* O que separa um passo do seguinte, sem desenhar linha: o formulário já tem
    `gap`, e o passo só precisa respirar mais que os campos dentro dele. */
-.formulario .passo + .passo,
-.formulario .passo + .ui-field {
+.formulario .etapa + .etapa,
+.formulario .etapa + .ui-field {
   margin-top: var(--space-3);
 }
 
