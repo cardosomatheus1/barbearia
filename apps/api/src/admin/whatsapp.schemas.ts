@@ -73,12 +73,30 @@ export const signupDoWhatsAppSchema = z.object({
  * desenvolvimento, e quem o informa já passou pelo login do painel.
  */
 export const signupDaTelaSchema = z.object({
+  /**
+   * Opcionais: a tela pede só o modo ao renderizar, e o endereço na hora de ir.
+   * Quando vêm, são conferidos — a validação não afrouxa por serem opcionais.
+   */
   redirectUri: z
     .string()
     .url()
-    .refine(
-      (v) => v.startsWith('https://') && new URL(v).pathname === '/admin/whatsapp/conectado',
-      'o retorno precisa ser https e apontar para a volta da conexão',
-    ),
-  state: z.string().regex(/^[a-f0-9]{32}$/),
+    .refine((v) => {
+      const u = new URL(v);
+      /**
+       * `https`, e a exceção é a própria máquina.
+       *
+       * Em produção o retorno tem que ser cifrado: ele carrega o código de
+       * autorização na barra do navegador. Em desenvolvimento o produto roda em
+       * `http://127.0.0.1`, e exigir `https` ali tornava este caminho
+       * **impossível de exercitar antes de subir** — que é como ele chegou ao
+       * ar quebrado da primeira vez.
+       *
+       * A Meta aceita `localhost` pela mesma razão.
+       */
+      const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+      const cifrado = u.protocol === 'https:' || (local && u.protocol === 'http:');
+      return cifrado && u.pathname === '/admin/whatsapp/conectado';
+    }, 'o retorno precisa ser https (ou local) e apontar para a volta da conexão')
+    .optional(),
+  state: z.string().regex(/^[a-f0-9]{32}$/).optional(),
 });

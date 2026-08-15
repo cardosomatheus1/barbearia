@@ -109,11 +109,21 @@ export function modoDoOnboarding(bruto = process.env['WHATSAPP_ONBOARDING']): Mo
  * "existe" e nunca como valor.
  */
 export function signupNaTela(
-  params: { readonly redirectUri: string; readonly state: string },
+  params: { readonly redirectUri?: string | undefined; readonly state?: string | undefined } = {},
   credenciais = credenciaisDaPlataforma(),
   modo = modoDoOnboarding(),
-): { readonly endereco: string; readonly modo: ModoDoOnboarding } | null {
+): { readonly endereco: string | null; readonly modo: ModoDoOnboarding } | null {
   if (!credenciais) return null;
+
+  /**
+   * Sem retorno e sem `state`, devolve só o modo.
+   *
+   * A tela precisa do modo para saber **o que avisar** sobre o número, e ela é
+   * renderizada sem poder gravar cookie — o Next só permite isso em ação de
+   * formulário ou rota. Quem sorteia o `state`, guarda e pede o endereço é a
+   * ação do botão, que é onde o cookie pode ser escrito.
+   */
+  if (!params.redirectUri || !params.state) return { endereco: null, modo };
 
   /**
    * A tela recebe o **endereço pronto**, e não as credenciais.

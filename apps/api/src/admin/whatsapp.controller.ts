@@ -151,7 +151,10 @@ export class WhatsAppController {
   @Exige('whatsapp.manage')
   @Get('signup')
   async signup(
-    @Query(new ZodValidationPipe(signupDaTelaSchema)) query: { redirectUri: string; state: string },
+    @Query(new ZodValidationPipe(signupDaTelaSchema)) query: {
+      redirectUri?: string;
+      state?: string;
+    },
   ) {
     /**
      * O endereço da Meta sai pronto daqui, e o `redirectUri` vem da tela.

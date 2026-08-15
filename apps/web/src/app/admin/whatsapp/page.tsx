@@ -17,13 +17,9 @@ import {
 } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
-import { guardarEstadoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
-import { randomBytes } from 'node:crypto';
-
-/** O endereço público desta instalação, para compor a volta da Meta. */
-const WEB_URL = process.env['WEB_URL'] ?? 'http://localhost:3001';
+import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
-  acaoConectarWhatsApp,
+  acaoIrParaMeta,
   acaoSalvarCadastroDoWhatsApp,
   acaoSubmeterTemplate,
   acaoSair,
@@ -192,13 +188,7 @@ function Caminho({
   );
 }
 
-function Conectar({
-  endereco,
-  modo,
-}: {
-  readonly endereco: string;
-  readonly modo: 'padrao' | 'coexistencia';
-}) {
+function Conectar({ modo }: { readonly modo: 'padrao' | 'coexistencia' }) {
   return (
     <section className="cartao-balcao">
       <h2 className="cartao-balcao__titulo">Conectar o WhatsApp</h2>
@@ -243,9 +233,22 @@ function Conectar({
         que este produto mandava ao navegador, junto com a exceção de política
         de conteúdo que ele exigia: o caminho mais robusto era o mais simples.
       */}
-      <a className="ui-button ui-button--primary ui-button--block" href={endereco}>
-        Conectar WhatsApp
-      </a>
+      {/*
+        Formulário, e não link.
+
+        O `state` precisa ir para um cookie antes da ida, e o Next só permite
+        gravar cookie em ação ou rota — nunca durante a renderização. Montar o
+        endereço aqui derrubava a tela inteira com "server-side exception", que
+        foi como este caminho chegou ao ar quebrado.
+
+        Continua sem JavaScript: é um `<form>` com um botão de submeter, como
+        todo o resto do painel.
+      */}
+      <form action={acaoIrParaMeta}>
+        <button className="ui-button ui-button--primary ui-button--block" type="submit">
+          Conectar WhatsApp
+        </button>
+      </form>
     </section>
   );
 }
@@ -351,13 +354,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
    * é dela** — o token de outra pessoa ficaria cifrado no nosso banco com a
    * tela dizendo que está tudo certo.
    */
-  const state = randomBytes(16).toString('hex');
-  await guardarEstadoDaMeta(state);
-
   const [cadastroResposta, templatesResposta, signupResposta] = await Promise.all([
     cadastroDoWhatsAppNaApi(token),
     templatesDoWhatsAppNaApi(token),
-    signupDoWhatsAppNaApi(token, { redirectUri: `${WEB_URL}/admin/whatsapp/conectado`, state }),
+    // Só o modo: quem sorteia o `state` e monta o endereço é a ação do botão,
+    // porque cookie não se grava durante a renderização.
+    signupDoWhatsAppNaApi(token),
   ]);
 
   const cadastro = cadastroResposta.ok ? cadastroResposta.dados.cadastro : null;
@@ -445,7 +447,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         </p>
       </section>
 
-      {podeMexer && signup ? <Conectar endereco={signup.endereco} modo={signup.modo} /> : null}
+      {podeMexer && signup ? <Conectar modo={signup.modo} /> : null}
 
       {/*
         Com o botão de conexão na tela, o formulário técnico vai para dentro de

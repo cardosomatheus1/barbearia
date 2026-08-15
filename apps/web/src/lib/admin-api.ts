@@ -3175,8 +3175,13 @@ export interface TemplateNaTelaDoAdmin {
  * em nome do app inteiro e não sai do servidor da API.
  */
 export interface SignupDoWhatsAppNaTela {
-  /** O endereço da Meta, montado no servidor e já com o `state`. */
-  readonly endereco: string;
+  /**
+   * O endereço da Meta, montado no servidor e já com o `state`.
+   *
+   * `null` quando a tela pediu só o modo — ela é renderizada sem poder gravar
+   * o cookie do `state`, e quem monta o endereço é a ação do botão.
+   */
+  readonly endereco: string | null;
   /**
    * Qual fluxo a janela da Meta abre — e o que a tela precisa avisar.
    *
@@ -3190,11 +3195,13 @@ export interface SignupDoWhatsAppNaTela {
 
 export const signupDoWhatsAppNaApi = (
   token: string,
-  params: { redirectUri: string; state: string },
+  params?: { redirectUri: string; state: string },
 ) =>
   chamar<{ signup: SignupDoWhatsAppNaTela | null }>(
     'GET',
-    `/v1/admin/whatsapp/signup?redirectUri=${encodeURIComponent(params.redirectUri)}&state=${params.state}`,
+    params
+      ? `/v1/admin/whatsapp/signup?redirectUri=${encodeURIComponent(params.redirectUri)}&state=${params.state}`
+      : '/v1/admin/whatsapp/signup',
     undefined,
     token,
   );

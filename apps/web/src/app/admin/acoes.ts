@@ -1,6 +1,10 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { redirect } from 'next/navigation';
+
+/** O endereço público desta instalação, para compor a volta da Meta. */
+const WEB_URL = process.env['WEB_URL'] ?? 'http://localhost:3001';
 import {
   ajustarConfianca,
   devolverSinalDoHorario,
@@ -51,6 +55,7 @@ import {
   abrirUnidadeNaApi,
   criarCampanhaNaApi,
   conectarWhatsAppNaApi,
+  signupDoWhatsAppNaApi,
   enviarCampanhaNaApi,
   definirUnidadeAtivaNaApi,
   definirUnidadesNaApi,
@@ -182,6 +187,7 @@ function modalidadeDeSinal(valor: string): ModalidadeDoFormulario {
 import {
   apagarSessaoGestor,
   guardarConflitoDaAgenda,
+  guardarEstadoDaMeta,
   guardarConflitoDeJornada,
   guardarLinkDaFila,
   guardarSenhaDeUmaVez,
@@ -2912,6 +2918,36 @@ export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void
  * o navegador nunca vê o `META_APP_SECRET`, então a troca do código pelo token
  * só pode acontecer do lado do servidor — que é aqui, e depois na API.
  */
+/**
+ * O botão "Conectar WhatsApp": sorteia o `state`, guarda, e leva para a Meta.
+ *
+ * ## Por que ação, e não link montado na renderização
+ *
+ * O `state` precisa ir para um cookie, e o Next só permite gravar cookie em
+ * ação de formulário ou rota — nunca durante a renderização de uma página.
+ * Montar o endereço no `page.tsx` derrubava a tela inteira com "server-side
+ * exception", que foi como este caminho chegou ao ar quebrado.
+ *
+ * Continua sem JavaScript: é um `<form>` com um botão de submeter, como todo o
+ * resto do painel.
+ */
+export async function acaoIrParaMeta(): Promise<void> {
+  const token = await exigirSessao();
+  const state = randomBytes(16).toString('hex');
+  await guardarEstadoDaMeta(state);
+
+  const resposta = await signupDoWhatsAppNaApi(token, {
+    redirectUri: `${WEB_URL}/admin/whatsapp/conectado`,
+    state,
+  });
+  if (!resposta.ok || !resposta.dados.signup?.endereco) {
+    falhar(ROTA_WHATSAPP, resposta.ok ? 'sem_app' : resposta.code);
+  }
+
+  // `redirect` para fora do domínio é o próprio fluxo: a Meta traz de volta.
+  redirect(resposta.dados.signup.endereco);
+}
+
 export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await conectarWhatsAppNaApi(token, {
