@@ -267,7 +267,11 @@ function Conectar({
       // não chegou a acrescentar número. O segundo não serve para mandar nada,
       // e tratá-lo como sucesso gravaria um cadastro sem 'phone_number_id' —
       // "Ativo" na tela com toda mensagem caindo no canal de reserva.
-      if (corpo.event === 'FINISH') dados = corpo.data;
+      // 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' é o encerramento da
+      // coexistência, e ele traz a conta mas nem sempre o número — o servidor
+      // descobre o resto pelo token, que é o caminho que não depende disto.
+      if (corpo.event === 'FINISH' || corpo.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING')
+        dados = corpo.data;
       else if (corpo.event === 'FINISH_ONLY_WABA') parou = 'sem_numero';
       else if (corpo.event === 'CANCEL') parou = corpo.data && corpo.data.current_step;
     } catch (e) { /* mensagem que não é do fluxo; ignorar */ }
@@ -313,9 +317,24 @@ function Conectar({
       config_id: ${JSON.stringify(signup.configId)},
       response_type: 'code',
       override_default_response_type: true,
-      // Exigido pela Meta na v4 do fluxo. Sem ele a janela abre no fluxo
-      // antigo, que não devolve os ids pelo evento.
-      extras: { setup: {} },
+      // setup é exigido pela Meta na v4; sem ele a janela abre no fluxo antigo,
+      // que não devolve os ids pelo evento.
+      //
+      // featureType é o que separa os dois fluxos: com ele a Meta abre o
+      // onboarding do aplicativo WhatsApp Business, e o número continua
+      // funcionando lá. Sem ele, o número é tomado pela Cloud API. Quem decide
+      // é o modo, porque a habilitação depende de credenciamento na Meta.
+      //
+      // Sem crase aqui: este comentário mora dentro de um template literal.
+      extras: ${JSON.stringify(
+        signup.modo === 'coexistencia'
+          ? {
+              setup: {},
+              featureType: 'whatsapp_business_app_onboarding',
+              sessionInfoVersion: '3',
+            }
+          : { setup: {} },
+      )},
     });
   });
 

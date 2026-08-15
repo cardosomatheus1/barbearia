@@ -63,6 +63,43 @@ export function credenciaisDaPlataforma(
 }
 
 /**
+ * Qual fluxo de conexão a janela da Meta abre (bloco 85).
+ *
+ * ## As duas coisas que a Meta chama de Embedded Signup
+ *
+ * O **padrão** conecta um número novo, e ele passa a ser da Cloud API: sai do
+ * aplicativo WhatsApp e deixa de funcionar lá. É o que este produto fazia, e é
+ * a resposta certa para quem vai dedicar um chip ao atendimento.
+ *
+ * A **coexistência** (`whatsapp_business_app_onboarding`) conecta um número que
+ * a barbearia **já usa no aplicativo WhatsApp Business**, e ele continua
+ * funcionando lá — a Meta mantém o histórico sincronizado entre os dois. Para a
+ * barbearia que atende pelo WhatsApp Business hoje, é a diferença entre migrar
+ * e somar.
+ *
+ * ## Por que é interruptor, e não decisão de código
+ *
+ * A coexistência exige status de Solution Partner ou Tech Provider **vinculado
+ * a este app**. Ter o status noutro negócio não habilita este `config_id`, e
+ * isso não é uma coisa que dê para conferir de dentro do código.
+ *
+ * Então o modo é dito por quem sabe, e o padrão é o **comportamento anterior** —
+ * a mesma regra de `PSP_MODO` e `FISCAL_MODO`. Valor desconhecido falha alto:
+ * lido com tolerância, um erro de digitação abriria o fluxo que **toma** o
+ * número da barbearia, que é justamente o que a coexistência evita.
+ */
+export type ModoDoOnboarding = 'padrao' | 'coexistencia';
+
+export function modoDoOnboarding(bruto = process.env['WHATSAPP_ONBOARDING']): ModoDoOnboarding {
+  if (bruto === undefined || bruto === '') return 'padrao';
+  if (bruto === 'padrao' || bruto === 'coexistencia') return bruto;
+  throw new Error(
+    `WHATSAPP_ONBOARDING inválido: ${bruto}. Use padrao ou coexistencia — ` +
+      'e lido com tolerância isto abriria o fluxo que toma o número da barbearia.',
+  );
+}
+
+/**
  * O que a tela precisa para desenhar o botão — e **nunca** o segredo.
  *
  * `appId` e `configId` vão para o navegador porque o `FB.login` precisa deles;
@@ -73,9 +110,13 @@ export function credenciaisDaPlataforma(
  */
 export function signupNaTela(
   credenciais = credenciaisDaPlataforma(),
-): { readonly appId: string; readonly configId: string } | null {
+  modo = modoDoOnboarding(),
+): { readonly appId: string; readonly configId: string; readonly modo: ModoDoOnboarding } | null {
   if (!credenciais) return null;
-  return { appId: credenciais.appId, configId: credenciais.configId };
+  // O modo viaja para a tela porque ela decide duas coisas com ele: o que
+  // mandar no `extras` do FB.login, e **o que avisar** antes do botão — num
+  // fluxo o número sai do WhatsApp, no outro ele fica.
+  return { appId: credenciais.appId, configId: credenciais.configId, modo };
 }
 
 export class SignupError extends Error {
@@ -343,6 +384,16 @@ export async function conectarPeloSignup(params: {
     // Número já registrado é o caso de reconexão, e é sucesso do ponto de vista
     // de quem clicou. O que decide se o canal funciona é o cadastro gravado.
   }
+
+  /**
+   * Qual fluxo produziu esta conexão, no log.
+   *
+   * Sem isto não há como responder "este número foi tomado ou está em
+   * coexistência?" depois — e a resposta muda o que se diz ao cliente quando
+   * ele reclama que o WhatsApp parou. Só conta e modo: quem conectou já está
+   * na trilha, e o número é dado da barbearia.
+   */
+  console.log('[whatsapp] conectado', { tenantId: params.tenantId, modo: modoDoOnboarding() });
 
   return salvarCadastroDoWhatsApp({
     tenantId: params.tenantId,

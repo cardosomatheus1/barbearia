@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import {
   AssinaturaDoWhatsAppInvalida,
   conferirAssinaturaDaMeta,
+  desconectarNumero,
   registrarEstadoDaMensagem,
   registrarResposta,
   tenantDoNumero,
@@ -63,8 +64,25 @@ const eventoDaMeta = z.object({
     z.object({
       changes: z.array(
         z.object({
+          /**
+           * Qual assunto o evento trata.
+           *
+           * `messages` traz entrega, leitura e o toque nos botões.
+           * `account_update` traz o que a Meta faz **com a conta** — e é por
+           * ele que chega a desconexão da coexistência (bloco 85).
+           */
+          field: z.string().optional(),
           value: z.object({
             metadata: z.object({ phone_number_id: z.string() }).optional(),
+            /**
+             * O que aconteceu com a conta, e o número a que se refere.
+             *
+             * O número vem aqui e **não** em `metadata` neste evento, então a
+             * leitura precisa dos dois caminhos — foi o que quase fez a
+             * desconexão ser descartada por falta de `metadata`.
+             */
+            event: z.string().optional(),
+            phone_number: z.string().optional(),
             statuses: z
               .array(
                 z.object({
@@ -172,12 +190,32 @@ export class WhatsAppWebhookController {
     let tratados = 0;
     for (const entrada of analisado.data.entry) {
       for (const mudanca of entrada.changes) {
-        const numero = mudanca.value.metadata?.phone_number_id;
+        const numero = mudanca.value.metadata?.phone_number_id ?? mudanca.value.phone_number;
         if (!numero) continue;
 
         // O número abre a barbearia; nada com RLS é lido antes disto.
         const dono = await tenantDoNumero(numero);
         if (!dono) continue;
+
+        /**
+         * A Meta desfez o pareamento do número (bloco 85).
+         *
+         * Acontece quando o cliente registra o aplicativo WhatsApp Business em
+         * outro aparelho: o número volta a ser só do aplicativo e o produto
+         * para de conseguir mandar. Sem tratar isto, a tela continuaria dizendo
+         * "Ativo" com toda mensagem caindo no canal de reserva — e a barbearia
+         * descobriria pela falta que os clientes não confirmam mais.
+         */
+        if (mudanca.value.event === 'ACCOUNT_OFFBOARDED') {
+          const mudou = await desconectarNumero({
+            tenantId: dono.tenantId,
+            phoneNumberId: numero,
+            motivo:
+              'A Meta desconectou este número porque o WhatsApp Business foi registrado em outro aparelho. Conecte de novo para os avisos voltarem a sair por ele.',
+          });
+          if (mudou) tratados += 1;
+          continue;
+        }
 
         for (const estado of mudanca.value.statuses ?? []) {
           const traduzido = ESTADO[estado.status];

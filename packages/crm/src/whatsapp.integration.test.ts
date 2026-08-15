@@ -15,6 +15,7 @@ import {
   templatesDaUnidade,
   templatesEmCurso,
   gravarRespostaDoTemplate,
+  desconectarNumero,
 } from './whatsapp.js';
 
 /**
@@ -665,5 +666,70 @@ describeIfDb('WhatsApp oficial', () => {
       { from_phone: string | null; body: string | null; customer_id: string | null }[]
     >(`SELECT from_phone, body, customer_id FROM whatsapp_inbound WHERE wamid = 'wamid.lgpd'`);
     expect(linha[0]).toMatchObject({ from_phone: null, body: null, customer_id: null });
+  });
+
+  describe('a Meta desconecta o número (bloco 85)', () => {
+    /**
+     * Na coexistência o número continua no aplicativo WhatsApp Business — e se
+     * o cliente registrar o aplicativo em outro aparelho, a Meta desfaz o
+     * pareamento e manda `ACCOUNT_OFFBOARDED`.
+     *
+     * Sem tratar isso, a tela continuaria dizendo **Ativo** com toda mensagem
+     * caindo no canal de reserva: o barbeiro troca de celular numa terça e a
+     * barbearia descobre pela falta que os clientes não confirmam mais.
+     */
+    it('tira o número do ar com o motivo escrito, e não apaga o token', async () => {
+      await ativar();
+
+      const mudou = await desconectarNumero({
+        tenantId: TENANT,
+        phoneNumberId: '109876543210987',
+        motivo: 'A Meta desconectou este número.',
+      });
+      expect(mudou).toBe(true);
+
+      const linhas = await admin.$queryRawUnsafe<
+        { status: string; status_reason: string; tem_token: boolean }[]
+      >(
+        `SELECT status::text AS status, status_reason,
+                (access_token_cipher IS NOT NULL) AS tem_token
+           FROM whatsapp_settings WHERE location_id = '${LOCAL}'`,
+      );
+      expect(linhas[0]?.status).toBe('suspenso');
+      expect(linhas[0]?.status_reason).toBe('A Meta desconectou este número.');
+      // O token fica: reconectar é refazer o fluxo, e apagá-lo aqui só tiraria
+      // a informação de que ele existiu.
+      expect(linhas[0]?.tem_token).toBe(true);
+    });
+
+    it('a reentrega do mesmo evento não conta duas vezes', async () => {
+      // A Meta reentrega, e é normal. `status <> 'suspenso'` no WHERE é o que
+      // faz a segunda passada não mexer em nada.
+      await ativar();
+      const primeira = await desconectarNumero({
+        tenantId: TENANT,
+        phoneNumberId: '109876543210987',
+        motivo: 'motivo',
+      });
+      const segunda = await desconectarNumero({
+        tenantId: TENANT,
+        phoneNumberId: '109876543210987',
+        motivo: 'motivo',
+      });
+      expect([primeira, segunda]).toEqual([true, false]);
+    });
+
+    it('o número da barbearia vizinha não é desconectado por esta', async () => {
+      // A RLS separa barbearias, e o webhook chega **antes** de existir tenant
+      // no contexto: quem o abre é `tenantDoNumero`. Se o tenant errado chegar
+      // aqui, a política é a última linha.
+      await ativar();
+      const mudou = await desconectarNumero({
+        tenantId: RIVAL,
+        phoneNumberId: '109876543210987',
+        motivo: 'motivo',
+      });
+      expect(mudou).toBe(false);
+    });
   });
 });

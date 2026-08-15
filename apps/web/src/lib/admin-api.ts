@@ -3177,6 +3177,15 @@ export interface TemplateNaTelaDoAdmin {
 export interface SignupDoWhatsAppNaTela {
   readonly appId: string;
   readonly configId: string;
+  /**
+   * Qual fluxo a janela da Meta abre — e o que a tela precisa avisar.
+   *
+   * `padrao` **toma** o número: ele sai do aplicativo WhatsApp. `coexistencia`
+   * conecta um número que já está no WhatsApp Business e ele continua lá.
+   * Avisar errado sobre isso é a barbearia perder o número que usa para
+   * atender.
+   */
+  readonly modo: 'padrao' | 'coexistencia';
 }
 
 export const signupDoWhatsAppNaApi = (token: string) =>

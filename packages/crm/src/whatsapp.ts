@@ -567,6 +567,45 @@ const ORDEM: Readonly<Record<EstadoDaMensagem, number>> = {
   falhou: 3,
 };
 
+/**
+ * A Meta desconectou o número da Cloud API (bloco 85).
+ *
+ * ## Quando isto acontece
+ *
+ * Na coexistência, o número continua no aplicativo WhatsApp Business — e se o
+ * cliente **registrar o aplicativo em outro aparelho**, a Meta desfaz o
+ * pareamento e manda `ACCOUNT_OFFBOARDED`. O número volta a ser só do
+ * aplicativo, e o produto para de conseguir mandar mensagem.
+ *
+ * ## Por que precisa de estado, e não de silêncio
+ *
+ * Sem tratar este evento, a tela continuaria dizendo **Ativo** enquanto toda
+ * mensagem cai no canal de reserva — o defeito da §6 pergunta 6, com a
+ * diferença de que aqui quem mente é o mundo, não a nossa consulta. O barbeiro
+ * trocaria de celular numa terça e a barbearia descobriria pela falta que os
+ * clientes não confirmam mais.
+ *
+ * Vai para `suspenso`, que é o estado que já significa "a Meta tirou o número
+ * do ar, o motivo está escrito, e os avisos voltaram ao canal antigo". O token
+ * **não** é apagado: reconectar é refazer o fluxo, e apagar a credencial aqui
+ * só tiraria a informação de que ela existiu.
+ */
+export async function desconectarNumero(params: {
+  readonly tenantId: string;
+  readonly phoneNumberId: string;
+  readonly motivo: string;
+}): Promise<boolean> {
+  return withTenant(params.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      UPDATE whatsapp_settings
+         SET status = 'suspenso', status_reason = ${params.motivo}, updated_at = now()
+       WHERE phone_number_id = ${params.phoneNumberId}
+         AND status <> 'suspenso'
+    `;
+    return afetadas === 1;
+  });
+}
+
 export async function registrarEstadoDaMensagem(params: {
   readonly tenantId: string;
   readonly wamid: string;

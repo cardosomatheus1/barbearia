@@ -79,6 +79,7 @@ x-ambiente: &ambiente
   META_APP_ID: ${META_APP_ID:-}
   META_CONFIG_ID: ${META_CONFIG_ID:-}
   META_APP_SECRET: ${META_APP_SECRET:-}
+  WHATSAPP_ONBOARDING: ${WHATSAPP_ONBOARDING:-padrao}
 
 services:
   db:
