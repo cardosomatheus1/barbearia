@@ -8494,3 +8494,14 @@ main { padding-bottom: var(--space-8); }
   opacity: 0.85;
   overflow-wrap: anywhere;
 }
+
+/* O caminho para resolver, embaixo da frase de quem recusou.
+
+   Sem opacidade e um pouco mais forte que o motivo: o motivo explica, esta
+   linha é o que a pessoa vai fazer em seguida. Hierarquia por peso antes de
+   cor, como em todo o resto. */
+.whatsapp__caminho {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}

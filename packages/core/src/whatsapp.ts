@@ -118,6 +118,57 @@ export const ESTADOS_DO_TEMPLATE = [
 ] as const;
 export type EstadoDoTemplate = (typeof ESTADOS_DO_TEMPLATE)[number];
 
+/**
+ * O que fazer diante de uma recusa da Meta, por frase dela.
+ *
+ * A frase dela já aparece na tela desde o bloco 87, e foi o que destravou três
+ * diagnósticos seguidos. Só que ela responde "o quê" e não "onde se resolve" —
+ * e a resposta mora em painel de terceiro, com dezenas de telas.
+ *
+ * É a mesma decisão da lista de perguntas sem resposta do bloco 66: lista de
+ * trabalho diz onde se resolve, senão é a lista que ninguém abre duas vezes.
+ *
+ * Casamento por trecho e não por código numérico: a Meta reusa o `code: 100`
+ * para quase tudo, e é a frase que distingue. Trecho e não igualdade porque ela
+ * traduz a mensagem para o idioma da conta e muda a redação sem avisar — o que
+ * não casa continua mostrando a frase crua, que é o comportamento de antes.
+ */
+export const O_QUE_FAZER_NA_META: readonly {
+  readonly quando: readonly string[];
+  readonly faca: string;
+}[] = [
+  {
+    // "This WhatsApp Business Account cannot create a new template"
+    quando: ['não pode criar um novo modelo', 'cannot create a new template'],
+    faca:
+      'A recusa é da conta, não do texto — reenviar não resolve. No Gerenciador ' +
+      'da Meta, confira sob qual conta do WhatsApp o número está: conta de teste ' +
+      'não cria texto novo, e conta com verificação de empresa pendente também ' +
+      'costuma ficar bloqueada. Conecte o número sob uma conta de verdade e ' +
+      'tente de novo.',
+  },
+  {
+    quando: ['já foi usado', 'has been used'],
+    faca: 'A conexão anterior deu certo. Recarregue a tela: o número já deve estar salvo.',
+  },
+  {
+    quando: ['domínio', "isn't included in the app's domains"],
+    faca:
+      'O endereço de volta não está registrado no app da Meta. É configuração da ' +
+      'plataforma, não da barbearia — avise o suporte.',
+  },
+  {
+    quando: ['expirou', 'expired', 'session has expired'],
+    faca: 'O código da Meta vale segundos. Toque em conectar de novo e siga sem parar no meio.',
+  },
+];
+
+/** A orientação para uma frase da Meta, ou `null` quando ela não é conhecida. */
+export function oQueFazerNaMeta(frase: string): string | null {
+  const alvo = frase.toLowerCase();
+  return O_QUE_FAZER_NA_META.find((r) => r.quando.some((t) => alvo.includes(t)))?.faca ?? null;
+}
+
 export const ROTULO_DO_TEMPLATE: Readonly<Record<EstadoDoTemplate, string>> = {
   rascunho: 'Rascunho',
   pendente: 'Na Meta',

@@ -6,6 +6,7 @@ import {
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
   TIPOS_DE_NOTIFICACAO,
+  oQueFazerNaMeta,
   VARIAVEIS_DO_AVISO,
   type BotaoDaMensagem,
 } from '@barbearia/core';
@@ -372,6 +373,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
   const atual = cadastro?.estado ?? 'nao_configurado';
   const falha = first(query['erro']);
   const motivoDaMeta = falha ? await lerMotivoDaMeta() : null;
+  const oQueFazer = motivoDaMeta ? oQueFazerNaMeta(motivoDaMeta) : null;
   const feito = first(query['feito']);
 
   return (
@@ -408,6 +410,10 @@ export default async function WhatsAppPage({ searchParams }: Props) {
               {falha === 'meta_recusou' ? 'Ela disse' : 'A resposta foi'}: “{motivoDaMeta}”
             </p>
           ) : null}
+          {/* A frase dela diz **o quê**; esta diz **onde se resolve**. Sem a
+              segunda, a pessoa fica com uma explicação correta e um painel de
+              terceiro com dezenas de telas para procurar. */}
+          {oQueFazer ? <p className="whatsapp__caminho">{oQueFazer}</p> : null}
         </div>
       ) : null}
       <Caminho
