@@ -42,6 +42,7 @@ export const SLUGS_RESERVADOS: ReadonlySet<string> = new Set([
   'ir',
   'pagamento',
   'plataforma',
+  'privacidade',
   // Sem pasta no app. O motivo de cada uma está em `scripts/rotas-reservadas.test.mjs`.
   '_next',
   'api',

@@ -2711,6 +2711,11 @@ async function main() {
     // A porta do produto. Não pertence a barbearia nenhuma e não precisa de
     // sessão — é a única tela medida sem nada preparado antes.
     { nome: 'landing', url: '/' },
+    // A política de privacidade, que a Meta exige em URL pública para aprovar o
+    // app na App Review. Sem sessão e sem dado preparado, como a landing — e é
+    // a única tela do produto que é texto longo, onde o que quebra não é grade
+    // e sim medida de linha.
+    { nome: 'privacidade', url: '/privacidade' },
     // Onde a Stripe deixa quem pagou por link. Sem sessão e sem dado: é a
     // única tela do produto cujo endereço quem escolhe é o adquirente.
     { nome: 'retorno do pagamento', url: '/pagamento?pago=1' },

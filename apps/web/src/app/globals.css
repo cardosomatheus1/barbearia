@@ -8505,3 +8505,57 @@ main { padding-bottom: var(--space-8); }
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
 }
+
+/* -- documento legal (bloco 89) ---------------------------------------------
+
+   A política de privacidade precisa de **URL pública** para a App Review da
+   Meta, e é o texto que o cliente da barbearia lê quando quer saber quem guarda
+   o telefone dele. Duas leituras diferentes, um documento longo, e o que decide
+   se ele é lido é a medida da linha.
+
+   `ch` e não `px`: a medida confortável de leitura é contada em caracteres, não
+   em pixels, e é a única unidade que acompanha o tamanho de fonte de quem
+   aumentou a letra do navegador. `min()` com a largura disponível mantém o piso
+   de 360px intacto sem media query — a regra do repositório é que `max-width`
+   de layout inverte a ordem de trabalho, e aqui não é preciso nenhuma das duas.
+
+   Sem `overflow-x: clip` nesta página: é justamente o recorte silencioso que
+   esconde transbordo da medição, e um documento de texto não tem o que
+   recortar. */
+.legal {
+  max-width: min(68ch, 100%);
+  padding-block: var(--space-7) var(--space-9);
+}
+.legal__titulo {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  line-height: 1.15;
+}
+.legal__meta {
+  margin: 0 0 var(--space-7);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+/* Hierarquia por tamanho e peso antes de cor: o título de seção é o que a
+   pessoa varre procurando "por quanto tempo" e "meus direitos". */
+.legal__secao {
+  margin: var(--space-7) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+}
+.legal p {
+  margin: 0 0 var(--space-4);
+  line-height: 1.65;
+}
+.legal__lista {
+  margin: 0 0 var(--space-4);
+  padding-inline-start: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+  line-height: 1.65;
+}
+.legal a {
+  color: var(--color-accent);
+}

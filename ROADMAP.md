@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 88 de 88 blocos.**
+**Status: 89 de 89 blocos.**
 
 ---
 
@@ -400,6 +400,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 86 | A janela de conexão por redirecionamento, no lugar do SDK | ✅ |
 | 87 | A frase da Meta chega à tela, e com ela onde se resolve | ✅ |
 | 88 | Os escopos concedidos viram cadastro, e a rota do número antigo sai | ✅ |
+| 89 | A política de privacidade vira página pública, que é o que a App Review exige | ✅ |
 
 ---
 
