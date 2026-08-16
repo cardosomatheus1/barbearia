@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { FakeWhatsAppProvider, montarPayload } from '@barbearia/core';
+import { FakeWhatsAppProvider, montarPayload, podeGerenciarTemplates } from '@barbearia/core';
 import {
   cadastroDoWhatsApp,
   enviarPeloWhatsApp,
@@ -207,6 +207,139 @@ describeIfDb('WhatsApp oficial', () => {
         ...operador,
       }),
     ).rejects.toMatchObject({ code: 'nao_configurado' });
+  });
+
+  // -- os escopos concedidos (bloco 88) --------------------------------------
+
+  it('o token que só envia é gravado como tal, e a leitura o devolve', async () => {
+    /**
+     * É o cadastro que conecta sem erro nenhum e não cria template. Antes deste
+     * bloco os escopos só existiam no log do servidor, e a tela não tinha como
+     * avisar — a pessoa escrevia o texto inteiro para receber da Meta "esta
+     * conta não pode criar um novo modelo", que não nomeia permissão nenhuma.
+     */
+    const salvo = await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      phoneNumberId: '109876543210987',
+      wabaId: '102030405060708',
+      numeroVisivel: null,
+      token: 'EAAG',
+      escopos: ['whatsapp_business_messaging'],
+      ...operador,
+    });
+    expect(salvo.escopos).toEqual(['whatsapp_business_messaging']);
+    expect(podeGerenciarTemplates(salvo.escopos)).toBe(false);
+  });
+
+  it('cadastro pelo formulário não declara escopo, e isso não é "não pode"', async () => {
+    // O caminho de escape do bloco 55 nunca fala com a Meta. Se a ausência
+    // virasse `false`, a tela acusaria de falta de acesso justamente quem está
+    // com o acesso funcionando.
+    const salvo = await cadastrar();
+    expect(salvo.escopos).toBeNull();
+    expect(podeGerenciarTemplates(salvo.escopos)).toBeNull();
+  });
+
+  it('corrigir o número visível não apaga o escopo que a Meta declarou', async () => {
+    /**
+     * Mesma regra do token, e pelo mesmo motivo: ausente é "não mexa". Sem o
+     * `COALESCE`, corrigir o número pela tela — que não manda escopo nenhum,
+     * porque não fala com a Meta — apagaria o que o Embedded Signup descobriu, e
+     * o aviso sumiria da tela sem ninguém ter reconectado nada.
+     */
+    await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      phoneNumberId: '109876543210987',
+      wabaId: '102030405060708',
+      numeroVisivel: null,
+      token: 'EAAG',
+      escopos: ['whatsapp_business_messaging'],
+      ...operador,
+    });
+
+    const depois = await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      phoneNumberId: '109876543210987',
+      wabaId: '102030405060708',
+      numeroVisivel: '+55 71 3333-9999',
+      ...operador,
+    });
+    expect(depois.escopos).toEqual(['whatsapp_business_messaging']);
+  });
+
+  // -- a rota do webhook, ao trocar de número (bloco 88) ----------------------
+
+  const rotas = () =>
+    admin.$queryRawUnsafe<{ phone_number_id: string; location_id: string }[]>(
+      `SELECT phone_number_id, location_id FROM whatsapp_numbers ORDER BY phone_number_id`,
+    );
+
+  it('trocar de número apaga a rota do antigo', async () => {
+    /**
+     * O caso real: a barbearia perde a conta na Meta, cria outra e reconecta com
+     * número novo. `whatsapp_settings` é por unidade e o `ON CONFLICT` sobrescreve
+     * a linha inteira — a rota velha ficava órfã, apontando para esta barbearia
+     * por um `phone_number_id` que já não é dela.
+     *
+     * Hoje é estado morto. No dia em que a Meta reciclar aquele id para outra
+     * empresa, o webhook dela cai aqui dentro: telefone e texto de cliente
+     * alheio gravados sob o nosso tenant.
+     */
+    await cadastrar();
+    await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      phoneNumberId: '111111111111111',
+      wabaId: '102030405060708',
+      numeroVisivel: null,
+      ...operador,
+    });
+
+    expect(await rotas()).toEqual([{ phone_number_id: '111111111111111', location_id: LOCAL }]);
+  });
+
+  it('a rota que outra unidade assumiu não é apagada junto', async () => {
+    /**
+     * O `location_id` no `DELETE` não é defesa repetida — é a regra.
+     *
+     * Numa rede, a unidade que ficou com o número antigo é dona legítima daquela
+     * linha. Sem o filtro, a matriz reconectando com um número novo apagaria a
+     * rota da filial, e o webhook dela passaria a chegar sem dono — sem erro,
+     * sem log, e sem nada na tela que explicasse por que as mensagens de uma
+     * loja pararam de ser recebidas.
+     */
+    const OUTRA = 'a5555555-0000-0000-0000-000000000003';
+    await exec(`INSERT INTO locations (id, tenant_id, name, timezone)
+                VALUES ('${OUTRA}', '${TENANT}', 'Filial', 'America/Bahia')`);
+
+    await cadastrar();
+    // A filial assume o número que era da matriz.
+    await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: OUTRA,
+      phoneNumberId: '109876543210987',
+      wabaId: '102030405060708',
+      numeroVisivel: null,
+      token: 'EAAG',
+      ...operador,
+    });
+    // E a matriz conecta um número novo.
+    await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      phoneNumberId: '111111111111111',
+      wabaId: '102030405060708',
+      numeroVisivel: null,
+      ...operador,
+    });
+
+    expect(await rotas()).toEqual([
+      { phone_number_id: '109876543210987', location_id: OUTRA },
+      { phone_number_id: '111111111111111', location_id: LOCAL },
+    ]);
   });
 
   // -- os templates ----------------------------------------------------------

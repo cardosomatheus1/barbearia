@@ -106,6 +106,56 @@ export function whatsappDisponivel(estado: EstadoDoWhatsApp): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// O que o token concedido pode
+// ---------------------------------------------------------------------------
+
+/**
+ * As duas permissões da Meta que este produto pede, como ela as nomeia.
+ *
+ * Elas fazem coisas diferentes e são concedidas em separado: a de envio manda
+ * mensagem, a de gerência **nomeia a conta e cria template**. O produto se
+ * contenta com a primeira para descobrir a qual conta o token pertence, e é
+ * por isso que existe conexão que funciona inteira e não aprova texto nenhum.
+ */
+export const ESCOPO_DE_ENVIO = 'whatsapp_business_messaging';
+export const ESCOPO_DE_GERENCIA = 'whatsapp_business_management';
+
+/**
+ * O token concedido cria modelo de mensagem?
+ *
+ * Três respostas e não duas, e a terceira é o bloco inteiro: **`null` é "não dá
+ * para dizer", nunca "não pode"**.
+ *
+ * Cadastro pelo formulário do bloco 55 não passa pela Meta e não tem escopo
+ * para gravar; cadastro anterior ao bloco 88 tampouco. Se a ausência virasse
+ * `false`, a tela acusaria de falta de acesso justamente quem está com o acesso
+ * funcionando — e a acusação sairia como aviso sobre um cadastro que manda
+ * mensagem sem reclamar.
+ *
+ * É a distinção que o score do bloco 61 já precisou fazer: numa tela, "não sei"
+ * e "zero" se parecem e levam a decisões opostas.
+ */
+export function podeGerenciarTemplates(escopos: readonly string[] | null): boolean | null {
+  if (escopos === null) return null;
+  return escopos.includes(ESCOPO_DE_GERENCIA);
+}
+
+/**
+ * O aviso que a tela dá **antes** de a pessoa escrever o texto.
+ *
+ * A frase da Meta para este caso — "esta conta não pode criar um novo modelo" —
+ * chega depois do trabalho todo e não nomeia permissão nenhuma. `O_QUE_FAZER_NA_META`
+ * a traduz para "onde se resolve"; isto é um passo antes: o cadastro **já sabe**
+ * que vai dar errado, e deixar a pessoa escrever mesmo assim é gastar o tempo
+ * dela para chegar a uma recusa previsível.
+ */
+export const AVISO_SEM_GERENCIA =
+  'Este acesso manda mensagem, mas não cria texto novo: a Meta concedeu só a ' +
+  'permissão de envio. Reconecte o número e, na janela dela, deixe marcada ' +
+  'também a permissão de gerenciar a conta — os textos que já estão aprovados ' +
+  'continuam saindo normalmente.';
+
+// ---------------------------------------------------------------------------
 // O estado do template
 // ---------------------------------------------------------------------------
 

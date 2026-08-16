@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 80 de 80 blocos.**
+**Status: 88 de 88 blocos.**
 
 ---
 
@@ -73,6 +73,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| A medição não enxerga transbordo cortado por `overflow-x: clip` | a medição abre cada tela nas quatro larguras e confere `documentElement.scrollWidth` **e** `body.scrollWidth`, que foi o conserto do bloco 72 — e o segundo pega o transbordo escondido dentro de `position: sticky` | enxergar o transbordo que um ancestral **recorta**. `.trabalho` usa `overflow-x: clip`, e com isso a tela inteira do painel no celular sai "ok" nas quatro larguras enquanto o conteúdo é cortado na direita. Já aconteceu duas vezes: o `nowrap` herdado no formulário de campanha (bloco 86) e um estouro no cartão do WhatsApp, os dois com medição verde | sem bloco definido: `scrollWidth` não é a ferramenta — quem responde é comparar o retângulo de cada elemento com o do recipiente, elemento a elemento, o que é uma segunda varredura e não um ajuste da que existe. É a lição do §5 na forma mais cara, porque **a medição verde é o que dá permissão para não olhar**: enquanto ela não enxergar, o print em 390px é a única rede, e ele é obrigatório por isso. Entra no primeiro bloco que mexa em `scripts/medir-responsividade.js` |
 | Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
 | Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
@@ -371,6 +372,34 @@ A contestação é o meio-termo que Booksy e Fresha já operam:
 O número do roadmap sobe de 79 para 80. Não é bloco descoberto: é escopo novo,
 pedido depois do 51, e está aqui porque adição silenciosa é o que faz um plano
 deixar de servir para planejar.
+
+---
+
+## Correção de contagem: o roadmap parou no 80 e o código foi ao 87
+
+Esta seção é o conserto de uma divergência, e ela merece ser dita em vez de
+apagada: o contador disse **80 de 80** por sete blocos, enquanto o código citava
+o 81, o 82, o 83, o 84, o 85, o 86 e o 87 — trinta e oito citações só do 82.
+
+É o defeito que este repositório mais cataloga, aplicado ao próprio plano: dois
+lugares afirmando o mesmo fato e discordando. O sintoma foi
+`verificar-lacunas.mjs 88` respondendo *"(bloco desconhecido)"* sobre o bloco que
+estava começando — a guarda que existe para dizer o que aponta para um bloco não
+conhecia bloco nenhum acima de 80.
+
+Nenhum destes é bloco novo: as linhas saem dos commits e das citações que já
+estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
+
+| # | Bloco | |
+|---|---|---|
+| 81 | Nota fiscal vira recurso ligado pela plataforma, e nasce desligada | ✅ |
+| 82 | Campanha e automação saindo pelo canal de WhatsApp | ✅ |
+| 83 | Embedded Signup: conectar deixa de ser copiar dois números de quinze dígitos | ✅ |
+| 84 | A conta e o número descobertos pelo token, não pelo navegador | ✅ |
+| 85 | Coexistência: conectar o número sem tirá-lo do WhatsApp da barbearia | ✅ |
+| 86 | A janela de conexão por redirecionamento, no lugar do SDK | ✅ |
+| 87 | A frase da Meta chega à tela, e com ela onde se resolve | ✅ |
+| 88 | Os escopos concedidos viram cadastro, e a rota do número antigo sai | ✅ |
 
 ---
 

@@ -29,6 +29,7 @@
  * cadastro não é isso.
  */
 
+import { ESCOPO_DE_ENVIO, ESCOPO_DE_GERENCIA } from '@barbearia/core';
 import {
   cadastroDoWhatsApp,
   salvarCadastroDoWhatsApp,
@@ -400,7 +401,7 @@ async function descobrirWaba(
   token: string,
   credenciais: CredenciaisDaPlataforma,
   buscar: typeof fetch,
-): Promise<string> {
+): Promise<{ readonly wabaId: string; readonly escopos: readonly string[] }> {
   const url = new URL(`${BASE}/debug_token`);
   url.searchParams.set('input_token', token);
   // O token do app, que é como a Meta o documenta: id|segredo. Ele não sai
@@ -433,15 +434,22 @@ async function descobrirWaba(
    *
    * Só os nomes dos escopos: os `target_ids` são ids de conta e já são
    * gravados; o token não entra aqui e em lugar nenhum de log.
+   *
+   * O log continua, e agora ele **acompanha** o cadastro em vez de ser a única
+   * cópia: os mesmos nomes são gravados em `whatsapp_settings.granted_scopes`
+   * (bloco 88). Enquanto eles só existiam aqui, responder "este token cria
+   * template?" exigia alcançar o servidor — e quem precisa da resposta é a tela,
+   * antes de a pessoa escrever o texto.
    */
+  const escopos = (granulares ?? []).map((g) => g.scope).filter((s): s is string => Boolean(s));
   console.log('[whatsapp] permissões concedidas', {
-    escopos: (granulares ?? []).map((g) => g.scope).filter(Boolean),
-    podeGerenciar: (granulares ?? []).some((g) => g.scope === 'whatsapp_business_management'),
+    escopos,
+    podeGerenciar: escopos.includes(ESCOPO_DE_GERENCIA),
   });
 
   const alvo =
-    granulares?.find((g) => g.scope === 'whatsapp_business_management')?.target_ids?.[0] ??
-    granulares?.find((g) => g.scope === 'whatsapp_business_messaging')?.target_ids?.[0];
+    granulares?.find((g) => g.scope === ESCOPO_DE_GERENCIA)?.target_ids?.[0] ??
+    granulares?.find((g) => g.scope === ESCOPO_DE_ENVIO)?.target_ids?.[0];
 
   if (alvo === undefined) {
     throw new SignupError(
@@ -449,7 +457,7 @@ async function descobrirWaba(
       'A Meta não disse a qual conta este acesso pertence. Refaça a conexão e escolha a conta do WhatsApp no fim do fluxo.',
     );
   }
-  return String(alvo);
+  return { wabaId: String(alvo), escopos };
 }
 
 async function descobrirNumero(
@@ -560,7 +568,41 @@ export async function conectarPeloSignup(params: {
     return gravado;
   }
 
-  const wabaId = params.wabaId ?? (await descobrirWaba(token, credenciais, buscar));
+  /**
+   * O `debug_token` é consultado **sempre**, mesmo quando o navegador mandou a
+   * conta (bloco 88).
+   *
+   * Antes ele só era chamado quando faltava a dica, e com isso os escopos eram
+   * conhecidos num caminho e não no outro — a mesma coluna preenchida por uma
+   * porta e vazia pela outra, que é o defeito de `stock_movements.location_id`
+   * do bloco 58. Um campo que mente em metade das conexões é pior que um campo
+   * vazio: ele tem valor.
+   *
+   * Quem decide a conta continua sendo a dica quando ela veio, para esta
+   * chamada não mudar o que já funciona. E a falha dela só é fatal quando não
+   * há dica: com a conta em mãos, este passo é sobre **descobrir permissão**, e
+   * derrubar por causa dele transformaria uma consulta nova em conexão perdida.
+   */
+  let escopos: readonly string[] | null = null;
+  let wabaDescoberta: string | null = null;
+  try {
+    const descoberto = await descobrirWaba(token, credenciais, buscar);
+    wabaDescoberta = descoberto.wabaId;
+    escopos = descoberto.escopos;
+  } catch (erro) {
+    if (!params.wabaId) throw erro;
+  }
+
+  const wabaId = params.wabaId ?? wabaDescoberta;
+  // Sem dica e sem descoberta o `catch` acima já teria relançado; o teste existe
+  // para o compilador, e porque `descobrirWaba` pode mudar de contrato.
+  if (wabaId === null) {
+    throw new SignupError(
+      'meta_recusou',
+      'A Meta não disse a qual conta este acesso pertence. Refaça a conexão e escolha a conta do WhatsApp no fim do fluxo.',
+    );
+  }
+
   const numero = params.phoneNumberId
     ? { id: params.phoneNumberId, visivel: params.numeroVisivel ?? null }
     : await descobrirNumero(wabaId, token, buscar);
@@ -591,6 +633,7 @@ export async function conectarPeloSignup(params: {
     wabaId,
     numeroVisivel: params.numeroVisivel ?? numero.visivel,
     token,
+    escopos,
     staffId: params.staffId,
     staffName: params.staffName,
   });

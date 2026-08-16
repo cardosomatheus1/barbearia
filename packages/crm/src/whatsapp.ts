@@ -103,6 +103,20 @@ export interface CadastroDoWhatsApp {
    * viva pela rede, para dentro de um HTML que fica no histórico do navegador.
    */
   readonly temToken: boolean;
+  /**
+   * As permissões que a Meta concedeu a este token, ou `null` (bloco 88).
+   *
+   * **Obrigatório e não opcional**, e a polaridade é o motivo: `escopos?` chega
+   * `undefined` na primeira consulta que esquecer dele, e a tela leria isso
+   * como "não dá para dizer" — calando o aviso justamente onde ele importa, com
+   * o compilador satisfeito. É a regra do campo novo num tipo que decide
+   * visibilidade, e aqui o silêncio é o erro caro.
+   *
+   * Nomes crus da Meta, não um booleano: quem os interpreta é
+   * `podeGerenciarTemplates`, em `core`, e a pergunta seguinte se responde lá
+   * sem migração.
+   */
+  readonly escopos: readonly string[] | null;
 }
 
 const NUMERO_DA_META = /^[0-9]{5,32}$/;
@@ -122,10 +136,11 @@ export async function cadastroDoWhatsApp(
         status_reason: string | null;
         verified_at: Date | null;
         tem_token: boolean;
+        granted_scopes: string[] | null;
       }[]
     >`
       SELECT status::text AS status, phone_number_id, waba_id, display_phone,
-             status_reason, verified_at,
+             status_reason, verified_at, granted_scopes,
              (access_token_cipher IS NOT NULL) AS tem_token
         FROM whatsapp_settings
        WHERE location_id = ${locationId}::uuid
@@ -140,6 +155,7 @@ export async function cadastroDoWhatsApp(
       motivo: linha.status_reason,
       verificadoEm: linha.verified_at?.toISOString() ?? null,
       temToken: linha.tem_token,
+      escopos: linha.granted_scopes,
     };
   };
   return tx ? dentro(tx) : withTenant(tenantId, dentro);
@@ -160,6 +176,16 @@ export async function salvarCadastroDoWhatsApp(params: {
   readonly wabaId: string;
   readonly numeroVisivel: string | null;
   readonly token?: string | null;
+  /**
+   * O que a Meta concedeu, quando quem chama falou com ela (bloco 88).
+   *
+   * Opcional aqui e obrigatório na leitura, e os dois estão certos: o
+   * formulário do bloco 55 é o caminho de quem já tem os ids e **nunca** fala
+   * com a Meta, então ele não tem o que declarar. Ausente é "não mexa", como o
+   * token — escrever `null` por omissão apagaria o que o Embedded Signup
+   * descobriu toda vez que alguém corrigisse o número visível pela tela.
+   */
+  readonly escopos?: readonly string[] | null;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<CadastroDoWhatsApp> {
@@ -185,15 +211,17 @@ export async function salvarCadastroDoWhatsApp(params: {
     // A unidade vem do servidor, mas a conferência sob RLS fica: a chave
     // estrangeira aceita a de outra barbearia, porque a checagem referencial
     // ignora row security.
+    const escopos = params.escopos === undefined ? null : (params.escopos as string[] | null);
+
     const gravadas = await tx.$executeRaw`
       INSERT INTO whatsapp_settings
         (location_id, tenant_id, status, phone_number_id, waba_id, display_phone,
-         access_token_cipher, updated_by)
+         access_token_cipher, granted_scopes, updated_by)
       SELECT ${params.locationId}::uuid,
              NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${estado}::whatsapp_status,
              ${params.phoneNumberId}, ${params.wabaId}, ${params.numeroVisivel},
-             ${cifrado}, ${params.staffId}::uuid
+             ${cifrado}, ${escopos}::text[], ${params.staffId}::uuid
        WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
       ON CONFLICT (location_id) DO UPDATE SET
         status = EXCLUDED.status,
@@ -203,11 +231,49 @@ export async function salvarCadastroDoWhatsApp(params: {
         -- Ausente é "não mexa": COALESCE mantém o que já estava.
         access_token_cipher = COALESCE(EXCLUDED.access_token_cipher,
                                        whatsapp_settings.access_token_cipher),
+        -- Mesma regra, e pelo mesmo motivo: quem salva pelo formulário não fala
+        -- com a Meta e não tem escopo a declarar. Sobrescrever com nulo faria
+        -- corrigir o número visível apagar o que o Embedded Signup descobriu.
+        granted_scopes = COALESCE(EXCLUDED.granted_scopes,
+                                  whatsapp_settings.granted_scopes),
         status_reason = NULL,
         updated_at = now(),
         updated_by = EXCLUDED.updated_by
     `;
     if (gravadas === 0) recusar('nao_configurado');
+
+    /**
+     * A rota do número **anterior** sai (bloco 88).
+     *
+     * `whatsapp_settings` é por unidade e o `ON CONFLICT (location_id)` acima
+     * sobrescreve a linha inteira, então trocar de número deixava a linha velha
+     * de `whatsapp_numbers` órfã — apontando para esta barbearia, para sempre,
+     * por um `phone_number_id` que já não é dela.
+     *
+     * Hoje isso é estado morto; no dia em que a Meta reciclar aquele id para
+     * outra empresa, o webhook dela cai aqui dentro: telefone e texto de
+     * cliente alheio gravados sob o nosso tenant, que é exatamente o vazamento
+     * que o `WHERE` de dono logo abaixo existe para impedir — na direção
+     * contrária. Uma barbearia trocando de conta da Meta é o caminho normal
+     * depois de um bloqueio, não caso raro.
+     *
+     * Sem `tenant_id` no `WHERE`: a política de remoção da 0078 é quem filtra, e
+     * repeti-la aqui mascararia política ausente.
+     *
+     * O `location_id`, ao contrário, **não** é defesa repetida — ele é a regra.
+     * Numa rede, a unidade que assumiu o número antigo da outra é dona legítima
+     * daquela linha: sem o filtro, a matriz reconectando com um número novo
+     * apagaria a rota da filial que ficou com o velho, e o webhook da filial
+     * passaria a chegar sem dono. Trocar de número entre unidades é raro; ficar
+     * sem receber mensagem por causa disso não teria explicação nenhuma na tela.
+     */
+    if (antes?.phoneNumberId && antes.phoneNumberId !== params.phoneNumberId) {
+      await tx.$executeRaw`
+        DELETE FROM whatsapp_numbers
+         WHERE phone_number_id = ${antes.phoneNumberId}
+           AND location_id = ${params.locationId}::uuid
+      `;
+    }
 
     /**
      * A rota do webhook, em dia com o cadastro.

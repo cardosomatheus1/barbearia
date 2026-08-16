@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AVISO_SEM_GERENCIA,
   BOTOES_DA_MENSAGEM,
   BOTOES_DO_AVISO,
+  ESCOPO_DE_ENVIO,
+  ESCOPO_DE_GERENCIA,
   ESTADOS_DO_TEMPLATE,
   ESTADOS_DO_WHATSAPP,
   EXPLICACAO_DO_TEMPLATE,
@@ -13,6 +16,7 @@ import {
   botaoConhecido,
   lerPayload,
   montarPayload,
+  podeGerenciarTemplates,
   templateUtilizavel,
   whatsappDisponivel,
 } from './whatsapp.js';
@@ -48,6 +52,42 @@ describe('o estado do cadastro', () => {
     // É o único estado que aparece **depois** de tudo ter funcionado, e a
     // pergunta que ele gera é sempre "por quê".
     expect(EXPLICACAO_DO_WHATSAPP.suspenso).toContain('motivo');
+  });
+});
+
+describe('o que o token concedido pode', () => {
+  it('sem a permissão de gerência, não cria texto novo', () => {
+    // É o cadastro que conecta sem erro nenhum e morre na primeira tentativa de
+    // aprovar um texto, com uma frase da Meta que não nomeia permissão.
+    expect(podeGerenciarTemplates([ESCOPO_DE_ENVIO])).toBe(false);
+  });
+
+  it('com a permissão de gerência, cria', () => {
+    expect(podeGerenciarTemplates([ESCOPO_DE_ENVIO, ESCOPO_DE_GERENCIA])).toBe(true);
+  });
+
+  it('"não dá para dizer" não é "não pode"', () => {
+    /**
+     * O caso que decide o bloco.
+     *
+     * Cadastro pelo formulário do bloco 55 nunca fala com a Meta, e cadastro
+     * anterior ao 88 não tem escopo gravado. Se a ausência virasse `false`, a
+     * tela acusaria de falta de acesso quem está mandando mensagem sem
+     * reclamar — e o aviso apareceria sobre um cadastro que funciona.
+     *
+     * `toBe(null)` e não `toBeFalsy()`: `false` passaria num teste frouxo, e é
+     * exatamente o valor errado.
+     */
+    expect(podeGerenciarTemplates(null)).toBe(null);
+  });
+
+  it('o aviso diz o que fazer, e não só o que falta', () => {
+    // "Falta uma permissão" sobre um painel de terceiro com dezenas de telas é
+    // a lista que ninguém abre duas vezes — é a decisão do bloco 87.
+    expect(AVISO_SEM_GERENCIA).toContain('Reconecte');
+    // E promete o que continua funcionando: sem isso a frase lê como "o
+    // WhatsApp parou", e alguém desliga o canal inteiro por causa dela.
+    expect(AVISO_SEM_GERENCIA).toContain('continuam saindo');
   });
 });
 

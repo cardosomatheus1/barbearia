@@ -301,9 +301,34 @@ describe('a descoberta da conta e do número pelo token', () => {
     expect(new URL(chamadas[0]!.url).searchParams.has('redirect_uri')).toBe(false);
   });
 
-  it('com os ids em mãos, não pergunta nada — é o caminho do computador', async () => {
+  /**
+   * A expectativa deste teste mudou no bloco 88, e o motivo fica escrito.
+   *
+   * Antes ele provava "uma ida a menos": com os ids em mãos, nem `debug_token`
+   * nem `phone_numbers`. A metade do número continua valendo — a dica responde
+   * o que a chamada responderia.
+   *
+   * O `debug_token` não: ele é a **única** origem dos escopos concedidos, e
+   * pulá-lo aqui deixava o aviso de "este acesso não cria texto novo" existindo
+   * num caminho e não no outro. Quem conecta pelo computador tem o mesmo token
+   * pela metade que quem conecta pelo celular, e descobriria a falta do mesmo
+   * jeito: escrevendo o texto inteiro para receber uma recusa da Meta que não
+   * nomeia permissão nenhuma.
+   *
+   * O preço é um GET a mais numa conexão, que acontece uma vez por barbearia.
+   */
+  it('com os ids em mãos, ainda pergunta as permissões — mas não o número', async () => {
     const { buscar, chamadas } = redeEmSequencia([
       { corpo: { access_token: 'tok' } },
+      {
+        corpo: {
+          data: {
+            granular_scopes: [
+              { scope: 'whatsapp_business_messaging', target_ids: ['102290129340398'] },
+            ],
+          },
+        },
+      },
       { corpo: { success: true } },
       { corpo: { success: true } },
     ]);
@@ -321,8 +346,50 @@ describe('a descoberta da conta e do número pelo token', () => {
       buscar,
     }).catch(() => undefined);
 
-    // Uma ida a menos: sem `debug_token` e sem `phone_numbers`.
-    expect(chamadas.map((c) => c.url).some((u) => u.includes('debug_token'))).toBe(false);
+    const urls = chamadas.map((c) => c.url);
+    // O número veio na dica: perguntá-lo seria a ida que a dica existe para evitar.
+    expect(urls.some((u) => u.includes('phone_numbers'))).toBe(false);
+    // As permissões, não: elas não têm dica, e é delas que sai o aviso da tela.
+    expect(urls.some((u) => u.includes('debug_token'))).toBe(true);
+  });
+
+  /**
+   * E a consulta nova não pode derrubar uma conexão que antes funcionava.
+   *
+   * Com a conta em mãos, o `debug_token` é sobre **descobrir permissão** — não
+   * sobre descobrir a conta. Deixar a falha dele subir transformaria um passo
+   * acrescentado em barbearia sem WhatsApp, que é o defeito mais caro que este
+   * bloco poderia introduzir. Sem escopo, a tela cala; ela não inventa recusa.
+   */
+  it('permissão não descoberta não derruba a conexão que tem a conta na dica', async () => {
+    const { buscar, chamadas } = redeEmSequencia([
+      { corpo: { access_token: 'tok' } },
+      { status: 400, corpo: { error: { message: 'Invalid OAuth access token' } } },
+      { corpo: { success: true } },
+      { corpo: { success: true } },
+    ]);
+
+    const erro = await conectarPeloSignup({
+      tenantId: '00000000-0000-0000-0000-000000000001',
+      locationId: '00000000-0000-0000-0000-000000000002',
+      code: 'AQD',
+      wabaId: '102290129340398',
+      phoneNumberId: '106540352242922',
+      numeroVisivel: '+55 71 98888-7777',
+      staffId: '00000000-0000-0000-0000-000000000003',
+      staffName: 'Matheus',
+      credenciais: CREDENCIAIS,
+      buscar,
+    }).then(
+      () => null,
+      (e: Error) => e,
+    );
+
+    // A recusa da Meta não virou a recusa da conexão: o fluxo seguiu para
+    // assinar o webhook. (A gravação em si precisa de banco e mora na
+    // integração — aqui o que se prova é que o caminho não parou.)
+    expect(chamadas.map((c) => c.url).some((u) => u.includes('subscribed_apps'))).toBe(true);
+    expect(erro?.message ?? '').not.toMatch(/Invalid OAuth access token/);
   });
 
   it('conta sem número diz o que fazer, e não o que faltou', async () => {

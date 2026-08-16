@@ -1892,12 +1892,17 @@ function prepararWhatsApp(slug) {
   );
   if (!local) return;
 
+  // O escopo só de envio é semeado de propósito: é o estado que faz a tela
+  // desenhar o aviso do bloco 88, e sem ele a medição fotografava a tela num
+  // estado em que a mudança é invisível — semente que prepara o estado errado
+  // mede o que ela acha que preparou, sem nada ficar vermelho.
   psql(
     `INSERT INTO whatsapp_settings
        (location_id, tenant_id, status, phone_number_id, waba_id, display_phone,
-        access_token_cipher, verified_at)
+        access_token_cipher, granted_scopes, verified_at)
      VALUES ('${local}', '${tenant}', 'ativo', '109876543210987', '102030405060708',
-             '+55 71 3333-4444', 'nonce.tag.dados', now())
+             '+55 71 3333-4444', 'nonce.tag.dados',
+             ARRAY['whatsapp_business_messaging'], now())
      ON CONFLICT (location_id) DO NOTHING`,
   );
   psql(

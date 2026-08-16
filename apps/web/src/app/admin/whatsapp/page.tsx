@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import {
+  AVISO_SEM_GERENCIA,
   EXPLICACAO_DO_TEMPLATE,
   EXPLICACAO_DO_WHATSAPP,
   ROTULO_DO_BOTAO,
@@ -7,6 +8,7 @@ import {
   ROTULO_DO_WHATSAPP,
   TIPOS_DE_NOTIFICACAO,
   oQueFazerNaMeta,
+  podeGerenciarTemplates,
   VARIAVEIS_DO_AVISO,
   type BotaoDaMensagem,
 } from '@barbearia/core';
@@ -506,6 +508,31 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           A Meta aprova cada texto antes de ele poder sair. Um por aviso — e ela pausa o que
           muita gente marca como spam.
         </p>
+
+        {/*
+          O aviso vem **antes** do formulário, e aberto (bloco 88).
+
+          Sem ele, a única forma de descobrir que este acesso não cria texto novo
+          era escrever o texto inteiro, mandar, e receber da Meta "esta conta não
+          pode criar um novo modelo" — frase que não nomeia permissão nenhuma e
+          que, lida no balcão, parece bloqueio da conta. O cadastro já sabe a
+          resposta no instante em que a conexão terminou.
+
+          Fora do `<details>` de propósito: escondido, ele vira opcional, e a
+          pessoa só o encontraria depois de abrir o formulário para escrever —
+          que é exatamente o trabalho que ele existe para poupar. É a mesma
+          decisão da explicação do score no bloco 61.
+
+          `=== false` e não `!`: `null` é "não dá para dizer" — cadastro pelo
+          formulário, ou anterior a este bloco — e ali a tela **cala**. Acusar
+          falta de permissão quem está mandando mensagem sem reclamar seria pior
+          que não avisar nada.
+        */}
+        {podeGerenciarTemplates(cadastro?.escopos ?? null) === false ? (
+          <p className="ui-alert ui-alert--danger" role="status">
+            {AVISO_SEM_GERENCIA}
+          </p>
+        ) : null}
 
         {templates.length === 0 ? (
           <p className="cartao-balcao__texto">

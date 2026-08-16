@@ -3154,6 +3154,15 @@ export interface CadastroDoWhatsAppNaTela {
   readonly verificadoEm: string | null;
   /** **Se** existe token, nunca qual é: a tela não recebe credencial viva. */
   readonly temToken: boolean;
+  /**
+   * As permissões que a Meta concedeu, ou `null` (bloco 88).
+   *
+   * Os nomes crus dela, e não um booleano pronto: quem os interpreta é
+   * `podeGerenciarTemplates`, de `core`, que é a mesma função dos dois lados —
+   * a regra do repositório é que permissão exibida na tela sai da mesma função
+   * que a API aplica, nunca de uma conta refeita na view.
+   */
+  readonly escopos: readonly string[] | null;
 }
 
 export interface TemplateNaTelaDoAdmin {
