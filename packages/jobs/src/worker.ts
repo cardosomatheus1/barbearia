@@ -16,6 +16,7 @@ import {
   agendarEntregaDeNotasDeTodas,
   entregaDeNotasPendente,
 } from './fiscal.js';
+import { agendarConciliacaoDoWhatsApp } from './whatsapp-conciliacao.js';
 import { agendarAlertasDeTodas, alertaPendente } from './alerta-agendado.js';
 import {
   agendarCobrancaDoClubeDeTodas,
@@ -150,6 +151,19 @@ export interface Contexto {
     inboundId: string,
     agora: Date,
   ) => Promise<void>;
+  /**
+   * Pergunta à Meta o que ela ainda não respondeu desta barbearia (bloco 90).
+   *
+   * Injetada e **obrigatória no tipo**, pela mesma razão de `varrerRetencao`:
+   * quem sabe falar com a Meta é `packages/crm`, e `jobs` não pode aprender
+   * isso. Opcional, o primeiro worker novo esqueceria dela — e o sintoma seria
+   * o de antes: o cadastro preso em "falta confirmar" e o texto preso em "Na
+   * Meta", sem nada ficar vermelho.
+   */
+  readonly conciliarWhatsApp: (
+    tenantId: string,
+    agora: Date,
+  ) => Promise<{ readonly promovido: boolean; readonly templates: number }>;
   readonly varrerRetencao: (
     tenantId: string,
     agora: Date,
@@ -457,6 +471,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    */
   'automacao.varrer': async (tarefa, contexto) => {
     await contexto.rodarAutomacoes(tarefa.tenantId, contexto.relogio.agora());
+  },
+
+  /**
+   * O que a Meta ainda não respondeu desta barbearia (bloco 90).
+   *
+   * O número que espera a prova de posse e os textos que esperam aprovação: a
+   * mesma pergunta, o mesmo token, a mesma volta do relógio. Antes desta tarefa
+   * as duas respostas nunca eram pedidas, e as duas telas mentiam em silêncio.
+   */
+  'whatsapp.conciliar': async (tarefa, contexto) => {
+    await contexto.conciliarWhatsApp(tarefa.tenantId, contexto.relogio.agora());
   },
 
   /**
@@ -845,6 +870,7 @@ export async function rodarWorker(
   /** O último dia em que este processo enfileirou a varredura de retenção. */
   let ultimaRetencao: string | null = null;
   let ultimaEntregaDeNotas: string | null = null;
+  let ultimaConciliacaoDoWhatsApp: string | null = null;
   let ultimaAutomacao: string | null = null;
   /** E a de alerta, que roda de manhã em vez de de madrugada. */
   let ultimoAlerta: string | null = null;
@@ -897,6 +923,20 @@ export async function rodarWorker(
     if (entrega.hora !== ultimaEntregaDeNotas) {
       ultimaEntregaDeNotas = entrega.hora;
       await agendarEntregaDeNotasDeTodas(entrega);
+    }
+
+    /**
+     * A conciliação com a Meta acompanha a mesma cadência (bloco 90).
+     *
+     * De hora em hora e não diária: quem acabou de digitar o código do SMS no
+     * painel da Meta está olhando a nossa tela esperando ela mudar, e um ciclo
+     * diário faria "falta confirmar o número" durar até amanhã sobre um número
+     * já confirmado. É o mesmo argumento da entrega da nota, que é a linha
+     * acima.
+     */
+    if (entrega.hora !== ultimaConciliacaoDoWhatsApp) {
+      ultimaConciliacaoDoWhatsApp = entrega.hora;
+      await agendarConciliacaoDoWhatsApp(entrega);
     }
 
     const alerta = alertaPendente(contexto.relogio.agora());

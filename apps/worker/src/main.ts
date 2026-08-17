@@ -8,6 +8,7 @@ import {
   enviarPeloWhatsApp,
   executarResposta,
   marcarDisparoEnviado,
+  conciliarWhatsAppDaUnidade,
   provedorDoWhatsApp,
   respostaParaEnviar,
   varrerAutomacoes,
@@ -464,6 +465,19 @@ async function main(): Promise<void> {
        * mesmo `provider` de todo o resto: instanciar um aqui faria deste o único
        * caminho que não troca junto quando o WhatsApp oficial entrar.
        */
+      /**
+       * O que a Meta ainda não respondeu desta barbearia (bloco 90).
+       *
+       * `primaryLocation` e não todas as unidades, como `rodarAutomacoes`: o
+       * cadastro de WhatsApp é por unidade, e cobrir a rede inteira aqui seria
+       * escopo que nenhuma barbearia deste produto exerce hoje — está declarado
+       * como lacuna, com bloco, em vez de virar um laço que ninguém exercita.
+       */
+      conciliarWhatsApp: async (tenantId, agora) => {
+        const local = await primaryLocation(tenantId);
+        if (!local) return { promovido: false, templates: 0 };
+        return conciliarWhatsAppDaUnidade(tenantId, local.id, agora);
+      },
       rodarAutomacoes: async (tenantId, agora) => {
         const local = await primaryLocation(tenantId);
         if (!local) return;

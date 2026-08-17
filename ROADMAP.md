@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 89 de 89 blocos.**
+**Status: 90 de 90 blocos.**
 
 ---
 
@@ -73,6 +73,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| Conciliação com a Meta só na unidade principal | a varredura de hora em hora (bloco 90) promove o número a `ativo` quando a Meta confirma a posse, e tira os textos de "Na Meta" — pela `primaryLocation` de cada barbearia | cobrir **todas** as unidades: `whatsapp_settings` é por unidade desde o bloco 55, e uma rede com número próprio por loja concilia só o da matriz | sem bloco definido: nenhuma barbearia deste produto tem hoje número por filial, e um laço sobre unidades seria caminho que nada exercita — o defeito de `blocks` outra vez. O que segura a decisão é dado, não código: entra quando existir a primeira rede com dois números. Enquanto isso o sintoma é conhecido e limitado — a filial fica em "falta confirmar" com o canal funcionando, que é o estado de antes do bloco 90 |
 | A medição não enxerga transbordo cortado por `overflow-x: clip` | a medição abre cada tela nas quatro larguras e confere `documentElement.scrollWidth` **e** `body.scrollWidth`, que foi o conserto do bloco 72 — e o segundo pega o transbordo escondido dentro de `position: sticky` | enxergar o transbordo que um ancestral **recorta**. `.trabalho` usa `overflow-x: clip`, e com isso a tela inteira do painel no celular sai "ok" nas quatro larguras enquanto o conteúdo é cortado na direita. Já aconteceu duas vezes: o `nowrap` herdado no formulário de campanha (bloco 86) e um estouro no cartão do WhatsApp, os dois com medição verde | sem bloco definido: `scrollWidth` não é a ferramenta — quem responde é comparar o retângulo de cada elemento com o do recipiente, elemento a elemento, o que é uma segunda varredura e não um ajuste da que existe. É a lição do §5 na forma mais cara, porque **a medição verde é o que dá permissão para não olhar**: enquanto ela não enxergar, o print em 390px é a única rede, e ele é obrigatório por isso. Entra no primeiro bloco que mexa em `scripts/medir-responsividade.js` |
 | Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
@@ -401,6 +402,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 87 | A frase da Meta chega à tela, e com ela onde se resolve | ✅ |
 | 88 | Os escopos concedidos viram cadastro, e a rota do número antigo sai | ✅ |
 | 89 | A política de privacidade vira página pública, que é o que a App Review exige | ✅ |
+| 90 | A Meta passa a ser perguntada: o número sai de "falta confirmar" e o texto sai de "Na Meta" | ✅ |
 
 ---
 

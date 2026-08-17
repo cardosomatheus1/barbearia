@@ -13,6 +13,7 @@ import {
   salvarCadastroDoWhatsApp,
   submeterTemplate,
   templatesDaUnidade,
+  conciliarNumero,
   templatesEmCurso,
   gravarRespostaDoTemplate,
   desconectarNumero,
@@ -268,6 +269,81 @@ describeIfDb('WhatsApp oficial', () => {
       ...operador,
     });
     expect(depois.escopos).toEqual(['whatsapp_business_messaging']);
+  });
+
+  // -- a promoção a ativo (bloco 90) -----------------------------------------
+
+  const estadoNoBanco = async () =>
+    (
+      await admin.$queryRawUnsafe<{ status: string; display_phone: string | null }[]>(
+        `SELECT status::text AS status, display_phone FROM whatsapp_settings
+          WHERE location_id = '${LOCAL}'`,
+      )
+    )[0];
+
+  it('a Meta confirmando o número é o que promove o cadastro a ativo', async () => {
+    /**
+     * O estado que nunca chegava: nada no produto escrevia `ativo`, e o
+     * checklist da tela — que lê `estado === 'ativo'` — ficava para sempre em
+     * "Passo 1: conectar o número", com o número conectado e mandando mensagem.
+     */
+    await cadastrar();
+    expect((await estadoNoBanco())?.status).toBe('aguardando_verificacao');
+
+    const provedor = new FakeWhatsAppProvider();
+    provedor.numeroVerificado = true;
+    const r = await conciliarNumero({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      provider: provedor,
+      agora: new Date('2026-09-01T12:00:00Z'),
+    });
+
+    expect(r).toEqual({ verificado: true, promovido: true });
+    expect((await estadoNoBanco())?.status).toBe('ativo');
+  });
+
+  it('número ainda não confirmado não promove nada', async () => {
+    // O fake nasce **não** verificado de propósito: é o estado real de um número
+    // recém-conectado, e um fake otimista faria este caminho nunca ser exercido.
+    await cadastrar();
+    const r = await conciliarNumero({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      provider: new FakeWhatsAppProvider(),
+      agora: new Date('2026-09-01T12:00:00Z'),
+    });
+
+    expect(r).toEqual({ verificado: false, promovido: false });
+    expect((await estadoNoBanco())?.status).toBe('aguardando_verificacao');
+  });
+
+  it('a conciliação não ressuscita um número que a Meta suspendeu', async () => {
+    /**
+     * Só sobe, nunca desce.
+     *
+     * Sem o `AND status = 'aguardando_verificacao'`, uma resposta verificada
+     * chegando depois da suspensão devolveria a barbearia para "ativo" e
+     * apagaria o motivo — que é a única frase que explica por que as mensagens
+     * pararam de sair.
+     */
+    await cadastrar();
+    await exec(
+      `UPDATE whatsapp_settings SET status = 'suspenso',
+              status_reason = 'qualidade baixa' WHERE location_id = '${LOCAL}'`,
+    );
+
+    const provedor = new FakeWhatsAppProvider();
+    provedor.numeroVerificado = true;
+    const r = await conciliarNumero({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      provider: provedor,
+      agora: new Date('2026-09-01T12:00:00Z'),
+    });
+
+    expect(r).toEqual({ verificado: true, promovido: false });
+    expect((await estadoNoBanco())?.status).toBe('suspenso');
   });
 
   // -- a rota do webhook, ao trocar de número (bloco 88) ----------------------

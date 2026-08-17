@@ -341,6 +341,21 @@ export interface MensagemEnviada {
   readonly wamid: string;
 }
 
+/**
+ * O que a Meta responde sobre o número em si (bloco 90).
+ *
+ * `verificado` é a posse do número provada — a pessoa digitou no painel da Meta
+ * o código que chegou por SMS. É o **único** fato que promove o cadastro a
+ * `ativo`, e é por isso que ele é perguntado a ela em vez de deduzido daqui:
+ * registrar o número e provar a posse dele são passos diferentes, e o segundo
+ * acontece fora do produto, minutos ou horas depois.
+ */
+export interface EstadoDoNumero {
+  readonly verificado: boolean;
+  /** Como a Meta escreve o número. Nulo quando ela não devolve. */
+  readonly numeroVisivel: string | null;
+}
+
 export interface WhatsAppProvider {
   /** Manda um template aprovado. É o único jeito de iniciar conversa. */
   enviar(mensagem: MensagemParaEnviar): Promise<MensagemEnviada>;
@@ -348,6 +363,8 @@ export interface WhatsAppProvider {
   submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate>;
   /** Pergunta em que pé está. A rede de segurança da conciliação. */
   consultarTemplate(nome: string, idioma: string): Promise<RespostaDoTemplate>;
+  /** Pergunta se a posse do número já foi provada. */
+  consultarNumero(): Promise<EstadoDoNumero>;
 }
 
 /**
@@ -385,6 +402,20 @@ export class FakeWhatsAppProvider implements WhatsAppProvider {
 
   async consultarTemplate(nome: string, _idioma: string): Promise<RespostaDoTemplate> {
     return this.resposta(nome);
+  }
+
+  /**
+   * **Não verificado por padrão**, pela mesma razão do template `pendente`.
+   *
+   * É o estado real de um número recém-conectado: quem prova a posse é a pessoa
+   * digitando no painel da Meta o código que chega por SMS, e isso acontece
+   * depois. Um fake otimista faria a conciliação — a varredura perguntando, a
+   * tela saindo de "falta confirmar" — nunca ser percorrida em teste nenhum.
+   */
+  numeroVerificado = false;
+
+  async consultarNumero(): Promise<EstadoDoNumero> {
+    return { verificado: this.numeroVerificado, numeroVisivel: null };
   }
 
   private resposta(nome: string): RespostaDoTemplate {

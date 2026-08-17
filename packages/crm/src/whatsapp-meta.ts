@@ -26,6 +26,7 @@
 import {
   ROTULO_DO_BOTAO,
   type BotaoDaMensagem,
+  type EstadoDoNumero,
   type EstadoDoTemplate,
   type MensagemEnviada,
   type MensagemParaEnviar,
@@ -34,7 +35,12 @@ import {
   type WhatsAppProvider,
 } from '@barbearia/core';
 import { decifrarCom } from '@barbearia/identity';
-import { cadastroDoWhatsApp } from './whatsapp.js';
+import {
+  cadastroDoWhatsApp,
+  conciliarNumero,
+  gravarRespostaDoTemplate,
+  templatesEmCurso,
+} from './whatsapp.js';
 import { withTenant } from '@barbearia/db';
 
 /**
@@ -279,6 +285,33 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   }
 
   /**
+   * A posse do número, perguntada à Meta (bloco 90).
+   *
+   * `code_verification_status` é dela e tem três valores: `VERIFIED`,
+   * `NOT_VERIFIED` e `EXPIRED`. Só o primeiro conta, e a comparação é por
+   * igualdade e não por "diferente de NOT_VERIFIED": um valor novo que ela
+   * invente amanhã seria lido como verificado, e o cadastro subiria para
+   * `ativo` sobre um número que ninguém provou possuir.
+   *
+   * `display_phone_number` vem junto porque é o mesmo GET, e é o número **como
+   * a Meta o escreve** — melhor que o que a pessoa digitou no formulário, que é
+   * o que a tela mostra hoje quando a conexão foi manual.
+   */
+  async consultarNumero(): Promise<EstadoDoNumero> {
+    const url = new URL(`${BASE}/${this.credenciais.phoneNumberId}`);
+    url.searchParams.set('fields', 'code_verification_status,display_phone_number');
+    const corpo = (await this.chamar(url, null)) as {
+      code_verification_status?: string;
+      display_phone_number?: string;
+    };
+
+    return {
+      verificado: corpo.code_verification_status === 'VERIFIED',
+      numeroVisivel: corpo.display_phone_number ?? null,
+    };
+  }
+
+  /**
    * Uma chamada à Graph API.
    *
    * `corpo === null` é `GET`. O token vai no cabeçalho e **nunca** na URL:
@@ -404,4 +437,49 @@ export async function provedorDoWhatsApp(
     wabaId: cadastro.wabaId,
     token: decifrarCom(CHAVE_DO_TOKEN, cifrado),
   });
+}
+
+/**
+ * Uma volta da conciliação para uma barbearia (bloco 90).
+ *
+ * É esta função que o worker injeta no `Contexto`: `jobs` não sabe falar com a
+ * Meta e não pode aprender, e quem monta o processo liga as duas pontas.
+ *
+ * **Canal ausente devolve zero, nunca lança.** Barbearia sem WhatsApp
+ * configurado é o caso comum — a varredura passa por todas —, e transformar
+ * isso em exceção faria a tarefa ser retentada três vezes por barbearia por
+ * volta, com a fila enchendo de falhas que não são falhas. É a mesma regra do
+ * canal indisponível no motor de aviso.
+ */
+export async function conciliarWhatsAppDaUnidade(
+  tenantId: string,
+  locationId: string,
+  agora: Date,
+): Promise<{ readonly promovido: boolean; readonly templates: number }> {
+  const provider = await provedorDoWhatsApp(tenantId, locationId);
+  if (!provider) return { promovido: false, templates: 0 };
+
+  const { promovido } = await conciliarNumero({ tenantId, locationId, provider, agora });
+
+  /**
+   * Os textos que ainda esperam, perguntados um a um.
+   *
+   * A recusa de **um** template não derruba a volta: a Meta responde 404 para
+   * o que ela ainda não indexou, e deixar isso subir faria um texto recém-criado
+   * impedir a conciliação de todos os outros — e do número junto.
+   */
+  const pendentes = await templatesEmCurso(tenantId);
+  let conciliados = 0;
+  for (const t of pendentes) {
+    try {
+      const resposta = await provider.consultarTemplate(t.nome, t.idioma);
+      await gravarRespostaDoTemplate({ tenantId, templateId: t.id, resposta });
+      conciliados += 1;
+    } catch {
+      // Fica para a volta seguinte: o estado na tela continua "Na Meta", que é
+      // verdade, e a varredura roda de novo.
+    }
+  }
+
+  return { promovido, templates: conciliados };
 }

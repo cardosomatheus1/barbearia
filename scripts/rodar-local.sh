@@ -193,6 +193,13 @@ else
   APP_DB_PASSWORD="$(openssl rand -hex 16)"
   STAFF_EMAIL_PEPPER="$(openssl rand -hex 32)"
   MFA_SECRET_KEY="$(openssl rand -base64 32)"
+  # `WHATSAPP_TOKEN_KEY` faltava aqui, e o sintoma era o pior formato possível:
+  # salvar o cadastro do WhatsApp respondia **500**, a tela dizia "Não deu para
+  # salvar. Tente de novo." e tentar de novo dava o mesmo. O motivo real —
+  # `CofreError: WHATSAPP_TOKEN_KEY não definida` — só existia no log da API.
+  # Este arquivo existe justamente para ninguém ter que descobrir segredo
+  # faltando por tentativa.
+  WHATSAPP_TOKEN_KEY="$(openssl rand -base64 32)"
   cat > "$ENV_LOCAL" <<ENV
 # Gerado por scripts/rodar-local.sh. Fora do Git (.gitignore cobre .env.*).
 # Apagar este arquivo obriga a recriar o banco: trocar o pepper invalida os
@@ -200,11 +207,12 @@ else
 APP_DB_PASSWORD="$APP_DB_PASSWORD"
 STAFF_EMAIL_PEPPER="$STAFF_EMAIL_PEPPER"
 MFA_SECRET_KEY="$MFA_SECRET_KEY"
+WHATSAPP_TOKEN_KEY="$WHATSAPP_TOKEN_KEY"
 ENV
   chmod 600 "$ENV_LOCAL"
   ok "sorteados e gravados em $ENV_LOCAL"
 fi
-export APP_DB_PASSWORD STAFF_EMAIL_PEPPER MFA_SECRET_KEY
+export APP_DB_PASSWORD STAFF_EMAIL_PEPPER MFA_SECRET_KEY WHATSAPP_TOKEN_KEY
 
 # ---------------------------------------------------------------------------
 # 4. Dependências

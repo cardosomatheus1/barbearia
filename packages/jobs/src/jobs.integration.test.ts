@@ -107,6 +107,7 @@ const avisosDoClube: { tenantId: string; assinaturaId: string; motivo: string }[
 let notasProcessadas: { tenantId: string; invoiceId: string }[] = [];
 let entregasDeNota: { tenantId: string; agora: Date }[] = [];
 let respostasDeWhatsApp: { tenantId: string; inboundId: string }[] = [];
+let conciliacoesDeWhatsApp: { tenantId: string; agora: Date }[] = [];
 let automacoesRodadas: { tenantId: string; agora: Date }[] = [];
 let campanhasDespachadas: { tenantId: string; campanhaId: string }[] = [];
 let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' =
@@ -122,6 +123,10 @@ const ligacoesDaPlataforma = () => ({
   },
   responderWhatsApp: async (tenantId: string, inboundId: string) => {
     respostasDeWhatsApp.push({ tenantId, inboundId });
+  },
+  conciliarWhatsApp: async (tenantId: string, agora: Date) => {
+    conciliacoesDeWhatsApp.push({ tenantId, agora });
+    return { promovido: false, templates: 0 };
   },
   rodarAutomacoes: async (tenantId: string, agora: Date) => {
     automacoesRodadas.push({ tenantId, agora });

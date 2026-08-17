@@ -80,7 +80,21 @@ const FALHA: Record<string, string> = {
   nao_configurado: 'Cadastre o número antes.',
   token_invalido: 'O token não confere. Copie de novo do painel da Meta.',
   forbidden: 'Sua conta não mexe no WhatsApp da casa.',
-  request_failed: 'Não deu para salvar. Tente de novo.',
+  /**
+   * "Tente de novo" só quando tentar de novo pode funcionar (bloco 90).
+   *
+   * Esta frase cobre duas coisas muito diferentes: a rede que hesitou, em que
+   * repetir resolve, e a configuração do servidor que falta — um
+   * `WHATSAPP_TOKEN_KEY` ausente devolve 500 e cai aqui. No segundo caso a
+   * frase antiga mandava a pessoa repetir para sempre um clique que nunca ia
+   * dar certo, e é o pior tipo de texto de interface: ele não erra um número,
+   * ele para o trabalho.
+   *
+   * O detalhe continua só no log, como manda a regra de erro genérico para o
+   * cliente — o que muda é dizer **onde** ele está, que é a decisão do bloco 87.
+   */
+  request_failed:
+    'Não deu para salvar. Se repetir, não é a sua conexão: o motivo fica no registro do servidor, e quem instalou o sistema consegue lê-lo.',
 };
 
 /** O rótulo de cada aviso, como o resto do produto o chama. */
