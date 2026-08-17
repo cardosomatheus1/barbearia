@@ -105,7 +105,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-  }, 180_000);
+  }, 300_000);
 
   afterAll(() => {
     rmSync(POSTERIOR, { force: true });
@@ -122,13 +122,19 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
     // limpeza, que é o pior formato de vermelho que existe: ele não aponta
     // defeito nenhum e ensina a ignorar a cor.
     //
+    // **E 180s também não bastaram.** Numa máquina mais lenta os cinco testes
+    // levaram **397s** e o gancho estourou os 180, com os cinco verdes: a saída
+    // dizia `Tests 5 passed` acima de `Hook timed out`, que é o retrato exato do
+    // vermelho que este parágrafo descreve. O número subiu para 300s pela mesma
+    // regra de antes — ele é medido, e acompanha o tempo da suíte, não um palpite.
+    //
     // **60s não bastavam, e o número aqui é medido.** No portão inteiro os
     // cinco testes levaram 340s e o gancho estourou os 60 — exatamente o
     // vermelho que o parágrafo acima descreve, e ele apareceu duas vezes
     // seguidas antes de alguém ler a saída inteira em vez do `tail`. A folga
     // passa a ser a mesma dos testes deste arquivo: se uma passada de migração
     // ganha 180s, apagar cinco bancos sob a mesma contenção ganha igual.
-  }, 180_000);
+  }, 300_000);
 
   it(
     'a segunda passada não quebra — e é ela que derrubava o site',
@@ -142,7 +148,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
 
       expect(segunda).toContain('nada a aplicar');
     },
-    180_000,
+    300_000,
   );
 
   it(
@@ -155,7 +161,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       const registradas = Number(psql(url, 'SELECT count(*) FROM schema_migrations'));
       expect(registradas).toBe(arquivosDeMigracao().length);
     },
-    180_000,
+    300_000,
   );
 
   it(
@@ -171,7 +177,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       const registradas = Number(psql(url, 'SELECT count(*) FROM schema_migrations'));
       expect(registradas).toBe(arquivosDeMigracao().length);
     },
-    180_000,
+    300_000,
   );
 
   it(
@@ -194,7 +200,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       );
       expect(existe, 'a migração posterior à baseline foi pulada em silêncio').toBe('1');
     },
-    180_000,
+    300_000,
   );
 
   it(
@@ -217,6 +223,6 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
 
       expect(morreu, 'o laço ingênuo deixou de falhar: este teste perdeu o sentido').toBe(true);
     },
-    180_000,
+    300_000,
   );
 });

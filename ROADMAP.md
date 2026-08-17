@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 90 de 90 blocos.**
+**Status: 91 de 91 blocos.**
 
 ---
 
@@ -403,6 +403,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 88 | Os escopos concedidos viram cadastro, e a rota do número antigo sai | ✅ |
 | 89 | A política de privacidade vira página pública, que é o que a App Review exige | ✅ |
 | 90 | A Meta passa a ser perguntada: o número sai de "falta confirmar" e o texto sai de "Na Meta" | ✅ |
+| 91 | Salvar o cadastro para de rebaixar um canal já verificado | ✅ |
 
 ---
 

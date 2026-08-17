@@ -346,6 +346,51 @@ describeIfDb('WhatsApp oficial', () => {
     expect((await estadoNoBanco())?.status).toBe('suspenso');
   });
 
+  // -- salvar não rebaixa o que já foi provado (bloco 91) ---------------------
+
+  it('trocar o token de um canal ativo não o devolve para "falta confirmar"', async () => {
+    /**
+     * Aconteceu em produção: a conciliação promoveu o cadastro a `ativo`, o dono
+     * salvou o token permanente minutos depois, e o painel voltou a dizer que
+     * faltava confirmar o número — com `verified_at` preenchido na mesma linha.
+     *
+     * Rotação de credencial é operação normal de segurança, e ela não pode
+     * desfazer uma posse já provada: `verified_at` é fato do passado.
+     */
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+    provedor.numeroVerificado = true;
+    await conciliarNumero({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      provider: provedor,
+      agora: new Date('2026-09-01T12:00:00Z'),
+    });
+    expect((await estadoNoBanco())?.status).toBe('ativo');
+
+    const depois = await cadastrar('EAAG-token-permanente');
+    expect(depois.estado).toBe('ativo');
+    expect(depois.verificadoEm).not.toBeNull();
+  });
+
+  it('salvar não ressuscita um número que a Meta suspendeu, e o motivo fica', async () => {
+    /**
+     * O outro lado da mesma escada. `suspenso` é decisão da Meta, e quem sai
+     * dela é a conciliação — a única que fala com ela. E o motivo precisa
+     * sobreviver: a CHECK recusa suspenso sem motivo, então limpá-lo aqui faria
+     * salvar o cadastro morrer com erro de banco no balcão.
+     */
+    await cadastrar();
+    await exec(
+      `UPDATE whatsapp_settings SET status = 'suspenso',
+              status_reason = 'qualidade baixa' WHERE location_id = '${LOCAL}'`,
+    );
+
+    const depois = await cadastrar('EAAG-token-novo');
+    expect(depois.estado).toBe('suspenso');
+    expect(depois.motivo).toBe('qualidade baixa');
+  });
+
   // -- a rota do webhook, ao trocar de número (bloco 88) ----------------------
 
   const rotas = () =>

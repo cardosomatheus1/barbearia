@@ -204,24 +204,63 @@ export async function salvarCadastroDoWhatsApp(params: {
      * Deixar a tela mandar `ativo` faria "está ativo?" ser uma opinião do
      * cliente HTTP. Com token e ids, o cadastro entra em `aguardando_verificacao`
      * — quem o promove a `ativo` é a Meta respondendo, pela conciliação.
+     *
+     * ## Salvar não rebaixa o que já foi provado (bloco 91)
+     *
+     * A versão anterior escrevia `aguardando_verificacao` **sempre** que houvesse
+     * token. Com isso, trocar o token de um canal ativo — rotação de credencial,
+     * que é operação normal de segurança — devolvia a barbearia para "falta
+     * confirmar o número", com `verified_at` preenchido na mesma linha. Os dois
+     * campos passavam a discordar sobre o mesmo fato, e a tela mandava a pessoa
+     * repetir um passo que ela já tinha feito.
+     *
+     * Aconteceu em produção: a conciliação promoveu às 15:00, o dono salvou o
+     * token permanente às 15:0X, e o painel voltou a dizer que faltava verificar.
+     *
+     * A escada respeita o que existe: sem token não há cadastro; `suspenso` é
+     * decisão da Meta e salvar não a desfaz — quem sai dela é a conciliação, que
+     * é a única que fala com ela; posse já provada continua provada, porque
+     * `verified_at` é um fato do passado e não muda por alguém colar um token
+     * novo.
      */
     const temToken = cifrado !== null || (antes?.temToken ?? false);
-    const estado: EstadoDoWhatsApp = temToken ? 'aguardando_verificacao' : 'nao_configurado';
+    const estado: EstadoDoWhatsApp = !temToken
+      ? 'nao_configurado'
+      : antes?.estado === 'suspenso'
+        ? 'suspenso'
+        : antes?.verificadoEm
+          ? 'ativo'
+          : 'aguardando_verificacao';
 
     // A unidade vem do servidor, mas a conferência sob RLS fica: a chave
     // estrangeira aceita a de outra barbearia, porque a checagem referencial
     // ignora row security.
     const escopos = params.escopos === undefined ? null : (params.escopos as string[] | null);
 
+    /**
+     * O motivo vai **na linha proposta**, e não só no `DO UPDATE` (bloco 91).
+     *
+     * `ON CONFLICT` trata violação de índice único; a `CHECK` é avaliada na
+     * linha que o `INSERT` propõe, **antes** de o conflito ser detectado. Com
+     * `status_reason` fora da lista de colunas, um cadastro suspenso chegava à
+     * `CHECK` como suspenso-sem-motivo e morria ali — o `DO UPDATE` que
+     * preservaria o motivo nunca era alcançado.
+     *
+     * Levou uma reprodução em psql para achar: a mensagem do Postgres aponta a
+     * constraint e o `DETAIL` mostra a linha do `INSERT`, com `created_at` igual
+     * a `updated_at` — que é a pista de que não é a linha atualizada.
+     */
+    const motivo = estado === 'suspenso' ? (antes?.motivo ?? null) : null;
+
     const gravadas = await tx.$executeRaw`
       INSERT INTO whatsapp_settings
         (location_id, tenant_id, status, phone_number_id, waba_id, display_phone,
-         access_token_cipher, granted_scopes, updated_by)
+         access_token_cipher, granted_scopes, status_reason, updated_by)
       SELECT ${params.locationId}::uuid,
              NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${estado}::whatsapp_status,
              ${params.phoneNumberId}, ${params.wabaId}, ${params.numeroVisivel},
-             ${cifrado}, ${escopos}::text[], ${params.staffId}::uuid
+             ${cifrado}, ${escopos}::text[], ${motivo}, ${params.staffId}::uuid
        WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
       ON CONFLICT (location_id) DO UPDATE SET
         status = EXCLUDED.status,
@@ -236,7 +275,11 @@ export async function salvarCadastroDoWhatsApp(params: {
         -- corrigir o número visível apagar o que o Embedded Signup descobriu.
         granted_scopes = COALESCE(EXCLUDED.granted_scopes,
                                   whatsapp_settings.granted_scopes),
-        status_reason = NULL,
+        -- Quem decidiu o motivo foi a linha proposta, acima: suspenso conserva o
+        -- que estava, e todo outro estado o limpa. Motivo velho ao lado de um
+        -- cadastro que voltou a funcionar é a tela explicando uma falha que já
+        -- passou.
+        status_reason = EXCLUDED.status_reason,
         updated_at = now(),
         updated_by = EXCLUDED.updated_by
     `;
