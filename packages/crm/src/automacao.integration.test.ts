@@ -5,6 +5,7 @@ import {
   automacoesDaCasa,
   disparosAEnviar,
   marcarDisparoEnviado,
+  definirAutomacaoAtiva,
   salvarAutomacao,
   varrerAutomacoes,
 } from './automacao.js';
@@ -28,6 +29,8 @@ const CARLOS = 'c6565656-0000-0000-0000-000000000001';
 const BRUNO = 'c6565656-0000-0000-0000-000000000002';
 const DONO = 'd6565656-0000-0000-0000-000000000001';
 const RUAN = 'e6565656-0000-0000-0000-000000000001';
+/** A automação de tipo que o produto passou a proibir, criada antes da guarda. */
+const ANTIGA = 'f6565656-0000-0000-0000-000000000001';
 
 const AGORA = new Date('2026-09-20T15:00:00Z');
 const operador = { staffId: DONO, staffName: 'Matheus' };
@@ -101,6 +104,44 @@ describeIfDb('automação', () => {
     await expect(automacao({ tipo: 'senha_de_acesso' })).rejects.toMatchObject({
       code: 'invalida',
     });
+  });
+
+  /**
+   * Desligar não pode depender de o resto da linha ainda ser válido.
+   *
+   * O botão da lista reenviava o objeto inteiro com `ativa` virado. Quando o
+   * bloco 88 fechou o tipo da automação em `TIPOS_DE_CAMPANHA`, as linhas
+   * criadas antes passaram a responder "Parâmetro inválido: tipo" e a
+   * **continuar ligadas** — sem saída pela tela, só por `UPDATE` no banco.
+   *
+   * Exatamente as automações que mais precisavam ser caladas — as de tipo que o
+   * produto passou a proibir — eram as únicas que não calavam. É a §6 pergunta
+   * 3 produzida por uma guarda que entrou depois.
+   *
+   * A semente escreve direto no banco de propósito: `salvarAutomacao` recusa o
+   * tipo antigo, que é o ponto — a linha existe e o caminho novo precisa
+   * alcançá-la mesmo assim.
+   */
+  it('automação de tipo hoje proibido continua podendo ser desligada', async () => {
+    await exec(`
+      INSERT INTO automations (id, tenant_id, name, trigger, threshold, delay_minutes,
+                               kind, goal, goal_window_days, active)
+      VALUES ('${ANTIGA}', '${TENANT}', 'Lembrete antigo', 'sem_retorno', 30, 0,
+              'lembrete_24h', 'agendamento', 7, true);
+    `);
+
+    const depois = await definirAutomacaoAtiva({
+      tenantId: TENANT,
+      id: ANTIGA,
+      ativa: false,
+      ...operador,
+    });
+
+    expect(depois.ativa).toBe(false);
+    const linhas = await admin.$queryRawUnsafe<{ active: boolean }[]>(
+      `SELECT active FROM automations WHERE id = '${ANTIGA}'`,
+    );
+    expect(linhas[0]?.active).toBe(false);
   });
 
   /** Um atendimento concluído há tantos dias. */

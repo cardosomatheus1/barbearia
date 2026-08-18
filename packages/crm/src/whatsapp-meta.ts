@@ -250,6 +250,44 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   }
 
   /** A rede de segurança da conciliação: pergunta em que pé o texto está. */
+  /**
+   * Reescreve um texto que a Meta já conhece.
+   *
+   * `POST /{id-do-template}` e não `POST /{waba}/message_templates`: o segundo
+   * **cria**, e criar sobre um nome existente é recusado. Enquanto só o de
+   * criar existia aqui, corrigir uma vírgula num texto aprovado era impossível
+   * pela tela — o produto tinha o `meta_id` guardado desde o bloco 55 e não o
+   * usava para nada.
+   *
+   * Nome e idioma não vão no corpo: a Meta não deixa mudá-los na edição, e
+   * mandá-los seria pedir o que ela recusa. O que se reescreve é o corpo e os
+   * botões, e um texto editado volta para análise — por isso a resposta é lida
+   * pelo mesmo caminho da submissão.
+   */
+  async editarTemplate(metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
+    const componentes: unknown[] = [{ type: 'BODY', text: template.corpo }];
+    if (template.botoes.length > 0) {
+      componentes.push({
+        type: 'BUTTONS',
+        buttons: template.botoes.map((botao: BotaoDaMensagem) => ({
+          type: 'QUICK_REPLY',
+          text: ROTULO_DO_BOTAO[botao],
+        })),
+      });
+    }
+
+    await this.chamar(metaId, { components: componentes });
+
+    /**
+     * A Meta responde `{ success: true }` na edição, sem estado.
+     *
+     * Ela recoloca o texto em análise, então o estado é `pendente` — e não o que
+     * ele era antes. Ler "aprovado" de uma resposta que não diz nada faria o
+     * produto mandar por um texto que a Meta ainda está olhando.
+     */
+    return { metaId, estado: 'pendente', motivoDaRecusa: null };
+  }
+
   async consultarTemplate(nome: string, idioma: string): Promise<RespostaDoTemplate> {
     const url = new URL(`${BASE}/${this.credenciais.wabaId}/message_templates`);
     url.searchParams.set('name', nome);

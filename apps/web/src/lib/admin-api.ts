@@ -3257,6 +3257,35 @@ export const templatesDoWhatsAppNaApi = (token: string) =>
     token,
   );
 
+/**
+ * Pergunta à Meta agora, sem esperar a volta do relógio.
+ *
+ * A conciliação roda de hora em hora e isso é certo para o conjunto; errado é
+ * ser o único caminho, porque quem aprova o texto no painel da Meta volta em
+ * segundos e lê "Na Meta".
+ */
+/**
+ * Manda o texto aprovado de um aviso para **um** cliente.
+ *
+ * `enviado: false` não é erro: é a guarda de consentimento, teto ou janela de
+ * silêncio dizendo por que não saiu, e o motivo vem escrito.
+ */
+export const mandarMensagemNaApi = (token: string, customerId: string, tipo: string) =>
+  chamar<{ enviado: boolean; wamid: string | null; motivo: string | null }>(
+    'POST',
+    '/v1/admin/whatsapp/mensagem',
+    { customerId, tipo },
+    token,
+  );
+
+export const conciliarWhatsAppNaApi = (token: string) =>
+  chamar<{ promovido: boolean; templates: number }>(
+    'POST',
+    '/v1/admin/whatsapp/conciliar',
+    {},
+    token,
+  );
+
 export const submeterTemplateNaApi = (
   token: string,
   corpo: { tipo: string; corpo: string },
@@ -3285,6 +3314,19 @@ export const automacoesNaApi = (token: string) =>
     undefined,
     token,
   );
+
+/**
+ * Liga e desliga, sem passar pela validação do formulário.
+ *
+ * Porta própria porque o freio não pode depender de o resto da linha ainda ser
+ * válido: a automação criada antes de o tipo ser fechado respondia 400 no
+ * reenvio e ficava ligada para sempre.
+ */
+export const definirAutomacaoAtivaNaApi = (
+  token: string,
+  id: string,
+  ativa: boolean,
+) => chamar<{ id: string; ativa: boolean }>('PATCH', '/v1/admin/automacoes/estado', { id, ativa }, token);
 
 export const salvarAutomacaoNaApi = (
   token: string,

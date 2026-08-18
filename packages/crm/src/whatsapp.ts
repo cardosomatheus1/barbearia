@@ -561,6 +561,22 @@ export async function submeterTemplate(params: {
   const idioma = params.idioma ?? 'pt_BR';
   const botoes = BOTOES_DO_AVISO[params.tipo];
 
+  /**
+   * O id que a Meta já deu a este texto, **antes** de a linha ser reescrita.
+   *
+   * É ele que decide criar ou editar. Lido depois do `INSERT ... ON CONFLICT`
+   * ele já estaria lá de qualquer jeito — a coluna é preservada —, mas ler
+   * antes deixa a decisão explícita em vez de depender de um `COALESCE` três
+   * linhas acima continuar existindo.
+   */
+  const jaNaMeta = await withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ meta_id: string | null }[]>`
+      SELECT meta_id FROM whatsapp_templates
+       WHERE location_id = ${params.locationId}::uuid AND name = ${nome} AND language = ${idioma}
+    `;
+    return linhas[0]?.meta_id ?? null;
+  });
+
   const criado = await withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO whatsapp_templates
@@ -592,12 +608,19 @@ export async function submeterTemplate(params: {
     return linha.id;
   });
 
-  const resposta = await params.provider.submeterTemplate({
-    nome,
-    idioma,
-    corpo: params.corpo,
-    botoes,
-  });
+  /**
+   * Editar quando a Meta já conhece o texto; criar quando não.
+   *
+   * Os dois são endpoints diferentes do lado dela, e o de criar é recusado
+   * sobre um nome que já existe. Enquanto só ele era chamado, corrigir uma
+   * vírgula num texto aprovado devolvia recusa da Meta numa frase que não
+   * explicava nada — e o nome é derivado do tipo desde o bloco 89, então a
+   * segunda submissão do mesmo aviso **sempre** cai nesse caso.
+   */
+  const paraAMeta = { nome, idioma, corpo: params.corpo, botoes };
+  const resposta = jaNaMeta
+    ? await params.provider.editarTemplate(jaNaMeta, paraAMeta)
+    : await params.provider.submeterTemplate(paraAMeta);
   await gravarRespostaDoTemplate({ tenantId: params.tenantId, templateId: criado, resposta });
 
   const atual = await templateDaUnidade(params.tenantId, criado);

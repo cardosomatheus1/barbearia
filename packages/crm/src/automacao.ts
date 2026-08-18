@@ -734,3 +734,58 @@ export async function atribuirObjetivos(params: {
     return atribuidos;
   });
 }
+
+/**
+ * Liga ou desliga uma automação, e **nada mais**.
+ *
+ * ## Por que é porta própria, e não o formulário inteiro
+ *
+ * O botão da lista reenviava o objeto completo com `ativa` virado, e isso
+ * amarrou o freio à validação de tudo o mais. Quando o bloco 88 fechou o tipo
+ * da automação em `TIPOS_DE_CAMPANHA` — decisão certa, porque `lembrete_24h`
+ * numa automação fura o opt-out de marketing e `senha_de_acesso` é credencial
+ * —, as linhas criadas antes passaram a ser **impossíveis de desligar**: o
+ * reenvio carregava o tipo antigo e a borda recusava com 400.
+ *
+ * Ou seja, exatamente as automações que mais precisavam ser caladas eram as
+ * únicas que não calavam. A única saída era um `UPDATE` à mão no banco.
+ *
+ * Reproduzido em produção e no piloto: tipo `lembrete_24h` devolve
+ * "Parâmetro inválido: tipo" e a linha continua ligada; tipo `retorno` desliga.
+ *
+ * Freio de emergência não se valida contra regra que entrou depois dele. Esta
+ * função toca uma coluna só, e por isso nenhuma regra futura sobre o **conteúdo**
+ * da automação pode voltar a trancar a saída.
+ *
+ * O filtro por id é o único: a RLS separa barbearias, e a linha ou é desta casa
+ * ou não existe para ela.
+ */
+export async function definirAutomacaoAtiva(params: {
+  readonly tenantId: string;
+  readonly id: string;
+  readonly ativa: boolean;
+  readonly staffId: string;
+  readonly staffName: string;
+}): Promise<{ readonly id: string; readonly ativa: boolean }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ id: string; active: boolean }[]>`
+      UPDATE automations
+         SET active = ${params.ativa}, updated_at = now()
+       WHERE id = ${params.id}::uuid
+      RETURNING id, active
+    `;
+    const linha = linhas[0];
+    if (!linha) throw new AutomacaoError('invalida', 'Esta automação não existe.');
+
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'automation.changed',
+      entity: 'automations',
+      entityId: linha.id,
+      after: { ativa: params.ativa },
+    });
+
+    return { id: linha.id, ativa: linha.active };
+  });
+}

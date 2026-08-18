@@ -361,6 +361,15 @@ export interface WhatsAppProvider {
   enviar(mensagem: MensagemParaEnviar): Promise<MensagemEnviada>;
   /** Submete um texto para aprovação da Meta. */
   submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate>;
+  /**
+   * Reescreve um texto que a Meta **já conhece** (bloco 92).
+   *
+   * Criar e editar são endpoints diferentes do lado dela, e usar o de criar
+   * sobre um nome que já existe é recusado — o que fazia corrigir uma vírgula
+   * num texto aprovado ser impossível pela tela. O nome e o idioma não mudam na
+   * edição: o que se reescreve é o corpo e os botões.
+   */
+  editarTemplate(metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate>;
   /** Pergunta em que pé está. A rede de segurança da conciliação. */
   consultarTemplate(nome: string, idioma: string): Promise<RespostaDoTemplate>;
   /** Pergunta se a posse do número já foi provada. */
@@ -399,6 +408,15 @@ export class FakeWhatsAppProvider implements WhatsAppProvider {
     this.submetidos.push(template);
     return this.resposta(template.nome);
   }
+
+  /** Editado vira submetido também: o que o teste confere é o texto que saiu. */
+  async editarTemplate(_metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
+    this.editados.push(template);
+    this.submetidos.push(template);
+    return this.resposta(template.nome);
+  }
+
+  readonly editados: TemplateParaAprovar[] = [];
 
   async consultarTemplate(nome: string, _idioma: string): Promise<RespostaDoTemplate> {
     return this.resposta(nome);

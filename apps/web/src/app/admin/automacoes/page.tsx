@@ -21,7 +21,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoSalvarAutomacao, acaoSair } from '../acoes';
+import { acaoLigarAutomacao, acaoSalvarAutomacao, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -115,19 +115,22 @@ function Automacao({ automacao, podeMexer }: {
               </p>
             ) : null}
           </div>
+          {/* Dois campos, e é o conserto.
+
+                A versão anterior reenviava a automação inteira com `ativa`
+                virado, o que amarrou o freio à validação de tudo o mais: quando
+                o tipo foi fechado em `TIPOS_DE_CAMPANHA`, as automações criadas
+                antes passaram a responder "Parâmetro inválido: tipo" e a
+                **continuar ligadas** — sem saída pela tela, só por `UPDATE` no
+                banco. Exatamente as que mais precisavam ser caladas.
+
+                O estado desejado é escrito, e não deduzido da ausência do
+                campo: para um `FormData`, "não veio" e "veio falso" são a mesma
+                coisa. */}
           {podeMexer ? (
-            <form action={acaoSalvarAutomacao}>
+            <form action={acaoLigarAutomacao}>
               <input name="id" type="hidden" value={automacao.id} />
-              <input name="nome" type="hidden" value={automacao.nome} />
-              <input name="gatilho" type="hidden" value={automacao.gatilho} />
-              <input name="limiar" type="hidden" value={automacao.limiar ?? ''} />
-              <input name="atrasoMinutos" type="hidden" value={automacao.atrasoMinutos} />
-              <input name="tipo" type="hidden" value={automacao.tipo} />
-              <input name="objetivo" type="hidden" value={automacao.objetivo} />
-              <input name="janelaDias" type="hidden" value={automacao.janelaDias} />
-              {/* Virado: a linha ligada manda o campo ausente, que é o que a
-                  ação lê como desligada. */}
-              {automacao.ativa ? null : <input name="ativa" type="hidden" value="on" />}
+              <input name="ativa" type="hidden" value={automacao.ativa ? 'nao' : 'sim'} />
               <button className="ui-button ui-button--ghost" type="submit">
                 {automacao.ativa ? 'Desligar' : 'Ligar'}
               </button>
@@ -171,7 +174,8 @@ export default async function AutomacoesPage({ searchParams }: Props) {
   const umaMensagemSo = TIPOS_DE_CAMPANHA.length === 1;
   const automacoes = resposta?.ok ? resposta.dados.automacoes : [];
   const erro = first(query['erro']);
-  const salva = first(query['feito']) === 'salva';
+  const feito = first(query['feito']);
+  const salva = feito === 'salva';
 
   return (
     <main className="ui-container painel__conteudo" {...secao('automacoes')}>
@@ -200,6 +204,18 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       {salva ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Automação salva. As que estão ligadas rodam de hora em hora.
+        </div>
+      ) : null}
+      {/* Ligar e desligar têm confirmação própria: "salva" sobre um botão de
+          desligar deixa quem apertou sem saber se a mensagem parou de sair. */}
+      {feito === 'desligada' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Automação desligada. Ela não manda mais nada até você ligar de novo.
+        </div>
+      ) : null}
+      {feito === 'ligada' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Automação ligada. A varredura roda de hora em hora.
         </div>
       ) : null}
 

@@ -18,6 +18,7 @@ import {
   gravarRespostaDoTemplate,
   desconectarNumero,
 } from './whatsapp.js';
+import { enviarMensagemAvulsa } from './mensagem-avulsa.js';
 
 /**
  * WhatsApp oficial contra Postgres real (bloco 55, SPEC §4.12).
@@ -525,6 +526,127 @@ describeIfDb('WhatsApp oficial', () => {
         ...operador,
       }),
     ).rejects.toMatchObject({ code: 'nome_invalido' });
+  });
+
+  /**
+   * A segunda submissão do mesmo aviso **edita**, e não cria.
+   *
+   * O nome é derivado do tipo desde o bloco 89, então corrigir uma vírgula num
+   * texto já enviado cai sempre neste caso. Criar sobre um nome que a Meta já
+   * conhece é recusado por ela — e a frase que voltava não explicava nada, o
+   * que fazia "não atualiza as mensagens já aprovadas" parecer defeito da tela.
+   */
+  it('reenviar o mesmo aviso edita o texto na Meta em vez de criar outro', async () => {
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+    provedor.proximoEstadoDoTemplate = 'aprovado';
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      corpo: 'Olá {{1}}, sentimos sua falta na {{2}}.',
+      provider: provedor,
+      ...operador,
+    });
+    expect(provedor.submetidos).toHaveLength(1);
+    expect(provedor.editados).toHaveLength(0);
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      corpo: 'Olá {{1}}, sentimos sua falta na {{2}}!',
+      provider: provedor,
+      ...operador,
+    });
+
+    expect(provedor.editados).toHaveLength(1);
+    expect(provedor.editados[0]?.corpo).toContain('!');
+  });
+
+  // -- a mensagem avulsa (bloco 92) -------------------------------------------
+
+  /**
+   * O envio avulso passa pelas **mesmas** guardas do automático.
+   *
+   * A tentação é isentá-lo: tem gente decidindo, então seria "de verdade". Mas
+   * consentimento é lei, o teto do mês existe para o número não ser queimado, e
+   * a janela de silêncio é sobre o cliente dormindo — nenhuma das três some
+   * porque quem apertou foi uma pessoa. Isento, o manual viraria o caminho mais
+   * curto para furar as três, e o caminho mais curto é o que todo mundo usa.
+   */
+  it('mensagem avulsa respeita quem revogou o marketing', async () => {
+    await ativar();
+    await aprovarTemplate('retorno', 'Olá {{1}}, sentimos sua falta na {{2}}.');
+    await exec(`UPDATE customers SET accepts_marketing = false WHERE id = '${CARLOS}'`);
+
+    let saiu = false;
+    const resultado = await enviarMensagemAvulsa({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      customerId: CARLOS,
+      tipo: 'retorno',
+      agora: new Date('2026-09-20T15:00:00Z'),
+      timeZone: 'America/Bahia',
+      ...operador,
+      enviar: async () => {
+        saiu = true;
+        return 'wamid.x';
+      },
+    });
+
+    expect(resultado.enviado).toBe(false);
+    expect(resultado.motivo).toBeTruthy();
+    expect(saiu).toBe(false);
+  });
+
+  it('mensagem avulsa sai e conta no teto do mês', async () => {
+    await ativar();
+    await aprovarTemplate('retorno', 'Olá {{1}}, sentimos sua falta na {{2}}.');
+    // A semente satisfaz tudo menos a regra sob teste: `accepts_marketing`
+    // nasce falso nesta suíte, e sem isto o que se mede é o opt-out de novo.
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+
+    const resultado = await enviarMensagemAvulsa({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      customerId: CARLOS,
+      tipo: 'retorno',
+      agora: new Date('2026-09-20T15:00:00Z'),
+      timeZone: 'America/Bahia',
+      ...operador,
+      enviar: async () => 'wamid.avulsa',
+    });
+
+    expect(resultado.enviado).toBe(true);
+
+    /**
+     * A linha em `notifications` é o que faz esta mensagem contar.
+     *
+     * Sem ela o envio avulso seria o furo do teto: quatro pelo motor e quantas
+     * quisessem pelo balcão, com a Meta somando todas do lado dela.
+     */
+    const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM notifications WHERE customer_id = '${CARLOS}' AND status = 'sent'`,
+    );
+    expect(Number(linhas[0]?.n ?? 0)).toBe(1);
+  });
+
+  it('mensagem avulsa recusa texto que fala de horário marcado', async () => {
+    await ativar();
+    await expect(
+      enviarMensagemAvulsa({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        customerId: CARLOS,
+        tipo: 'lembrete_24h',
+        agora: new Date('2026-09-20T15:00:00Z'),
+        timeZone: 'America/Bahia',
+        ...operador,
+        enviar: async () => null,
+      }),
+    ).rejects.toMatchObject({ code: 'tipo_invalido' });
   });
 
   // -- o envio ---------------------------------------------------------------

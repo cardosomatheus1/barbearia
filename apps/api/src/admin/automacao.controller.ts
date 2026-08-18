@@ -1,12 +1,17 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
-import { AutomacaoError, automacoesDaCasa, salvarAutomacao } from '@barbearia/crm';
+import { Body, Controller, Get, Patch, Put, UseGuards } from '@nestjs/common';
+import {
+  AutomacaoError,
+  automacoesDaCasa,
+  definirAutomacaoAtiva,
+  salvarAutomacao,
+} from '@barbearia/crm';
 import type { Gatilho, Objetivo, TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
-import { automacaoSchema } from './automacao.schemas.js';
+import { automacaoSchema, estadoDaAutomacaoSchema } from './automacao.schemas.js';
 
 /**
  * As automações da casa (bloco 56, SPEC §4.11).
@@ -42,6 +47,37 @@ export class AutomacaoController {
   @Get()
   async listar(@Staff() staff: AuthenticatedStaff) {
     return { automacoes: await automacoesDaCasa(staff.tenantId) };
+  }
+
+  /**
+   * Ligar e desligar, por porta própria.
+   *
+   * `PATCH` e não `PUT`: isto muda **uma** coluna, e a diferença não é
+   * cosmética. Enquanto o freio passava pelo formulário inteiro, uma regra nova
+   * sobre o conteúdo da automação trancava a saída das linhas antigas — e foi o
+   * que aconteceu quando o tipo foi fechado em `TIPOS_DE_CAMPANHA`: a automação
+   * com tipo velho respondia 400 e continuava ligada, sem saída pela tela.
+   *
+   * Desligar é o freio de emergência de um canal que fala com cliente. Ele não
+   * pode depender de o resto da linha ainda ser válido.
+   */
+  @Exige('marketing.send')
+  @Patch('estado')
+  async estado(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(estadoDaAutomacaoSchema)) body: { id: string; ativa: boolean },
+  ) {
+    try {
+      return await definirAutomacaoAtiva({
+        tenantId: staff.tenantId,
+        id: body.id,
+        ativa: body.ativa,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+      });
+    } catch (erro) {
+      return toHttp(erro);
+    }
   }
 
   @Exige('marketing.send')

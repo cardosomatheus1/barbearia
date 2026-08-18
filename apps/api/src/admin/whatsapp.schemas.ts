@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
+import { TIPOS_DE_CAMPANHA, TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
 
 /**
  * A borda do WhatsApp (bloco 55).
@@ -131,4 +131,16 @@ export const signupDaTelaSchema = z.object({
    */
   redirectUri: enderecoDeVolta.optional(),
   state: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+});
+
+/**
+ * Mandar uma mensagem para um cliente (bloco 92).
+ *
+ * `TIPOS_DE_CAMPANHA` e não os seis avisos, pela razão da automação: quem
+ * recebe uma mensagem avulsa **não tem horário marcado**, então `lembrete_24h`
+ * prometeria um horário que não existe — e `senha_de_acesso` é credencial.
+ */
+export const mensagemAvulsaSchema = z.object({
+  customerId: z.string().uuid(),
+  tipo: z.enum(TIPOS_DE_CAMPANHA),
 });

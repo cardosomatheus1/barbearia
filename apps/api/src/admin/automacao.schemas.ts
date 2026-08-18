@@ -31,3 +31,18 @@ export const automacaoSchema = z.object({
   janelaDias: z.number().int().min(1).max(JANELA_MAXIMA_DIAS),
   ativa: z.boolean(),
 });
+
+/**
+ * Ligar e desligar: `id` e `ativa`, e nada mais.
+ *
+ * Um schema próprio, e é o ponto. A borda do formulário confere tipo, gatilho,
+ * limiar e janela — e foi assim que uma automação criada antes do bloco 88
+ * deixou de poder ser desligada: o botão reenviava o objeto inteiro e a
+ * validação nova barrava o tipo antigo, com a linha continuando ligada.
+ *
+ * O freio não pode depender de o resto da linha ainda ser válido.
+ */
+export const estadoDaAutomacaoSchema = z.object({
+  id: z.string().uuid(),
+  ativa: z.boolean(),
+});

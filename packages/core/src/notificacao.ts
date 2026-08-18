@@ -60,6 +60,35 @@ export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
  * e `{{2}}` na campanha são textos diferentes, aprovados em separado. O que não
  * pode variar é dentro do mesmo tipo.
  */
+/**
+ * O nome de cada aviso, como o produto o chama na tela.
+ *
+ * Mora aqui e não na tela porque **duas** telas o mostram desde o bloco 92 — a
+ * de WhatsApp e a ficha do cliente —, e uma lista escrita ao lado é a que fica
+ * para trás no primeiro aviso novo. É a mesma decisão dos públicos de campanha,
+ * que viraram teste pelo mesmo motivo.
+ */
+export const NOME_DO_AVISO: Readonly<Record<TipoDeNotificacao, string>> = {
+  confirmacao: 'Confirmação do agendamento',
+  lembrete_24h: 'Lembrete de 24 horas',
+  lembrete_2h: 'Lembrete de 2 horas',
+  sua_vez: 'Sua vez na fila',
+  senha_de_acesso: 'Senha de primeiro acesso',
+  retorno: 'Convite de retorno',
+};
+
+/**
+ * O nome do aviso a partir de um texto qualquer.
+ *
+ * A tela recebe o tipo como `string` — ele vem da API, do banco, de um campo de
+ * formulário. Um `as` para calar o compilador aqui esconderia justamente o caso
+ * que interessa: o tipo que chegou e que este mapa não conhece. Devolver o
+ * próprio valor é o que a tela já fazia, agora com o compilador de acordo.
+ */
+export function nomeDoAviso(tipo: string): string {
+  return (NOME_DO_AVISO as Record<string, string | undefined>)[tipo] ?? tipo;
+}
+
 export const VARIAVEIS_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly string[]>> = {
   // Os três que falam de um horário marcado: é o que o cliente precisa ler.
   confirmacao: ['o nome do cliente', 'a hora do agendamento', 'o nome do profissional'],

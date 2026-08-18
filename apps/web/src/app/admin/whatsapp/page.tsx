@@ -6,6 +6,7 @@ import {
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
+  nomeDoAviso,
   TIPOS_DE_NOTIFICACAO,
   oQueFazerNaMeta,
   podeGerenciarTemplates,
@@ -23,6 +24,7 @@ import { redirect } from 'next/navigation';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerMotivoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
+  acaoConciliarWhatsApp,
   acaoIrParaMeta,
   acaoSalvarCadastroDoWhatsApp,
   acaoSubmeterTemplate,
@@ -97,16 +99,6 @@ const FALHA: Record<string, string> = {
     'Não deu para salvar. Se repetir, não é a sua conexão: o motivo fica no registro do servidor, e quem instalou o sistema consegue lê-lo.',
 };
 
-/** O rótulo de cada aviso, como o resto do produto o chama. */
-const NOME_DO_AVISO: Record<string, string> = {
-  confirmacao: 'Confirmação do agendamento',
-  lembrete_24h: 'Lembrete de 24 horas',
-  lembrete_2h: 'Lembrete de 2 horas',
-  sua_vez: 'Sua vez na fila',
-  senha_de_acesso: 'Senha de primeiro acesso',
-  retorno: 'Convite de retorno',
-};
-
 function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
   return (
     <li>
@@ -116,7 +108,7 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
         <div className="item-cadastro__cabeca">
           <div className="item-cadastro__quem">
             <h3 className="item-cadastro__nome">
-              {NOME_DO_AVISO[template.tipo] ?? template.tipo}
+              {nomeDoAviso(template.tipo)}
             </h3>
             <p className="item-cadastro__linha">
               {template.nome} · {ROTULO_DO_TEMPLATE[template.estado]}
@@ -447,6 +439,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           por SMS.
         </div>
       ) : null}
+      {feito === 'conciliado' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Perguntamos à Meta. O que ela já respondeu está abaixo — se ainda diz “Na Meta”, é
+          porque ela não terminou de analisar.
+        </div>
+      ) : null}
       {feito === 'conectado' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           WhatsApp conectado. Agora cadastre os textos abaixo — a Meta precisa aprovar cada um
@@ -560,6 +558,23 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           </ul>
         )}
 
+        {/* Perguntar agora, e não esperar a volta do relógio.
+
+            A conciliação roda de hora em hora, o que é certo para o conjunto e
+            errado como **único** caminho: quem digita o código do SMS no painel
+            da Meta volta para cá em segundos, lê "Na Meta" sobre um texto já
+            aprovado, e conclui que a tela travou. O mecanismo existia desde o
+            bloco 90 e não tinha como ser acionado por quem estava olhando.
+
+            Fica ao lado da lista porque é dela que se duvida. */}
+        {podeMexer ? (
+          <form action={acaoConciliarWhatsApp}>
+            <button className="ui-button ui-button--ghost" type="submit">
+              Perguntar à Meta agora
+            </button>
+          </form>
+        ) : null}
+
         {podeMexer ? (
           <details className="dobra">
             <summary className="dobra__titulo">Mandar um texto para aprovação</summary>
@@ -571,7 +586,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                 <select className="ui-field__input" id="tipo" name="tipo" required>
                   {TIPOS_DE_NOTIFICACAO.map((tipo) => (
                     <option key={tipo} value={tipo}>
-                      {NOME_DO_AVISO[tipo] ?? tipo}
+                      {nomeDoAviso(tipo)}
                     </option>
                   ))}
                 </select>
@@ -607,7 +622,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                 <dl className="significados">
                   {TIPOS_DE_NOTIFICACAO.map((tipo) => (
                     <div className="significados__par" key={tipo}>
-                      <dt>{NOME_DO_AVISO[tipo] ?? tipo}</dt>
+                      <dt>{nomeDoAviso(tipo)}</dt>
                       <dd>
                         {VARIAVEIS_DO_AVISO[tipo].map((qual, i) => (
                           <span key={qual}>

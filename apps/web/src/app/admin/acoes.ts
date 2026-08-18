@@ -48,7 +48,10 @@ import {
   emitirNotaNaApi,
   salvarDocumentoDoTomadorNaApi,
   salvarCadastroDoWhatsAppNaApi,
+  conciliarWhatsAppNaApi,
+  mandarMensagemNaApi,
   submeterTemplateNaApi,
+  definirAutomacaoAtivaNaApi,
   salvarAutomacaoNaApi,
   abrirUnidadeNaApi,
   criarCampanhaNaApi,
@@ -2897,6 +2900,29 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
 }
 
 
+/**
+ * Liga e desliga uma automação, sem reenviar o resto.
+ *
+ * A versão anterior reenviava o objeto inteiro com `ativa` virado, e isso
+ * amarrou o freio à validação de tudo o mais: automação criada antes de o tipo
+ * ser fechado respondia "Parâmetro inválido: tipo" e **continuava ligada**,
+ * sem saída pela tela.
+ *
+ * `ativa` vem do formulário como o estado **desejado**, escrito no campo
+ * escondido, e não da ausência do campo: "não veio" e "veio falso" são a mesma
+ * coisa para um `FormData`, e derivar disso já custou um defeito neste arquivo.
+ */
+export async function acaoLigarAutomacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await definirAutomacaoAtivaNaApi(
+    token,
+    texto(form, 'id'),
+    texto(form, 'ativa') === 'sim',
+  );
+  if (!resultado.ok) falhar(ROTA_AUTOMACOES, resultado.code);
+  redirect(`${ROTA_AUTOMACOES}?feito=${resultado.dados.ativa ? 'ligada' : 'desligada'}`);
+}
+
 export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const novo = texto(form, 'token');
@@ -2961,6 +2987,44 @@ export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
     falhar(ROTA_WHATSAPP, resultado.code);
   }
   redirect(`${ROTA_WHATSAPP}?feito=conectado`);
+}
+
+/**
+ * Pergunta à Meta o que ela ainda não respondeu, agora.
+ *
+ * Sem isto, o número aprovado e o texto aprovado só apareciam na tela na volta
+ * seguinte do relógio — até uma hora depois. Quem acabou de digitar o código do
+ * SMS no painel da Meta volta para cá em segundos e conclui que a tela travou.
+ */
+/**
+ * Manda uma mensagem para um cliente, da ficha dele.
+ *
+ * O desfecho volta em letras porque "não saiu" tem quatro motivos legítimos —
+ * revogou o marketing, já recebeu hoje, estourou o teto do mês, ou está na
+ * janela de silêncio — e nenhum deles é erro. Sem a frase, o balcão apertaria
+ * de novo achando que falhou.
+ */
+export async function acaoMandarMensagem(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  const resultado = await mandarMensagemNaApi(token, customerId, texto(form, 'tipo'));
+  const rota = `/admin/cliente/${customerId}`;
+  if (!resultado.ok) {
+    await guardarMotivoDaMeta(resultado.message);
+    falhar(rota, resultado.code);
+  }
+  if (!resultado.dados.enviado) {
+    await guardarMotivoDaMeta(resultado.dados.motivo ?? 'Não deu para mandar.');
+    falhar(rota, 'nao_saiu');
+  }
+  redirect(`${rota}?feito=mensagem`);
+}
+
+export async function acaoConciliarWhatsApp(): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await conciliarWhatsAppNaApi(token);
+  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  redirect(`${ROTA_WHATSAPP}?feito=conciliado`);
 }
 
 export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
