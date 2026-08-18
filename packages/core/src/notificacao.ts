@@ -78,6 +78,74 @@ export const NOME_DO_AVISO: Readonly<Record<TipoDeNotificacao, string>> = {
 };
 
 /**
+ * A maior posição de variável usada no corpo, que é o que a Meta conta.
+ *
+ * Posição e não ocorrência: um texto que usa `{{1}}` duas vezes pede **uma**
+ * variável, e um que usa só `{{2}}` pede duas — a Meta preenche por índice.
+ *
+ * Mora no `core` porque é lógica pura sobre uma string, e porque quem precisa
+ * dela agora são dois: o envio, que corta as variáveis pelo tamanho do texto
+ * aprovado, e a submissão, que manda uma amostra por posição.
+ */
+export function variaveisDoCorpo(corpo: string): number {
+  let maior = 0;
+  for (const achado of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    const posicao = Number(achado[1]);
+    if (Number.isFinite(posicao) && posicao > maior) maior = posicao;
+  }
+  return maior;
+}
+
+/**
+ * Um exemplo de cada variável, para a Meta analisar o texto (bloco 93).
+ *
+ * ## Por que isto existe
+ *
+ * A Meta **recusa** template cujas variáveis chegam sem amostra. A recusa vem
+ * com o nome da política — *"Variáveis de modelo sem texto de amostra"* — e o
+ * texto fica rejeitado sem nunca ter sido lido por ninguém: o produto mandava
+ * `Olá {{1}}, é sua vez na fila para a {{2}}` e a Meta não tinha como saber se
+ * `{{1}}` é um nome, um valor em reais ou um link.
+ *
+ * Aconteceu com o primeiro texto de verdade deste produto, e nada do nosso lado
+ * apontava para isso: a submissão respondia sucesso, o estado virava `pendente`,
+ * e a rejeição chegava depois pelo painel da Meta.
+ *
+ * ## Por que sai daqui, e casado com o significado
+ *
+ * A amostra precisa ser **plausível para aquela posição**: mandar "exemplo" nas
+ * três faria a Meta analisar um texto que não se parece com o que vai sair, e é
+ * pela verossimilhança que ela decide. Como o significado de cada posição já
+ * mora em `VARIAVEIS_DO_AVISO`, a amostra é casada com ele — e uma variável nova
+ * ali sem amostra aqui fica visível no `Record`, que o compilador cobra.
+ *
+ * Nomes inventados de propósito: a amostra vai para a Meta e não é cliente
+ * nenhum. É o mesmo cuidado de não pôr dado pessoal em log.
+ */
+export const EXEMPLO_DA_VARIAVEL: Readonly<Record<string, string>> = {
+  'o nome do cliente': 'Carlos',
+  'o nome da barbearia': 'Barbearia Domari',
+  'a hora do agendamento': 'terça-feira, 19 de agosto às 15:30',
+  'o nome do profissional': 'Ruan',
+};
+
+/**
+ * As amostras que acompanham um corpo, na ordem das posições que ele usa.
+ *
+ * Quem manda é o **corpo escrito**, não a lista do tipo: a barbearia pode
+ * escrever um texto com uma variável só, e mandar três amostras para duas
+ * posições é recusado pela Meta com a mesma cara de erro de conteúdo.
+ */
+export function exemplosDoCorpo(tipo: TipoDeNotificacao, corpo: string): readonly string[] {
+  const quantas = variaveisDoCorpo(corpo);
+  const significados = VARIAVEIS_DO_AVISO[tipo];
+  return Array.from({ length: quantas }, (_, i) => {
+    const qual = significados[i];
+    return (qual ? EXEMPLO_DA_VARIAVEL[qual] : undefined) ?? 'exemplo';
+  });
+}
+
+/**
  * O nome do aviso a partir de um texto qualquer.
  *
  * A tela recebe o tipo como `string` — ele vem da API, do banco, de um campo de

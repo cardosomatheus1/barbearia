@@ -24,6 +24,7 @@
  */
 
 import {
+  exemplosDoCorpo,
   ROTULO_DO_BOTAO,
   type BotaoDaMensagem,
   type EstadoDoNumero,
@@ -122,6 +123,33 @@ interface ErroDaMeta {
  * `provedorDoWhatsApp`, logo abaixo, e manter as duas coisas separadas é o que
  * permite exercitar esta classe contra a Graph API sem passar pelo banco.
  */
+/**
+ * O componente de corpo, com uma amostra por variável.
+ *
+ * A Meta **recusa** template cujas variáveis chegam sem exemplo, e a recusa vem
+ * com o nome da política: *"Variáveis de modelo sem texto de amostra"*. O texto
+ * fica rejeitado sem nunca ter sido lido — ela não tem como saber se `{{1}}` é
+ * um nome, um valor em reais ou um link.
+ *
+ * Nada do nosso lado apontava para isso: a submissão respondia sucesso, o
+ * estado virava `pendente`, e a rejeição chegava depois pelo painel dela. Foi o
+ * que aconteceu com o primeiro texto de verdade deste produto.
+ *
+ * Texto sem variável nenhuma não leva `example`: mandar um arranjo vazio é a
+ * mesma recusa por outro caminho.
+ */
+function corpoComAmostra(template: TemplateParaAprovar): unknown {
+  const amostras = exemplosDoCorpo(template.tipo, template.corpo);
+  if (amostras.length === 0) return { type: 'BODY', text: template.corpo };
+  return {
+    type: 'BODY',
+    text: template.corpo,
+    // `body_text` é um arranjo de arranjos: um conjunto de amostras por
+    // exemplo, e a Meta aceita um só.
+    example: { body_text: [amostras] },
+  };
+}
+
 export class MetaWhatsAppProvider implements WhatsAppProvider {
   constructor(
     private readonly credenciais: {
@@ -223,7 +251,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
    * conjunto de botões, que já é derivado do tipo do aviso.
    */
   async submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
-    const componentes: unknown[] = [{ type: 'BODY', text: template.corpo }];
+    const componentes: unknown[] = [corpoComAmostra(template)];
     if (template.botoes.length > 0) {
       componentes.push({
         type: 'BUTTONS',
@@ -265,7 +293,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
    * pelo mesmo caminho da submissão.
    */
   async editarTemplate(metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
-    const componentes: unknown[] = [{ type: 'BODY', text: template.corpo }];
+    const componentes: unknown[] = [corpoComAmostra(template)];
     if (template.botoes.length > 0) {
       componentes.push({
         type: 'BUTTONS',

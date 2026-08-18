@@ -311,6 +311,15 @@ export interface TemplateParaAprovar {
   readonly idioma: string;
   readonly corpo: string;
   readonly botoes: readonly BotaoDaMensagem[];
+  /**
+   * Qual aviso é, e existe para a **amostra** fazer sentido (bloco 93).
+   *
+   * A Meta recusa variável sem exemplo, e o exemplo precisa ser plausível para
+   * aquela posição — `{{2}}` é a hora num lembrete e o nome da casa numa
+   * campanha. Sem o tipo, a amostra seria genérica e o texto seria analisado
+   * como algo que não se parece com o que vai sair.
+   */
+  readonly tipo: TipoDeNotificacao;
 }
 
 export interface RespostaDoTemplate {

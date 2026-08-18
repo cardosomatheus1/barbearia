@@ -11,6 +11,7 @@ import {
   type EstadoDoWhatsApp,
   type TipoDeNotificacao,
   type WhatsAppProvider,
+  variaveisDoCorpo,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { enfileirarPara } from '@barbearia/jobs';
@@ -617,7 +618,7 @@ export async function submeterTemplate(params: {
    * explicava nada — e o nome é derivado do tipo desde o bloco 89, então a
    * segunda submissão do mesmo aviso **sempre** cai nesse caso.
    */
-  const paraAMeta = { nome, idioma, corpo: params.corpo, botoes };
+  const paraAMeta = { nome, idioma, corpo: params.corpo, botoes, tipo: params.tipo };
   const resposta = jaNaMeta
     ? await params.provider.editarTemplate(jaNaMeta, paraAMeta)
     : await params.provider.submeterTemplate(paraAMeta);
@@ -704,21 +705,6 @@ export interface PedidoDeMensagem {
  * unicidade dele: uma retentativa que já tinha enviado grava o mesmo id e
  * esbarra na constraint em vez de contar duas vezes.
  */
-/**
- * A maior posição de variável usada no corpo, que é o que a Meta conta.
- *
- * Posição e não ocorrência: um texto que usa `{{1}}` duas vezes pede **uma**
- * variável, e um que usa só `{{2}}` pede duas — a Meta preenche por índice.
- */
-export function variaveisDoCorpo(corpo: string): number {
-  let maior = 0;
-  for (const achado of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
-    const posicao = Number(achado[1]);
-    if (Number.isFinite(posicao) && posicao > maior) maior = posicao;
-  }
-  return maior;
-}
-
 export async function enviarPeloWhatsApp(
   pedido: PedidoDeMensagem,
 ): Promise<{ readonly wamid: string } | null> {
