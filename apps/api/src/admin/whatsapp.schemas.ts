@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TIPOS_DE_CAMPANHA, TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
+import { BOTOES_DA_MENSAGEM, TIPOS_DE_CAMPANHA, TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
 
 /**
  * A borda do WhatsApp (bloco 55).
@@ -35,15 +35,16 @@ export const templateSchema = z.object({
    */
   titulo: z.string().trim().min(1).max(80).optional(),
   /**
-   * Os botões, e só os dois que agem **sem** horário marcado.
+   * Os botões deste texto.
    *
-   * `confirmar` e `cancelar` mexem num agendamento provado, e quem recebe uma
-   * campanha não tem nenhum: aprovado com eles, o cliente aperta e o produto
-   * responde "o horário não é de quem respondeu" — nada acontece e ninguém
-   * sabe por quê. O domínio confere de novo, e as duas camadas existem porque
-   * uma delas é a que sobrevive.
+   * A borda confere a **forma** — que é botão conhecido do produto —, e o
+   * domínio confere se aquele aviso o aceita: `confirmar` mexe num agendamento
+   * provado, e uma campanha não tem nenhum. As duas camadas existem porque uma
+   * delas é a que sobrevive, e a que sabe a regra é a de baixo.
+   *
+   * Três é o teto da Meta para botões de resposta rápida.
    */
-  botoes: z.array(z.enum(['agendar_novamente', 'parar_de_receber'])).max(2).optional(),
+  botoes: z.array(z.enum(BOTOES_DA_MENSAGEM)).max(3).optional(),
   /**
    * Opcional: por padrão o nome na Meta é o próprio tipo do aviso.
    *

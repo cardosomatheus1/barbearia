@@ -317,10 +317,70 @@ export const EFEITO_DO_BOTAO: Readonly<Record<BotaoDaMensagem, string>> = {
  * pior combinação: o cliente aperta, o produto responde "o horário não é de
  * quem respondeu", e nada acontece sem que ninguém saiba por quê.
  */
-export const BOTOES_QUE_A_CASA_ESCOLHE: readonly BotaoDaMensagem[] = [
-  'agendar_novamente',
-  'parar_de_receber',
-];
+/**
+ * Quais botões cada aviso **pode** carregar, para a barbearia escolher.
+ *
+ * ## Por que agora dá para escolher, e antes não dava
+ *
+ * A regra deste repositório era categórica: botão sai do tipo, nunca do
+ * formulário, porque *"o que a Meta aprova precisa ser o que o motor manda"*.
+ * Ela existia por um mecanismo — o motor montava os botões de
+ * `BOTOES_DO_AVISO` na hora do envio, e a Meta casa a resposta do cliente pela
+ * **posição**: um texto aprovado com dois botões recebendo três do motor faria
+ * o cliente apertar "Confirmar" e o produto entender "Cancelar".
+ *
+ * Esse mecanismo mudou no bloco 94: o motor lê os botões **da linha do
+ * template**, que é o que a Meta aprovou. A divergência deixou de ser possível,
+ * e com ela caiu o motivo de a escolha não existir.
+ *
+ * ## O que continua fechado, e por quê
+ *
+ * A lista por tipo, e não uma lista só. Confirmar, remarcar e cancelar mexem
+ * num **agendamento provado**: num texto de campanha o cliente apertaria, o
+ * produto responderia "o horário não é de quem respondeu", e nada aconteceria
+ * sem que ninguém soubesse por quê.
+ *
+ * `sua_vez` e `senha_de_acesso` ficam sem nenhum, e é decisão: a primeira é a
+ * pessoa já dentro da barbearia esperando a vez — não há o que confirmar —, e a
+ * segunda é credencial, onde qualquer botão é superfície a mais.
+ *
+ * `BOTOES_DO_AVISO` continua sendo o **padrão** de cada aviso, e é o que sai
+ * quando a barbearia não escolhe.
+ */
+export const BOTOES_POSSIVEIS: Readonly<Record<TipoDeNotificacao, readonly BotaoDaMensagem[]>> = {
+  confirmacao: ['confirmar', 'remarcar', 'cancelar'],
+  lembrete_24h: ['confirmar', 'remarcar', 'cancelar'],
+  /**
+   * "Remarcar" continua disponível aqui, e a tela **avisa** em vez de proibir.
+   *
+   * Duas horas antes não há grade para remanejar no mesmo dia, e oferecer
+   * produz a frustração de tentar e não ter — o motivo escrito em
+   * `BOTOES_DO_AVISO`, que é por isso que o padrão não o traz. Mas é opinião de
+   * produto sobre o negócio de outra pessoa, e a barbearia que abre a agenda no
+   * mesmo dia está certa em querê-lo. Proibir seria o produto sabendo mais que
+   * o dono sobre a agenda dele.
+   */
+  lembrete_2h: ['confirmar', 'remarcar', 'cancelar'],
+  sua_vez: [],
+  senha_de_acesso: [],
+  retorno: ['agendar_novamente', 'parar_de_receber'],
+};
+
+/**
+ * Os botões que este aviso desaconselha, com o motivo.
+ *
+ * Aviso e não recusa: a tela diz o que acontece e deixa decidir. Recusar seria
+ * o produto opinando sobre a agenda de quem opera.
+ */
+export const RESSALVA_DO_BOTAO: Readonly<
+  Partial<Record<TipoDeNotificacao, Partial<Record<BotaoDaMensagem, string>>>>
+> = {
+  lembrete_2h: {
+    remarcar:
+      'Duas horas antes costuma não haver grade para remanejar no mesmo dia — quem tenta e não '
+      + 'acha horário fica mais frustrado que quem não recebeu a oferta.',
+  },
+};
 
 /**
  * O rótulo de um botão a partir de um texto qualquer.

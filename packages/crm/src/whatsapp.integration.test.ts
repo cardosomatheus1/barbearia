@@ -565,6 +565,62 @@ describeIfDb('WhatsApp oficial', () => {
     expect(provedor.editados[0]?.corpo).toContain('!');
   });
 
+  /**
+   * A barbearia escolhe os botões, dentro do que aquele aviso aceita.
+   *
+   * A regra antiga era categórica — botão sai do tipo, nunca do formulário —, e
+   * existia por um mecanismo: o motor montava os botões na hora do envio, e a
+   * Meta casa a resposta pela **posição**. Um texto aprovado com dois botões
+   * recebendo três faria o cliente apertar "Confirmar" e o produto entender
+   * "Cancelar".
+   *
+   * O motor passou a ler os botões da linha do template, que é o que a Meta
+   * aprovou. A divergência deixou de ser possível, e com ela caiu o motivo de a
+   * escolha não existir.
+   */
+  it('a barbearia escolhe os botões do texto', async () => {
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'lembrete_24h',
+      corpo: 'Oi {{1}}, amanhã às {{2}} com {{3}}.',
+      botoes: ['confirmar', 'cancelar'],
+      provider: provedor,
+      ...operador,
+    });
+
+    expect(provedor.submetidos.at(-1)?.botoes).toEqual(['confirmar', 'cancelar']);
+  });
+
+  /**
+   * E não escolhe o que aquele aviso não aceita.
+   *
+   * `confirmar` mexe num agendamento provado, e quem recebe campanha não tem
+   * nenhum: aprovado assim, o cliente aperta, o produto responde "o horário não
+   * é de quem respondeu", e nada acontece sem que ninguém saiba por quê.
+   */
+  it('botão que o aviso não aceita é recusado antes de ir à Meta', async () => {
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+
+    await expect(
+      submeterTemplate({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        tipo: 'retorno',
+        corpo: 'Oi {{1}}, volte à {{2}}.',
+        botoes: ['confirmar'],
+        provider: provedor,
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'botao_invalido' });
+
+    expect(provedor.submetidos).toHaveLength(0);
+  });
+
   // -- a mensagem avulsa (bloco 92) -------------------------------------------
 
   /**

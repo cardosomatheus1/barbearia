@@ -6,7 +6,8 @@ import {
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
-  BOTOES_QUE_A_CASA_ESCOLHE,
+  BOTOES_POSSIVEIS,
+  RESSALVA_DO_BOTAO,
   EFEITO_DO_BOTAO,
   nomeDoAviso,
   TIPOS_DE_NOTIFICACAO,
@@ -100,6 +101,34 @@ const FALHA: Record<string, string> = {
   request_failed:
     'Não deu para salvar. Se repetir, não é a sua conexão: o motivo fica no registro do servidor, e quem instalou o sistema consegue lê-lo.',
 };
+
+/**
+ * Os botões agrupados por quem os aceita, derivados de `BOTOES_POSSIVEIS`.
+ *
+ * Derivado e não escrito: um aviso novo, ou um botão novo num aviso existente,
+ * aparece aqui sozinho. Uma lista ao lado seria a que fica para trás — foi o que
+ * aconteceu três vezes com o rótulo dos avisos neste mesmo arquivo.
+ *
+ * Os avisos que não aceitam botão nenhum não viram grupo: `sua_vez` é a pessoa
+ * já esperando dentro da barbearia, e `senha_de_acesso` é credencial.
+ */
+const GRUPOS_DE_BOTAO = [
+  { titulo: 'Para confirmação e lembretes', tipo: 'lembrete_24h' as const },
+  { titulo: 'Para campanha e automação', tipo: 'retorno' as const },
+].map((g) => ({
+  titulo: g.titulo,
+  botoes: BOTOES_POSSIVEIS[g.tipo],
+  /**
+   * As ressalvas do aviso mais restritivo do grupo.
+   *
+   * O lembrete de 2 horas aceita "Remarcar" e desaconselha: duas horas antes
+   * não costuma haver grade para remanejar no mesmo dia. Aviso e não recusa —
+   * proibir seria o produto opinando sobre a agenda de quem opera.
+   */
+  ressalvas: (RESSALVA_DO_BOTAO[g.tipo] ?? RESSALVA_DO_BOTAO['lembrete_2h'] ?? {}) as Partial<
+    Record<string, string>
+  >,
+}));
 
 function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
   return (
@@ -671,22 +700,50 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                   Só os dois que agem **sem** horário marcado. Confirmar e
                   cancelar mexem num agendamento provado, e quem recebe campanha
                   não tem nenhum — o cliente apertaria e nada aconteceria. */}
+              {/* Os botões, agrupados **por aviso** e com o efeito ao lado.
+
+                  Cinco existem, e nem todo aviso aceita os cinco: confirmar,
+                  remarcar e cancelar mexem num agendamento provado, e quem
+                  recebe campanha não tem nenhum — apertaria e nada aconteceria.
+                  Ao contrário, "agendar novamente" num lembrete ofereceria
+                  marcar de novo a quem já tem hora marcada.
+
+                  Todos aparecem juntos porque o produto não tem componente de
+                  cliente para trocar a lista ao mexer no seletor de aviso — é a
+                  mesma limitação do rótulo que muda por opção. Então cada grupo
+                  diz a que aviso pertence, e o domínio recusa a combinação
+                  errada com a frase que explica.
+
+                  O efeito vem escrito porque botão é a única parte da mensagem
+                  em que o cliente **age**: sem ele, "Agendar novamente" parece
+                  marcar sozinho. */}
               <fieldset className="etapa">
                 <legend className="etapa__titulo">Botões, se quiser</legend>
                 <p className="etapa__texto">
-                  A Meta desenha o botão dentro da mensagem. Aparecem só se ela aprovar.
+                  A Meta desenha o botão dentro da mensagem, e ele só aparece se ela aprovar.
+                  Marque os do aviso que você escolheu acima.
                 </p>
-                <div className="alternativas">
-                  {BOTOES_QUE_A_CASA_ESCOLHE.map((b) => (
-                    <label className="alternativa" key={b}>
-                      <input name="botoes" type="checkbox" value={b} />
-                      <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{ROTULO_DO_BOTAO[b]}</span>
-                        <span className="alternativa__nota">{EFEITO_DO_BOTAO[b]}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                {GRUPOS_DE_BOTAO.map((grupo) => (
+                  <div key={grupo.titulo}>
+                    <p className="ui-field__label">{grupo.titulo}</p>
+                    <div className="alternativas">
+                      {grupo.botoes.map((b) => (
+                        <label className="alternativa" key={b}>
+                          <input name="botoes" type="checkbox" value={b} />
+                          <span className="alternativa__corpo">
+                            <span className="alternativa__nome">{ROTULO_DO_BOTAO[b]}</span>
+                            <span className="alternativa__nota">{EFEITO_DO_BOTAO[b]}</span>
+                            {grupo.ressalvas[b] ? (
+                              <span className="alternativa__nota alternativa__nota--risco">
+                                {grupo.ressalvas[b]}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </fieldset>
 
               <button className="ui-button ui-button--secondary ui-button--block" type="submit">

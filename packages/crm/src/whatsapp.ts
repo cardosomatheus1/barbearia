@@ -13,7 +13,7 @@ import {
   type WhatsAppProvider,
   variaveisDoCorpo,
   botaoConhecido,
-  BOTOES_QUE_A_CASA_ESCOLHE,
+  BOTOES_POSSIVEIS,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { registrarConsentimento } from './lgpd.js';
@@ -637,14 +637,15 @@ export async function submeterTemplate(params: {
   /**
    * Os botões escolhidos, conferidos contra o que a barbearia **pode** escolher.
    *
-   * A borda também confere, e as duas camadas existem porque uma delas é a que
+   * A lista é **por tipo**, e as duas camadas existem porque uma delas é a que
    * sobrevive: `confirmar` e `cancelar` mexem num agendamento provado, e um
    * texto de campanha não tem nenhum. Aprovado com eles, o cliente apertaria e
    * o produto responderia "o horário não é de quem respondeu" — nada acontece,
-   * e ninguém sabe por quê.
+   * e ninguém sabe por quê. Ao contrário, `agendar_novamente` num lembrete
+   * ofereceria marcar de novo a quem já tem hora marcada.
    */
   const escolhidos = params.botoes;
-  if (escolhidos?.some((b) => !BOTOES_QUE_A_CASA_ESCOLHE.includes(b))) {
+  if (escolhidos?.some((b) => !BOTOES_POSSIVEIS[params.tipo].includes(b))) {
     recusar('botao_invalido');
   }
   const botoes = escolhidos ?? BOTOES_DO_AVISO[params.tipo];

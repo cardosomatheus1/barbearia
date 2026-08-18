@@ -15,7 +15,11 @@ import {
   submeterTemplate,
   templatesDaUnidade,
 } from '@barbearia/crm';
-import { FakeWhatsAppProvider, type TipoDeNotificacao } from '@barbearia/core';
+import {
+  FakeWhatsAppProvider,
+  type BotaoDaMensagem,
+  type TipoDeNotificacao,
+} from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -365,7 +369,7 @@ export class WhatsAppController {
       tipo: TipoDeNotificacao;
       nome?: string;
       titulo?: string;
-      botoes?: ('agendar_novamente' | 'parar_de_receber')[];
+      botoes?: BotaoDaMensagem[];
       corpo: string;
     },
   ) {
