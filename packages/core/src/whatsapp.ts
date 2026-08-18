@@ -390,8 +390,73 @@ export const RESSALVA_DO_BOTAO: Readonly<
  * o botão gravado por uma versão anterior e que este mapa não conhece.
  */
 export function rotuloDoBotao(botao: string): string {
-  return (ROTULO_DO_BOTAO as Record<string, string | undefined>)[botao] ?? botao;
+  /**
+   * Os dois mapas, porque a linha do template guarda os dois tipos juntos.
+   *
+   * `whatsapp_templates.buttons` é um arranjo de nomes, e desde o bloco 95 ele
+   * mistura resposta rápida com os que levam a algum lugar. A tela não precisa
+   * saber a diferença para escrever o nome; quem precisa é o envio, e lá o
+   * filtro é por `botaoConhecido`.
+   */
+  const dos = ROTULO_DO_BOTAO as Record<string, string | undefined>;
+  const levam = ROTULO_DO_BOTAO_QUE_LEVA as Record<string, string | undefined>;
+  return dos[botao] ?? levam[botao] ?? botao;
 }
+
+/**
+ * Os botões que **levam a algum lugar**, e não voltam como resposta (bloco 95).
+ *
+ * ## Os três tipos da Meta, e por que só um era usado
+ *
+ * Ela aceita `QUICK_REPLY` — que volta para nós como mensagem —, `URL` e
+ * `PHONE_NUMBER`, que não voltam: o aparelho abre o navegador ou o discador e
+ * pronto. O produto só usava o primeiro, e isso deixava de fora as duas coisas
+ * que uma barbearia mais quer oferecer.
+ *
+ * ## O que isso conserta em `agendar_novamente`
+ *
+ * Aquele botão é resposta rápida, e o cliente que o aperta **não vai a lugar
+ * nenhum**: o produto registra "quer agendar de novo" e a pessoa continua na
+ * conversa, esperando algo acontecer. O comentário do executor já dizia por quê
+ * — escolher horário exige ver a grade, e a mensagem não tem grade — e a
+ * conclusão certa não era registrar a intenção: era **levar à grade**.
+ *
+ * `abrir_agenda` faz isso. `agendar_novamente` continua existindo para os
+ * textos já aprovados com ele, e a tela recomenda o novo.
+ *
+ * ## Por que o endereço não é digitado
+ *
+ * Sai do slug da barbearia e do telefone da unidade, que o produto já tem. Um
+ * campo livre seria um link que a barbearia digita errado uma vez e manda para
+ * mil pessoas — e, pior, um lugar onde alguém cola um endereço que não é dela.
+ */
+export const BOTOES_QUE_LEVAM = ['abrir_agenda', 'ligar'] as const;
+export type BotaoQueLeva = (typeof BOTOES_QUE_LEVAM)[number];
+
+export const ROTULO_DO_BOTAO_QUE_LEVA: Readonly<Record<BotaoQueLeva, string>> = {
+  abrir_agenda: 'Agendar',
+  ligar: 'Ligar para a barbearia',
+};
+
+export const EFEITO_DO_BOTAO_QUE_LEVA: Readonly<Record<BotaoQueLeva, string>> = {
+  abrir_agenda: 'abre a página de agendamento da barbearia no navegador do cliente',
+  ligar: 'abre o discador do celular já com o número da barbearia',
+};
+
+export function botaoQueLevaConhecido(valor: string): valor is BotaoQueLeva {
+  return (BOTOES_QUE_LEVAM as readonly string[]).includes(valor);
+}
+
+/**
+ * O teto da Meta, e ele é por tipo.
+ *
+ * Três de resposta rápida, e no máximo um de link e um de ligação. Mandar mais
+ * é recusa dela, e a recusa chega horas depois pelo painel — o formato de falha
+ * que este produto já pagou caro duas vezes.
+ */
+export const TETO_DE_RESPOSTA_RAPIDA = 3;
+export const TETO_DE_LINK = 1;
+export const TETO_DE_LIGACAO = 1;
 
 export function botaoConhecido(valor: string): valor is BotaoDaMensagem {
   return (BOTOES_DA_MENSAGEM as readonly string[]).includes(valor);
@@ -425,6 +490,14 @@ export interface TemplateParaAprovar {
   readonly idioma: string;
   readonly corpo: string;
   readonly botoes: readonly BotaoDaMensagem[];
+  /**
+   * Os botões que levam a algum lugar, com o destino já resolvido (bloco 95).
+   *
+   * O endereço e o telefone saem do cadastro da barbearia e chegam aqui
+   * prontos: o provedor não sabe consultar banco, e um destino montado lá
+   * dentro seria a segunda noção de "qual é a página desta casa".
+   */
+  readonly acoes?: readonly { readonly botao: BotaoQueLeva; readonly destino: string }[];
   /**
    * Qual aviso é, e existe para a **amostra** fazer sentido (bloco 93).
    *

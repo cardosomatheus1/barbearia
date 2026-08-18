@@ -14,6 +14,10 @@ import {
   variaveisDoCorpo,
   botaoConhecido,
   BOTOES_POSSIVEIS,
+  TETO_DE_LIGACAO,
+  TETO_DE_LINK,
+  TETO_DE_RESPOSTA_RAPIDA,
+  type BotaoQueLeva,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { registrarConsentimento } from './lgpd.js';
@@ -64,7 +68,9 @@ export type WhatsAppFailure =
   | 'numero_invalido'
   | 'numero_indisponivel'
   | 'nome_invalido'
-  | 'botao_invalido';
+  | 'botao_invalido'
+  | 'sem_telefone_da_casa'
+  | 'sem_pagina_da_casa';
 
 export class WhatsAppError extends Error {
   constructor(
@@ -93,6 +99,10 @@ const MENSAGEM: Readonly<Record<WhatsAppFailure, string>> = {
   nome_invalido: 'O nome do texto aceita só minúsculas, números e sublinhado.',
   botao_invalido:
     'Este botão precisa de um horário marcado, e quem recebe esta mensagem não tem um.',
+  sem_telefone_da_casa:
+    'O botão de ligação precisa do telefone da unidade, e ele não está cadastrado.',
+  sem_pagina_da_casa:
+    'O botão de agendar precisa da página pública da barbearia, e ela não está no ar.',
 };
 
 function recusar(code: WhatsAppFailure): never {
@@ -584,6 +594,39 @@ export function identificadorDoTexto(titulo: string | undefined, tipo: TipoDeNot
   return limpo === '' ? tipo : limpo;
 }
 
+/**
+ * Para onde cada botão que leva aponta, lido do cadastro da barbearia.
+ *
+ * Resolvido aqui e não no provedor: ele não fala com banco, e um destino
+ * montado lá dentro seria a segunda noção de "qual é a página desta casa" — a
+ * primeira já mora no slug, que é permanente por decisão do bloco 1.
+ */
+async function destinosDosBotoes(
+  tenantId: string,
+  locationId: string,
+  acoes: readonly BotaoQueLeva[],
+): Promise<readonly { readonly botao: BotaoQueLeva; readonly destino: string }[]> {
+  const casa = await withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ slug: string | null; telefone: string | null }[]>`
+      SELECT (SELECT slug FROM tenant_slugs
+               WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+               ORDER BY created_at LIMIT 1) AS slug,
+             (SELECT phone_e164 FROM locations WHERE id = ${locationId}::uuid) AS telefone
+    `;
+    return linhas[0] ?? null;
+  });
+
+  const base = process.env['WEB_URL'] ?? '';
+  return acoes.map((botao) => {
+    if (botao === 'ligar') {
+      if (!casa?.telefone) recusar('sem_telefone_da_casa');
+      return { botao, destino: casa.telefone };
+    }
+    if (!casa?.slug || base === '') recusar('sem_pagina_da_casa');
+    return { botao, destino: `${base}/${casa.slug}` };
+  });
+}
+
 export async function submeterTemplate(params: {
   readonly tenantId: string;
   readonly locationId: string;
@@ -624,6 +667,15 @@ export async function submeterTemplate(params: {
    * provado, e quem recebe campanha não tem.
    */
   readonly botoes?: readonly BotaoDaMensagem[];
+  /**
+   * Os botões que levam a algum lugar (bloco 95).
+   *
+   * O destino não vem daqui: sai do slug da barbearia e do telefone da unidade,
+   * resolvidos logo abaixo. Um campo livre seria um link digitado errado uma vez
+   * e mandado para mil pessoas — e um lugar onde alguém cola um endereço que não
+   * é dela.
+   */
+  readonly acoes?: readonly BotaoQueLeva[];
   readonly idioma?: string;
   readonly corpo: string;
   readonly provider: WhatsAppProvider;
@@ -649,6 +701,21 @@ export async function submeterTemplate(params: {
     recusar('botao_invalido');
   }
   const botoes = escolhidos ?? BOTOES_DO_AVISO[params.tipo];
+  if (botoes.length > TETO_DE_RESPOSTA_RAPIDA) recusar('botao_invalido');
+
+  const acoes = [...new Set(params.acoes ?? [])];
+  if (acoes.filter((a) => a === 'abrir_agenda').length > TETO_DE_LINK) recusar('botao_invalido');
+  if (acoes.filter((a) => a === 'ligar').length > TETO_DE_LIGACAO) recusar('botao_invalido');
+
+  /**
+   * O destino de cada botão que leva, do cadastro da casa.
+   *
+   * `abrir_agenda` vai para a página pública da barbearia, que é onde a grade
+   * está; `ligar` vai para o telefone da unidade. Sem telefone cadastrado o
+   * botão de ligação é **recusado** em vez de sair vazio: a Meta aprovaria um
+   * botão que não disca, e o cliente apertaria sem nada acontecer.
+   */
+  const destinos = acoes.length === 0 ? [] : await destinosDosBotoes(params.tenantId, params.locationId, acoes);
 
   /**
    * O id que a Meta já deu a este texto, **antes** de a linha ser reescrita.
@@ -673,7 +740,7 @@ export async function submeterTemplate(params: {
       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${params.locationId}::uuid, ${params.tipo}::notification_kind,
              ${nome}, ${idioma}, 'pendente', ${params.corpo},
-             ${JSON.stringify(botoes)}::jsonb, ${params.titulo ?? null}
+             ${JSON.stringify([...botoes, ...acoes])}::jsonb, ${params.titulo ?? null}
        WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
       ON CONFLICT (location_id, name, language) DO UPDATE SET
         body = EXCLUDED.body,
@@ -707,7 +774,7 @@ export async function submeterTemplate(params: {
    * explicava nada — e o nome é derivado do tipo desde o bloco 89, então a
    * segunda submissão do mesmo aviso **sempre** cai nesse caso.
    */
-  const paraAMeta = { nome, idioma, corpo: params.corpo, botoes, tipo: params.tipo };
+  const paraAMeta = { nome, idioma, corpo: params.corpo, botoes, tipo: params.tipo, acoes: destinos };
   const resposta = jaNaMeta
     ? await params.provider.editarTemplate(jaNaMeta, paraAMeta)
     : await params.provider.submeterTemplate(paraAMeta);

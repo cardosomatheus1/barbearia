@@ -24,6 +24,7 @@
  */
 
 import {
+  ROTULO_DO_BOTAO_QUE_LEVA,
   categoriaDoAviso,
   exemplosDoCorpo,
   ROTULO_DO_BOTAO,
@@ -124,6 +125,36 @@ interface ErroDaMeta {
  * `provedorDoWhatsApp`, logo abaixo, e manter as duas coisas separadas é o que
  * permite exercitar esta classe contra a Graph API sem passar pelo banco.
  */
+/**
+ * Os botões no formato da Meta, dos três tipos que ela aceita.
+ *
+ * `QUICK_REPLY` volta para nós como mensagem e é o que aciona confirmar e
+ * cancelar. `URL` e `PHONE_NUMBER` não voltam: o aparelho abre o navegador ou o
+ * discador, e é justamente por isso que eles resolvem o que o "agendar
+ * novamente" de resposta rápida nunca resolveu — aquele registra a intenção e
+ * deixa a pessoa parada na conversa.
+ *
+ * A ordem importa: os de resposta rápida primeiro, como a Meta os desenha.
+ */
+function botoesDaMeta(template: TemplateParaAprovar): readonly unknown[] {
+  const rapidos = template.botoes.map((botao: BotaoDaMensagem) => ({
+    type: 'QUICK_REPLY',
+    text: ROTULO_DO_BOTAO[botao],
+  }));
+
+  const levam = (template.acoes ?? []).map((a) =>
+    a.botao === 'ligar'
+      ? {
+          type: 'PHONE_NUMBER',
+          text: ROTULO_DO_BOTAO_QUE_LEVA[a.botao],
+          phone_number: a.destino,
+        }
+      : { type: 'URL', text: ROTULO_DO_BOTAO_QUE_LEVA[a.botao], url: a.destino },
+  );
+
+  return [...rapidos, ...levam];
+}
+
 /**
  * O componente de corpo, com uma amostra por variável.
  *
@@ -254,15 +285,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
    */
   async submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
     const componentes: unknown[] = [corpoComAmostra(template)];
-    if (template.botoes.length > 0) {
-      componentes.push({
-        type: 'BUTTONS',
-        buttons: template.botoes.map((botao: BotaoDaMensagem) => ({
-          type: 'QUICK_REPLY',
-          text: ROTULO_DO_BOTAO[botao],
-        })),
-      });
-    }
+    const botoes = botoesDaMeta(template);
+    if (botoes.length > 0) componentes.push({ type: 'BUTTONS', buttons: botoes });
 
     const corpo = await this.chamar(`${this.credenciais.wabaId}/message_templates`, {
       name: template.nome,
@@ -296,15 +320,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
    */
   async editarTemplate(metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
     const componentes: unknown[] = [corpoComAmostra(template)];
-    if (template.botoes.length > 0) {
-      componentes.push({
-        type: 'BUTTONS',
-        buttons: template.botoes.map((botao: BotaoDaMensagem) => ({
-          type: 'QUICK_REPLY',
-          text: ROTULO_DO_BOTAO[botao],
-        })),
-      });
-    }
+    const botoes = botoesDaMeta(template);
+    if (botoes.length > 0) componentes.push({ type: 'BUTTONS', buttons: botoes });
 
     await this.chamar(metaId, { components: componentes });
 

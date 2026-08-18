@@ -7,6 +7,9 @@ import {
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
   BOTOES_POSSIVEIS,
+  BOTOES_QUE_LEVAM,
+  EFEITO_DO_BOTAO_QUE_LEVA,
+  ROTULO_DO_BOTAO_QUE_LEVA,
   RESSALVA_DO_BOTAO,
   EFEITO_DO_BOTAO,
   nomeDoAviso,
@@ -723,6 +726,28 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                   A Meta desenha o botão dentro da mensagem, e ele só aparece se ela aprovar.
                   Marque os do aviso que você escolheu acima.
                 </p>
+                {/* Os que **levam a algum lugar**, e valem para qualquer aviso.
+
+                    A Meta aceita três tipos: resposta rápida, que volta para nós
+                    como mensagem, e link e ligação, que não voltam — o aparelho
+                    abre o navegador ou o discador. O produto só usava o primeiro.
+
+                    É o que conserta o "Agendar novamente": aquele é resposta
+                    rápida, e quem aperta **não vai a lugar nenhum** — o produto
+                    registra a intenção e a pessoa fica parada na conversa. */}
+                <p className="ui-field__label">Levam a algum lugar</p>
+                <div className="alternativas">
+                  {BOTOES_QUE_LEVAM.map((b) => (
+                    <label className="alternativa" key={b}>
+                      <input name="acoes" type="checkbox" value={b} />
+                      <span className="alternativa__corpo">
+                        <span className="alternativa__nome">{ROTULO_DO_BOTAO_QUE_LEVA[b]}</span>
+                        <span className="alternativa__nota">{EFEITO_DO_BOTAO_QUE_LEVA[b]}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
                 {GRUPOS_DE_BOTAO.map((grupo) => (
                   <div key={grupo.titulo}>
                     <p className="ui-field__label">{grupo.titulo}</p>

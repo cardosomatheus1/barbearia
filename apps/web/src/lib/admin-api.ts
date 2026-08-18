@@ -3290,7 +3290,7 @@ export const conciliarWhatsAppNaApi = (token: string) =>
 
 export const submeterTemplateNaApi = (
   token: string,
-  corpo: { tipo: string; titulo?: string; botoes?: string[]; corpo: string },
+  corpo: { tipo: string; titulo?: string; botoes?: string[]; acoes?: string[]; corpo: string },
 ) => chamar<TemplateNaTelaDoAdmin>('POST', '/v1/admin/whatsapp/templates', corpo, token);
 
 // -- automação (bloco 56) ----------------------------------------------------

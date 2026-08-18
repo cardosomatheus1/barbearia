@@ -18,6 +18,7 @@ import {
 import {
   FakeWhatsAppProvider,
   type BotaoDaMensagem,
+  type BotaoQueLeva,
   type TipoDeNotificacao,
 } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -370,6 +371,7 @@ export class WhatsAppController {
       nome?: string;
       titulo?: string;
       botoes?: BotaoDaMensagem[];
+      acoes?: BotaoQueLeva[];
       corpo: string;
     },
   ) {
@@ -383,6 +385,7 @@ export class WhatsAppController {
         ...(body.nome ? { nome: body.nome } : {}),
         ...(body.titulo ? { titulo: body.titulo } : {}),
         ...(body.botoes ? { botoes: body.botoes } : {}),
+        ...(body.acoes ? { acoes: body.acoes } : {}),
         corpo: body.corpo,
         // O de verdade quando há canal ligado; o de mentira só como último
         // recurso, para a tela continuar exercitável sem conta na Meta.

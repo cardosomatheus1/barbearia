@@ -3047,11 +3047,13 @@ export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
    * nada para explicar a diferença.
    */
   const botoes = form.getAll('botoes').filter((b): b is string => typeof b === 'string');
+  const acoes = form.getAll('acoes').filter((b): b is string => typeof b === 'string');
 
   const resultado = await submeterTemplateNaApi(token, {
     tipo: texto(form, 'tipo'),
     ...(titulo ? { titulo } : {}),
     ...(botoes.length > 0 ? { botoes } : {}),
+    ...(acoes.length > 0 ? { acoes } : {}),
     corpo: texto(form, 'corpo'),
   });
   if (!resultado.ok) {

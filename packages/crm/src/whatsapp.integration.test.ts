@@ -621,6 +621,72 @@ describeIfDb('WhatsApp oficial', () => {
     expect(provedor.submetidos).toHaveLength(0);
   });
 
+  /**
+   * Os botões que **levam a algum lugar**, com o destino do cadastro da casa.
+   *
+   * A Meta aceita três tipos e o produto só usava um. `agendar_novamente` é
+   * resposta rápida: quem aperta **não vai a lugar nenhum** — o produto registra
+   * a intenção e a pessoa fica parada na conversa. O de link resolve isso.
+   *
+   * O endereço não é digitado: sai do slug, que é permanente desde o bloco 1. Um
+   * campo livre seria um link errado mandado para mil pessoas.
+   */
+  it('o botão de agendar leva para a página da barbearia', async () => {
+    await cadastrar();
+    /**
+     * A semente satisfaz tudo menos a regra sob teste: o destino sai do slug e
+     * do endereço público, e sem os dois o que se mede é a recusa, não o link.
+     */
+    await exec(`
+      INSERT INTO tenant_slugs (slug, tenant_id) VALUES ('domari', '${TENANT}')
+      ON CONFLICT DO NOTHING;
+    `);
+    process.env['WEB_URL'] = 'https://barbearia.exemplo';
+    const provedor = new FakeWhatsAppProvider();
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      corpo: 'Oi {{1}}, volte à {{2}}!',
+      acoes: ['abrir_agenda'],
+      provider: provedor,
+      ...operador,
+    });
+
+    const enviado = provedor.submetidos.at(-1);
+    expect(enviado?.acoes).toHaveLength(1);
+    expect(enviado?.acoes?.[0]?.botao).toBe('abrir_agenda');
+    expect(enviado?.acoes?.[0]?.destino).toBe('https://barbearia.exemplo/domari');
+  });
+
+  /**
+   * Sem telefone cadastrado, o botão de ligação é **recusado**.
+   *
+   * Sair vazio seria pior: a Meta aprovaria um botão que não disca, e o cliente
+   * apertaria sem nada acontecer — a classe de defeito que o produto já pagou
+   * três vezes hoje, com o botão desenhado na tela e inerte no aparelho.
+   */
+  it('sem telefone da unidade, o botão de ligar é recusado antes de ir à Meta', async () => {
+    await cadastrar();
+    await exec(`UPDATE locations SET phone_e164 = NULL WHERE id = '${LOCAL}'`);
+    const provedor = new FakeWhatsAppProvider();
+
+    await expect(
+      submeterTemplate({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        tipo: 'retorno',
+        corpo: 'Oi {{1}}, volte à {{2}}!',
+        acoes: ['ligar'],
+        provider: provedor,
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'sem_telefone_da_casa' });
+
+    expect(provedor.submetidos).toHaveLength(0);
+  });
+
   // -- a mensagem avulsa (bloco 92) -------------------------------------------
 
   /**

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { BOTOES_DA_MENSAGEM, TIPOS_DE_CAMPANHA, TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
+import {
+  BOTOES_DA_MENSAGEM,
+  BOTOES_QUE_LEVAM,
+  TIPOS_DE_CAMPANHA,
+  TIPOS_DE_NOTIFICACAO,
+} from '@barbearia/core';
 
 /**
  * A borda do WhatsApp (bloco 55).
@@ -45,6 +50,15 @@ export const templateSchema = z.object({
    * Três é o teto da Meta para botões de resposta rápida.
    */
   botoes: z.array(z.enum(BOTOES_DA_MENSAGEM)).max(3).optional(),
+  /**
+   * Os botões que levam a algum lugar (bloco 95).
+   *
+   * O destino **não** vem da tela: sai do slug da barbearia e do telefone da
+   * unidade, resolvidos no domínio. Um campo de endereço aqui seria um link
+   * digitado errado uma vez e mandado para mil pessoas — e o lugar onde alguém
+   * cola um endereço que não é da casa.
+   */
+  acoes: z.array(z.enum(BOTOES_QUE_LEVAM)).max(2).optional(),
   /**
    * Opcional: por padrão o nome na Meta é o próprio tipo do aviso.
    *
