@@ -161,6 +161,15 @@ export interface MensagemDeAutomacao extends DeQuem {
   readonly clienteNome: string;
   readonly barbearia: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto a automação escolheu (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco, que resolve por tipo como antes. Sem
+   * este campo, as onze automações possíveis saíam todas com a mesma frase —
+   * o motor pegava o único aprovado do tipo, e os gatilhos existem justamente
+   * porque as situações são diferentes.
+   */
+  readonly templateId?: string | null;
 }
 
 /**

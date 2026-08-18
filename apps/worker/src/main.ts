@@ -220,6 +220,8 @@ class CanalDaCasa implements NotificationProvider {
     readonly quandoTexto?: string | undefined;
     readonly profissional?: string | undefined;
     readonly appointmentId?: string | null;
+    /** Qual texto mandar, quando quem chamou escolheu (bloco 94). */
+    readonly templateId?: string | null | undefined;
   }): Promise<string | null> {
     const zap = await provedorDoWhatsApp(params.tenantId, params.locationId);
     if (!zap) return null;
@@ -245,6 +247,7 @@ class CanalDaCasa implements NotificationProvider {
       tipo: params.tipo,
       telefone: params.telefone,
       variaveis: VARIAVEIS_DO_AVISO[params.tipo].map((qual) => valores[qual] ?? ''),
+      templateId: params.templateId ?? null,
       // `notifications` já guarda quem recebeu; `whatsapp_messages` guarda o
       // vínculo com o template, e é por ele que a entrega é conciliada.
       customerId: null,
@@ -289,6 +292,7 @@ class CanalDaCasa implements NotificationProvider {
       telefone: mensagem.phoneE164,
       clienteNome: mensagem.clienteNome,
       barbearia: mensagem.barbearia,
+      templateId: mensagem.templateId,
     });
     if (!foi) await this.reserva.enviarDeAutomacao(mensagem);
   }
@@ -498,6 +502,9 @@ async function main(): Promise<void> {
             clienteNome: disparo.clienteNome,
             barbearia: disparo.barbearia,
             tipo: disparo.tipo,
+            // O texto que esta automação escolheu. Sem ele, as onze automações
+            // possíveis saíam todas com a mesma frase.
+            templateId: disparo.templateId,
           });
           enviados += 1;
         }

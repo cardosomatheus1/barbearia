@@ -12,8 +12,19 @@ import {
   type TipoDeNotificacao,
   type WhatsAppProvider,
   variaveisDoCorpo,
+  botaoConhecido,
+  BOTOES_QUE_A_CASA_ESCOLHE,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import { registrarConsentimento } from './lgpd.js';
+
+/**
+ * O que fica gravado como "versão do texto" quando a saída foi por botão.
+ *
+ * Marcador fixo e não a versão do texto de marketing: a pessoa não leu nada,
+ * ela apertou. Afirmar que leu seria prova falsa; nulo o `CHECK` recusa.
+ */
+const VERSAO_DA_SAIDA_PELO_BOTAO = 'saida-pelo-botao-do-whatsapp';
 import { enfileirarPara } from '@barbearia/jobs';
 import { cifrarCom, decifrarCom } from '@barbearia/identity';
 
@@ -52,7 +63,8 @@ export type WhatsAppFailure =
   | 'template_nao_aprovado'
   | 'numero_invalido'
   | 'numero_indisponivel'
-  | 'nome_invalido';
+  | 'nome_invalido'
+  | 'botao_invalido';
 
 export class WhatsAppError extends Error {
   constructor(
@@ -79,6 +91,8 @@ const MENSAGEM: Readonly<Record<WhatsAppFailure, string>> = {
    */
   numero_indisponivel: 'Não foi possível salvar este número. Confira o identificador.',
   nome_invalido: 'O nome do texto aceita só minúsculas, números e sublinhado.',
+  botao_invalido:
+    'Este botão precisa de um horário marcado, e quem recebe esta mensagem não tem um.',
 };
 
 function recusar(code: WhatsAppFailure): never {
@@ -471,6 +485,14 @@ export interface TemplateNaTela {
   readonly id: string;
   readonly tipo: TipoDeNotificacao;
   readonly nome: string;
+  /**
+   * O nome em português, quando a barbearia deu um (bloco 94).
+   *
+   * Nulo é texto anterior ao bloco: a tela cai no rótulo do tipo, que é o que
+   * ela já mostrava. Com vários textos do mesmo tipo, é ele que os distingue —
+   * o `nome` é o identificador da Meta e não distingue nada para quem lê.
+   */
+  readonly titulo: string | null;
   readonly idioma: string;
   readonly estado: EstadoDoTemplate;
   readonly corpo: string;
@@ -478,13 +500,14 @@ export interface TemplateNaTela {
   readonly motivoDaRecusa: string | null;
 }
 
-const COLUNAS_DO_TEMPLATE = `id, kind::text AS kind, name, language, status::text AS status,
-                             body, buttons, rejection_reason`;
+const COLUNAS_DO_TEMPLATE = `id, kind::text AS kind, name, titulo, language,
+                             status::text AS status, body, buttons, rejection_reason`;
 
 const paraTela = (l: {
   id: string;
   kind: TipoDeNotificacao;
   name: string;
+  titulo: string | null;
   language: string;
   status: EstadoDoTemplate;
   body: string;
@@ -494,6 +517,7 @@ const paraTela = (l: {
   id: l.id,
   tipo: l.kind,
   nome: l.name,
+  titulo: l.titulo,
   idioma: l.language,
   estado: l.status,
   corpo: l.body,
@@ -532,6 +556,34 @@ const NOME_DO_TEMPLATE = /^[a-z0-9_]{1,512}$/;
  * lembrete de 2h não oferece seria aprovação gasta à toa, e o contrário —
  * mandar um botão que não foi aprovado — a Meta recusa na hora do envio.
  */
+/**
+ * O identificador da Meta a partir do título que a barbearia escreveu.
+ *
+ * A Meta só aceita minúsculas, números e sublinhado — sem acento, sem espaço,
+ * sem pontuação. Até o bloco 89 o balcão era obrigado a acertar isso na mão, e
+ * "Lembrete 24h" voltava como "Parâmetro inválido: nome"; depois disso o nome
+ * passou a sair do tipo, o que deu **um texto por tipo** e fez as onze
+ * automações possíveis mandarem a mesma frase.
+ *
+ * Sai do título para que dois títulos diferentes produzam dois textos. Sem
+ * título — que é o caminho dos seis avisos do motor — continua saindo do tipo.
+ *
+ * A colisão é possível ("Volta, Carlos!" e "volta carlos" dão o mesmo) e é
+ * tratada onde ela aparece: o `ON CONFLICT` reescreve o texto daquele nome, que
+ * é o comportamento certo para quem está corrigindo o mesmo texto e o errado
+ * para quem queria um segundo. A tela avisa antes, comparando os títulos.
+ */
+export function identificadorDoTexto(titulo: string | undefined, tipo: TipoDeNotificacao): string {
+  const limpo = (titulo ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60);
+  return limpo === '' ? tipo : limpo;
+}
+
 export async function submeterTemplate(params: {
   readonly tenantId: string;
   readonly locationId: string;
@@ -551,16 +603,51 @@ export async function submeterTemplate(params: {
    * aprovado do lado de lá e precisa casar com ele.
    */
   readonly nome?: string;
+  /**
+   * O nome que a barbearia deu ao texto, em português (bloco 94).
+   *
+   * `nome` é o identificador da Meta e só aceita minúsculas, números e
+   * sublinhado — nunca foi para ser lido por gente. Com vários textos do mesmo
+   * tipo, a tela precisa de algo que os distinga, e "retorno_2" não distingue
+   * nada.
+   *
+   * É ele que gera o identificador quando não vem um pronto, então dois títulos
+   * diferentes produzem dois textos, que é o ponto deste bloco inteiro.
+   */
+  readonly titulo?: string;
+  /**
+   * Os botões deste texto, quando a barbearia escolheu (bloco 94).
+   *
+   * Ausente cai em `BOTOES_DO_AVISO`, que é o caminho dos seis avisos que o
+   * motor dispara sozinho. Quem escreve um texto de campanha escolhe entre os
+   * dois que agem sem horário marcado — os outros precisam de um agendamento
+   * provado, e quem recebe campanha não tem.
+   */
+  readonly botoes?: readonly BotaoDaMensagem[];
   readonly idioma?: string;
   readonly corpo: string;
   readonly provider: WhatsAppProvider;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<TemplateNaTela> {
-  const nome = params.nome ?? params.tipo;
+  const nome = params.nome ?? identificadorDoTexto(params.titulo, params.tipo);
   if (!NOME_DO_TEMPLATE.test(nome)) recusar('nome_invalido');
   const idioma = params.idioma ?? 'pt_BR';
-  const botoes = BOTOES_DO_AVISO[params.tipo];
+
+  /**
+   * Os botões escolhidos, conferidos contra o que a barbearia **pode** escolher.
+   *
+   * A borda também confere, e as duas camadas existem porque uma delas é a que
+   * sobrevive: `confirmar` e `cancelar` mexem num agendamento provado, e um
+   * texto de campanha não tem nenhum. Aprovado com eles, o cliente apertaria e
+   * o produto responderia "o horário não é de quem respondeu" — nada acontece,
+   * e ninguém sabe por quê.
+   */
+  const escolhidos = params.botoes;
+  if (escolhidos?.some((b) => !BOTOES_QUE_A_CASA_ESCOLHE.includes(b))) {
+    recusar('botao_invalido');
+  }
+  const botoes = escolhidos ?? BOTOES_DO_AVISO[params.tipo];
 
   /**
    * O id que a Meta já deu a este texto, **antes** de a linha ser reescrita.
@@ -581,15 +668,16 @@ export async function submeterTemplate(params: {
   const criado = await withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO whatsapp_templates
-        (tenant_id, location_id, kind, name, language, status, body, buttons)
+        (tenant_id, location_id, kind, name, language, status, body, buttons, titulo)
       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${params.locationId}::uuid, ${params.tipo}::notification_kind,
              ${nome}, ${idioma}, 'pendente', ${params.corpo},
-             ${JSON.stringify(botoes)}::jsonb
+             ${JSON.stringify(botoes)}::jsonb, ${params.titulo ?? null}
        WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
       ON CONFLICT (location_id, name, language) DO UPDATE SET
         body = EXCLUDED.body,
         buttons = EXCLUDED.buttons,
+        titulo = COALESCE(EXCLUDED.titulo, whatsapp_templates.titulo),
         status = 'pendente',
         rejection_reason = NULL,
         updated_at = now()
@@ -689,6 +777,14 @@ export interface PedidoDeMensagem {
   readonly customerId: string | null;
   readonly appointmentId: string | null;
   readonly provider: WhatsAppProvider;
+  /**
+   * Qual texto mandar, quando quem chama escolheu (bloco 94).
+   *
+   * Ausente resolve por tipo, que é o caminho do motor — ele dispara sozinho e
+   * não tem quem escolha. A automação e a campanha escolhem, e é isso que faz
+   * onze gatilhos diferentes deixarem de mandar a mesma frase.
+   */
+  readonly templateId?: string | null;
 }
 
 /**
@@ -705,21 +801,59 @@ export interface PedidoDeMensagem {
  * unicidade dele: uma retentativa que já tinha enviado grava o mesmo id e
  * esbarra na constraint em vez de contar duas vezes.
  */
+/**
+ * Os botões gravados na linha do template, conferidos um a um.
+ *
+ * `jsonb` não tem tipo do lado de cá, e o que estiver ali foi escrito por uma
+ * versão anterior deste código ou por uma migração. Um valor que não é botão
+ * conhecido é descartado em silêncio — mandá-lo à Meta seria erro de envio, e
+ * recusar a mensagem inteira por um botão estranho tiraria do ar um texto que
+ * funciona.
+ */
+function botoesDaLinha(bruto: unknown): readonly BotaoDaMensagem[] {
+  if (!Array.isArray(bruto)) return [];
+  return bruto.filter((b): b is BotaoDaMensagem => typeof b === 'string' && botaoConhecido(b));
+}
+
 export async function enviarPeloWhatsApp(
   pedido: PedidoDeMensagem,
 ): Promise<{ readonly wamid: string } | null> {
   const cadastro = await cadastroDoWhatsApp(pedido.tenantId, pedido.locationId);
   if (!cadastro || !whatsappDisponivel(cadastro.estado)) return null;
 
+  /**
+   * O texto **escolhido**, quando quem chama escolheu (bloco 94).
+   *
+   * Sem escolha, resolve por tipo como sempre — é o caminho do motor, que
+   * dispara sozinho e não tem quem escolha. Com escolha, é a automação ou a
+   * campanha dizendo qual dos textos daquele tipo ela manda: até este bloco
+   * existia um só por tipo, e as onze automações possíveis saíam todas com a
+   * mesma frase.
+   *
+   * O `location_id` continua no filtro nos dois casos: o id vem de uma linha
+   * desta barbearia pela RLS, e a unidade é outra coisa — numa rede, o texto da
+   * filial não é o da matriz.
+   */
   const template = await withTenant(pedido.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
-      { id: string; name: string; language: string; status: EstadoDoTemplate; body: string }[]
+      {
+        id: string;
+        name: string;
+        language: string;
+        status: EstadoDoTemplate;
+        body: string;
+        buttons: unknown;
+      }[]
     >`
-      SELECT id, name, language, status::text AS status, body
+      SELECT id, name, language, status::text AS status, body, buttons
         FROM whatsapp_templates
        WHERE location_id = ${pedido.locationId}::uuid
-         AND kind = ${pedido.tipo}::notification_kind
          AND status = 'aprovado'
+         AND (
+           (${pedido.templateId ?? null}::uuid IS NOT NULL AND id = ${pedido.templateId ?? null}::uuid)
+           OR (${pedido.templateId ?? null}::uuid IS NULL
+               AND kind = ${pedido.tipo}::notification_kind)
+         )
        LIMIT 1
     `;
     return linhas[0] ?? null;
@@ -746,10 +880,28 @@ export async function enviarPeloWhatsApp(
   if (pedidas > pedido.variaveis.length) return null;
   const variaveis = pedido.variaveis.slice(0, pedidas);
 
-  const botoes = BOTOES_DO_AVISO[pedido.tipo];
-  const respostas = pedido.appointmentId
-    ? botoes.map((botao) => ({ botao, payload: montarPayload(botao, pedido.appointmentId!) }))
-    : [];
+  /**
+   * Os botões saem da **linha**, e não mais do tipo.
+   *
+   * O que a Meta aprovou é o que está gravado ali: `BOTOES_DO_AVISO` é o que se
+   * pede na criação, e a linha é o que ela devolveu. Com textos escritos pela
+   * barbearia — cada um com o seu conjunto — derivar do tipo mandaria os botões
+   * de um texto junto do corpo de outro, e a Meta casa a resposta pela
+   * **posição**: o cliente apertaria o primeiro e o produto entenderia outro.
+   */
+  const botoes = botoesDaLinha(template.buttons);
+  /**
+   * Os botões saem **sempre**, com ou sem agendamento.
+   *
+   * A versão anterior mandava zero quando `appointmentId` era nulo — que é o
+   * caso de toda campanha, toda automação e toda mensagem avulsa. O texto era
+   * aprovado com botão, a Meta o desenhava no cadastro, e o cliente recebia uma
+   * mensagem sem botão nenhum. Ninguém do lado de cá via a diferença.
+   */
+  const respostas = botoes.map((botao) => ({
+    botao,
+    payload: montarPayload(botao, pedido.appointmentId),
+  }));
 
   const enviada = await pedido.provider.enviar({
     para: pedido.telefone,
@@ -1080,6 +1232,36 @@ export async function executarResposta(params: {
    */
   if (!resposta.customerId) {
     return fechar('quem respondeu não está no cadastro — nada foi alterado');
+  }
+
+  /**
+   * Sair da lista age **sem** horário, e por isso vem antes da checagem dele.
+   *
+   * É o único botão deste produto que não fala de um agendamento: quem recebeu
+   * uma campanha não tem horário marcado, e exigir um faria o pedido de parar
+   * cair em "o horário não é de quem respondeu" — a pessoa apertaria, nada
+   * aconteceria, e a mensagem seguinte chegaria igual. Depois disso ela não
+   * aperta de novo: marca como spam, que derruba a qualidade do número e leva
+   * o lembrete de horário junto.
+   *
+   * Revogação é **inserção** no histórico, nunca apagamento da concessão — é a
+   * regra de `customer_consents` desde o bloco 33, e o espelho em
+   * `customers.accepts_marketing` é atualizado por gatilho.
+   *
+   * A versão é um marcador fixo porque não houve texto lido: a pessoa apertou
+   * um botão. Escrever a versão do texto de marketing afirmaria que ela leu
+   * aquilo agora, o que é falso; nulo o `CHECK` recusa, e com razão. É a decisão
+   * do motivo do ajuste de saldo, pela mesma razão.
+   */
+  if (resposta.botao === 'parar_de_receber') {
+    await registrarConsentimento({
+      tenantId: params.tenantId,
+      customerId: resposta.customerId,
+      finalidade: 'marketing',
+      concedido: false,
+      versaoDoTexto: VERSAO_DA_SAIDA_PELO_BOTAO,
+    });
+    return fechar('saiu da lista de promoções');
   }
 
   /**

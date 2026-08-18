@@ -6,6 +6,8 @@ import {
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
+  BOTOES_QUE_A_CASA_ESCOLHE,
+  EFEITO_DO_BOTAO,
   nomeDoAviso,
   TIPOS_DE_NOTIFICACAO,
   oQueFazerNaMeta,
@@ -580,6 +582,24 @@ export default async function WhatsAppPage({ searchParams }: Props) {
             <summary className="dobra__titulo">Mandar um texto para aprovação</summary>
             <form action={acaoSubmeterTemplate} className="formulario">
               <div className="ui-field">
+                <label className="ui-field__label" htmlFor="titulo">
+                  Nome deste texto
+                </label>
+                <input
+                  className="ui-field__input"
+                  id="titulo"
+                  maxLength={80}
+                  name="titulo"
+                  placeholder="Volta que a gente sente falta"
+                  required
+                />
+                <p className="ui-field__hint">
+                  Só para você reconhecer na lista. É por ele que você escolhe qual texto cada
+                  automação manda — dois nomes diferentes viram dois textos.
+                </p>
+              </div>
+
+              <div className="ui-field">
                 <label className="ui-field__label" htmlFor="tipo">
                   Para qual aviso
                 </label>
@@ -641,6 +661,33 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                   sai para ninguém.
                 </p>
               </div>
+
+              {/* Os botões, com o que acontece escrito ao lado.
+
+                  Botão é a única parte da mensagem em que o cliente **age**, e
+                  quem monta o texto precisa saber o efeito antes de oferecer:
+                  sem isso, "Agendar novamente" parece marcar sozinho.
+
+                  Só os dois que agem **sem** horário marcado. Confirmar e
+                  cancelar mexem num agendamento provado, e quem recebe campanha
+                  não tem nenhum — o cliente apertaria e nada aconteceria. */}
+              <fieldset className="etapa">
+                <legend className="etapa__titulo">Botões, se quiser</legend>
+                <p className="etapa__texto">
+                  A Meta desenha o botão dentro da mensagem. Aparecem só se ela aprovar.
+                </p>
+                <div className="alternativas">
+                  {BOTOES_QUE_A_CASA_ESCOLHE.map((b) => (
+                    <label className="alternativa" key={b}>
+                      <input name="botoes" type="checkbox" value={b} />
+                      <span className="alternativa__corpo">
+                        <span className="alternativa__nome">{ROTULO_DO_BOTAO[b]}</span>
+                        <span className="alternativa__nota">{EFEITO_DO_BOTAO[b]}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               <button className="ui-button ui-button--secondary ui-button--block" type="submit">
                 Mandar para aprovação

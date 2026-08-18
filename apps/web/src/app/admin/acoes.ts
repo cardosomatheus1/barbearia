@@ -2890,7 +2890,16 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
     // domínio de propósito, porque um limiar de zero dispara para todo mundo.
     limiar: limiarBruto ? Number(limiarBruto) : null,
     atrasoMinutos: Number(texto(form, 'atrasoMinutos') || '0'),
-    tipo: texto(form, 'tipo'),
+    /**
+     * O tipo é o do **texto escolhido**, e quem o resolve é o domínio.
+     *
+     * Ele decide o que importa — natureza da mensagem, opt-out, teto do mês,
+     * categoria na Meta —, e deixou de ser o endereço do texto. O que vai daqui
+     * é só o padrão para a automação sem texto escolhido; com texto, o domínio
+     * lê o tipo dele e ignora este campo, senão os dois divergiriam.
+     */
+    tipo: texto(form, 'tipo') || 'retorno',
+    templateId: texto(form, 'templateId') || null,
     objetivo: texto(form, 'objetivo'),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
     ativa: form.get('ativa') === 'on',
@@ -3029,8 +3038,20 @@ export async function acaoConciliarWhatsApp(): Promise<void> {
 
 export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
   const token = await exigirSessao();
+  const titulo = texto(form, 'titulo');
+  /**
+   * Os botões vêm como vários campos de mesmo nome, e `getAll` é o que os lê.
+   *
+   * `texto(form, 'botoes')` devolveria só o primeiro — e a pessoa que marcasse
+   * os dois receberia um texto com um botão só, aprovado assim pela Meta e sem
+   * nada para explicar a diferença.
+   */
+  const botoes = form.getAll('botoes').filter((b): b is string => typeof b === 'string');
+
   const resultado = await submeterTemplateNaApi(token, {
     tipo: texto(form, 'tipo'),
+    ...(titulo ? { titulo } : {}),
+    ...(botoes.length > 0 ? { botoes } : {}),
     corpo: texto(form, 'corpo'),
   });
   if (!resultado.ok) {

@@ -51,13 +51,33 @@ export interface AutomacaoNaTela {
   readonly objetivo: Objetivo;
   readonly janelaDias: number;
   readonly ativa: boolean;
+  /**
+   * Qual texto ela manda, e o nome dele para a tela (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco: ela resolve por tipo, e a tela diz isso
+   * em letras em vez de deixar o campo em branco — campo vazio numa lista de
+   * envio é a pessoa supondo qual mensagem sai.
+   */
+  readonly templateId: string | null;
+  readonly textoTitulo: string | null;
   /** Quantas saíram e quantas alcançaram o objetivo. É o que decide desligar. */
   readonly enviadas: number;
   readonly alcancadas: number;
 }
 
 const COLUNAS = `a.id, a.name, a.trigger::text AS trigger, a.threshold, a.delay_minutes,
-                 a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active`;
+                 a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active,
+                 a.template_id`;
+
+/**
+ * O título do texto é só da tela, e por isso não entra em `COLUNAS`.
+ *
+ * A varredura lê as mesmas colunas e **não** junta `whatsapp_templates` — nem
+ * precisa: ela decide quem dispara, e o nome do texto não entra nessa conta.
+ * Numa constante compartilhada, ele quebrava a varredura com "missing
+ * FROM-clause entry", que foi o que aconteceu.
+ */
+const TITULO_DO_TEXTO = `w.titulo AS texto_titulo`;
 
 const paraTela = (l: {
   id: string;
@@ -69,6 +89,8 @@ const paraTela = (l: {
   goal: Objetivo;
   goal_window_days: number;
   active: boolean;
+  template_id: string | null;
+  texto_titulo: string | null;
   enviadas: bigint | number;
   alcancadas: bigint | number;
 }): AutomacaoNaTela => ({
@@ -81,6 +103,8 @@ const paraTela = (l: {
   objetivo: l.goal,
   janelaDias: l.goal_window_days,
   ativa: l.active,
+  templateId: l.template_id,
+  textoTitulo: l.texto_titulo,
   enviadas: Number(l.enviadas),
   alcancadas: Number(l.alcancadas),
 });
@@ -96,12 +120,13 @@ const paraTela = (l: {
 export async function automacoesDaCasa(tenantId: string): Promise<readonly AutomacaoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
-      `SELECT ${COLUNAS},
+      `SELECT ${COLUNAS}, ${TITULO_DO_TEXTO},
               count(s.id) FILTER (WHERE s.sent_at IS NOT NULL) AS enviadas,
               count(s.id) FILTER (WHERE s.goal_met_at IS NOT NULL) AS alcancadas
          FROM automations a
          LEFT JOIN automation_sends s ON s.automation_id = a.id
-        GROUP BY a.id
+         LEFT JOIN whatsapp_templates w ON w.id = a.template_id
+        GROUP BY a.id, w.titulo
         ORDER BY a.created_at DESC`,
     );
     return linhas.map(paraTela);
@@ -116,6 +141,14 @@ export async function salvarAutomacao(params: {
   readonly limiar: number | null;
   readonly atrasoMinutos: number;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto esta automação manda (bloco 94).
+   *
+   * Opcional para não trancar a automação criada antes deste bloco, que resolve
+   * por tipo como sempre fez — é a decisão de `staff_locations`, onde ausência
+   * significa o comportamento anterior. A tela pede na primeira edição.
+   */
+  readonly templateId?: string | null;
   readonly objetivo: Objetivo;
   readonly janelaDias: number;
   readonly ativa: boolean;
@@ -151,16 +184,43 @@ export async function salvarAutomacao(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    /**
+     * O tipo sai do **texto escolhido**, e não de um campo ao lado.
+     *
+     * Os dois viajavam separados no formulário, e separados eles divergem: a
+     * automação declararia um tipo e mandaria o texto de outro, com o opt-out,
+     * o teto do mês e a categoria na Meta sendo decididos pelo primeiro. É a
+     * lista paralela de sempre, agora entre dois campos do mesmo envio.
+     *
+     * Conferido sob RLS antes de gravar, como todo id que vem do corpo: a
+     * checagem de integridade referencial do Postgres ignora row security, e a
+     * chave estrangeira aceitaria o texto de outra barbearia sem reclamar.
+     */
+    let tipo = params.tipo;
+    if (params.templateId) {
+      const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
+        SELECT kind::text AS kind FROM whatsapp_templates
+         WHERE id = ${params.templateId}::uuid
+      `;
+      const achado = doTexto[0];
+      if (!achado) throw new AutomacaoError('invalida', 'Este texto não existe.');
+      tipo = achado.kind;
+      if (!tipoDeCampanhaValido(tipo)) {
+        throw new AutomacaoError('invalida', 'Este texto não serve para automação.');
+      }
+    }
+
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO automations
         (id, tenant_id, name, trigger, threshold, delay_minutes, kind, goal,
-         goal_window_days, active, created_by)
+         goal_window_days, active, created_by, template_id)
       VALUES (COALESCE(${params.id ?? null}::uuid, gen_random_uuid()),
               NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.gatilho}::automation_trigger,
               ${params.limiar}, ${params.atrasoMinutos},
-              ${params.tipo}::notification_kind, ${params.objetivo}::automation_goal,
-              ${params.janelaDias}, ${params.ativa}, ${params.staffId}::uuid)
+              ${tipo}::notification_kind, ${params.objetivo}::automation_goal,
+              ${params.janelaDias}, ${params.ativa}, ${params.staffId}::uuid,
+              ${params.templateId ?? null}::uuid)
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         threshold = EXCLUDED.threshold,
@@ -169,6 +229,11 @@ export async function salvarAutomacao(params: {
         goal = EXCLUDED.goal,
         goal_window_days = EXCLUDED.goal_window_days,
         active = EXCLUDED.active,
+        -- COALESCE e nao EXCLUDED direto: quem liga e desliga pela porta
+        -- propria nao manda o texto, e sobrescrever com nulo apagaria a escolha
+        -- de quem montou a automacao. Trocar o texto e edicao, e ali ele vem.
+        -- (Sem crase: isto esta dentro de um template literal, e a crase o fecha.)
+        template_id = COALESCE(EXCLUDED.template_id, automations.template_id),
         updated_at = now()
       RETURNING id
     `;
@@ -451,7 +516,7 @@ export async function varrerAutomacoes(params: {
 }): Promise<ResultadoDaAutomacao> {
   return withTenant(params.tenantId, async (tx) => {
     const regras = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
-      `SELECT ${COLUNAS}, 0 AS enviadas, 0 AS alcancadas
+      `SELECT ${COLUNAS}, NULL AS texto_titulo, 0 AS enviadas, 0 AS alcancadas
          FROM automations a WHERE a.active`,
     );
 
@@ -548,6 +613,14 @@ export interface DisparoAEnviar {
   readonly id: string;
   readonly customerId: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto esta automação manda (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco, que resolve por tipo como antes. Sem
+   * isto, as onze automações possíveis saíam todas com a mesma frase, porque o
+   * motor pegava o único aprovado do tipo.
+   */
+  readonly templateId: string | null;
   readonly telefone: string;
   readonly clienteNome: string;
   /** O nome da casa, que é como a mensagem se apresenta. */
@@ -566,12 +639,13 @@ export async function disparosAEnviar(
         id: string;
         customer_id: string;
         kind: TipoDeNotificacao;
+        template_id: string | null;
         phone_e164: string;
         name: string;
         barbearia: string;
       }[]
     >`
-      SELECT s.id, s.customer_id, a.kind::text AS kind, c.phone_e164, c.name,
+      SELECT s.id, s.customer_id, a.kind::text AS kind, a.template_id, c.phone_e164, c.name,
              t.name AS barbearia
         FROM automation_sends s
         JOIN automations a ON a.id = s.automation_id
@@ -587,6 +661,7 @@ export async function disparosAEnviar(
       id: l.id,
       customerId: l.customer_id,
       tipo: l.kind,
+      templateId: l.template_id,
       telefone: l.phone_e164,
       clienteNome: l.name,
       barbearia: l.barbearia,

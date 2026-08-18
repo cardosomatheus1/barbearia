@@ -27,6 +27,24 @@ export const cadastroDoWhatsAppSchema = z.object({
 export const templateSchema = z.object({
   tipo: z.enum(TIPOS_DE_NOTIFICACAO),
   /**
+   * O nome que a barbearia deu ao texto, em português (bloco 94).
+   *
+   * É dele que sai o identificador da Meta, e é por isso que dois títulos
+   * diferentes produzem dois textos — que é o que faz onze automações deixarem
+   * de mandar a mesma frase.
+   */
+  titulo: z.string().trim().min(1).max(80).optional(),
+  /**
+   * Os botões, e só os dois que agem **sem** horário marcado.
+   *
+   * `confirmar` e `cancelar` mexem num agendamento provado, e quem recebe uma
+   * campanha não tem nenhum: aprovado com eles, o cliente aperta e o produto
+   * responde "o horário não é de quem respondeu" — nada acontece e ninguém
+   * sabe por quê. O domínio confere de novo, e as duas camadas existem porque
+   * uma delas é a que sobrevive.
+   */
+  botoes: z.array(z.enum(['agendar_novamente', 'parar_de_receber'])).max(2).optional(),
+  /**
    * Opcional: por padrão o nome na Meta é o próprio tipo do aviso.
    *
    * A regra dela é minúsculas, números e sublinhado — identificador de sistema,

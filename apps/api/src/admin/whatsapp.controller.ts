@@ -364,6 +364,8 @@ export class WhatsAppController {
     @Body(new ZodValidationPipe(templateSchema)) body: {
       tipo: TipoDeNotificacao;
       nome?: string;
+      titulo?: string;
+      botoes?: ('agendar_novamente' | 'parar_de_receber')[];
       corpo: string;
     },
   ) {
@@ -373,8 +375,10 @@ export class WhatsAppController {
         tenantId: staff.tenantId,
         locationId: local.id,
         tipo: body.tipo,
-        // Ausente é o caminho normal: o nome sai do tipo do aviso.
+        // Ausente é o caminho normal: o nome sai do título, e sem título do tipo.
         ...(body.nome ? { nome: body.nome } : {}),
+        ...(body.titulo ? { titulo: body.titulo } : {}),
+        ...(body.botoes ? { botoes: body.botoes } : {}),
         corpo: body.corpo,
         // O de verdade quando há canal ligado; o de mentira só como último
         // recurso, para a tela continuar exercitável sem conta na Meta.

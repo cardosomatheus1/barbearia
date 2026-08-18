@@ -91,6 +91,7 @@ export class AutomacaoController {
       limiar: number | null;
       atrasoMinutos: number;
       tipo: TipoDeNotificacao;
+      templateId?: string | null;
       objetivo: Objetivo;
       janelaDias: number;
       ativa: boolean;
@@ -105,6 +106,7 @@ export class AutomacaoController {
         limiar: body.limiar,
         atrasoMinutos: body.atrasoMinutos,
         tipo: body.tipo,
+        templateId: body.templateId ?? null,
         objetivo: body.objetivo,
         janelaDias: body.janelaDias,
         ativa: body.ativa,

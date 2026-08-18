@@ -27,6 +27,14 @@ export const automacaoSchema = z.object({
    * consentimento. E `senha_de_acesso` é credencial.
    */
   tipo: z.enum(TIPOS_DE_CAMPANHA),
+  /**
+   * Qual texto esta automação manda (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco, que resolve por tipo como antes — e é
+   * também o que a porta de ligar e desligar manda, porque ela não mexe no
+   * texto. O `COALESCE` do domínio é quem preserva a escolha ali.
+   */
+  templateId: z.string().uuid().nullable().optional(),
   objetivo: z.enum(OBJETIVOS),
   janelaDias: z.number().int().min(1).max(JANELA_MAXIMA_DIAS),
   ativa: z.boolean(),

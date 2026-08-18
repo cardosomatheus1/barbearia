@@ -10,6 +10,8 @@ import {
   ROTULO_DO_GATILHO,
   ROTULO_DO_OBJETIVO,
   TIPOS_DE_CAMPANHA,
+  nomeDoAviso,
+  rotuloDoBotao,
   type Gatilho,
   type Objetivo,
 } from '@barbearia/core';
@@ -54,15 +56,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const NOME_DO_AVISO: Record<string, string> = {
-  confirmacao: 'Confirmação do agendamento',
-  lembrete_24h: 'Lembrete de 24 horas',
-  lembrete_2h: 'Lembrete de 2 horas',
-  sua_vez: 'Sua vez na fila',
-  senha_de_acesso: 'Senha de primeiro acesso',
-  retorno: 'Convite de retorno',
-};
-
 /**
  * A linha, com a saída do estado em que ela está (bloco 92, §6 pergunta 3).
  *
@@ -95,7 +88,7 @@ function Automacao({ automacao, podeMexer }: {
             </p>
             <p className="item-cadastro__linha">
               {automacao.ativa ? 'Ligada' : 'Desligada'} · manda{' '}
-              {NOME_DO_AVISO[automacao.tipo] ?? automacao.tipo}
+              {nomeDoAviso(automacao.tipo)}
             </p>
             {/*
               Os dois números que decidem desligar. Sem eles a lista seria de
@@ -166,12 +159,23 @@ export default async function AutomacoesPage({ searchParams }: Props) {
   const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
   // Só o aprovado sai. Mostrar rascunho e pendente aqui prometeria mensagem que
   // a Meta ainda não deixa mandar.
-  const textos = (templates?.ok ? templates.dados.templates : []).filter(
-    (t) => t.estado === 'aprovado',
+  /**
+   * Os textos que a automação pode mandar (bloco 94).
+   *
+   * Só aprovado: mostrar rascunho e pendente prometeria mensagem que a Meta
+   * ainda não deixa sair. E só os tipos que uma automação usa — quem recebe não
+   * tem horário marcado, então lembrete e confirmação mentiriam no texto.
+   *
+   * A escolha passou a ser **o texto**, e não o tipo: até o bloco 94 existia um
+   * texto por tipo, e as onze automações possíveis saíam todas com a mesma
+   * frase.
+   */
+  const aprovados = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
-  // Um item só na lista de campanha é a verdade do produto hoje, e a tela
-  // deriva disso em vez de fingir uma escolha. Ver o comentário da etapa 2.
-  const umaMensagemSo = TIPOS_DE_CAMPANHA.length === 1;
+  // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
+  // uma decisão que não existe e quem abre procura a segunda opção.
+  const umaMensagemSo = aprovados.length <= 1;
   const automacoes = resposta?.ok ? resposta.dados.automacoes : [];
   const erro = first(query['erro']);
   const feito = first(query['feito']);
@@ -421,33 +425,39 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 className="alternativas"
                 {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
               >
-                {TIPOS_DE_CAMPANHA.map((t, i) => {
-                  const texto = textos.find((x) => x.tipo === t);
-                  return (
-                    <label className="alternativa" key={t}>
+                {aprovados.length === 0 ? (
+                  <p className="alternativa__nota alternativa__nota--risco">
+                    Nenhum texto aprovado — nada vai sair.
+                  </p>
+                ) : (
+                  aprovados.map((texto, i) => (
+                    <label className="alternativa" key={texto.id}>
                       <input
                         defaultChecked={i === 0}
-                        name="tipo"
+                        name="templateId"
                         type={umaMensagemSo ? 'hidden' : 'radio'}
-                        value={t}
+                        value={texto.id}
                       />
                       <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
-                        {texto ? (
-                          <span className="alternativa__texto">{texto.corpo}</span>
-                        ) : (
-                          <span className="alternativa__nota alternativa__nota--risco">
-                            Sem texto aprovado — nada vai sair.
+                        <span className="alternativa__nome">
+                          {texto.titulo ?? nomeDoAviso(texto.tipo)}
+                        </span>
+                        <span className="alternativa__texto">{texto.corpo}</span>
+                        {texto.botoes.length > 0 ? (
+                          <span className="alternativa__nota">
+                            Com botão: {texto.botoes.map((b) => rotuloDoBotao(b)).join(' · ')}
                           </span>
-                        )}
+                        ) : null}
                       </span>
                     </label>
-                  );
-                })}
+                  ))
+                )}
               </div>
               <p className="ui-field__hint">
                 É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
-                cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
+                cada um antes de deixar enviar.{' '}
+                <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — cada texto novo vira
+                uma opção nesta lista.
               </p>
             </div>
 

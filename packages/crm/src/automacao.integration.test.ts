@@ -31,6 +31,9 @@ const DONO = 'd6565656-0000-0000-0000-000000000001';
 const RUAN = 'e6565656-0000-0000-0000-000000000001';
 /** A automação de tipo que o produto passou a proibir, criada antes da guarda. */
 const ANTIGA = 'f6565656-0000-0000-0000-000000000001';
+/** Dois textos aprovados do mesmo tipo — o que o bloco 94 passou a permitir. */
+const TEXTO_A = 'a7565656-0000-0000-0000-000000000001';
+const TEXTO_B = 'a7565656-0000-0000-0000-000000000002';
 
 const AGORA = new Date('2026-09-20T15:00:00Z');
 const operador = { staffId: DONO, staffName: 'Matheus' };
@@ -142,6 +145,71 @@ describeIfDb('automação', () => {
       `SELECT active FROM automations WHERE id = '${ANTIGA}'`,
     );
     expect(linhas[0]?.active).toBe(false);
+  });
+
+  /**
+   * A automação aponta para **um texto**, e é o que faz onze gatilhos deixarem
+   * de mandar a mesma frase.
+   *
+   * Até o bloco 94 só `retorno` era permitido, o nome do texto saía do tipo, e
+   * um índice único impunha um aprovado por tipo. "Avisa quando a assinatura
+   * está vencendo" e "avisa quando o pacote está acabando" saíam com a mesma
+   * mensagem — e os gatilhos existem justamente porque as situações são
+   * diferentes.
+   */
+  it('duas automações do mesmo tipo mandam textos diferentes', async () => {
+    await exec(`
+      INSERT INTO whatsapp_templates
+        (id, tenant_id, location_id, kind, name, titulo, language, status, body)
+      VALUES
+        ('${TEXTO_A}', '${TENANT}', '${LOCAL}', 'retorno', 'volta_carlos',
+         'Volta, sentimos falta', 'pt_BR', 'aprovado', 'Oi {{1}}, volte à {{2}}!'),
+        ('${TEXTO_B}', '${TENANT}', '${LOCAL}', 'retorno', 'pacote_acabando',
+         'Seu pacote está no fim', 'pt_BR', 'aprovado', 'Oi {{1}}, seu pacote na {{2}} acaba.');
+    `);
+
+    const a = await automacao({ nome: 'Sumiu', templateId: TEXTO_A });
+    const b = await automacao({ nome: 'Pacote', templateId: TEXTO_B });
+
+    const linhas = await admin.$queryRawUnsafe<{ id: string; template_id: string }[]>(
+      `SELECT id, template_id FROM automations WHERE id IN ('${a.id}', '${b.id}')`,
+    );
+    const porId = new Map(linhas.map((l) => [l.id, l.template_id]));
+    expect(porId.get(a.id)).toBe(TEXTO_A);
+    expect(porId.get(b.id)).toBe(TEXTO_B);
+    expect(porId.get(a.id)).not.toBe(porId.get(b.id));
+  });
+
+  /**
+   * Salvar sem mandar texto **preserva** o que já estava escolhido.
+   *
+   * O formulário só desenha o rádio de texto quando há texto aprovado, então
+   * ele chega vazio em duas situações reais: a barbearia que ainda não aprovou
+   * nenhum, e a edição feita numa tela que não carregou a lista. Sem o
+   * `COALESCE` no `ON CONFLICT`, o primeiro salvamento nessas condições zeraria
+   * a escolha, e a automação voltaria a mandar a frase de outro texto — sem
+   * nada falhar e sem ninguém decidir isso.
+   *
+   * A primeira versão deste teste usava ligar-e-desligar e passava com e sem o
+   * conserto: aquele caminho é a porta estreita do bloco 92, que toca uma coluna
+   * só e nunca chegou perto do `ON CONFLICT`.
+   */
+  it('salvar sem texto não apaga o texto já escolhido', async () => {
+    await exec(`
+      INSERT INTO whatsapp_templates
+        (id, tenant_id, location_id, kind, name, titulo, language, status, body)
+      VALUES ('${TEXTO_A}', '${TENANT}', '${LOCAL}', 'retorno', 'volta_carlos',
+              'Volta, sentimos falta', 'pt_BR', 'aprovado', 'Oi {{1}}!');
+    `);
+    const criada = await automacao({ templateId: TEXTO_A });
+
+    // O mesmo formulário, salvo de novo sem o campo de texto.
+    await automacao({ id: criada.id, templateId: null });
+
+    const linhas = await admin.$queryRawUnsafe<{ template_id: string | null }[]>(
+      `SELECT template_id FROM automations WHERE id = '${criada.id}'`,
+    );
+    expect(linhas[0]?.template_id).toBe(TEXTO_A);
   });
 
   /** Um atendimento concluído há tantos dias. */

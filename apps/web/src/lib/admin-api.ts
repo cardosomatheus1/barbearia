@@ -3169,6 +3169,8 @@ export interface TemplateNaTelaDoAdmin {
   readonly id: string;
   readonly tipo: string;
   readonly nome: string;
+  /** O nome em português. Nulo é texto anterior ao bloco 94. */
+  readonly titulo: string | null;
   readonly idioma: string;
   readonly estado: 'rascunho' | 'pendente' | 'aprovado' | 'rejeitado' | 'pausado';
   readonly corpo: string;
@@ -3288,7 +3290,7 @@ export const conciliarWhatsAppNaApi = (token: string) =>
 
 export const submeterTemplateNaApi = (
   token: string,
-  corpo: { tipo: string; corpo: string },
+  corpo: { tipo: string; titulo?: string; botoes?: string[]; corpo: string },
 ) => chamar<TemplateNaTelaDoAdmin>('POST', '/v1/admin/whatsapp/templates', corpo, token);
 
 // -- automação (bloco 56) ----------------------------------------------------
@@ -3337,6 +3339,8 @@ export const salvarAutomacaoNaApi = (
     limiar: number | null;
     atrasoMinutos: number;
     tipo: string;
+    /** Qual texto ela manda (bloco 94). Nulo resolve por tipo, como antes. */
+    templateId?: string | null;
     objetivo: string;
     janelaDias: number;
     ativa: boolean;
