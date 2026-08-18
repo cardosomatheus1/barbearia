@@ -63,7 +63,23 @@ const NOME_DO_AVISO: Record<string, string> = {
   retorno: 'Convite de retorno',
 };
 
-function Automacao({ automacao }: { readonly automacao: AutomacaoNaTelaDoAdmin }) {
+/**
+ * A linha, com a saída do estado em que ela está (bloco 92, §6 pergunta 3).
+ *
+ * A tela criava automação e não desligava nenhuma: `ativa` era alcançável e não
+ * tinha botão de volta, então a única forma de calar uma mensagem que estava
+ * saindo errado era pelo banco. O domínio já aceitava — a ação de salvar recebe
+ * `id` desde o bloco 56 —, e a interface é que nunca ofereceu.
+ *
+ * O `PUT` é do objeto inteiro, então a linha reenvia o que já tem: um formulário
+ * de campos escondidos com `ativa` virado. Reenviar em vez de mandar só o estado
+ * mantém uma porta de escrita só — a mesma que o formulário de baixo usa, com a
+ * mesma validação de borda.
+ */
+function Automacao({ automacao, podeMexer }: {
+  readonly automacao: AutomacaoNaTelaDoAdmin;
+  readonly podeMexer: boolean;
+}) {
   const gatilho = automacao.gatilho as Gatilho;
   const varre = (GATILHOS_COM_VARREDURA as readonly string[]).includes(gatilho);
   return (
@@ -99,6 +115,24 @@ function Automacao({ automacao }: { readonly automacao: AutomacaoNaTelaDoAdmin }
               </p>
             ) : null}
           </div>
+          {podeMexer ? (
+            <form action={acaoSalvarAutomacao}>
+              <input name="id" type="hidden" value={automacao.id} />
+              <input name="nome" type="hidden" value={automacao.nome} />
+              <input name="gatilho" type="hidden" value={automacao.gatilho} />
+              <input name="limiar" type="hidden" value={automacao.limiar ?? ''} />
+              <input name="atrasoMinutos" type="hidden" value={automacao.atrasoMinutos} />
+              <input name="tipo" type="hidden" value={automacao.tipo} />
+              <input name="objetivo" type="hidden" value={automacao.objetivo} />
+              <input name="janelaDias" type="hidden" value={automacao.janelaDias} />
+              {/* Virado: a linha ligada manda o campo ausente, que é o que a
+                  ação lê como desligada. */}
+              {automacao.ativa ? null : <input name="ativa" type="hidden" value="on" />}
+              <button className="ui-button ui-button--ghost" type="submit">
+                {automacao.ativa ? 'Desligar' : 'Ligar'}
+              </button>
+            </form>
+          ) : null}
         </div>
       </article>
     </li>
@@ -132,7 +166,9 @@ export default async function AutomacoesPage({ searchParams }: Props) {
   const textos = (templates?.ok ? templates.dados.templates : []).filter(
     (t) => t.estado === 'aprovado',
   );
-  const aprovados = new Set(textos.map((t) => t.tipo));
+  // Um item só na lista de campanha é a verdade do produto hoje, e a tela
+  // deriva disso em vez de fingir uma escolha. Ver o comentário da etapa 2.
+  const umaMensagemSo = TIPOS_DE_CAMPANHA.length === 1;
   const automacoes = resposta?.ok ? resposta.dados.automacoes : [];
   const erro = first(query['erro']);
   const salva = first(query['feito']) === 'salva';
@@ -152,8 +188,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
 
       <h1 className="painel__titulo">Automações</h1>
       <p className="painel__sub">
-        O que a casa manda sozinha quando um fato acontece. Cada uma declara o que promete
-        produzir — é o número que diz se ela vale o que custa.
+        Mensagens que a casa manda sozinha quando um fato acontece.
       </p>
 
       {erro ? (
@@ -164,7 +199,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       ) : null}
       {salva ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Automação salva. A varredura roda de hora em hora.
+          Automação salva. As que estão ligadas rodam de hora em hora.
         </div>
       ) : null}
 
@@ -182,21 +217,24 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       ) : null}
 
       <section className="cartao-balcao">
-        <h2 className="cartao-balcao__titulo">O que está ligado</h2>
+        {/* "O que está ligado" era o título, e a lista sempre trouxe as
+            desligadas junto — agora mais, porque o botão de desligar deixa a
+            linha onde está. Título que não descreve o que está embaixo dele é a
+            §6 pergunta 6 entre um cabeçalho e a própria lista. */}
+        <h2 className="cartao-balcao__titulo">Suas automações</h2>
         <p className="cartao-balcao__texto">
-          Ninguém recebe duas automações no mesmo dia, e nada sai entre 21h e 8h. Promoção
-          respeita quem pediu para não receber e o teto de quatro por mês.
+          Valem para todas: uma por cliente por dia, nada entre 21h e 8h, no máximo quatro
+          promoções por mês, e quem pediu para não receber não recebe.
         </p>
 
         {automacoes.length === 0 ? (
           <p className="cartao-balcao__texto">
-            Nenhuma ainda. A que mais traz gente de volta é a de quem sumiu: escolha o número de
-            dias que corresponde ao intervalo normal da sua clientela.
+            Nenhuma ainda. Comece pela de quem sumiu — é a que mais traz gente de volta.
           </p>
         ) : (
           <ul className="lista-cadastro">
             {automacoes.map((a) => (
-              <Automacao automacao={a} key={a.id} />
+              <Automacao automacao={a} key={a.id} podeMexer={podeMexer} />
             ))}
           </ul>
         )}
@@ -206,15 +244,14 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         <section className="cartao-balcao">
           <h2 className="cartao-balcao__titulo">Nova automação</h2>
           {/*
-            Uma automação é uma frase, e a tela passou a dizê-la antes dos
-            campos. A versão anterior era oito campos técnicos em fila —
-            "limiar", "atrasoMinutos", "janelaDias" — sem nada explicando o que
-            se estava montando, e quem abria não sabia se tinha terminado.
+            Três perguntas numeradas, e a numeração diz a verdade: é uma
+            sequência, e a terceira só faz sentido depois das duas. A versão
+            anterior era oito campos técnicos em fila — "limiar",
+            "atrasoMinutos", "janelaDias" —, sem nada dizendo o que se estava
+            montando, e quem abria não sabia se tinha terminado.
           */}
           <p className="cartao-balcao__texto">
-            Uma automação é uma frase: <strong>quando</strong> ela dispara,{' '}
-            <strong>o que</strong> a pessoa recebe, e <strong>o que</strong> isso precisa
-            produzir. Depois de ligada ela roda sozinha, todo dia, sem você abrir esta tela.
+            São três perguntas. Depois de salva, ela roda sozinha — você não precisa voltar aqui.
           </p>
           <form action={acaoSalvarAutomacao} className="formulario">
             <div className="ui-field">
@@ -229,41 +266,69 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 placeholder="Volta pro corte"
                 required
               />
-              <p className="ui-field__hint">Só para você reconhecer depois.</p>
+              <p className="ui-field__hint">Só você vê. O cliente nunca lê este nome.</p>
             </div>
 
             <fieldset className="etapa">
               <legend className="etapa__titulo">1. Quando ela dispara</legend>
 
+            {/*
+              Escolha aberta, e não seletor.
+
+              O significado do número muda por gatilho, e o produto não tem
+              componente de cliente para trocar um rótulo ao mexer no seletor.
+              A versão anterior resolvia repetindo: a opção dizia "Sumiu há um
+              tempo — depois de quantos dias sem vir", e uma lista de seis
+              definições logo abaixo dizia a mesma coisa de novo, ocupando o
+              maior bloco da tela. Duas cópias do mesmo mapa, e nenhuma visível
+              na hora de preencher — porque o texto da opção some quando o
+              seletor fecha.
+
+              Aberto, cada gatilho carrega o próprio significado **e continua
+              na tela** enquanto a pessoa digita o número. Uma cópia só, sem
+              JavaScript, e a lista de definições deixa de existir.
+            */}
             <div className="ui-field">
-              <label className="ui-field__label" htmlFor="gatilho">
-                O gatilho
-              </label>
-              <select className="ui-field__input" id="gatilho" name="gatilho" required>
-                {/*
-                  O rótulo do número vai **dentro da opção**, e não numa dica
-                  abaixo. A dica teria que listar os sete significados de uma
-                  vez — foi o que a primeira versão fez, e virou um parágrafo de
-                  seis linhas que ninguém lê, o mesmo defeito que a tela fiscal
-                  teve com as explicações de regime. O produto não tem componente
-                  de cliente para trocar o texto ao mexer no seletor; pôr o
-                  rótulo na opção resolve sem JavaScript.
-                */}
-                {GATILHOS.map((g) => (
-                  <option key={g} value={g}>
-                    {ROTULO_DO_GATILHO[g]}
-                    {LIMIAR_DO_GATILHO[g] ? ` — ${LIMIAR_DO_GATILHO[g]}` : ''}
-                    {(GATILHOS_COM_VARREDURA as readonly string[]).includes(g)
-                      ? ''
-                      : ' (ainda não dispara)'}
-                  </option>
-                ))}
-              </select>
+              <span className="ui-field__label">O gatilho</span>
+              <div className="alternativas" role="radiogroup" aria-label="O gatilho">
+                {GATILHOS.map((g, i) => {
+                  const pede = LIMIAR_DO_GATILHO[g];
+                  const varre = (GATILHOS_COM_VARREDURA as readonly string[]).includes(g);
+                  return (
+                    <label className="alternativa" key={g}>
+                      <input
+                        defaultChecked={i === 0}
+                        name="gatilho"
+                        required
+                        type="radio"
+                        value={g}
+                      />
+                      <span className="alternativa__corpo">
+                        <span className="alternativa__nome">{ROTULO_DO_GATILHO[g]}</span>
+                        {/* A pergunta que o número responde, com o ponto de
+                            interrogação: "O número é: quantos dias antes." era
+                            o rótulo do domínio empurrado para dentro de uma
+                            frase que ele não cabe. */}
+                        <span className="alternativa__nota">
+                          {pede ? `${pede}?` : 'Não pede número.'}
+                        </span>
+                        {/* Gatilho que ainda não varre aparece marcado, nunca
+                            escondido: escondido faria a SPEC parecer entregue. */}
+                        {varre ? null : (
+                          <span className="alternativa__nota alternativa__nota--risco">
+                            Ainda não dispara sozinho.
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="limiar">
-                O número que o gatilho pede
+                O número
               </label>
               <input
                 className="ui-field__input"
@@ -272,115 +337,102 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 name="limiar"
                 placeholder="30"
               />
-              {/*
-                O significado do número fica **visível**, e não só dentro da
-                opção. A versão anterior dizia "está escrito na opção que você
-                escolheu acima" — e não estava: assim que o seletor fecha, o
-                texto da opção some, e a pessoa fica olhando um campo chamado
-                "número" sem saber número de quê.
-
-                Uma tabela curta e não um parágrafo: o produto já rejeitou a
-                dica que lista sete significados em prosa, e com razão. O que
-                muda aqui é a **forma** — sete linhas de duas colunas se
-                varrem com o olho; sete orações não.
-              */}
               <p className="ui-field__hint">
-                Gatilho que não pede número: deixe em branco. O que o número significa em cada um:
-              </p>
-              {/*
-                Lista de definição que **empilha**, e não tabela.
-
-                A primeira versão era uma tabela de duas colunas dentro de um
-                `.ui-scroll-x`. A página não rolava de lado — a medição confirmou
-                —, mas a segunda coluna ficava fora da tela em 360px, e era ela
-                que carregava o significado. Uma tabela que exige arrastar para
-                ler a resposta é pior que a dica que ela substituiu.
-
-                Empilhado no celular, duas colunas a partir de 768px: mesma
-                informação, sem gesto nenhum.
-              */}
-              <dl className="significados">
-                {GATILHOS.filter((g) => LIMIAR_DO_GATILHO[g]).map((g) => (
-                  <div className="significados__par" key={g}>
-                    <dt>{ROTULO_DO_GATILHO[g]}</dt>
-                    <dd>{LIMIAR_DO_GATILHO[g]}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field__label" htmlFor="atrasoMinutos">
-                Esperar quantos minutos
-              </label>
-              <input
-                className="ui-field__input"
-                defaultValue="0"
-                id="atrasoMinutos"
-                inputMode="numeric"
-                name="atrasoMinutos"
-              />
-              <p className="ui-field__hint">
-                Zero manda assim que a varredura passa. "Como foi seu atendimento?" enquanto a
-                pessoa ainda está pagando não é pesquisa, é constrangimento.
+                Responde à pergunta da opção marcada acima. Deixe em branco quando ela diz que
+                não pede número.
               </p>
             </div>
+
+            {/*
+              Ajuste fino, recolhido: zero serve para quase todo mundo, e um
+              campo que ninguém mexe competindo com os que decidem a automação é
+              o que faz a tela parecer maior do que a decisão.
+            */}
+            <details className="dobra">
+              <summary className="dobra__titulo">Esperar antes de mandar</summary>
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="atrasoMinutos">
+                  Esperar quantos minutos
+                </label>
+                <input
+                  className="ui-field__input"
+                  defaultValue="0"
+                  id="atrasoMinutos"
+                  inputMode="numeric"
+                  name="atrasoMinutos"
+                />
+                <p className="ui-field__hint">
+                  Zero manda na primeira varredura depois do fato. Serve para quase tudo.
+                </p>
+              </div>
+            </details>
 
             </fieldset>
 
             <fieldset className="etapa">
               <legend className="etapa__titulo">2. O que a pessoa recebe</legend>
 
-            <div className="ui-field">
-              <label className="ui-field__label" htmlFor="tipo">
-                Qual mensagem
-              </label>
-              {/* `TIPOS_DE_CAMPANHA` e não os seis avisos: a automação fala com quem
-                  **não tem horário marcado**, então lembrete e confirmação mentiriam
-                  no texto — e `senha_de_acesso` é credencial. É a mesma lista que a
-                  campanha já usava; a automação tinha ficado de fora. */}
-              <select className="ui-field__input" defaultValue="retorno" id="tipo" name="tipo">
-                {TIPOS_DE_CAMPANHA.map((t) => (
-                  <option key={t} value={t}>
-                    {NOME_DO_AVISO[t] ?? t}
-                    {aprovados.has(t) ? '' : ' — sem texto aprovado'}
-                  </option>
-                ))}
-              </select>
-              {/*
-                **Onde está a mensagem.** Era a pergunta que esta tela não
-                respondia: ela oferecia seis nomes abstratos, e o texto que o
-                cliente lê mora em outra tela, cadastrado como template que a
-                Meta aprova. Quem montava uma automação nunca via o que ia sair.
+            {/*
+              **O texto que sai, ao lado do nome que o escolhe.**
 
-                Não dá para escrever o texto aqui — a Meta exige aprovar cada um
-                antes, e um campo livre nesta tela prometeria algo que o canal
-                recusa. O que dá, e é o que faltava, é **mostrar o que existe**.
-              */}
-              {textos.length === 0 ? (
-                <p className="ui-field__hint">
-                  Você ainda não tem nenhum texto aprovado, então nada vai sair.{' '}
-                  <a href="/admin/whatsapp">Escreva o texto em WhatsApp</a> — a Meta precisa
-                  aprovar cada um antes de ele poder ser enviado.
-                </p>
-              ) : (
-                <>
-                  <p className="ui-field__hint">
-                    É este o texto que o cliente vai ler.{' '}
-                    <a href="/admin/whatsapp">Escrever ou mudar em WhatsApp</a>.
-                  </p>
-                  <ul className="textos-aprovados">
-                    {textos.map((t) => (
-                      <li key={t.id}>
-                        <span className="textos-aprovados__nome">
-                          {NOME_DO_AVISO[t.tipo] ?? t.tipo}
-                        </span>
-                        <span className="textos-aprovados__corpo">{t.corpo}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+              A versão anterior mostrava *todos* os textos aprovados embaixo de
+              um seletor, com a frase "é este o texto que o cliente vai ler" no
+              singular. Com o seletor em "Convite de retorno — sem texto
+              aprovado" e a caixa mostrando "Lembrete de 24 horas", a tela
+              afirmava que sairia um texto que aquela automação nunca manda —
+              duas telas discordando sobre o mesmo fato (§6, pergunta 6), dentro
+              de uma só.
+
+              Agora cada tipo carrega **o texto dele**, casado por `tipo`, e a
+              ausência é escrita em letras: card sem o dado principal lê como
+              defeito de carregamento.
+
+              `TIPOS_DE_CAMPANHA` e não os seis avisos: a automação fala com quem
+              **não tem horário marcado**, então lembrete e confirmação mentiriam
+              no texto — e `senha_de_acesso` é credencial.
+
+              O `input` é escondido enquanto a lista tem um item só. Um seletor
+              de uma opção é escolha de mentira: ele pede uma decisão que não
+              existe, e quem abre procura a segunda opção que nunca vai achar. O
+              dia em que houver a segunda, ela vira rádio sozinha — a lista é a
+              mesma, e é dela que a tela deriva.
+            */}
+            <div className="ui-field">
+              <span className="ui-field__label">
+                {umaMensagemSo ? 'A mensagem' : 'Qual mensagem'}
+              </span>
+              <div
+                className="alternativas"
+                {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
+              >
+                {TIPOS_DE_CAMPANHA.map((t, i) => {
+                  const texto = textos.find((x) => x.tipo === t);
+                  return (
+                    <label className="alternativa" key={t}>
+                      <input
+                        defaultChecked={i === 0}
+                        name="tipo"
+                        type={umaMensagemSo ? 'hidden' : 'radio'}
+                        value={t}
+                      />
+                      <span className="alternativa__corpo">
+                        <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
+                        {texto ? (
+                          <span className="alternativa__texto">{texto.corpo}</span>
+                        ) : (
+                          <span className="alternativa__nota alternativa__nota--risco">
+                            Sem texto aprovado — nada vai sair.
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="ui-field__hint">
+                É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
+                cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
+              </p>
             </div>
 
             </fieldset>
@@ -388,10 +440,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
             <fieldset className="etapa">
               <legend className="etapa__titulo">3. O que isso precisa produzir</legend>
               <p className="etapa__texto">
-                Sem objetivo, uma automação é uma mensagem que ninguém consegue defender nem
-                matar: ela some no meio do custo e fica ligada para sempre. A lista acima mostra
-                enviadas e alcançadas lado a lado — é por esses dois números que você desliga o
-                que não funciona.
+                É o que a lista lá em cima vai contar, para você saber se vale manter ligada.
               </p>
 
             <div className="ui-field">
@@ -421,17 +470,26 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 name="janelaDias"
               />
               <p className="ui-field__hint">
-                De 1 a {JANELA_MAXIMA_DIAS}. Janela larga demais dá crédito a esta mensagem por
-                um corte que a pessoa marcaria de qualquer jeito.
+                De 1 a {JANELA_MAXIMA_DIAS}. Prazo largo demais dá crédito a esta mensagem por um
+                corte que a pessoa marcaria de qualquer jeito.
               </p>
             </div>
 
             </fieldset>
 
+            {/*
+              `.marca` e não um `<input>` solto dentro do rótulo: o padrão do
+              navegador é 13px e reprova o piso de 44px em qualquer largura. É a
+              mesma caixa da tela de avisos.
+            */}
             <div className="ui-field">
-              <label className="ui-field__label" htmlFor="ativa">
-                <input defaultChecked id="ativa" name="ativa" type="checkbox" /> Ligada
+              <label className="marca" htmlFor="ativa">
+                <input defaultChecked id="ativa" name="ativa" type="checkbox" />
+                <span>Começar ligada</span>
               </label>
+              <p className="ui-field__hint">
+                Você pode desligar depois sem perder o que ela já mediu.
+              </p>
             </div>
 
             <button className="ui-button ui-button--primary ui-button--block" type="submit">

@@ -305,7 +305,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const textos = (templates?.ok ? templates.dados.templates : []).filter(
     (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
-  const aprovados = new Set(textos.map((t) => t.tipo));
+  const umaMensagemSo = TIPOS_DE_CAMPANHA.length === 1;
   const campanhas = resposta?.ok ? resposta.dados.campanhas : [];
   const grade = resposta?.ok ? resposta.dados.grade : [];
 
@@ -515,49 +515,55 @@ export default async function CampanhasPage({ searchParams }: Props) {
             <fieldset className="etapa">
               <legend className="etapa__titulo">2. O que eles recebem</legend>
 
+            {/*
+              Cada tipo com **o texto dele**, casado por `tipo` — a mesma forma
+              da tela de automações, e pela mesma razão: as duas respondem a
+              pergunta "o que vai sair?", e respondê-la de dois jeitos faria uma
+              discordar da outra sobre o mesmo fato (§6, pergunta 6).
+
+              O texto mora no template que a Meta aprova, e não se escreve aqui:
+              um campo livre prometeria o que o canal recusa. O `input` fica
+              escondido enquanto a lista tem um item só — um seletor de uma
+              opção pede uma decisão que não existe.
+            */}
             <div className="ui-field">
-              <label className="ui-field__label" htmlFor="tipo">
-                Qual mensagem
-              </label>
-              <select className="ui-field__input" defaultValue="retorno" id="tipo" name="tipo">
-                {TIPOS_DE_CAMPANHA.map((t) => (
-                  <option key={t} value={t}>
-                    {NOME_DO_AVISO[t] ?? t}
-                    {aprovados.has(t) ? '' : ' — sem texto aprovado'}
-                  </option>
-                ))}
-              </select>
+              <span className="ui-field__label">
+                {umaMensagemSo ? 'A mensagem' : 'Qual mensagem'}
+              </span>
+              <div
+                className="alternativas"
+                {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
+              >
+                {TIPOS_DE_CAMPANHA.map((t, i) => {
+                  const texto = textos.find((x) => x.tipo === t);
+                  return (
+                    <label className="alternativa" key={t}>
+                      <input
+                        defaultChecked={i === 0}
+                        name="tipo"
+                        type={umaMensagemSo ? 'hidden' : 'radio'}
+                        value={t}
+                      />
+                      <span className="alternativa__corpo">
+                        <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
+                        {texto ? (
+                          <span className="alternativa__texto">{texto.corpo}</span>
+                        ) : (
+                          <span className="alternativa__nota alternativa__nota--risco">
+                            Sem texto aprovado — nada vai sair.
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
               <p className="ui-field__hint">
-                Só textos de campanha aparecem aqui. Lembrete e confirmação são do agendamento —
-                mandá-los como campanha prometeria um horário que a pessoa não tem.
+                É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
+                cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
+                Lembrete e confirmação não entram — são do agendamento, e como campanha
+                prometeriam um horário que a pessoa não tem.
               </p>
-              {/* Onde está a mensagem: o texto mora no template que a Meta
-                  aprova, e sem mostrá-lo aqui quem monta a campanha nunca vê o
-                  que vai sair. */}
-              {textos.length === 0 ? (
-                <p className="ui-field__hint">
-                  Você ainda não tem nenhum texto aprovado, então nada vai sair.{' '}
-                  <a href="/admin/whatsapp">Escreva o texto em WhatsApp</a> — a Meta precisa
-                  aprovar cada um antes de ele poder ser enviado.
-                </p>
-              ) : (
-                <>
-                  <p className="ui-field__hint">
-                    É este o texto que o cliente vai ler.{' '}
-                    <a href="/admin/whatsapp">Escrever ou mudar em WhatsApp</a>.
-                  </p>
-                  <ul className="textos-aprovados">
-                    {textos.map((t) => (
-                      <li key={t.id}>
-                        <span className="textos-aprovados__nome">
-                          {NOME_DO_AVISO[t.tipo] ?? t.tipo}
-                        </span>
-                        <span className="textos-aprovados__corpo">{t.corpo}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
             </div>
 
             </fieldset>

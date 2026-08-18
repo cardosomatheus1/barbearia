@@ -7429,12 +7429,17 @@ main { padding-bottom: var(--space-8); }
    quebrar linha e nunca esticar a tela. */
 .textos-aprovados__corpo { overflow-wrap: anywhere; }
 
-/* O que o número significa em cada gatilho.
+/* O que um campo significa, em pares nome/significado.
 
    Empilhado por padrão e em duas colunas a partir de 768px. A primeira versão
    era tabela dentro de `.ui-scroll-x`: a página não rolava de lado, mas a
    coluna do significado ficava fora da tela em 360px — e era ela que a lista
-   existia para mostrar. Nunca esconder conteúdo no celular: refluir. */
+   existia para mostrar. Nunca esconder conteúdo no celular: refluir.
+
+   A tela de automações usava isto para explicar o número de cada gatilho e
+   deixou de usar no bloco 92: lá a definição passou a morar dentro da própria
+   opção, que é onde ela é lida na hora de preencher. Importação e WhatsApp
+   continuam usando, e ali o par é o formato certo — o nome não é escolhível. */
 .significados {
   margin: var(--space-2) 0 0;
   display: grid;
@@ -7451,6 +7456,114 @@ main { padding-bottom: var(--space-8); }
     grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
     gap: var(--space-3);
   }
+}
+
+/* Alternativas: a opção que carrega o próprio significado (bloco 92).
+
+   Nome próprio, e não `.escolha`. Aquela classe já existe duas vezes neste
+   arquivo — a linha do cardápio de serviços e a da marcação pelo balcão —, com
+   `display: flex` e `justify-content: space-between` valendo. Herdá-la aqui
+   jogaria o texto explicativo para a direita da tela e me daria a terceira
+   regra `.escolha` a brigar com as outras duas, que é exatamente o defeito que
+   o comentário do bloco do cardápio documenta.
+
+   ## Por que aberto, e não seletor
+
+   O significado do número muda por gatilho, e não há componente de cliente
+   neste produto para trocar um rótulo ao mexer num `<select>`. A tela resolvia
+   isso repetindo: cada `<option>` dizia "Sumiu há um tempo — depois de quantos
+   dias sem vir", e uma lista de seis definições logo abaixo dizia o mesmo de
+   novo, ocupando o maior bloco da página. Duas cópias do mesmo mapa, e nenhuma
+   visível na hora de preencher — porque o texto da opção some quando o seletor
+   fecha.
+
+   Aberto, o significado fica na tela enquanto a pessoa digita o número. Uma
+   cópia só, sem JavaScript, e a lista de definições deixa de existir. */
+.alternativas {
+  display: grid;
+  /* Coluna de grade nasce em `min-content`, e o `min-content` de um nome de
+     gatilho comprido decide a largura da tela sem este piso. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+/* O `container-type` vai no **ancestral**, e a primeira versão o pôs na própria
+   `.alternativas` — o defeito que a convenção deste repositório descreve em uma
+   linha: um elemento não responde sobre si mesmo. A regra nunca casava, a lista
+   ficava em coluna única em 1280, e nada ficava vermelho. Quem mostrou foi o
+   print.
+   `:has(>)` em vez de `container-type` no `.ui-field` inteiro porque
+   `container-type: inline-size` cria contenção, e o design system usa
+   `.ui-field` em toda tela do produto. */
+.ui-field:has(> .alternativas) { container-type: inline-size; }
+
+/* A pastilha da caixa de seleção tem a largura do próprio texto. Dentro de um
+   `.ui-field`, que é grade, ela esticava de ponta a ponta do cartão: uma
+   pastilha de 740px em volta de duas palavras lê como campo de texto, não como
+   caixa de marcar. */
+.ui-field > .marca { justify-self: start; }
+
+/* Onze alternativas empilhadas são uma tela inteira de rolagem no notebook do
+   balcão; em duas colunas cabem de uma olhada. O corte é acima da largura que o
+   cartão tem em 768px — em duas colunas ali, o nome mais comprido ("Abriu vaga
+   na lista de espera") quebra em três linhas e a lista fica mais alta do que
+   era em coluna única. */
+@container (min-width: 40rem) {
+  .alternativas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.alternativa {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  /* Alvo de toque em qualquer largura: a alternativa inteira é clicável, e não
+     só o botão de 13px que o navegador desenha. */
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.alternativa:hover { border-color: var(--color-border-strong); }
+
+/* Marcado é estado, e estado se lê de longe. `:has` porque o `<input>` é irmão
+   do corpo, não pai dele — e sem suporte a alternativa continua legível, só sem
+   o realce. */
+.alternativa:has(input:checked) {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-raised));
+}
+
+.alternativa:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.alternativa input {
+  /* O padrão do navegador é 13px e não cresce com `width`: o alvo é a
+     alternativa inteira, e o botão só marca onde ela está. */
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.alternativa__corpo { display: grid; gap: var(--space-1); min-width: 0; }
+.alternativa__nome { font-weight: var(--font-weight-medium); }
+.alternativa__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.alternativa__nota--risco { color: var(--color-danger); }
+
+/* O texto aprovado é o que o cliente lê, com `{{1}}` dentro: ele quebra linha e
+   nunca estica a tela. Em itálico porque é citação — o produto está mostrando
+   palavra de outra tela, não escrevendo a própria. */
+.alternativa__texto {
+  font-size: var(--font-size-sm);
+  font-style: italic;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 
 /* O caminho até a mensagem chegar (bloco 83).
