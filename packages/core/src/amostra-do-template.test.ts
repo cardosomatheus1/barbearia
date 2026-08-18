@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EXEMPLO_DA_VARIAVEL, VARIAVEIS_DO_AVISO, exemplosDoCorpo } from './notificacao.js';
+import {
+  EXEMPLO_DA_VARIAVEL,
+  VARIAVEIS_DO_AVISO,
+  categoriaDoAviso,
+  exemplosDoCorpo,
+  naturezaDe,
+} from './notificacao.js';
+import { BOTOES_DO_AVISO } from './whatsapp.js';
 import { TIPOS_DE_NOTIFICACAO } from './notificacao.js';
 
 /**
@@ -51,6 +58,36 @@ describe('a amostra que vai para a Meta', () => {
       for (const qual of VARIAVEIS_DO_AVISO[tipo]) {
         expect(EXEMPLO_DA_VARIAVEL[qual], qual).toBeTruthy();
       }
+    }
+  });
+});
+
+describe('a categoria que vai para a Meta', () => {
+  /**
+   * `sua_vez` não tem botão e é a mensagem mais transacional que existe aqui.
+   *
+   * Enquanto a categoria saía do conjunto de botões, ela ia declarada como
+   * marketing — que aprova menos, custa mais por mensagem e é a primeira que a
+   * Meta limita quando o número é novo. Botão era um palpite bom para quase
+   * tudo e errado justamente para ela.
+   */
+  it('aviso sem botão continua sendo utilidade quando é transacional', () => {
+    expect(BOTOES_DO_AVISO['sua_vez']).toHaveLength(0);
+    expect(categoriaDoAviso('sua_vez')).toBe('UTILITY');
+  });
+
+  it('só o convite de retorno é marketing', () => {
+    for (const tipo of TIPOS_DE_NOTIFICACAO) {
+      expect(categoriaDoAviso(tipo), tipo).toBe(tipo === 'retorno' ? 'MARKETING' : 'UTILITY');
+    }
+  });
+
+  it('a categoria acompanha a natureza, que é quem decide opt-out e teto', () => {
+    // Duas fontes para a mesma pergunta divergiriam no primeiro aviso novo, e a
+    // divergência apareceria como texto reprovado sem explicação.
+    for (const tipo of TIPOS_DE_NOTIFICACAO) {
+      const esperada = naturezaDe(tipo) === 'promocional' ? 'MARKETING' : 'UTILITY';
+      expect(categoriaDoAviso(tipo), tipo).toBe(esperada);
     }
   });
 });

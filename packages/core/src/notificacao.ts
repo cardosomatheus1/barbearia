@@ -186,6 +186,48 @@ export function naturezaDe(tipo: TipoDeNotificacao): NaturezaDaMensagem {
 }
 
 /**
+ * A categoria que a Meta cobra, aprova e limita — derivada do **tipo**.
+ *
+ * ## Por que não sai mais dos botões
+ *
+ * A primeira versão respondia `UTILITY` quando havia botão e `MARKETING` quando
+ * não havia. Botão é um bom palpite — o lembrete tem três, a campanha tem um —,
+ * e é só um palpite: `sua_vez` não tem botão nenhum e é a mensagem mais
+ * transacional que existe neste produto. Ela ia para a Meta declarada como
+ * marketing.
+ *
+ * Não é detalhe de etiqueta. Marketing tem regra de aprovação mais dura, custa
+ * diferente por mensagem, e é a categoria que a Meta limita quando o número é
+ * novo — então declarar utilidade como promoção é reprovar mais, pagar mais e
+ * mandar menos, tudo ao mesmo tempo.
+ *
+ * ## Por que da natureza, e não de um campo no formulário
+ *
+ * `naturezaDe` já decide quem respeita opt-out e quem conta no teto do mês, e a
+ * Meta separa as duas coisas pelo mesmo critério. Duas fontes para a mesma
+ * pergunta divergiriam no primeiro aviso novo — e a divergência apareceria como
+ * texto reprovado sem explicação, que é o defeito que este bloco veio consertar.
+ *
+ * Um seletor na tela seria pior ainda: a Meta **recategoriza** o que ela discorda,
+ * e a barbearia estaria escolhendo um campo que não decide nada e que a faz
+ * pagar mais quando escolhe errado.
+ *
+ * ## Sobre `AUTHENTICATION`
+ *
+ * A Meta tem uma terceira categoria, e `senha_de_acesso` seria dela. Não é usada
+ * de propósito: template de autenticação tem formato fechado — corpo fixo, botão
+ * de copiar código, nada de texto livre —, e o nosso é escrito pela barbearia.
+ * Declará-lo assim seria recusa garantida. `UTILITY` é o que ele de fato é do
+ * ponto de vista de quem recebe, e fica escrito aqui para ninguém "consertar"
+ * isto depois sem saber o que custa.
+ */
+export type CategoriaDoTemplate = 'UTILITY' | 'MARKETING';
+
+export function categoriaDoAviso(tipo: TipoDeNotificacao): CategoriaDoTemplate {
+  return naturezaDe(tipo) === 'promocional' ? 'MARKETING' : 'UTILITY';
+}
+
+/**
  * Os tipos que uma **campanha** pode usar (bloco 82).
  *
  * Uma campanha é marketing por construção: é o dono escolhendo um público e

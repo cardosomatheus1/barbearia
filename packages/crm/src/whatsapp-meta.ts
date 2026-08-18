@@ -24,6 +24,7 @@
  */
 
 import {
+  categoriaDoAviso,
   exemplosDoCorpo,
   ROTULO_DO_BOTAO,
   type BotaoDaMensagem,
@@ -245,10 +246,11 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   /**
    * Submete um texto para aprovação.
    *
-   * A categoria é `MARKETING` quando o texto não tem botão de agendamento e
-   * `UTILITY` quando tem — e não é escolha estética: a Meta cobra as duas
-   * diferente e recusa promoção declarada como utilidade. Quem decide é o
-   * conjunto de botões, que já é derivado do tipo do aviso.
+   * A categoria sai de `categoriaDoAviso`, que a deriva do **tipo** — e não do
+   * conjunto de botões, como esta linha fazia antes. Botão era um palpite bom
+   * para quase tudo e errado para `sua_vez`: sem botão nenhum, a mensagem mais
+   * transacional do produto ia declarada como marketing, que aprova menos,
+   * custa mais e é a primeira que a Meta limita em número novo.
    */
   async submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
     const componentes: unknown[] = [corpoComAmostra(template)];
@@ -265,7 +267,7 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     const corpo = await this.chamar(`${this.credenciais.wabaId}/message_templates`, {
       name: template.nome,
       language: template.idioma,
-      category: template.botoes.length > 0 ? 'UTILITY' : 'MARKETING',
+      category: categoriaDoAviso(template.tipo),
       components: componentes,
     });
 

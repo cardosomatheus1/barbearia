@@ -225,7 +225,7 @@ describe('o provedor da Meta', () => {
     expect(r.estado).toBe('pendente');
   });
 
-  it('template com botão vai como UTILITY, sem botão como MARKETING', async () => {
+  it('a categoria sai do tipo do aviso, e não dos botões', async () => {
     /**
      * Não é escolha estética: a Meta cobra as duas diferente e recusa promoção
      * declarada como utilidade. Quem decide é o conjunto de botões, que já é
