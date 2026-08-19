@@ -3127,9 +3127,75 @@ async function main() {
           const overflow = getComputedStyle(el).overflowX;
           if (overflow !== 'clip' && overflow !== 'hidden') continue;
           if (el.clientWidth <= 1 || el.clientHeight <= 1) continue;
-          if (el.scrollWidth > el.clientWidth + 1) {
-            const nome = `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`;
-            cortados.push(`${nome} (+${el.scrollWidth - el.clientWidth}px)`);
+
+          /**
+           * O que denuncia é um **filho de verdade** passando da borda, e não
+           * `scrollWidth`.
+           *
+           * A primeira versão comparava `scrollWidth > clientWidth`, e a
+           * primeira medição com ela acendeu três coisas — todas legítimas:
+           *
+           * - `.numero`, cujo `::after` é um brilho decorativo com
+           *   `right: -30%`, sangrando de propósito para o `overflow: hidden`
+           *   recortar. Pseudo-elemento conta no `scrollWidth` e não é filho;
+           * - `input.ui-field__input`, em que o valor digitado é mais largo que
+           *   a caixa — normal, e alcançável: o navegador rola o campo com o
+           *   cursor;
+           * - `path` de SVG, cuja caixa é coordenada de desenho e não layout.
+           *
+           * O filho real separa os três do defeito: uma tabela de 900px dentro
+           * de `<main>` **é** um elemento, e o seu retângulo passa da borda do
+           * recipiente. Texto solto e pseudo-elemento não são elementos, e por
+           * isso saem sozinhos — sem lista de exceções por nome de classe.
+           */
+          /**
+           * `ui-sangra` é a declaração do autor de que o recorte é enfeite.
+           *
+           * Par de `.ui-scroll-x`: um diz "rola, a pessoa alcança", o outro diz
+           * "sangra, e não há o que alcançar". A faixa que corre da landing é
+           * `max-content` animado — indistinguível, para esta varredura, de uma
+           * tabela que perdeu colunas. A diferença é intenção, e intenção não se
+           * deduz do layout: quem sabe é quem escreveu o CSS, e é lá que a
+           * marca mora, ao lado da regra que a justifica.
+           */
+          const caixa = el.getBoundingClientRect();
+          for (const filho of el.querySelectorAll('*')) {
+            const r = filho.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+
+            /**
+             * Filho dentro de um rolador intermediário **é alcançável**.
+             *
+             * `.ui-scroll-x` é o padrão do projeto para conteúdo largo: a
+             * tabela do clube e o heatmap das campanhas passam da borda do
+             * casco de propósito, e a pessoa chega neles com o dedo. Sem parar
+             * no primeiro `auto`/`scroll` entre o filho e o recipiente, a
+             * varredura acusava justamente o padrão que ela existe para
+             * incentivar — e o padrão está certo desde o bloco 5.
+             */
+            let alcancavel = false;
+            for (let p = filho.parentElement; p && p !== el; p = p.parentElement) {
+              const o = getComputedStyle(p).overflowX;
+              if (o === 'auto' || o === 'scroll') { alcancavel = true; break; }
+            }
+            if (alcancavel) continue;
+
+            /**
+             * `ui-sangra` é a marca de **quem sangra**, e por isso é conferida
+             * no filho — não no recipiente.
+             *
+             * A primeira versão marcava o recipiente, e a faixa da landing
+             * continuou acusando: quem reclamava era `div.lp`, ancestral dela,
+             * que não carrega a marca e nunca carregaria. Um enfeite que sangra
+             * não conta contra recipiente nenhum, em nenhum nível.
+             */
+            if (filho.closest('.ui-sangra') !== null) continue;
+
+            if (r.right > caixa.right + 1 || r.left < caixa.left - 1) {
+              const nome = `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`;
+              cortados.push(`${nome} (+${Math.round(r.right - caixa.right)}px)`);
+              break;
+            }
           }
         }
 
@@ -3152,24 +3218,26 @@ async function main() {
           while (pai) {
             const overflow = getComputedStyle(pai).overflowX;
             /**
-             * Só `auto` e `scroll` **contêm**; `hidden` e `clip` **cortam**.
+             * Os quatro contêm, e aqui isso está **certo**.
              *
-             * A versão anterior aceitava os quatro, e como o design system põe
-             * `overflow-x: hidden` em `html, body`, **todo** elemento do produto
-             * tinha um ancestral que satisfazia o teste: `estouram` devolvia
-             * lista vazia sempre, inclusive nas páginas em que `rola` era
-             * verdadeiro. A guarda existia e não olhava para nada.
+             * As duas listas respondem perguntas diferentes, e confundi-las foi
+             * o erro de uma primeira versão deste bloco:
              *
-             * O enfeite que sangra de propósito continua coberto — ele não
-             * transborda o **conteúdo** do recipiente, e quem o pega agora é
-             * `cortados`, acima, com o corte de 1px isentando o que é para
-             * leitor de tela.
+             * - `estouram` pergunta *"o conteúdo empurra a página para o
+             *   lado?"*. `hidden` e `clip` impedem exatamente isso — eles
+             *   contêm, e a faixa animada da landing é o caso legítimo;
+             * - `cortados`, acima, pergunta *"o conteúdo foi cortado e ficou
+             *   inalcançável?"*. Ali só `auto` e `scroll` valem, porque só neles
+             *   a pessoa chega no resto com o dedo.
+             *
+             * Trocar o critério daqui fez a faixa da landing acusar em quatro
+             * larguras sem nada estar errado. O que faltava não era mudar esta
+             * pergunta: era fazer a outra.
              */
-            if (overflow === 'auto' || overflow === 'scroll') {
+            if (overflow === 'auto' || overflow === 'hidden' || overflow === 'clip') {
               contido = true;
               break;
             }
-            if (overflow === 'hidden' || overflow === 'clip') break;
             pai = pai.parentElement;
           }
           if (contido) continue;

@@ -377,7 +377,9 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <div className="lp-faixa">
+        {/* `ui-sangra`: a faixa é max-content e animada de propósito — não há
+            conteúdo a alcançar atrás do recorte. */}
+        <div className="lp-faixa ui-sangra">
           <div className="lp-faixa__trilho">
             {/* Duplicado para o laço não ter emenda visível. */}
             {[0, 1].map((volta) => (

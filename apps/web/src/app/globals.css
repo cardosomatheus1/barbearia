@@ -3768,6 +3768,19 @@ main { padding-bottom: var(--space-8); }
 
 /* -- faixa que corre -------------------------------------------------------- */
 
+/* `ui-sangra` declara o que a medição não tem como adivinhar (bloco 104).
+
+   A faixa que corre é `max-content` por definição: o trilho é mais largo que a
+   tela de propósito, duplicado e animado, e o `overflow: hidden` recorta o que
+   sobra. Para a varredura de conteúdo cortado isso é indistinguível de uma
+   tabela que perdeu duas colunas — a diferença é **intenção**, e intenção não
+   se deduz do layout.
+
+   O marcador é o par de `.ui-scroll-x`: um diz "isto rola, a pessoa alcança", o
+   outro diz "isto sangra, e não há o que alcançar". Os dois moram no CSS, ao
+   lado da regra que os justifica, e não numa lista de nomes dentro do teste. */
+.ui-sangra {}
+
 .lp-faixa {
   position: relative;
   z-index: 1;
@@ -8499,7 +8512,16 @@ main { padding-bottom: var(--space-8); }
 }
 .fotos__tipo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .fotos__acoes { display: grid; gap: var(--space-2); }
-.fotos__acao { min-height: 44px; width: 100%; }
+.fotos__acao {
+  min-height: 44px;
+  width: 100%;
+  /* O piso de um item de grade é `min-content`, e o dele é a palavra mais
+     comprida do botão. A partir de 40em o cartão vira quatro colunas e as ações
+     viram linha — em 768px os dois botões passavam 24px da borda do `.quadro`,
+     que tem `overflow: hidden` e os cortava (bloco 104). É a mesma armadilha
+     dos seis consertos locais que o design system já absorveu. */
+  min-width: 0;
+}
 .fotos__form { margin-top: var(--space-3); }
 .fotos__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
 .fotos__marca input { width: 24px; height: 24px; }
@@ -8507,7 +8529,7 @@ main { padding-bottom: var(--space-8); }
 
 @media (min-width: 40em) {
   .fotos { grid-template-columns: repeat(4, 1fr); }
-  .fotos__acoes { grid-auto-flow: column; }
+  .fotos__acoes { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 }
 
 /* -- Destaque pago na busca (bloco 75) ------------------------------------- */
@@ -8767,7 +8789,16 @@ main { padding-bottom: var(--space-8); }
   gap: var(--space-2) var(--space-3);
 }
 .chave__nome { margin: 0; font-size: var(--font-size-base); }
-.chave__prefixo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.chave__prefixo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  /* A URL do webhook não tem espaço para quebrar, e `<code>` não quebra sozinho:
+     em 360px ela empurrava o cartão 43px além da própria lista, e a borda
+     direita saía cortada. É o mesmo `anywhere` de `.numero__valor` e de
+     `.cadeiras-agora__quem`, pelo mesmo motivo (bloco 104). */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .chave__escopos {
   margin: var(--space-2) 0 0;
   font-size: var(--font-size-sm);
