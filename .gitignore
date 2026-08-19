@@ -16,3 +16,14 @@ next-env.d.ts
 # gravável — acontece em contêiner com usuário trocado, e são centenas de
 # megabytes que ninguém quer commitar sem perceber.
 .pnpm-store/
+
+# A migração descartável que `packages/db/test/migracoes-repetiveis.test.mjs`
+# escreve para provar que banco adotado ainda recebe o que vem **depois** da
+# baseline. Ela existe só enquanto a suíte roda e o `afterAll` a apaga.
+#
+# Ignorada porque a janela em que ela existe é justamente a janela em que
+# alguém pode rodar `git add -A`: commitada, ela vira uma migração de verdade
+# chamada 9999, aplicada em produção pelo `preparar` do compose, criando uma
+# tabela `teste_do_livro_caixa` que ninguém pediu — e, por ser posterior à
+# baseline, nem os bancos já adotados escapariam.
+packages/db/migrations/9999_teste_do_livro_caixa.sql
