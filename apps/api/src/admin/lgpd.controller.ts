@@ -226,11 +226,19 @@ export class LgpdController {
    * canal: uma mensagem que ninguém lê cumpriria a letra e não a intenção, e a
    * lista aberta aqui é onde o dono decide se corre atrás de alguém.
    *
-   * `settings.manage` e não `customers.view`: é informação sobre a base
-   * encolhendo, e a decisão que ela pede — trazer o cliente de volta ou deixar
-   * sair — é de quem responde pela empresa.
+   * `settings.manage` porque é informação sobre a base encolhendo, e a decisão
+   * que ela pede — trazer o cliente de volta ou deixar sair — é de quem responde
+   * pela empresa.
+   *
+   * E `customers.view` **junto**, porque a resposta traz o **nome** de cada um
+   * (bloco 104). O comentário anterior dizia "e não `customers.view`", como se
+   * as duas fossem alternativas: não são, e é a nona vez que a regra da rota que
+   * agrega é quebrada aqui. Conferido antes de acrescentar: `manager` e `owner`
+   * já têm as duas de fábrica, então ninguém perde acesso — o risco era só para
+   * um papel montado com uma e sem a outra, que é justamente o que os papéis
+   * editáveis do bloco 30 permitem.
    */
-  @Exige('settings.manage')
+  @Exige('settings.manage', 'customers.view')
   @Get('lgpd/retencao')
   async retencao(@Staff() staff: AuthenticatedStaff) {
     const lista = await aVencerPorRetencao(staff.tenantId);

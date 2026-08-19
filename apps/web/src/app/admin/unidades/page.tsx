@@ -147,6 +147,12 @@ export default async function UnidadesPage({ searchParams }: Props) {
   const rede = abertas.length > 1;
 
   const cadastro = podeCadastrar ? await cadastroDeUnidadesNaApi(token) : null;
+  /**
+   * A mesma condição que o domínio usa para recusar `ultima_unidade`: a
+   * barbearia precisa de pelo menos uma loja aberta.
+   */
+  const unicaAberta =
+    cadastro?.ok === true && cadastro.dados.unidades.filter((u) => u.ativa).length === 1;
   const equipe = podeEquipe && rede ? await equipePorUnidadeNaApi(token) : null;
   const estoque = podeEstoque && rede ? await transferenciasNaApi(token) : null;
 
@@ -264,9 +270,24 @@ export default async function UnidadesPage({ searchParams }: Props) {
                         ? ' · você está operando aqui'
                         : ''}
                     </span>
-                    <button className="ui-button ui-button--ghost" type="submit">
-                      {unidade.ativa ? 'Fechar' : 'Reabrir'}
-                    </button>
+                    {/*
+                      O botão sai da mesma pergunta que o domínio faz (bloco 104).
+
+                      Na barbearia de uma loja — que o cartão acima descreve em
+                      letras — "Fechar" aparecia e o domínio recusava com
+                      `ultima_unidade`, sempre. Derivado de "existe unidade?" em
+                      vez de "esta pode fechar?", era um botão que só sabia
+                      falhar.
+                    */}
+                    {unidade.ativa && unicaAberta ? (
+                      <span className="unidade-linha__nota">
+                        única aberta — a barbearia precisa de uma
+                      </span>
+                    ) : (
+                      <button className="ui-button ui-button--ghost" type="submit">
+                        {unidade.ativa ? 'Fechar' : 'Reabrir'}
+                      </button>
+                    )}
                   </form>
                 </li>
               ))}

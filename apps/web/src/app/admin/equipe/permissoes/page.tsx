@@ -1,10 +1,15 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { PERMISSOES, type Papel, type Permissao } from '@barbearia/core';
+import {
+  PERMISSOES,
+  PERMISSOES_DE_DINHEIRO,
+  type Papel,
+  type Permissao,
+} from '@barbearia/core';
 import { equipeDaBarbearia } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoPermissoesDoPapel } from '../../acoes';
+import { acaoPermissoesDoPapel, acaoSair } from '../../acoes';
 import { secao } from '../../secoes';
 
 /**
@@ -209,15 +214,18 @@ const GRUPOS: readonly Grupo[] = [
 ];
 
 /**
- * As que cobram o segundo fator, derivadas da mesma regra que a guarda aplica.
+ * As que cobram o segundo fator, **do mesmo conjunto** que a guarda aplica.
  *
- * Repetir a lista aqui faria a tela prometer uma coisa e a API cobrar outra na
- * primeira vez que alguém acrescentasse uma permissão de dinheiro.
+ * O comentário anterior dizia exatamente isto — *"repetir a lista aqui faria a
+ * tela prometer uma coisa e a API cobrar outra"* — e a linha abaixo dele
+ * reimplementava a regra à mão, com o prefixo escrito de novo. Concordavam por
+ * enquanto; era a sexta lista paralela deste repositório esperando divergir, e
+ * o selo "2º fator" sumiria sozinho da tela no dia em que o grupo mudasse.
+ *
+ * Agora vem de `PERMISSOES_DE_DINHEIRO`, que é o que a `PermissaoGuard` lê.
  */
-const exigeSegundoFator = (p: Permissao): boolean =>
-  (p.startsWith('finance.') || p.startsWith('cashier.') || p === 'commission.view_all' ||
-    p === 'commission.edit_rules') &&
-  p !== 'commission.view_own';
+const DE_DINHEIRO: ReadonlySet<string> = new Set(PERMISSOES_DE_DINHEIRO);
+const exigeSegundoFator = (p: Permissao): boolean => DE_DINHEIRO.has(p);
 
 const FALHA: Record<string, string> = {
   owner_protected: 'O dono tem todas as permissões por definição, e isso não se edita.',
@@ -234,11 +242,29 @@ export default async function PermissoesPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
   await painelOuDesvio(token);
 
+  const estado = await painelOuDesvio(token);
   const resposta = await equipeDaBarbearia(token);
+
+  /**
+   * O cabeçalho com a volta e o **Sair** (bloco 104).
+   *
+   * Esta tela e a de plano eram as duas únicas do painel sem ele. Numa máquina
+   * de balcão compartilhada, o botão de sair desaparecia exatamente onde a
+   * memória muscular o procura — e sem a volta, a tela era caminho de ida.
+   */
+  const topo = (
+    <header className="painel__topo">
+      <a className="painel__marca" href="/admin/equipe">← Usuários e acessos</a>
+      <form action={acaoSair}>
+        <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
+      </form>
+    </header>
+  );
 
   if (!resposta.ok) {
     return (
       <main className="ui-container painel__conteudo" {...secao('equipe')}>
+        {topo}
         <h1 className="painel__titulo">Permissões</h1>
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar as permissões. Recarregue a página.
@@ -251,6 +277,7 @@ export default async function PermissoesPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container painel__conteudo" {...secao('equipe')}>
+      {topo}
       <h1 className="painel__titulo">Permissões</h1>
       <p className="painel__sub">
         O que cada papel pode fazer nesta barbearia. Vale na requisição seguinte, para quem já está

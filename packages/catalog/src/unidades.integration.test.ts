@@ -123,7 +123,7 @@ describeIfDb('unidades da casa', () => {
      * as vinte rotas do painel responderiam 404 — inclusive a que reabriria.
      */
     await expect(
-      definirUnidadeAtiva({ tenantId: TENANT, locationId: MATRIZ, ativa: false, ator }),
+      definirUnidadeAtiva({ tenantId: TENANT, locationId: MATRIZ, ativa: false, autorizadas: [], ator }),
     ).rejects.toMatchObject({ code: 'ultima_unidade' });
 
     expect((await unidadesDoCadastro(TENANT))[0]?.ativa).toBe(true);
@@ -134,10 +134,10 @@ describeIfDb('unidades da casa', () => {
       tenantId: TENANT, nome: 'Domari Pituba', timezone: 'America/Bahia', ator,
     });
 
-    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: false, ator });
+    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: false, autorizadas: [], ator });
     expect((await unidadesDoCadastro(TENANT)).find((u) => u.id === id)?.ativa).toBe(false);
 
-    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: true, ator });
+    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: true, autorizadas: [], ator });
     expect((await unidadesDoCadastro(TENANT)).find((u) => u.id === id)?.ativa).toBe(true);
   });
 
@@ -155,7 +155,7 @@ describeIfDb('unidades da casa', () => {
       VALUES ('${TENANT}', '${DONO}', 'abc123', now() + interval '1 day', '${id}');
     `);
 
-    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: false, ator });
+    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: false, autorizadas: [], ator });
 
     const sessoes = await withTenant(TENANT, async (tx) =>
       tx.$queryRaw<{ location_id: string | null }[]>`
@@ -169,8 +169,79 @@ describeIfDb('unidades da casa', () => {
     expect(await unidadesDoCadastro(TENANT)).toHaveLength(1);
 
     await expect(
-      definirUnidadeAtiva({ tenantId: TENANT, locationId: DELES, ativa: false, ator }),
+      definirUnidadeAtiva({ tenantId: TENANT, locationId: DELES, ativa: false, autorizadas: [], ator }),
     ).rejects.toMatchObject({ code: 'location_not_found' });
+  });
+
+  /**
+   * A unidade vizinha **dentro da mesma barbearia** (bloco 104).
+   *
+   * O caso acima prova o tenant vizinho, que a RLS já separa. Este prova a loja
+   * vizinha, que ela **não** separa — e era por onde passava: reproduzido contra
+   * a API, um gerente escopado à filial fechou a matriz e recebeu 201.
+   *
+   * O estrago é operacional: fechar zera o `location_id` das sessões de quem
+   * estava lá, e a equipe inteira da matriz passa a receber 404 em toda rota do
+   * painel. E a tela oferece o botão — não precisa de `curl`.
+   */
+  it('o gerente de uma loja não fecha a loja que não é dele', async () => {
+    const { id: filial } = await criarUnidade({
+      tenantId: TENANT, nome: 'Domari Pituba', timezone: 'America/Bahia', ator,
+    });
+
+    await expect(
+      definirUnidadeAtiva({
+        tenantId: TENANT, locationId: MATRIZ, ativa: false, autorizadas: [filial], ator,
+      }),
+    ).rejects.toMatchObject({ code: 'location_not_found' });
+
+    // A matriz continua aberta: sem esta asserção o caso passaria se a recusa
+    // acontecesse **depois** do `UPDATE`.
+    const ainda = await unidadesDoCadastro(TENANT);
+    expect(ainda.find((u) => u.id === MATRIZ)?.ativa).toBe(true);
+
+    // E a dele ele fecha, senão o teste provaria só que a função recusa tudo.
+    await definirUnidadeAtiva({
+      tenantId: TENANT, locationId: filial, ativa: false, autorizadas: [filial], ator,
+    });
+    const depois = await unidadesDoCadastro(TENANT);
+    expect(depois.find((u) => u.id === filial)?.ativa).toBe(false);
+  });
+
+  it('a recusa da loja alheia tem a mesma cara de unidade inexistente', async () => {
+    // "Existe, mas não é sua" confirma o id para quem o adivinhou. É o
+    // precedente do OTP, que responde igual para telefone existente e não.
+    const { id: filial } = await criarUnidade({
+      tenantId: TENANT, nome: 'Domari Pituba', timezone: 'America/Bahia', ator,
+    });
+    /**
+     * Uma de cada vez, e o código capturado — **não** duas promessas criadas
+     * antes de terem quem as espere.
+     *
+     * A primeira versão fazia isso, e o efeito só apareceu no portão: a
+     * promessa rejeitava antes de o `expect` anexar o tratador, e o Node
+     * registrava rejeição não capturada. O vitest reportava "51 passaram, 1
+     * erro" — verde nas asserções e vermelho no processo —, e a suíte rodada
+     * sozinha não reproduzia, porque ali a rejeição chegava depois.
+     */
+    const codigoDe = async (locationId: string): Promise<string> => {
+      try {
+        await definirUnidadeAtiva({
+          tenantId: TENANT, locationId, ativa: false, autorizadas: [filial], ator,
+        });
+        return 'nao recusou';
+      } catch (erro) {
+        return (erro as { code?: string }).code ?? 'sem codigo';
+      }
+    };
+
+    const alheia = await codigoDe(MATRIZ);
+    const inexistente = await codigoDe('00000000-0000-0000-0000-0000000000ff');
+
+    expect(alheia).toBe('location_not_found');
+    // Iguais, e é isso que o caso prova: "existe, mas não é sua" confirmaria o
+    // id para quem o adivinhou.
+    expect(alheia).toBe(inexistente);
   });
 
   it('nome curto demais é recusado antes de tocar o banco', async () => {
@@ -183,7 +254,7 @@ describeIfDb('unidades da casa', () => {
     const { id } = await criarUnidade({
       tenantId: TENANT, nome: 'Domari Pituba', timezone: 'America/Bahia', ator,
     });
-    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: false, ator });
+    await definirUnidadeAtiva({ tenantId: TENANT, locationId: id, ativa: false, autorizadas: [], ator });
 
     const eventos = await withTenant(TENANT, async (tx) =>
       tx.$queryRaw<{ action: string }[]>`

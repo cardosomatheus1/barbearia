@@ -588,6 +588,22 @@ export async function setStaffActive(request: {
       throw new StaffError('owner_protected', 'A conta do dono não se desliga.');
     }
 
+    /**
+     * Ninguém desliga quem alcança mais que ele (bloco 104).
+     *
+     * `changeStaffRole` e `resetStaffPassword` já chamavam esta guarda; esta
+     * função só protegia o dono — e três comentários deste arquivo afirmavam,
+     * em prosa, que ela protegia como as outras. Reproduzido: uma recepcionista
+     * com `team.manage` delegado desligou a conta do gerente e recebeu 200.
+     *
+     * Não é ganho de permissão, e é por isso que passou despercebido. É
+     * indisponibilidade e retaliação: a mesma transação revoga as sessões
+     * abertas dele, então o gerente perde o caixa aberto no meio do expediente
+     * sem entender por quê — e quem desligou não precisou de nada além do botão
+     * que a tela já oferece.
+     */
+    await recusarPapelAcimaDoAtor(tx, request.actor.id, atual.role);
+
     await tx.$executeRaw`
       UPDATE staff_users SET active = ${request.active}, updated_at = now()
       WHERE id = ${request.staffUserId}::uuid

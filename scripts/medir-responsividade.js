@@ -3099,6 +3099,40 @@ async function main() {
         const rola =
           document.documentElement.scrollWidth > limite || document.body.scrollWidth > limite;
 
+        /**
+         * Conteúdo **cortado** por um ancestral que não rola (bloco 104).
+         *
+         * `rola` continua sendo cego no painel, e o motivo é estrutural: o casco
+         * usa `.trabalho { overflow-x: clip }`, que corta antes de o estouro
+         * chegar ao `body`. Uma tabela de 900px dentro de `<main>` em 390px
+         * deixava 526px fora da tela, inalcançáveis — sem barra e sem pista de
+         * que havia mais —, e esta medição respondia `rola: false` com
+         * `estouram: []`. Toda tela de `/admin` estava nesse ponto cego, com o
+         * portão fechando verde.
+         *
+         * O detector certo é o próprio elemento que corta: `scrollWidth` **vê**
+         * o transbordo mesmo sob `clip`, o que foi conferido antes de escrever
+         * esta linha (900 contra 390 num caso sintético).
+         *
+         * `auto` e `scroll` ficam de fora de propósito: ali a pessoa alcança o
+         * resto com o dedo, que é o padrão `.ui-scroll-x` do projeto.
+         *
+         * O corte de 1px isenta `ui-visually-hidden` — conteúdo de leitor de
+         * tela, invisível por desenho. É recorte estrutural e não lista de nomes
+         * de classe: a próxima tela que use o padrão nasce isenta sem ninguém
+         * lembrar dela, e nada além de 1px passa por engano.
+         */
+        const cortados = [];
+        for (const el of document.querySelectorAll('body *')) {
+          const overflow = getComputedStyle(el).overflowX;
+          if (overflow !== 'clip' && overflow !== 'hidden') continue;
+          if (el.clientWidth <= 1 || el.clientHeight <= 1) continue;
+          if (el.scrollWidth > el.clientWidth + 1) {
+            const nome = `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`;
+            cortados.push(`${nome} (+${el.scrollWidth - el.clientWidth}px)`);
+          }
+        }
+
         const estouram = [];
         for (const el of document.querySelectorAll('body *')) {
           const r = el.getBoundingClientRect();
@@ -3117,10 +3151,25 @@ async function main() {
           let contido = false;
           while (pai) {
             const overflow = getComputedStyle(pai).overflowX;
-            if (overflow === 'auto' || overflow === 'hidden' || overflow === 'clip') {
+            /**
+             * Só `auto` e `scroll` **contêm**; `hidden` e `clip` **cortam**.
+             *
+             * A versão anterior aceitava os quatro, e como o design system põe
+             * `overflow-x: hidden` em `html, body`, **todo** elemento do produto
+             * tinha um ancestral que satisfazia o teste: `estouram` devolvia
+             * lista vazia sempre, inclusive nas páginas em que `rola` era
+             * verdadeiro. A guarda existia e não olhava para nada.
+             *
+             * O enfeite que sangra de propósito continua coberto — ele não
+             * transborda o **conteúdo** do recipiente, e quem o pega agora é
+             * `cortados`, acima, com o corte de 1px isentando o que é para
+             * leitor de tela.
+             */
+            if (overflow === 'auto' || overflow === 'scroll') {
               contido = true;
               break;
             }
+            if (overflow === 'hidden' || overflow === 'clip') break;
             pai = pai.parentElement;
           }
           if (contido) continue;
@@ -3138,7 +3187,12 @@ async function main() {
         // a própria WCAG 2.5.8 isenta. Link de navegação sozinho não é isso e
         // não é isento.
         const pequenos = [];
-        for (const el of document.querySelectorAll('a[href], button, input, select, textarea')) {
+        // `summary` entra na varredura (bloco 104): ele é alvo autônomo — abre e
+        // fecha uma dobra — e estava de fora, então nenhum `<details>` do
+        // produto era medido. O da tela de importação saía com 24px.
+        for (const el of document.querySelectorAll(
+          'a[href], button, input, select, textarea, summary',
+        )) {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
           if (r.height < 44) {
@@ -3164,7 +3218,12 @@ async function main() {
           }
         }
 
-        return { rola, estouram: [...new Set(estouram)].slice(0, 4), pequenos: [...new Set(pequenos)].slice(0, 4) };
+        return {
+          rola,
+          estouram: [...new Set(estouram)].slice(0, 4),
+          cortados: [...new Set(cortados)].slice(0, 4),
+          pequenos: [...new Set(pequenos)].slice(0, 4),
+        };
       });
 
       resultados.push({ largura, ...medida });
@@ -3194,7 +3253,9 @@ async function main() {
       await ctx.close();
     }
 
-    const ruins = resultados.filter((r) => r.rola || r.estouram.length > 0 || r.pequenos.length > 0);
+    const ruins = resultados.filter(
+      (r) => r.rola || r.estouram.length > 0 || r.cortados.length > 0 || r.pequenos.length > 0,
+    );
     problemas += ruins.length;
 
     // Largura que nem chegou a ser medida não conta como aprovada: sem isto,
@@ -3205,6 +3266,9 @@ async function main() {
     for (const r of ruins) {
       if (r.rola) console.log(`      ${r.largura}px rolagem horizontal na página`);
       if (r.estouram.length) console.log(`      ${r.largura}px estoura: ${r.estouram.join(', ')}`);
+      // "Corta" e não "estoura": o conteúdo não empurra a página — ele some, e
+      // quem lê não tem como saber que havia mais.
+      if (r.cortados.length) console.log(`      ${r.largura}px corta: ${r.cortados.join(', ')}`);
       if (r.pequenos.length) console.log(`      ${r.largura}px alvo < 44px: ${r.pequenos.join(', ')}`);
     }
   }

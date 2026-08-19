@@ -9,7 +9,7 @@ import {
 import { lacunasDaRecepcaoNaApi, type LacunaNaTela } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoResolverLacuna } from '../acoes';
+import { acaoResolverLacuna, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -93,6 +93,19 @@ export default async function RecepcaoPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container recepcao" {...secao('recepcao')}>
+      {/*
+        O cabeçalho com a volta e o Sair (bloco 104).
+
+        Quatro telas do painel não o tinham, e ninguém notava: dezenove
+        acertavam por hábito. Sem o Sair, a sessão fica aberta na máquina do
+        balcão; sem a volta, a tela é caminho de ida (§6, pergunta 1).
+      */}
+      <header className="painel__topo">
+        <a className="painel__marca" href="/admin/painel">← {estado.businessName}</a>
+        <form action={acaoSair}>
+          <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
+        </form>
+      </header>
       <header className="recepcao__topo">
         <h1 className="titulo">Recepção</h1>
         <p className="recepcao__sub">

@@ -103,6 +103,12 @@ export async function definirUnidadeAtiva(request: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly ativa: boolean;
+  /**
+   * As lojas que o ator pode operar. **Vazio significa todas**, como em todo o
+   * resto do schema — negar por omissão trancaria a equipe inteira no dia da
+   * migração, porque nenhuma barbearia existente tem linha em `staff_locations`.
+   */
+  readonly autorizadas: readonly string[];
   readonly ator: { readonly id: string; readonly name: string };
 }): Promise<void> {
   await withTenant(request.tenantId, async (tx) => {
@@ -111,6 +117,28 @@ export async function definirUnidadeAtiva(request: {
     `;
     const unidade = linhas[0];
     if (!unidade) throw new CatalogError('location_not_found', 'Esta unidade não existe.');
+
+    /**
+     * O escopo é conferido **aqui**, e não na borda nem no seletor (bloco 104).
+     *
+     * A RLS separa barbearias e **não** separa lojas dentro de uma. A rota
+     * vizinha deste mesmo controller — a transferência de estoque — já recebia
+     * `autorizadas` por causa do achado do bloco 58; esta ficou de fora, e o
+     * resultado foi reproduzido de ponta a ponta: um gerente escopado à filial
+     * fechou a matriz e recebeu `201 {"ok":true}`.
+     *
+     * O estrago não é ler dado alheio, é derrubar operação: fechar zera o
+     * `location_id` das sessões de quem estava lá, e a equipe inteira da matriz
+     * passa a receber 404 em toda rota do painel até alguém com acesso a outra
+     * loja reabrir. E não exige `curl` — a tela lista as duas unidades com o
+     * botão "Fechar" ao lado de cada uma.
+     *
+     * A recusa usa a **mesma mensagem de inexistente**: "existe, mas não é sua"
+     * confirma o id para quem o adivinhou, e é o precedente do OTP.
+     */
+    if (request.autorizadas.length > 0 && !request.autorizadas.includes(request.locationId)) {
+      throw new CatalogError('location_not_found', 'Esta unidade não existe.');
+    }
 
     if (!request.ativa) {
       const abertas = await tx.$queryRaw<{ total: bigint }[]>`

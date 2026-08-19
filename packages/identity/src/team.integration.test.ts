@@ -481,6 +481,40 @@ describeIfDb('equipe e permissões', () => {
     expect(mudanca?.after).toEqual({ role: 'manager' });
   });
 
+  /**
+   * A trilha diz **em quem** o evento mexeu (bloco 104).
+   *
+   * Ela promete "quem mexeu em quê" e respondia só o quem: catorze das noventa
+   * e duas frases terminam em "de"/"do"/"da" — "reemitiu a senha de", "exportou
+   * os dados de" — esperando um nome que a tela nunca recebia. Inclusive nos
+   * eventos que a LGPD exige registrar.
+   *
+   * O nome é resolvido na **leitura** e não gravado: `audit_log` é append-only
+   * e a anonimização não o alcança, então guardá-lo lá seria uma segunda cópia
+   * de dado pessoal onde a exclusão não chega.
+   */
+  it('o evento diz o nome de quem sofreu a ação, resolvido na leitura', async () => {
+    const dono = await abrirBarbearia();
+    const { member } = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Maria Recepção',
+      email: `maria${Date.now()}@domari.com.br`,
+      role: 'receptionist',
+    });
+
+    await changeStaffRole({
+      tenantId: dono.tenantId, actor: ator(dono), staffUserId: member.id, role: 'manager',
+    });
+
+    const eventos = await withTenant(dono.tenantId, (tx) => listAudit(tx, { acoes: ACOES_DE_GESTAO }));
+    const mudanca = eventos.find((e) => e.action === 'staff.role_changed');
+
+    expect(mudanca?.actorName).toBe(DONO.name);
+    expect(mudanca?.alvoNome).toBe('Maria Recepção');
+  });
+
   it('a trilha nunca guarda senha nem hash', async () => {
     const dono = await abrirBarbearia();
     const { senhaInicial } = await createStaffUser({
@@ -905,6 +939,146 @@ describeIfDb('equipe e permissões', () => {
     const mapa = await permissionsByRole(dono.tenantId);
     expect([...(mapa['receptionist'] ?? [])].sort()).toEqual(['appointments.view', 'customers.view']);
     expect(mapa['manager']).toContain('team.manage');
+  });
+
+  /**
+   * A guarda de escalada nas **quatro** portas (bloco 104).
+   *
+   * `recusarPapelAcimaDoAtor` é a proteção contra tomada de conta em uma
+   * requisição, e tinha **zero** testes: apagar as três chamadas deixava a
+   * suíte de `identity` e o e2e da API verdes. As únicas asserções de
+   * `cannot_grant` exercitavam `definirPermissoesDoPapel` e
+   * `definirUnidadesDoOperador`, que são outras funções.
+   *
+   * `setStaffActive` era a quarta porta e não chamava a guarda — só protegia o
+   * dono —, enquanto três comentários deste arquivo afirmavam que ela protegia
+   * como as outras. Ali o estrago não é ganho de permissão: é desligar o
+   * gerente e derrubar as sessões dele no meio do expediente.
+   *
+   * A semente satisfaz **tudo menos** a regra sob teste: o gerente tem
+   * `team.manage` de verdade, está ativo, e o alvo existe. O que separa é só o
+   * alcance do papel.
+   */
+  it('quem tem team.manage não alcança papel acima do dele, nas quatro portas', async () => {
+    const dono = await abrirBarbearia();
+
+    // O dono delega gestão de equipe à recepção. É a configuração que o bloco
+    // 30 passou a suportar, e é onde a escalada nasce.
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'receptionist',
+      permissoes: ['appointments.view', 'customers.view', 'team.manage'],
+      actor: ator(dono),
+    });
+
+    const { senhaInicial } = await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Recepcao',
+      email: `recepcao${Date.now()}@teste.com`,
+      role: 'receptionist',
+    });
+    await createStaffUser({
+      messaging,
+      tenantId: dono.tenantId,
+      actor: ator(dono),
+      name: 'Gerente',
+      email: `gerente${Date.now()}@teste.com`,
+      role: 'manager',
+    });
+
+    const membros = await listStaff(dono.tenantId);
+    const recepcao = membros.find((m) => m.name === 'Recepcao');
+    const gerente = membros.find((m) => m.name === 'Gerente');
+    await staffLogin({ email: recepcao!.email, password: senhaInicial });
+    const comoRecepcao = { id: recepcao!.id, name: 'Recepcao' };
+
+    // 1. Promover a si mesma — o caminho mais curto da escalada.
+    await expect(
+      changeStaffRole({
+        tenantId: dono.tenantId, actor: comoRecepcao, staffUserId: recepcao!.id, role: 'manager',
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // 2. Criar uma conta acima dela e entrar por ela.
+    await expect(
+      createStaffUser({
+        messaging,
+        tenantId: dono.tenantId,
+        actor: comoRecepcao,
+        name: 'Atalho',
+        email: `atalho${Date.now()}@teste.com`,
+        role: 'manager',
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // 3. Reemitir a senha do gerente e entrar como ele.
+    await expect(
+      resetStaffPassword({
+        messaging, tenantId: dono.tenantId, actor: comoRecepcao, staffUserId: gerente!.id,
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // 4. Desligar o gerente — não é ganho de permissão, é derrubar a operação
+    //    dele: a mesma transação revoga as sessões abertas.
+    await expect(
+      setStaffActive({
+        tenantId: dono.tenantId, actor: comoRecepcao, staffUserId: gerente!.id, active: false,
+      }),
+    ).rejects.toMatchObject({ code: 'cannot_grant' });
+
+    // Nada aconteceu por nenhum dos quatro caminhos.
+    const depois = await listStaff(dono.tenantId);
+    expect(depois.find((m) => m.name === 'Recepcao')?.role).toBe('receptionist');
+    expect(depois.find((m) => m.name === 'Gerente')?.active).toBe(true);
+    expect(depois.find((m) => m.name === 'Atalho')).toBeUndefined();
+  });
+
+  it('o que está dentro do alcance dela continua funcionando', async () => {
+    /**
+     * O outro lado, e sem ele o caso acima passaria com a guarda recusando
+     * tudo — que seria um defeito pior, porque trancaria quem administra.
+     */
+    const dono = await abrirBarbearia();
+    /**
+     * O gerente **de fábrica**, mais `team.manage` — e não uma lista curta.
+     *
+     * A primeira versão deste caso dava três permissões a ele e mandava criar
+     * uma recepcionista: recusado, corretamente, porque o papel de recepção tem
+     * `appointments.create` e o gerente empobrecido não tinha. O suspeito era o
+     * teste, não a guarda — quem alcança tem que alcançar de verdade.
+     */
+    await definirPermissoesDoPapel({
+      tenantId: dono.tenantId,
+      papel: 'manager',
+      permissoes: [...new Set([...permissoesPadrao('manager'), 'team.manage'])],
+      actor: ator(dono),
+    });
+
+    const { senhaInicial } = await createStaffUser({
+      messaging, tenantId: dono.tenantId, actor: ator(dono),
+      name: 'Gerente', email: `ger${Date.now()}@teste.com`, role: 'manager',
+    });
+    const membros = await listStaff(dono.tenantId);
+    const gerente = membros.find((m) => m.name === 'Gerente');
+    await staffLogin({ email: gerente!.email, password: senhaInicial });
+    const comoGerente = { id: gerente!.id, name: 'Gerente' };
+
+    // `receptionist` não tem nada que o gerente não tenha: ele alcança.
+    const nova = await createStaffUser({
+      messaging, tenantId: dono.tenantId, actor: comoGerente,
+      name: 'Nova', email: `nova${Date.now()}@teste.com`, role: 'receptionist',
+    });
+    expect(nova.senhaInicial).toBeTruthy();
+
+    const comNova = await listStaff(dono.tenantId);
+    const alvo = comNova.find((m) => m.name === 'Nova');
+    await setStaffActive({
+      tenantId: dono.tenantId, actor: comoGerente, staffUserId: alvo!.id, active: false,
+    });
+    const fim = await listStaff(dono.tenantId);
+    expect(fim.find((m) => m.name === 'Nova')?.active).toBe(false);
   });
 
   it('o dono continua concedendo tudo, porque tudo é o que ele tem', async () => {

@@ -10,12 +10,7 @@ import { recadosDaFila, type RecadoNaTela } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { redirect } from 'next/navigation';
-import {
-  acaoAssumirRecado,
-  acaoDevolverRecado,
-  acaoEncerrarRecado,
-  acaoResponderRecado,
-} from '../acoes';
+import { acaoAssumirRecado, acaoDevolverRecado, acaoEncerrarRecado, acaoResponderRecado, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -89,6 +84,19 @@ export default async function RecadosPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container recados" {...secao('recados')}>
+      {/*
+        O cabeçalho com a volta e o Sair (bloco 104).
+
+        Quatro telas do painel não o tinham, e ninguém notava: dezenove
+        acertavam por hábito. Sem o Sair, a sessão fica aberta na máquina do
+        balcão; sem a volta, a tela é caminho de ida (§6, pergunta 1).
+      */}
+      <header className="painel__topo">
+        <a className="painel__marca" href="/admin/painel">← {estado.businessName}</a>
+        <form action={acaoSair}>
+          <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
+        </form>
+      </header>
       <header className="recados__topo">
         <h1 className="titulo">Recados</h1>
         <p className="recados__sub">

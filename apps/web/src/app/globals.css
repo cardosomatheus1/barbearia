@@ -1218,7 +1218,14 @@ main { padding-bottom: var(--space-8); }
 }
 .pessoa-equipe__email { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .pessoa-equipe__pode { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
-.pessoa-equipe__contagem { white-space: nowrap; }
+/* Vira link para a tela de permissões, e por isso precisa do alvo de toque:
+   é o único caminho do painel até ela a partir daqui (bloco 104). */
+.pessoa-equipe__contagem {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+}
 .pessoa-equipe__dono { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
 
 .pessoa-equipe__acoes { display: grid; gap: var(--space-2); }
@@ -3323,6 +3330,26 @@ main { padding-bottom: var(--space-8); }
   width: 100%;
   min-width: 0;
   max-width: 100%;
+}
+/* O botão nativo do navegador, vestido (bloco 104).
+
+   Sem esta regra o Chromium desenha "Choose File" ao lado de "No file chosen" —
+   cinza claro, quadrado, em inglês — no meio de um painel escuro inteiramente
+   em português. É o momento em que a tela deixa de parecer produto, e o único
+   controle assim que restava.
+
+   Os 44px vêm do alvo de toque: o botão é o que a pessoa aperta, não o campo. */
+.importar__form input[type='file']::file-selector-button {
+  min-height: var(--size-touch);
+  margin-inline-end: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
 }
 
 /* ============================================================================
@@ -7922,6 +7949,13 @@ main { padding-bottom: var(--space-8); }
 }
 .unidade-linha__nome {
   font-weight: var(--font-weight-medium);
+  min-width: 0;
+}
+/* Ocupa o lugar do botão quando ele não existe, e diz por quê — a alternativa
+   era o botão que só sabe falhar (bloco 104). */
+.unidade-linha__nota {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
   min-width: 0;
 }
 /* O botão nasce com a largura toda: no piso de 360px é o alvo mais fácil de

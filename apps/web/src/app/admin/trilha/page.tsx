@@ -65,6 +65,22 @@ function Evento({ evento }: { readonly evento: EventoDaTrilha }) {
         {/* Ação sem tradução aparece como o próprio código: melhor um rótulo
             feio e verdadeiro do que uma frase genérica que esconde o evento. */}
         {FRASE_DO_EVENTO[evento.action] ?? evento.action}
+        {/*
+          O alvo, que faltava (bloco 104).
+
+          Catorze das noventa e duas frases terminam em "de"/"do"/"da" — "exportou
+          os dados de", "reemitiu a senha de" — e a tela nunca fornecia o nome.
+          A trilha promete "quem mexeu em quê" e respondia só o quem, inclusive
+          nos eventos que a LGPD exige registrar.
+
+          Nulo continua saindo sem complemento: entidade sem nome, ou já apagada.
+        */}
+        {evento.alvoNome ? (
+          <>
+            {' '}
+            <strong>{evento.alvoNome}</strong>
+          </>
+        ) : null}
       </p>
       {mudou.length > 0 ? (
         <ul className="evento__mudou">

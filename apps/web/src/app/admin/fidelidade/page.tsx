@@ -4,7 +4,7 @@ import { MODOS_DE_FIDELIDADE, ROTULO_DO_MODO, type ModoDeFidelidade } from '@bar
 import { programaDeFidelidade } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoSalvarFidelidade } from '../acoes';
+import { acaoSair, acaoSalvarFidelidade } from '../acoes';
 import { secao } from '../secoes';
 
 /**
@@ -73,6 +73,19 @@ export default async function FidelidadePage({ searchParams }: Props) {
 
   return (
     <main className="ui-container painel__conteudo fidelidade" {...secao('fidelidade')}>
+      {/*
+        O cabeçalho com a volta e o Sair (bloco 104).
+
+        Quatro telas do painel não o tinham, e ninguém notava: dezenove
+        acertavam por hábito. Sem o Sair, a sessão fica aberta na máquina do
+        balcão; sem a volta, a tela é caminho de ida (§6, pergunta 1).
+      */}
+      <header className="painel__topo">
+        <a className="painel__marca" href="/admin/painel">← {estado.businessName}</a>
+        <form action={acaoSair}>
+          <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
+        </form>
+      </header>
       <header className="fidelidade__topo">
         <h1 className="titulo">Fidelidade</h1>
         <p className="fidelidade__sub">

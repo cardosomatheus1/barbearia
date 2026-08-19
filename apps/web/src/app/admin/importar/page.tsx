@@ -317,7 +317,9 @@ export default async function ImportarPage({ searchParams }: Props) {
           das listas paralelas que este repositório já pagou cinco vezes.
         */}
         <details className="dobra importar__cabecalhos">
-          <summary>Como o cabeçalho precisa se chamar</summary>
+          {/* `dobra__titulo` porque `<summary>` sem classe sai com 24px, abaixo
+              dos 44 — e não é link dentro de frase. */}
+          <summary className="dobra__titulo">Como o cabeçalho precisa se chamar</summary>
           <p className="cartao-balcao__texto">
             Não precisa renomear nada se a sua planilha já usa um destes — a comparação ignora
             acento, maiúscula e pontuação, e entende cabeçalho composto como{' '}

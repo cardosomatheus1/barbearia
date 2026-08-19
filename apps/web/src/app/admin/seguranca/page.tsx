@@ -206,14 +206,34 @@ export default async function SegurancaPage({ searchParams }: Props) {
               </div>
             ) : null}
 
+            {/*
+              Nunca primário, e desabilitado enquanto o próprio dono não tem o
+              segundo fator (bloco 104).
+
+              Antes, este botão era o **primeiro** âmbar cheio da tela, e o
+              "Passo 1: gerar a chave" — de que ele depende — ficava abaixo. Quem
+              clica no primeiro botão primário que vê liga a exigência para a
+              barbearia inteira, e toda rota `finance.*` e `cashier.*` passa a
+              responder `mfa_setup_required` para a equipe no meio do expediente.
+              É literalmente o cenário que o `CLAUDE.md` descreve como motivo de
+              o interruptor existir.
+
+              O domínio só exige código para **afrouxar**; ligar não conferia
+              nada. A tela passa a conferir, e diz por quê em vez de só recusar.
+            */}
             <button
-              className={`ui-button ui-button--block ${
-                exigidoNaBarbearia ? 'ui-button--ghost' : 'ui-button--primary'
-              }`}
+              className="ui-button ui-button--secondary ui-button--block"
+              disabled={!exigidoNaBarbearia && !ativo}
               type="submit"
             >
               {exigidoNaBarbearia ? 'Deixar de exigir' : 'Passar a exigir'}
             </button>
+            {!exigidoNaBarbearia && !ativo ? (
+              <p className="cartao-seguranca__texto">
+                Cadastre o seu segundo fator primeiro, logo abaixo. Ligar a exigência sem ter o
+                seu deixaria você de fora do próprio financeiro.
+              </p>
+            ) : null}
           </form>
         ) : (
           <p className="cartao-seguranca__texto">
@@ -489,6 +509,16 @@ function QuemEstaNaConta({
   );
 }
 
+/**
+ * Com **hora**, porque sem ela as sessões são indistinguíveis (bloco 104).
+ *
+ * A tela existe para responder "qual destes não sou eu?", e mostrava quatro
+ * linhas iguais: "Aparelho desconhecido · Entrou em 19/08/26". O timestamp
+ * completo já vinha da API e era jogado fora no formato. É o mesmo formato da
+ * trilha, que acerta desde sempre.
+ */
 const dataCurta = (iso: string): string =>
-  new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
     .format(new Date(iso));

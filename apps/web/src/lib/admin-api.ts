@@ -1818,6 +1818,13 @@ export interface EventoDaTrilha {
   action: string;
   entity: string;
   entityId: string | null;
+  /**
+   * Em **quem** o evento mexeu. Nulo quando o alvo não é entidade nomeada.
+   *
+   * Resolvido na leitura pela API, nunca gravado em `audit_log`: a trilha é
+   * append-only e a anonimização não a alcança.
+   */
+  alvoNome: string | null;
   before: unknown;
   after: unknown;
   createdAt: string;

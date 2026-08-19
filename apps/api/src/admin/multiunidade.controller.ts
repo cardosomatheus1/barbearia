@@ -169,6 +169,11 @@ export class MultiunidadeController {
         tenantId: staff.tenantId,
         locationId,
         ativa: body.ativa,
+        // A lista do seletor decide o que a tela **oferece**; ela não guarda o
+        // `POST`, que recebe o id do corpo. Mesmo achado do bloco 58, na
+        // terceira porta — aqui o estrago é fechar a loja alheia e derrubar a
+        // equipe dela.
+        autorizadas: staff.unidadesAutorizadas,
         ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (erro) {

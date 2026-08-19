@@ -566,6 +566,25 @@ export interface AuditRecord {
   readonly action: AuditAction;
   readonly entity: string;
   readonly entityId: string | null;
+  /**
+   * **Em quem** o evento mexeu, resolvido na leitura (bloco 104).
+   *
+   * A trilha promete "quem mexeu em quê" e respondia só o **quem**: catorze das
+   * noventa e duas frases terminam em "de"/"do"/"da" esperando um nome que a
+   * tela nunca recebia — entre elas `customer.data_exported`,
+   * `customer.anonymized`, `lgpd.request_fulfilled` e `staff.password_reset`.
+   * "Rogério exportou os dados de" e ponto final, num registro que existe
+   * justamente para responder a uma fiscalização.
+   *
+   * Resolvido aqui e **não gravado** em `audit_log`: a trilha é append-only e
+   * não é alcançada pela anonimização, então guardar o nome dentro dela seria
+   * uma segunda cópia de dado pessoal onde a exclusão não chega. Lido na
+   * leitura, o cliente anonimizado já aparece com o apelido que a anonimização
+   * deixou, que é exatamente o nome certo a mostrar.
+   *
+   * Nulo quando o alvo não é uma entidade nomeada, ou já não existe.
+   */
+  readonly alvoNome: string | null;
   readonly before: unknown;
   readonly after: unknown;
   readonly createdAt: string;
@@ -601,16 +620,36 @@ export async function listAudit(
       action: AuditAction;
       entity: string;
       entity_id: string | null;
+      alvo_nome: string | null;
       before: unknown;
       after: unknown;
       created_at: Date;
     }[]
   >`
-    SELECT id, actor_name, action, entity, entity_id, before, after, created_at
-    FROM audit_log
-    WHERE (${params.antesDe ?? null}::bigint IS NULL OR id < ${params.antesDe ?? null}::bigint)
-      AND action = ANY(${params.acoes as string[]}::text[])
-    ORDER BY id DESC
+    SELECT a.id, a.actor_name, a.action, a.entity, a.entity_id,
+           -- O nome do alvo, por LEFT JOIN LATERAL e nao por uma ida ao banco
+           -- por linha: sao cinquenta eventos por pagina, e o N+1 aqui seria
+           -- sobre a tabela que mais cresce no produto.
+           --
+           -- As tabelas entram por nome de entidade, que e o que audit() grava.
+           -- Entidade que nao aparece aqui devolve nulo, e a frase da tela
+           -- continua funcionando sem o complemento.
+           alvo.nome AS alvo_nome,
+           a.before, a.after, a.created_at
+    FROM audit_log a
+    LEFT JOIN LATERAL (
+      SELECT CASE a.entity
+               WHEN 'customer'     THEN (SELECT c.name FROM customers c WHERE c.id = a.entity_id)
+               WHEN 'customers'    THEN (SELECT c.name FROM customers c WHERE c.id = a.entity_id)
+               WHEN 'staff_users'  THEN (SELECT u.name FROM staff_users u WHERE u.id = a.entity_id)
+               WHEN 'locations'    THEN (SELECT l.name FROM locations l WHERE l.id = a.entity_id)
+               WHEN 'professionals' THEN (SELECT p.name FROM professionals p WHERE p.id = a.entity_id)
+               ELSE NULL
+             END AS nome
+    ) alvo ON true
+    WHERE (${params.antesDe ?? null}::bigint IS NULL OR a.id < ${params.antesDe ?? null}::bigint)
+      AND a.action = ANY(${params.acoes as string[]}::text[])
+    ORDER BY a.id DESC
     LIMIT ${limite}
   `;
 
@@ -622,6 +661,7 @@ export async function listAudit(
     action: linha.action,
     entity: linha.entity,
     entityId: linha.entity_id,
+    alvoNome: linha.alvo_nome,
     before: linha.before,
     after: linha.after,
     createdAt: linha.created_at.toISOString(),

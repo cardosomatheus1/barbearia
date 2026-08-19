@@ -16,7 +16,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoContestarMarketplace, acaoTrocarDePlano } from '../acoes';
+import { acaoContestarMarketplace, acaoSair, acaoTrocarDePlano } from '../acoes';
 import { secao } from '../secoes';
 import { reais } from '@/lib/dinheiro';
 
@@ -169,9 +169,23 @@ export default async function PlanoPage({
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
-  // Redireciona sozinha quando não há sessão válida ou a senha inicial não foi
-  // trocada; o retorno é o estado do painel, que esta tela não usa.
-  await painelOuDesvio(token);
+  const estado = await painelOuDesvio(token);
+
+  /**
+   * O cabeçalho com a volta e o **Sair** (bloco 104).
+   *
+   * Esta tela e a de permissões eram as duas únicas do painel sem ele. Numa
+   * máquina de balcão compartilhada, o botão de sair sumia justamente onde a
+   * memória muscular o procura.
+   */
+  const topo = (
+    <header className="painel__topo">
+      <a className="painel__marca" href="/admin/painel">← {estado.businessName}</a>
+      <form action={acaoSair}>
+        <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
+      </form>
+    </header>
+  );
 
   const [resposta, respostaOpcoes, respostaFaturas, respostaMarketplace] = await Promise.all([
     planoDaBarbearia(token),
@@ -183,6 +197,7 @@ export default async function PlanoPage({
   if (!resposta.ok) {
     return (
       <main className="ui-container painel__conteudo" {...secao('plano')}>
+        {topo}
         <h1 className="painel__titulo">Plano</h1>
         <div className="ui-alert ui-alert--danger" role="alert">
           Não deu para carregar o plano. Recarregue a página.
@@ -203,6 +218,7 @@ export default async function PlanoPage({
 
   return (
     <main className="ui-container painel__conteudo" {...secao('plano')}>
+      {topo}
       <h1 className="painel__titulo">Plano</h1>
       <p className="painel__sub">O que a barbearia contratou, e o que vem junto.</p>
 

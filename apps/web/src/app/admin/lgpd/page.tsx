@@ -53,12 +53,37 @@ const ESTADO: Record<string, string> = {
   open: 'Em aberto',
 };
 
-const FALHA: Record<string, string> = {
+/**
+ * As frases de recusa, pela **união** dos códigos e não por `string`.
+ *
+ * Com a chave larga, o acesso devolve `undefined` e o mapa parcial vira a caixa
+ * de erro genérica — e foi o que aconteceu com `exclusao_tem_caminho_proprio`:
+ * o domínio recusa com uma frase cuidadosa, *"pedido de exclusão é atendido
+ * apagando o cadastro, não marcando a linha"*, e a tela jogava fora, mostrando
+ * "não deu para salvar, tente de novo" sobre um botão que **nunca** ia
+ * funcionar. O dono, com quinze dias de prazo legal correndo, apertava de novo
+ * e lia o mesmo.
+ *
+ * Com a união, o compilador cobra a frase no dia em que o código novo existir.
+ */
+type FalhaDoPedido =
+  | 'forbidden'
+  | 'customer_not_found'
+  | 'version_required'
+  | 'exclusao_tem_caminho_proprio'
+  | 'request_failed';
+
+const FALHA: Readonly<Record<FalhaDoPedido, string>> = {
   forbidden: 'Sua conta não responde por pedidos de dados.',
   customer_not_found: 'Este pedido já foi encerrado por outra pessoa.',
   version_required: 'Escreva o motivo da recusa.',
+  exclusao_tem_caminho_proprio:
+    'Exclusão se atende apagando os dados na ficha do cliente, não marcando esta linha.',
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
+
+const frase = (codigo: string | undefined): string =>
+  FALHA[(codigo ?? 'request_failed') as FalhaDoPedido] ?? FALHA.request_failed;
 
 const data = (iso: string): string =>
   new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -106,10 +131,41 @@ function Pedido({ pedido, agora }: { readonly pedido: PedidoNaTela; readonly ago
           </div>
 
           <div className="pedido__botoes">
-            <button className="ui-button ui-button--primary" name="atendido" type="submit"
-                    value="1">
-              Marcar como atendido
-            </button>
+            {/*
+              Exclusão não se marca como atendida — ela se cumpre apagando os
+              dados (bloco 104).
+
+              O domínio recusa `atendido=1` para este tipo, com uma frase certa,
+              e a tela oferecia o botão mesmo assim como ação **primária** do
+              card. O dono, com quinze dias de prazo legal correndo, apertava o
+              botão mais destacado, lia "tente de novo", e apertava outra vez.
+              Nada dizia onde a resposta estava.
+
+              É a §6 pergunta 3 pelo avesso: o estado tem saída, e a tela
+              apontava para a que não existe. Agora ela aponta para a que existe
+              — a ficha do cliente, onde `customers.anonymize` guarda o botão
+              que de fato encerra o pedido.
+            */}
+            {pedido.tipo === 'deletion' ? (
+              pedido.customerId ? (
+                <a
+                  className="ui-button ui-button--primary"
+                  href={`/admin/cliente/${pedido.customerId}#apagar`}
+                >
+                  Apagar os dados
+                </a>
+              ) : (
+                <p className="ui-field__hint">
+                  Este pedido não tem ficha vinculada. Encontre a pessoa em Clientes e apague os
+                  dados por lá.
+                </p>
+              )
+            ) : (
+              <button className="ui-button ui-button--primary" name="atendido" type="submit"
+                      value="1">
+                Marcar como atendido
+              </button>
+            )}
             <button className="ui-button ui-button--ghost" name="atendido" type="submit"
                     value="0">
               Recusar
@@ -154,7 +210,7 @@ export default async function LgpdPage({ searchParams }: Props) {
         {topo}
         <h1 className="painel__titulo">Privacidade</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
-          {FALHA[resposta.code] ?? FALHA['request_failed']}
+          {frase(resposta.code)}
         </div>
       </main>
     );
@@ -175,7 +231,7 @@ export default async function LgpdPage({ searchParams }: Props) {
 
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
+          {frase(erro)}
         </div>
       ) : null}
 
@@ -195,7 +251,10 @@ export default async function LgpdPage({ searchParams }: Props) {
         <div className="ui-alert ui-alert--warning painel__aviso" role="alert">
           Você ainda não cadastrou o encarregado de dados. A lei manda divulgar quem é e como
           falar com ele.{' '}
-          <a href="/admin/configuracoes">Cadastrar agora</a>.
+          {/* Com âncora: o campo do encarregado fica no fim de um formulário
+              de 3459px em 390px, e o link levava ao topo dele. `#dpoName` já
+              existia no HTML. */}
+          <a href="/admin/configuracoes#dpoName">Cadastrar agora</a>.
         </div>
       ) : (
         <p className="painel__nota">

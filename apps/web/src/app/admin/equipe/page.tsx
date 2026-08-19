@@ -88,9 +88,22 @@ function Pessoa({
           ) : null}
         </h3>
         <p className="pessoa-equipe__email">{membro.email}</p>
+        {/*
+          A contagem vira link, e a frase sai daqui (bloco 104).
+
+          `PARA_QUE` é um mapa fixo no arquivo, e os papéis são **editáveis**
+          desde o bloco 30: bastou conceder `team.manage` à recepção para a tela
+          continuar dizendo "sem dinheiro e sem equipe" ao lado de "17
+          permissões" — a contagem vem da API e subiu, a frase não. Era a frase
+          que o dono lia ao decidir em que papel colocar a próxima contratação.
+
+          O que existe de verdade é a lista, e agora a tela leva até ela — que
+          também conserta a tela de permissões não ser alcançável a partir daqui.
+        */}
         <p className="pessoa-equipe__pode">
-          {PARA_QUE[membro.role]}{' '}
-          <span className="pessoa-equipe__contagem tabular">{permissoes.length} permissões</span>
+          <a className="pessoa-equipe__contagem tabular" href="/admin/equipe/permissoes">
+            {permissoes.length} permissões
+          </a>
         </p>
       </div>
 
@@ -257,7 +270,10 @@ export default async function EquipePage({ searchParams }: Props) {
                 <label className="papel" key={papel}>
                   <input defaultChecked={indice === 0} name="role" type="radio" value={papel} />
                   <span className="papel__nome">{PAPEL[papel]}</span>
-                  <span className="papel__sobre">{PARA_QUE[papel]}</span>
+                  {/* "No padrão" porque o papel é editável: a frase descreve o
+                      que ele traz de fábrica, e a contagem ao lado é a verdade
+                      de agora. */}
+                  <span className="papel__sobre">No padrão: {PARA_QUE[papel]}</span>
                   <span className="papel__contagem tabular">
                     {(equipe.permissionsByRole[papel] ?? []).length} permissões
                   </span>

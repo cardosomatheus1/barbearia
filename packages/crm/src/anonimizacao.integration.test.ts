@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { RETENCAO_ANOS, AVISO_DE_RETENCAO_DIAS } from '@barbearia/core';
-import { anonimizarCliente, varrerRetencao } from './anonimizacao.js';
+import { aVencerPorRetencao, anonimizarCliente, varrerRetencao } from './anonimizacao.js';
 import { abrirPedidoDoTitular, atenderExclusao, encerrarPedidoDoTitular, LgpdError, pedidosDoTitular } from './lgpd.js';
 
 /**
@@ -620,5 +620,43 @@ describeIfDb('anonimização e retenção', () => {
         ator,
       }),
     ).rejects.toBeInstanceOf(LgpdError);
+  });
+
+  /**
+   * A lista que a tela mostra, executada (bloco 104).
+   *
+   * `aVencerPorRetencao` é a fonte do bloco *"Cadastros que saem por
+   * inatividade"* de `/admin/lgpd` — a lista em que não fazer nada tem
+   * consequência **irreversível** —, e nenhum teste a chamava. Havia onze
+   * casos de retenção neste arquivo, todos sobre a varredura que **carimba**,
+   * nenhum sobre a consulta que **mostra**.
+   *
+   * `$queryRaw` é string: nem o TypeScript nem o Prisma a conferem. Foi assim
+   * que três consultas quebradas derrubaram um motor por quatro dias em
+   * produção nesta mesma semana.
+   */
+  it('a lista de quem sai por inatividade traz só os avisados, do mais antigo', async () => {
+    await varrerRetencao({ tenantId: TENANT, agora: AGORA });
+
+    const lista = await aVencerPorRetencao(TENANT);
+
+    // Dois avisados pela varredura, e ninguém mais: quem tem interação recente
+    // não aparece — sem esta parte o caso passaria com a consulta devolvendo
+    // a base inteira.
+    expect(lista).toHaveLength(2);
+    for (const c of lista) {
+      expect(c.avisadoEm).toBeInstanceOf(Date);
+      expect(c.nome).toBeTruthy();
+    }
+
+    // Ordenada do aviso mais antigo para o mais novo: é a ordem de urgência, e
+    // é o que a tela promete.
+    const datas = lista.map((c) => c.avisadoEm?.getTime() ?? 0);
+    expect([...datas].sort((a, b) => a - b)).toEqual(datas);
+  });
+
+  it('a lista da vizinha não aparece nesta barbearia', async () => {
+    await varrerRetencao({ tenantId: TENANT, agora: AGORA });
+    expect(await aVencerPorRetencao(RIVAL)).toEqual([]);
   });
 });
