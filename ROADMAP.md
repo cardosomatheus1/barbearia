@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 101 de 101 blocos.**
+**Status: 102 de 102 blocos.**
 
 ---
 
