@@ -387,11 +387,24 @@ async function candidatos(
   }
 
   if (gatilho === 'primeiro_atendimento') {
+    /**
+     * O `::text` vai **dentro** do agregado, e não depois dele.
+     *
+     * `min(uuid)` não existe no Postgres: `min(a.id)::text` passa por todo
+     * typecheck e por toda suíte deste repositório e morre em tempo de
+     * execução com `42883`. Ela derrubou a volta inteira da automação por
+     * quatro dias em produção — a exceção sobe de um gatilho e mata os outros
+     * dez da mesma barbearia, porque a varredura é uma tarefa só.
+     *
+     * O `HAVING count(a.id) = 1` garante uma linha por grupo, então qualquer
+     * agregado devolve aquele único atendimento; o que precisava mudar era o
+     * tipo que entra em `min`, não qual agregado se usa.
+     */
     return (
       await tx.$queryRawUnsafe<
         { customer_id: string; referencia: string; fato_em: Date; tem_telefone: boolean; aceita: boolean }[]
       >(
-        `SELECT c.id AS customer_id, min(a.id)::text AS referencia,
+        `SELECT c.id AS customer_id, min(a.id::text) AS referencia,
                 min(a.starts_at) AS fato_em, ${comum}
            FROM customers c
            JOIN appointments a ON a.customer_id = c.id AND a.status = 'completed'
@@ -481,7 +494,10 @@ async function candidatos(
           AND c.anonymized_at IS NULL
           AND EXISTS (
             SELECT 1 FROM order_items i
-             WHERE i.order_id = o.id AND i.kind = $2::order_item_kind
+             -- order_item_type, e nao order_item_kind: a coluna se chama
+             -- kind e o tipo dela nao. O nome inventado derrubava a consulta
+             -- com 42704 e, com ela, a varredura inteira da barbearia.
+             WHERE i.order_id = o.id AND i.kind = $2::order_item_type
           )`,
       agora,
       tipo,
@@ -495,12 +511,26 @@ async function candidatos(
      * mais rápido e estaria errado no dia em que alguém estornasse uma venda.
      */
     const restantes = limiar ?? 1;
+    /**
+     * Pacote vivo é `refunded_at IS NULL` mais a validade, e **não** um estado.
+     *
+     * `customer_packages` nunca teve coluna `status`: o pacote não some quando
+     * é reembolsado, ele fica com a data — é a decisão do bloco 45. A cláusula
+     * `p.status = 'active'` derrubava a consulta com `42703` em toda volta da
+     * varredura, e como a varredura da barbearia é uma transação só, ela levava
+     * os outros dez gatilhos junto. Achada pela guarda que executa todos eles.
+     *
+     * O predicado é o mesmo de `vivosDoCliente`, em `packages/finance`, mais o
+     * vencimento — anunciar "faltam duas unidades" de um pacote que venceu
+     * ontem é mandar a pessoa ao balcão para ouvir não.
+     */
     return simples(
-      `SELECT c.id AS customer_id, p.id::text AS referencia, now() AS fato_em, ${comum}
+      `SELECT c.id AS customer_id, p.id::text AS referencia, $1::timestamptz AS fato_em, ${comum}
          FROM customer_packages p
          JOIN customers c ON c.id = p.customer_id
         WHERE c.anonymized_at IS NULL
-          AND p.status = 'active'
+          AND p.refunded_at IS NULL
+          AND (p.expires_at IS NULL OR p.expires_at > $1::timestamptz)
           AND p.quantity - (
                 SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
               ) <= $2::int

@@ -414,6 +414,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 99 | Um vocabulário só para segmento, automação e campanha — e a pista de que a barra rola | ✅ |
 | 100 | "Quando · só para · mandar": o gatilho ganha público, e a automação vira uma frase | ✅ |
 | 101 | O que a avaliação cega achou: a fila parada tem aviso, o dinheiro tem um formato só, e as barras de navegação dizem que rolam | ✅ |
+| 102 | Três consultas da automação nunca tinham rodado: a varredura volta a funcionar, e o aviso passa a enxergar a tarefa que desistiu | ✅ |
 
 ---
 

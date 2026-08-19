@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   EXEMPLO_DA_VARIAVEL,
+  NOME_DO_AVISO,
+  NOME_DO_QUE_O_BANCO_CONHECE,
   VARIAVEIS_DO_AVISO,
   categoriaDoAviso,
   corpoComExemplos,
@@ -79,13 +81,35 @@ describe('o nome do aviso', () => {
     }
   });
 
-  it('o que o produto não conhece vira frase, nunca identificador', () => {
+  it('o que o banco conhece e o código não tem nome escrito à mão, com acento', () => {
     /**
      * `notification_kind` é enum do banco e é mais largo que a união deste
      * pacote: `pedido_de_avaliacao` está lá desde o bloco 46 e nenhum código o
      * usa. O painel mostrava "manda pedido_de_avaliacao" no balcão.
+     *
+     * O humanizador sozinho devolveria "Pedido de avaliacao" — sem cedilha e
+     * sem acento, porque tudo que ele faz é trocar `_` por espaço. Para o que o
+     * banco já tem, a frase é escrita.
      */
-    expect(nomeDoAviso('pedido_de_avaliacao')).toBe('Pedido de avaliacao');
+    expect(nomeDoAviso('pedido_de_avaliacao')).toBe('Pedido de avaliação');
+  });
+
+  it('o que ninguém conhece vira frase, nunca identificador', () => {
+    /**
+     * O exemplo é provado desconhecido **antes** de a frase ser cobrada.
+     *
+     * A versão anterior deste caso usava `pedido_de_avaliacao`, que era o
+     * desconhecido do bloco 96 e ganhou nome próprio no 101: o teste ficou
+     * vermelho porque o que ele cobria tinha sido melhorado, e a leitura óbvia
+     * — trocar a expectativa — apagaria a guarda do caso genérico sem que
+     * ninguém percebesse. Ancorado nos dois mapas, ele não pode passar por
+     * estar cobrando um tipo que virou conhecido.
+     */
+    const inventado = 'aviso_que_o_produto_nao_tem';
+    expect(Object.keys(NOME_DO_AVISO)).not.toContain(inventado);
+    expect(Object.keys(NOME_DO_QUE_O_BANCO_CONHECE)).not.toContain(inventado);
+
+    expect(nomeDoAviso(inventado)).toBe('Aviso que o produto nao tem');
   });
 });
 

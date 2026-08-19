@@ -1515,6 +1515,55 @@ describeIfDb('a saúde da fila', () => {
     expect(acordada).toMatchObject({ atrasadas: 1, emSilencio: false, parada: true });
   });
 
+  /**
+   * A tarefa que desistiu, e o buraco que ela ocupava (bloco 102).
+   *
+   * A primeira versão desta função contava só `pending`. Isso não era detalhe:
+   * a barbearia de produção tinha 84 `automacao.varrer` **falhadas**, nenhuma
+   * pendente, e conclusões recentes de outros tipos — então `atrasadas` era
+   * zero, `parada` era falso, e o aviso que existe para dizer "as mensagens
+   * não estão saindo" afirmava saúde sobre um motor morto havia quatro dias.
+   */
+  it('tarefa que esgotou as tentativas acende o aviso mesmo com a fila andando', async () => {
+    /**
+     * A semente satisfaz **tudo menos** a regra sob teste: a fila anda (há
+     * conclusão de dois minutos atrás) e nada está vencido. Sem estas duas
+     * linhas, o caso passaria por `parada`, que é outra coisa.
+     */
+    await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'campanha.enviar', 'done', '${haMinutos(40)}', '${haMinutos(2)}'`);
+    await tarefa(`status, run_after, finished_at, attempts) VALUES ('${TENANT}', 'automacao.varrer', 'failed', '${haMinutos(60)}', '${haMinutos(55)}', 3`);
+
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
+    expect(saude).toMatchObject({ atrasadas: 0, parada: false, falhadas: 1, desistiu: true });
+  });
+
+  it('a falha de anteontem não acende nada — o aviso não fica ligado para sempre', async () => {
+    // Alarme que nunca apaga é alarme que se aprende a ignorar. A janela é de
+    // 48h: o que falhou e ninguém tentou de novo é fato encerrado.
+    await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'automacao.varrer', 'failed', '${haMinutos(5000)}', '${haMinutos(4400)}'`);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
+    expect(saude).toMatchObject({ falhadas: 0, desistiu: false });
+  });
+
+  it('a falha acende mesmo dentro da janela de silêncio', async () => {
+    /**
+     * Silêncio explica tarefa **esperando**; não explica tarefa que desistiu.
+     * Uma falha às 22h continua sendo uma falha às 8h, e escondê-la até lá é
+     * adiar a única notícia que importa.
+     */
+    await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'automacao.varrer', 'failed', '${haMinutos(60)}', '${haMinutos(55)}'`);
+    const dormindo = await saudeDaFila(TENANT, AGORA, 'Pacific/Kiritimati');
+    expect(dormindo).toMatchObject({ emSilencio: true, desistiu: true });
+  });
+
+  it('a tarefa falhada da vizinha não acende o alarme desta barbearia', async () => {
+    // Mesmo motivo do caso de baixo: `jobs` não tem RLS, e o filtro por
+    // barbearia é escrito na consulta. O contador novo precisa dele também.
+    await tarefa(`status, run_after, finished_at) VALUES ('${RIVAL}', 'automacao.varrer', 'failed', '${haMinutos(60)}', '${haMinutos(55)}'`);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
+    expect(saude).toMatchObject({ falhadas: 0, desistiu: false });
+  });
+
   it('a fila parada da vizinha não acende o alarme desta barbearia', async () => {
     /**
      * `jobs` **não tem RLS** — é decisão do bloco 20, e o filtro por barbearia
