@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 106 de 106 blocos.**
+**Status: 107 de 107 blocos.**
 
 ---
 
@@ -427,6 +427,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 104 | O que a avaliação cega da administração achou: a medição deixa de ser cega no painel, o gerente da filial para de fechar a matriz, e a trilha passa a dizer em quem mexeu | ✅ |
 | 105 | O que a avaliação cega do cliente final achou: o passo 4 mostra o preço que o motor grava, a disputa por um horário deixa de virar 500, e a busca ganha os filtros que a API já aceitava | ✅ |
 | 106 | A porta do agente: o cliente escreve o que precisa, e a proposta leva ao passo de confirmar | ✅ |
+| 107 | O agente entende substantivo: "quero um corte amanhã" para de ser "não entendi" | ✅ |
 
 ---
 

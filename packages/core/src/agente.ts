@@ -26,6 +26,8 @@
  * entendeu: o custo de errar aqui é uma cadeira ocupada e um cliente que não vem.
  */
 
+import { assuntoDaPergunta } from './recepcao.js';
+
 export const INTENCOES = [
   'marcar',
   'remarcar',
@@ -93,6 +95,25 @@ const PISTAS_DE_INTENCAO: readonly { readonly intencao: Intencao; readonly palav
   },
 ];
 
+/**
+ * Querer, sem dizer o verbo de agendar.
+ *
+ * São as palavras que transformam o nome de um serviço em pedido: *"quero um
+ * corte"*, *"preciso de uma barba"*. Ficam separadas das pistas de intenção
+ * porque sozinhas não dizem nada — "quero saber o preço" também tem "quero", e
+ * é a terceira condição da regra que separa as duas.
+ */
+const PISTAS_DE_DESEJO: readonly string[] = [
+  'quero',
+  'queria',
+  'gostaria',
+  'preciso',
+  'to precisando',
+  'vou querer',
+  'tem vaga',
+  'tem como',
+];
+
 /** "amanhã" e afins. A data absoluta fica com quem tem o fuso — ver o cabeçalho. */
 const PISTAS_DE_DIA: readonly { readonly palavras: readonly string[]; readonly dias: number }[] = [
   { palavras: ['depois de amanha'], dias: 2 },
@@ -129,12 +150,47 @@ export function interpretarPedido(
   if (t.trim().length === 0) return null;
 
   const achada = PISTAS_DE_INTENCAO.find((p) => p.palavras.some((w) => t.includes(w)));
-  if (!achada) return null;
 
   const servico = casar(t, catalogo.servicos);
   const profissional = casar(t, catalogo.profissionais);
   const dia = PISTAS_DE_DIA.find((d) => d.palavras.some((w) => t.includes(w)));
   const faixa = faixaDeHora(t);
+
+  /**
+   * O substantivo também marca — e era a frase mais comum que não funcionava.
+   *
+   * As pistas de intenção são todas **verbais**: "quero cortar", "agendar",
+   * "marcar". Quem diz *"quero um corte amanhã"* — que é como se pede corte no
+   * Brasil — não casava nenhuma, o intérprete devolvia nulo, a recepção não
+   * tinha resposta, e o cliente lia "não entendi". A convenção
+   * *"substantivo no catálogo, verbo na boca"* já existia neste arquivo e
+   * cobria só metade do problema: o verbo que acha o substantivo. Faltava o
+   * substantivo que dispensa o verbo.
+   *
+   * A regra é estreita de propósito, porque a errada aqui é cara: um pedido de
+   * preço tratado como agendamento é o agente oferecendo horário a quem
+   * perguntou quanto custa. Três condições ao mesmo tempo:
+   *
+   * 1. a frase **nomeia um serviço do catálogo** — sem isso não há o que marcar;
+   * 2. carrega um sinal de agendamento: um dia, uma hora, ou uma palavra de
+   *    querer ("quero", "queria", "preciso");
+   * 3. **não é pergunta de recepção**. Quem decide isso é `assuntoDaPergunta`,
+   *    a mesma função que a recepção usa — duas leituras da mesma frase por
+   *    caminhos diferentes acabariam discordando, e a discordância apareceria
+   *    como "quanto custa o corte?" virando oferta de horário.
+   *
+   * A confiança sai da fórmula de sempre, e é ela que segura o resto: sem dia,
+   * "queria uma barba" fica em 0,60 e o agente **pergunta quando** em vez de
+   * agir. É o desfecho certo para uma frase que de fato não disse quando.
+   */
+  const querer = PISTAS_DE_DESEJO.some((w) => t.includes(w));
+  const marcarPeloSubstantivo =
+    !achada
+    && servico !== null
+    && (dia !== undefined || faixa.de !== null || faixa.ate !== null || querer)
+    && assuntoDaPergunta(texto) === null;
+
+  if (!achada && !marcarPeloSubstantivo) return null;
 
   /**
    * A confiança sobe com o que a frase **fixa**.
@@ -150,7 +206,7 @@ export function interpretarPedido(
   if (profissional) confianca += 0.1;
 
   return {
-    intencao: achada.intencao,
+    intencao: achada?.intencao ?? 'marcar',
     servicoId: servico?.id ?? null,
     servicoNome: servico?.nome ?? null,
     profissionalId: profissional?.id ?? null,

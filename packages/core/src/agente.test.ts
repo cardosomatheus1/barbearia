@@ -209,3 +209,94 @@ describe('o telefone não vira hora', () => {
     expect(p?.aPartirDeMinuto).toBeNull();
   });
 });
+
+/**
+ * O substantivo marca (bloco 107).
+ *
+ * ## O defeito
+ *
+ * As pistas de intenção eram todas verbais. *"Quero um corte amanhã"* — a
+ * forma mais comum de pedir corte no Brasil — não casava nenhuma: o intérprete
+ * devolvia nulo, a recepção não tinha resposta para a frase, e o que o cliente
+ * lia era *"não entendi"*. Enquanto isso *"quero cortar o cabelo amanhã"*
+ * funcionava, o que faz o agente parecer aleatório para quem está do outro lado.
+ *
+ * ## Por que a regra é estreita
+ *
+ * O erro caro aqui é o contrário: tratar pergunta de preço como pedido de
+ * horário. Por isso são três condições ao mesmo tempo — serviço nomeado, sinal
+ * de agendamento, e a frase não ser assunto de recepção. Os casos negativos
+ * abaixo são o que prova isso, e sem eles o teste passaria com uma regra que
+ * captura tudo.
+ */
+describe('o substantivo do catálogo pedindo horário', () => {
+  const CATALOGO = {
+    servicos: [
+      { id: 's1', nome: 'Corte masculino' },
+      { id: 's2', nome: 'Barba' },
+    ],
+    profissionais: [{ id: 'p1', nome: 'Ruan' }],
+  };
+
+  it('"quero um corte masculino amanhã" é pedido de agendamento', () => {
+    const pedido = interpretarPedido('quero um corte masculino amanhã', CATALOGO);
+    expect(pedido?.intencao).toBe('marcar');
+    expect(pedido?.servicoId).toBe('s1');
+    expect(pedido?.emQuantosDias).toBe(1);
+    // Serviço mais dia: passa do piso, e o agente age em vez de perguntar.
+    expect(pedido?.confianca).toBeGreaterThanOrEqual(CONFIANCA_PARA_AGIR);
+  });
+
+  it('"barba sexta às 19h" marca mesmo sem palavra de querer', () => {
+    const pedido = interpretarPedido('barba às 19h', CATALOGO);
+    expect(pedido?.intencao).toBe('marcar');
+    expect(pedido?.servicoId).toBe('s2');
+    expect(pedido?.aPartirDeMinuto ?? pedido?.ateMinuto).not.toBeNull();
+  });
+
+  it('sem dizer quando, ela pergunta em vez de escolher um dia', () => {
+    /**
+     * "Queria uma barba" é pedido, e não diz quando.
+     *
+     * Quem segura este caso é `oQueFalta`, não a confiança — a primeira versão
+     * deste teste esperava confiança abaixo do piso e reprovou em 0,60 contra
+     * um piso de 0,60. O suspeito era o teste: serviço reconhecido é evidência
+     * de verdade, e o que falta não é certeza, é o dia. Escolher "hoje" por
+     * omissão ofereceria as sobras da tarde a quem talvez quisesse sábado.
+     */
+    const pedido = interpretarPedido('queria uma barba', CATALOGO);
+    expect(pedido?.intencao).toBe('marcar');
+    expect(pedido?.emQuantosDias).toBeNull();
+    expect(oQueFalta(pedido!)).toContain('dia');
+  });
+
+  it('pergunta de preço continua não sendo agendamento', () => {
+    /**
+     * O caso que a regra existe para **não** capturar — e ele precisa satisfazer
+     * **tudo menos** a condição sob teste.
+     *
+     * A primeira versão usava "quanto custa o corte masculino?", que não tem
+     * palavra de querer nem dia: ela já caía fora pela segunda condição, e o
+     * teste passava com a terceira removida. Provado quebrando de propósito.
+     *
+     * "Quero saber quanto custa o corte masculino" tem serviço **e** "quero" —
+     * satisfaz as duas primeiras, e só a terceira a segura. Sem ela, quem
+     * perguntou um preço receberia três horários, e a recepção, que sabe
+     * responder, nunca seria chamada.
+     */
+    expect(interpretarPedido('quero saber quanto custa o corte masculino', CATALOGO)).toBeNull();
+    expect(interpretarPedido('queria saber o preço da barba', CATALOGO)).toBeNull();
+    // E os que já não passavam nem pela segunda condição.
+    expect(interpretarPedido('quanto custa o corte masculino?', CATALOGO)).toBeNull();
+  });
+
+  it('frase sem serviço do catálogo continua sem virar pedido', () => {
+    expect(interpretarPedido('quero um café amanhã', CATALOGO)).toBeNull();
+  });
+
+  it('serviço nomeado sem sinal nenhum de agendamento não vira pedido', () => {
+    // "Corte masculino" sozinho pode ser resposta a uma pergunta anterior, não
+    // um pedido — e inventar intenção aqui é o palpite que a SPEC proíbe.
+    expect(interpretarPedido('corte masculino', CATALOGO)).toBeNull();
+  });
+});

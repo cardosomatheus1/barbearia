@@ -141,7 +141,20 @@ const PALAVRAS_VAZIAS = new Set([
 ]);
 
 const PISTAS: readonly { readonly assunto: AssuntoDaRecepcao; readonly palavras: readonly string[] }[] = [
-  { assunto: 'preco', palavras: ['quanto custa', 'qual o preco', 'preco do', 'valor do', 'quanto e'] },
+  /**
+   * `preco` e `valor` sozinhos, e o motivo é gênero.
+   *
+   * A lista dizia `preco do` e `valor do`, e com isso *"qual o preço **da**
+   * barba?"* não era classificada como pergunta de preço — passava direto para
+   * a escalada, e no bloco 107 passou a virar **pedido de horário**, porque a
+   * frase nomeia um serviço e tem "queria". Uma lista de preposições fica sempre
+   * uma flexão atrás da língua; a palavra sozinha não fica.
+   *
+   * `quanto` sozinho ficou de fora de propósito: "quanto tempo demora?" é
+   * pergunta de duração, e responder com uma tabela de preços seria o produto
+   * inventando o assunto.
+   */
+  { assunto: 'preco', palavras: ['quanto custa', 'preco', 'valor do', 'valor da', 'quanto e', 'quanto fica'] },
   {
     assunto: 'jornada_do_profissional',
     palavras: ['trabalha', 'atende', 'esta la', 'vai estar'],
