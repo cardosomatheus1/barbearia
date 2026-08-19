@@ -1,11 +1,14 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
+import { segmentosDaBase } from './segmento.js';
 import {
   chaveDoFato,
   decidirDisparo,
   objetivoAlcancado,
+  segmentoValido,
   validarAutomacao,
   type Gatilho,
   type Objetivo,
+  type Segmento,
   type TipoDeNotificacao,
   tipoDeCampanhaValido,
 } from '@barbearia/core';
@@ -60,6 +63,17 @@ export interface AutomacaoNaTela {
    */
   readonly templateId: string | null;
   readonly textoTitulo: string | null;
+  /**
+   * Para quem esta automação manda, quando ela se restringe (bloco 100).
+   *
+   * `null` é **todo mundo** que cruzou o gatilho, que é o comportamento
+   * anterior: padrão de configuração é sempre o que já acontecia.
+   *
+   * O público é o segmento derivado do bloco 61, e não um filtro novo — ele já
+   * existe, já é calculado sobre a base inteira e a campanha já o usa. Uma
+   * segunda noção de "quem é este cliente" seria a lista paralela de sempre.
+   */
+  readonly publico: Segmento | null;
   /** Quantas saíram e quantas alcançaram o objetivo. É o que decide desligar. */
   readonly enviadas: number;
   readonly alcancadas: number;
@@ -67,7 +81,7 @@ export interface AutomacaoNaTela {
 
 const COLUNAS = `a.id, a.name, a.trigger::text AS trigger, a.threshold, a.delay_minutes,
                  a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active,
-                 a.template_id`;
+                 a.template_id, a.audience`;
 
 /**
  * O título do texto é só da tela, e por isso não entra em `COLUNAS`.
@@ -90,6 +104,7 @@ const paraTela = (l: {
   goal_window_days: number;
   active: boolean;
   template_id: string | null;
+  audience: string | null;
   texto_titulo: string | null;
   enviadas: bigint | number;
   alcancadas: bigint | number;
@@ -105,6 +120,7 @@ const paraTela = (l: {
   ativa: l.active,
   templateId: l.template_id,
   textoTitulo: l.texto_titulo,
+  publico: segmentoValido(l.audience),
   enviadas: Number(l.enviadas),
   alcancadas: Number(l.alcancadas),
 });
@@ -149,6 +165,16 @@ export async function salvarAutomacao(params: {
    * significa o comportamento anterior. A tela pede na primeira edição.
    */
   readonly templateId?: string | null;
+  /**
+   * Para quem esta automação manda (bloco 100).
+   *
+   * `null` explícito é "todo mundo", e **ausente** é "não mexa": é a mesma
+   * distinção de `templateId`, e ela existe porque o mesmo `PUT` é usado pela
+   * edição e por caminhos que não conhecem este campo. Escrever o padrão por
+   * omissão faria uma edição sem relação apagar em silêncio uma decisão que
+   * alguém tomou.
+   */
+  readonly publico?: Segmento | null;
   readonly objetivo: Objetivo;
   readonly janelaDias: number;
   readonly ativa: boolean;
@@ -213,14 +239,15 @@ export async function salvarAutomacao(params: {
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO automations
         (id, tenant_id, name, trigger, threshold, delay_minutes, kind, goal,
-         goal_window_days, active, created_by, template_id)
+         goal_window_days, active, created_by, template_id, audience)
       VALUES (COALESCE(${params.id ?? null}::uuid, gen_random_uuid()),
               NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.gatilho}::automation_trigger,
               ${params.limiar}, ${params.atrasoMinutos},
               ${tipo}::notification_kind, ${params.objetivo}::automation_goal,
               ${params.janelaDias}, ${params.ativa}, ${params.staffId}::uuid,
-              ${params.templateId ?? null}::uuid)
+              ${params.templateId ?? null}::uuid,
+              ${params.publico === undefined ? null : params.publico})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         threshold = EXCLUDED.threshold,
@@ -234,6 +261,12 @@ export async function salvarAutomacao(params: {
         -- de quem montou a automacao. Trocar o texto e edicao, e ali ele vem.
         -- (Sem crase: isto esta dentro de um template literal, e a crase o fecha.)
         template_id = COALESCE(EXCLUDED.template_id, automations.template_id),
+        -- Aqui o COALESCE nao serve: nulo e um valor legitimo ("todo mundo"),
+        -- e com ele ninguem conseguiria voltar de "so para VIP" para "todo
+        -- mundo". Quem nao quer mexer nao manda o campo, e a borda so o inclui
+        -- quando ele veio -- e ai o CASE de fora escolhe manter.
+        audience = CASE WHEN ${params.publico === undefined} THEN automations.audience
+                        ELSE EXCLUDED.audience END,
         updated_at = now()
       RETURNING id
     `;
@@ -524,6 +557,28 @@ export async function varrerAutomacoes(params: {
     let pulados = 0;
     const ano = params.agora.getUTCFullYear();
 
+    /**
+     * O segmento de cada cliente, calculado **uma vez** para a varredura toda
+     * (bloco 100).
+     *
+     * Ele depende da base inteira — "frequente" é ciclo abaixo da mediana dela,
+     * "VIP" é o topo do decil de gasto —, então não cabe numa cláusula `WHERE`
+     * sobre uma linha. É a mesma decisão do público de campanha, e é por isso
+     * que ele mora em `packages/core`.
+     *
+     * Uma vez e não por regra: onze automações restritas dariam onze varreduras
+     * da base inteira. E preguiçoso — `null` enquanto nenhuma regra pediu — para
+     * a barbearia que não usa público nenhum não pagar a conta.
+     */
+    let porSegmento: Map<string, string> | null = null;
+    const segmentoDe = async (customerId: string): Promise<string | null> => {
+      if (porSegmento === null) {
+        const base = await segmentosDaBase(params.tenantId, params.agora, tx);
+        porSegmento = new Map(base.map((c) => [c.customerId, c.segmento]));
+      }
+      return porSegmento.get(customerId) ?? null;
+    };
+
     for (const bruta of regras) {
       const regra = paraTela(bruta);
       const lista = await candidatos(tx, regra.gatilho, regra.limiar, params.agora);
@@ -559,6 +614,19 @@ export async function varrerAutomacoes(params: {
       );
 
       for (const candidato of lista) {
+        /**
+         * Fora do público, a automação **não grava nada**.
+         *
+         * Não é um pulo com motivo: pulo é "esta pessoa deveria receber e não
+         * recebeu", e quem está fora do público nunca esteve na conta. Gravar
+         * encheria `automation_sends` com a base inteira menos o público, e a
+         * lista de "por que não chegou" do bloco 97 viraria ruído.
+         */
+        if (regra.publico !== null) {
+          const dele = await segmentoDe(candidato.customerId);
+          if (dele !== regra.publico) continue;
+        }
+
         const chave = chaveDoFato({
           gatilho: regra.gatilho,
           referencia: candidato.referencia,

@@ -3316,6 +3316,10 @@ export interface AutomacaoNaTelaDoAdmin {
    * §6 pergunta 4.
    */
   readonly textoTitulo: string | null;
+  /** O id do texto escolhido, que o formulário de edição precisa repor. */
+  readonly templateId: string | null;
+  /** Para quem ela manda; nulo é todo mundo que cruzou o gatilho. */
+  readonly publico: string | null;
   readonly objetivo: string;
   readonly janelaDias: number;
   readonly ativa: boolean;
@@ -3355,6 +3359,8 @@ export const salvarAutomacaoNaApi = (
     tipo: string;
     /** Qual texto ela manda (bloco 94). Nulo resolve por tipo, como antes. */
     templateId?: string | null;
+    /** Para quem ela manda (bloco 100). Nulo é todo mundo; ausente é "não mexa". */
+    publico?: string | null;
     objetivo: string;
     janelaDias: number;
     ativa: boolean;
@@ -3381,6 +3387,10 @@ export interface CampanhaNaTelaDoAdmin {
   readonly tipo: string;
   /** O nome do texto escolhido; nulo é campanha anterior ao bloco 96. */
   readonly textoTitulo: string | null;
+  /** Quantos saíram pelo WhatsApp de verdade; o resto caiu no canal de reserva. */
+  readonly enviadosPeloWhatsApp: number;
+  /** Quantos foram pulados, por motivo. Vazio quando ninguém foi pulado. */
+  readonly pulados: readonly { readonly motivo: string; readonly quantos: number }[];
   /**
    * A união, e não `string`.
    *
@@ -3419,6 +3429,21 @@ export const criarCampanhaNaApi = (
     janelaDias: number;
   },
 ) => chamar<{ id: string; publico: number }>('POST', '/v1/admin/campanhas', corpo, token);
+
+export interface PuladoNaTela {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly motivo: string;
+}
+
+/** Quem não recebeu, com nome e motivo (bloco 97). */
+export const puladosDaCampanhaNaApi = (token: string, id: string) =>
+  chamar<{ pulados: readonly PuladoNaTela[] }>(
+    'GET',
+    `/v1/admin/campanhas/${id}/pulados`,
+    undefined,
+    token,
+  );
 
 export const enviarCampanhaNaApi = (token: string, id: string) =>
   chamar<{ estado: 'enviando' }>('POST', `/v1/admin/campanhas/${id}/enviar`, {}, token);

@@ -9,12 +9,16 @@ import {
   OBJETIVOS,
   ROTULO_DO_GATILHO,
   ROTULO_DO_OBJETIVO,
+  ROTULO_DO_SEGMENTO,
+  EXPLICACAO_DO_SEGMENTO,
+  SEGMENTOS,
   TIPOS_DE_CAMPANHA,
   corpoComExemplos,
   nomeDoAviso,
   rotuloDoBotao,
   type Gatilho,
   type Objetivo,
+  type Segmento,
 } from '@barbearia/core';
 import {
   automacoesNaApi,
@@ -23,7 +27,7 @@ import {
   type AutomacaoNaTelaDoAdmin,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
-import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { lerRascunho, lerRecusa, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoLigarAutomacao, acaoSalvarAutomacao, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
@@ -70,9 +74,18 @@ const first = (valor: string | string[] | undefined): string | undefined =>
  * mantém uma porta de escrita só — a mesma que o formulário de baixo usa, com a
  * mesma validação de borda.
  */
-function Automacao({ automacao, podeMexer }: {
+function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
   readonly automacao: AutomacaoNaTelaDoAdmin;
   readonly podeMexer: boolean;
+  /**
+   * Existe texto aprovado que esta automação possa mandar? (bloco 97)
+   *
+   * A linha dizia "Ligada · manda o primeiro texto aprovado de X" sobre um tipo
+   * que não tem nenhum: a automação aparecia ligada, com contador zerado, e não
+   * mandava nada — a tela prometendo entrega sobre um caminho que não existe. É
+   * a irmã de "a campanha diz enviada com o canal desligado".
+   */
+  readonly temTextoDoTipo: boolean;
 }) {
   const gatilho = automacao.gatilho as Gatilho;
   const varre = (GATILHOS_COM_VARREDURA as readonly string[]).includes(gatilho);
@@ -82,10 +95,31 @@ function Automacao({ automacao, podeMexer }: {
         <div className="item-cadastro__cabeca">
           <div className="item-cadastro__quem">
             <h3 className="item-cadastro__nome">{automacao.nome}</h3>
+            {/*
+              **A automação lida como frase** (bloco 100).
+
+              A linha era "Sumiu há um tempo · 30 · Gerar agendamento em 7 dias":
+              rótulos técnicos separados por ponto, e o "30" solto no meio sem
+              dizer 30 de quê. Quem abre a lista está perguntando "o que esta
+              regra faz?", e a resposta cabe numa frase.
+
+              Quando · só para · manda — a mesma ordem do formulário, para a
+              lista e o formulário serem lidos do mesmo jeito.
+            */}
             <p className="item-cadastro__linha">
-              {ROTULO_DO_GATILHO[gatilho]}
-              {automacao.limiar !== null ? ` · ${automacao.limiar}` : ''} ·{' '}
-              {ROTULO_DO_OBJETIVO[automacao.objetivo as Objetivo]} em {automacao.janelaDias} dias
+              Quando <strong>{ROTULO_DO_GATILHO[gatilho].toLowerCase()}</strong>
+              {automacao.limiar !== null ? ` (${automacao.limiar})` : ''}
+              {automacao.publico ? (
+                <>
+                  , só para{' '}
+                  <strong>
+                    {ROTULO_DO_SEGMENTO[automacao.publico as Segmento] ?? automacao.publico}
+                  </strong>
+                </>
+              ) : null}
+              {' · espera '}
+              {ROTULO_DO_OBJETIVO[automacao.objetivo as Objetivo].toLowerCase()} em{' '}
+              {automacao.janelaDias} dias
             </p>
             {/*
               **Qual texto ela manda**, e não o nome do tipo (bloco 96).
@@ -101,6 +135,19 @@ function Automacao({ automacao, podeMexer }: {
                 <em>o primeiro texto aprovado de {nomeDoAviso(automacao.tipo)}</em>
               )}
             </p>
+            {/*
+              **Ligada e sem texto não manda nada** (bloco 97).
+
+              Sem texto aprovado daquele tipo, esta automação roda a varredura,
+              não acha o que mandar e devolve zero — com a linha dizendo
+              "Ligada" e o contador em "0 enviadas". O dono lê que está no ar.
+            */}
+            {automacao.textoTitulo === null && !temTextoDoTipo ? (
+              <p className="item-cadastro__linha item-cadastro__risco">
+                Nada vai sair: não há texto aprovado de {nomeDoAviso(automacao.tipo)}.{' '}
+                <a href="/admin/whatsapp">Mandar um para aprovação</a>.
+              </p>
+            ) : null}
             {/*
               Os dois números que decidem desligar. Sem eles a lista seria de
               automações que ninguém consegue defender nem matar.
@@ -132,13 +179,38 @@ function Automacao({ automacao, podeMexer }: {
                 campo: para um `FormData`, "não veio" e "veio falso" são a mesma
                 coisa. */}
           {podeMexer ? (
-            <form action={acaoLigarAutomacao}>
-              <input name="id" type="hidden" value={automacao.id} />
-              <input name="ativa" type="hidden" value={automacao.ativa ? 'nao' : 'sim'} />
-              <button className="ui-button ui-button--ghost" type="submit">
-                {automacao.ativa ? 'Desligar' : 'Ligar'}
-              </button>
-            </form>
+            <div className="item-cadastro__acoes">
+              {/*
+                **Corrigir uma automação já criada** (bloco 98).
+
+                Mudar de 30 para 45 dias exigia criar outra e desligar a errada,
+                e as duas ficavam na lista com o mesmo nome. O domínio aceita
+                `id` desde o bloco 56 — o `PUT` é do objeto inteiro —, e a
+                interface é que nunca ofereceu.
+
+                Abre o formulário de baixo preenchido, na mesma tela: uma tela
+                nova por automação seria mais um destino a desenhar barra, volta
+                e estado vazio, e o formulário já existe.
+
+                Não há apagar, e é decisão: `automation_sends` guarda quantas
+                saíram e quantas alcançaram o objetivo, e apagar a automação
+                levaria a resposta de "valeu a pena?" junto. Desligar já para o
+                envio e mantém o que ela mediu.
+              */}
+              <a
+                className="ui-button ui-button--ghost"
+                href={`/admin/automacoes?editar=${automacao.id}#nova-automacao`}
+              >
+                Editar
+              </a>
+              <form action={acaoLigarAutomacao}>
+                <input name="id" type="hidden" value={automacao.id} />
+                <input name="ativa" type="hidden" value={automacao.ativa ? 'nao' : 'sim'} />
+                <button className="ui-button ui-button--ghost" type="submit">
+                  {automacao.ativa ? 'Desligar' : 'Ligar'}
+                </button>
+              </form>
+            </div>
           ) : null}
         </div>
       </article>
@@ -188,6 +260,22 @@ export default async function AutomacoesPage({ searchParams }: Props) {
   // uma decisão que não existe e quem abre procura a segunda opção.
   const umaMensagemSo = aprovados.length <= 1;
   const automacoes = resposta?.ok ? resposta.dados.automacoes : [];
+  /**
+   * O que a pessoa tinha digitado quando a recusa voltou (bloco 98).
+   *
+   * Vazio no caminho normal: o cookie dura dois minutos e só é escrito quando a
+   * API recusa. Quem acerta de primeira não vê diferença nenhuma.
+   */
+  const rascunho = await lerRascunho();
+  const recusa = await lerRecusa();
+  /**
+   * A automação que o botão "Editar" abriu (bloco 98).
+   *
+   * `undefined` é o caminho normal — formulário de criação. O id vem da URL e é
+   * casado contra a lista que a API já devolveu: um id de outra barbearia não
+   * acha nada e cai em criação, sem consulta a mais e sem 404.
+   */
+  const emEdicao = automacoes.find((a) => a.id === first(query['editar']));
   const erro = first(query['erro']);
   const feito = first(query['feito']);
   const salva = feito === 'salva';
@@ -206,13 +294,21 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       </header>
 
       <h1 className="painel__titulo">Automações</h1>
+      {/* O par da frase que a tela de campanhas ganhou: as duas ficam lado a
+          lado no menu, mandam pelo mesmo canal e têm formulário parecido, e
+          quem abre pela primeira vez não tem como saber qual usar. */}
       <p className="painel__sub">
-        Mensagens que a casa manda sozinha quando um fato acontece.
+        Uma regra que fica ligada e manda <strong>sozinha</strong>, toda vez que o fato
+        acontecer com alguém. Para falar hoje com uma lista escolhida agora, use{' '}
+        <a href="/admin/campanhas">Campanhas</a>.
       </p>
 
+      {/* A frase do domínio primeiro: ela nomeia o campo. O mapa por código
+          continua como rede para as recusas que não trazem frase. */}
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {EXPLICACAO_DA_FALHA[erro as keyof typeof EXPLICACAO_DA_FALHA] ??
+            recusa ??
             'Não deu para salvar. Tente de novo.'}
         </div>
       ) : null}
@@ -265,15 +361,31 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         ) : (
           <ul className="lista-cadastro">
             {automacoes.map((a) => (
-              <Automacao automacao={a} key={a.id} podeMexer={podeMexer} />
+              <Automacao
+                automacao={a}
+                key={a.id}
+                podeMexer={podeMexer}
+                temTextoDoTipo={aprovados.some((t) => t.tipo === a.tipo)}
+              />
             ))}
           </ul>
         )}
       </section>
 
       {podeMexer ? (
-        <section className="cartao-balcao">
-          <h2 className="cartao-balcao__titulo">Nova automação</h2>
+        <section className="cartao-balcao" id="nova-automacao">
+          {/* O título diz o que se está fazendo: "Nova automação" sobre um
+              formulário preenchido com uma existente seria a tela mentindo
+              sobre o próprio efeito. */}
+          <h2 className="cartao-balcao__titulo">
+            {emEdicao ? `Editando ${emEdicao.nome}` : 'Nova automação'}
+          </h2>
+          {emEdicao ? (
+            <p className="cartao-balcao__texto">
+              Salvar substitui esta automação — o que ela já mediu continua na linha dela.{' '}
+              <a href="/admin/automacoes">Cancelar e criar uma nova</a>.
+            </p>
+          ) : null}
           {/*
             Três perguntas numeradas, e a numeração diz a verdade: é uma
             sequência, e a terceira só faz sentido depois das duas. A versão
@@ -285,12 +397,16 @@ export default async function AutomacoesPage({ searchParams }: Props) {
             São três perguntas. Depois de salva, ela roda sozinha — você não precisa voltar aqui.
           </p>
           <form action={acaoSalvarAutomacao} className="formulario">
+            {/* O id viaja escondido: é ele que faz o domínio substituir em vez
+                de criar. Ausente, nasce automação nova, como sempre. */}
+            {emEdicao ? <input name="id" type="hidden" value={emEdicao.id} /> : null}
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="nome">
                 Nome
               </label>
               <input
                 className="ui-field__input"
+                defaultValue={rascunho['nome'] ?? emEdicao?.nome ?? ''}
                 id="nome"
                 maxLength={80}
                 name="nome"
@@ -328,7 +444,16 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                   return (
                     <label className="alternativa" key={g}>
                       <input
-                        defaultChecked={i === 0}
+                        defaultChecked={
+                          // Rascunho, depois a automação em edição, depois o
+                          // primeiro. Sem a segunda, editar trocaria o gatilho
+                          // em silêncio — o `PUT` é do objeto inteiro.
+                          rascunho['gatilho'] !== undefined
+                            ? rascunho['gatilho'] === g
+                            : emEdicao !== undefined
+                              ? emEdicao.gatilho === g
+                              : i === 0
+                        }
                         name="gatilho"
                         required
                         type="radio"
@@ -357,12 +482,53 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               </div>
             </div>
 
+            {/*
+              **Só para quem** (bloco 100).
+
+              A automação sabia **quando** disparar e **o que** mandar, e não
+              sabia **para quem**: "sumiu há 30 dias" ia para todo mundo que
+              sumiu há 30 dias — o assinante que paga mensalidade e o visitante
+              de uma vez só, com a mesma frase.
+
+              O público é o segmento derivado do bloco 61, o mesmo que o
+              contador da tela de campanhas mostra e o mesmo nome. Uma segunda
+              noção de "quem é este cliente" seria a lista paralela de sempre.
+
+              "Todo mundo" é a primeira opção **e** o padrão, porque é o
+              comportamento anterior: quem não decidir nada continua com o que
+              tinha.
+            */}
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="publico">
+                Só para
+              </label>
+              <select
+                className="ui-field__input"
+                defaultValue={rascunho['publico'] ?? emEdicao?.publico ?? ''}
+                id="publico"
+                name="publico"
+              >
+                <option value="">Todo mundo que cruzar o gatilho</option>
+                {SEGMENTOS.map((seg) => (
+                  <option key={seg} value={seg}>
+                    {ROTULO_DO_SEGMENTO[seg]} — {EXPLICACAO_DO_SEGMENTO[seg]}
+                  </option>
+                ))}
+              </select>
+              <p className="ui-field__hint">
+                Recorta o gatilho pelo grupo em que a pessoa está hoje. É o mesmo grupo que a
+                tela de <a href="/admin/campanhas">Campanhas</a> conta lá em cima, recalculado a
+                cada varredura — ninguém fica preso num rótulo velho.
+              </p>
+            </div>
+
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="limiar">
                 O número
               </label>
               <input
                 className="ui-field__input"
+                defaultValue={rascunho['limiar'] ?? emEdicao?.limiar ?? ''}
                 id="limiar"
                 inputMode="numeric"
                 name="limiar"
@@ -387,7 +553,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 </label>
                 <input
                   className="ui-field__input"
-                  defaultValue="0"
+                  defaultValue={rascunho['atrasoMinutos'] ?? emEdicao?.atrasoMinutos ?? '0'}
                   id="atrasoMinutos"
                   inputMode="numeric"
                   name="atrasoMinutos"
@@ -444,7 +610,13 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                   aprovados.map((texto, i) => (
                     <label className="alternativa" key={texto.id}>
                       <input
-                        defaultChecked={i === 0}
+                        defaultChecked={
+                          rascunho['templateId'] !== undefined
+                            ? rascunho['templateId'] === texto.id
+                            : emEdicao?.templateId != null
+                              ? emEdicao.templateId === texto.id
+                              : i === 0
+                        }
                         name="templateId"
                         type={umaMensagemSo ? 'hidden' : 'radio'}
                         value={texto.id}
@@ -486,7 +658,13 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               <label className="ui-field__label" htmlFor="objetivo">
                 O que precisa acontecer
               </label>
-              <select className="ui-field__input" id="objetivo" name="objetivo" required>
+              <select
+                className="ui-field__input"
+                defaultValue={rascunho['objetivo'] ?? emEdicao?.objetivo ?? OBJETIVOS[0]}
+                id="objetivo"
+                name="objetivo"
+                required
+              >
                 {OBJETIVOS.map((o) => (
                   <option key={o} value={o}>
                     {ROTULO_DO_OBJETIVO[o]}
@@ -501,7 +679,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
               </label>
               <input
                 className="ui-field__input"
-                defaultValue="7"
+                defaultValue={rascunho['janelaDias'] ?? emEdicao?.janelaDias ?? '7'}
                 id="janelaDias"
                 inputMode="numeric"
                 max={JANELA_MAXIMA_DIAS}
@@ -523,7 +701,21 @@ export default async function AutomacoesPage({ searchParams }: Props) {
             */}
             <div className="ui-field">
               <label className="marca" htmlFor="ativa">
-                <input defaultChecked id="ativa" name="ativa" type="checkbox" />
+                <input
+                  defaultChecked={
+                    // Uma caixa ausente do `FormData` é "desmarcada", e o
+                    // rascunho a guarda como string vazia justamente para
+                    // distinguir isso de "não houve rascunho".
+                    rascunho['ativa'] !== undefined
+                      ? rascunho['ativa'] === 'on'
+                      : emEdicao
+                        ? emEdicao.ativa
+                        : true
+                  }
+                  id="ativa"
+                  name="ativa"
+                  type="checkbox"
+                />
                 <span>Começar ligada</span>
               </label>
               <p className="ui-field__hint">

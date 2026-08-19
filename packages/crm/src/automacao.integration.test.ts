@@ -529,4 +529,141 @@ describeIfDb('automação', () => {
       admin.$executeRawUnsafe(`UPDATE automation_sends SET goal_met_at = now()`),
     ).rejects.toThrow();
   });
+
+
+  /**
+   * Só para quem (bloco 100).
+   *
+   * A automação sabia **quando** disparar e **o que** mandar, e não sabia
+   * **para quem**: "sumiu há 30 dias" ia para todo mundo que sumiu há 30 dias
+   * — o assinante que paga mensalidade e o visitante de uma vez só, com a mesma
+   * frase.
+   */
+  describe('o público da automação', () => {
+    /**
+     * Dois clientes no mesmo gatilho e em segmentos diferentes.
+     *
+     * Carlos tem três atendimentos e vira `em_risco` — passou do próprio ritmo;
+     * Bruno tem um só e fica `novo`. Sem os dois, a restrição passaria por não
+     * haver ninguém do outro lado dela.
+     */
+    const doisSumidos = async () => {
+      /**
+       * Cada horário numa hora diferente: a constraint anti-overbooking é por
+       * profissional, e dois atendimentos no mesmo instante são recusados —
+       * inclusive numa semeadura, onde a colisão parece um defeito do código.
+       */
+      const dia = (n: number, hora: number) =>
+        new Date(AGORA.getTime() - n * 86_400_000 + hora * 3_600_000);
+      // Meia hora de duração: a janela de serviço tem `CHECK` de fim > início.
+      const marcar = (id: string, cliente: string, quando: Date) => {
+        const fim = new Date(quando.getTime() + 30 * 60_000).toISOString();
+        const inicio = quando.toISOString();
+        return `
+        INSERT INTO appointments
+          (id, tenant_id, location_id, professional_id, customer_id, status,
+           starts_at, ends_at, service_starts_at, service_ends_at)
+        VALUES ('${id}', '${TENANT}', '${LOCAL}', '${RUAN}', '${cliente}', 'completed',
+                '${inicio}', '${fim}', '${inicio}', '${fim}');
+      `;
+      };
+      await exec(
+        /**
+         * Carlos corta a cada 20 dias — 73, 53, 33 — e está há 33 sem vir:
+         * passou do **próprio** ritmo e ainda não do dobro dele, que é
+         * exatamente `em_risco`. Um ciclo largo o deixaria dentro do prazo e o
+         * teste mediria outra coisa.
+         */
+        marcar('16565656-0000-4000-8000-000000000011', CARLOS, dia(73, 0)) +
+          marcar('16565656-0000-4000-8000-000000000012', CARLOS, dia(53, 0)) +
+          marcar('16565656-0000-4000-8000-000000000013', CARLOS, dia(33, 0)) +
+          marcar('16565656-0000-4000-8000-000000000021', BRUNO, dia(33, 2)),
+      );
+    };
+
+    const varrer = () =>
+      varrerAutomacoes({ tenantId: TENANT, agora: AGORA, timeZone: 'America/Bahia' });
+
+    const quemFoiMarcado = async (): Promise<string[]> => {
+      const linhas = await admin.$queryRawUnsafe<{ customer_id: string }[]>(
+        `SELECT customer_id FROM automation_sends ORDER BY customer_id`,
+      );
+      return linhas.map((l) => l.customer_id);
+    };
+
+    it('sem público, todo mundo que cruzou o gatilho entra', async () => {
+      // O comportamento anterior, e o padrão: quem não decidir nada continua
+      // com o que tinha. Sem este caso, o de baixo passaria com a varredura
+      // quebrada para todo mundo.
+      await doisSumidos();
+      await automacao();
+      await varrer();
+      expect((await quemFoiMarcado()).sort()).toEqual([CARLOS, BRUNO].sort());
+    });
+
+    it('com público, só quem está naquele segmento entra', async () => {
+      await doisSumidos();
+      await automacao({ publico: 'em_risco' });
+      await varrer();
+      // Carlos passou do próprio ritmo; Bruno veio uma vez e é `novo`.
+      expect(await quemFoiMarcado()).toEqual([CARLOS]);
+    });
+
+    it('quem fica de fora do público não vira disparo pulado', async () => {
+      /**
+       * Fora do público não é pulo: pulo é "deveria receber e não recebeu", e
+       * quem não é do público nunca esteve na conta. Gravar encheria a lista de
+       * "por que não chegou" do bloco 97 com a base inteira menos o público.
+       */
+      await doisSumidos();
+      await automacao({ publico: 'em_risco' });
+      await varrer();
+      const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+        `SELECT count(*) AS n FROM automation_sends WHERE customer_id = '${BRUNO}'`,
+      );
+      expect(Number(linhas[0]?.n ?? 0)).toBe(0);
+    });
+
+    it('salvar sem mandar o campo não apaga o público', async () => {
+      /**
+       * `undefined` é "não mexa", e `null` é "todo mundo" — a mesma distinção de
+       * `templateId`. Sem o `CASE` no `UPDATE`, qualquer chamador que não
+       * conheça este campo apagaria a restrição em silêncio, e a automação
+       * voltaria a mandar para a base inteira.
+       *
+       * Pelo `salvarAutomacao` e não pela porta de ligar/desligar: aquela usa um
+       * `UPDATE` estreito que só toca `active` desde o bloco 92 e **nunca**
+       * chega ao `ON CONFLICT` — o teste passaria com o conserto removido.
+       */
+      const { id } = await automacao({ publico: 'vip' });
+      await automacao({ id, nome: 'Outro nome' });
+
+      const lista = await automacoesDaCasa(TENANT);
+      const salva = lista.find((a) => a.id === id);
+      expect(salva?.nome).toBe('Outro nome');
+      expect(salva?.publico).toBe('vip');
+    });
+
+    it('voltar para "todo mundo" é possível', async () => {
+      /**
+       * `null` é valor legítimo e não "não mexa". Com um `COALESCE` no lugar do
+       * `CASE`, ninguém conseguiria desfazer a restrição pela tela — e a saída
+       * seria criar outra automação, que é o defeito que o bloco 98 fechou.
+       */
+      const { id } = await automacao({ publico: 'vip' });
+      await automacao({ id, publico: null });
+      const lista = await automacoesDaCasa(TENANT);
+      expect(lista.find((a) => a.id === id)?.publico).toBeNull();
+    });
+
+    it('segmento desconhecido no banco não vira público', async () => {
+      // A coluna tem `CHECK`, mas a leitura não pode confiar nela: um valor que
+      // este pacote ainda não conhece precisa virar "todo mundo" na tela, e não
+      // um rótulo em branco ao lado de "só para".
+      const { id } = await automacao();
+      await exec(`UPDATE automations SET audience = NULL WHERE id = '${id}'`);
+      const lista = await automacoesDaCasa(TENANT);
+      expect(lista.find((a) => a.id === id)?.publico).toBeNull();
+    });
+  });
 });

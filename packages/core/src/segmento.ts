@@ -38,6 +38,18 @@ export const SEGMENTOS = [
 ] as const;
 export type Segmento = (typeof SEGMENTOS)[number];
 
+/**
+ * O segmento vindo do banco, ou nulo (bloco 100).
+ *
+ * `string` na entrada pelo motivo de `nomeDoAviso`: a coluna é `text` com
+ * `CHECK`, e o valor chega como `string | null`. Um `as` para calar o
+ * compilador esconderia justamente o caso que a guarda existe para pegar — um
+ * segmento novo no banco que este pacote ainda não conhece.
+ */
+export function segmentoValido(valor: string | null | undefined): Segmento | null {
+  return (SEGMENTOS as readonly string[]).includes(valor ?? '') ? (valor as Segmento) : null;
+}
+
 export const ROTULO_DO_SEGMENTO: Readonly<Record<Segmento, string>> = {
   novo: 'Novo',
   ativo: 'Ativo',
@@ -269,6 +281,19 @@ export const FILTROS_DE_CAMPANHA = [
 ] as const;
 export type FiltroDeCampanha = (typeof FILTROS_DE_CAMPANHA)[number];
 
+/**
+ * O nome de cada público — e três deles **são segmentos** (bloco 99).
+ *
+ * Este mapa e `ROTULO_DO_SEGMENTO` davam nomes diferentes às mesmas pessoas, na
+ * **mesma tela**: o contador dizia "23 Em risco" e o seletor logo abaixo dizia
+ * "Passou do ritmo dele". Quem opera não tem como saber que são o mesmo grupo,
+ * e é a §6 pergunta 2 — a mesma coisa com dois nomes.
+ *
+ * Agora o nome sai de `rotuloDoFiltro`, que pergunta primeiro se aquele filtro
+ * é um segmento. Este mapa continua existindo porque quatro públicos **não**
+ * são segmentos, e porque a definição de cada um vira a dica ao lado do nome:
+ * "Em risco — passou do ritmo dele". Um nome, com o que ele quer dizer junto.
+ */
 export const ROTULO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string>> = {
   inativos: 'Quem sumiu',
   aniversariantes: 'Aniversariantes do mês',
@@ -278,6 +303,29 @@ export const ROTULO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string>> = {
   perdido: 'Passou do dobro do ritmo dele',
   vip: 'Quem mais gasta na casa',
 };
+
+/**
+ * O nome que a tela mostra para um público.
+ *
+ * Filtro que é segmento herda o nome do segmento — é a mesma gente, e dois
+ * nomes fazem a recepção procurar um terceiro grupo que não existe. O resto
+ * mantém o nome próprio, porque não há segmento correspondente.
+ */
+export function rotuloDoFiltro(filtro: FiltroDeCampanha): string {
+  const segmento = SEGMENTO_DO_FILTRO[filtro];
+  return segmento ? ROTULO_DO_SEGMENTO[segmento] : ROTULO_DO_FILTRO[filtro];
+}
+
+/**
+ * O que aquele nome quer dizer, para ficar ao lado dele.
+ *
+ * Para os três que são segmentos, é a definição que este mapa já guardava —
+ * "passou do ritmo dele" — e que deixou de ser o **nome**. Para os outros
+ * quatro, o nome já é a definição e não há o que acrescentar.
+ */
+export function definicaoDoFiltro(filtro: FiltroDeCampanha): string | null {
+  return SEGMENTO_DO_FILTRO[filtro] ? ROTULO_DO_FILTRO[filtro].toLowerCase() : null;
+}
 
 /**
  * Em que pé está uma campanha (bloco 82).

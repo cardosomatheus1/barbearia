@@ -171,6 +171,47 @@ export const EXPLICACAO_DE_NAO_DISPARAR: Readonly<Record<MotivoDeNaoDisparar, st
   teto_do_mes: `Já foram ${TETO_PROMOCIONAL_MES} mensagens promocionais neste mês.`,
 };
 
+/**
+ * Por que **esta** pessoa não recebeu, em português (bloco 97).
+ *
+ * A campanha grava um motivo a mais que a automação: `fora_da_janela`, quando a
+ * decisão empurrou o envio para depois — entre 21h e 8h nada sai. Ele não é
+ * `MotivoDeNaoDisparar` porque não é uma recusa, é um adiamento, e por isso
+ * mora aqui e não naquele mapa.
+ *
+ * `string` na entrada pelo motivo de `nomeDoAviso`: quem chama é a tela, e o
+ * valor vem do banco. Motivo desconhecido devolve a frase genérica em vez de
+ * vazar o identificador da coluna — foi o que `pedido_de_avaliacao` já ensinou.
+ */
+export function explicacaoDoPulo(motivo: string): string {
+  const conhecido = (EXPLICACAO_DE_NAO_DISPARAR as Record<string, string | undefined>)[motivo];
+  if (conhecido) return conhecido;
+  if (motivo === 'fora_da_janela') {
+    return 'Ficou para depois: entre 21h e 8h nada sai.';
+  }
+  return 'Não deu para mandar.';
+}
+
+/**
+ * O mesmo motivo em duas palavras, para a contagem ao lado do número.
+ *
+ * A frase inteira serve para uma linha por pessoa; num resumo de quatro
+ * motivos ela vira parágrafo, e parágrafo num cartão é o que ninguém lê.
+ */
+export const RESUMO_DO_PULO: Readonly<Record<string, string>> = {
+  automacao_desligada: 'automação desligada',
+  ja_disparou_por_este_fato: 'já recebeu por este motivo',
+  ja_recebeu_hoje: 'já recebeu hoje',
+  sem_telefone: 'sem telefone',
+  optou_por_nao_receber: 'pediu para não receber',
+  teto_do_mes: 'teto do mês',
+  fora_da_janela: 'fora do horário',
+};
+
+export function resumoDoPulo(motivo: string): string {
+  return RESUMO_DO_PULO[motivo] ?? motivo.replace(/_/g, ' ');
+}
+
 export interface DecisaoDeDisparo {
   readonly disparar: boolean;
   /** Quando mandar. Já sai fora da janela de silêncio, no fuso da unidade. */

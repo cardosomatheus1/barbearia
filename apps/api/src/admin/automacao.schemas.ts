@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { GATILHOS, JANELA_MAXIMA_DIAS, OBJETIVOS, TIPOS_DE_CAMPANHA } from '@barbearia/core';
+import {
+  GATILHOS,
+  JANELA_MAXIMA_DIAS,
+  OBJETIVOS,
+  SEGMENTOS,
+  TIPOS_DE_CAMPANHA,
+} from '@barbearia/core';
 
 /**
  * A borda da automação (bloco 56).
@@ -35,6 +41,17 @@ export const automacaoSchema = z.object({
    * texto. O `COALESCE` do domínio é quem preserva a escolha ali.
    */
   templateId: z.string().uuid().nullable().optional(),
+  /**
+   * Para quem esta automação manda (bloco 100).
+   *
+   * A lista sai de `SEGMENTOS`, nunca reescrita aqui: a borda é o pior lugar
+   * para uma lista paralela, porque o sintoma é a rota recusando o que o
+   * produto aceita. Foi o que já aconteceu com o toggle do Super Admin.
+   *
+   * `null` é "todo mundo" e **ausente** é "não mexa" — a distinção que a porta
+   * de ligar e desligar precisa, porque ela não manda este campo.
+   */
+  publico: z.enum(SEGMENTOS).nullable().optional(),
   objetivo: z.enum(OBJETIVOS),
   janelaDias: z.number().int().min(1).max(JANELA_MAXIMA_DIAS),
   ativa: z.boolean(),

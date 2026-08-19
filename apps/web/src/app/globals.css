@@ -1413,6 +1413,72 @@ main { padding-bottom: var(--space-8); }
 
 /* `<details>` é o único jeito de esconder e revelar sem JavaScript, e este
    produto não manda JavaScript de painel para o navegador. */
+/*
+  Confirmacao antes de um envio em massa (bloco 98).
+
+  `<details>` porque o painel nao manda JavaScript proprio: o resumo e o botao,
+  e o corpo so aparece depois do toque. O `list-style: none` tira o triangulo
+  do navegador, que num botao le como enfeite quebrado.
+
+  Alvo de 44px como todo alvo de toque, em qualquer largura — `summary` nasce
+  com a altura do texto.
+*/
+/*
+  Os botoes de uma linha de cadastro, lado a lado e quebrando quando nao cabem.
+
+  No celular "Editar" e "Desligar" nao cabem numa linha ao lado do texto; sem o
+  `wrap` um deles fica fora do alcance de quem usa o aparelho pequeno.
+*/
+/*
+  O contador de segmento, quando ele vira o comeco de uma campanha (bloco 99).
+
+  Ocupa o cartao inteiro para o alvo de toque ser o cartao e nao o numero — 44px
+  em qualquer largura, como todo alvo autonomo.
+*/
+.segmentos__link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+.segmentos__link:hover .segmentos__rotulo,
+.segmentos__link:focus-visible .segmentos__rotulo { text-decoration: underline; }
+
+.item-cadastro__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.confirmar { position: relative; }
+.confirmar__abrir {
+  list-style: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.confirmar__abrir::-webkit-details-marker { display: none; }
+.confirmar__corpo {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* O piso de uma coluna e o min-content dela: sem isto o nome do texto decide
+     a largura da tela. */
+  min-width: 0;
+}
+.confirmar__texto { font-size: var(--font-size-sm); }
+
 .dobra { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .dobra__titulo {
   display: flex;
@@ -7553,6 +7619,33 @@ main { padding-bottom: var(--space-8); }
 
 .alternativa__corpo { display: grid; gap: var(--space-1); min-width: 0; }
 .alternativa__nome { font-weight: var(--font-weight-medium); }
+/*
+  Quem nao recebeu, aberto dentro do cartao da campanha (bloco 97).
+
+  Recuado e com fio a esquerda para dizer que pertence aquela campanha e nao a
+  proxima: a lista abre no meio de uma lista, e sem a marca visual as duas se
+  confundem.
+*/
+.pulados {
+  margin-top: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* O piso de uma coluna e o min-content dela: sem isto um nome comprido
+     decide a largura da tela. */
+  min-width: 0;
+}
+
+.pulados__titulo {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .alternativa__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .alternativa__nota--risco { color: var(--color-danger); }
 

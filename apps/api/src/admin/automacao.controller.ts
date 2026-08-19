@@ -5,7 +5,7 @@ import {
   definirAutomacaoAtiva,
   salvarAutomacao,
 } from '@barbearia/crm';
-import type { Gatilho, Objetivo, TipoDeNotificacao } from '@barbearia/core';
+import type { Gatilho, Objetivo, Segmento, TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -92,6 +92,7 @@ export class AutomacaoController {
       atrasoMinutos: number;
       tipo: TipoDeNotificacao;
       templateId?: string | null;
+      publico?: Segmento | null;
       objetivo: Objetivo;
       janelaDias: number;
       ativa: boolean;
@@ -107,6 +108,9 @@ export class AutomacaoController {
         atrasoMinutos: body.atrasoMinutos,
         tipo: body.tipo,
         templateId: body.templateId ?? null,
+        // Ausente é "não mexa": o spread condicional é o que preserva a
+        // distinção entre "todo mundo" (null) e "não veio no corpo".
+        ...(body.publico === undefined ? {} : { publico: body.publico }),
         objetivo: body.objetivo,
         janelaDias: body.janelaDias,
         ativa: body.ativa,

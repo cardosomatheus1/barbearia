@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 96 de 100 blocos.**
+**Status: 100 de 100 blocos.**
 
 ---
 
@@ -73,12 +73,6 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
-| Automação de um tipo sem texto aprovado promete o que não sai | o cartão diz **qual texto** ela manda (bloco 96), e quando não há um escolhido diz que vai pelo primeiro aprovado do tipo. `nomeDoAviso` deixou de vazar o identificador do banco na tela | dizer **"nada vai sair"** quando não existe texto aprovado daquele tipo. `pedido_de_avaliacao` é valor de `notification_kind` desde o bloco 46 e nenhum código o usa: a automação de pedir avaliação existe na semente, aparece ligada e não manda nada. É irmã de "a tela diz enviada com o canal desligado" — a tela promete entrega sobre um caminho que não existe | 97 — a tela passa a responder "por que não chegou" |
-| "Por que não chegou" não tem lista clicável | o motivo de cada pulo é gravado — `campaign_targets.skipped_reason` e `notifications.reason` desde o bloco 20 —, e a tela da campanha mostra os enviados e os pulados | a **lista** de quem foi pulado, com o motivo ao lado e o nome clicável. Hoje o dono lê "3 enviados · 27 pulados" e não tem como saber quem nem por quê sem ir ao banco. O dado existe e ninguém o lê, que é a §6 pergunta 4 | 97 — a tela passa a responder "por que não chegou" |
-| A tela da campanha diz "enviada" com o canal desligado | `enviarPeloWhatsApp` devolve nulo quando não há canal (SPEC §4.12: canal indisponível não lança), e o alvo é carimbado assim mesmo — o envio caiu no canal de reserva | dizer isso **na tela**. Hoje a campanha aparece verde, com "27 enviados", e nada chegou a ninguém pelo WhatsApp. Número que ignora parte do dado precisa dizer isso na tela, e este não diz | 97 — a tela passa a responder "por que não chegou" |
-| Erro no formulário de campanha perde o que foi digitado | a recusa volta com código e a tela mostra a frase certa | preservar o preenchimento e apontar **o campo**. Hoje "Diga a partir de quantos dias sem vir" volta com o formulário inteiro vazio, e quem montou um público de sete campos recomeça | 98 — o formulário para de perder trabalho, e o envio em massa ganha confirmação |
-| Não há confirmação antes do envio em massa | o estado é a trava contra o segundo toque (bloco 82), e a tela diz "Enviar para 96" | o passo de confirmação. Mandar promoção para noventa e seis pessoas é irreversível e custa dinheiro por mensagem, e hoje é um clique único — a mesma tela que tem confirmação para apagar um serviço não tem para isto | 98 — o formulário para de perder trabalho, e o envio em massa ganha confirmação |
-| Corrigir uma automação já criada | ligar e desligar pela linha (bloco 92), e a ação de salvar recebe `id` desde o bloco 56 — o `PUT` é do objeto inteiro | **editar** os campos: mudar de 30 para 45 dias exige criar outra e desligar a errada, e as duas ficam na lista com o mesmo nome | sem bloco definido: o formulário de edição é o de criação com os valores preenchidos, e o que falta é decidir se ele abre no lugar da linha ou numa tela própria — o painel não tem precedente de edição em linha. Enquanto isso o caminho existe e não perde nada: a nova nasce zerada, a velha guarda o que mediu. Entra no primeiro bloco que mexa nesta tela |
 | Conciliação com a Meta só na unidade principal | a varredura de hora em hora (bloco 90) promove o número a `ativo` quando a Meta confirma a posse, e tira os textos de "Na Meta" — pela `primaryLocation` de cada barbearia | cobrir **todas** as unidades: `whatsapp_settings` é por unidade desde o bloco 55, e uma rede com número próprio por loja concilia só o da matriz | sem bloco definido: nenhuma barbearia deste produto tem hoje número por filial, e um laço sobre unidades seria caminho que nada exercita — o defeito de `blocks` outra vez. O que segura a decisão é dado, não código: entra quando existir a primeira rede com dois números. Enquanto isso o sintoma é conhecido e limitado — a filial fica em "falta confirmar" com o canal funcionando, que é o estado de antes do bloco 90 |
 | A medição não enxerga transbordo cortado por `overflow-x: clip` | a medição abre cada tela nas quatro larguras e confere `documentElement.scrollWidth` **e** `body.scrollWidth`, que foi o conserto do bloco 72 — e o segundo pega o transbordo escondido dentro de `position: sticky` | enxergar o transbordo que um ancestral **recorta**. `.trabalho` usa `overflow-x: clip`, e com isso a tela inteira do painel no celular sai "ok" nas quatro larguras enquanto o conteúdo é cortado na direita. Já aconteceu duas vezes: o `nowrap` herdado no formulário de campanha (bloco 86) e um estouro no cartão do WhatsApp, os dois com medição verde | sem bloco definido: `scrollWidth` não é a ferramenta — quem responde é comparar o retângulo de cada elemento com o do recipiente, elemento a elemento, o que é uma segunda varredura e não um ajuste da que existe. É a lição do §5 na forma mais cara, porque **a medição verde é o que dá permissão para não olhar**: enquanto ela não enxergar, o print em 390px é a única rede, e ele é obrigatório por isso. Entra no primeiro bloco que mexa em `scripts/medir-responsividade.js` |
 | Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
@@ -415,10 +409,10 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 94 | O texto vira cadastro com nome próprio, e a automação escolhe **qual** — não mais um por tipo | ✅ |
 | 95 | Os três tipos de botão da Meta, com o destino saindo do domínio e nunca de um campo | ✅ |
 | 96 | A campanha e a ficha do cliente também escolhem o texto, e a tela mostra a frase preenchida | ✅ |
-| 97 | A tela passa a responder "por que não chegou": lista de pulados com motivo, e nada de verde com o canal desligado | |
-| 98 | O formulário para de perder o que foi digitado, e o envio em massa ganha confirmação | |
-| 99 | Um vocabulário só para segmento, automação e campanha — e a barra de seções no celular | |
-| 100 | "Quando · só para · mandar": o gatilho e o público viram uma frase que a barbearia monta | |
+| 97 | A tela passa a responder "por que não chegou": lista de pulados com motivo, e nada de verde com o canal desligado | ✅ |
+| 98 | O formulário para de perder o que foi digitado, e o envio em massa ganha confirmação | ✅ |
+| 99 | Um vocabulário só para segmento, automação e campanha — e a pista de que a barra rola | ✅ |
+| 100 | "Quando · só para · mandar": o gatilho ganha público, e a automação vira uma frase | ✅ |
 
 ---
 

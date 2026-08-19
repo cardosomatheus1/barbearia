@@ -99,6 +99,33 @@ export interface CampanhaNaTela {
   readonly cliques: number;
   readonly agendamentos: number;
   readonly receitaCents: number;
+  /**
+   * Quantos saíram **pelo WhatsApp**, e não pelo canal de reserva (bloco 97).
+   *
+   * `enviarPeloWhatsApp` devolve nulo quando não há canal ligado — SPEC §4.12:
+   * canal indisponível não lança, cai para o outro caminho —, e o alvo é
+   * carimbado assim mesmo. A campanha aparecia verde, com "27 enviados", e
+   * nada tinha chegado a ninguém.
+   *
+   * É a regra do número que ignora parte do dado: ele sai completo, com cara
+   * de completo, e o dono decide em cima dele.
+   */
+  readonly enviadosPeloWhatsApp: number;
+  /** Quantos foram pulados, por motivo. Vazio quando ninguém foi pulado. */
+  readonly pulados: readonly { readonly motivo: string; readonly quantos: number }[];
+}
+
+/**
+ * Uma pessoa que **não** recebeu, com o motivo (bloco 97).
+ *
+ * O motivo de cada pulo é gravado desde o bloco 20 e a tela mostrava só a
+ * contagem: o dono lia "3 enviados · 27 pulados" e não tinha como saber quem
+ * nem por quê sem ir ao banco. Dado que existe e ninguém lê é a §6 pergunta 4.
+ */
+export interface PuladoDaCampanha {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly motivo: string;
 }
 
 /**
@@ -129,6 +156,8 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
         cliques: bigint;
         agendamentos: bigint;
         receita: bigint | null;
+        pelo_whatsapp: bigint;
+        pulados: readonly { motivo: string; quantos: number }[] | null;
       }[]
     >`
       SELECT c.id, c.name, c.filter::text AS filter, c.filter_value, c.filter_weekday,
@@ -140,12 +169,26 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
              count(t.id) FILTER (WHERE m.read_at IS NOT NULL) AS lidos,
              count(t.id) FILTER (WHERE t.clicked_at IS NOT NULL) AS cliques,
              count(t.id) FILTER (WHERE t.goal_met_at IS NOT NULL) AS agendamentos,
-             COALESCE(sum(t.goal_amount_cents), 0) AS receita
+             COALESCE(sum(t.goal_amount_cents), 0) AS receita,
+             -- Enviado **pelo WhatsApp** é o que tem wamid: sem canal ligado o
+             -- alvo é carimbado do mesmo jeito e nada chega a ninguém.
+             count(t.id) FILTER (WHERE t.wamid IS NOT NULL) AS pelo_whatsapp,
+             COALESCE(mot.motivos, '[]'::jsonb) AS pulados
         FROM campaigns c
         LEFT JOIN campaign_targets t ON t.campaign_id = c.id
         LEFT JOIN whatsapp_messages m ON m.wamid = t.wamid
         LEFT JOIN whatsapp_templates w ON w.id = c.template_id
-       GROUP BY c.id, w.titulo
+        -- Os motivos por campanha, dentro da **mesma** consulta: uma ida ao
+        -- banco por linha da lista seria o N+1 que a regra proíbe.
+        LEFT JOIN LATERAL (
+          SELECT jsonb_agg(jsonb_build_object('motivo', p.motivo, 'quantos', p.quantos)
+                             ORDER BY p.quantos DESC, p.motivo) AS motivos
+            FROM (SELECT ct.skipped_reason AS motivo, count(*)::int AS quantos
+                    FROM campaign_targets ct
+                   WHERE ct.campaign_id = c.id AND ct.skipped_reason IS NOT NULL
+                   GROUP BY ct.skipped_reason) p
+        ) mot ON true
+       GROUP BY c.id, w.titulo, mot.motivos
        ORDER BY c.created_at DESC
     `;
     return linhas.map((l) => ({
@@ -165,6 +208,45 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
       cliques: Number(l.cliques),
       agendamentos: Number(l.agendamentos),
       receitaCents: Number(l.receita ?? 0),
+      enviadosPeloWhatsApp: Number(l.pelo_whatsapp),
+      pulados: l.pulados ?? [],
+    }));
+  });
+}
+
+/**
+ * Quem não recebeu, com o nome e o motivo (bloco 97).
+ *
+ * A contagem já vem na lista; o que faltava era **agir sobre ela**. "Vinte e
+ * sete pulados" sem nomes obriga o dono a abrir a base e procurar um por um, e
+ * é a lista que ninguém abre duas vezes.
+ *
+ * Curta de propósito: quem precisa falar com todos usa a campanha, que é o
+ * botão ao lado. O teto é dito na tela, como manda a regra do limite de itens.
+ *
+ * Ordenada por motivo e nome para a lista não trocar de ordem entre dois
+ * carregamentos — empate desempatado por campo estável, nunca pela consulta.
+ */
+export async function puladosDaCampanha(
+  tenantId: string,
+  campanhaId: string,
+  limite = 50,
+): Promise<readonly PuladoDaCampanha[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { customer_id: string; nome: string | null; motivo: string }[]
+    >`
+      SELECT t.customer_id, c.name AS nome, t.skipped_reason AS motivo
+        FROM campaign_targets t
+        JOIN customers c ON c.id = t.customer_id
+       WHERE t.campaign_id = ${campanhaId}::uuid AND t.skipped_reason IS NOT NULL
+       ORDER BY t.skipped_reason, c.name
+       LIMIT ${limite}
+    `;
+    return linhas.map((l) => ({
+      customerId: l.customer_id,
+      nome: l.nome ?? 'sem nome',
+      motivo: l.motivo,
     }));
   });
 }

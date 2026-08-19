@@ -191,6 +191,8 @@ import {
   guardarConflitoDaAgenda,
   guardarEstadoDaMeta,
   guardarMotivoDaMeta,
+  guardarRascunho,
+  guardarRecusa,
   guardarConflitoDeJornada,
   guardarLinkDaFila,
   guardarSenhaDeUmaVez,
@@ -218,6 +220,41 @@ const numero = (form: FormData, campo: string, padrao: number): number => {
 function falhar(rota: string, code: string): never {
   const separador = rota.includes('?') ? '&' : '?';
   redirect(`${rota}${separador}erro=${encodeURIComponent(code)}`);
+}
+
+/**
+ * Guarda o que foi digitado antes de recusar (bloco 98).
+ *
+ * A recusa voltava com a frase certa e o formulário **vazio**: quem montou um
+ * público de sete campos recomeçava do zero por um número que faltava.
+ *
+ * Só os campos que a tela sabe repor — `FormData` traz botão, chave de
+ * idempotência e campo escondido junto, e reencher a tela com eles seria
+ * devolver estado que ninguém digitou. A lista é da tela porque é ela que sabe
+ * o que tem `defaultValue`.
+ */
+async function guardarOQueFoiDigitado(
+  form: FormData,
+  campos: readonly string[],
+  mensagem?: string,
+): Promise<void> {
+  // A frase do domínio junto: ela diz **qual** campo está errado, e a tela
+  // mostrava uma genérica sobre um formulário de sete campos.
+  if (mensagem) await guardarRecusa(mensagem);
+  const rascunho: Record<string, string> = {};
+  for (const campo of campos) {
+    const valor = form.get(campo);
+    /**
+     * Campo ausente vira string vazia, e não some.
+     *
+     * Some, ele volta ao **padrão** na próxima renderização — e o padrão da
+     * caixa "Começar ligada" é marcada. Quem desmarcou de propósito e levou uma
+     * recusa por outro campo encontrava a caixa marcada de novo: a tela
+     * desfazendo em silêncio uma decisão que alguém tomou.
+     */
+    rascunho[campo] = typeof valor === 'string' ? valor : '';
+  }
+  await guardarRascunho(rascunho);
 }
 
 /**
@@ -2846,6 +2883,23 @@ const ROTA_WHATSAPP = '/admin/whatsapp';
 const ROTA_AUTOMACOES = '/admin/automacoes';
 const ROTA_CAMPANHAS = '/admin/campanhas';
 
+/**
+ * Os campos que a tela de campanha sabe repor depois de uma recusa (bloco 98).
+ *
+ * Escrita aqui e não derivada do `FormData`: ele traz também o botão, a chave
+ * de idempotência e os campos escondidos, e reencher a tela com eles devolveria
+ * estado que ninguém digitou. Há teste que cobra que todo `name` com
+ * `defaultValue` na tela esteja nesta lista.
+ */
+const CAMPOS_DA_CAMPANHA = [
+  'nome',
+  'filtro',
+  'valorDoFiltro',
+  'diaDaSemana',
+  'templateId',
+  'janelaDias',
+] as const;
+
 export async function acaoCriarCampanha(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const valor = texto(form, 'valorDoFiltro');
@@ -2871,7 +2925,10 @@ export async function acaoCriarCampanha(form: FormData): Promise<void> {
     ...(templateId ? { templateId } : { tipo: texto(form, 'tipo') }),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
   });
-  if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
+  if (!resultado.ok) {
+    await guardarOQueFoiDigitado(form, CAMPOS_DA_CAMPANHA, resultado.message);
+    falhar(ROTA_CAMPANHAS, resultado.code);
+  }
   redirect(`${ROTA_CAMPANHAS}?feito=criada&publico=${resultado.dados.publico}`);
 }
 
@@ -2890,6 +2947,19 @@ export async function acaoEnviarCampanha(form: FormData): Promise<void> {
   redirect(`${ROTA_CAMPANHAS}?feito=enviando`);
 }
 
+
+/** Os campos que a tela de automação sabe repor. Mesma razão da campanha. */
+const CAMPOS_DA_AUTOMACAO = [
+  'nome',
+  'gatilho',
+  'limiar',
+  'atrasoMinutos',
+  'templateId',
+  'publico',
+  'objetivo',
+  'janelaDias',
+  'ativa',
+] as const;
 
 export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
   const token = await exigirSessao();
@@ -2913,11 +2983,22 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
      */
     tipo: texto(form, 'tipo') || 'retorno',
     templateId: texto(form, 'templateId') || null,
+    /**
+     * Para quem ela manda (bloco 100).
+     *
+     * Vazio é "todo mundo", que é o valor da primeira opção do seletor — e não
+     * "não mexa": este formulário é o único caminho de edição, e um `undefined`
+     * daqui faria voltar de "só para VIP" para "todo mundo" ser impossível.
+     */
+    publico: texto(form, 'publico') || null,
     objetivo: texto(form, 'objetivo'),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
     ativa: form.get('ativa') === 'on',
   });
-  if (!resultado.ok) falhar(ROTA_AUTOMACOES, resultado.code);
+  if (!resultado.ok) {
+    await guardarOQueFoiDigitado(form, CAMPOS_DA_AUTOMACAO, resultado.message);
+    falhar(ROTA_AUTOMACOES, resultado.code);
+  }
   redirect(`${ROTA_AUTOMACOES}?feito=salva`);
 }
 

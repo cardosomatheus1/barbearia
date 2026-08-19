@@ -6,6 +6,7 @@ import {
   campanhasDaCasa,
   criarCampanha,
   despacharCampanha,
+  puladosDaCampanha,
   marcarParaEnvio,
 } from './campanha.js';
 
@@ -512,6 +513,112 @@ describeIfDb('campanhas', () => {
       // Criada assim, ela existiria sem nada para mandar — e o botão "Enviar"
       // não teria como falhar, porque não há texto que possa faltar.
       await expect(campanha({ tipo: undefined })).rejects.toThrow(/Escolha o texto/);
+    });
+  });
+
+  /**
+   * Por que não chegou (bloco 97).
+   *
+   * O motivo de cada pulo é gravado desde o bloco 20 e a tela mostrava só a
+   * contagem: "3 enviados · 27 pulados", sem quem nem por quê. Dado que existe
+   * e ninguém lê é a §6 pergunta 4.
+   */
+  describe('por que não chegou', () => {
+    it('a lista traz cada pessoa com o motivo, e a contagem agrega por motivo', async () => {
+      /**
+       * **Dois** com o mesmo motivo, e uma **segunda** campanha ao lado.
+       *
+       * Com uma pessoa só, `quantos` seria 1 de qualquer jeito e a agregação
+       * passaria mesmo sem contar; com uma campanha só, a lista passaria sem
+       * filtrar por campanha. A semente precisa satisfazer tudo menos a regra
+       * sob teste — nos dois eixos.
+       */
+      await exec(`
+        UPDATE customers SET accepts_marketing = false
+         WHERE id IN ('${CARLOS}', '${BRUNO}');
+      `);
+      const criada = await campanha();
+      await despacharCampanha({
+        tenantId: TENANT,
+        campanhaId: criada.id,
+        agora: AGORA,
+        timeZone: 'America/Bahia',
+        enviar: async () => null,
+      });
+
+      // A vizinha de lista: os pulos dela não podem aparecer na desta.
+      const outra = await campanha({ nome: 'Outra campanha' });
+      await despacharCampanha({
+        tenantId: TENANT,
+        campanhaId: outra.id,
+        agora: AGORA,
+        timeZone: 'America/Bahia',
+        enviar: async () => null,
+      });
+
+      const pulados = await puladosDaCampanha(TENANT, criada.id);
+      expect(pulados.map((p) => p.customerId).sort()).toEqual([CARLOS, BRUNO].sort());
+      expect(pulados.every((p) => p.motivo === 'optou_por_nao_receber')).toBe(true);
+      expect(pulados.find((p) => p.customerId === CARLOS)?.nome).toBe('Carlos Souza');
+
+      // E a contagem da lista, agregada por motivo na mesma consulta.
+      const lista = await campanhasDaCasa(TENANT);
+      const naLista = lista.find((c) => c.id === criada.id);
+      expect(naLista?.pulados).toEqual([{ motivo: 'optou_por_nao_receber', quantos: 2 }]);
+    });
+
+    it('a lista de outra barbearia devolve vazio — a RLS não vê a campanha', async () => {
+      await exec(`UPDATE customers SET accepts_marketing = false`);
+      const criada = await campanha();
+      await despacharCampanha({
+        tenantId: TENANT,
+        campanhaId: criada.id,
+        agora: AGORA,
+        timeZone: 'America/Bahia',
+        enviar: async () => null,
+      });
+
+      expect(await puladosDaCampanha(VIZINHO, criada.id)).toEqual([]);
+    });
+
+    it('sem canal ligado, "enviados" não conta como saído pelo WhatsApp', async () => {
+      /**
+       * `enviarPeloWhatsApp` devolve nulo sem canal — SPEC §4.12 — e o alvo é
+       * carimbado do mesmo jeito. A campanha ficava verde com "3 enviados" e
+       * nada tinha chegado a ninguém.
+       */
+      const criada = await campanha();
+      await despacharCampanha({
+        tenantId: TENANT,
+        campanhaId: criada.id,
+        agora: AGORA,
+        timeZone: 'America/Bahia',
+        // Nulo é o canal de reserva: envio, não falha — e não é WhatsApp.
+        enviar: async () => null,
+      });
+
+      const lista = await campanhasDaCasa(TENANT);
+      const naLista = lista.find((c) => c.id === criada.id);
+      expect(naLista?.enviados).toBe(3);
+      expect(naLista?.enviadosPeloWhatsApp).toBe(0);
+    });
+
+    it('com canal ligado, os dois números batem', async () => {
+      // A semente satisfaz tudo menos a regra sob teste: sem este caso, o de
+      // cima passaria com a contagem sempre zerada.
+      const criada = await campanha();
+      await despacharCampanha({
+        tenantId: TENANT,
+        campanhaId: criada.id,
+        agora: AGORA,
+        timeZone: 'America/Bahia',
+        enviar: async (alvo) => `wamid.${alvo.customerId}`,
+      });
+
+      const lista = await campanhasDaCasa(TENANT);
+      const naLista = lista.find((c) => c.id === criada.id);
+      expect(naLista?.enviados).toBe(3);
+      expect(naLista?.enviadosPeloWhatsApp).toBe(3);
     });
   });
 
