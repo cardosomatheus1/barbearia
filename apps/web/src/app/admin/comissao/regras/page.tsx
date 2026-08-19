@@ -198,8 +198,15 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
               id="tratamentoDoDesconto"
               name="tratamentoDoDesconto"
             >
-              <option value="reduz_base">O barbeiro divide o desconto com a casa</option>
-              <option value="custo_da_casa">O desconto é custo da casa; a base não cai</option>
+              {/*
+                Rótulos curtos porque o seletor é cortado em 390px (bloco 103).
+                "O barbeiro divide o desconto com a c…" faz a pessoa escolher sem
+                saber o que escolheu, e o significado que muda por opção mora
+                **dentro** da opção — a dica abaixo teria que listar os dois de
+                uma vez, e vira parágrafo que ninguém lê.
+              */}
+              <option value="reduz_base">Barbeiro divide o desconto</option>
+              <option value="custo_da_casa">Desconto é custo da casa</option>
             </select>
             <p className="ui-field__hint">
               O desconto costuma ser decisão do dono. Fazer o barbeiro pagar por uma cortesia que
@@ -246,8 +253,16 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
             <li className="aliquotas__item" key={meio.valor}>
               <form action={acaoAliquotaDoAdquirente} className="aliquotas__linha">
                 <input name="forma" type="hidden" value={meio.valor} />
+                {/*
+                  A unidade no rótulo (bloco 103). "Crédito 3,19" sem o símbolo
+                  lê tão bem como R$ 3,19 quanto como 3,19% — e duas seções
+                  abaixo, na mesma tela, as regras de comissão aparecem como
+                  "40%". O número alimenta `orders.fee_cents`, que é congelado
+                  em cada venda: errar a leitura aqui erra a comissão de todo
+                  mundo até alguém notar.
+                */}
                 <label className="ui-field__label aliquotas__nome" htmlFor={`bps-${meio.valor}`}>
-                  {meio.rotulo}
+                  {meio.rotulo} (%)
                 </label>
                 <input
                   className="ui-field__input aliquotas__campo"

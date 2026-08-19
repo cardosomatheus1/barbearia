@@ -165,13 +165,29 @@ async function operacionalDoDia(
  * É o denominador da ocupação. Sem ele a métrica não existe — e num dia sem
  * jornada nenhuma (a folga da casa) a ocupação é zero, não infinito.
  */
+/**
+ * A pausa sai do denominador, nas três (bloco 103).
+ *
+ * A convenção é escrita: *"Denominador de uma taxa de ocupação ou de rendimento
+ * sai da jornada cadastrada, com pausa descontada"*. `metrica.ts` e
+ * `crescimento.ts` já descontavam; estas três não, e o resultado era o produto
+ * discordando de si mesmo sobre a mesma cadeira no mesmo dia: quem trabalha das
+ * 9h às 17h com uma hora de almoço e vendeu 240 minutos aparecia com **50%** no
+ * painel e **57%** na métrica.
+ *
+ * O número decide contratar e demitir, e sem descontar a pausa quem atende o dia
+ * inteiro nunca cruza o corte de "cheio".
+ */
 async function capacidadeDoDia(
   tx: TransactionClient,
   locationId: string,
   dia: string,
 ): Promise<number> {
   const linhas = await tx.$queryRaw<{ minutos: bigint }[]>`
-    SELECT coalesce(sum(ws.end_minute - ws.start_minute), 0)::bigint AS minutos
+    SELECT coalesce(sum(ws.end_minute - ws.start_minute - COALESCE((
+                 SELECT sum((b->>'end')::int - (b->>'start')::int)
+                   FROM jsonb_array_elements(ws.breaks) AS b
+               ), 0)), 0)::bigint AS minutos
       FROM work_schedules ws
       JOIN professionals p ON p.id = ws.professional_id
      WHERE p.active AND p.kind = 'professional'
@@ -397,7 +413,10 @@ async function capacidadeDoPeriodo(
   fim: string,
 ): Promise<number> {
   const linhas = await tx.$queryRaw<{ minutos: bigint }[]>`
-    SELECT coalesce(sum(ws.end_minute - ws.start_minute), 0)::bigint AS minutos
+    SELECT coalesce(sum(ws.end_minute - ws.start_minute - COALESCE((
+                 SELECT sum((b->>'end')::int - (b->>'start')::int)
+                   FROM jsonb_array_elements(ws.breaks) AS b
+               ), 0)), 0)::bigint AS minutos
       FROM generate_series(${inicio}::date, ${fim}::date, interval '1 day') AS d(dia)
       JOIN work_schedules ws ON ws.weekday = EXTRACT(DOW FROM d.dia)
       JOIN professionals p ON p.id = ws.professional_id
@@ -423,7 +442,10 @@ async function ocupacaoDaEquipe(
          AND a.service_starts_at >= ${inicio}::date
          AND a.service_starts_at < (${fim}::date + 1)
          AND a.status IN ('completed', 'in_progress', 'checked_in', 'waiting', 'confirmed', 'pending')), 0)::bigint AS vendidos,
-      coalesce((SELECT sum(ws.end_minute - ws.start_minute)
+      coalesce((SELECT sum(ws.end_minute - ws.start_minute - COALESCE((
+                 SELECT sum((b->>'end')::int - (b->>'start')::int)
+                   FROM jsonb_array_elements(ws.breaks) AS b
+               ), 0))
         FROM generate_series(${inicio}::date, ${fim}::date, interval '1 day') AS d(dia)
         JOIN work_schedules ws ON ws.professional_id = p.id
                               AND ws.weekday = EXTRACT(DOW FROM d.dia)), 0)::bigint AS capacidade

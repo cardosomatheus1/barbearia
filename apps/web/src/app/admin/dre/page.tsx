@@ -1,3 +1,4 @@
+import { componentesDo } from '@barbearia/core';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { dreNaApi, type LinhaDoDre, type VariacaoDaLinha } from '@/lib/admin-api';
@@ -206,7 +207,9 @@ export default async function DrePage({ searchParams }: Props) {
               <article className="gaveta">
                 <p className="gaveta__rotulo">Saiu</p>
                 <p className="gaveta__valor tabular">{reais(atual.custoTotalCents)}</p>
-                <p className="gaveta__quem">comissão, insumo, taxa, fidelidade e despesa</p>
+                {/* Derivada de LINHAS_DO_DRE: escrita à mão, a legenda omitia
+                    "desconto" — um dos seis componentes do número acima. */}
+                <p className="gaveta__quem">{componentesDo('custo')}</p>
               </article>
 
               <article className={`gaveta${atual.resultadoCents < 0 ? ' gaveta--risco' : ''}`}>

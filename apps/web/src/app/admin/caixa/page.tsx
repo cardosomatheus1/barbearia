@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { caixaDaUnidade, faturamentoDeHoje, type MovimentoDoCaixa, type SessaoDeCaixa } from '@/lib/admin-api';
@@ -250,6 +251,14 @@ export default async function CaixaPage({ searchParams }: Props) {
           <details className="dobra">
             <summary className="dobra__titulo">Sangria ou suprimento</summary>
             <form action={acaoMovimentarCaixa} className="formulario">
+              {/*
+                Sorteada por renderização, e **não** derivada do formulário: duas
+                sangrias legítimas de R$ 100 no mesmo dia acontecem, e uma chave
+                derivada do conteúdo faria a segunda ser engolida como repetição.
+                Reproduzido antes deste bloco: dois envios deixavam duas linhas
+                com 23 ms de diferença, numa tabela append-only sem desfazer.
+              */}
+              <input name="idempotencyKey" type="hidden" value={randomUUID()} />
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="kind">
                   O que aconteceu

@@ -134,7 +134,7 @@ export default async function SegurancaPage({ searchParams }: Props) {
     <main className="ui-container painel__conteudo" {...secao('seguranca')}>
       {topo}
 
-      <h1 className="painel__titulo">Segundo fator</h1>
+      <h1 className="painel__titulo">Segurança</h1>
       <p className="painel__sub">
         Um código de seis dígitos, do aplicativo do seu celular. O balcão fica logado o dia
         inteiro — o código é o que separa a gaveta de quem passa por perto.

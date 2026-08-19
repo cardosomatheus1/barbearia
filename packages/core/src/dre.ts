@@ -156,20 +156,40 @@ export function compararLinha(
 }
 
 export const LINHAS_DO_DRE = [
-  { campo: 'receitaServicosCents', rotulo: 'Serviços', natureza: 'receita' },
-  { campo: 'receitaProdutosCents', rotulo: 'Produtos', natureza: 'receita' },
-  { campo: 'receitaAssinaturasCents', rotulo: 'Assinaturas', natureza: 'receita' },
-  { campo: 'descontosCents', rotulo: 'Descontos concedidos', natureza: 'custo' },
-  { campo: 'comissoesCents', rotulo: 'Comissões', natureza: 'custo' },
-  { campo: 'cmvCents', rotulo: 'Custo dos produtos vendidos', natureza: 'custo' },
-  { campo: 'taxasCents', rotulo: 'Taxas de pagamento', natureza: 'custo' },
-  { campo: 'fidelidadeCents', rotulo: 'Programa de fidelidade', natureza: 'custo' },
-  { campo: 'despesasCents', rotulo: 'Despesas operacionais', natureza: 'custo' },
+  { campo: 'receitaServicosCents', rotulo: 'Serviços', curto: 'serviço', natureza: 'receita' },
+  { campo: 'receitaProdutosCents', rotulo: 'Produtos', curto: 'produto', natureza: 'receita' },
+  { campo: 'receitaAssinaturasCents', rotulo: 'Assinaturas', curto: 'assinatura', natureza: 'receita' },
+  { campo: 'descontosCents', rotulo: 'Descontos concedidos', curto: 'desconto', natureza: 'custo' },
+  { campo: 'comissoesCents', rotulo: 'Comissões', curto: 'comissão', natureza: 'custo' },
+  { campo: 'cmvCents', rotulo: 'Custo dos produtos vendidos', curto: 'insumo', natureza: 'custo' },
+  { campo: 'taxasCents', rotulo: 'Taxas de pagamento', curto: 'taxa', natureza: 'custo' },
+  { campo: 'fidelidadeCents', rotulo: 'Programa de fidelidade', curto: 'fidelidade', natureza: 'custo' },
+  { campo: 'despesasCents', rotulo: 'Despesas operacionais', curto: 'despesa', natureza: 'custo' },
 ] as const satisfies readonly {
   campo: keyof FatosDoDre;
   rotulo: string;
+  /** O nome curto, para a legenda do cartão. */
+  curto: string;
   natureza: 'receita' | 'custo';
 }[];
+
+/**
+ * Os componentes de um dos dois totais, por extenso, para a legenda do cartão.
+ *
+ * Derivada de `LINHAS_DO_DRE` e não escrita à mão (bloco 103). O cartão "Saiu"
+ * enumerava cinco dos **seis** componentes do número que exibia — faltava
+ * "desconto" —, e a lista logo abaixo trazia "Descontos concedidos" dentro
+ * daquele mesmo total. Quem conferia a soma não fechava, e a legenda e o número
+ * discordavam na mesma tela (§6, pergunta 6).
+ *
+ * Derivada, a linha nova que alguém acrescentar em `LINHAS_DO_DRE` aparece na
+ * legenda sem ninguém lembrar dela.
+ */
+export function componentesDo(natureza: 'receita' | 'custo'): string {
+  const nomes = LINHAS_DO_DRE.filter((l) => l.natureza === natureza).map((l) => l.curto);
+  if (nomes.length <= 1) return nomes[0] ?? '';
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
 
 export interface DreComparado {
   readonly atual: Dre;

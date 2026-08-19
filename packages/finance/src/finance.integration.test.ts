@@ -156,6 +156,46 @@ describeIfDb('comanda, caixa e fiado', () => {
     expect((await caixaAberto(TENANT, LOCATION))?.esperadoAgoraCents).toBe(10000);
   });
 
+  /**
+   * O toque duplo na sangria (bloco 103).
+   *
+   * Reproduzido contra a API viva antes do conserto: dois envios do mesmo
+   * formulário deixaram duas linhas de R$ 100 com 23 ms de diferença.
+   * `cash_movements` é append-only por REVOKE — não havia desfazer, e a segunda
+   * virava divergência do fechamento cego com o nome do operador e sem causa.
+   *
+   * A semente satisfaz **tudo menos** a regra sob teste: o caixa está aberto,
+   * há dinheiro na gaveta, e os dois envios são idênticos e válidos. O que
+   * separa um do outro é só a chave.
+   */
+  it('a mesma chave não tira duas vezes da gaveta', async () => {
+    await abrir();
+    const chave = 'recepcao-1:sangria-abc';
+    for (const _ of [1, 2]) {
+      await movimentarCaixa({
+        tenantId: TENANT, locationId: LOCATION, kind: 'withdrawal',
+        amountCents: 10000, reason: 'Banco', idempotencyKey: chave, ...operador,
+      });
+    }
+    expect((await caixaAberto(TENANT, LOCATION))?.esperadoAgoraCents).toBe(10000);
+  });
+
+  it('duas sangrias iguais com chaves diferentes são duas sangrias', async () => {
+    /**
+     * O outro lado, e é ele que impede o conserto de virar defeito: R$ 100 de
+     * manhã e R$ 100 à tarde acontecem, e uma chave derivada do conteúdo faria
+     * a segunda ser engolida como repetição.
+     */
+    await abrir();
+    for (const chave of ['recepcao-1:manha', 'recepcao-1:tarde']) {
+      await movimentarCaixa({
+        tenantId: TENANT, locationId: LOCATION, kind: 'withdrawal',
+        amountCents: 5000, reason: 'Banco', idempotencyKey: chave, ...operador,
+      });
+    }
+    expect((await caixaAberto(TENANT, LOCATION))?.esperadoAgoraCents).toBe(10000);
+  });
+
   it('fecha registrando a divergência, inclusive quando bate', async () => {
     await abrir();
     const fechado = await fecharCaixaDaUnidade({
@@ -631,8 +671,47 @@ describeIfDb('comanda, caixa e fiado', () => {
     expect((await caixaAberto(TENANT, LOCATION))?.esperadoAgoraCents).toBe(25000);
 
     const devendo = await quemEstaDevendo(TENANT);
-    expect(devendo).toHaveLength(1);
-    expect(devendo[0]).toMatchObject({ name: 'Carlos Souza', saldoCents: -2000 });
+    expect(devendo.devedores).toHaveLength(1);
+    expect(devendo.devedores[0]).toMatchObject({ name: 'Carlos Souza', saldoCents: -2000 });
+    // O total e a contagem saem do domínio, não da lista: é o que a tela usa.
+    expect(devendo).toMatchObject({ quantos: 1, totalCents: 2000 });
+  });
+
+  /**
+   * O toque duplo no recebimento **parcial** (bloco 103).
+   *
+   * Pagar a dívida inteira já era barrado pelo estado — o segundo toque cai em
+   * "este cliente não tem dívida em aberto". Por isso o defeito passou
+   * despercebido: o formulário vem pré-preenchido com a dívida cheia, e quem
+   * recebe parcial é que perdia. Reproduzido: devia R$ 200, entregou R$ 50, a
+   * dívida caiu R$ 100 e a gaveta passou a esperar dinheiro que ninguém deu.
+   *
+   * O caso paga 5.000 de uma dívida de 7.000: sobra dívida, então o estado
+   * **não** barra o segundo toque, e só a chave separa.
+   */
+  it('a mesma chave não abate a dívida duas vezes', async () => {
+    await abrir();
+    const com = await comItem(7000);
+    await fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: com.id,
+      pagamentos: [{ forma: 'fiado', valorCents: 7000 }], ...fecha,
+    });
+
+    const chave = 'recepcao-1:fiado-abc';
+    const primeira = await receberFiado({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS,
+      amountCents: 5000, forma: 'cash', idempotencyKey: chave, ...operador,
+    });
+    const segunda = await receberFiado({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS,
+      amountCents: 5000, forma: 'cash', idempotencyKey: chave, ...operador,
+    });
+
+    expect(primeira.saldoCents).toBe(-2000);
+    expect(segunda.saldoCents).toBe(-2000);
+    // A gaveta também: sem isto, a linha de `debt_payment` repetida passaria
+    // despercebida enquanto o saldo do cliente estivesse certo.
+    expect((await caixaAberto(TENANT, LOCATION))?.esperadoAgoraCents).toBe(25000);
   });
 
   it('não se recebe mais do que a dívida', async () => {
@@ -709,7 +788,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     });
 
     expect(await caixaAberto(RIVAL, LOCATION)).toBeNull();
-    expect(await quemEstaDevendo(RIVAL)).toEqual([]);
+    expect(await quemEstaDevendo(RIVAL)).toEqual({ devedores: [], quantos: 0, totalCents: 0 });
 
     await expect(
       receberFiado({
@@ -720,7 +799,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     // E a dívida da casa continua de pé.
     const devendo = await quemEstaDevendo(TENANT);
-    expect(devendo[0]?.saldoCents).toBe(-7000);
+    expect(devendo.devedores[0]?.saldoCents).toBe(-7000);
   });
 
   // -- a trilha ---------------------------------------------------------------
@@ -836,7 +915,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
 
     const devendo = await quemEstaDevendo(TENANT);
-    expect(devendo[0]?.saldoCents).toBe(-6000);
+    expect(devendo.devedores[0]?.saldoCents).toBe(-6000);
   });
 
   it('a mesma chave de idempotência devolve a comanda paga, não um erro', async () => {

@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 102 de 102 blocos.**
+**Status: 103 de 103 blocos.**
 
 ---
 
@@ -415,6 +415,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 100 | "Quando · só para · mandar": o gatilho ganha público, e a automação vira uma frase | ✅ |
 | 101 | O que a avaliação cega achou: a fila parada tem aviso, o dinheiro tem um formato só, e as barras de navegação dizem que rolam | ✅ |
 | 102 | Três consultas da automação nunca tinham rodado: a varredura volta a funcionar, e o aviso passa a enxergar a tarefa que desistiu | ✅ |
+| 103 | O que a avaliação cega do financeiro achou: o balcão para de cobrar duas vezes, a permissão da tela volta a ser a da rota, e o menu chama cada tela pelo nome dela | ✅ |
 
 ---
 

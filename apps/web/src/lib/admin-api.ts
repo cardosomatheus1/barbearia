@@ -1231,7 +1231,8 @@ export const abrirOCaixa = (token: string, openingCents: number) =>
 export const movimentarOCaixa = (
   token: string,
   dados: { kind: 'withdrawal' | 'supply'; amountCents: number; reason: string },
-) => chamar<{ ok: true }>('POST', '/v1/admin/cash/movements', dados, token);
+  idempotencyKey?: string,
+) => chamar<{ ok: true }>('POST', '/v1/admin/cash/movements', dados, token, idempotencyKey);
 
 /**
  * Fecha o caixa.
@@ -1359,12 +1360,18 @@ export interface Devedor {
 }
 
 export const quemDeve = (token: string) =>
-  chamar<{ devedores: Devedor[] }>('GET', '/v1/admin/debts', undefined, token);
+  chamar<{ devedores: Devedor[]; quantos: number; totalCents: number }>(
+    'GET',
+    '/v1/admin/debts',
+    undefined,
+    token,
+  );
 
 export const receberDoFiado = (
   token: string,
   dados: { customerId: string; amountCents: number; forma: 'cash' | 'debit' | 'credit' | 'pix' },
-) => chamar<{ saldoCents: number }>('POST', '/v1/admin/debts/receive', dados, token);
+  idempotencyKey?: string,
+) => chamar<{ saldoCents: number }>('POST', '/v1/admin/debts/receive', dados, token, idempotencyKey);
 
 export interface FaturamentoDoDia {
   dia: string;

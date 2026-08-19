@@ -205,6 +205,20 @@ export async function movimentarCaixa(params: {
   readonly kind: 'withdrawal' | 'supply';
   readonly amountCents: number;
   readonly reason: string;
+  /**
+   * Barra o toque duplo (bloco 103), e é chave porque não há estado.
+   *
+   * Duas sangrias de R$ 100 no mesmo dia são caso legítimo — não existe estado
+   * que distinga a repetição do segundo depósito de verdade. O `FOR UPDATE` de
+   * `sessaoAbertaOuErro` serializa chamadas **concorrentes** e não faz nada
+   * contra duas **sequenciais**, que é o que um duplo clique produz.
+   *
+   * Reproduzido antes do conserto: dois envios do mesmo formulário deixaram
+   * duas linhas de sangria de R$ 100 com 23 ms de diferença. `cash_movements` é
+   * append-only por REVOKE, então a segunda não tinha como ser desfeita — ela
+   * virava divergência do fechamento cego com o nome do operador e sem causa.
+   */
+  readonly idempotencyKey?: string;
 }): Promise<void> {
   if (!Number.isInteger(params.amountCents) || params.amountCents <= 0) {
     throw new CaixaError('valor_invalido', 'Informe um valor maior que zero.');
@@ -214,6 +228,13 @@ export async function movimentarCaixa(params: {
   }
 
   await withTenant(params.tenantId, async (tx) => {
+    if (params.idempotencyKey) {
+      const jaFeito = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM cash_movements WHERE idempotency_key = ${params.idempotencyKey}
+      `;
+      if (jaFeito[0]) return;
+    }
+
     const sessao = await sessaoAbertaOuErro(tx, params.locationId);
     const movimentos = await movimentosDa(tx, sessao.id);
     const naGaveta = movimentos.reduce((soma, m) => soma + m.amountCents, 0);
@@ -230,11 +251,13 @@ export async function movimentarCaixa(params: {
 
     await tx.$executeRaw`
       INSERT INTO cash_movements
-        (tenant_id, session_id, kind, amount_cents, reason, created_by, created_by_name)
+        (tenant_id, session_id, kind, amount_cents, reason, created_by, created_by_name,
+         idempotency_key)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${sessao.id}::uuid, ${params.kind}::cash_movement_type, ${valor},
-        ${params.reason.trim()}, ${params.staffId}::uuid, ${params.staffName}
+        ${params.reason.trim()}, ${params.staffId}::uuid, ${params.staffName},
+        ${params.idempotencyKey ?? null}
       )
     `;
 

@@ -1494,6 +1494,14 @@ export async function lancarNoExtrato(
      * mentir com número, que é pior do que estar vazio.
      */
     readonly locationId?: string | null;
+    /**
+     * Marca a linha que **reencontra** a operação, quando ela tem chave.
+     *
+     * Opcional porque a maioria dos lançamentos nasce dentro de outra operação
+     * que já tem a própria chave — o fiado de uma comanda é reencontrado pela
+     * comanda. Quem passa é o pagamento de fiado, que não tinha nenhuma.
+     */
+    readonly idempotencyKey?: string;
   },
 ): Promise<number> {
   const atualizados = await tx.$queryRaw<{ balance_cents: number }[]>`
@@ -1510,14 +1518,16 @@ export async function lancarNoExtrato(
   await tx.$executeRaw`
     INSERT INTO customer_ledger
       (tenant_id, customer_id, kind, amount_cents, balance_after_cents,
-       order_id, session_id, note, created_by, created_by_name, location_id)
+       order_id, session_id, note, created_by, created_by_name, location_id,
+       idempotency_key)
     VALUES (
       NULLIF(current_setting('app.tenant_id', true), '')::uuid,
       ${params.customerId}::uuid, ${params.kind}::customer_ledger_kind,
       ${params.amountCents}, ${saldo},
       ${params.orderId ?? null}::uuid, ${params.sessionId ?? null}::uuid,
       ${params.note}, ${params.staffId}::uuid, ${params.staffName},
-      ${params.locationId ?? null}::uuid
+      ${params.locationId ?? null}::uuid,
+      ${params.idempotencyKey ?? null}
     )
   `;
 
@@ -1538,6 +1548,19 @@ export async function receberFiado(params: {
   readonly customerId: string;
   readonly amountCents: number;
   readonly forma: FormaDePagamento;
+  /**
+   * Barra o toque duplo (bloco 103), e é chave porque não há estado.
+   *
+   * Pagar a dívida **inteira** já era barrado pelo estado — o segundo toque cai
+   * em "este cliente não tem dívida em aberto". Quem recebe **parcial** é que
+   * perdia: reproduzido antes do conserto, um cliente que devia R$ 200 entregou
+   * R$ 50 e a dívida caiu R$ 100, com duas linhas de `debt_payment` na gaveta
+   * esperando dinheiro que ninguém entregou.
+   *
+   * Dois pagamentos parciais iguais no mesmo dia são caso legítimo, então não
+   * há estado que os distinga da repetição — é a regra do bloco 51.
+   */
+  readonly idempotencyKey?: string;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<{ readonly saldoCents: number }> {
@@ -1551,6 +1574,24 @@ export async function receberFiado(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    /**
+     * Antes de qualquer trava, porque a resposta do repetido é o saldo de
+     * agora — e não o que ele era quando o pagamento aconteceu.
+     */
+    if (params.idempotencyKey) {
+      const jaFeito = await tx.$queryRaw<{ customer_id: string }[]>`
+        SELECT customer_id FROM customer_ledger
+         WHERE idempotency_key = ${params.idempotencyKey}
+      `;
+      const anterior = jaFeito[0];
+      if (anterior) {
+        const saldos = await tx.$queryRaw<{ balance_cents: number }[]>`
+          SELECT balance_cents FROM customers WHERE id = ${anterior.customer_id}::uuid
+        `;
+        return { saldoCents: Number(saldos[0]?.balance_cents ?? 0) };
+      }
+    }
+
     const cliente = await saldoTravado(tx, params.customerId);
     if (cliente.saldoCents >= 0) {
       throw new ComandaError('pagamento_invalido', 'Este cliente não tem dívida em aberto.');
@@ -1599,6 +1640,7 @@ export async function receberFiado(params: {
     });
 
     let saldo = cliente.saldoCents;
+    let primeira = true;
     for (const parte of partes) {
       saldo = await lancarNoExtrato(tx, {
         customerId: params.customerId,
@@ -1609,7 +1651,17 @@ export async function receberFiado(params: {
         staffId: params.staffId,
         staffName: params.staffName,
         locationId: parte.unidadeId,
+        /**
+         * Só a primeira parte carrega a chave.
+         *
+         * Um pagamento vira uma linha por loja onde a dívida está (bloco 59), e
+         * a chave existe para **reencontrar o pagamento**, não para descrever
+         * cada parte dele — no índice único, a segunda parte do mesmo pagamento
+         * seria recusada.
+         */
+        ...(primeira && params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
       });
+      primeira = false;
     }
 
     if (params.forma === 'cash') {
@@ -1638,18 +1690,60 @@ export async function receberFiado(params: {
   });
 }
 
-/** Quem está devendo, para a tela de cobrança. */
-export async function quemEstaDevendo(
-  tenantId: string,
-): Promise<readonly { readonly id: string; readonly name: string; readonly saldoCents: number }[]> {
+export interface Devedor {
+  readonly id: string;
+  readonly name: string;
+  readonly saldoCents: number;
+}
+
+export interface QuemEstaDevendo {
+  /** Os cem primeiros, do que mais deve para o que menos deve. */
+  readonly devedores: readonly Devedor[];
+  /** Quantos devem no total, e não quantos couberam na lista. */
+  readonly quantos: number;
+  /** Quanto a casa tem a receber ao todo, em centavos positivos. */
+  readonly totalCents: number;
+}
+
+/**
+ * Quem está devendo, para a tela de cobrança.
+ *
+ * ## Por que o total não sai da lista (bloco 103)
+ *
+ * A tela somava as linhas devolvidas e chamava aquilo de **"Total a receber"**.
+ * Como a consulta corta em cem, a partir do 101º devedor o cartão no alto da
+ * tela afirmava um total que não é o total, e "N pessoas" travava em cem para
+ * sempre — sem paginação e sem aviso de corte, então a lista **parecia**
+ * completa.
+ *
+ * E o que ficava de fora era a cauda: a ordenação é pela maior dívida, então o
+ * que some é a ponta de dívidas pequenas — a que ninguém percebe faltando. O
+ * caderno atrás do balcão é o concorrente declarado desta tela, e uma barbearia
+ * de bairro com anos de fiado passa de cem nomes sem esforço.
+ *
+ * É a convenção escrita: *"Total que a tela promete e a cobrança usa sai do
+ * domínio, sem o teto da leitura"*.
+ */
+export async function quemEstaDevendo(tenantId: string): Promise<QuemEstaDevendo> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<{ id: string; name: string; balance_cents: number }[]>`
-      SELECT id, name, balance_cents FROM customers
-       WHERE balance_cents < 0
-       ORDER BY balance_cents
-       LIMIT 100
-    `;
-    return linhas.map((l) => ({ id: l.id, name: l.name, saldoCents: l.balance_cents }));
+    const [linhas, somas] = await Promise.all([
+      tx.$queryRaw<{ id: string; name: string; balance_cents: number }[]>`
+        SELECT id, name, balance_cents FROM customers
+         WHERE balance_cents < 0
+         ORDER BY balance_cents
+         LIMIT 100
+      `,
+      tx.$queryRaw<{ quantos: bigint; total: number | null }[]>`
+        SELECT count(*)::bigint AS quantos, -sum(balance_cents)::int AS total
+          FROM customers WHERE balance_cents < 0
+      `,
+    ]);
+
+    return {
+      devedores: linhas.map((l) => ({ id: l.id, name: l.name, saldoCents: l.balance_cents })),
+      quantos: Number(somas[0]?.quantos ?? 0),
+      totalCents: Number(somas[0]?.total ?? 0),
+    };
   });
 }
 

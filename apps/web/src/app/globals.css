@@ -1366,9 +1366,23 @@ main { padding-bottom: var(--space-8); }
 
    O `accent-color` é o que faz a caixa marcada usar o acento do tema em vez do
    azul do sistema — sem ele, o único elemento fora da paleta seria justamente o
-   que confirma uma escolha. */
+   que confirma uma escolha.
+
+   A promessa acima — "toda tela nova que usar uma repete o defeito" — falhou,
+   e o motivo foi o **seletor**: ancorada em `.ui-field__label`, a regra não
+   alcançava `.opcao-simples`, que é o rótulo usado por seis telas. A caixa que
+   liga o repasse direto do dinheiro do barbeiro saía com os 13px do sistema, em
+   cinza, no tema escuro, e a medição não reprovava porque o rótulo em volta
+   tem 44px — isenção correta pela WCAG 2.5.8, que cobre o **alvo** e não a
+   aparência.
+
+   Regra ancorada em nome de classe alcança as telas que já existiam. Ancorar
+   nos dois rótulos é o conserto de agora; a lição é a mesma de `PESO_DO_ATRASO`
+   e do `secoes.ts`. */
 .ui-field__label input[type='checkbox'],
-.ui-field__label input[type='radio'] {
+.ui-field__label input[type='radio'],
+.opcao-simples input[type='checkbox'],
+.opcao-simples input[type='radio'] {
   inline-size: var(--size-touch);
   block-size: var(--size-touch);
   margin-inline-end: var(--space-2);
@@ -1490,6 +1504,24 @@ main { padding-bottom: var(--space-8); }
   cursor: pointer;
 }
 .dobra[open] .dobra__titulo { margin-bottom: var(--space-3); }
+
+/* A ação principal de uma tela cujo trabalho é lançar conta (bloco 103).
+
+   `/admin/financeiro` não tinha **nenhuma** ação primária em repouso: as três
+   dobras eram texto em acento, e o único destaque da tela era o cartão vermelho
+   da sobra projetada. Uma tela sem ação primária é uma tela sem resposta para
+   "e agora?" — e §5 pede exatamente uma.
+
+   Modificador e não regra em `.dobra__titulo`: as outras dobras da mesma tela
+   continuam secundárias de propósito, senão volta a não haver hierarquia. */
+.dobra__titulo--principal {
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  font-size: var(--font-size-base);
+}
 .dobra__ajuda { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); }
 
 .campos-lado { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }

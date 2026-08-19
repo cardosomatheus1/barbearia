@@ -152,7 +152,7 @@ export default async function LgpdPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('lgpd')}>
         {topo}
-        <h1 className="painel__titulo">Pedidos de dados</h1>
+        <h1 className="painel__titulo">Privacidade</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
           {FALHA[resposta.code] ?? FALHA['request_failed']}
         </div>
@@ -167,7 +167,7 @@ export default async function LgpdPage({ searchParams }: Props) {
     <main className="ui-container painel__conteudo" {...secao('lgpd')}>
       {topo}
 
-      <h1 className="painel__titulo">Pedidos de dados</h1>
+      <h1 className="painel__titulo">Privacidade</h1>
       <p className="painel__sub">
         Quando um cliente pede uma cópia dos dados dele — ou pede para ser apagado — você tem 15
         dias para responder. Registre o pedido na ficha dele; ele aparece aqui.

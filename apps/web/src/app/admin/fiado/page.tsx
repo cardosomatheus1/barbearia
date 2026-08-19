@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { quemDeve, type Devedor } from '@/lib/admin-api';
@@ -56,6 +57,13 @@ function Devendo({ devedor }: { readonly devedor: Devedor }) {
         <summary className="dobra__titulo">Receber</summary>
         <form action={acaoReceberFiado} className="formulario">
           <input name="customerId" type="hidden" value={devedor.id} />
+          {/*
+            Sorteada por renderização. Pagar a dívida **inteira** já era barrado
+            pelo estado — o segundo toque cai em "não tem dívida em aberto" —,
+            mas quem recebe **parcial** perdia: reproduzido, um cliente que devia
+            R$ 200 entregou R$ 50 e a dívida caiu R$ 100.
+          */}
+          <input name="idempotencyKey" type="hidden" value={randomUUID()} />
 
           <div className="ui-field">
             <label className="ui-field__label" htmlFor={`valor-${devedor.id}`}>
@@ -140,7 +148,15 @@ export default async function FiadoPage({ searchParams }: Props) {
   }
 
   const lista = devedores.dados.devedores;
-  const total = lista.reduce((soma, devedor) => soma - devedor.saldoCents, 0);
+  /**
+   * O total e a contagem vêm do **domínio**, não da soma da lista (bloco 103).
+   *
+   * A lista corta em cem. Somando-a, o cartão afirmava um total que não é o
+   * total a partir do 101º devedor, e "N pessoas" travava em cem para sempre —
+   * sem paginação e sem aviso, então a tela parecia completa.
+   */
+  const total = devedores.dados.totalCents;
+  const quantos = devedores.dados.quantos;
 
   return (
     <main className="ui-container painel__conteudo" {...secao('fiado')}>
@@ -175,7 +191,13 @@ export default async function FiadoPage({ searchParams }: Props) {
             <p className="gaveta__rotulo">Total a receber</p>
             <p className="gaveta__valor">{reais(total)}</p>
             <p className="gaveta__quem">
-              {lista.length === 1 ? '1 pessoa' : `${lista.length} pessoas`}
+              {quantos === 1 ? '1 pessoa' : `${quantos} pessoas`}
+              {/*
+                Teto dito na tela, com o critério do corte. Uma lista truncada em
+                silêncio lê como completa, e aqui o que fica de fora é a cauda de
+                dívidas pequenas — a que ninguém percebe faltando.
+              */}
+              {quantos > lista.length ? ` · mostrando as ${lista.length} maiores dívidas` : null}
             </p>
           </section>
 

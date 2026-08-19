@@ -474,9 +474,27 @@ export default async function ComandaPage({ params, searchParams }: Props) {
     return null;
   })();
 
-  // A mesma pergunta que a API faz: dar desconto é `finance.view`, que a
-  // recepção não tem. Mostrar o formulário para ela só produziria um 403.
-  const podeDarDesconto = podeNaTela(estado, 'finance.view');
+  /**
+   * A mesma pergunta que a API faz — e por um bloco ela **não** era.
+   *
+   * O bloco 30 separou dar desconto de ver faturamento: a rota passou a exigir
+   * `finance.discount`, para o dono poder conceder o desconto à recepção sem
+   * entregar o resultado do mês junto. A tela ficou perguntando por
+   * `finance.view`, e o efeito era o oposto do que o bloco entregou: com
+   * `finance.discount` concedido e `finance.view` negado — que é exatamente a
+   * configuração que ele existe para permitir —, a API aceitava o desconto e o
+   * botão nunca aparecia. Capacidade sem saída na interface (§6, pergunta 3),
+   * sobre um mecanismo pronto havia dezenas de blocos.
+   *
+   * O sentido inverso também estava errado: tirar `finance.discount` de um
+   * gerente que mantinha `finance.view` fazia a tela oferecer o formulário para
+   * a API responder 403.
+   *
+   * Nada divergia nos testes porque os papéis-padrão trazem as duas juntas —
+   * a migração 0032 concedeu uma a quem tinha a outra. O defeito só existia em
+   * papel editado, que é justamente o que o bloco 30 entregou.
+   */
+  const podeDarDesconto = podeNaTela(estado, 'finance.discount');
   /**
    * A cobrança que a tela mostra: a viva, ou a paga que ainda não virou venda.
    *
@@ -784,7 +802,25 @@ export default async function ComandaPage({ params, searchParams }: Props) {
           </details>
           ) : null}
 
-          {cobrancaDoMomento ? (
+          {/*
+            Comanda sem item não oferece cobrança (bloco 103).
+
+            A tela desenhava o estado vazio certo — "Nada na comanda ainda" — e
+            logo abaixo dois botões prometendo cobrar **R$ 0,00**. Os dois eram
+            viagem inútil: `POST charges` devolve 409 `comanda_sem_valor` e
+            `POST close` devolve 400. Não era beco sem saída, porque a mensagem
+            existe no mapa desta tela; era uma viagem oferecida com o maior
+            destaque da tela, trinta vezes por dia.
+          */}
+          {conta.totalCents <= 0 ? (
+            <section className="cartao-balcao">
+              <h2 className="cartao-balcao__titulo">Nada a cobrar ainda</h2>
+              <p className="cartao-balcao__texto">
+                Adicione o serviço ou o produto acima. O valor aparece aqui e as formas de
+                cobrança abrem junto.
+              </p>
+            </section>
+          ) : cobrancaDoMomento ? (
             <CobrancaEmCurso cobranca={cobrancaDoMomento} orderId={conta.id} />
           ) : (
             <section className="cartao-balcao">
@@ -793,10 +829,16 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                 A comanda fecha sozinha quando o adquirente confirmar.
               </p>
               {/*
-                Três formas, três formulários, **um botão primário só** — o Pix.
-                A tela não pergunta "qual meio?" antes de mostrar o valor: no
-                balcão a pergunta é feita ao cliente em voz alta, e quem opera já
-                sabe a resposta quando chega aqui.
+                Três formas, três formulários, e **nenhum** primário aqui.
+
+                O comentário anterior dizia "um botão primário só — o Pix", e era
+                verdade dentro desta seção e falso na tela: "Receber" logo abaixo
+                também era primário, e os dois apareciam juntos, em âmbar cheio,
+                prometendo o mesmo valor. Se tudo é destaque, nada é (§5).
+
+                O primário da tela é "Receber", que é o caminho da maioria — o
+                cliente paga no balcão e a recepção fecha. Cobrar pelo aparelho é
+                a exceção, e `secondary` a distingue do resto sem competir.
               */}
               {MEIOS.map((meio) => (
                 <form action={acaoCobrarComanda} key={meio.valor}>
@@ -808,7 +850,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                   <input name="idempotencyKey" type="hidden" value={randomUUID()} />
                   <button
                     className={`ui-button ui-button--block ${
-                      meio.valor === 'pix' ? 'ui-button--primary' : 'ui-button--ghost'
+                      meio.valor === 'pix' ? 'ui-button--secondary' : 'ui-button--ghost'
                     } cobranca__meio`}
                     type="submit"
                   >
@@ -819,7 +861,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             </section>
           )}
 
-          {cobrancaDoMomento ? null : (
+          {cobrancaDoMomento || conta.totalCents <= 0 ? null : (
           <section className="cartao-balcao">
             <h2 className="cartao-balcao__titulo">Receber</h2>
 

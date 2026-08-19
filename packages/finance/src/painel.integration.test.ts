@@ -2,7 +2,12 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda } from './comanda.js';
-import { painelDeDinheiro, painelOperacional } from './painel.js';
+import {
+  painelDeDinheiro,
+  painelDeDinheiroDoPeriodo,
+  painelOperacional,
+  painelOperacionalDoPeriodo,
+} from './painel.js';
 
 /**
  * O painel do proprietário contra Postgres real — SPEC §5.9.
@@ -61,9 +66,16 @@ describeIfDb('painel do proprietário', () => {
       INSERT INTO professionals (id, tenant_id, location_id, name, kind)
       VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional');
 
-      -- Sábado (6) com 8 horas de jornada: 480 minutos de capacidade.
-      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
-      VALUES ('${TENANT}', '${RUAN}', 6, 540, 1020);
+      -- Sábado (6) das 9h às 17h, com uma hora de almoço: 480 - 60 = 420
+      -- minutos de capacidade.
+      --
+      -- A pausa entra na semente de propósito. Sem ela, a asserção de ocupação
+      -- passava **idêntica** com e sem o desconto no denominador — teste que
+      -- passaria mesmo com a regra removida —, e foi assim que o painel ficou
+      -- discordando da métrica sobre a mesma cadeira.
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute, breaks)
+      VALUES ('${TENANT}', '${RUAN}', 6, 540, 1020,
+              '[{"start": 720, "end": 780}]'::jsonb);
 
       INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
       VALUES ('${CABELO}', '${TENANT}', 'Corte', 5000, 30);
@@ -155,8 +167,12 @@ describeIfDb('painel do proprietário', () => {
     await agendou({ id: uuid(1), dia: SABADO, hora: 12, minutos: 120 });
     await agendou({ id: uuid(2), dia: SABADO, hora: 15, minutos: 120 });
 
-    // 240 minutos vendidos sobre 480 de jornada.
-    expect((await operacao()).ocupacao.valor).toBe(50);
+    /**
+     * 240 minutos vendidos sobre **420** de jornada — 480 menos a hora de
+     * almoço. Sem descontar a pausa daria 50, e é esse o número que o painel
+     * mostrava enquanto a métrica ao lado mostrava 57 (§6, pergunta 6).
+     */
+    expect((await operacao()).ocupacao.valor).toBe(57);
   });
 
   it('sem jornada no dia, a ocupação é zero e não infinito', async () => {
@@ -277,6 +293,49 @@ describeIfDb('painel do proprietário', () => {
 
     expect(daRival.agendamentos.valor).toBe(0);
     expect(dinheiroDaRival.faturamentoCents.valor).toBe(0);
+  });
+
+  /**
+   * O recorte de semana e de mês, que nenhum teste executava (bloco 103).
+   *
+   * Cinco consultas cruas de `painel.ts` — `operacionalDoPeriodo`,
+   * `capacidadeDoPeriodo`, `dinheiroDoPeriodo`, `serieDeFaturamento` e
+   * `metaDaCasa` — só são alcançáveis por estas duas funções, e nenhum teste do
+   * repositório passava `periodo`. Elas passaram por typecheck, por build e pelo
+   * portão inteiro sem nunca tocar um banco.
+   *
+   * `$queryRaw` é string: o TypeScript não a lê e o Prisma não a confere. Foi
+   * assim que três consultas quebradas derrubaram a varredura de automação por
+   * quatro dias em produção nesta mesma semana. O que este caso garante não é
+   * um número — é que o SQL **roda**.
+   */
+  it('o recorte de semana e de mês executa as consultas de período', async () => {
+    await agendou({ id: uuid(1), dia: SABADO, hora: 12, minutos: 120 });
+
+    /**
+     * A ocupação esperada por recorte, e ela discrimina os dois jeitos.
+     *
+     * Ruan só trabalha sábado. A janela de 7 dias (06 a 12/09) tem **um**
+     * sábado: 120 sobre 420 dá 29. A do mês (01 a 12/09) tem **dois**: 120
+     * sobre 840 dá 14. Sem descontar o almoço os mesmos casos dariam 25 e 13,
+     * então os dois números continuam separando o certo do errado.
+     */
+    const ESPERADO: Readonly<Record<'7d' | 'mes', number>> = { '7d': 29, mes: 14 };
+
+    for (const periodo of ['7d', 'mes'] as const) {
+      const operacao = await painelOperacionalDoPeriodo({
+        tenantId: TENANT, locationId: LOCATION, dia: SABADO, periodo,
+      });
+      const dinheiro = await painelDeDinheiroDoPeriodo({
+        tenantId: TENANT, locationId: LOCATION, dia: SABADO, periodo,
+      });
+
+      expect(operacao.agendamentos.valor, periodo).toBeGreaterThanOrEqual(1);
+      // A ocupação do período sai do mesmo denominador com pausa descontada.
+      expect(operacao.ocupacao.valor, periodo).toBe(ESPERADO[periodo]);
+      expect(dinheiro.faturamentoCents.valor, periodo).toBeGreaterThanOrEqual(0);
+      expect(dinheiro.serie?.length ?? 0, periodo).toBeGreaterThan(0);
+    }
   });
 
   it('id de unidade alheia não vaza o dado da casa', async () => {

@@ -157,12 +157,21 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(movimentoSchema))
     body: { kind: 'withdrawal' | 'supply'; amountCents: number; reason: string },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
+      throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
+    }
+
     const local = await this.unidade(staff);
     try {
       await movimentarCaixa({
         tenantId: staff.tenantId,
         locationId: local.id,
+        // Escopada por operador, como em toda rota de dinheiro: a chave vem do
+        // cliente e é livre, e duas recepcionistas mandando "1" fariam a segunda
+        // receber a sangria da primeira de volta em vez de lançar a dela.
+        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
         staffId: staff.staffUserId,
         staffName: staff.name,
         kind: body.kind,
@@ -204,7 +213,18 @@ export class CaixaController {
 
   // -- Comanda ----------------------------------------------------------------
 
-  @Exige('cashier.open')
+  /**
+   * `customers.view` junto, porque a comanda devolve o cadastro do cliente.
+   *
+   * Nome, saldo de fiado e teto de crédito saem daqui. Operar a comanda com o
+   * nome do cliente na frente é defensável — é o balcão —, mas quem não pode
+   * abrir a ficha também não recebe o saldo dela por esta porta.
+   *
+   * `finance.view` **não** entra, e a decisão é escrita: o saldo e o teto são o
+   * que decide se a venda pode sair fiada, e exigi-lo trancaria a recepção
+   * para fora da operação que ela existe para fazer.
+   */
+  @Exige('cashier.open', 'customers.view')
   @Get('orders/:id')
   async comanda(
     @Staff() staff: AuthenticatedStaff,
@@ -384,10 +404,31 @@ export class CaixaController {
 
   // -- Fiado ------------------------------------------------------------------
 
-  @Exige('cashier.open')
+  /**
+   * Declara as **três** permissões do que devolve, e não a mais próxima do nome.
+   *
+   * A rota não lista dívida: ela lista **cem clientes nomeados com o valor que
+   * cada um deve**. A irmã que devolve um saldo só já exige `customers.view` +
+   * `finance.view` (`financeiro.controller.ts`), e esta devolvia a base inteira
+   * de devedores sob uma permissão de operação de balcão.
+   *
+   * Hoje nada vaza, porque a recepção padrão já tem `customers.view`. O caminho
+   * é o dos oito precedentes catalogados: papéis são editáveis desde o bloco 30,
+   * e um papel "Caixa" — alguém que só opera a gaveta — é configuração natural.
+   * Ele recebia a lista de quem deve para a casa sem ela.
+   *
+   * `finance.view` **não** entra, e a decisão é escrita porque a primeira
+   * versão deste conserto a incluiu e o e2e do balcão a derrubou. Cobrar quem
+   * deve é trabalho de recepção, e ela não tem `finance.view` de propósito —
+   * exigi-lo aqui é o mesmo defeito com o sinal trocado: em vez de vazar a
+   * lista, trancaria para fora dela justamente quem precisa cobrar. É a razão
+   * de o teste `a recepcionista abre o caixa, fecha a venda e vê quem deve`
+   * existir.
+   */
+  @Exige('cashier.open', 'customers.view')
   @Get('debts')
   async devedores(@Staff() staff: AuthenticatedStaff) {
-    return { devedores: await quemEstaDevendo(staff.tenantId) };
+    return await quemEstaDevendo(staff.tenantId);
   }
 
   @Exige('cashier.open')
@@ -396,7 +437,12 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(receberFiadoSchema))
     body: { customerId: string; amountCents: number; forma: 'cash' | 'debit' | 'credit' | 'pix' },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
+      throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
+    }
+
     const local = await this.unidade(staff);
     try {
       return await receberFiado({
@@ -405,6 +451,8 @@ export class CaixaController {
         customerId: body.customerId,
         amountCents: body.amountCents,
         forma: body.forma,
+        // Escopada por operador, como em toda rota de dinheiro.
+        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
         staffId: staff.staffUserId,
         staffName: staff.name,
       });

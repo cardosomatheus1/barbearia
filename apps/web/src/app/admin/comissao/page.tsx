@@ -314,19 +314,25 @@ export default async function ComissaoPage({ searchParams }: Props) {
   // inteira exige segundo fator, o próprio holerite não.
   const veTodos = podeNaTela(estado, 'commission.view_all');
 
-  /*
-    O mesmo período do extrato: o mês corrente. Repasse é a comissão saindo para
-    a conta de alguém, e ler os dois em janelas diferentes faria a soma de um
-    nunca bater com a do outro.
-  */
-  const agora = new Date();
-  const de = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), 1))
-    .toISOString().slice(0, 10);
-  const ate = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0))
-    .toISOString().slice(0, 10);
+  /**
+   * A janela vem do **extrato**, e não é calculada aqui (bloco 103).
+   *
+   * A versão anterior montava o mês com `Date.UTC` e o comparava com o
+   * cabeçalho que a API imprime — que sai do fuso **da unidade**. São duas
+   * janelas na mesma tela: no último dia do mês, entre 21h e meia-noite em
+   * Salvador, o relógio UTC já virou, o subtítulo dizia "1 a 31 de agosto" e as
+   * seções de vale e repasse pediam setembro, vazias. É o horário em que o
+   * gerente fecha o mês.
+   *
+   * É o defeito D2 pela porta dos fundos, e a tela do DRE ao lado já recusa
+   * explicitamente fazer isto. O custo é uma ida a mais ao servidor antes das
+   * outras quatro, que continuam em paralelo.
+   */
+  const extrato = await comissaoDoPeriodo(token, { daCasa: veTodos });
+  const de = extrato.ok ? extrato.dados.de : '';
+  const ate = extrato.ok ? extrato.dados.ate : '';
 
-  const [extrato, historico, repasses, contas, vales] = await Promise.all([
-    comissaoDoPeriodo(token, { daCasa: veTodos }),
+  const [historico, repasses, contas, vales] = await Promise.all([
     fechamentosDeComissao(token, veTodos),
     // A rota da casa exige `commission.view_all`; a do próprio, `view_own`. Quem
     // decide qual chamar é a mesma pergunta que a API faz.

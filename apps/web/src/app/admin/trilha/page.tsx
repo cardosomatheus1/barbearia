@@ -140,7 +140,7 @@ export default async function TrilhaPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('trilha')}>
         {topo}
-        <h1 className="painel__titulo">Trilha</h1>
+        <h1 className="painel__titulo">Auditoria</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
           {resposta.code === 'forbidden'
             ? 'Sua conta não lê a trilha da barbearia.'
@@ -171,7 +171,7 @@ export default async function TrilhaPage({ searchParams }: Props) {
       {topo}
       {abas}
 
-      <h1 className="painel__titulo">Trilha</h1>
+      <h1 className="painel__titulo">Auditoria</h1>
       <p className="painel__sub">
         {noDinheiro
           ? 'Abertura e fechamento de caixa, sangria, suprimento, desconto, fiado e comissão — com o valor de cada um.'

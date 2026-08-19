@@ -237,7 +237,7 @@ export default async function ImportarPage({ searchParams }: Props) {
           oferecer quatro links que respondem 403 — botão que só serve para dar
           erro é pior que botão ausente. */}
 
-      <h1 className="painel__titulo">Trazer minha base</h1>
+      <h1 className="painel__titulo">Importar dados</h1>
 
       {!podeImportar ? (
         <div className="ui-alert ui-alert--warning" role="alert">

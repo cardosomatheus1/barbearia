@@ -231,7 +231,9 @@ function NovaConta({
 }) {
   return (
     <details className="dobra">
-      <summary className="dobra__titulo">Lançar uma conta</summary>
+      {/* A ação principal desta tela: o trabalho dela é lançar conta, e em
+          repouso não havia destaque nenhum — só o cartão vermelho da sobra. */}
+      <summary className="dobra__titulo dobra__titulo--principal">Lançar uma conta</summary>
       <form action={acaoCriarContaDoFinanceiro} className="formulario">
         <div className="ui-field">
           <label className="ui-field__label" htmlFor="nova-descricao">

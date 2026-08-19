@@ -110,8 +110,13 @@ export const MODULOS = [
     nome: 'Financeiro',
     telas: [
       { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', nota: 'abertura, movimentos e fechamento', grupo: 'Balcão' },
-      { href: '/admin/comanda', nome: 'Comandas', secao: 'comanda', nota: 'cobrança dos atendimentos', grupo: 'Balcão' },
-      { href: '/admin/fiado', nome: 'Pendências', secao: 'fiado', nota: 'valores em aberto de clientes', grupo: 'Balcão' },
+      // "Cobrar", como o título da tela. Mesmo defeito do fiado, mais leve.
+      { href: '/admin/comanda', nome: 'Cobrar', secao: 'comanda', nota: 'cobrança dos atendimentos', grupo: 'Balcão' },
+      // "Fiado" e não "Pendências": todo o resto do produto diz fiado — a rota, a
+      // função `quemEstaDevendo`, "Pagamento de fiado" no extrato do caixa, o
+      // resumo do dia e o próprio título da tela. Quando o dono fala "abre o
+      // Fiado", a recepção procurava "Fiado" no menu e não achava (§6, pergunta 2).
+      { href: '/admin/fiado', nome: 'Fiado', secao: 'fiado', nota: 'valores em aberto de clientes', grupo: 'Balcão' },
       { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', nota: 'o que a casa deve e tem a receber', grupo: 'Fechamento' },
       { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', nota: 'o que a casa precisa pagar', grupo: 'Fechamento' },
       { href: '/admin/dre', nome: 'Resultado', secao: 'dre', nota: 'o que sobrou depois de tudo', grupo: 'Fechamento' },

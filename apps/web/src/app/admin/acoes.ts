@@ -1402,11 +1402,15 @@ export async function acaoMovimentarCaixa(form: FormData): Promise<void> {
   const kind = texto(form, 'kind');
   if (kind !== 'withdrawal' && kind !== 'supply') falhar('/admin/caixa', 'invalid_request');
 
-  const resultado = await movimentarOCaixa(token, {
-    kind,
-    amountCents: centavos(form, 'amountCents', '/admin/caixa'),
-    reason: texto(form, 'reason'),
-  });
+  const resultado = await movimentarOCaixa(
+    token,
+    {
+      kind,
+      amountCents: centavos(form, 'amountCents', '/admin/caixa'),
+      reason: texto(form, 'reason'),
+    },
+    texto(form, 'idempotencyKey'),
+  );
   if (!resultado.ok) falhar('/admin/caixa', resultado.code);
   redirect('/admin/caixa?salvo=1');
 }
@@ -1600,11 +1604,15 @@ export async function acaoReceberFiado(form: FormData): Promise<void> {
     falhar('/admin/fiado', 'invalid_request');
   }
 
-  const resultado = await receberDoFiado(token, {
-    customerId: texto(form, 'customerId'),
-    amountCents: centavos(form, 'amountCents', '/admin/fiado'),
-    forma: forma as 'cash' | 'debit' | 'credit' | 'pix',
-  });
+  const resultado = await receberDoFiado(
+    token,
+    {
+      customerId: texto(form, 'customerId'),
+      amountCents: centavos(form, 'amountCents', '/admin/fiado'),
+      forma: forma as 'cash' | 'debit' | 'credit' | 'pix',
+    },
+    texto(form, 'idempotencyKey'),
+  );
   if (!resultado.ok) falhar('/admin/fiado', resultado.code);
   redirect('/admin/fiado?salvo=1');
 }
