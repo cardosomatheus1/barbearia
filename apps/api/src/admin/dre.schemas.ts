@@ -1,10 +1,10 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 /**
  * A borda do DRE, do vale e do estorno (bloco 52).
  */
 
-const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD');
 
 /**
  * O período do relatório tem teto nas **duas** pontas.
@@ -14,7 +14,7 @@ const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD'
  * dias da lista de espera teve no bloco 38.
  */
 export const periodoDoDreSchema = z
-  .object({ de: dia.optional(), ate: dia.optional() })
+  .object({ de: diaISO.optional(), ate: diaISO.optional() })
   .refine((p) => (p.de === undefined) === (p.ate === undefined), {
     message: 'Informe o período inteiro ou nenhum.',
   })
@@ -30,10 +30,10 @@ export const periodoDoDreSchema = z
   );
 
 /**
- * O mês corrente **da unidade**, do primeiro ao último dia.
+ * O mês corrente **da unidade**, do primeiro ao último diaISO.
  *
- * Fica na API e não na tela porque o dia de hoje é o da unidade, nunca o do
- * aparelho: às 22h de Salvador o UTC já virou, e no dia 30 o relatório abriria
+ * Fica na API e não na tela porque o diaISO de hoje é o da unidade, nunca o do
+ * aparelho: às 22h de Salvador o UTC já virou, e no diaISO 30 o relatório abriria
  * no mês seguinte, vazio, para quem ainda está trabalhando. É o defeito D2.
  */
 export function mesDaUnidade(hoje: string): { de: string; ate: string } {
@@ -48,13 +48,13 @@ export const valeNovoSchema = z.object({
   professionalId: z.string().uuid(),
   valorCents: z.number().int().positive().max(10_000_000),
   /**
-   * O dia **não** vem do formulário: o vale é sempre de hoje, e hoje é o dia da
+   * O diaISO **não** vem do formulário: o vale é sempre de hoje, e hoje é o diaISO da
    * unidade. Aceitá-lo do cliente deixaria o balcão datar um adiantamento para
    * dentro de um período já fechado — e é o defeito D2 com uma consequência
    * contábil.
    */
-  de: dia,
-  ate: dia,
+  de: diaISO,
+  ate: diaISO,
   motivo: z.string().trim().max(300).nullable().optional(),
   pelaGaveta: z.boolean(),
 });
@@ -73,7 +73,7 @@ export const transferenciaDePacoteSchema = z.object({
 });
 
 export const periodoDoValeSchema = z.object({
-  de: dia,
-  ate: dia,
+  de: diaISO,
+  ate: diaISO,
   professionalId: z.string().uuid().optional(),
 });

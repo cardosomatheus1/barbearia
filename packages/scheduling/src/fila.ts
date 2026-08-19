@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { agendarAvisoDeFila } from '@barbearia/jobs';
-import { pgCode } from './booking.js';
+import { contencaoDeHorario, pgCode } from './booking.js';
 import {
   custoDoEncaixe,
   duracaoEsperada,
@@ -628,8 +628,6 @@ export async function moveQueueEntry(params: {
   });
 }
 
-const EXCLUSION_VIOLATION = '23P01';
-
 /**
  * A pessoa sentou: a entrada da fila vira atendimento de verdade.
  *
@@ -737,7 +735,7 @@ export async function seatQueueEntry(params: {
       if (!novo) throw new QueueError('slot_taken', 'Não foi possível iniciar o atendimento.');
       appointmentId = novo.id;
     } catch (error) {
-      if (pgCode(error) === EXCLUSION_VIOLATION) {
+      if (contencaoDeHorario(error)) {
         throw new QueueError(
           'slot_taken',
           'Não cabe: este profissional tem cliente marcado nesse horário. '

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ISS_MAXIMO_BPS, REGIMES_FISCAIS } from '@barbearia/core';
+import { diaISO } from '../common/data.js';
 
 /**
  * A borda do fiscal (bloco 53).
@@ -9,7 +10,6 @@ import { ISS_MAXIMO_BPS, REGIMES_FISCAIS } from '@barbearia/core';
  * devolveria erro de constraint em vez de "o ISS vai de 0 a 5%".
  */
 
-const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD');
 
 export const configuracaoFiscalSchema = z.object({
   /** Aceita pontuação e normaliza no domínio: o balcão digita como no cartão CNPJ. */
@@ -28,7 +28,7 @@ export const cancelamentoDeNotaSchema = z.object({
 
 /** O período das notas tem teto nas duas pontas, como o do DRE. */
 export const periodoDasNotasSchema = z
-  .object({ de: dia, ate: dia })
+  .object({ de: diaISO, ate: diaISO })
   .refine((p) => p.ate >= p.de, { message: 'O fim vem antes do início.' })
   .refine(
     (p) => Date.parse(`${p.ate}T00:00:00Z`) - Date.parse(`${p.de}T00:00:00Z`) <= 400 * 86_400_000,

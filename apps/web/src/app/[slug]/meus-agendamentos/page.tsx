@@ -382,7 +382,11 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
                 <legend className="ui-field__label">Sua nota</legend>
                 {[1, 2, 3, 4, 5].map((nota) => (
                   <label className="dar-nota__estrela" key={nota}>
-                    <input name="nota" required type="radio" value={nota} />
+                    {/* O rádio é escondido e o alvo é a estrela inteira, então
+                        ele declara que tem marca própria — sem isso o design
+                        system o dimensiona em 44px, e o que sobra é uma caixa
+                        invisível daquele tamanho dentro do botão. */}
+                    <input className="ui-marca-propria" name="nota" required type="radio" value={nota} />
                     {/* O número e uma estrela: as estrelas acumuladas davam
                         botões de larguras diferentes, e a escala fica igual de
                         legível com "3 ★". */}

@@ -16,6 +16,7 @@ import {
   type Punctuality,
 } from '@barbearia/core';
 import { agendarOfertaDaVaga } from '@barbearia/jobs';
+import { contencaoDeHorario } from './booking.js';
 import { quemQuerAVagaLiberada, type CandidatoDaVaga } from './espera.js';
 
 /**
@@ -356,15 +357,6 @@ const CARIMBO: Partial<Record<AttendanceAction, 'checked_in_at' | 'started_at' |
   complete: 'completed_at',
 };
 
-const EXCLUSION_VIOLATION = '23P01';
-
-function pgCode(error: unknown): string | null {
-  const meta = (error as { meta?: { code?: unknown } })?.meta;
-  if (typeof meta?.code === 'string') return meta.code;
-  const message = error instanceof Error ? error.message : '';
-  return /Code: `(\w+)`/.exec(message)?.[1] ?? null;
-}
-
 /**
  * Move um atendimento de estado, pelo balcão.
  *
@@ -457,7 +449,7 @@ export async function applyAttendance(params: {
       // ignorava enquanto era `no_show`. Se a vaga já foi dada a outro cliente,
       // o banco recusa — e é bom que recuse, senão a barbearia teria dois
       // clientes no mesmo horário por causa de um toque.
-      if (pgCode(error) === EXCLUSION_VIOLATION) {
+      if (contencaoDeHorario(error)) {
         throw new BoardError(
           'slot_taken',
           'Este horário já foi dado a outro cliente. Marque um novo.',

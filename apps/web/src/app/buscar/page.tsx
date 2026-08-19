@@ -1,9 +1,14 @@
 import type { Metadata } from 'next';
 import {
+  COMODIDADES,
   DISPONIBILIDADES,
+  ehComodidade,
   imagemPublica,
   ORDENS_DA_BUSCA,
+  raioDaBusca,
   RAIO_PADRAO_KM,
+  RAIOS_DA_BUSCA,
+  ROTULO_DA_COMODIDADE,
   ROTULO_DA_DISPONIBILIDADE,
   ROTULO_DA_ORDEM,
   type Disponibilidade,
@@ -70,6 +75,17 @@ const primeiro = (valor: string | string[] | undefined): string | undefined =>
 const nota = (bps: number): string =>
   (bps / 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
+/**
+ * Os degraus de nota e de preço que o formulário oferece.
+ *
+ * Nota em centésimos de estrela, que é como a borda a recebe (`400` é 4,0); o
+ * teto de preço em centavos, como todo dinheiro deste código. Poucos degraus de
+ * propósito: uma lista longa num `<select>` de celular responde pior que quatro
+ * opções que cobrem a decisão.
+ */
+const NOTAS_MINIMAS = [400, 450] as const;
+const TETOS_DE_PRECO = [3000, 5000, 8000] as const;
+
 const distancia = (km: number): string =>
   km < 1 ? `${Math.round(km * 1000)} m` : `${km.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km`;
 
@@ -82,8 +98,35 @@ export default async function BuscarPage({ searchParams }: Props) {
   const ordem = (ORDENS_DA_BUSCA as readonly string[]).includes(primeiro(busca['ordem']) ?? '')
     ? (primeiro(busca['ordem']) as OrdemDaBusca)
     : 'distancia';
-  const raio = Number(primeiro(busca['raioKm']) ?? RAIO_PADRAO_KM);
+  const raio = raioDaBusca(Number(primeiro(busca['raioKm']) ?? RAIO_PADRAO_KM));
   const clube = primeiro(busca['clube']) === 'true';
+
+  /**
+   * Nota e preço: os dois primeiros filtros de quem escolhe barbearia.
+   *
+   * A API os aceita desde o bloco 70 e o domínio os implementa com a assimetria
+   * documentada lá — sem nota **não passa** no filtro de nota, sem preço
+   * **passa** no de preço. O que faltava era por onde pedi-los: o `ROADMAP` os
+   * dava por entregues e nenhum campo da tela os mandava. É o defeito de
+   * `blocks` na direção inversa, com a lacuna registrada como fechada.
+   *
+   * Os degraus são da tela, não do domínio: nota e preço são contínuos, e o que
+   * a pessoa escolhe no celular com uma mão é uma faixa. Ficam aqui de
+   * propósito, ao contrário de `COMODIDADES`, que é conjunto fechado gravado no
+   * banco e por isso mora em `core`.
+   */
+  const notaMinimaBps = NOTAS_MINIMAS.find(
+    (n) => String(n) === primeiro(busca['notaMinimaBps']),
+  );
+  const precoMaximoCents = TETOS_DE_PRECO.find(
+    (p) => String(p) === primeiro(busca['precoMaximoCents']),
+  );
+  const comodidades = (Array.isArray(busca['comodidades'])
+    ? busca['comodidades']
+    : busca['comodidades'] === undefined
+      ? []
+      : [busca['comodidades']]
+  ).filter(ehComodidade);
   const disponivel = (DISPONIBILIDADES as readonly string[]).includes(
     primeiro(busca['disponivel']) ?? '',
   )
@@ -94,10 +137,13 @@ export default async function BuscarPage({ searchParams }: Props) {
     ? await buscarBarbearias({
         lat: String(escolhida.latitude),
         lon: String(escolhida.longitude),
-        raioKm: String(Number.isFinite(raio) && raio > 0 ? raio : RAIO_PADRAO_KM),
+        raioKm: String(raio),
         ordem,
         disponivel,
         ...(clube ? { clube: 'true' } : {}),
+        ...(notaMinimaBps !== undefined ? { notaMinimaBps: String(notaMinimaBps) } : {}),
+        ...(precoMaximoCents !== undefined ? { precoMaximoCents: String(precoMaximoCents) } : {}),
+        ...(comodidades.length > 0 ? { comodidades: [...comodidades] } : {}),
       })
     : { resultados: [], analisadas: 0, truncada: false };
   const resultados = encontrado.resultados;
@@ -179,7 +225,7 @@ export default async function BuscarPage({ searchParams }: Props) {
                 Distância
               </label>
               <select className="ui-field__input" defaultValue={String(raio)} id="busca-raio" name="raioKm">
-                {[2, 5, 10, 25].map((km) => (
+                {RAIOS_DA_BUSCA.map((km) => (
                   <option key={km} value={km}>
                     até {km} km
                   </option>
@@ -187,7 +233,63 @@ export default async function BuscarPage({ searchParams }: Props) {
               </select>
             </div>
 
-            <label className="ui-field__label buscar__marca">
+            <div className="ui-field buscar__campo">
+              <label className="ui-field__label" htmlFor="busca-nota">
+                Nota
+              </label>
+              <select
+                className="ui-field__input"
+                defaultValue={notaMinimaBps === undefined ? '' : String(notaMinimaBps)}
+                id="busca-nota"
+                name="notaMinimaBps"
+              >
+                <option value="">Qualquer nota</option>
+                {NOTAS_MINIMAS.map((bps) => (
+                  <option key={bps} value={bps}>
+                    {nota(bps)} ou mais
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="ui-field buscar__campo">
+              <label className="ui-field__label" htmlFor="busca-preco">
+                Preço de entrada
+              </label>
+              <select
+                className="ui-field__input"
+                defaultValue={precoMaximoCents === undefined ? '' : String(precoMaximoCents)}
+                id="busca-preco"
+                name="precoMaximoCents"
+              >
+                <option value="">Qualquer preço</option>
+                {TETOS_DE_PRECO.map((cents) => (
+                  <option key={cents} value={cents}>
+                    Até R$ {reais(cents)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Caixas e não `<select>` múltiplo: são três, e as três cabem na
+                tela. "Todas as pedidas, não qualquer uma" é a regra do domínio —
+                quem marcou estacionamento **e** acessibilidade precisa das duas. */}
+            <fieldset className="ui-field buscar__campo buscar__comodidades">
+              <legend className="ui-field__label">A barbearia tem</legend>
+              {COMODIDADES.map((valor) => (
+                <label className="ui-field__label buscar__marca" key={valor}>
+                  <input
+                    defaultChecked={comodidades.includes(valor)}
+                    name="comodidades"
+                    type="checkbox"
+                    value={valor}
+                  />
+                  {ROTULO_DA_COMODIDADE[valor]}
+                </label>
+              ))}
+            </fieldset>
+
+            <label className="ui-field__label buscar__marca buscar__clube">
               <input defaultChecked={clube} name="clube" type="checkbox" value="true" />
               Só com plano de assinatura
             </label>

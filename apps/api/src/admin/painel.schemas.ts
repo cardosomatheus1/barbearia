@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 /**
  * O dia que o painel mostra.
@@ -13,9 +14,7 @@ import { z } from 'zod';
  */
 export const diaSchema = z.object({
   periodo: z.enum(['dia', '7d', 'mes']).optional(),
-  dia: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
+  dia: diaISO
     .refine((valor) => {
       const [ano, mes, dia] = valor.split('-').map(Number);
       if (!ano || !mes || !dia) return false;

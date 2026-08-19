@@ -16,6 +16,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { diaISO } from '../common/data.js';
 
 /**
  * Split de pagamento (bloco 49, SPEC §3.5).
@@ -73,8 +74,8 @@ function toHttp(erro: unknown): never {
 }
 
 const periodoSchema = z.object({
-  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  de: diaISO,
+  ate: diaISO,
 });
 
 @Controller('v1/admin/split')

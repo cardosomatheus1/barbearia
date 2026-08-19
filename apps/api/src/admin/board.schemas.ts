@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 /**
  * Entrada do balcão, validada na borda.
@@ -9,13 +10,12 @@ import { z } from 'zod';
  * certo.
  */
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export const daySchema = z.object({
   // Ausente significa "hoje na barbearia", resolvido no servidor pelo fuso da
   // unidade — nunca pelo relógio do notebook do balcão.
-  date: z.string().regex(ISO_DATE, 'data inválida').optional(),
+  date: diaISO.optional(),
   professionalId: z.string().uuid().optional(),
 });
 
@@ -44,8 +44,8 @@ export const counterRangeSchema = z.object({
     .transform((valor) => valor.split(',').filter(Boolean))
     .pipe(z.array(z.string().uuid()).min(1).max(10)),
   professionalId: z.string().uuid().optional(),
-  dateFrom: z.string().regex(ISO_DATE, 'data inválida'),
-  dateTo: z.string().regex(ISO_DATE, 'data inválida').optional(),
+  dateFrom: diaISO,
+  dateTo: diaISO.optional(),
 });
 
 /**
@@ -66,7 +66,7 @@ export const counterBookingSchema = z
     phone: z.string().trim().min(8).max(24).optional(),
     professionalId: z.string().uuid(),
     serviceIds: z.array(z.string().uuid()).min(1).max(10),
-    date: z.string().regex(ISO_DATE, 'data inválida'),
+    date: diaISO,
     start: z.string().regex(HHMM, 'horário inválido'),
     notes: z.string().trim().max(300).optional(),
   })

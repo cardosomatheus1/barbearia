@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LIMITE_MAXIMO_DE_FIADO_CENTS } from '@barbearia/core';
+import { diaISO } from '../common/data.js';
 
 /**
  * A borda do financeiro (bloco 51).
@@ -9,7 +10,6 @@ import { LIMITE_MAXIMO_DE_FIADO_CENTS } from '@barbearia/core';
  * devolveria erro de constraint em vez de "confira o valor".
  */
 
-const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD');
 const direcao = z.enum(['pagar', 'receber']);
 
 /** Cem mil reais numa conta de barbearia é um zero a mais. */
@@ -19,7 +19,7 @@ export const contaNovaSchema = z.object({
   direcao,
   descricao: z.string().trim().min(2).max(120),
   valorCents: valor,
-  vencimentoEm: dia,
+  vencimentoEm: diaISO,
   categoriaId: z.string().uuid().nullable().optional(),
   contaId: z.string().uuid().nullable().optional(),
   observacao: z.string().trim().max(500).nullable().optional(),
@@ -31,7 +31,7 @@ export const quitacaoSchema = z.object({
    * antecipação e juros por atraso são o que o fornecedor faz.
    */
   valorPagoCents: valor,
-  pagaEm: dia,
+  pagaEm: diaISO,
   pelaGaveta: z.boolean(),
 });
 
@@ -54,7 +54,7 @@ export const transferenciaSchema = z.object({
   deContaId: z.string().uuid(),
   paraContaId: z.string().uuid(),
   valorCents: valor,
-  quandoEm: dia,
+  quandoEm: diaISO,
   observacao: z.string().trim().max(300).nullable().optional(),
 });
 

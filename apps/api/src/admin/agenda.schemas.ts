@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TIPOS_DE_EXCECAO } from '@barbearia/core';
+import { diaISO } from '../common/data.js';
 
 /**
  * Entrada da agenda do admin, validada na borda.
@@ -10,7 +11,7 @@ import { TIPOS_DE_EXCECAO } from '@barbearia/core';
  * torta para quem estava viajando.
  */
 
-const dataLocal = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use AAAA-MM-DD');
+const dataLocal = diaISO;
 
 export const agendaQuerySchema = z.object({
   /**

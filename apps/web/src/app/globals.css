@@ -530,6 +530,17 @@ main { padding-bottom: var(--space-8); }
 .hora__valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: -0.02em; }
 .hora__quem { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
+/* O preço do horário, quando ele difere da tabela (bloco 105).
+
+   Só aparece no chip que difere: escrito em todos, num dia com noventa chips,
+   ele some no próprio excesso. E a cor não carrega o dado sozinha — o valor
+   está escrito, e o rodapé fixo mostra o preço de tabela ao lado. Os dois pares
+   (`danger` e `success` sobre `surface-raised`) são conferidos pelo teste de
+   contraste do design system. */
+.hora__preco { font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.hora__preco--acima { color: var(--color-danger); }
+.hora__preco--abaixo { color: var(--color-success); }
+
 /* -- Confirmação e formulário ---------------------------------------------- */
 
 .confirmacao { margin-bottom: var(--space-5); }
@@ -540,9 +551,25 @@ main { padding-bottom: var(--space-8); }
 .confere > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
 .confere dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .confere dd { margin: 0; font-weight: var(--font-weight-medium); }
+/* A diferença entre o preço deste horário e o de tabela, em letras.
+
+   Fica fora do `<dl>` de propósito: não é mais um par rótulo/valor, é a
+   explicação do valor que acabou de ser lido. */
+.confere__ajuste {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Link de navegação sozinho dentro do cartão: 44px como todo alvo autônomo, em
+   qualquer largura. Saía com 91x21 — é o mesmo caso do `← Voltar` de 21px que a
+   medição pegou antes, e a isenção da WCAG 2.5.8 não alcança: ele não está
+   dentro de uma frase. */
 .confere__trocar {
-  display: inline-block;
-  margin-top: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin-top: var(--space-3);
   font-size: var(--font-size-sm);
   color: var(--color-accent);
 }
@@ -1384,12 +1411,24 @@ main { padding-bottom: var(--space-8); }
    aparência.
 
    Regra ancorada em nome de classe alcança as telas que já existiam. Ancorar
-   nos dois rótulos é o conserto de agora; a lição é a mesma de `PESO_DO_ATRASO`
-   e do `secoes.ts`. */
-.ui-field__label input[type='checkbox'],
-.ui-field__label input[type='radio'],
-.opcao-simples input[type='checkbox'],
-.opcao-simples input[type='radio'] {
+   nos dois rótulos foi o conserto do bloco 92, e ele **falhou pela terceira
+   vez**: a tela de recado do cliente usa `.falar__tipo`, que não é nenhum dos
+   dois. Os três rádios saíam com 13px e em azul de Chrome, na única tela do
+   cliente que ficou de fora — e a medição não reprovava, porque o rótulo em
+   volta tem 44px.
+
+   A lição foi aprendida na direção errada duas vezes. O seletor não é uma lista
+   de rótulos que se estende quando alguém lembra: é `input[type='checkbox']` e
+   `input[type='radio']`, todos, e a tela que quiser outra aparência **declara**
+   isso (`.ui-marca-propria`). Assim a próxima tela nasce certa em vez de nascer
+   errada e esperar por uma medição.
+
+   A isenção existe porque há um caso legítimo: a nota por estrelas esconde o
+   rádio (`position: absolute; opacity: 0`) e usa o rótulo inteiro como alvo. Ali
+   dimensionar o `input` não desenha nada e só cria uma caixa invisível de 44px
+   dentro da estrela. */
+input[type='checkbox']:not(.ui-marca-propria),
+input[type='radio']:not(.ui-marca-propria) {
   inline-size: var(--size-touch);
   block-size: var(--size-touch);
   margin-inline-end: var(--space-2);
@@ -1404,7 +1443,7 @@ main { padding-bottom: var(--space-8); }
    O alvo continua com 44px; o que muda é a **aparência**. A marca é uma imagem
    de fundo e não um `::after`, porque pseudo-elemento em `input` depende do
    navegador, e esta caixa decide em quais lojas alguém trabalha. */
-.ui-field__label input[type='checkbox'] {
+input[type='checkbox']:not(.ui-marca-propria) {
   appearance: none;
   -webkit-appearance: none;
   border: 1px solid var(--color-border);
@@ -1415,12 +1454,12 @@ main { padding-bottom: var(--space-8); }
   background-size: 60% 60%;
   cursor: pointer;
 }
-.ui-field__label input[type='checkbox']:checked {
+input[type='checkbox']:not(.ui-marca-propria):checked {
   border-color: var(--color-accent);
   background-color: var(--color-accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23111' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.5 3.5L13 4.5'/%3E%3C/svg%3E");
 }
-.ui-field__label input[type='checkbox']:focus-visible {
+input[type='checkbox']:not(.ui-marca-propria):focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -1988,11 +2027,31 @@ main { padding-bottom: var(--space-8); }
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-4);
 }
-.buscar__campo { margin: 0; }
+.buscar__campo { margin: 0; min-width: 0; }
+
+/* As três comodidades, empilhadas — `fieldset` não herda o grid do formulário,
+   e sem isto os rótulos ficam em linha e estouram a coluna em 360px. */
+/* As comodidades ocupam a **linha inteira** do formulário.
+
+   Numa célula só, o `fieldset` empilha três rótulos, fica três vezes mais alto
+   que os vizinhos e abre um buraco nas outras colunas — foi o que o print de
+   1280 mostrou. Ocupando a linha, os três ficam lado a lado onde cabe e
+   empilhados onde não cabe. O `<legend>` fica fora do grid por conta do
+   navegador, que é o que mantém "A barbearia tem" acima das caixas. */
+.buscar__comodidades {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-1) var(--space-4);
+  padding: 0;
+  border: 0;
+}
+.buscar__clube { grid-column: 1 / -1; }
+@media (min-width: 40em) {
+  .buscar__comodidades { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+}
 /* Caixa de selecao com 44px, como todo alvo de toque: o padrao do navegador da
    13px, e a medicao reprova. */
 .buscar__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
-.buscar__marca input { width: 24px; height: 24px; }
 .buscar__acao { min-height: 44px; justify-self: start; }
 
 .buscar__pendente {
@@ -4174,11 +4233,20 @@ main { padding-bottom: var(--space-8); }
   gap: var(--space-3);
 }
 .lp-rodape__links { display: flex; gap: var(--space-5); }
+/* 44px nas **duas** medidas, e a segunda foi o achado.
+
+   Só `min-height` deixava `Telas` com 37×44 e `Entrar` com 34×44 — em 390 e
+   também em 1280. A altura passava e a largura não, e a regra do projeto é
+   sobre o alvo, não sobre uma das dimensões dele. Não é link dentro de frase:
+   a isenção da WCAG 2.5.8 cobre a âncora no meio de um parágrafo, não a
+   navegação do topo. */
 .lp-rodape__links a,
 .lp-nav__links a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: var(--size-touch);
+  min-width: var(--size-touch);
   color: var(--color-text-muted);
 }
 .lp-rodape__links a:hover,

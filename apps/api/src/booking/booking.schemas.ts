@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 const uuid = z.string().uuid();
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'formato esperado YYYY-MM-DD');
 
 /** Máximo de serviços numa visita. Teto explícito evita payload abusivo. */
 const MAX_SERVICES = 10;
@@ -15,8 +15,8 @@ export const serviceIds = z
 export const availabilityQuerySchema = z.object({
   locationId: uuid,
   serviceIds,
-  dateFrom: isoDate,
-  dateTo: isoDate.optional(),
+  dateFrom: diaISO,
+  dateTo: diaISO.optional(),
   professionalId: uuid.optional(),
   anyProfessional: z
     .enum(['true', 'false'])
@@ -39,8 +39,8 @@ export const appointmentIdSchema = uuid;
 
 /** Intervalo pedido pela grade de remarcação. Mesmo formato do `/availability`. */
 export const rescheduleRangeSchema = z.object({
-  dateFrom: isoDate,
-  dateTo: isoDate.optional(),
+  dateFrom: diaISO,
+  dateTo: diaISO.optional(),
   /**
    * Com quem: o id de um profissional, ou `any` para ver a agenda da equipe.
    *

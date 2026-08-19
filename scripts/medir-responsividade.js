@@ -394,6 +394,72 @@ async function prepararCliente(slug) {
  * Nome composto, serviço longo e dois profissionais: é o que quebra layout, e
  * só aparece com conteúdo verdadeiro (CLAUDE.md §5).
  */
+/**
+ * Os passos 3 e 4 do agendamento público, num horário **de preço diferente**.
+ *
+ * A medição fotografava `/agendar` e parava no passo 1 — o cardápio. Os dois
+ * passos onde o cliente decide, e onde o bloco 105 mexeu (o preço no chip da
+ * grade e o total na confirmação), nunca tinham sido olhados em largura
+ * nenhuma. Foi ali que a tela dizia R$ 45,00 sobre um agendamento de R$ 54,00.
+ *
+ * A escolha do horário não é qualquer uma: é a primeira cujo preço difere do
+ * catálogo. Um horário sem faixa não desenha o chip nem o parágrafo da
+ * diferença, e a medição diria "ok" sobre a tela **antes** da mudança — é a
+ * regra da semente que precisa produzir o estado que o bloco criou.
+ *
+ * Devolve `null` quando não há faixa em catorze dias: a medição segue sem os
+ * dois passos e avisa, em vez de parar tudo.
+ */
+async function prepararAgendamentoPublico(slug) {
+  // O perfil público é a raiz de `/v1/b/:slug` — não há `/profile`, e pedi-lo
+  // devolvia 404 e um `null` silencioso que tirava as duas telas da medição.
+  const perfil = await (await fetch(`${API}/v1/b/${slug}`)).json();
+  const servico = perfil?.categories?.flatMap((c) => c.services ?? [])?.[0];
+  const local = perfil?.location;
+  /**
+   * Perfil que não responde é **defeito**, não "não tem faixa hoje".
+   *
+   * A primeira versão pedia `/v1/b/:slug/profile`, que não existe: o 404 virava
+   * `null`, o `null` virava um aviso de uma linha, e as duas telas sumiam da
+   * medição sem nada ficar vermelho. Distinguir os dois casos é o que separa
+   * "o cenário não aconteceu" de "a preparação está quebrada".
+   */
+  if (!servico || !local) {
+    throw new Error(`o perfil público de ${slug} não respondeu com serviço e unidade`);
+  }
+
+  const hoje = new Date();
+  const ate = new Date(hoje);
+  ate.setUTCDate(ate.getUTCDate() + 13);
+  const de = hoje.toISOString().slice(0, 10);
+
+  const grade = await (
+    await fetch(
+      `${API}/v1/b/${slug}/availability?locationId=${local.id}`
+        + `&serviceIds=${servico.id}&dateFrom=${de}&dateTo=${ate.toISOString().slice(0, 10)}`
+        + '&anyProfessional=true',
+    )
+  ).json();
+
+  for (const dia of grade?.days ?? []) {
+    // Hoje não: o horário encostado na antecedência mínima some entre listar e
+    // abrir, e a tela medida seria a de erro.
+    if (dia.date === de) continue;
+    const achado = (dia.slots ?? []).find(
+      (s) => s.priceCents !== null && s.priceCents !== servico.priceCents,
+    );
+    if (achado) {
+      return {
+        servicoId: servico.id,
+        profissionalId: achado.professionalId,
+        dia: dia.date,
+        hora: achado.start,
+      };
+    }
+  }
+  return null;
+}
+
 async function prepararBalcao(token) {
   const cabecalho = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
   const catalogo = await (await fetch(`${API}/v1/admin/catalog`, { headers: cabecalho })).json();
@@ -2808,6 +2874,10 @@ async function main() {
     console.warn('  aviso: retenção não preparada; o aviso prévio entra vazio');
   }
   const tokenPlataforma = await prepararPlataforma();
+  const agendamento = await prepararAgendamentoPublico(slug);
+  if (!agendamento) {
+    console.warn('  aviso: nenhum horário com preço de faixa; os passos 3 e 4 não entram');
+  }
 
   const telas = [
     // A porta do produto. Não pertence a barbearia nenhuma e não precisa de
@@ -2823,6 +2893,20 @@ async function main() {
     { nome: 'retorno do pagamento', url: '/pagamento?pago=1' },
     { nome: 'pública', url: `/${slug}` },
     { nome: 'agendar', url: `/${slug}/agendar` },
+    ...(agendamento
+      ? [
+          {
+            nome: 'agendar — horário',
+            url: `/${slug}/agendar?s=${agendamento.servicoId}&p=${agendamento.profissionalId}`
+              + `&d=${agendamento.dia}&e=h`,
+          },
+          {
+            nome: 'agendar — confirmar',
+            url: `/${slug}/agendar?s=${agendamento.servicoId}&p=${agendamento.profissionalId}`
+              + `&d=${agendamento.dia}&h=${encodeURIComponent(agendamento.hora)}&e=d`,
+          },
+        ]
+      : []),
     { nome: 'entrar (cliente)', url: `/${slug}/entrar` },
     { nome: 'meus agendamentos', url: `/${slug}/meus-agendamentos`, cookie: { nome: `sessao_${slug}`, valor: tokenCliente, caminho: `/${slug}` } },
     { nome: 'criar conta', url: '/admin/criar-conta' },

@@ -417,38 +417,45 @@ describeIfDb('reserva', () => {
 
   // -- concorrência ----------------------------------------------------------
 
-  it('dois clientes no mesmo horário: um vence, o outro recebe erro claro', async () => {
-    const results = await Promise.allSettled([
-      createAppointment({ ...base, idempotencyKey: 'a' }),
-      createAppointment({ ...base, idempotencyKey: 'b' }),
-    ]);
+  /**
+   * **Seis** e não dois, e o número é a regra (bloco 105).
+   *
+   * Com dois, o entrelaçamento comum é o segundo chegar depois do commit do
+   * primeiro e cair na validação — `slot_not_available`, sem nunca tocar a
+   * constraint. O caso que este teste existe para pegar é outro: várias
+   * transações **dentro** do `INSERT` ao mesmo tempo, cada uma já com a própria
+   * entrada no índice GiST, esperando o xid da outra. Aí o Postgres mata uma
+   * por deadlock (`40P01`), e `40P01` não é `23P01`.
+   *
+   * O diagnóstico que a versão de dois clientes deixou plantado — *"provavelmente
+   * `40P01` ou `40001`... não reproduziu em três execuções"* — estava certo.
+   * Com seis, reproduz: cinco recusas, das quais várias vêm por contenção, e
+   * antes do conserto elas subiam cruas até o cliente como "Erro interno".
+   *
+   * A asserção **é** determinística mesmo com a corrida não sendo: qual código
+   * cada uma recebe varia, mas nenhuma pode escapar do conjunto, e a agenda
+   * fica com exatamente uma linha. É a propriedade que importa.
+   */
+  it('seis clientes no mesmo horário: um vence, e nenhuma recusa escapa crua', async () => {
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, (_, i) =>
+        createAppointment({ ...base, idempotencyKey: `disputa-${i}` }),
+      ),
+    );
 
     const criados = results.filter((r) => r.status === 'fulfilled');
     const recusados = results.filter((r) => r.status === 'rejected');
 
     expect(criados).toHaveLength(1);
-    expect(recusados).toHaveLength(1);
+    expect(recusados).toHaveLength(5);
 
-    const erro = (recusados[0] as PromiseRejectedResult).reason as BookingError;
-    // Pode cair na validação ou na constraint, dependendo do entrelaçamento —
-    // as duas são respostas corretas, e nenhuma delas é overbooking.
-    /**
-     * A mensagem nomeia o erro cru quando ele aparece.
-     *
-     * Aconteceu uma vez, com o portão inteiro em paralelo e a pilha de
-     * demonstração disputando o mesmo Postgres: o caso reprovou com `P2010`, o
-     * código genérico do Prisma para consulta crua. `pgCode` traduz `23P01` e
-     * `23505`; o que escapou foi outro SQLSTATE — provavelmente `40P01` ou
-     * `40001`, que são de contenção. Não reproduziu em três execuções, e
-     * nomear um defeito que não se reproduz é pior que não nomeá-lo.
-     *
-     * O que fica é o diagnóstico: na próxima vez o relatório diz **qual**
-     * código escapou, em vez de "esperava conter P2010".
-     */
-    expect(
-      ['slot_taken', 'slot_not_available'],
-      `o erro veio cru: ${erro.code} — ${String(erro.message).slice(0, 300)}`,
-    ).toContain(erro.code);
+    for (const recusa of recusados) {
+      const erro = (recusa as PromiseRejectedResult).reason as BookingError;
+      expect(
+        ['slot_taken', 'slot_not_available'],
+        `o erro veio cru: ${erro.code} — ${String(erro.message).slice(0, 300)}`,
+      ).toContain(erro.code);
+    }
 
     const total = await admin.$queryRawUnsafe<{ n: bigint }[]>(
       `SELECT count(*) AS n FROM appointments`,

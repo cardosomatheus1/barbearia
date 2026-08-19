@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 /**
  * Entrada dos indicadores da rede (bloco 77).
@@ -6,9 +7,7 @@ import { z } from 'zod';
  * O período é dia **da unidade**, não instante: é `orders.business_day` que
  * responde "de que dia é este dinheiro", e ele é uma data.
  */
-const diaSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
+const diaSchema = diaISO
   .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'data inexistente');
 
 export const periodoDaRedeSchema = z

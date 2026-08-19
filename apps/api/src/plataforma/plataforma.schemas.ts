@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { LUGARES_EM_DESTAQUE } from '@barbearia/core';
 import { RECURSOS } from '@barbearia/platform';
+import { diaISO } from '../common/data.js';
 
 /**
  * Validação na borda, como toda entrada externa (CLAUDE.md §2).
@@ -54,9 +55,7 @@ export type TrilhaQuery = z.infer<typeof trilhaQuerySchema>;
  * faria toda comparação com ontem parecer queda.
  */
 export const janelaSchema = z.object({
-  ate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'formato esperado YYYY-MM-DD')
+  ate: diaISO
     // O formato sozinho aceita `0000-00-00`, que atravessa a borda e só quebra
     // lá dentro, na aritmética de data — virando 500 sobre uma entrada que era
     // do cliente. A borda é onde isso vira 400.
@@ -174,9 +173,7 @@ export const comissaoDoMarketplaceSchema = z.object({
  * 30" entende isso, e um `timestamptz` na borda faria o mesmo dia render
  * períodos diferentes conforme o fuso de quem digitou.
  */
-const diaDeVerdade = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
+const diaDeVerdade = diaISO
   /**
    * O formato sozinho aceita `0000-00-00`, e o precedente é de `janelaSchema`,
    * cinquenta linhas acima: a data inválida atravessa a borda e só quebra lá

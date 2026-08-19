@@ -183,6 +183,74 @@ describeIfDb('GET /v1/b/:slug/availability', () => {
     expect(response.body.days[0].waitlistAvailable).toBe(false);
   });
 
+  // -- preço -----------------------------------------------------------------
+
+  /**
+   * O preço que a grade anuncia é o que o `POST` congela (bloco 105).
+   *
+   * ## O defeito que este teste prende
+   *
+   * O passo 4 do agendamento somava o preço do **catálogo** e mostrava o total
+   * ao lado de "Confirmar agendamento". Com uma faixa de +20% cadastrada, a
+   * tela dizia R$ 49,00 e o recibo da tela seguinte dizia R$ 58,80 — sobre o
+   * mesmo agendamento, um clique depois.
+   *
+   * Nada ficava vermelho: `precoDoHorario` estava certo e testado, a API estava
+   * certa, e cada uma das duas telas era coerente sozinha. É a §6 pergunta 6.
+   *
+   * ## Por que aqui, e não numa asserção sobre a tela
+   *
+   * A tela passou a **ler** `priceCents` do slot. O que precisa ficar preso é o
+   * contrato de que aquele campo é a mesma verdade que a gravação usa: se um
+   * dia a grade e o `resolveSlot` divergirem, a tela volta a mentir sem ter
+   * mudado uma linha.
+   *
+   * A faixa fica no fim da tarde de propósito: os testes acima asseram sobre o
+   * primeiro horário do dia, e uma faixa da manhã os quebraria por outro motivo
+   * que não a regra sob teste.
+   */
+  it('o preço do horário na grade é o que a gravação congela', async () => {
+    // 17:00–18:00 locais, +20%. `max_price_variation_bps` nasce em 1500 (15%),
+    // e é ele que apara: 4900 + 15% = 5635.
+    await exec(admin, `
+      UPDATE locations SET dynamic_pricing_enabled = true WHERE id = '${LOCATION}';
+
+      INSERT INTO pricing_rules (tenant_id, location_id, weekday, start_minute, end_minute, delta_bps)
+      VALUES ('${TENANT}', '${LOCATION}', 2, 1020, 1080, 2000);
+    `);
+
+    try {
+      const grade = await request(app.getHttpServer()).get(url('domari', ok)).expect(200);
+      const slots: { start: string; priceCents: number | null }[] = grade.body.days[0].slots;
+
+      const cedo = slots.find((s) => s.start === '09:00');
+      const naFaixa = slots.find((s) => s.start === '17:00');
+      expect(cedo?.priceCents).toBe(4900);
+      // Aparado pelo teto da marca, não os 5880 que a faixa pediria.
+      expect(naFaixa?.priceCents).toBe(5635);
+
+      const criado = await request(app.getHttpServer())
+        .post('/v1/b/domari/appointments')
+        .send({
+          name: 'Carlos Andrade',
+          phone: '(71) 98888-7777',
+          locationId: LOCATION,
+          professionalId: RUAN,
+          serviceIds: [CABELO],
+          date: TERCA,
+          start: '17:00',
+        })
+        .expect(201);
+
+      expect(criado.body.priceCents).toBe(naFaixa?.priceCents);
+    } finally {
+      await exec(admin, `
+        DELETE FROM pricing_rules WHERE location_id = '${LOCATION}';
+        UPDATE locations SET dynamic_pricing_enabled = false WHERE id = '${LOCATION}';
+      `);
+    }
+  });
+
   // -- isolamento ------------------------------------------------------------
 
   it('não expõe o tenant interno em lugar nenhum da resposta', async () => {

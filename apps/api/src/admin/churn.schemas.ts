@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 /**
  * A janela do relatório de crescimento, validada na borda.
@@ -20,9 +21,7 @@ import { z } from 'zod';
  * de março, então comparar o `toISOString` com o texto original é o que pega o
  * dia que não existe.
  */
-const dia = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD.')
+const dia = diaISO
   .refine((d) => {
     const instante = Date.parse(`${d}T00:00:00Z`);
     return !Number.isNaN(instante) && new Date(instante).toISOString().slice(0, 10) === d;

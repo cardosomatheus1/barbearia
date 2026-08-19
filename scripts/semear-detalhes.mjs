@@ -1059,20 +1059,56 @@ function precos({ tenant, local, balcao }) {
 // 13 — perfil público do barbeiro e vitrine
 // ---------------------------------------------------------------------------
 
-function vitrineEPerfil({ tenant, local, cadeiras, slug }) {
-  const apelidos = ['ruan', 'gleidson', 'italo'];
-  const especialidades = [
-    ['degrade', 'navalha', 'barba'],
-    ['barba', 'toalha quente', 'pigmentacao'],
-    ['infantil', 'social', 'sobrancelha'],
-  ];
+/**
+ * O endereço público a partir do **nome da pessoa**, nunca da posição dela.
+ *
+ * `apelidos[i]` casava contra a ordem de `cadeiras`, que sai do banco por
+ * `created_at` e não é a ordem em que a lista foi escrita: no piloto,
+ * `/b/gleidson` abria a página de Ruan Cavalcante, e as especialidades de cada
+ * um estavam na ficha do outro. É a mesma regra de casar dado por id e não por
+ * ordem — aqui o que identifica a pessoa é o nome dela.
+ *
+ * A slugificação repete a de `slugDoBarbeiro` em `packages/core` de propósito:
+ * a semente roda antes de qualquer build e importar `dist` a faria depender da
+ * ordem de compilação. O que ela **não** pode fazer é divergir no resultado, e
+ * é por isso que o teste de perfil público confere o endereço gerado.
+ */
+function apelidoDe(nome) {
+  const limpo = String(nome)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const primeiro = limpo.split('-')[0] ?? '';
+  return primeiro.length >= 3 ? primeiro : limpo.slice(0, 60);
+}
 
-  const perfis = cadeiras.map((c, i) => {
-    const apelido = (apelidos[i] ?? `barbeiro-${i + 1}`);
+function vitrineEPerfil({ tenant, local, cadeiras, slug }) {
+  /**
+   * As especialidades saem de `ESPECIALIDADES` (`packages/core/src/barbeiro.ts`)
+   * e de mais lugar nenhum.
+   *
+   * A versão anterior escrevia `navalha`, `toalha quente`, `pigmentacao` e
+   * `social` — nenhum dos quatro está na lista fechada, e `ehComodidade`/
+   * `ehEspecialidade` os descartam em silêncio. O filtro funcionava; a semente
+   * é que escrevia lixo, e a página do barbeiro nunca foi olhada com dado
+   * coerente — que é justamente o estado que a medição fotografa.
+   */
+  const porNome = new Map([
+    ['ruan', ['degrade', 'navalhado', 'barba']],
+    ['gleidson', ['barba', 'barboterapia', 'coloracao']],
+    ['italo', ['corte_social', 'infantil', 'sobrancelha']],
+  ]);
+  const padrao = ['fade', 'barba', 'pezinho'];
+
+  const perfis = cadeiras.map((c) => {
+    const apelido = apelidoDe(c.nome);
+    const especialidades = porNome.get(apelido) ?? padrao;
     return `UPDATE professionals SET
         public_profile = true,
         public_slug = COALESCE(public_slug, ${lit(apelido)}),
-        specialties = ARRAY[${(especialidades[i] ?? especialidades[0]).map(lit).join(', ')}]
+        specialties = ARRAY[${especialidades.map(lit).join(', ')}]
       WHERE id = ${lit(c.id)};`;
   });
 

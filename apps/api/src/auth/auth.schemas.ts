@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { diaISO } from '../common/data.js';
 
 export const requestOtpSchema = z.object({
   phone: z.string().min(8).max(24),
@@ -19,7 +20,7 @@ export const createAppointmentSchema = z.object({
   locationId: z.string().uuid(),
   professionalId: z.string().uuid(),
   serviceIds: z.array(z.string().uuid()).min(1).max(10),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: diaISO,
   start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   holdId: z.string().uuid().optional(),
   // Teto explícito: campo livre sem limite vira armazenamento gratuito.
@@ -59,14 +60,14 @@ export const entrarNaEsperaSchema = z.object({
   serviceIds: z.array(z.string().uuid()).min(1).max(10),
   // Ausente é "qualquer profissional", que é o caso comum de quem espera vaga.
   professionalId: z.string().uuid().optional(),
-  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  de: diaISO,
+  ate: diaISO,
   inicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   fim: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 });
 
 export const rescheduleSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: diaISO,
   start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   professionalId: z.string().uuid().optional(),
 });

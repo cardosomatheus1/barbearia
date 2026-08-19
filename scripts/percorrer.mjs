@@ -283,8 +283,61 @@ await percurso('cliente marca pelo site', async (page) => {
    * mesma razão que valia no e2e do balcão: o percurso que falha uma vez em
    * seis ensina todo mundo a reexecutar em vez de olhar.
    */
-  await clicar(page, '.dia:not(.dia--atual)', 'o dia de amanhã');
-  await clicar(page, '.hora', 'um horário');
+  /**
+   * E, entre os dias, o primeiro que tenha um horário **de preço diferente**.
+   *
+   * Sem esta procura a asserção de preço logo abaixo passava pelo motivo
+   * errado: num dia sem faixa cadastrada, o preço do motor e a soma do catálogo
+   * são o mesmo número, e comparar dois números iguais não prova nada — o
+   * percurso ficaria verde com o defeito de volta. É a mesma armadilha do teste
+   * de remarcação que passava com e sem `ignoreAppointmentId`.
+   *
+   * A semente liga a precificação dinâmica e cadastra faixas em três janelas,
+   * então dentro de catorze dias sempre há uma. Não achando nenhuma, o percurso
+   * **falha** em vez de seguir: um dia sem faixa nenhuma significa que a
+   * semente parou de produzir o cenário, e isso é para ser consertado, não
+   * ignorado.
+   */
+  const outrosDias = await page
+    .locator('.dia:not(.dia--atual)')
+    .evaluateAll((as) => as.map((a) => a.getAttribute('href')).filter(Boolean));
+
+  let achouFaixa = false;
+  for (const destino of outrosDias) {
+    // Por endereço e não por clique: clicar move o `--atual`, e o conjunto que
+    // o laço percorre mudaria embaixo dele a cada volta.
+    await page.goto(`${WEB}${destino}`, { waitUntil: 'networkidle' });
+    if ((await page.locator('.hora .hora__preco').count()) > 0) {
+      achouFaixa = true;
+      break;
+    }
+  }
+  if (!achouFaixa) {
+    throw new Error(
+      'nenhum horário com preço diferente do catálogo em catorze dias — '
+        + 'a semente parou de cadastrar faixa de preço, e a asserção abaixo viraria decoração',
+    );
+  }
+  await clicar(page, '.hora:has(.hora__preco)', 'um horário de preço diferente');
+
+  /**
+   * O total que a tela promete, lido **antes** de confirmar.
+   *
+   * É a asserção que o bloco 105 existe para prender, e ela só é possível aqui:
+   * a tela dizia R$ 45,00 somando o catálogo e o banco gravava R$ 54,00, porque
+   * o preço do profissional e a faixa de horário entram no motor e não na soma.
+   * Nada ficava vermelho — `precoDoHorario` tinha teste, a API tinha teste, e as
+   * duas telas eram coerentes cada uma consigo mesma (§6, pergunta 6).
+   *
+   * Nenhum teste de unidade alcança isto: o que se compara é o que a pessoa lê
+   * na tela contra o que ficou na linha do banco.
+   */
+  const totalNaTela = await page.locator('.confere > div:last-of-type dd').innerText();
+  const centavosNaTela = (() => {
+    const achado = /R\$\s*([\d.]+),(\d{2})/.exec(totalNaTela);
+    if (!achado) throw new Error(`não achei o total na tela: ${totalNaTela}`);
+    return Number(achado[1].replace(/\./g, '')) * 100 + Number(achado[2]);
+  })();
 
   await page.fill('input[name="name"]', 'Cliente do Percurso');
   await page.fill('input[name="phone"]', telefone);
@@ -303,6 +356,18 @@ await percurso('cliente marca pelo site', async (page) => {
   );
   if (marcados !== '1') {
     throw new Error(`o agendamento não chegou ao banco (achei ${marcados} para ${telefone})`);
+  }
+
+  const gravado = consultar(
+    `SELECT a.price_cents FROM appointments a
+       JOIN customers c ON c.id = a.customer_id
+      WHERE c.phone_e164 = '+55${telefone.replace(/\D/g, '')}'`,
+  );
+  if (Number(gravado) !== centavosNaTela) {
+    throw new Error(
+      `a tela prometeu ${centavosNaTela} centavos e o banco gravou ${gravado} — `
+        + 'é o preço do catálogo aparecendo no lugar do preço do motor',
+    );
   }
 });
 

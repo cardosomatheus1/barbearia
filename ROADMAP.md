@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 104 de 104 blocos.**
+**Status: 105 de 105 blocos.**
 
 ---
 
@@ -73,6 +73,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| O agente de conversa do cliente não tem porta | `POST /v1/b/:slug/agente` e `/agente/meu` estão de pé desde os blocos 65 e 66, com intenção, casamento de serviço pelo catálogo, três horários oferecidos, remarcação sob sessão e recepção que só responde o que a barbearia cadastrou — tudo com teste, e o e2e `agente.e2e.test.ts` exercita as duas rotas | **quem fala com elas**. Nenhum dos helpers de `apps/web/src/lib/api.ts` as chama, não há tela em `apps/web/src/app/[slug]/`, e o webhook de entrada da Meta encaminha a mensagem recebida para `registrarResposta`, nunca para o agente. Duas portas, e cada uma é um bloco: a tela de conversa (SSR, um envio por mensagem, como todo formulário deste produto) e o encaminhamento do WhatsApp, que precisa decidir o que fazer quando o texto não é resposta a nada | sem bloco definido: a tela entra junto do próximo bloco de superfície do cliente; o encaminhamento depende de a barbearia ter número próprio verificado, que é o estado que o bloco 88 tornou explícito. Achado da avaliação cega do bloco 105 |
 | Conciliação com a Meta só na unidade principal | a varredura de hora em hora (bloco 90) promove o número a `ativo` quando a Meta confirma a posse, e tira os textos de "Na Meta" — pela `primaryLocation` de cada barbearia | cobrir **todas** as unidades: `whatsapp_settings` é por unidade desde o bloco 55, e uma rede com número próprio por loja concilia só o da matriz | sem bloco definido: nenhuma barbearia deste produto tem hoje número por filial, e um laço sobre unidades seria caminho que nada exercita — o defeito de `blocks` outra vez. O que segura a decisão é dado, não código: entra quando existir a primeira rede com dois números. Enquanto isso o sintoma é conhecido e limitado — a filial fica em "falta confirmar" com o canal funcionando, que é o estado de antes do bloco 90 |
 | O `payload` de uma importação abandonada nunca é apagado | o `CHECK` do bloco 25 garante que importação **aplicada** não guarda `payload`, e a análise seguinte limpa o que passou de sete dias | uma varredura que alcance quem **nunca mais abriu a tela**. A limpeza pega carona no início da próxima análise, e o caso mais provável é o que nunca é limpo: a barbearia sobe o CSV uma vez, olha a conferência, desiste e some — deixando nome, telefone e aniversário da base legada inteira, de gente que talvez nunca vire cliente | sem bloco definido: entra junto da próxima tarefa de fila por tenant. `imports` tem RLS, então não serve varredura sem tenant: precisa ser uma tarefa por barbearia, como `fiscal.emitir`. Achado da avaliação cega do bloco 104, e não é vulnerabilidade — é postura de dado herdada em vez de decidida, que é o critério do bloco 66 |
 | Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
@@ -314,11 +315,18 @@ Depende de histórico acumulado. Não antecipar.
 | 62 | Churn score com explicação | ✅ |
 | 63 | Schema semântico de métricas (base do assistente) | ✅ |
 | 64 | Assistente do gestor: text-to-query | ✅ |
-| 65 | Agente de agendamento: intent, slots, confirmação | ✅ |
-| 66 | Agente: remarcação e recepção digital | ✅ |
+| 65 | Agente de agendamento: intent, slots, confirmação | ✅ ¹ |
+| 66 | Agente: remarcação e recepção digital | ✅ ¹ |
 | 67 | Insights proativos | ✅ |
 | 68 | Smart pricing com aprovação humana | ✅ |
 | 69 | Previsão de consumo e sugestão de compra | ✅ |
+
+¹ O motor e as rotas estão de pé e testados; **nenhuma tela e nenhum canal os
+chamam**. Está escrito em [Lacunas com dependência](#lacunas-com-dependência-declarada),
+com as duas portas que faltam e o que cada uma depende. O ✅ fica porque o que o
+bloco entregou — intenção, casamento de serviço, grade pelo mesmo motor, proposta
+que não grava — está entregue; o que falta é superfície, e superfície que falta
+não pode desaparecer atrás de um símbolo verde.
 
 ---
 
@@ -417,6 +425,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 102 | Três consultas da automação nunca tinham rodado: a varredura volta a funcionar, e o aviso passa a enxergar a tarefa que desistiu | ✅ |
 | 103 | O que a avaliação cega do financeiro achou: o balcão para de cobrar duas vezes, a permissão da tela volta a ser a da rota, e o menu chama cada tela pelo nome dela | ✅ |
 | 104 | O que a avaliação cega da administração achou: a medição deixa de ser cega no painel, o gerente da filial para de fechar a matriz, e a trilha passa a dizer em quem mexeu | ✅ |
+| 105 | O que a avaliação cega do cliente final achou: o passo 4 mostra o preço que o motor grava, a disputa por um horário deixa de virar 500, e a busca ganha os filtros que a API já aceitava | ✅ |
 
 ---
 

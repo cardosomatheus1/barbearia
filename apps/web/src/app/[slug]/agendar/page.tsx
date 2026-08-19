@@ -199,6 +199,7 @@ export default async function AgendarPage({ params, searchParams }: Props) {
           <PassoHorario
             slug={slug}
             profile={profile}
+            carrinho={carrinho}
             escolhidos={escolhidos}
             profissional={profissional!}
             dia={dia}
@@ -230,8 +231,16 @@ export default async function AgendarPage({ params, searchParams }: Props) {
               <p className="resumo__servicos">
                 {carrinho.map((s) => s.name).join(' + ')}
               </p>
+              {/* No passo do horário o valor é dito como **tabela**.
+
+                  Sem a palavra, o rodapé afirmava "R$ 15,00" logo abaixo de uma
+                  grade em que vários chips diziam "R$ 12,75" — dois números
+                  sobre o mesmo serviço na mesma tela, e o de baixo com cara de
+                  ser o que se paga. São fatos diferentes (o preço do catálogo e
+                  o preço daquela hora), e o que faltava era dizer qual é qual. */}
               <p className="resumo__dados tabular">
                 {duracao} min · R$ {money(total)}
+                {passo === 3 ? ' na tabela' : ''}
               </p>
             </div>
             {passo === 1 ? (
@@ -431,6 +440,7 @@ function PassoProfissional({
 async function PassoHorario({
   slug,
   profile,
+  carrinho,
   escolhidos,
   profissional,
   dia,
@@ -440,6 +450,7 @@ async function PassoHorario({
 }: {
   slug: string;
   profile: PublicProfile;
+  carrinho: PublicService[];
   escolhidos: string[];
   profissional: string;
   dia: string;
@@ -459,6 +470,16 @@ async function PassoHorario({
 
   const doDia = resultado?.days[0];
   const nomePorId = new Map(profile.professionals.map((p) => [p.id, p.name]));
+
+  /**
+   * O preço aparece no chip **só quando ele difere da tabela**.
+   *
+   * Escondê-lo faria a pessoa escolher 18:00 sem saber que aquela hora custa
+   * 20% a mais e descobrir no passo seguinte; escrevê-lo em todos os noventa
+   * chips do dia é ruído que some no próprio excesso — é a mesma decisão do
+   * rótulo direto num gráfico, que só marca o ponto que se procura.
+   */
+  const tabela = carrinho.reduce((soma, s) => soma + s.priceCents, 0);
 
   return (
     <section aria-labelledby="titulo">
@@ -491,6 +512,15 @@ async function PassoHorario({
                 <span className="hora__valor tabular">{slot.start}</span>
                 {profissional === 'any' ? (
                   <span className="hora__quem">{nomePorId.get(slot.professionalId) ?? ''}</span>
+                ) : null}
+                {slot.priceCents !== null && slot.priceCents !== tabela ? (
+                  <span
+                    className={`hora__preco tabular ${
+                      slot.priceCents > tabela ? 'hora__preco--acima' : 'hora__preco--abaixo'
+                    }`}
+                  >
+                    R$ {money(slot.priceCents)}
+                  </span>
                 ) : null}
               </a>
             </li>
@@ -651,7 +681,7 @@ function Espera({
 
 /* -- Passo 4: nome e celular ----------------------------------------------- */
 
-function PassoDados({
+async function PassoDados({
   slug,
   profile,
   carrinho,
@@ -672,8 +702,40 @@ function PassoDados({
   href: (m: Record<string, string | null>) => string;
   falha?: string;
 }) {
-  const total = carrinho.reduce((soma, s) => soma + s.priceCents, 0);
+  const tabela = carrinho.reduce((soma, s) => soma + s.priceCents, 0);
   const duracao = carrinho.reduce((soma, s) => soma + s.durationMinutes, 0);
+
+  /**
+   * O total sai do **motor**, nunca da soma do catálogo.
+   *
+   * A tela dizia R$ 45,00 sobre um horário que `createAppointment` congelava
+   * por R$ 54,00 — e nada ficava vermelho, porque `core/precificacao` estava
+   * certo, a API estava certa, e cada uma das duas telas era coerente sozinha
+   * (§6, pergunta 6). O dado já chegava: `priceCents` do slot existe desde que
+   * a grade o devolve, e a tela o descartava (§6, pergunta 4).
+   *
+   * São **dois** ajustes que a soma do catálogo perde, e o segundo é anterior
+   * às faixas de horário: o preço do profissional (`professional_services`) e
+   * a faixa do bloco 68. Quem aplica os dois é `slotsForDate`, que é a mesma
+   * função que `resolveSlot` usa para gravar — é isto que a convenção *"preço
+   * mostrado ao cliente é o do mesmo motor que grava"* quer dizer.
+   *
+   * `revalidate: 0` porque isto é a última tela antes de confirmar: um preço
+   * de trinta segundos atrás é o preço errado quando o balcão acabou de mexer
+   * na faixa.
+   */
+  const grade = await getAvailability(
+    slug,
+    {
+      locationId: profile.location.id,
+      serviceIds: escolhidos,
+      dateFrom: dia,
+      ...(profissional === 'any' ? { anyProfessional: true } : { professionalId: profissional }),
+    },
+    0,
+  );
+  const escolhido = grade?.days[0]?.slots.find((s) => s.start === hora);
+  const total = escolhido?.priceCents ?? tabela;
   const quem =
     profissional === 'any'
       ? 'Qualquer profissional'
@@ -722,10 +784,23 @@ function PassoDados({
           <div>
             <dt>Total</dt>
             <dd className="tabular">
-              {duracao} min · R$ {total.toString() ? money(total) : ''}
+              {duracao} min · R$ {money(total)}
             </dd>
           </div>
         </dl>
+        {total !== tabela ? (
+          /* A diferença é dita, nunca só embutida no número.
+             Um total que chega 20% acima da tabela sem explicação é a tela
+             cobrando a mais em silêncio — e quem opera não tem como responder
+             "por que R$ 54?" no balcão. */
+          <p className="confere__ajuste">
+            {total > tabela ? 'Este horário custa ' : 'Este horário sai '}
+            <strong className="tabular">
+              R$ {money(Math.abs(total - tabela))} {total > tabela ? 'a mais' : 'a menos'}
+            </strong>{' '}
+            que o preço de tabela (R$ {money(tabela)}).
+          </p>
+        ) : null}
         <a className="confere__trocar" href={href({ h: null, e: 'h' })}>
           Trocar horário
         </a>

@@ -42,6 +42,7 @@ export * from './marketplace.js';
 export * from './proximo.js';
 export * from './atribuicao.js';
 export * from './barbeiro.js';
+export * from './comodidade.js';
 export * from './destaque.js';
 export * from './franquia.js';
 export * from './rede.js';

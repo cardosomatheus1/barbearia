@@ -7,6 +7,7 @@ import {
   TRATAMENTOS_DA_TAXA,
   TRATAMENTOS_DO_DESCONTO,
 } from '@barbearia/core';
+import { diaISO } from '../common/data.js';
 
 /**
  * A borda do dinheiro.
@@ -121,10 +122,7 @@ export const receberFiadoSchema = z.object({
 
 export const diaSchema = z.object({
   // A data é só o dia; o fuso vem da unidade, nunca do aparelho (defeito D2).
-  dia: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  dia: diaISO.optional(),
 });
 
 export const codigoMfaSchema = z.object({
@@ -133,8 +131,6 @@ export const codigoMfaSchema = z.object({
 });
 
 // -- Comissão -------------------------------------------------------------------
-
-const diaISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const periodoSchema = z.object({
   de: diaISO.optional(),

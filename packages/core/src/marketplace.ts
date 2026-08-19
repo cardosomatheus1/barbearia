@@ -66,6 +66,31 @@ export const RAIO_PADRAO_KM = 5;
 /** Teto do raio pedido. Sem ele, "500 km" varre o país e devolve ruído. */
 export const RAIO_MAXIMO_KM = 50;
 
+/**
+ * As distâncias que a tela oferece — e o conjunto que a busca aceita da URL.
+ *
+ * O seletor listava `[2, 5, 10, 25]` enquanto a página repassava **qualquer**
+ * número positivo até o teto: com `?raioKm=50`, o `defaultValue` não casava com
+ * opção nenhuma, o navegador caía na primeira, e a tela dizia "até 2 km" sobre
+ * uma busca que havia rodado com 50. O controle contradizia a consulta que ele
+ * descreve.
+ *
+ * Com a lista aqui, a tela desenha o que a busca aceita e a página redonda o
+ * valor recebido para o degrau mais próximo — nunca há um raio em uso que o
+ * seletor não saiba mostrar.
+ */
+export const RAIOS_DA_BUSCA = [2, 5, 10, 25, 50] as const;
+
+/** O degrau mais próximo do que veio pela URL. Fora de faixa cai no padrão. */
+export function raioDaBusca(pedido: number): number {
+  if (!Number.isFinite(pedido) || pedido <= 0) return RAIO_PADRAO_KM;
+  let escolhido: number = RAIOS_DA_BUSCA[0];
+  for (const km of RAIOS_DA_BUSCA) {
+    if (Math.abs(km - pedido) < Math.abs(escolhido - pedido)) escolhido = km;
+  }
+  return escolhido;
+}
+
 /** Quantos resultados uma busca devolve. */
 export const RESULTADOS_POR_BUSCA = 20;
 

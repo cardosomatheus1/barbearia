@@ -38,6 +38,7 @@ import {
   modeloDaAssinaturaSchema,
   planoSchema,
 } from './assinatura.schemas.js';
+import { diaISO } from '../common/data.js';
 
 /**
  * O clube de assinatura (bloco 45, SPEC §4.6).
@@ -83,7 +84,7 @@ const STATUS: Record<string, number> = {
  * recusa por causa de um parâmetro mal digitado só ensina a não abrir a tela.
  */
 function mesCorrente(de?: string, ate?: string): { de: string; ate: string } {
-  const valida = (valor?: string) => (valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : null);
+  const valida = (valor?: string) => (valor && diaISO.safeParse(valor).success ? valor : null);
   const inicio = valida(de);
   const fim = valida(ate);
   if (inicio && fim && fim >= inicio) return { de: inicio, ate: fim };

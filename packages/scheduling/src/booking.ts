@@ -111,6 +111,36 @@ export class BookingError extends Error {
 
 const EXCLUSION_VIOLATION = '23P01';
 const UNIQUE_VIOLATION = '23505';
+const DEADLOCK = '40P01';
+const SERIALIZATION_FAILURE = '40001';
+
+/**
+ * Duas pessoas disputando o mesmo horário — pelos **três** códigos que isso tem.
+ *
+ * A constraint de exclusão anti-overbooking recusa o segundo com `23P01`, e era
+ * só isso que este código reconhecia. Mas o Postgres tem outro desfecho para a
+ * mesma disputa, e ele é o comum quando três ou mais chegam juntos: cada
+ * transação grava a própria entrada no índice GiST e **depois** espera o xid da
+ * outra para saber se pode. Duas esperando uma pela outra é `40P01`; sob
+ * `SERIALIZABLE` a mesma cena sai como `40001`.
+ *
+ * Seis `POST` simultâneos no mesmo horário devolviam `201` e **cinco `500`** —
+ * "Erro interno" para quem só chegou em segundo lugar, e uma repetição que
+ * sempre falha, porque o horário de fato acabou. O desfecho verdadeiro é o
+ * mesmo nos três: quem ganhou gravou, e este pedido precisa reler a grade.
+ *
+ * A pergunta do produto é *"o horário ainda é meu?"*, e a resposta é não. Não
+ * há ambiguidade a resolver: quem perdeu o deadlock foi abortado sem gravar
+ * nada, e quem venceu segue para o commit.
+ *
+ * O `catch` envolve **uma** instrução — o `INSERT` do agendamento —, então não
+ * há como um deadlock de outra origem entrar por aqui e virar "horário
+ * ocupado".
+ */
+export function contencaoDeHorario(error: unknown): boolean {
+  const code = pgCode(error);
+  return code === EXCLUSION_VIOLATION || code === DEADLOCK || code === SERIALIZATION_FAILURE;
+}
 
 /**
  * Extrai o SQLSTATE do Postgres de um erro do Prisma.
@@ -615,7 +645,7 @@ async function criarDentroDaTransacao(
       );
     } catch (error) {
       const code = pgCode(error);
-      if (code === EXCLUSION_VIOLATION) {
+      if (contencaoDeHorario(error)) {
         // Outra requisição gravou o mesmo horário entre a validação e o INSERT.
         throw new BookingError(
           'slot_taken',
@@ -1197,7 +1227,7 @@ export async function rescheduleAppointment(
     try {
       id = await insertAppointment(tx, target, slot, sinal);
     } catch (error) {
-      if (pgCode(error) === EXCLUSION_VIOLATION) {
+      if (contencaoDeHorario(error)) {
         // Rollback devolve o agendamento original ao estado ativo.
         throw new BookingError(
           'slot_taken',

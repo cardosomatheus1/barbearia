@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { estadoDoPainel, templatesDeServico } from '@/lib/admin-api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { COMODIDADES, ROTULO_DA_COMODIDADE } from '@barbearia/core';
 import {
   acaoEmpresa,
   acaoPagamentos,
@@ -52,12 +53,6 @@ const PAGAMENTOS = [
   { valor: 'card', nome: 'Cartão' },
   { valor: 'cash', nome: 'Dinheiro' },
   { valor: 'online', nome: 'Pagamento online' },
-];
-
-const COMODIDADES = [
-  { valor: 'wifi', nome: 'Wi-Fi' },
-  { valor: 'parking', nome: 'Estacionamento' },
-  { valor: 'accessible', nome: 'Acessível' },
 ];
 
 const money = (cents: number): string => (cents / 100).toFixed(2);
@@ -206,10 +201,10 @@ export default async function OnboardingPage({ searchParams }: Props) {
           <fieldset className="painel__grupo">
             <legend className="ui-field__label">A barbearia tem</legend>
             <div className="painel__marcas">
-              {COMODIDADES.map((item) => (
-                <label className="marca" key={item.valor}>
-                  <input type="checkbox" name="amenities" value={item.valor} />
-                  <span>{item.nome}</span>
+              {COMODIDADES.map((valor) => (
+                <label className="marca" key={valor}>
+                  <input type="checkbox" name="amenities" value={valor} />
+                  <span>{ROTULO_DA_COMODIDADE[valor]}</span>
                 </label>
               ))}
             </div>

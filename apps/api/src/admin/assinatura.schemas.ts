@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ESCOPOS } from '@barbearia/core';
+import { diaISO } from '../common/data.js';
 
 /**
  * A borda do clube (bloco 45).
@@ -122,6 +123,6 @@ export const modeloDaAssinaturaSchema = z.object({
 
 /** O recorte da simulação. Um mês fechado é o que responde a pergunta. */
 export const periodoSchema = z.object({
-  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  de: diaISO,
+  ate: diaISO,
 });

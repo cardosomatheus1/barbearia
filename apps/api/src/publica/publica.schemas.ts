@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { serviceIds } from '../booking/booking.schemas.js';
+import { diaISO } from '../common/data.js';
 
 /**
  * Entrada da API pública (bloco 78).
@@ -9,9 +10,7 @@ import { serviceIds } from '../booking/booking.schemas.js';
  * deixaria "de hoje até 2099" passar, e isso nunca expira.
  */
 
-const diaSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
+const diaSchema = diaISO
   .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'data inexistente');
 
 /**

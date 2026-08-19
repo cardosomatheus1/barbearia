@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CONVERSAS } from '@barbearia/core';
+import { diaISO } from '../common/data.js';
 
 /**
  * O que o barbeiro anota sobre o cliente.
@@ -57,9 +58,7 @@ export const metaSchema = z.object({
    * obrigação de recusar com 400. O `refine` fecha isso perguntando ao
    * calendário, que é quem sabe se o mês existe e quantos dias ele tem.
    */
-  mes: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'mês no formato YYYY-MM-DD')
+  mes: diaISO
     .refine((valor) => {
       const [ano, mes, dia] = valor.split('-').map(Number);
       if (!ano || !mes || !dia) return false;

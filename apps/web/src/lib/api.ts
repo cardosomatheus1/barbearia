@@ -881,9 +881,20 @@ export async function cidadesDaVitrine(): Promise<readonly CidadeNaVitrine[]> {
 }
 
 export async function buscarBarbearias(
-  parametros: Record<string, string>,
+  parametros: Record<string, string | string[]>,
 ): Promise<BuscaDeBarbearias> {
-  const query = new URLSearchParams(parametros).toString();
+  /**
+   * Lista vira **parâmetro repetido**, que é o que um `<form method="get">` com
+   * caixas de seleção manda e o que a borda já sabe ler (`z.union([string,
+   * array])`). Juntar com vírgula seria inventar uma segunda gramática de lista
+   * na URL: `comodidades=wifi,parking` chegaria como um valor só e não casaria
+   * com comodidade nenhuma — sem erro, devolvendo vazio.
+   */
+  const busca = new URLSearchParams();
+  for (const [chave, valor] of Object.entries(parametros)) {
+    for (const item of Array.isArray(valor) ? valor : [valor]) busca.append(chave, item);
+  }
+  const query = busca.toString();
   const resposta = await fetch(`${BASE}/v1/marketplace/busca?${query}`, { cache: 'no-store' });
   if (!resposta.ok) return { resultados: [], analisadas: 0, truncada: false };
   return (await resposta.json()) as BuscaDeBarbearias;
