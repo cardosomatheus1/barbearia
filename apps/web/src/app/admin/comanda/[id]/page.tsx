@@ -24,7 +24,7 @@ import {
 import { notaDaComandaNaApi } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela, recursoNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import {
   acaoAdicionarItem,
   acaoVenderPacote,
@@ -89,7 +89,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
 /**
  * Os meios que o adquirente sabe emitir, na ordem em que o balcão os usa.

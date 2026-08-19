@@ -63,7 +63,20 @@ export function ocupacaoDaCelula(celula: CelulaDeOcupacao): number | null {
    * divisão de relatório deste produto.
    */
   if (celula.minutosDeJornada <= 0) return null;
-  return Math.round((celula.minutosVendidos / celula.minutosDeJornada) * 10_000);
+  /**
+   * Teto em 100%, e o motivo é o que a pessoa faz com o número (bloco 101).
+   *
+   * Vender mais minutos do que a jornada tem é normal e não é erro: o
+   * agendamento que começa às 8h50 e termina às 9h20 entra inteiro nas duas
+   * horas, e três cadeiras numa hora de duas dão 150%. Mas "104% de ocupação"
+   * não quer dizer nada para quem lê — e joga dúvida sobre a grade inteira, que
+   * é o preço de mostrar um número que não se pode explicar.
+   *
+   * Cem por cento é a frase honesta: aquela hora está cheia. Quem precisa saber
+   * *quanto* passou olha a agenda, não o mapa de calor.
+   */
+  const bruto = Math.round((celula.minutosVendidos / celula.minutosDeJornada) * 10_000);
+  return Math.min(bruto, 10_000);
 }
 
 export function faixaDaCelula(celula: CelulaDeOcupacao): FaixaDeOcupacao {

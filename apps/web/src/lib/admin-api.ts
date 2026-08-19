@@ -3327,6 +3327,23 @@ export interface AutomacaoNaTelaDoAdmin {
   readonly alcancadas: number;
 }
 
+/**
+ * A fila está andando? (bloco 101)
+ *
+ * Nenhuma tela sabia responder: a campanha dizia "entrou na fila", a automação
+ * prometia "rodam de hora em hora" e o WhatsApp mostrava o canal de pé — com
+ * trinta e três mensagens paradas e o processo que as manda fora do ar.
+ */
+export interface SaudeDaFilaNaTela {
+  readonly atrasadas: number;
+  readonly agendadas: number;
+  readonly ultimaConclusao: string | null;
+  readonly parada: boolean;
+}
+
+export const filaNaApi = (token: string) =>
+  chamar<SaudeDaFilaNaTela>('GET', '/v1/admin/automacoes/fila', undefined, token);
+
 export const automacoesNaApi = (token: string) =>
   chamar<{ automacoes: readonly AutomacaoNaTelaDoAdmin[] }>(
     'GET',

@@ -8,6 +8,7 @@ import {
   enfileirarAvulso,
   esperaDaTentativa,
   falharTarefa,
+  saudeDaFila,
   soltarOrfas,
   tomarTarefas,
 } from './fila.js';
@@ -1404,5 +1405,106 @@ describeIfDb('alertas de negócio, com os números vindos do banco', () => {
 
     expect(fila?.severidade).toBe('critico');
     expect(fila?.valor).toBe(90);
+  });
+});
+
+/**
+ * A fila está andando? (bloco 101)
+ *
+ * Nenhuma tela do produto sabia responder: a campanha dizia "entrou na fila", a
+ * automação prometia "rodam de hora em hora" e a de WhatsApp mostrava o canal
+ * de pé — com trinta e três mensagens paradas e o processo fora do ar. As
+ * quatro afirmavam o contrário do que estava acontecendo.
+ */
+describeIfDb('a saúde da fila', () => {
+  const AGORA = new Date('2026-09-20T15:00:00Z');
+  const haMinutos = (n: number) => new Date(AGORA.getTime() - n * 60_000).toISOString();
+
+  beforeAll(async () => {
+    if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
+    admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
+  });
+
+  afterAll(async () => {
+    await admin?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    /**
+     * Só a fila, e **não** `tenants CASCADE`.
+     *
+     * Truncar os tenants aqui derrubava a semente dos blocos vizinhos — os
+     * agendamentos deles apontam para uma unidade que deixava de existir, e
+     * duas suítes de alerta ficavam vermelhas por um teste que não é sobre
+     * elas. As barbearias já vêm da semente do primeiro bloco.
+     */
+    await exec(admin, `
+      TRUNCATE jobs;
+      INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari'), ('${RIVAL}', 'Rival')
+        ON CONFLICT (id) DO NOTHING;
+    `);
+  });
+
+  const tarefa = (extra: string) => exec(admin, `
+    INSERT INTO jobs (tenant_id, kind, ${extra});
+  `);
+
+  it('fila vazia não é fila parada', async () => {
+    /**
+     * A barbearia sem nada a fazer tem a fila vazia e silenciosa, e isso é o
+     * certo. Alarme que dispara à toa é alarme que se aprende a ignorar.
+     */
+    const saude = await saudeDaFila(TENANT, AGORA);
+    expect(saude).toMatchObject({ atrasadas: 0, agendadas: 0, parada: false });
+  });
+
+  it('tarefa esperando a hora não é alarme', async () => {
+    // O lembrete de amanhã nasce hoje com `run_after` no futuro. É o desenho da
+    // fila desde o bloco 20, e não tem nada de errado.
+    await tarefa(`status, run_after) VALUES ('${TENANT}', 'lembrete_24h', 'pending', '${haMinutos(-600)}'`);
+    const saude = await saudeDaFila(TENANT, AGORA);
+    expect(saude).toMatchObject({ atrasadas: 0, agendadas: 1, parada: false });
+  });
+
+  it('tarefa vencida com a fila andando também não é alarme', async () => {
+    /**
+     * A semente satisfaz **tudo menos** a regra sob teste: há tarefa vencida, e
+     * o que impede o alarme é a conclusão recente. Sem este caso, o de baixo
+     * passaria com o alarme ligado para todo mundo.
+     */
+    await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
+    await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'campanha.enviar', 'done', '${haMinutos(40)}', '${haMinutos(2)}'`);
+
+    const saude = await saudeDaFila(TENANT, AGORA);
+    expect(saude.atrasadas).toBe(1);
+    expect(saude.parada).toBe(false);
+  });
+
+  it('tarefa vencida e nada concluído há muito tempo é a fila parada', async () => {
+    await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
+    await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'campanha.enviar', 'done', '${haMinutos(200)}', '${haMinutos(180)}'`);
+
+    const saude = await saudeDaFila(TENANT, AGORA);
+    expect(saude).toMatchObject({ atrasadas: 1, parada: true });
+    expect(saude.ultimaConclusao).toBe(new Date(haMinutos(180)).toISOString());
+  });
+
+  it('fila que nunca concluiu nada, com tarefa vencida, é a fila parada', async () => {
+    // É o caso da instalação nova em que o worker nunca subiu — exatamente o
+    // que a avaliação encontrou.
+    await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
+    const saude = await saudeDaFila(TENANT, AGORA);
+    expect(saude).toMatchObject({ atrasadas: 1, ultimaConclusao: null, parada: true });
+  });
+
+  it('a fila parada da vizinha não acende o alarme desta barbearia', async () => {
+    /**
+     * `jobs` **não tem RLS** — é decisão do bloco 20, e o filtro por barbearia
+     * é escrito na consulta. Sem ele, uma barbearia com o worker parado faria a
+     * tela de todas as outras acusar.
+     */
+    await tarefa(`status, run_after) VALUES ('${RIVAL}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
+    const saude = await saudeDaFila(TENANT, AGORA);
+    expect(saude).toMatchObject({ atrasadas: 0, parada: false });
   });
 });

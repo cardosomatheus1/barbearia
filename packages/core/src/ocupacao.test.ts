@@ -40,6 +40,22 @@ describe('a ocupação de uma célula', () => {
      * heatmap ingênuo.
      */
     expect(ocupacaoDaCelula(celula({ minutosDeJornada: 0 }))).toBeNull();
+  });
+
+  it('não passa de 100%, mesmo vendendo mais minutos que a jornada', () => {
+    /**
+     * Vender mais do que a jornada tem é normal: o agendamento que começa às
+     * 8h50 e termina às 9h20 entra inteiro nas duas horas, e três cadeiras numa
+     * hora de duas dão 150%.
+     *
+     * "104% de ocupação" não quer dizer nada para quem lê — e joga dúvida sobre
+     * a grade inteira, que é o preço de mostrar um número que não se explica.
+     */
+    expect(
+      ocupacaoDaCelula(celula({ minutosVendidos: 125, minutosDeJornada: 60 })),
+    ).toBe(10_000);
+    // E a hora exatamente cheia continua sendo 100%, não 99 nem 101.
+    expect(ocupacaoDaCelula(celula({ minutosVendidos: 60, minutosDeJornada: 60 }))).toBe(10_000);
     expect(faixaDaCelula(celula({ minutosDeJornada: 0 }))).toBe('fechado');
   });
 

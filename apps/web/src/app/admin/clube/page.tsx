@@ -23,7 +23,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import {
   acaoCancelarFatura,
   acaoPagarFatura,
@@ -80,7 +80,7 @@ const FEITO: Record<string, string> = {
   modelo: 'Modelo salvo. Ele vale a partir do próximo fechamento de comissão.',
 };
 
-const dinheiro = (cents: number) => `R$ ${reaisDoCampo(cents)}`;
+const dinheiro = reais;
 
 const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'] as const;
 

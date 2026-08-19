@@ -12,7 +12,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import {
   acaoCancelarContaDoFinanceiro,
   acaoCriarCategoriaDoFinanceiro,
@@ -85,8 +85,6 @@ const SUCESSO: Record<string, string> = {
  * resposta para "se eu pagar tudo, sobra quanto?" quando a resposta é "não
  * sobra".
  */
-const reais = (centavos: number): string =>
-  `${centavos < 0 ? '−' : ''}R$ ${reaisDoCampo(Math.abs(centavos))}`;
 
 /** "15/11" — o vencimento no calendário, sem o ano quando ele é o corrente. */
 function dataCurta(iso: string, hoje: string): string {

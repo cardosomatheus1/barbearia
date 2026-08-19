@@ -26,6 +26,7 @@ import {
 import {
   cadastroDoWhatsAppNaApi,
   campanhasNaApi,
+  filaNaApi,
   puladosDaCampanhaNaApi,
   segmentosNaApi,
   templatesDoWhatsAppNaApi,
@@ -37,8 +38,9 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerRascunho, lerRecusa, lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoCriarCampanha, acaoEnviarCampanha, acaoSair } from '../acoes';
+import { FilaParada } from '../fila-parada';
 import { secao } from '../secoes';
 
 /**
@@ -77,7 +79,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
 /**
  * O nome de cada público sai de `packages/core`, nunca escrito aqui.
@@ -329,10 +330,22 @@ function Campanha({
               )}
             </p>
             <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
-            {/* As seis colunas da SPEC §4.13, na ordem em que ela as escreve. */}
+            {/*
+              As seis colunas da SPEC §4.13, na ordem em que ela as escreve — e
+              "enviados" diz **pelo WhatsApp**, não "carimbado".
+
+              A linha dizia "44 enviados" e duas linhas abaixo "Nada saiu pelo
+              WhatsApp". A explicação estava certa e o número em cima dela
+              mentia: é o que se lê primeiro, e é o que fica. Agora o número
+              principal é o que de fato saiu, e a diferença aparece ao lado.
+            */}
             <p className="item-cadastro__linha">
-              {campanha.enviados} enviados · {campanha.entregues} entregues · {campanha.lidos}{' '}
-              lidos · {campanha.cliques} cliques · {campanha.agendamentos} voltaram
+              {campanha.enviadosPeloWhatsApp} enviados
+              {campanha.enviadosPeloWhatsApp < campanha.enviados
+                ? ` (de ${campanha.enviados} tentados)`
+                : ''}{' '}
+              · {campanha.entregues} entregues · {campanha.lidos} lidos ·{' '}
+              {campanha.cliques} cliques · {campanha.agendamentos} voltaram
             </p>
             <p className="item-cadastro__linha">
               <strong>{reais(campanha.receitaCents)}</strong> de receita atribuída
@@ -518,7 +531,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
    */
   const rascunho = await lerRascunho();
   const recusa = await lerRecusa();
-  const [resposta, base, canal, templates, listaDePulados] = await Promise.all([
+  const [resposta, base, canal, templates, listaDePulados, saudeDaFila] = await Promise.all([
     podeMexer ? campanhasNaApi(token) : Promise.resolve(null),
     podeNaTela(estado, 'customers.view') ? segmentosNaApi(token) : Promise.resolve(null),
     podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
@@ -526,7 +539,10 @@ export default async function CampanhasPage({ searchParams }: Props) {
     puladosDe && podeVerNomes && podeMexer
       ? puladosDaCampanhaNaApi(token, puladosDe)
       : Promise.resolve(null),
+    // A fila anda? A campanha dizia "entrou na fila" sobre uma fila parada.
+    podeMexer ? filaNaApi(token) : Promise.resolve(null),
   ]);
+  const fila = saudeDaFila?.ok ? saudeDaFila.dados : null;
   const pulados = listaDePulados?.ok ? listaDePulados.dados.pulados : null;
   const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
   // Só o aprovado sai; mostrar rascunho prometeria o que a Meta ainda recusa.
@@ -589,6 +605,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
         se ela valeu o que custou.
       </p>
 
+      <FilaParada fila={fila} />
       {/*
         A frase do **domínio**, quando ela existe (bloco 98).
 
@@ -644,8 +661,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
         */}
         <p className="cartao-balcao__texto">
           {temHoraFria
-            ? 'As horas em azul estão vazias. Toque numa delas para montar uma campanha, já preenchida, com quem costuma vir naquele horário.'
-            : 'Nenhuma hora está vazia o bastante para virar campanha agora — as horas em azul é que são clicáveis. Você pode montar uma campanha por outro público logo abaixo.'}
+            ? 'As horas mais claras estão vazias. Toque numa delas para montar uma campanha, já preenchida, com quem costuma vir naquele horário.'
+            : 'Nenhuma hora está vazia o bastante para virar campanha agora — as mais claras é que são clicáveis. Você pode montar uma campanha por outro público logo abaixo.'}
         </p>
         {grade.length === 0 ? (
           <p className="cartao-balcao__texto">

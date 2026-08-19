@@ -14,7 +14,7 @@ import {
 } from '@/lib/admin-api';
 import { exigirRecurso, painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoCancelarNota, acaoSair, acaoSalvarFiscal } from '../acoes';
 import { secao } from '../secoes';
 
@@ -63,7 +63,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
 /** Pontos-base viram porcentagem só na hora de mostrar. */
 const percent = (bps: number): string => (bps / 100).toFixed(2).replace('.', ',');

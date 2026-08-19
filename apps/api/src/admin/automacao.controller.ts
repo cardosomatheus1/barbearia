@@ -5,6 +5,7 @@ import {
   definirAutomacaoAtiva,
   salvarAutomacao,
 } from '@barbearia/crm';
+import { saudeDaFila } from '@barbearia/jobs';
 import type { Gatilho, Objetivo, Segmento, TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
@@ -43,6 +44,19 @@ export class AutomacaoController {
    * consegue defender nem matar — que é o que a SPEC §4.11 proíbe em letras:
    * *"sem isso não há como desligar o que não funciona"*.
    */
+  /**
+   * A fila está andando? (bloco 101)
+   *
+   * `marketing.send` e nada mais: a resposta são três contagens e um instante —
+   * não devolve cadastro, nem nome, nem centavo. Quem monta campanha é quem
+   * precisa saber se o que ela promete vai acontecer.
+   */
+  @Exige('marketing.send')
+  @Get('fila')
+  async fila(@Staff() staff: AuthenticatedStaff) {
+    return saudeDaFila(staff.tenantId, new Date());
+  }
+
   @Exige('marketing.send')
   @Get()
   async listar(@Staff() staff: AuthenticatedStaff) {

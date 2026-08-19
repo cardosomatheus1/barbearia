@@ -11,6 +11,7 @@ import {
   acaoSair,
 } from '../acoes';
 import { secao } from '../secoes';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * O cardápio padrão da franquia (bloco 76).
@@ -46,8 +47,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const reais = (centavos: number): string =>
-  (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function Item({
   item,

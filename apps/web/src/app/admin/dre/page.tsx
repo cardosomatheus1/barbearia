@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { dreNaApi, type LinhaDoDre, type VariacaoDaLinha } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
@@ -41,8 +41,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para carregar. Tente de novo.',
 };
 
-const reais = (centavos: number): string =>
-  `${centavos < 0 ? '−' : ''}R$ ${reaisDoCampo(Math.abs(centavos))}`;
 
 /** "36,1%" — pontos-base viram porcentagem só na hora de mostrar. */
 const porcento = (bps: number | null): string =>

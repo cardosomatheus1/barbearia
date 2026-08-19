@@ -10,6 +10,7 @@ import {
   type OrdemDaBusca,
 } from '@barbearia/core';
 import { buscarBarbearias, cidadesDaVitrine, type CasaNaBusca } from '@/lib/api';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * A busca do marketplace (bloco 70, SPEC §5.2).
@@ -56,8 +57,6 @@ interface Props {
 const primeiro = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const reais = (centavos: number): string =>
-  (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /**
  * Uma casa decimal, e o **máximo** também é uma.

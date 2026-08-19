@@ -172,31 +172,57 @@ export const EXPLICACAO_DE_NAO_DISPARAR: Readonly<Record<MotivoDeNaoDisparar, st
 };
 
 /**
- * Por que **esta** pessoa não recebeu, em português (bloco 97).
+ * Por que uma mensagem não saiu — **todos** os motivos, num lugar só.
  *
- * A campanha grava um motivo a mais que a automação: `fora_da_janela`, quando a
- * decisão empurrou o envio para depois — entre 21h e 8h nada sai. Ele não é
- * `MotivoDeNaoDisparar` porque não é uma recusa, é um adiamento, e por isso
- * mora aqui e não naquele mapa.
+ * Três colunas guardam motivo neste produto: `campaign_targets.skipped_reason`,
+ * `automation_sends.skipped_reason` e `notifications.reason`. As duas primeiras
+ * saem de `MotivoDeNaoDisparar`; a terceira tem um vocabulário próprio, escrito
+ * pelo motor de aviso — e a explicação dela morava **escrita à mão na tela de
+ * avisos**, com palavras diferentes para os mesmos fatos.
+ *
+ * `sem_consentimento` e `optou_por_nao_receber` são a mesma coisa dita duas
+ * vezes, e a segunda cópia é o que fez a lista de "quem não recebeu" mostrar
+ * "Não deu para mandar" sobre um motivo que o produto sabe explicar. Os dois
+ * ficam aqui, apontando para a mesma frase, porque os dois estão gravados em
+ * bancos que já existem — desfazer isso é migração, e a tela não pode esperar.
+ *
+ * É a quinta lista paralela de motivo que este repositório encontra, e a última.
+ */
+const EXPLICACAO_DO_MOTIVO: Readonly<Record<string, string>> = {
+  ...EXPLICACAO_DE_NAO_DISPARAR,
+  // `campaign_targets`, quando a decisão empurrou o envio para depois. Não é
+  // recusa, é adiamento, e por isso não está em `MotivoDeNaoDisparar`.
+  fora_da_janela: 'Ficou para depois: entre 21h e 8h nada sai.',
+  // `notifications.reason`, escrito pelo motor de aviso.
+  sem_consentimento: 'A pessoa pediu para não receber promoção.',
+  cancelado: 'O horário foi desmarcado.',
+  ja_enviada: 'Esta pessoa já tinha sido avisada.',
+  passou_da_hora: 'A hora do aviso já tinha passado.',
+  ainda_no_prazo: 'Ainda está dentro do prazo de retorno.',
+  provedor_indisponivel: 'O canal de mensagem estava fora do ar.',
+};
+
+/**
+ * A frase inteira, para uma linha por pessoa.
  *
  * `string` na entrada pelo motivo de `nomeDoAviso`: quem chama é a tela, e o
- * valor vem do banco. Motivo desconhecido devolve a frase genérica em vez de
- * vazar o identificador da coluna — foi o que `pedido_de_avaliacao` já ensinou.
+ * valor vem do banco. Motivo desconhecido é **humanizado**, nunca devolvido
+ * cru e nunca descartado: a primeira versão jogava fora a informação que o
+ * resumo ao lado mostrava, e a lista de "quem não recebeu" ficava mais vaga que
+ * o número que levava até ela.
  */
 export function explicacaoDoPulo(motivo: string): string {
-  const conhecido = (EXPLICACAO_DE_NAO_DISPARAR as Record<string, string | undefined>)[motivo];
+  const conhecido = EXPLICACAO_DO_MOTIVO[motivo];
   if (conhecido) return conhecido;
-  if (motivo === 'fora_da_janela') {
-    return 'Ficou para depois: entre 21h e 8h nada sai.';
-  }
-  return 'Não deu para mandar.';
+  const frase = motivo.replace(/_/g, ' ').trim();
+  return frase ? `${frase.charAt(0).toUpperCase()}${frase.slice(1)}.` : 'Não deu para mandar.';
 }
 
 /**
  * O mesmo motivo em duas palavras, para a contagem ao lado do número.
  *
- * A frase inteira serve para uma linha por pessoa; num resumo de quatro
- * motivos ela vira parágrafo, e parágrafo num cartão é o que ninguém lê.
+ * A frase inteira serve para uma linha por pessoa; num resumo de quatro motivos
+ * ela vira parágrafo, e parágrafo num cartão é o que ninguém lê.
  */
 export const RESUMO_DO_PULO: Readonly<Record<string, string>> = {
   automacao_desligada: 'automação desligada',
@@ -204,8 +230,14 @@ export const RESUMO_DO_PULO: Readonly<Record<string, string>> = {
   ja_recebeu_hoje: 'já recebeu hoje',
   sem_telefone: 'sem telefone',
   optou_por_nao_receber: 'pediu para não receber',
+  sem_consentimento: 'pediu para não receber',
   teto_do_mes: 'teto do mês',
   fora_da_janela: 'fora do horário',
+  cancelado: 'horário desmarcado',
+  ja_enviada: 'já tinha sido avisado',
+  passou_da_hora: 'a hora já tinha passado',
+  ainda_no_prazo: 'ainda no prazo',
+  provedor_indisponivel: 'canal fora do ar',
 };
 
 export function resumoDoPulo(motivo: string): string {

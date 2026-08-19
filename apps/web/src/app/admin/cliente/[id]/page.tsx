@@ -41,7 +41,7 @@ import {
   type VisitaNaFicha,
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { lerMotivoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
 import {
@@ -695,11 +695,11 @@ function Fiado({
 
       <div className="saldo-fidelidade">
         <p className="saldo-fidelidade__numero tabular">
-          {divida > 0 ? `Deve R$ ${reaisDoCampo(divida)}` : 'Nada em aberto'}
+          {divida > 0 ? `Deve ${reais(divida)}` : 'Nada em aberto'}
         </p>
         <p className="saldo-fidelidade__nota">
           {fiado.limiteCents > 0
-            ? `Pode levar até R$ ${reaisDoCampo(fiado.limiteCents)} sem pagar na hora.`
+            ? `Pode levar até ${reais(fiado.limiteCents)} sem pagar na hora.`
             : 'Sem limite: hoje esta pessoa não leva fiado.'}
         </p>
 

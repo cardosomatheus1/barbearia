@@ -9,7 +9,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import {
   acaoAliquotaDoAdquirente,
   acaoConfiguracaoDeComissao,
@@ -77,7 +77,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 /** 4250 pontos-base viram "42,5%". */
 const emPorcento = (pontosBase: number): string =>
   `${(pontosBase / 100).toFixed(2).replace('.', ',').replace(/,?0+$/, '')}%`;

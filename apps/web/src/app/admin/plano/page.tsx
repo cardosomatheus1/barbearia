@@ -18,6 +18,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoContestarMarketplace, acaoTrocarDePlano } from '../acoes';
 import { secao } from '../secoes';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * O plano, para quem paga por ele.
@@ -37,8 +38,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const reais = (centavos: number): string =>
-  `R$ ${(centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
 const dia = (iso: string): string =>
   new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });

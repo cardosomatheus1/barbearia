@@ -4620,6 +4620,37 @@ main { padding-bottom: var(--space-8); }
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
+/*
+  A pista de que as duas barras de navegacao rolam (bloco 101).
+
+  O bloco 99 pos o gradiente em `.ui-scroll-x` e as duas barras que mais rolam
+  no celular nao usam aquela classe: o trilho mede 1060px dentro de 390 — so
+  "Visao geral" e "Atendimento" cabem, e Marketing fica 90px fora da borda — e a
+  faixa de secoes mede 1505px dentro de 366, sem nenhum item inteiro.
+
+  A pagina nao rola de lado, entao a medicao passa. Mas quem opera no celular ve
+  uma faixa que **parece terminada** e nao descobre que Marketing existe. O
+  heatmap ja usa este gradiente e funciona; faltava nas duas que mais importam.
+
+  Mesma mecanica de `.ui-scroll-x`: a mascara apaga a borda direita enquanto ha o
+  que rolar e some no fim, entao ela e a propria informacao. Onde o navegador nao
+  suporta, a regra inteira e ignorada.
+*/
+@supports (animation-timeline: scroll(self inline)) {
+  .trilho,
+  .contexto__faixa {
+    mask-image: linear-gradient(to right, #000 0 calc(100% - 2rem), transparent 100%);
+    animation: ui-fim-da-rolagem linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: contain;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trilho,
+    .contexto__faixa { animation: none; }
+  }
+}
+
 .contexto__pe { min-width: 0; }
 .contexto__quem {
   display: flex;
@@ -4675,6 +4706,20 @@ main { padding-bottom: var(--space-8); }
 
 /* A barra de cada tela vira a barra do mock: gruda no topo, fundo translúcido e
    a linha embaixo. Antes era um cabeçalho solto no meio do conteúdo. */
+/*
+  Ancora de `#` nao para atras da barra fixa (bloco 101).
+
+  O botao "Editar" de uma automacao leva a `#nova-automacao`, e o titulo
+  "Editando <nome>" parava em y=17 com a barra fixa terminando em y=69: as duas
+  unicas frases que dizem que aquilo **substitui** em vez de criar ficavam 52px
+  atras dela. O que sobrava era um formulario visualmente igual ao de criacao,
+  com o mesmo botao.
+
+  Vale para todo alvo de ancora do painel — o `#nova-campanha` do heatmap e o
+  `#pulados` da campanha tinham o mesmo problema, e o proximo nasce coberto.
+*/
+.casco [id] { scroll-margin-top: 4.5rem; }
+
 .casco .painel__topo {
   position: sticky;
   top: 0;

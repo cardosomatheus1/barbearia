@@ -4,7 +4,7 @@ import { caixaDaUnidade, faturamentoDeHoje, type MovimentoDoCaixa, type SessaoDe
 import { ROTULO_DO_MOVIMENTO_DE_CAIXA } from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirCaixa, acaoFecharCaixa, acaoMovimentarCaixa, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
@@ -55,7 +55,6 @@ const FALHA: Record<string, string> = {
  */
 const NOME_DO_MOVIMENTO: Record<string, string> = ROTULO_DO_MOVIMENTO_DE_CAIXA;
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
 /** "13:42" no fuso da unidade — o servidor já mandou o instante em ISO. */
 const hora = (iso: string, timezone: string): string =>

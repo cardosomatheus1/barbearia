@@ -22,6 +22,7 @@ import {
 } from '@barbearia/core';
 import {
   automacoesNaApi,
+  filaNaApi,
   cadastroDoWhatsAppNaApi,
   templatesDoWhatsAppNaApi,
   type AutomacaoNaTelaDoAdmin,
@@ -29,6 +30,7 @@ import {
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerRascunho, lerRecusa, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoLigarAutomacao, acaoSalvarAutomacao, acaoSair } from '../acoes';
+import { FilaParada } from '../fila-parada';
 import { secao } from '../secoes';
 
 /**
@@ -144,7 +146,10 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
             */}
             {automacao.textoTitulo === null && !temTextoDoTipo ? (
               <p className="item-cadastro__linha item-cadastro__risco">
-                Nada vai sair: não há texto aprovado de {nomeDoAviso(automacao.tipo)}.{' '}
+                {automacao.enviadas > 0
+                  ? 'Parou de sair: '
+                  : 'Nada vai sair: '}
+                não há texto aprovado de {nomeDoAviso(automacao.tipo)}.{' '}
                 <a href="/admin/whatsapp">Mandar um para aprovação</a>.
               </p>
             ) : null}
@@ -234,11 +239,14 @@ export default async function AutomacoesPage({ searchParams }: Props) {
    * pior que não avisar.
    */
   const podeVerCanal = podeNaTela(estado, 'whatsapp.manage');
-  const [resposta, canal, templates] = await Promise.all([
+  const [resposta, canal, templates, saudeDaFila] = await Promise.all([
     podeMexer ? automacoesNaApi(token) : Promise.resolve(null),
     podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
     podeVerCanal ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
+    // A fila anda? Nenhuma tela sabia responder, e as quatro afirmavam que sim.
+    podeMexer ? filaNaApi(token) : Promise.resolve(null),
   ]);
+  const fila = saudeDaFila?.ok ? saudeDaFila.dados : null;
   const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
   // Só o aprovado sai. Mostrar rascunho e pendente aqui prometeria mensagem que
   // a Meta ainda não deixa mandar.
@@ -303,6 +311,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         <a href="/admin/campanhas">Campanhas</a>.
       </p>
 
+      <FilaParada fila={fila} />
       {/* A frase do domínio primeiro: ela nomeia o campo. O mapa por código
           continua como rede para as recusas que não trazem frase. */}
       {erro ? (

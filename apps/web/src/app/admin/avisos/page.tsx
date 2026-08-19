@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { nomeDoAviso } from '@barbearia/core';
+import { explicacaoDoPulo, nomeDoAviso } from '@barbearia/core';
 import { avisos, type EnvioRegistrado, type TipoDeAviso } from '@/lib/admin-api';
 import { exigirRecurso, painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -46,17 +46,6 @@ const FALHA: Record<string, string> = {
  * ela diz o que aconteceu, não pede desculpa — motivo de não envio quase sempre
  * é o sistema fazendo a coisa certa.
  */
-const MOTIVO: Record<string, string> = {
-  sem_telefone: 'Sem celular cadastrado',
-  cancelado: 'O horário foi desmarcado',
-  ja_enviada: 'Já tinha sido avisado',
-  passou_da_hora: 'A hora do aviso já tinha passado',
-  sem_consentimento: 'O cliente não aceita mensagem promocional',
-  teto_do_mes: 'Teto de mensagens promocionais do mês',
-  ainda_no_prazo: 'Ainda dentro do prazo de retorno',
-  provedor_indisponivel: 'O canal de mensagem estava fora do ar',
-};
-
 const ROTULO_DO_STATUS: Record<EnvioRegistrado['status'], string> = {
   sent: 'Enviado',
   failed: 'Falhou',
@@ -250,7 +239,13 @@ export default async function AvisosPage({ searchParams }: Props) {
               </p>
               <p className="envios__meta">
                 <time dateTime={envio.enviadoEm}>{quando(envio.enviadoEm)}</time>
-                {envio.motivo ? ` · ${MOTIVO[envio.motivo] ?? envio.motivo}` : ''}
+                {/* A frase sai de `packages/core`: esta tela tinha o quinto
+                    mapa de motivos do produto, com palavras próprias para os
+                    mesmos fatos — e era o único que conhecia
+                    `sem_consentimento`, o que deixava a lista de "quem não
+                    recebeu" da campanha dizendo "Não deu para mandar" sobre um
+                    motivo que o produto sabe explicar. */}
+                {envio.motivo ? ` · ${explicacaoDoPulo(envio.motivo)}` : ''}
               </p>
             </li>
           ))}
