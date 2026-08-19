@@ -1,11 +1,15 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
+import { segmentosDaBase } from './segmento.js';
 import {
   chaveDoFato,
   decidirDisparo,
+  EXPLICACAO_DA_FALHA,
   objetivoAlcancado,
+  segmentoValido,
   validarAutomacao,
   type Gatilho,
   type Objetivo,
+  type Segmento,
   type TipoDeNotificacao,
   tipoDeCampanhaValido,
 } from '@barbearia/core';
@@ -51,13 +55,44 @@ export interface AutomacaoNaTela {
   readonly objetivo: Objetivo;
   readonly janelaDias: number;
   readonly ativa: boolean;
+  /**
+   * Qual texto ela manda, e o nome dele para a tela (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco: ela resolve por tipo, e a tela diz isso
+   * em letras em vez de deixar o campo em branco — campo vazio numa lista de
+   * envio é a pessoa supondo qual mensagem sai.
+   */
+  readonly templateId: string | null;
+  readonly textoTitulo: string | null;
+  /**
+   * Para quem esta automação manda, quando ela se restringe (bloco 100).
+   *
+   * `null` é **todo mundo** que cruzou o gatilho, que é o comportamento
+   * anterior: padrão de configuração é sempre o que já acontecia.
+   *
+   * O público é o segmento derivado do bloco 61, e não um filtro novo — ele já
+   * existe, já é calculado sobre a base inteira e a campanha já o usa. Uma
+   * segunda noção de "quem é este cliente" seria a lista paralela de sempre.
+   */
+  readonly publico: Segmento | null;
   /** Quantas saíram e quantas alcançaram o objetivo. É o que decide desligar. */
   readonly enviadas: number;
   readonly alcancadas: number;
 }
 
 const COLUNAS = `a.id, a.name, a.trigger::text AS trigger, a.threshold, a.delay_minutes,
-                 a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active`;
+                 a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active,
+                 a.template_id, a.audience`;
+
+/**
+ * O título do texto é só da tela, e por isso não entra em `COLUNAS`.
+ *
+ * A varredura lê as mesmas colunas e **não** junta `whatsapp_templates` — nem
+ * precisa: ela decide quem dispara, e o nome do texto não entra nessa conta.
+ * Numa constante compartilhada, ele quebrava a varredura com "missing
+ * FROM-clause entry", que foi o que aconteceu.
+ */
+const TITULO_DO_TEXTO = `w.titulo AS texto_titulo`;
 
 const paraTela = (l: {
   id: string;
@@ -69,6 +104,9 @@ const paraTela = (l: {
   goal: Objetivo;
   goal_window_days: number;
   active: boolean;
+  template_id: string | null;
+  audience: string | null;
+  texto_titulo: string | null;
   enviadas: bigint | number;
   alcancadas: bigint | number;
 }): AutomacaoNaTela => ({
@@ -81,6 +119,9 @@ const paraTela = (l: {
   objetivo: l.goal,
   janelaDias: l.goal_window_days,
   ativa: l.active,
+  templateId: l.template_id,
+  textoTitulo: l.texto_titulo,
+  publico: segmentoValido(l.audience),
   enviadas: Number(l.enviadas),
   alcancadas: Number(l.alcancadas),
 });
@@ -96,12 +137,13 @@ const paraTela = (l: {
 export async function automacoesDaCasa(tenantId: string): Promise<readonly AutomacaoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
-      `SELECT ${COLUNAS},
+      `SELECT ${COLUNAS}, ${TITULO_DO_TEXTO},
               count(s.id) FILTER (WHERE s.sent_at IS NOT NULL) AS enviadas,
               count(s.id) FILTER (WHERE s.goal_met_at IS NOT NULL) AS alcancadas
          FROM automations a
          LEFT JOIN automation_sends s ON s.automation_id = a.id
-        GROUP BY a.id
+         LEFT JOIN whatsapp_templates w ON w.id = a.template_id
+        GROUP BY a.id, w.titulo
         ORDER BY a.created_at DESC`,
     );
     return linhas.map(paraTela);
@@ -116,6 +158,24 @@ export async function salvarAutomacao(params: {
   readonly limiar: number | null;
   readonly atrasoMinutos: number;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto esta automação manda (bloco 94).
+   *
+   * Opcional para não trancar a automação criada antes deste bloco, que resolve
+   * por tipo como sempre fez — é a decisão de `staff_locations`, onde ausência
+   * significa o comportamento anterior. A tela pede na primeira edição.
+   */
+  readonly templateId?: string | null;
+  /**
+   * Para quem esta automação manda (bloco 100).
+   *
+   * `null` explícito é "todo mundo", e **ausente** é "não mexa": é a mesma
+   * distinção de `templateId`, e ela existe porque o mesmo `PUT` é usado pela
+   * edição e por caminhos que não conhecem este campo. Escrever o padrão por
+   * omissão faria uma edição sem relação apagar em silêncio uma decisão que
+   * alguém tomou.
+   */
+  readonly publico?: Segmento | null;
   readonly objetivo: Objetivo;
   readonly janelaDias: number;
   readonly ativa: boolean;
@@ -129,7 +189,19 @@ export async function salvarAutomacao(params: {
     atrasoMinutos: params.atrasoMinutos,
     janelaDias: params.janelaDias,
   });
-  if (falha) throw new AutomacaoError('invalida', falha);
+  /**
+   * A **frase**, não o código (bloco 101).
+   *
+   * Isto lançava `falha` — que é `limiar_obrigatorio`, o identificador — como
+   * mensagem, e a tarja vermelha da tela mostrava exatamente essa palavra.
+   * "Limiar" não é português de barbearia, e o campo na tela se chama "O
+   * número": o erro nomeava um campo que não existe ali.
+   *
+   * A frase certa já estava escrita em `EXPLICACAO_DA_FALHA` desde o bloco 56,
+   * e ninguém a lia — o `code` continua sendo o identificador, para quem
+   * programa contra a API.
+   */
+  if (falha) throw new AutomacaoError('invalida', EXPLICACAO_DA_FALHA[falha]);
   /**
    * Automação usa a **mesma** lista fechada da campanha, e faltava.
    *
@@ -151,16 +223,44 @@ export async function salvarAutomacao(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    /**
+     * O tipo sai do **texto escolhido**, e não de um campo ao lado.
+     *
+     * Os dois viajavam separados no formulário, e separados eles divergem: a
+     * automação declararia um tipo e mandaria o texto de outro, com o opt-out,
+     * o teto do mês e a categoria na Meta sendo decididos pelo primeiro. É a
+     * lista paralela de sempre, agora entre dois campos do mesmo envio.
+     *
+     * Conferido sob RLS antes de gravar, como todo id que vem do corpo: a
+     * checagem de integridade referencial do Postgres ignora row security, e a
+     * chave estrangeira aceitaria o texto de outra barbearia sem reclamar.
+     */
+    let tipo = params.tipo;
+    if (params.templateId) {
+      const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
+        SELECT kind::text AS kind FROM whatsapp_templates
+         WHERE id = ${params.templateId}::uuid
+      `;
+      const achado = doTexto[0];
+      if (!achado) throw new AutomacaoError('invalida', 'Este texto não existe.');
+      tipo = achado.kind;
+      if (!tipoDeCampanhaValido(tipo)) {
+        throw new AutomacaoError('invalida', 'Este texto não serve para automação.');
+      }
+    }
+
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO automations
         (id, tenant_id, name, trigger, threshold, delay_minutes, kind, goal,
-         goal_window_days, active, created_by)
+         goal_window_days, active, created_by, template_id, audience)
       VALUES (COALESCE(${params.id ?? null}::uuid, gen_random_uuid()),
               NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.gatilho}::automation_trigger,
               ${params.limiar}, ${params.atrasoMinutos},
-              ${params.tipo}::notification_kind, ${params.objetivo}::automation_goal,
-              ${params.janelaDias}, ${params.ativa}, ${params.staffId}::uuid)
+              ${tipo}::notification_kind, ${params.objetivo}::automation_goal,
+              ${params.janelaDias}, ${params.ativa}, ${params.staffId}::uuid,
+              ${params.templateId ?? null}::uuid,
+              ${params.publico === undefined ? null : params.publico})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         threshold = EXCLUDED.threshold,
@@ -169,6 +269,17 @@ export async function salvarAutomacao(params: {
         goal = EXCLUDED.goal,
         goal_window_days = EXCLUDED.goal_window_days,
         active = EXCLUDED.active,
+        -- COALESCE e nao EXCLUDED direto: quem liga e desliga pela porta
+        -- propria nao manda o texto, e sobrescrever com nulo apagaria a escolha
+        -- de quem montou a automacao. Trocar o texto e edicao, e ali ele vem.
+        -- (Sem crase: isto esta dentro de um template literal, e a crase o fecha.)
+        template_id = COALESCE(EXCLUDED.template_id, automations.template_id),
+        -- Aqui o COALESCE nao serve: nulo e um valor legitimo ("todo mundo"),
+        -- e com ele ninguem conseguiria voltar de "so para VIP" para "todo
+        -- mundo". Quem nao quer mexer nao manda o campo, e a borda so o inclui
+        -- quando ele veio -- e ai o CASE de fora escolhe manter.
+        audience = CASE WHEN ${params.publico === undefined} THEN automations.audience
+                        ELSE EXCLUDED.audience END,
         updated_at = now()
       RETURNING id
     `;
@@ -451,13 +562,35 @@ export async function varrerAutomacoes(params: {
 }): Promise<ResultadoDaAutomacao> {
   return withTenant(params.tenantId, async (tx) => {
     const regras = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
-      `SELECT ${COLUNAS}, 0 AS enviadas, 0 AS alcancadas
+      `SELECT ${COLUNAS}, NULL AS texto_titulo, 0 AS enviadas, 0 AS alcancadas
          FROM automations a WHERE a.active`,
     );
 
     let marcados = 0;
     let pulados = 0;
     const ano = params.agora.getUTCFullYear();
+
+    /**
+     * O segmento de cada cliente, calculado **uma vez** para a varredura toda
+     * (bloco 100).
+     *
+     * Ele depende da base inteira — "frequente" é ciclo abaixo da mediana dela,
+     * "VIP" é o topo do decil de gasto —, então não cabe numa cláusula `WHERE`
+     * sobre uma linha. É a mesma decisão do público de campanha, e é por isso
+     * que ele mora em `packages/core`.
+     *
+     * Uma vez e não por regra: onze automações restritas dariam onze varreduras
+     * da base inteira. E preguiçoso — `null` enquanto nenhuma regra pediu — para
+     * a barbearia que não usa público nenhum não pagar a conta.
+     */
+    let porSegmento: Map<string, string> | null = null;
+    const segmentoDe = async (customerId: string): Promise<string | null> => {
+      if (porSegmento === null) {
+        const base = await segmentosDaBase(params.tenantId, params.agora, tx);
+        porSegmento = new Map(base.map((c) => [c.customerId, c.segmento]));
+      }
+      return porSegmento.get(customerId) ?? null;
+    };
 
     for (const bruta of regras) {
       const regra = paraTela(bruta);
@@ -494,6 +627,19 @@ export async function varrerAutomacoes(params: {
       );
 
       for (const candidato of lista) {
+        /**
+         * Fora do público, a automação **não grava nada**.
+         *
+         * Não é um pulo com motivo: pulo é "esta pessoa deveria receber e não
+         * recebeu", e quem está fora do público nunca esteve na conta. Gravar
+         * encheria `automation_sends` com a base inteira menos o público, e a
+         * lista de "por que não chegou" do bloco 97 viraria ruído.
+         */
+        if (regra.publico !== null) {
+          const dele = await segmentoDe(candidato.customerId);
+          if (dele !== regra.publico) continue;
+        }
+
         const chave = chaveDoFato({
           gatilho: regra.gatilho,
           referencia: candidato.referencia,
@@ -548,6 +694,14 @@ export interface DisparoAEnviar {
   readonly id: string;
   readonly customerId: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto esta automação manda (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco, que resolve por tipo como antes. Sem
+   * isto, as onze automações possíveis saíam todas com a mesma frase, porque o
+   * motor pegava o único aprovado do tipo.
+   */
+  readonly templateId: string | null;
   readonly telefone: string;
   readonly clienteNome: string;
   /** O nome da casa, que é como a mensagem se apresenta. */
@@ -566,12 +720,13 @@ export async function disparosAEnviar(
         id: string;
         customer_id: string;
         kind: TipoDeNotificacao;
+        template_id: string | null;
         phone_e164: string;
         name: string;
         barbearia: string;
       }[]
     >`
-      SELECT s.id, s.customer_id, a.kind::text AS kind, c.phone_e164, c.name,
+      SELECT s.id, s.customer_id, a.kind::text AS kind, a.template_id, c.phone_e164, c.name,
              t.name AS barbearia
         FROM automation_sends s
         JOIN automations a ON a.id = s.automation_id
@@ -587,6 +742,7 @@ export async function disparosAEnviar(
       id: l.id,
       customerId: l.customer_id,
       tipo: l.kind,
+      templateId: l.template_id,
       telefone: l.phone_e164,
       clienteNome: l.name,
       barbearia: l.barbearia,
@@ -732,5 +888,60 @@ export async function atribuirObjetivos(params: {
       atribuidos += 1;
     }
     return atribuidos;
+  });
+}
+
+/**
+ * Liga ou desliga uma automação, e **nada mais**.
+ *
+ * ## Por que é porta própria, e não o formulário inteiro
+ *
+ * O botão da lista reenviava o objeto completo com `ativa` virado, e isso
+ * amarrou o freio à validação de tudo o mais. Quando o bloco 88 fechou o tipo
+ * da automação em `TIPOS_DE_CAMPANHA` — decisão certa, porque `lembrete_24h`
+ * numa automação fura o opt-out de marketing e `senha_de_acesso` é credencial
+ * —, as linhas criadas antes passaram a ser **impossíveis de desligar**: o
+ * reenvio carregava o tipo antigo e a borda recusava com 400.
+ *
+ * Ou seja, exatamente as automações que mais precisavam ser caladas eram as
+ * únicas que não calavam. A única saída era um `UPDATE` à mão no banco.
+ *
+ * Reproduzido em produção e no piloto: tipo `lembrete_24h` devolve
+ * "Parâmetro inválido: tipo" e a linha continua ligada; tipo `retorno` desliga.
+ *
+ * Freio de emergência não se valida contra regra que entrou depois dele. Esta
+ * função toca uma coluna só, e por isso nenhuma regra futura sobre o **conteúdo**
+ * da automação pode voltar a trancar a saída.
+ *
+ * O filtro por id é o único: a RLS separa barbearias, e a linha ou é desta casa
+ * ou não existe para ela.
+ */
+export async function definirAutomacaoAtiva(params: {
+  readonly tenantId: string;
+  readonly id: string;
+  readonly ativa: boolean;
+  readonly staffId: string;
+  readonly staffName: string;
+}): Promise<{ readonly id: string; readonly ativa: boolean }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ id: string; active: boolean }[]>`
+      UPDATE automations
+         SET active = ${params.ativa}, updated_at = now()
+       WHERE id = ${params.id}::uuid
+      RETURNING id, active
+    `;
+    const linha = linhas[0];
+    if (!linha) throw new AutomacaoError('invalida', 'Esta automação não existe.');
+
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'automation.changed',
+      entity: 'automations',
+      entityId: linha.id,
+      after: { ativa: params.ativa },
+    });
+
+    return { id: linha.id, ativa: linha.active };
   });
 }

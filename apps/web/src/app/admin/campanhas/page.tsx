@@ -10,24 +10,37 @@ import {
   ROTULO_DA_CAMPANHA,
   ROTULO_DA_FAIXA,
   ROTULO_DO_FILTRO,
+  SEGMENTO_DO_FILTRO,
+  definicaoDoFiltro,
+  rotuloDoFiltro,
+  type FiltroDeCampanha,
   TIPOS_DE_CAMPANHA,
   campanhaEnviavel,
+  corpoComExemplos,
+  explicacaoDoPulo,
+  resumoDoPulo,
   nomeDaCelula,
+  nomeDoAviso,
+  rotuloDoBotao,
 } from '@barbearia/core';
 import {
   cadastroDoWhatsAppNaApi,
   campanhasNaApi,
+  filaNaApi,
+  puladosDaCampanhaNaApi,
   segmentosNaApi,
   templatesDoWhatsAppNaApi,
   type CampanhaNaTelaDoAdmin,
   type CelulaNaTelaDoAdmin,
+  type PuladoNaTela,
   type ClienteEmRiscoNaTela,
   type SegmentoNaTela,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
-import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { lerRascunho, lerRecusa, lerSessaoGestor } from '@/lib/sessao-gestor';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoCriarCampanha, acaoEnviarCampanha, acaoSair } from '../acoes';
+import { FilaParada } from '../fila-parada';
 import { secao } from '../secoes';
 
 /**
@@ -66,16 +79,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
-
-const NOME_DO_AVISO: Record<string, string> = {
-  confirmacao: 'Confirmação do agendamento',
-  lembrete_24h: 'Lembrete de 24 horas',
-  lembrete_2h: 'Lembrete de 2 horas',
-  sua_vez: 'Sua vez na fila',
-  senha_de_acesso: 'Senha de primeiro acesso',
-  retorno: 'Convite de retorno',
-};
 
 /**
  * O nome de cada público sai de `packages/core`, nunca escrito aqui.
@@ -86,7 +89,7 @@ const NOME_DO_AVISO: Record<string, string> = {
  */
 const nomeDoFiltro = (filtro: string): string =>
   filtro in ROTULO_DO_FILTRO
-    ? ROTULO_DO_FILTRO[filtro as keyof typeof ROTULO_DO_FILTRO]
+    ? rotuloDoFiltro(filtro as FiltroDeCampanha)
     : filtro;
 
 function Heatmap({ grade }: { readonly grade: readonly CelulaNaTelaDoAdmin[] }) {
@@ -168,9 +171,16 @@ function Heatmap({ grade }: { readonly grade: readonly CelulaNaTelaDoAdmin[] }) 
 function Segmentos({
   segmentos,
   emRisco,
+  podeMexer,
 }: {
   readonly segmentos: readonly SegmentoNaTela[];
   readonly emRisco: readonly ClienteEmRiscoNaTela[];
+  /**
+   * Sem `marketing.send` o contador não vira link: ele levaria a um formulário
+   * que a pessoa não pode enviar, e botão que leva a lugar nenhum é §6
+   * pergunta 1.
+   */
+  readonly podeMexer: boolean;
 }) {
   return (
     <section className="cartao-balcao">
@@ -180,13 +190,44 @@ function Segmentos({
         existe rótulo velho.
       </p>
 
+      {/*
+        **O contador é o começo de uma campanha** (bloco 99).
+
+        Ele dizia "23 Em risco" e parava ali: para falar com aqueles vinte e
+        três, a pessoa tinha que descer, achar o seletor e adivinhar que "Passou
+        do ritmo dele" era o mesmo grupo. Contagem que a tela mostra vem com o
+        caminho de agir sobre ela — é a decisão do heatmap, cuja célula fria é
+        clicável desde o bloco 57.
+
+        Só os três que viram público (`SEGMENTO_DO_FILTRO`); os outros continuam
+        número, porque não existe campanha correspondente e link que não leva a
+        lugar nenhum é §6 pergunta 1.
+      */}
       <ul className="segmentos">
-        {segmentos.map((s) => (
-          <li className={`segmentos__item segmentos__item--${s.chave}`} key={s.chave}>
-            <span className="segmentos__quantos">{s.quantos}</span>
-            <span className="segmentos__rotulo">{s.rotulo}</span>
-          </li>
-        ))}
+        {segmentos.map((s) => {
+          const publico = FILTROS_DE_CAMPANHA.find((f) => SEGMENTO_DO_FILTRO[f] === s.chave);
+          const corpo = (
+            <>
+              <span className="segmentos__quantos">{s.quantos}</span>
+              <span className="segmentos__rotulo">{s.rotulo}</span>
+            </>
+          );
+          return (
+            <li className={`segmentos__item segmentos__item--${s.chave}`} key={s.chave}>
+              {publico && podeMexer ? (
+                <a
+                  className="segmentos__link"
+                  href={`/admin/campanhas?filtro=${publico}#nova-campanha`}
+                  title={`Montar campanha para ${s.rotulo}`}
+                >
+                  {corpo}
+                </a>
+              ) : (
+                corpo
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       <h3 className="cartao-balcao__subtitulo">Passaram do ritmo e ainda não voltaram</h3>
@@ -210,7 +251,7 @@ function Segmentos({
             ))}
           </ul>
           <p className="cartao-balcao__texto">
-            Para chamar todos de uma vez, escolha <strong>{ROTULO_DO_FILTRO['em_risco']}</strong> no
+            Para chamar todos de uma vez, escolha <strong>{rotuloDoFiltro('em_risco')}</strong> no
             formulário abaixo.
           </p>
         </>
@@ -227,12 +268,33 @@ function Segmentos({
  * **toda** campanha nascia, e não tinha caminho para fora na tela. A pessoa
  * montava o público, via "3 pessoas", e não havia o que apertar.
  */
+/**
+ * Quantas pessoas os motivos somam.
+ *
+ * A soma, e não `pulados.length`: a lista é de **motivos**, e cada um carrega
+ * quantas pessoas caíram nele. Contar os motivos diria "4 não receberam" sobre
+ * vinte e sete pessoas.
+ */
+function somaDosPulados(
+  pulados: readonly { readonly quantos: number }[],
+): number {
+  return pulados.reduce((total, p) => total + p.quantos, 0);
+}
+
+/** O mesmo teto que a API aplica; a tela o diz em letras. */
+const TETO_DE_PULADOS = 50;
+
 function Campanha({
   campanha,
   podeMexer,
+  podeVerNomes,
+  pulados,
 }: {
   readonly campanha: CampanhaNaTelaDoAdmin;
   readonly podeMexer: boolean;
+  readonly podeVerNomes: boolean;
+  /** A lista aberta desta campanha; `null` quando ela não foi pedida. */
+  readonly pulados: readonly PuladoNaTela[] | null;
 }) {
   const estado = campanha.estado;
   return (
@@ -253,24 +315,162 @@ function Campanha({
                 : ''}{' '}
               · {campanha.publico} pessoa{campanha.publico === 1 ? '' : 's'}
             </p>
-            <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
-            {/* As seis colunas da SPEC §4.13, na ordem em que ela as escreve. */}
+            {/*
+              **Qual texto esta campanha manda**, e não o nome do tipo.
+
+              A linha dizia "Convite de retorno" com três convites de retorno
+              diferentes cadastrados — o nome do tipo respondendo uma pergunta
+              sobre o texto. Quem abre a lista depois do envio está justamente
+              conferindo qual dos três foi.
+            */}
             <p className="item-cadastro__linha">
-              {campanha.enviados} enviados · {campanha.entregues} entregues · {campanha.lidos}{' '}
-              lidos · {campanha.cliques} cliques · {campanha.agendamentos} voltaram
+              Manda <strong>{campanha.textoTitulo ?? nomeDoAviso(campanha.tipo)}</strong>
+              {campanha.textoTitulo === null ? ' (o primeiro aprovado deste aviso)' : ''}
+            </p>
+            <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
+            {/*
+              As seis colunas da SPEC §4.13, na ordem em que ela as escreve — e
+              "enviados" diz **pelo WhatsApp**, não "carimbado".
+
+              A linha dizia "44 enviados" e duas linhas abaixo "Nada saiu pelo
+              WhatsApp". A explicação estava certa e o número em cima dela
+              mentia: é o que se lê primeiro, e é o que fica. Agora o número
+              principal é o que de fato saiu, e a diferença aparece ao lado.
+            */}
+            <p className="item-cadastro__linha">
+              {campanha.enviadosPeloWhatsApp} enviados
+              {campanha.enviadosPeloWhatsApp < campanha.enviados
+                ? ` (de ${campanha.enviados} tentados)`
+                : ''}{' '}
+              · {campanha.entregues} entregues · {campanha.lidos} lidos ·{' '}
+              {campanha.cliques} cliques · {campanha.agendamentos} voltaram
             </p>
             <p className="item-cadastro__linha">
               <strong>{reais(campanha.receitaCents)}</strong> de receita atribuída
             </p>
+
+            {/*
+              **Enviado não é entregue quando o canal está desligado** (bloco 97).
+
+              `enviarPeloWhatsApp` devolve nulo sem canal ligado — SPEC §4.12:
+              canal indisponível não lança, cai para o outro caminho — e o alvo
+              é carimbado do mesmo jeito. A campanha aparecia verde, com "27
+              enviados", e nada tinha chegado a ninguém.
+
+              Número que ignora parte do dado diz isso na tela: ele sai
+              completo, com cara de completo, e o dono decide em cima dele.
+            */}
+            {campanha.enviados > 0 && campanha.enviadosPeloWhatsApp === 0 ? (
+              <p className="item-cadastro__linha item-cadastro__risco">
+                Nada saiu pelo WhatsApp: o canal não estava ligado quando esta campanha
+                rodou. <a href="/admin/whatsapp">Conectar o número</a>.
+              </p>
+            ) : campanha.enviadosPeloWhatsApp < campanha.enviados ? (
+              <p className="item-cadastro__linha item-cadastro__risco">
+                Só {campanha.enviadosPeloWhatsApp} de {campanha.enviados} saíram pelo
+                WhatsApp — o resto caiu no canal de reserva e não chegou a ninguém.
+              </p>
+            ) : null}
+
+            {/*
+              **Por que não chegou** (bloco 97, §6 pergunta 4).
+
+              O motivo de cada pulo é gravado desde o bloco 20 e a tela mostrava
+              só a contagem: "3 enviados · 27 pulados", sem quem nem por quê. O
+              dado existia e ninguém o lia.
+
+              O resumo fica no cartão e a lista com nomes abre por link, na
+              mesma tela: carregar os nomes de toda campanha da lista seria uma
+              ida ao banco por linha.
+            */}
+            {campanha.pulados.length > 0 ? (
+              <p className="item-cadastro__linha">
+                {somaDosPulados(campanha.pulados)} não receberam:{' '}
+                {campanha.pulados
+                  .map((p) => `${p.quantos} ${resumoDoPulo(p.motivo)}`)
+                  .join(' · ')}
+                {podeVerNomes ? (
+                  <>
+                    {' · '}
+                    <a href={`/admin/campanhas?pulados=${campanha.id}#pulados`}>
+                      ver quem
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+
+            {pulados !== null ? (
+              <div className="pulados" id="pulados">
+                <p className="pulados__titulo">Quem não recebeu</p>
+                {pulados.length === 0 ? (
+                  <p className="item-cadastro__linha">Ninguém foi pulado nesta campanha.</p>
+                ) : (
+                  <>
+                    <ul className="lista-cadastro">
+                      {pulados.map((p) => (
+                        <li key={p.customerId}>
+                          <a
+                            className="item-cadastro item-cadastro--link"
+                            href={`/admin/cliente/${p.customerId}`}
+                          >
+                            <span className="item-cadastro__nome">{p.nome}</span>
+                            <span className="item-cadastro__linha">
+                              {explicacaoDoPulo(p.motivo)}
+                            </span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Teto dito na tela: lista truncada em silêncio lê como
+                        lista completa, e aí ninguém procura o resto. */}
+                    {pulados.length >= TETO_DE_PULADOS ? (
+                      <p className="item-cadastro__linha">
+                        Mostrando os primeiros {TETO_DE_PULADOS}. Para falar com todos de
+                        uma vez, monte uma campanha nova com o público certo.
+                      </p>
+                    ) : null}
+                  </>
+                )}
+                <p className="item-cadastro__linha">
+                  <a href="/admin/campanhas">Fechar esta lista</a>
+                </p>
+              </div>
+            ) : null}
           </div>
 
+          {/*
+            **Confirmação antes do envio em massa** (bloco 98).
+
+            Mandar promoção para noventa e seis pessoas é irreversível e custa
+            dinheiro por mensagem, e era um clique único — a mesma tela que pede
+            confirmação para apagar um serviço não pedia para isto.
+
+            `<details>` e não janela do navegador: o painel é renderizado no
+            servidor e não manda JavaScript próprio. Ele diz **quantas pessoas**
+            e **qual texto** antes de abrir o botão, que é o que a pessoa
+            precisa reler.
+          */}
           {podeMexer && campanhaEnviavel(estado) ? (
-            <form action={acaoEnviarCampanha}>
-              <input name="id" type="hidden" value={campanha.id} />
-              <button className="ui-button ui-button--primary" type="submit">
+            <details className="confirmar">
+              <summary className="ui-button ui-button--primary confirmar__abrir">
                 Enviar para {campanha.publico}
-              </button>
-            </form>
+              </summary>
+              <div className="confirmar__corpo">
+                <p className="confirmar__texto">
+                  Vai sair agora para <strong>{campanha.publico}</strong> pessoa
+                  {campanha.publico === 1 ? '' : 's'}, mandando{' '}
+                  <strong>{campanha.textoTitulo ?? nomeDoAviso(campanha.tipo)}</strong>. Não dá
+                  para desfazer.
+                </p>
+                <form action={acaoEnviarCampanha}>
+                  <input name="id" type="hidden" value={campanha.id} />
+                  <button className="ui-button ui-button--primary" type="submit">
+                    Confirmar e enviar
+                  </button>
+                </form>
+              </div>
+            </details>
           ) : null}
         </div>
       </article>
@@ -294,18 +494,62 @@ export default async function CampanhasPage({ searchParams }: Props) {
    * que ela não abre é pior que não avisar.
    */
   const podeVerCanal = podeNaTela(estado, 'whatsapp.manage');
-  const [resposta, base, canal, templates] = await Promise.all([
+  /**
+   * A lista de quem não recebeu abre por link, na mesma tela (bloco 97).
+   *
+   * Uma ida ao banco por campanha da lista seria o N+1 que a regra proibe, e
+   * uma tela nova por campanha seria mais um destino a desenhar barra, volta e
+   * estado vazio. O parametro diz **qual** campanha abriu, e so ela carrega os
+   * nomes.
+   *
+   * `customers.view` porque a resposta traz nome de cliente, que e a mesma
+   * permissao que a rota declara. Sem ela o link nem aparece: mandar alguem
+   * para um 403 e pior que nao oferecer.
+   */
+  const podeVerNomes = podeNaTela(estado, 'customers.view');
+  const puladosDe = first(query['pulados']) ?? null;
+  /**
+   * O público que o contador de segmentos escolheu (bloco 99).
+   *
+   * Conferido contra a lista do domínio: um valor inventado na URL cairia no
+   * padrão em vez de virar um `<select>` sem opção selecionada.
+   */
+  const filtroPedido = first(query['filtro']);
+  const filtroEscolhido = (FILTROS_DE_CAMPANHA as readonly string[]).includes(filtroPedido ?? '')
+    ? filtroPedido
+    : undefined;
+  /**
+   * O que a pessoa tinha digitado quando a recusa voltou (bloco 98).
+   *
+   * A recusa mostrava a frase certa e o formulário **vazio**: quem montou um
+   * público de sete campos recomeçava do zero por um número que faltava.
+   *
+   * Vazio no caminho normal — o cookie dura dois minutos e só é escrito quando
+   * a API recusa —, então isto não muda nada para quem acerta de primeira.
+   */
+  const rascunho = await lerRascunho();
+  const recusa = await lerRecusa();
+  const [resposta, base, canal, templates, listaDePulados, saudeDaFila] = await Promise.all([
     podeMexer ? campanhasNaApi(token) : Promise.resolve(null),
     podeNaTela(estado, 'customers.view') ? segmentosNaApi(token) : Promise.resolve(null),
     podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
     podeVerCanal ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
+    puladosDe && podeVerNomes && podeMexer
+      ? puladosDaCampanhaNaApi(token, puladosDe)
+      : Promise.resolve(null),
+    // A fila anda? A campanha dizia "entrou na fila" sobre uma fila parada.
+    podeMexer ? filaNaApi(token) : Promise.resolve(null),
   ]);
+  const fila = saudeDaFila?.ok ? saudeDaFila.dados : null;
+  const pulados = listaDePulados?.ok ? listaDePulados.dados.pulados : null;
   const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
   // Só o aprovado sai; mostrar rascunho prometeria o que a Meta ainda recusa.
   const textos = (templates?.ok ? templates.dados.templates : []).filter(
     (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
-  const umaMensagemSo = TIPOS_DE_CAMPANHA.length === 1;
+  // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
+  // uma decisão que não existe e quem abre procura a segunda opção.
+  const umaMensagemSo = textos.length <= 1;
   const campanhas = resposta?.ok ? resposta.dados.campanhas : [];
   const grade = resposta?.ok ? resposta.dados.grade : [];
 
@@ -341,16 +585,37 @@ export default async function CampanhasPage({ searchParams }: Props) {
       </header>
 
       <h1 className="painel__titulo">Campanhas</h1>
+      {/*
+        **A diferença entre as duas telas, dita na tela** (bloco 99).
+
+        "Campanhas" e "Automações" ficam lado a lado no menu, as duas mandam
+        mensagem pelo WhatsApp e as duas têm um formulário parecido. Quem abre
+        pela primeira vez não tem como saber qual usar — e escolher errado custa
+        uma campanha disparada uma vez onde devia haver uma regra permanente.
+
+        Uma frase em cada uma, dizendo o que ela é **e** o que a outra é: só na
+        de cá, a pessoa continuaria sem saber o que perdeu.
+      */}
       <p className="painel__sub">
-        Onde a agenda está vazia, e quem chamar para encher. A última coluna de cada campanha é a
-        que diz se ela valeu o que custou.
+        Uma lista de pessoas, escolhida hoje, que recebe <strong>uma vez</strong>. Para uma
+        mensagem que sai sozinha sempre que um fato acontecer, use{' '}
+        <a href="/admin/automacoes">Automações</a>. A última coluna de cada campanha é a que diz
+        se ela valeu o que custou.
       </p>
 
+      <FilaParada fila={fila} />
+      {/*
+        A frase do **domínio**, quando ela existe (bloco 98).
+
+        Ele já responde "Diga a partir de quantos dias sem vir" e "Este texto
+        não existe ou não foi aprovado"; a tela mostrava "Confira o nome e o
+        público" sobre um formulário de sete campos, sem dizer qual.
+      */}
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {erro === 'ja_enviada'
             ? 'Esta campanha não está mais em rascunho. Só um rascunho pode ser enviado.'
-            : 'Não deu para criar a campanha. Confira o nome e o público.'}
+            : (recusa ?? 'Não deu para criar a campanha. Confira o nome e o público.')}
         </div>
       ) : null}
       {criada ? (
@@ -394,8 +659,8 @@ export default async function CampanhasPage({ searchParams }: Props) {
         */}
         <p className="cartao-balcao__texto">
           {temHoraFria
-            ? 'As horas em azul estão vazias. Toque numa delas para montar uma campanha, já preenchida, com quem costuma vir naquele horário.'
-            : 'Nenhuma hora está vazia o bastante para virar campanha agora — as horas em azul é que são clicáveis. Você pode montar uma campanha por outro público logo abaixo.'}
+            ? 'As horas mais claras estão vazias. Toque numa delas para montar uma campanha, já preenchida, com quem costuma vir naquele horário.'
+            : 'Nenhuma hora está vazia o bastante para virar campanha agora — as mais claras é que são clicáveis. Você pode montar uma campanha por outro público logo abaixo.'}
         </p>
         {grade.length === 0 ? (
           <p className="cartao-balcao__texto">
@@ -407,7 +672,13 @@ export default async function CampanhasPage({ searchParams }: Props) {
         )}
       </section>
 
-      {base?.ok ? <Segmentos emRisco={base.dados.emRisco} segmentos={base.dados.segmentos} /> : null}
+      {base?.ok ? (
+        <Segmentos
+          emRisco={base.dados.emRisco}
+          podeMexer={podeMexer}
+          segmentos={base.dados.segmentos}
+        />
+      ) : null}
 
       {podeMexer ? (
         <section className="cartao-balcao" id="nova-campanha">
@@ -431,12 +702,13 @@ export default async function CampanhasPage({ searchParams }: Props) {
               <input
                 className="ui-field__input"
                 defaultValue={
-                  diaEscolhido && horaEscolhida
+                  rascunho['nome'] ??
+                  (diaEscolhido && horaEscolhida
                     ? `Encher ${nomeDaCelula({
                         diaDaSemana: Number(diaEscolhido),
                         hora: Number(horaEscolhida),
                       })}`
-                    : ''
+                    : '')
                 }
                 id="nome"
                 maxLength={80}
@@ -456,13 +728,30 @@ export default async function CampanhasPage({ searchParams }: Props) {
               </label>
               <select
                 className="ui-field__input"
-                defaultValue={diaEscolhido ? 'celula_fria' : 'inativos'}
+                defaultValue={
+                  // Rascunho, depois o público que o contador escolheu, depois
+                  // o mapa de ocupação, depois o padrão.
+                  rascunho['filtro'] ??
+                  filtroEscolhido ??
+                  (diaEscolhido ? 'celula_fria' : 'inativos')
+                }
                 id="filtro"
                 name="filtro"
               >
+                {/*
+                  **Um nome só para a mesma gente** (bloco 99).
+
+                  O contador acima dizia "23 Em risco" e esta opção dizia
+                  "Passou do ritmo dele": o mesmo grupo com dois nomes, na mesma
+                  tela, e quem opera não tem como saber que são a mesma coisa.
+
+                  Agora o nome vem do segmento e a definição antiga vira o que
+                  ela sempre foi — a explicação ao lado do nome.
+                */}
                 {FILTROS_DE_CAMPANHA.map((valor) => (
                   <option key={valor} value={valor}>
-                    {ROTULO_DO_FILTRO[valor]}
+                    {rotuloDoFiltro(valor)}
+                    {definicaoDoFiltro(valor) ? ` — ${definicaoDoFiltro(valor)}` : ''}
                     {NUMERO_DO_FILTRO[valor] ? ` · pede ${NUMERO_DO_FILTRO[valor]}` : ''}
                   </option>
                 ))}
@@ -479,7 +768,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
               </label>
               <input
                 className="ui-field__input"
-                defaultValue={horaEscolhida ?? DIAS_SUMIDO_PADRAO}
+                defaultValue={rascunho['valorDoFiltro'] ?? horaEscolhida ?? DIAS_SUMIDO_PADRAO}
                 id="valorDoFiltro"
                 inputMode="numeric"
                 name="valorDoFiltro"
@@ -497,7 +786,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
               </label>
               <select
                 className="ui-field__input"
-                defaultValue={diaEscolhido ?? ''}
+                defaultValue={rascunho['diaDaSemana'] ?? diaEscolhido ?? ''}
                 id="diaDaSemana"
                 name="diaDaSemana"
               >
@@ -516,15 +805,23 @@ export default async function CampanhasPage({ searchParams }: Props) {
               <legend className="etapa__titulo">2. O que eles recebem</legend>
 
             {/*
-              Cada tipo com **o texto dele**, casado por `tipo` — a mesma forma
-              da tela de automações, e pela mesma razão: as duas respondem a
-              pergunta "o que vai sair?", e respondê-la de dois jeitos faria uma
-              discordar da outra sobre o mesmo fato (§6, pergunta 6).
+              **A campanha escolhe o texto**, como a automação desde o bloco 94.
 
-              O texto mora no template que a Meta aprova, e não se escreve aqui:
-              um campo livre prometeria o que o canal recusa. O `input` fica
-              escondido enquanto a lista tem um item só — um seletor de uma
-              opção pede uma decisão que não existe.
+              Ela ficava para trás escolhendo o **tipo**, e o motor pegava o
+              primeiro aprovado daquele tipo com `LIMIT 1`. Com três convites de
+              retorno cadastrados — "volte que sentimos sua falta", "seu pacote
+              está acabando", "promoção de terça" —, a campanha da célula fria
+              saía com o do pacote para gente que nunca comprou pacote. O pior
+              formato de defeito possível: a tela mostrava a prévia de um texto,
+              o motor mandava outro, e o único jeito de descobrir era o cliente
+              responder "que pacote?".
+
+              O corpo aparece com as variáveis **preenchidas**: "{{1}}" é
+              vocabulário da Meta, e quem lê isso entende que falta alguma coisa
+              — justamente na tela em que a decisão é sobre o que não falta.
+
+              O `input` fica escondido enquanto a lista tem um item só: um
+              seletor de uma opção pede uma decisão que não existe.
             */}
             <div className="ui-field">
               <span className="ui-field__label">
@@ -534,35 +831,49 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 className="alternativas"
                 {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
               >
-                {TIPOS_DE_CAMPANHA.map((t, i) => {
-                  const texto = textos.find((x) => x.tipo === t);
-                  return (
-                    <label className="alternativa" key={t}>
+                {textos.length === 0 ? (
+                  <p className="alternativa__nota alternativa__nota--risco">
+                    Nenhum texto aprovado — nada vai sair.
+                  </p>
+                ) : (
+                  textos.map((texto, i) => (
+                    <label className="alternativa" key={texto.id}>
                       <input
-                        defaultChecked={i === 0}
-                        name="tipo"
+                        defaultChecked={
+                          // O texto escolhido volta depois de uma recusa: era
+                          // o campo mais caro de refazer, porque é onde a
+                          // pessoa leu três frases antes de decidir.
+                          rascunho['templateId'] !== undefined
+                            ? rascunho['templateId'] === texto.id
+                            : i === 0
+                        }
+                        name="templateId"
                         type={umaMensagemSo ? 'hidden' : 'radio'}
-                        value={t}
+                        value={texto.id}
                       />
                       <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
-                        {texto ? (
-                          <span className="alternativa__texto">{texto.corpo}</span>
-                        ) : (
-                          <span className="alternativa__nota alternativa__nota--risco">
-                            Sem texto aprovado — nada vai sair.
+                        <span className="alternativa__nome">
+                          {texto.titulo ?? nomeDoAviso(texto.tipo)}
+                        </span>
+                        <span className="alternativa__texto">
+                          {corpoComExemplos(texto.tipo, texto.corpo)}
+                        </span>
+                        {texto.botoes.length > 0 ? (
+                          <span className="alternativa__nota">
+                            Com botão: {texto.botoes.map((b) => rotuloDoBotao(b)).join(' · ')}
                           </span>
-                        )}
+                        ) : null}
                       </span>
                     </label>
-                  );
-                })}
+                  ))
+                )}
               </div>
               <p className="ui-field__hint">
-                É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
-                cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
-                Lembrete e confirmação não entram — são do agendamento, e como campanha
-                prometeriam um horário que a pessoa não tem.
+                É este o texto que chega no WhatsApp, com o nome e a barbearia já preenchidos, e
+                ele não se escreve aqui: a Meta aprova cada um antes de deixar enviar.{' '}
+                <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — cada texto novo vira
+                uma opção nesta lista. Lembrete e confirmação não entram: são do agendamento, e
+                como campanha prometeriam um horário que a pessoa não tem.
               </p>
             </div>
 
@@ -581,7 +892,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
               </label>
               <input
                 className="ui-field__input"
-                defaultValue="7"
+                defaultValue={rascunho['janelaDias'] ?? '7'}
                 id="janelaDias"
                 inputMode="numeric"
                 max={JANELA_MAXIMA_DIAS}
@@ -604,7 +915,13 @@ export default async function CampanhasPage({ searchParams }: Props) {
       ) : null}
 
       <section className="cartao-balcao">
-        <h2 className="cartao-balcao__titulo">O que já saiu</h2>
+        {/*
+          "O que já saiu" sobre uma lista que sempre trouxe rascunho junto é o
+          cabeçalho discordando da própria lista (§6, pergunta 6) — e piora
+          agora, porque o rascunho é justamente o que ainda **não** saiu e o que
+          tem botão de enviar.
+        */}
+        <h2 className="cartao-balcao__titulo">Suas campanhas</h2>
         {campanhas.length === 0 ? (
           <p className="cartao-balcao__texto">
             Nenhuma campanha ainda. Comece por uma hora vazia da grade acima — é o público que
@@ -613,7 +930,13 @@ export default async function CampanhasPage({ searchParams }: Props) {
         ) : (
           <ul className="lista-cadastro">
             {campanhas.map((c) => (
-              <Campanha campanha={c} key={c.id} podeMexer={podeMexer} />
+              <Campanha
+                campanha={c}
+                key={c.id}
+                podeMexer={podeMexer}
+                podeVerNomes={podeVerNomes}
+                pulados={c.id === puladosDe ? pulados : null}
+              />
             ))}
           </ul>
         )}

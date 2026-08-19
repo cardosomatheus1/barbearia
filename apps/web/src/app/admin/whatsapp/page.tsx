@@ -6,6 +6,14 @@ import {
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
+  BOTOES_POSSIVEIS,
+  BOTOES_QUE_LEVAM,
+  EFEITO_DO_BOTAO_QUE_LEVA,
+  ROTULO_DO_BOTAO_QUE_LEVA,
+  RESSALVA_DO_BOTAO,
+  EFEITO_DO_BOTAO,
+  corpoComExemplos,
+  nomeDoAviso,
   TIPOS_DE_NOTIFICACAO,
   oQueFazerNaMeta,
   podeGerenciarTemplates,
@@ -23,6 +31,7 @@ import { redirect } from 'next/navigation';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerMotivoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
+  acaoConciliarWhatsApp,
   acaoIrParaMeta,
   acaoSalvarCadastroDoWhatsApp,
   acaoSubmeterTemplate,
@@ -97,15 +106,33 @@ const FALHA: Record<string, string> = {
     'Não deu para salvar. Se repetir, não é a sua conexão: o motivo fica no registro do servidor, e quem instalou o sistema consegue lê-lo.',
 };
 
-/** O rótulo de cada aviso, como o resto do produto o chama. */
-const NOME_DO_AVISO: Record<string, string> = {
-  confirmacao: 'Confirmação do agendamento',
-  lembrete_24h: 'Lembrete de 24 horas',
-  lembrete_2h: 'Lembrete de 2 horas',
-  sua_vez: 'Sua vez na fila',
-  senha_de_acesso: 'Senha de primeiro acesso',
-  retorno: 'Convite de retorno',
-};
+/**
+ * Os botões agrupados por quem os aceita, derivados de `BOTOES_POSSIVEIS`.
+ *
+ * Derivado e não escrito: um aviso novo, ou um botão novo num aviso existente,
+ * aparece aqui sozinho. Uma lista ao lado seria a que fica para trás — foi o que
+ * aconteceu três vezes com o rótulo dos avisos neste mesmo arquivo.
+ *
+ * Os avisos que não aceitam botão nenhum não viram grupo: `sua_vez` é a pessoa
+ * já esperando dentro da barbearia, e `senha_de_acesso` é credencial.
+ */
+const GRUPOS_DE_BOTAO = [
+  { titulo: 'Para confirmação e lembretes', tipo: 'lembrete_24h' as const },
+  { titulo: 'Para campanha e automação', tipo: 'retorno' as const },
+].map((g) => ({
+  titulo: g.titulo,
+  botoes: BOTOES_POSSIVEIS[g.tipo],
+  /**
+   * As ressalvas do aviso mais restritivo do grupo.
+   *
+   * O lembrete de 2 horas aceita "Remarcar" e desaconselha: duas horas antes
+   * não costuma haver grade para remanejar no mesmo dia. Aviso e não recusa —
+   * proibir seria o produto opinando sobre a agenda de quem opera.
+   */
+  ressalvas: (RESSALVA_DO_BOTAO[g.tipo] ?? RESSALVA_DO_BOTAO['lembrete_2h'] ?? {}) as Partial<
+    Record<string, string>
+  >,
+}));
 
 function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
   return (
@@ -115,10 +142,27 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
       >
         <div className="item-cadastro__cabeca">
           <div className="item-cadastro__quem">
+            {/*
+              O nome que a barbearia deu, e não o do tipo (bloco 96).
+
+              Com três convites de retorno cadastrados, os três apareciam nesta
+              lista como "Convite de retorno" — três linhas idênticas, sendo que
+              o título existe desde o bloco 94 e é ele que a automação e a
+              campanha oferecem. O tipo continua visível na linha de baixo.
+            */}
             <h3 className="item-cadastro__nome">
-              {NOME_DO_AVISO[template.tipo] ?? template.tipo}
+              {template.titulo ?? nomeDoAviso(template.tipo)}
             </h3>
+            {/*
+              O tipo só quando ele **acrescenta** algo.
+
+              Texto sem título cai no nome do aviso lá em cima, e repeti-lo aqui
+              dava "Confirmação do agendamento · Confirmação do agendamento" —
+              a mesma frase duas vezes ensina a pular a linha que existe para
+              explicar o que o título não diz.
+            */}
             <p className="item-cadastro__linha">
+              {template.titulo ? `${nomeDoAviso(template.tipo)} · ` : ''}
               {template.nome} · {ROTULO_DO_TEMPLATE[template.estado]}
             </p>
             <p className="item-cadastro__linha">{EXPLICACAO_DO_TEMPLATE[template.estado]}</p>
@@ -127,7 +171,19 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
                 {template.motivoDaRecusa}
               </p>
             ) : null}
+            {/*
+              O texto cru **e** como ele chega.
+
+              Esta é a tela em que o texto se escreve, então `{{1}}` importa: é
+              o que a pessoa digitou e o que a Meta aprovou. Mas ler a frase com
+              as chaves duplas não responde se ela ficou boa — e é essa a
+              decisão que a tela pede. As duas linhas, e a segunda com o rótulo
+              dizendo o que ela é.
+            */}
             <p className="item-cadastro__linha">{template.corpo}</p>
+            <p className="item-cadastro__linha">
+              Chega assim: {corpoComExemplos(template.tipo, template.corpo)}
+            </p>
             {template.botoes.length > 0 ? (
               <p className="item-cadastro__linha">
                 Botões:{' '}
@@ -447,6 +503,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           por SMS.
         </div>
       ) : null}
+      {feito === 'conciliado' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Perguntamos à Meta. O que ela já respondeu está abaixo — se ainda diz “Na Meta”, é
+          porque ela não terminou de analisar.
+        </div>
+      ) : null}
       {feito === 'conectado' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           WhatsApp conectado. Agora cadastre os textos abaixo — a Meta precisa aprovar cada um
@@ -560,10 +622,45 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           </ul>
         )}
 
+        {/* Perguntar agora, e não esperar a volta do relógio.
+
+            A conciliação roda de hora em hora, o que é certo para o conjunto e
+            errado como **único** caminho: quem digita o código do SMS no painel
+            da Meta volta para cá em segundos, lê "Na Meta" sobre um texto já
+            aprovado, e conclui que a tela travou. O mecanismo existia desde o
+            bloco 90 e não tinha como ser acionado por quem estava olhando.
+
+            Fica ao lado da lista porque é dela que se duvida. */}
+        {podeMexer ? (
+          <form action={acaoConciliarWhatsApp}>
+            <button className="ui-button ui-button--ghost" type="submit">
+              Perguntar à Meta agora
+            </button>
+          </form>
+        ) : null}
+
         {podeMexer ? (
           <details className="dobra">
             <summary className="dobra__titulo">Mandar um texto para aprovação</summary>
             <form action={acaoSubmeterTemplate} className="formulario">
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="titulo">
+                  Nome deste texto
+                </label>
+                <input
+                  className="ui-field__input"
+                  id="titulo"
+                  maxLength={80}
+                  name="titulo"
+                  placeholder="Volta que a gente sente falta"
+                  required
+                />
+                <p className="ui-field__hint">
+                  Só para você reconhecer na lista. É por ele que você escolhe qual texto cada
+                  automação manda — dois nomes diferentes viram dois textos.
+                </p>
+              </div>
+
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="tipo">
                   Para qual aviso
@@ -571,7 +668,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                 <select className="ui-field__input" id="tipo" name="tipo" required>
                   {TIPOS_DE_NOTIFICACAO.map((tipo) => (
                     <option key={tipo} value={tipo}>
-                      {NOME_DO_AVISO[tipo] ?? tipo}
+                      {nomeDoAviso(tipo)}
                     </option>
                   ))}
                 </select>
@@ -607,7 +704,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                 <dl className="significados">
                   {TIPOS_DE_NOTIFICACAO.map((tipo) => (
                     <div className="significados__par" key={tipo}>
-                      <dt>{NOME_DO_AVISO[tipo] ?? tipo}</dt>
+                      <dt>{nomeDoAviso(tipo)}</dt>
                       <dd>
                         {VARIAVEIS_DO_AVISO[tipo].map((qual, i) => (
                           <span key={qual}>
@@ -626,6 +723,83 @@ export default async function WhatsAppPage({ searchParams }: Props) {
                   sai para ninguém.
                 </p>
               </div>
+
+              {/* Os botões, com o que acontece escrito ao lado.
+
+                  Botão é a única parte da mensagem em que o cliente **age**, e
+                  quem monta o texto precisa saber o efeito antes de oferecer:
+                  sem isso, "Agendar novamente" parece marcar sozinho.
+
+                  Só os dois que agem **sem** horário marcado. Confirmar e
+                  cancelar mexem num agendamento provado, e quem recebe campanha
+                  não tem nenhum — o cliente apertaria e nada aconteceria. */}
+              {/* Os botões, agrupados **por aviso** e com o efeito ao lado.
+
+                  Cinco existem, e nem todo aviso aceita os cinco: confirmar,
+                  remarcar e cancelar mexem num agendamento provado, e quem
+                  recebe campanha não tem nenhum — apertaria e nada aconteceria.
+                  Ao contrário, "agendar novamente" num lembrete ofereceria
+                  marcar de novo a quem já tem hora marcada.
+
+                  Todos aparecem juntos porque o produto não tem componente de
+                  cliente para trocar a lista ao mexer no seletor de aviso — é a
+                  mesma limitação do rótulo que muda por opção. Então cada grupo
+                  diz a que aviso pertence, e o domínio recusa a combinação
+                  errada com a frase que explica.
+
+                  O efeito vem escrito porque botão é a única parte da mensagem
+                  em que o cliente **age**: sem ele, "Agendar novamente" parece
+                  marcar sozinho. */}
+              <fieldset className="etapa">
+                <legend className="etapa__titulo">Botões, se quiser</legend>
+                <p className="etapa__texto">
+                  A Meta desenha o botão dentro da mensagem, e ele só aparece se ela aprovar.
+                  Marque os do aviso que você escolheu acima.
+                </p>
+                {/* Os que **levam a algum lugar**, e valem para qualquer aviso.
+
+                    A Meta aceita três tipos: resposta rápida, que volta para nós
+                    como mensagem, e link e ligação, que não voltam — o aparelho
+                    abre o navegador ou o discador. O produto só usava o primeiro.
+
+                    É o que conserta o "Agendar novamente": aquele é resposta
+                    rápida, e quem aperta **não vai a lugar nenhum** — o produto
+                    registra a intenção e a pessoa fica parada na conversa. */}
+                <p className="ui-field__label">Levam a algum lugar</p>
+                <div className="alternativas">
+                  {BOTOES_QUE_LEVAM.map((b) => (
+                    <label className="alternativa" key={b}>
+                      <input name="acoes" type="checkbox" value={b} />
+                      <span className="alternativa__corpo">
+                        <span className="alternativa__nome">{ROTULO_DO_BOTAO_QUE_LEVA[b]}</span>
+                        <span className="alternativa__nota">{EFEITO_DO_BOTAO_QUE_LEVA[b]}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {GRUPOS_DE_BOTAO.map((grupo) => (
+                  <div key={grupo.titulo}>
+                    <p className="ui-field__label">{grupo.titulo}</p>
+                    <div className="alternativas">
+                      {grupo.botoes.map((b) => (
+                        <label className="alternativa" key={b}>
+                          <input name="botoes" type="checkbox" value={b} />
+                          <span className="alternativa__corpo">
+                            <span className="alternativa__nome">{ROTULO_DO_BOTAO[b]}</span>
+                            <span className="alternativa__nota">{EFEITO_DO_BOTAO[b]}</span>
+                            {grupo.ressalvas[b] ? (
+                              <span className="alternativa__nota alternativa__nota--risco">
+                                {grupo.ressalvas[b]}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </fieldset>
 
               <button className="ui-button ui-button--secondary ui-button--block" type="submit">
                 Mandar para aprovação

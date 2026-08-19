@@ -1930,6 +1930,37 @@ function prepararWhatsApp(slug) {
              'Conteúdo promocional em template de categoria utilitária — reenvie como marketing')
      ON CONFLICT DO NOTHING`,
   );
+
+  /**
+   * **Dois** convites de retorno aprovados, com títulos diferentes (bloco 96).
+   *
+   * São eles que fazem a campanha e a automação desenharem a escolha do texto:
+   * com nenhum, as duas telas mostram "Nenhum texto aprovado — nada vai sair" e
+   * a medição fotografa o estado de antes do bloco. Com um só, o rádio vira
+   * campo escondido e a escolha some.
+   *
+   * É a regra da semente que confere a resposta, aplicada ao que a medição
+   * fotografa: semente que prepara o estado errado mede o que ela acha que
+   * preparou, sem nada ficar vermelho.
+   */
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, titulo, status, body, buttons)
+     VALUES ('${tenant}', '${local}', 'retorno', 'volta_sentimos_falta',
+             'Volta que a gente sente falta', 'aprovado',
+             'Oi {{1}}, faz tempo! Volte à {{2}} — a cadeira está esperando.',
+             '["agendar_novamente","parar_de_receber"]'::jsonb)
+     ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, titulo, status, body, buttons)
+     VALUES ('${tenant}', '${local}', 'retorno', 'pacote_no_fim',
+             'Seu pacote está no fim', 'aprovado',
+             'Oi {{1}}, seu pacote na {{2}} está acabando. Quer renovar?',
+             '["agendar_novamente"]'::jsonb)
+     ON CONFLICT DO NOTHING`,
+  );
 }
 
 /**
@@ -1950,6 +1981,25 @@ function prepararAutomacoes(slug) {
         'retorno', 'agendamento', 7, true),
        ('${tenant}', 'Parabéns na véspera', 'aniversario', 1, 0,
         'retorno', 'agendamento', 14, false)
+     ON CONFLICT DO NOTHING`,
+  );
+
+  /**
+   * Uma automação **com público** (bloco 100).
+   *
+   * É o estado que o bloco criou: sem ela a linha sai como "Quando sumiu há um
+   * tempo (30) · espera ..." e a metade nova da frase — "só para Em risco" —
+   * não aparece em largura nenhuma. Semente que não produz o estado novo
+   * fotografa a tela de antes da mudança, e a medição diz "ok" sobre o que não
+   * foi olhado.
+   */
+  psql(
+    `INSERT INTO automations
+       (tenant_id, name, trigger, threshold, delay_minutes, kind, goal,
+        goal_window_days, active, audience)
+     VALUES
+       ('${tenant}', 'Sumiu e é dos que mais gastam', 'sem_retorno', 45, 0,
+        'retorno', 'agendamento', 14, true, 'vip')
      ON CONFLICT DO NOTHING`,
   );
 }
@@ -2137,12 +2187,35 @@ function prepararCampanha(slug) {
     .map((l) => l.trim())
     .filter(Boolean);
 
+  /**
+   * Nove enviados e três **pulados**, com motivos diferentes (bloco 97).
+   *
+   * O resumo por motivo e o link "ver quem" só existem quando alguém foi
+   * pulado: sem isso a medição fotografa o cartão de antes do bloco. Dois
+   * motivos e não um, porque a linha os junta com "·" e é ela que pode
+   * estourar a largura no celular.
+   *
+   * `wamid` nos enviados: sem ele o cartão passa a dizer "nada saiu pelo
+   * WhatsApp" — que é o aviso certo para aquele estado, e não o desta tela.
+   */
   for (const [i, cliente] of clientes.entries()) {
+    if (i >= 9) {
+      const motivo = i === 9 ? 'optou_por_nao_receber' : 'teto_do_mes';
+      psql(
+        `INSERT INTO campaign_targets
+           (tenant_id, campaign_id, customer_id, skipped_reason)
+         VALUES ('${tenant}', '${campanha}', '${cliente}', '${motivo}')
+         ON CONFLICT DO NOTHING`,
+      );
+      continue;
+    }
     const objetivo = i < 3 ? `now(), NULL, ${4500 + i * 900}` : 'NULL, NULL, NULL';
     psql(
       `INSERT INTO campaign_targets
-         (tenant_id, campaign_id, customer_id, sent_at, goal_met_at, goal_ref, goal_amount_cents)
-       VALUES ('${tenant}', '${campanha}', '${cliente}', now(), ${objetivo})
+         (tenant_id, campaign_id, customer_id, sent_at, wamid, goal_met_at, goal_ref,
+          goal_amount_cents)
+       VALUES ('${tenant}', '${campanha}', '${cliente}', now(),
+               'wamid.medicao.${i}', ${objetivo})
        ON CONFLICT DO NOTHING`,
     );
   }

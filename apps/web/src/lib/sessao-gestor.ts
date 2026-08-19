@@ -474,6 +474,96 @@ export async function lerMotivoDaMeta(): Promise<string | null> {
   return (await cookies()).get(MOTIVO_DA_META)?.value ?? null;
 }
 
+/**
+ * O que a pessoa tinha digitado quando o formulário foi recusado (bloco 98).
+ *
+ * A recusa voltava com a frase certa e o formulário **vazio**: quem montou um
+ * público de sete campos recomeçava do zero por causa de um número que faltava.
+ * Perder trabalho de quem já acertou seis dos sete é o jeito mais rápido de a
+ * pessoa desistir da tela.
+ *
+ * Cookie e não parâmetro de URL, pelo motivo do motivo da Meta: o formulário
+ * carrega nome de campanha e número de dias, e a URL do painel fica no
+ * histórico do navegador e no `Referer` de toda requisição seguinte. Também não
+ * cabe em URL — são sete campos.
+ *
+ * Dois minutos, como os outros: é o tempo entre o redirecionamento e a tela
+ * desenhar. Quem voltar depois disso encontra o formulário limpo, que é o
+ * estado certo para quem já foi fazer outra coisa.
+ *
+ * `path` é do painel inteiro porque três telas o usam — campanha, automação e
+ * o que vier —, e um cookie por tela seria a lista paralela de sempre.
+ */
+const RASCUNHO_DO_FORMULARIO = 'barbearia_rascunho';
+
+/** Teto do que se guarda: um formulário deste painel não passa disso. */
+const TETO_DO_RASCUNHO = 2000;
+
+export async function guardarRascunho(campos: Record<string, string>): Promise<void> {
+  const jar = await cookies();
+  const texto = JSON.stringify(campos).slice(0, TETO_DO_RASCUNHO);
+  jar.set(RASCUNHO_DO_FORMULARIO, texto, {
+    httpOnly: true,
+    path: '/admin',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+/**
+ * Lê sem apagar, como o motivo da Meta: componente de servidor não apaga cookie
+ * durante a renderização, e quem limpa é o tempo curto.
+ *
+ * JSON malformado devolve vazio em vez de derrubar a tela: o valor vem de um
+ * cookie, e cookie é entrada externa mesmo quando fomos nós que a escrevemos —
+ * um recorte pelo teto no meio de um caractere já basta para quebrá-lo.
+ */
+export async function lerRascunho(): Promise<Record<string, string>> {
+  const bruto = (await cookies()).get(RASCUNHO_DO_FORMULARIO)?.value;
+  if (!bruto) return {};
+  try {
+    const lido: unknown = JSON.parse(bruto);
+    if (typeof lido !== 'object' || lido === null || Array.isArray(lido)) return {};
+    const saida: Record<string, string> = {};
+    for (const [chave, valor] of Object.entries(lido)) {
+      if (typeof valor === 'string') saida[chave] = valor;
+    }
+    return saida;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * A frase com que o domínio recusou, da ação para a tela (bloco 98).
+ *
+ * O domínio já responde "Diga a partir de quantos dias sem vir" e "Este texto
+ * não existe ou não foi aprovado", e a tela mostrava "Não deu para criar a
+ * campanha. Confira o nome e o público." — uma frase que não diz **qual** campo
+ * está errado sobre um formulário de sete.
+ *
+ * Cookie e não parâmetro de URL, como o motivo da Meta: a frase pode citar o
+ * nome do texto ou da campanha, e a URL do painel fica no histórico.
+ */
+const RECUSA_DO_DOMINIO = 'barbearia_recusa';
+
+export async function guardarRecusa(mensagem: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(RECUSA_DO_DOMINIO, mensagem.slice(0, 300), {
+    httpOnly: true,
+    path: '/admin',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+/** Lê sem apagar, como o motivo da Meta: quem limpa é o tempo curto. */
+export async function lerRecusa(): Promise<string | null> {
+  return (await cookies()).get(RECUSA_DO_DOMINIO)?.value ?? null;
+}
+
 /** Lê e **apaga**: o código vale uma troca só, e a Meta recusa a segunda. */
 export async function tomarCodigoDaMeta(): Promise<string | null> {
   const jar = await cookies();

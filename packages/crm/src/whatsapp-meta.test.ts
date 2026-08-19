@@ -225,7 +225,7 @@ describe('o provedor da Meta', () => {
     expect(r.estado).toBe('pendente');
   });
 
-  it('template com botão vai como UTILITY, sem botão como MARKETING', async () => {
+  it('a categoria sai do tipo do aviso, e não dos botões', async () => {
     /**
      * Não é escolha estética: a Meta cobra as duas diferente e recusa promoção
      * declarada como utilidade. Quem decide é o conjunto de botões, que já é
@@ -237,11 +237,18 @@ describe('o provedor da Meta', () => {
       idioma: 'pt_BR',
       corpo: 'Oi {{1}}, seu horário na {{2}} é amanhã.',
       botoes: ['confirmar', 'cancelar'],
+      tipo: 'lembrete_24h',
     });
     const um = corpoDe(comBotao.chamadas[0]!.init);
     expect(um['category']).toBe('UTILITY');
     expect(um['components']).toEqual([
-      { type: 'BODY', text: 'Oi {{1}}, seu horário na {{2}} é amanhã.' },
+      {
+        type: 'BODY',
+        text: 'Oi {{1}}, seu horário na {{2}} é amanhã.',
+        // A Meta recusa variável sem amostra, e a amostra é casada com o
+        // significado da posição: no lembrete, `{{2}}` é a hora.
+        example: { body_text: [['Carlos', 'terça-feira, 19 de agosto às 15:30']] },
+      },
       {
         type: 'BUTTONS',
         buttons: [
@@ -257,8 +264,23 @@ describe('o provedor da Meta', () => {
       idioma: 'pt_BR',
       corpo: 'Oi {{1}}, temos novidade na {{2}}.',
       botoes: [],
+      tipo: 'retorno',
     });
     expect(corpoDe(semBotao.chamadas[0]!.init)['category']).toBe('MARKETING');
+    /**
+     * Numa campanha `{{2}}` é o nome da casa, e não a hora.
+     *
+     * A amostra é casada com o significado da **posição naquele tipo**: a mesma
+     * chave em dois avisos diferentes vale coisas diferentes, e uma amostra
+     * genérica faria a Meta analisar um texto que não se parece com o que sai.
+     */
+    expect(corpoDe(semBotao.chamadas[0]!.init)['components']).toEqual([
+      {
+        type: 'BODY',
+        text: 'Oi {{1}}, temos novidade na {{2}}.',
+        example: { body_text: [['Carlos', 'Barbearia Domari']] },
+      },
+    ]);
   });
 
   it('um 302 não leva a credencial junto', async () => {

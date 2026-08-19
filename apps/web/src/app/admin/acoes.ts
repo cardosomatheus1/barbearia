@@ -48,7 +48,10 @@ import {
   emitirNotaNaApi,
   salvarDocumentoDoTomadorNaApi,
   salvarCadastroDoWhatsAppNaApi,
+  conciliarWhatsAppNaApi,
+  mandarMensagemNaApi,
   submeterTemplateNaApi,
+  definirAutomacaoAtivaNaApi,
   salvarAutomacaoNaApi,
   abrirUnidadeNaApi,
   criarCampanhaNaApi,
@@ -188,6 +191,8 @@ import {
   guardarConflitoDaAgenda,
   guardarEstadoDaMeta,
   guardarMotivoDaMeta,
+  guardarRascunho,
+  guardarRecusa,
   guardarConflitoDeJornada,
   guardarLinkDaFila,
   guardarSenhaDeUmaVez,
@@ -215,6 +220,41 @@ const numero = (form: FormData, campo: string, padrao: number): number => {
 function falhar(rota: string, code: string): never {
   const separador = rota.includes('?') ? '&' : '?';
   redirect(`${rota}${separador}erro=${encodeURIComponent(code)}`);
+}
+
+/**
+ * Guarda o que foi digitado antes de recusar (bloco 98).
+ *
+ * A recusa voltava com a frase certa e o formulário **vazio**: quem montou um
+ * público de sete campos recomeçava do zero por um número que faltava.
+ *
+ * Só os campos que a tela sabe repor — `FormData` traz botão, chave de
+ * idempotência e campo escondido junto, e reencher a tela com eles seria
+ * devolver estado que ninguém digitou. A lista é da tela porque é ela que sabe
+ * o que tem `defaultValue`.
+ */
+async function guardarOQueFoiDigitado(
+  form: FormData,
+  campos: readonly string[],
+  mensagem?: string,
+): Promise<void> {
+  // A frase do domínio junto: ela diz **qual** campo está errado, e a tela
+  // mostrava uma genérica sobre um formulário de sete campos.
+  if (mensagem) await guardarRecusa(mensagem);
+  const rascunho: Record<string, string> = {};
+  for (const campo of campos) {
+    const valor = form.get(campo);
+    /**
+     * Campo ausente vira string vazia, e não some.
+     *
+     * Some, ele volta ao **padrão** na próxima renderização — e o padrão da
+     * caixa "Começar ligada" é marcada. Quem desmarcou de propósito e levou uma
+     * recusa por outro campo encontrava a caixa marcada de novo: a tela
+     * desfazendo em silêncio uma decisão que alguém tomou.
+     */
+    rascunho[campo] = typeof valor === 'string' ? valor : '';
+  }
+  await guardarRascunho(rascunho);
 }
 
 /**
@@ -2843,19 +2883,52 @@ const ROTA_WHATSAPP = '/admin/whatsapp';
 const ROTA_AUTOMACOES = '/admin/automacoes';
 const ROTA_CAMPANHAS = '/admin/campanhas';
 
+/**
+ * Os campos que a tela de campanha sabe repor depois de uma recusa (bloco 98).
+ *
+ * Escrita aqui e não derivada do `FormData`: ele traz também o botão, a chave
+ * de idempotência e os campos escondidos, e reencher a tela com eles devolveria
+ * estado que ninguém digitou. Há teste que cobra que todo `name` com
+ * `defaultValue` na tela esteja nesta lista.
+ */
+const CAMPOS_DA_CAMPANHA = [
+  'nome',
+  'filtro',
+  'valorDoFiltro',
+  'diaDaSemana',
+  'templateId',
+  'janelaDias',
+] as const;
+
 export async function acaoCriarCampanha(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const valor = texto(form, 'valorDoFiltro');
   const dia = texto(form, 'diaDaSemana');
+  /**
+   * O texto escolhido, e é **ele** quem diz o tipo (bloco 96).
+   *
+   * A tela mandava um `tipo` fixo e o motor pegava o primeiro texto aprovado
+   * daquele tipo com `LIMIT 1`. Com três convites de retorno cadastrados, a
+   * campanha da célula fria saía com "seu pacote está acabando" para quem nunca
+   * comprou pacote — e a prévia na tela mostrava outro texto.
+   *
+   * Um campo só, e não os dois: o `tipo` continua existindo na borda para quem
+   * cria campanha sem nenhum texto cadastrado, e mandar os dois daqui seria o
+   * par que diverge.
+   */
+  const templateId = texto(form, 'templateId');
   const resultado = await criarCampanhaNaApi(token, {
     nome: texto(form, 'nome'),
     filtro: texto(form, 'filtro'),
     valorDoFiltro: valor ? Number(valor) : null,
     diaDaSemana: dia ? Number(dia) : null,
-    tipo: texto(form, 'tipo'),
+    ...(templateId ? { templateId } : { tipo: texto(form, 'tipo') }),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
   });
-  if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
+  if (!resultado.ok) {
+    await guardarOQueFoiDigitado(form, CAMPOS_DA_CAMPANHA, resultado.message);
+    falhar(ROTA_CAMPANHAS, resultado.code);
+  }
   redirect(`${ROTA_CAMPANHAS}?feito=criada&publico=${resultado.dados.publico}`);
 }
 
@@ -2875,6 +2948,19 @@ export async function acaoEnviarCampanha(form: FormData): Promise<void> {
 }
 
 
+/** Os campos que a tela de automação sabe repor. Mesma razão da campanha. */
+const CAMPOS_DA_AUTOMACAO = [
+  'nome',
+  'gatilho',
+  'limiar',
+  'atrasoMinutos',
+  'templateId',
+  'publico',
+  'objetivo',
+  'janelaDias',
+  'ativa',
+] as const;
+
 export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const limiarBruto = texto(form, 'limiar');
@@ -2887,15 +2973,58 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
     // domínio de propósito, porque um limiar de zero dispara para todo mundo.
     limiar: limiarBruto ? Number(limiarBruto) : null,
     atrasoMinutos: Number(texto(form, 'atrasoMinutos') || '0'),
-    tipo: texto(form, 'tipo'),
+    /**
+     * O tipo é o do **texto escolhido**, e quem o resolve é o domínio.
+     *
+     * Ele decide o que importa — natureza da mensagem, opt-out, teto do mês,
+     * categoria na Meta —, e deixou de ser o endereço do texto. O que vai daqui
+     * é só o padrão para a automação sem texto escolhido; com texto, o domínio
+     * lê o tipo dele e ignora este campo, senão os dois divergiriam.
+     */
+    tipo: texto(form, 'tipo') || 'retorno',
+    templateId: texto(form, 'templateId') || null,
+    /**
+     * Para quem ela manda (bloco 100).
+     *
+     * Vazio é "todo mundo", que é o valor da primeira opção do seletor — e não
+     * "não mexa": este formulário é o único caminho de edição, e um `undefined`
+     * daqui faria voltar de "só para VIP" para "todo mundo" ser impossível.
+     */
+    publico: texto(form, 'publico') || null,
     objetivo: texto(form, 'objetivo'),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
     ativa: form.get('ativa') === 'on',
   });
-  if (!resultado.ok) falhar(ROTA_AUTOMACOES, resultado.code);
+  if (!resultado.ok) {
+    await guardarOQueFoiDigitado(form, CAMPOS_DA_AUTOMACAO, resultado.message);
+    falhar(ROTA_AUTOMACOES, resultado.code);
+  }
   redirect(`${ROTA_AUTOMACOES}?feito=salva`);
 }
 
+
+/**
+ * Liga e desliga uma automação, sem reenviar o resto.
+ *
+ * A versão anterior reenviava o objeto inteiro com `ativa` virado, e isso
+ * amarrou o freio à validação de tudo o mais: automação criada antes de o tipo
+ * ser fechado respondia "Parâmetro inválido: tipo" e **continuava ligada**,
+ * sem saída pela tela.
+ *
+ * `ativa` vem do formulário como o estado **desejado**, escrito no campo
+ * escondido, e não da ausência do campo: "não veio" e "veio falso" são a mesma
+ * coisa para um `FormData`, e derivar disso já custou um defeito neste arquivo.
+ */
+export async function acaoLigarAutomacao(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await definirAutomacaoAtivaNaApi(
+    token,
+    texto(form, 'id'),
+    texto(form, 'ativa') === 'sim',
+  );
+  if (!resultado.ok) falhar(ROTA_AUTOMACOES, resultado.code);
+  redirect(`${ROTA_AUTOMACOES}?feito=${resultado.dados.ativa ? 'ligada' : 'desligada'}`);
+}
 
 export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void> {
   const token = await exigirSessao();
@@ -2963,10 +3092,69 @@ export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
   redirect(`${ROTA_WHATSAPP}?feito=conectado`);
 }
 
+/**
+ * Pergunta à Meta o que ela ainda não respondeu, agora.
+ *
+ * Sem isto, o número aprovado e o texto aprovado só apareciam na tela na volta
+ * seguinte do relógio — até uma hora depois. Quem acabou de digitar o código do
+ * SMS no painel da Meta volta para cá em segundos e conclui que a tela travou.
+ */
+/**
+ * Manda uma mensagem para um cliente, da ficha dele.
+ *
+ * O desfecho volta em letras porque "não saiu" tem quatro motivos legítimos —
+ * revogou o marketing, já recebeu hoje, estourou o teto do mês, ou está na
+ * janela de silêncio — e nenhum deles é erro. Sem a frase, o balcão apertaria
+ * de novo achando que falhou.
+ */
+export async function acaoMandarMensagem(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const customerId = texto(form, 'customerId');
+  // O texto escolhido, e não o tipo: os três convites de retorno da ficha
+  // apareciam com um botão cada e os três mandavam o primeiro.
+  const templateId = texto(form, 'templateId');
+  const resultado = await mandarMensagemNaApi(
+    token,
+    customerId,
+    templateId ? { templateId } : { tipo: texto(form, 'tipo') },
+  );
+  const rota = `/admin/cliente/${customerId}`;
+  if (!resultado.ok) {
+    await guardarMotivoDaMeta(resultado.message);
+    falhar(rota, resultado.code);
+  }
+  if (!resultado.dados.enviado) {
+    await guardarMotivoDaMeta(resultado.dados.motivo ?? 'Não deu para mandar.');
+    falhar(rota, 'nao_saiu');
+  }
+  redirect(`${rota}?feito=mensagem`);
+}
+
+export async function acaoConciliarWhatsApp(): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await conciliarWhatsAppNaApi(token);
+  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  redirect(`${ROTA_WHATSAPP}?feito=conciliado`);
+}
+
 export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
   const token = await exigirSessao();
+  const titulo = texto(form, 'titulo');
+  /**
+   * Os botões vêm como vários campos de mesmo nome, e `getAll` é o que os lê.
+   *
+   * `texto(form, 'botoes')` devolveria só o primeiro — e a pessoa que marcasse
+   * os dois receberia um texto com um botão só, aprovado assim pela Meta e sem
+   * nada para explicar a diferença.
+   */
+  const botoes = form.getAll('botoes').filter((b): b is string => typeof b === 'string');
+  const acoes = form.getAll('acoes').filter((b): b is string => typeof b === 'string');
+
   const resultado = await submeterTemplateNaApi(token, {
     tipo: texto(form, 'tipo'),
+    ...(titulo ? { titulo } : {}),
+    ...(botoes.length > 0 ? { botoes } : {}),
+    ...(acoes.length > 0 ? { acoes } : {}),
     corpo: texto(form, 'corpo'),
   });
   if (!resultado.ok) {

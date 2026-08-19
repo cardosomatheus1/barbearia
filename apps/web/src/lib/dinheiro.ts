@@ -20,3 +20,35 @@ export function centavosDoCampo(bruto: string): number | null {
 export function reaisDoCampo(centavos: number): string {
   return (centavos / 100).toFixed(2).replace('.', ',');
 }
+
+/**
+ * O dinheiro como ele se **lê**, com separador de milhar (bloco 101).
+ *
+ * `reaisDoCampo` é o formato que volta para o **campo de edição** — é o que a
+ * própria documentação dele diz —, e vinte e três telas o usavam para exibir.
+ * O resultado aparecia lado a lado na mesma tela: `R$ 32432,00` num indicador e
+ * `R$ 1.848,00` no gráfico logo abaixo. O primeiro obriga a contar dígitos, e
+ * número que se conta com o dedo é número em que não se confia de relance.
+ *
+ * Uma função, num lugar, para as vinte e três: cada tela declarava o próprio
+ * `const reais`, e é assim que dois formatos convivem sem nada ficar vermelho.
+ *
+ * `pt-BR` fixo e não o do navegador: o produto é de uma barbearia brasileira, e
+ * o formato do dinheiro não muda com a configuração de quem abre a tela.
+ */
+const FORMATO = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function reais(centavos: number): string {
+  /**
+   * O sinal antes do `R$`, e o sinal de menos tipográfico.
+   *
+   * `R$ -500,00` põe o sinal no meio do valor e some na leitura de uma coluna;
+   * `−R$ 500,00` é como o DRE e o financeiro já escreviam, e é o que se lê num
+   * extrato. O `Intl` põe o hífen depois do símbolo, então o sinal sai daqui.
+   */
+  const sinal = centavos < 0 ? '−' : '';
+  return `${sinal}R$ ${FORMATO.format(Math.abs(centavos) / 100)}`;
+}

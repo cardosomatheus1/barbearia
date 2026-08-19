@@ -4,6 +4,10 @@ import {
   WhatsAppMetaError,
   SignupError,
   cadastroDoWhatsApp,
+  conciliarWhatsAppDaUnidade,
+  enviarMensagemAvulsa,
+  enviarPeloWhatsApp,
+  EnvioAvulsoError,
   conectarPeloSignup,
   provedorDoWhatsApp,
   signupNaTela,
@@ -11,7 +15,12 @@ import {
   submeterTemplate,
   templatesDaUnidade,
 } from '@barbearia/crm';
-import { FakeWhatsAppProvider, type TipoDeNotificacao } from '@barbearia/core';
+import {
+  FakeWhatsAppProvider,
+  type BotaoDaMensagem,
+  type BotaoQueLeva,
+  type TipoDeNotificacao,
+} from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -20,6 +29,7 @@ import { Exige, PermissaoGuard } from './permissao.guard.js';
 import {
   cadastroDoWhatsAppSchema,
   signupDaTelaSchema,
+  mensagemAvulsaSchema,
   signupDoWhatsAppSchema,
   templateSchema,
 } from './whatsapp.schemas.js';
@@ -91,6 +101,14 @@ function toHttp(erro: unknown): never {
    * 502 e não 400: quem recusou foi o serviço de fora, e o pedido do balcão
    * estava bem formado.
    */
+  if (erro instanceof EnvioAvulsoError) {
+    /**
+     * `tipo_invalido` e `sem_texto_aprovado` são pedido malformado do ponto de
+     * vista do produto; cliente inexistente é 404. Nenhum deles é falha nossa,
+     * e todos têm frase escrita — a tela mostra a frase.
+     */
+    throw new DomainError(erro.code, erro.code === 'cliente_nao_encontrado' ? 404 : 409, erro.message);
+  }
   if (erro instanceof WhatsAppMetaError) {
     /**
      * Código **próprio**, e a distinção não é cosmética.
@@ -250,6 +268,99 @@ export class WhatsAppController {
     }
   }
 
+  /**
+   * Manda uma mensagem para **um** cliente, do balcão (bloco 92).
+   *
+   * `marketing.send` e não `whatsapp.manage`: quem cadastra o número da casa e
+   * quem fala com o cliente são trabalhos diferentes, e a recepção precisa do
+   * segundo sem o primeiro.
+   *
+   * Sem canal ligado isto **recusa**, ao contrário do disparo automático — que
+   * cai no canal de reserva de propósito, porque não há ninguém esperando. Aqui
+   * há alguém no balcão que acabou de apertar o botão e vai dizer ao cliente
+   * que mandou.
+   */
+  @Exige('marketing.send')
+  @Post('mensagem')
+  async mensagem(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(mensagemAvulsaSchema)) body: {
+      customerId: string;
+      tipo?: TipoDeNotificacao;
+      templateId?: string;
+    },
+  ) {
+    const local = await this.unidade(staff);
+    const zap = await provedorDoWhatsApp(staff.tenantId, local.id);
+    if (!zap) {
+      throw new DomainError(
+        'sem_canal',
+        409,
+        'O WhatsApp da casa ainda não está ligado, então nada chega ao cliente.',
+      );
+    }
+
+    try {
+      return await enviarMensagemAvulsa({
+        tenantId: staff.tenantId,
+        locationId: local.id,
+        customerId: body.customerId,
+        ...(body.tipo === undefined ? {} : { tipo: body.tipo }),
+        ...(body.templateId === undefined ? {} : { templateId: body.templateId }),
+        agora: new Date(),
+        timeZone: local.timezone,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+        enviar: async (destino) => {
+          const saiu = await enviarPeloWhatsApp({
+            tenantId: staff.tenantId,
+            locationId: local.id,
+            // O tipo do **texto escolhido**, resolvido pelo domínio: aqui o
+            // corpo pode nem trazer `tipo`, e reler `body.tipo` faria a
+            // mensagem sair pelo primeiro aprovado de outro tipo.
+            tipo: destino.tipo,
+            templateId: destino.templateId,
+            telefone: destino.telefone,
+            // A ordem é a de `VARIAVEIS_DO_AVISO` para os tipos de campanha:
+            // nome do cliente, nome da barbearia. Quem corta pelo tamanho do
+            // texto aprovado é `enviarPeloWhatsApp`.
+            variaveis: [destino.clienteNome, destino.barbearia],
+            customerId: body.customerId,
+            appointmentId: null,
+            provider: zap,
+          });
+          return saiu?.wamid ?? null;
+        },
+      });
+    } catch (erro) {
+      return toHttp(erro);
+    }
+  }
+
+  /**
+   * Pergunta à Meta agora, em vez de esperar a volta do relógio.
+   *
+   * A conciliação do bloco 90 roda de hora em hora, e isso é certo para o
+   * conjunto. Errado é ser o **único** caminho: quem aprova o texto no painel
+   * da Meta volta para cá em segundos, lê "Na Meta" e conclui que a tela está
+   * travada — o mecanismo existia e não tinha como ser acionado por quem estava
+   * olhando.
+   *
+   * Mesma função da varredura, então não há segunda noção de "o que a Meta
+   * respondeu". Sem canal ligado ela devolve zero e não falha: pedir notícia de
+   * quem não foi perguntado é resposta vazia, não erro.
+   */
+  @Exige('whatsapp.manage')
+  @Post('conciliar')
+  async conciliar(@Staff() staff: AuthenticatedStaff) {
+    const local = await this.unidade(staff);
+    try {
+      return await conciliarWhatsAppDaUnidade(staff.tenantId, local.id, new Date());
+    } catch (erro) {
+      return toHttp(erro);
+    }
+  }
+
   @Exige('whatsapp.manage')
   @Get('templates')
   async templates(@Staff() staff: AuthenticatedStaff) {
@@ -264,6 +375,9 @@ export class WhatsAppController {
     @Body(new ZodValidationPipe(templateSchema)) body: {
       tipo: TipoDeNotificacao;
       nome?: string;
+      titulo?: string;
+      botoes?: BotaoDaMensagem[];
+      acoes?: BotaoQueLeva[];
       corpo: string;
     },
   ) {
@@ -273,8 +387,11 @@ export class WhatsAppController {
         tenantId: staff.tenantId,
         locationId: local.id,
         tipo: body.tipo,
-        // Ausente é o caminho normal: o nome sai do tipo do aviso.
+        // Ausente é o caminho normal: o nome sai do título, e sem título do tipo.
         ...(body.nome ? { nome: body.nome } : {}),
+        ...(body.titulo ? { titulo: body.titulo } : {}),
+        ...(body.botoes ? { botoes: body.botoes } : {}),
+        ...(body.acoes ? { acoes: body.acoes } : {}),
         corpo: body.corpo,
         // O de verdade quando há canal ligado; o de mentira só como último
         // recurso, para a tela continuar exercitável sem conta na Meta.

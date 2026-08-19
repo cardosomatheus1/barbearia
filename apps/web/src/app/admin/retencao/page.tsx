@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { EXPLICACAO_DO_CRESCIMENTO, ROTULO_DO_CRESCIMENTO, SUBIR_E_BOM } from '@barbearia/core';
+import {
+  EXPLICACAO_DO_CRESCIMENTO,
+  ROTULO_DO_CRESCIMENTO,
+  SUBIR_E_BOM,
+  rotuloDoFiltro,
+} from '@barbearia/core';
 import {
   churnNaApi,
   crescimentoNaApi,
@@ -9,7 +14,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { SerieDeFaturamento } from './serie';
@@ -40,7 +45,6 @@ interface Props {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 const porcento = (bps: number): string => `${(bps / 100).toFixed(1).replace('.', ',')}%`;
 
 /** Quantos dias a janela cobre por padrão. */
@@ -233,7 +237,11 @@ export default async function RetencaoPage({ searchParams }: Props) {
           )}
 
           <p className="cartao-balcao__texto">
-            Para chamar todos de uma vez, use <strong>Passou do ritmo dele</strong> em{' '}
+            {/* O nome sai do domínio: esta tela mandava procurar "Passou do
+                ritmo dele" e o seletor de Campanhas chama a mesma opção de "Em
+                risco" desde o bloco 99. Duas telas mandando procurar coisas com
+                nomes diferentes (§6, pergunta 2). */}
+            Para chamar todos de uma vez, use <strong>{rotuloDoFiltro('em_risco')}</strong> em{' '}
             <a href="/admin/campanhas">Campanhas</a>.
           </p>
         </section>

@@ -24,6 +24,9 @@
  */
 
 import {
+  ROTULO_DO_BOTAO_QUE_LEVA,
+  categoriaDoAviso,
+  exemplosDoCorpo,
   ROTULO_DO_BOTAO,
   type BotaoDaMensagem,
   type EstadoDoNumero,
@@ -122,6 +125,63 @@ interface ErroDaMeta {
  * `provedorDoWhatsApp`, logo abaixo, e manter as duas coisas separadas é o que
  * permite exercitar esta classe contra a Graph API sem passar pelo banco.
  */
+/**
+ * Os botões no formato da Meta, dos três tipos que ela aceita.
+ *
+ * `QUICK_REPLY` volta para nós como mensagem e é o que aciona confirmar e
+ * cancelar. `URL` e `PHONE_NUMBER` não voltam: o aparelho abre o navegador ou o
+ * discador, e é justamente por isso que eles resolvem o que o "agendar
+ * novamente" de resposta rápida nunca resolveu — aquele registra a intenção e
+ * deixa a pessoa parada na conversa.
+ *
+ * A ordem importa: os de resposta rápida primeiro, como a Meta os desenha.
+ */
+function botoesDaMeta(template: TemplateParaAprovar): readonly unknown[] {
+  const rapidos = template.botoes.map((botao: BotaoDaMensagem) => ({
+    type: 'QUICK_REPLY',
+    text: ROTULO_DO_BOTAO[botao],
+  }));
+
+  const levam = (template.acoes ?? []).map((a) =>
+    a.botao === 'ligar'
+      ? {
+          type: 'PHONE_NUMBER',
+          text: ROTULO_DO_BOTAO_QUE_LEVA[a.botao],
+          phone_number: a.destino,
+        }
+      : { type: 'URL', text: ROTULO_DO_BOTAO_QUE_LEVA[a.botao], url: a.destino },
+  );
+
+  return [...rapidos, ...levam];
+}
+
+/**
+ * O componente de corpo, com uma amostra por variável.
+ *
+ * A Meta **recusa** template cujas variáveis chegam sem exemplo, e a recusa vem
+ * com o nome da política: *"Variáveis de modelo sem texto de amostra"*. O texto
+ * fica rejeitado sem nunca ter sido lido — ela não tem como saber se `{{1}}` é
+ * um nome, um valor em reais ou um link.
+ *
+ * Nada do nosso lado apontava para isso: a submissão respondia sucesso, o
+ * estado virava `pendente`, e a rejeição chegava depois pelo painel dela. Foi o
+ * que aconteceu com o primeiro texto de verdade deste produto.
+ *
+ * Texto sem variável nenhuma não leva `example`: mandar um arranjo vazio é a
+ * mesma recusa por outro caminho.
+ */
+function corpoComAmostra(template: TemplateParaAprovar): unknown {
+  const amostras = exemplosDoCorpo(template.tipo, template.corpo);
+  if (amostras.length === 0) return { type: 'BODY', text: template.corpo };
+  return {
+    type: 'BODY',
+    text: template.corpo,
+    // `body_text` é um arranjo de arranjos: um conjunto de amostras por
+    // exemplo, e a Meta aceita um só.
+    example: { body_text: [amostras] },
+  };
+}
+
 export class MetaWhatsAppProvider implements WhatsAppProvider {
   constructor(
     private readonly credenciais: {
@@ -217,27 +277,21 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   /**
    * Submete um texto para aprovação.
    *
-   * A categoria é `MARKETING` quando o texto não tem botão de agendamento e
-   * `UTILITY` quando tem — e não é escolha estética: a Meta cobra as duas
-   * diferente e recusa promoção declarada como utilidade. Quem decide é o
-   * conjunto de botões, que já é derivado do tipo do aviso.
+   * A categoria sai de `categoriaDoAviso`, que a deriva do **tipo** — e não do
+   * conjunto de botões, como esta linha fazia antes. Botão era um palpite bom
+   * para quase tudo e errado para `sua_vez`: sem botão nenhum, a mensagem mais
+   * transacional do produto ia declarada como marketing, que aprova menos,
+   * custa mais e é a primeira que a Meta limita em número novo.
    */
   async submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
-    const componentes: unknown[] = [{ type: 'BODY', text: template.corpo }];
-    if (template.botoes.length > 0) {
-      componentes.push({
-        type: 'BUTTONS',
-        buttons: template.botoes.map((botao: BotaoDaMensagem) => ({
-          type: 'QUICK_REPLY',
-          text: ROTULO_DO_BOTAO[botao],
-        })),
-      });
-    }
+    const componentes: unknown[] = [corpoComAmostra(template)];
+    const botoes = botoesDaMeta(template);
+    if (botoes.length > 0) componentes.push({ type: 'BUTTONS', buttons: botoes });
 
     const corpo = await this.chamar(`${this.credenciais.wabaId}/message_templates`, {
       name: template.nome,
       language: template.idioma,
-      category: template.botoes.length > 0 ? 'UTILITY' : 'MARKETING',
+      category: categoriaDoAviso(template.tipo),
       components: componentes,
     });
 
@@ -250,6 +304,37 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   }
 
   /** A rede de segurança da conciliação: pergunta em que pé o texto está. */
+  /**
+   * Reescreve um texto que a Meta já conhece.
+   *
+   * `POST /{id-do-template}` e não `POST /{waba}/message_templates`: o segundo
+   * **cria**, e criar sobre um nome existente é recusado. Enquanto só o de
+   * criar existia aqui, corrigir uma vírgula num texto aprovado era impossível
+   * pela tela — o produto tinha o `meta_id` guardado desde o bloco 55 e não o
+   * usava para nada.
+   *
+   * Nome e idioma não vão no corpo: a Meta não deixa mudá-los na edição, e
+   * mandá-los seria pedir o que ela recusa. O que se reescreve é o corpo e os
+   * botões, e um texto editado volta para análise — por isso a resposta é lida
+   * pelo mesmo caminho da submissão.
+   */
+  async editarTemplate(metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
+    const componentes: unknown[] = [corpoComAmostra(template)];
+    const botoes = botoesDaMeta(template);
+    if (botoes.length > 0) componentes.push({ type: 'BUTTONS', buttons: botoes });
+
+    await this.chamar(metaId, { components: componentes });
+
+    /**
+     * A Meta responde `{ success: true }` na edição, sem estado.
+     *
+     * Ela recoloca o texto em análise, então o estado é `pendente` — e não o que
+     * ele era antes. Ler "aprovado" de uma resposta que não diz nada faria o
+     * produto mandar por um texto que a Meta ainda está olhando.
+     */
+    return { metaId, estado: 'pendente', motivoDaRecusa: null };
+  }
+
   async consultarTemplate(nome: string, idioma: string): Promise<RespostaDoTemplate> {
     const url = new URL(`${BASE}/${this.credenciais.wabaId}/message_templates`);
     url.searchParams.set('name', nome);

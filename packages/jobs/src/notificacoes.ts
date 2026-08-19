@@ -161,6 +161,15 @@ export interface MensagemDeAutomacao extends DeQuem {
   readonly clienteNome: string;
   readonly barbearia: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto a automação escolheu (bloco 94).
+   *
+   * Nulo é automação anterior ao bloco, que resolve por tipo como antes. Sem
+   * este campo, as onze automações possíveis saíam todas com a mesma frase —
+   * o motor pegava o único aprovado do tipo, e os gatilhos existem justamente
+   * porque as situações são diferentes.
+   */
+  readonly templateId?: string | null;
 }
 
 /**
@@ -178,6 +187,18 @@ export interface MensagemDeCampanha extends DeQuem {
   readonly clienteNome: string;
   readonly barbearia: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * Qual texto esta campanha manda (bloco 96).
+   *
+   * A automação ganhou este campo no bloco 94 e a campanha ficou para trás,
+   * ainda resolvendo por tipo — e o motor pega o primeiro aprovado daquele tipo
+   * com `LIMIT 1`. Com três convites de retorno cadastrados, a campanha da
+   * célula fria saía com "seu pacote está acabando" para quem nunca comprou
+   * pacote: a tela mostrava a prévia de um texto e o motor mandava outro.
+   *
+   * Nulo é campanha anterior ao bloco, que resolve por tipo como antes.
+   */
+  readonly templateId?: string | null;
 }
 
 export interface NotificationProvider {
@@ -267,6 +288,9 @@ export class FakeNotificationProvider implements NotificationProvider {
     this.avisosDoClube.length = 0;
     this.notas.length = 0;
     this.automacoes.length = 0;
+    // Faltava, e o que ela esconde é um teste passando pelo motivo errado: a
+    // campanha do caso anterior continuava na lista que o caso seguinte lê.
+    this.campanhas.length = 0;
   }
 }
 

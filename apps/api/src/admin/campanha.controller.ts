@@ -3,6 +3,7 @@ import {
   CampanhaError,
   campanhasDaCasa,
   criarCampanha,
+  puladosDaCampanha,
   marcarParaEnvio,
   type FiltroDeCampanha,
 } from '@barbearia/crm';
@@ -64,7 +65,8 @@ export class CampanhaController {
       filtro: FiltroDeCampanha;
       valorDoFiltro: number | null;
       diaDaSemana: number | null;
-      tipo: TipoDeNotificacao;
+      tipo?: TipoDeNotificacao;
+      templateId?: string;
       janelaDias: number;
     },
   ) {
@@ -75,7 +77,8 @@ export class CampanhaController {
         filtro: body.filtro,
         valorDoFiltro: body.valorDoFiltro,
         diaDaSemana: body.diaDaSemana,
-        tipo: body.tipo,
+        ...(body.tipo === undefined ? {} : { tipo: body.tipo }),
+        ...(body.templateId === undefined ? {} : { templateId: body.templateId }),
         janelaDias: body.janelaDias,
         agora: new Date(),
         staffId: staff.staffUserId,
@@ -130,5 +133,22 @@ export class CampanhaController {
       );
     }
     return { estado: 'enviando' as const };
+  }
+
+  /**
+   * Quem não recebeu, com nome e motivo (bloco 97).
+   *
+   * `customers.view` junto de `marketing.send`, pela regra da rota que agrega:
+   * a resposta traz **nome de cliente**, e é a nona vez que este produto
+   * precisa lembrar disso. Sem ela, quem pode disparar campanha colhia a base
+   * nominal pela porta dos fundos, uma campanha por vez.
+   */
+  @Exige('marketing.send', 'customers.view')
+  @Get(':id/pulados')
+  async pulados(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(campanhaIdSchema)) id: string,
+  ) {
+    return { pulados: await puladosDaCampanha(staff.tenantId, id) };
   }
 }

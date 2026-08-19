@@ -18,6 +18,7 @@ import {
   gravarRespostaDoTemplate,
   desconectarNumero,
 } from './whatsapp.js';
+import { enviarMensagemAvulsa } from './mensagem-avulsa.js';
 
 /**
  * WhatsApp oficial contra Postgres real (bloco 55, SPEC §4.12).
@@ -120,9 +121,16 @@ describeIfDb('WhatsApp oficial', () => {
     );
   };
 
+  /**
+   * `nome` por parâmetro desde o bloco 96: dois textos do **mesmo tipo** é o
+   * caso que este bloco existe para cobrir, e com o nome derivado do tipo os
+   * dois colidiriam na chave da Meta — o teste falharia por outro motivo que
+   * não a regra sob prova.
+   */
   const aprovarTemplate = async (
     tipo = 'lembrete_24h',
     corpo = 'Olá {{1}}, seu corte é amanhã às {{2}}.',
+    nome = `${tipo}_v1`,
   ) => {
     const provedor = new FakeWhatsAppProvider();
     provedor.proximoEstadoDoTemplate = 'aprovado';
@@ -130,7 +138,7 @@ describeIfDb('WhatsApp oficial', () => {
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: tipo as 'lembrete_24h',
-      nome: `${tipo}_v1`,
+      nome,
       corpo,
       provider: provedor,
       ...operador,
@@ -525,6 +533,365 @@ describeIfDb('WhatsApp oficial', () => {
         ...operador,
       }),
     ).rejects.toMatchObject({ code: 'nome_invalido' });
+  });
+
+  /**
+   * A segunda submissão do mesmo aviso **edita**, e não cria.
+   *
+   * O nome é derivado do tipo desde o bloco 89, então corrigir uma vírgula num
+   * texto já enviado cai sempre neste caso. Criar sobre um nome que a Meta já
+   * conhece é recusado por ela — e a frase que voltava não explicava nada, o
+   * que fazia "não atualiza as mensagens já aprovadas" parecer defeito da tela.
+   */
+  it('reenviar o mesmo aviso edita o texto na Meta em vez de criar outro', async () => {
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+    provedor.proximoEstadoDoTemplate = 'aprovado';
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      corpo: 'Olá {{1}}, sentimos sua falta na {{2}}.',
+      provider: provedor,
+      ...operador,
+    });
+    expect(provedor.submetidos).toHaveLength(1);
+    expect(provedor.editados).toHaveLength(0);
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      corpo: 'Olá {{1}}, sentimos sua falta na {{2}}!',
+      provider: provedor,
+      ...operador,
+    });
+
+    expect(provedor.editados).toHaveLength(1);
+    expect(provedor.editados[0]?.corpo).toContain('!');
+  });
+
+  /**
+   * A barbearia escolhe os botões, dentro do que aquele aviso aceita.
+   *
+   * A regra antiga era categórica — botão sai do tipo, nunca do formulário —, e
+   * existia por um mecanismo: o motor montava os botões na hora do envio, e a
+   * Meta casa a resposta pela **posição**. Um texto aprovado com dois botões
+   * recebendo três faria o cliente apertar "Confirmar" e o produto entender
+   * "Cancelar".
+   *
+   * O motor passou a ler os botões da linha do template, que é o que a Meta
+   * aprovou. A divergência deixou de ser possível, e com ela caiu o motivo de a
+   * escolha não existir.
+   */
+  it('a barbearia escolhe os botões do texto', async () => {
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'lembrete_24h',
+      corpo: 'Oi {{1}}, amanhã às {{2}} com {{3}}.',
+      botoes: ['confirmar', 'cancelar'],
+      provider: provedor,
+      ...operador,
+    });
+
+    expect(provedor.submetidos.at(-1)?.botoes).toEqual(['confirmar', 'cancelar']);
+  });
+
+  /**
+   * E não escolhe o que aquele aviso não aceita.
+   *
+   * `confirmar` mexe num agendamento provado, e quem recebe campanha não tem
+   * nenhum: aprovado assim, o cliente aperta, o produto responde "o horário não
+   * é de quem respondeu", e nada acontece sem que ninguém saiba por quê.
+   */
+  it('botão que o aviso não aceita é recusado antes de ir à Meta', async () => {
+    await cadastrar();
+    const provedor = new FakeWhatsAppProvider();
+
+    await expect(
+      submeterTemplate({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        tipo: 'retorno',
+        corpo: 'Oi {{1}}, volte à {{2}}.',
+        botoes: ['confirmar'],
+        provider: provedor,
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'botao_invalido' });
+
+    expect(provedor.submetidos).toHaveLength(0);
+  });
+
+  /**
+   * Os botões que **levam a algum lugar**, com o destino do cadastro da casa.
+   *
+   * A Meta aceita três tipos e o produto só usava um. `agendar_novamente` é
+   * resposta rápida: quem aperta **não vai a lugar nenhum** — o produto registra
+   * a intenção e a pessoa fica parada na conversa. O de link resolve isso.
+   *
+   * O endereço não é digitado: sai do slug, que é permanente desde o bloco 1. Um
+   * campo livre seria um link errado mandado para mil pessoas.
+   */
+  it('o botão de agendar leva para a página da barbearia', async () => {
+    await cadastrar();
+    /**
+     * A semente satisfaz tudo menos a regra sob teste: o destino sai do slug e
+     * do endereço público, e sem os dois o que se mede é a recusa, não o link.
+     */
+    await exec(`
+      INSERT INTO tenant_slugs (slug, tenant_id) VALUES ('domari', '${TENANT}')
+      ON CONFLICT DO NOTHING;
+    `);
+    process.env['WEB_URL'] = 'https://barbearia.exemplo';
+    const provedor = new FakeWhatsAppProvider();
+
+    await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      corpo: 'Oi {{1}}, volte à {{2}}!',
+      acoes: ['abrir_agenda'],
+      provider: provedor,
+      ...operador,
+    });
+
+    const enviado = provedor.submetidos.at(-1);
+    expect(enviado?.acoes).toHaveLength(1);
+    expect(enviado?.acoes?.[0]?.botao).toBe('abrir_agenda');
+    expect(enviado?.acoes?.[0]?.destino).toBe('https://barbearia.exemplo/domari');
+  });
+
+  /**
+   * Sem telefone cadastrado, o botão de ligação é **recusado**.
+   *
+   * Sair vazio seria pior: a Meta aprovaria um botão que não disca, e o cliente
+   * apertaria sem nada acontecer — a classe de defeito que o produto já pagou
+   * três vezes hoje, com o botão desenhado na tela e inerte no aparelho.
+   */
+  it('sem telefone da unidade, o botão de ligar é recusado antes de ir à Meta', async () => {
+    await cadastrar();
+    await exec(`UPDATE locations SET phone_e164 = NULL WHERE id = '${LOCAL}'`);
+    const provedor = new FakeWhatsAppProvider();
+
+    await expect(
+      submeterTemplate({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        tipo: 'retorno',
+        corpo: 'Oi {{1}}, volte à {{2}}!',
+        acoes: ['ligar'],
+        provider: provedor,
+        ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'sem_telefone_da_casa' });
+
+    expect(provedor.submetidos).toHaveLength(0);
+  });
+
+  // -- a mensagem avulsa (bloco 92) -------------------------------------------
+
+  /**
+   * O envio avulso passa pelas **mesmas** guardas do automático.
+   *
+   * A tentação é isentá-lo: tem gente decidindo, então seria "de verdade". Mas
+   * consentimento é lei, o teto do mês existe para o número não ser queimado, e
+   * a janela de silêncio é sobre o cliente dormindo — nenhuma das três some
+   * porque quem apertou foi uma pessoa. Isento, o manual viraria o caminho mais
+   * curto para furar as três, e o caminho mais curto é o que todo mundo usa.
+   */
+  it('mensagem avulsa respeita quem revogou o marketing', async () => {
+    await ativar();
+    await aprovarTemplate('retorno', 'Olá {{1}}, sentimos sua falta na {{2}}.');
+    await exec(`UPDATE customers SET accepts_marketing = false WHERE id = '${CARLOS}'`);
+
+    let saiu = false;
+    const resultado = await enviarMensagemAvulsa({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      customerId: CARLOS,
+      tipo: 'retorno',
+      agora: new Date('2026-09-20T15:00:00Z'),
+      timeZone: 'America/Bahia',
+      ...operador,
+      enviar: async () => {
+        saiu = true;
+        return 'wamid.x';
+      },
+    });
+
+    expect(resultado.enviado).toBe(false);
+    expect(resultado.motivo).toBeTruthy();
+    expect(saiu).toBe(false);
+  });
+
+  it('mensagem avulsa sai e conta no teto do mês', async () => {
+    await ativar();
+    await aprovarTemplate('retorno', 'Olá {{1}}, sentimos sua falta na {{2}}.');
+    // A semente satisfaz tudo menos a regra sob teste: `accepts_marketing`
+    // nasce falso nesta suíte, e sem isto o que se mede é o opt-out de novo.
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+
+    const resultado = await enviarMensagemAvulsa({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      customerId: CARLOS,
+      tipo: 'retorno',
+      agora: new Date('2026-09-20T15:00:00Z'),
+      timeZone: 'America/Bahia',
+      ...operador,
+      enviar: async () => 'wamid.avulsa',
+    });
+
+    expect(resultado.enviado).toBe(true);
+
+    /**
+     * A linha em `notifications` é o que faz esta mensagem contar.
+     *
+     * Sem ela o envio avulso seria o furo do teto: quatro pelo motor e quantas
+     * quisessem pelo balcão, com a Meta somando todas do lado dela.
+     */
+    const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM notifications WHERE customer_id = '${CARLOS}' AND status = 'sent'`,
+    );
+    expect(Number(linhas[0]?.n ?? 0)).toBe(1);
+  });
+
+  /**
+   * A ficha manda **o texto que o balcão apertou** (bloco 96).
+   *
+   * Ela listava os três convites de retorno aprovados com um botão cada, e os
+   * três mandavam o mesmo: o formulário postava o `tipo`, e o motor pegava o
+   * primeiro aprovado dele. A recepção lia "volte que sentimos sua falta",
+   * apertava, e o cliente recebia "seu pacote está acabando".
+   */
+  it('mensagem avulsa manda o texto escolhido, e não o primeiro do tipo', async () => {
+    await ativar();
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+    await aprovarTemplate('retorno', 'Volte, {{1}}! Sentimos sua falta na {{2}}.');
+    const segundo = await aprovarTemplate(
+      'retorno',
+      'Oi {{1}}, seu pacote na {{2}} está acabando.',
+      'pacote_acabando',
+    );
+
+    let escolhido: string | null = 'nada';
+    const resultado = await enviarMensagemAvulsa({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      customerId: CARLOS,
+      templateId: segundo.id,
+      agora: new Date('2026-09-20T15:00:00Z'),
+      timeZone: 'America/Bahia',
+      ...operador,
+      enviar: async (destino) => {
+        escolhido = destino.templateId;
+        return 'wamid.escolhido';
+      },
+    });
+
+    expect(resultado.enviado).toBe(true);
+    // O segundo, e não o primeiro que a consulta por tipo acharia.
+    expect(escolhido).toBe(segundo.id);
+  });
+
+  it('mensagem avulsa recusa o texto da barbearia vizinha', async () => {
+    /**
+     * A checagem de integridade referencial do Postgres ignora row security: a
+     * chave estrangeira aceitaria o id alheio sem reclamar.
+     *
+     * Quem recusa aqui é a **política**, e não uma cláusula escrita — a leitura
+     * roda dentro de `withTenant`, e a linha da vizinha não existe para ela. O
+     * caso que prova o filtro escrito é o de baixo, o da outra loja: ali a
+     * política enxerga a linha, porque a RLS separa barbearias e não separa
+     * lojas dentro de uma.
+     */
+    await ativar();
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+    // A semente satisfaz **tudo menos** a regra sob teste: sem um `retorno`
+    // aprovado aqui, a recusa viria da falta de texto e o caso passaria verde
+    // com a conferência removida.
+    await aprovarTemplate('retorno', 'Volte, {{1}}! Sentimos sua falta na {{2}}.');
+    await exec(`
+      INSERT INTO whatsapp_templates (id, tenant_id, location_id, kind, name, status, body)
+      VALUES ('b5555555-0000-4000-8000-0000000000ff', '${RIVAL}', '${LOCAL_RIVAL}',
+              'retorno', 'deles_v1', 'aprovado', 'Oi {{1}}, na {{2}}.');
+    `);
+
+    await expect(
+      enviarMensagemAvulsa({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        customerId: CARLOS,
+        templateId: 'b5555555-0000-4000-8000-0000000000ff',
+        agora: new Date('2026-09-20T15:00:00Z'),
+        timeZone: 'America/Bahia',
+        ...operador,
+        enviar: async () => 'wamid.nao',
+      }),
+    ).rejects.toMatchObject({ code: 'sem_texto_aprovado' });
+  });
+
+  it('mensagem avulsa recusa o texto aprovado no número da outra loja', async () => {
+    /**
+     * A RLS separa barbearias e **não** separa lojas dentro de uma: a leitura
+     * sob RLS acha o texto da filial sem reclamar. Quem recusa é o filtro por
+     * unidade, e é ele que este caso prova — o da vizinha passa pela política e
+     * não exercita esta linha.
+     *
+     * Importa porque o template é aprovado **por número**: mandar o da filial
+     * pelo número da matriz é a Meta recusando a mensagem no balcão.
+     */
+    await ativar();
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+    // Mesma razão do caso da vizinha: sem um `retorno` aprovado nesta unidade,
+    // a recusa viria da falta de texto e não do filtro por unidade.
+    await aprovarTemplate('retorno', 'Volte, {{1}}! Sentimos sua falta na {{2}}.');
+    const FILIAL = 'a5555555-0000-0000-0000-000000000004';
+    await exec(`
+      INSERT INTO locations (id, tenant_id, name, timezone)
+      VALUES ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia');
+
+      INSERT INTO whatsapp_templates (id, tenant_id, location_id, kind, name, status, body)
+      VALUES ('b5555555-0000-4000-8000-0000000000fe', '${TENANT}', '${FILIAL}',
+              'retorno', 'da_filial_v1', 'aprovado', 'Oi {{1}}, na {{2}}.');
+    `);
+
+    await expect(
+      enviarMensagemAvulsa({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        customerId: CARLOS,
+        templateId: 'b5555555-0000-4000-8000-0000000000fe',
+        // Recusado antes de qualquer envio: se a conferência sumir, esta
+        // chamada acontece e o caso fica vermelho por não ter lançado.
+        agora: new Date('2026-09-20T15:00:00Z'),
+        timeZone: 'America/Bahia',
+        ...operador,
+        enviar: async () => 'wamid.nao',
+      }),
+    ).rejects.toMatchObject({ code: 'sem_texto_aprovado' });
+  });
+
+  it('mensagem avulsa recusa texto que fala de horário marcado', async () => {
+    await ativar();
+    await expect(
+      enviarMensagemAvulsa({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        customerId: CARLOS,
+        tipo: 'lembrete_24h',
+        agora: new Date('2026-09-20T15:00:00Z'),
+        timeZone: 'America/Bahia',
+        ...operador,
+        enviar: async () => null,
+      }),
+    ).rejects.toMatchObject({ code: 'tipo_invalido' });
   });
 
   // -- o envio ---------------------------------------------------------------

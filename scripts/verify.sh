@@ -190,6 +190,9 @@ lancar "segredos do deploy" npx vitest run scripts/segredos-do-deploy.test.mjs
 # crontab vazio e deixava o backup diário — a única cópia dos dados — sem existir.
 lancar "cron do backup" npx vitest run scripts/cron-do-backup.test.mjs
 lancar "trava da semente" npx vitest run scripts/semente-permitida.test.mjs
+# Semente que inventa tipo ou motivo faz o produto parecer capaz do que não é —
+# e já contaminou o vocabulário do domínio uma vez.
+lancar "semente não inventa" npx vitest run scripts/semente-nao-inventa.test.mjs
 # Migração destrutiva tira do rollback a forma barata dele: a volta deixa de ser
 # "sobe a imagem anterior" e vira "restaura backup e perde o que veio depois".
 lancar "migração aditiva" npx vitest run packages/db/test/migracao-aditiva.test.mjs

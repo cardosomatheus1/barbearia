@@ -5,6 +5,7 @@ import {
   automacoesDaCasa,
   disparosAEnviar,
   marcarDisparoEnviado,
+  definirAutomacaoAtiva,
   salvarAutomacao,
   varrerAutomacoes,
 } from './automacao.js';
@@ -28,6 +29,11 @@ const CARLOS = 'c6565656-0000-0000-0000-000000000001';
 const BRUNO = 'c6565656-0000-0000-0000-000000000002';
 const DONO = 'd6565656-0000-0000-0000-000000000001';
 const RUAN = 'e6565656-0000-0000-0000-000000000001';
+/** A automação de tipo que o produto passou a proibir, criada antes da guarda. */
+const ANTIGA = 'f6565656-0000-0000-0000-000000000001';
+/** Dois textos aprovados do mesmo tipo — o que o bloco 94 passou a permitir. */
+const TEXTO_A = 'a7565656-0000-0000-0000-000000000001';
+const TEXTO_B = 'a7565656-0000-0000-0000-000000000002';
 
 const AGORA = new Date('2026-09-20T15:00:00Z');
 const operador = { staffId: DONO, staffName: 'Matheus' };
@@ -101,6 +107,109 @@ describeIfDb('automação', () => {
     await expect(automacao({ tipo: 'senha_de_acesso' })).rejects.toMatchObject({
       code: 'invalida',
     });
+  });
+
+  /**
+   * Desligar não pode depender de o resto da linha ainda ser válido.
+   *
+   * O botão da lista reenviava o objeto inteiro com `ativa` virado. Quando o
+   * bloco 88 fechou o tipo da automação em `TIPOS_DE_CAMPANHA`, as linhas
+   * criadas antes passaram a responder "Parâmetro inválido: tipo" e a
+   * **continuar ligadas** — sem saída pela tela, só por `UPDATE` no banco.
+   *
+   * Exatamente as automações que mais precisavam ser caladas — as de tipo que o
+   * produto passou a proibir — eram as únicas que não calavam. É a §6 pergunta
+   * 3 produzida por uma guarda que entrou depois.
+   *
+   * A semente escreve direto no banco de propósito: `salvarAutomacao` recusa o
+   * tipo antigo, que é o ponto — a linha existe e o caminho novo precisa
+   * alcançá-la mesmo assim.
+   */
+  it('automação de tipo hoje proibido continua podendo ser desligada', async () => {
+    await exec(`
+      INSERT INTO automations (id, tenant_id, name, trigger, threshold, delay_minutes,
+                               kind, goal, goal_window_days, active)
+      VALUES ('${ANTIGA}', '${TENANT}', 'Lembrete antigo', 'sem_retorno', 30, 0,
+              'lembrete_24h', 'agendamento', 7, true);
+    `);
+
+    const depois = await definirAutomacaoAtiva({
+      tenantId: TENANT,
+      id: ANTIGA,
+      ativa: false,
+      ...operador,
+    });
+
+    expect(depois.ativa).toBe(false);
+    const linhas = await admin.$queryRawUnsafe<{ active: boolean }[]>(
+      `SELECT active FROM automations WHERE id = '${ANTIGA}'`,
+    );
+    expect(linhas[0]?.active).toBe(false);
+  });
+
+  /**
+   * A automação aponta para **um texto**, e é o que faz onze gatilhos deixarem
+   * de mandar a mesma frase.
+   *
+   * Até o bloco 94 só `retorno` era permitido, o nome do texto saía do tipo, e
+   * um índice único impunha um aprovado por tipo. "Avisa quando a assinatura
+   * está vencendo" e "avisa quando o pacote está acabando" saíam com a mesma
+   * mensagem — e os gatilhos existem justamente porque as situações são
+   * diferentes.
+   */
+  it('duas automações do mesmo tipo mandam textos diferentes', async () => {
+    await exec(`
+      INSERT INTO whatsapp_templates
+        (id, tenant_id, location_id, kind, name, titulo, language, status, body)
+      VALUES
+        ('${TEXTO_A}', '${TENANT}', '${LOCAL}', 'retorno', 'volta_carlos',
+         'Volta, sentimos falta', 'pt_BR', 'aprovado', 'Oi {{1}}, volte à {{2}}!'),
+        ('${TEXTO_B}', '${TENANT}', '${LOCAL}', 'retorno', 'pacote_acabando',
+         'Seu pacote está no fim', 'pt_BR', 'aprovado', 'Oi {{1}}, seu pacote na {{2}} acaba.');
+    `);
+
+    const a = await automacao({ nome: 'Sumiu', templateId: TEXTO_A });
+    const b = await automacao({ nome: 'Pacote', templateId: TEXTO_B });
+
+    const linhas = await admin.$queryRawUnsafe<{ id: string; template_id: string }[]>(
+      `SELECT id, template_id FROM automations WHERE id IN ('${a.id}', '${b.id}')`,
+    );
+    const porId = new Map(linhas.map((l) => [l.id, l.template_id]));
+    expect(porId.get(a.id)).toBe(TEXTO_A);
+    expect(porId.get(b.id)).toBe(TEXTO_B);
+    expect(porId.get(a.id)).not.toBe(porId.get(b.id));
+  });
+
+  /**
+   * Salvar sem mandar texto **preserva** o que já estava escolhido.
+   *
+   * O formulário só desenha o rádio de texto quando há texto aprovado, então
+   * ele chega vazio em duas situações reais: a barbearia que ainda não aprovou
+   * nenhum, e a edição feita numa tela que não carregou a lista. Sem o
+   * `COALESCE` no `ON CONFLICT`, o primeiro salvamento nessas condições zeraria
+   * a escolha, e a automação voltaria a mandar a frase de outro texto — sem
+   * nada falhar e sem ninguém decidir isso.
+   *
+   * A primeira versão deste teste usava ligar-e-desligar e passava com e sem o
+   * conserto: aquele caminho é a porta estreita do bloco 92, que toca uma coluna
+   * só e nunca chegou perto do `ON CONFLICT`.
+   */
+  it('salvar sem texto não apaga o texto já escolhido', async () => {
+    await exec(`
+      INSERT INTO whatsapp_templates
+        (id, tenant_id, location_id, kind, name, titulo, language, status, body)
+      VALUES ('${TEXTO_A}', '${TENANT}', '${LOCAL}', 'retorno', 'volta_carlos',
+              'Volta, sentimos falta', 'pt_BR', 'aprovado', 'Oi {{1}}!');
+    `);
+    const criada = await automacao({ templateId: TEXTO_A });
+
+    // O mesmo formulário, salvo de novo sem o campo de texto.
+    await automacao({ id: criada.id, templateId: null });
+
+    const linhas = await admin.$queryRawUnsafe<{ template_id: string | null }[]>(
+      `SELECT template_id FROM automations WHERE id = '${criada.id}'`,
+    );
+    expect(linhas[0]?.template_id).toBe(TEXTO_A);
   });
 
   /** Um atendimento concluído há tantos dias. */
@@ -419,5 +528,142 @@ describeIfDb('automação', () => {
     await expect(
       admin.$executeRawUnsafe(`UPDATE automation_sends SET goal_met_at = now()`),
     ).rejects.toThrow();
+  });
+
+
+  /**
+   * Só para quem (bloco 100).
+   *
+   * A automação sabia **quando** disparar e **o que** mandar, e não sabia
+   * **para quem**: "sumiu há 30 dias" ia para todo mundo que sumiu há 30 dias
+   * — o assinante que paga mensalidade e o visitante de uma vez só, com a mesma
+   * frase.
+   */
+  describe('o público da automação', () => {
+    /**
+     * Dois clientes no mesmo gatilho e em segmentos diferentes.
+     *
+     * Carlos tem três atendimentos e vira `em_risco` — passou do próprio ritmo;
+     * Bruno tem um só e fica `novo`. Sem os dois, a restrição passaria por não
+     * haver ninguém do outro lado dela.
+     */
+    const doisSumidos = async () => {
+      /**
+       * Cada horário numa hora diferente: a constraint anti-overbooking é por
+       * profissional, e dois atendimentos no mesmo instante são recusados —
+       * inclusive numa semeadura, onde a colisão parece um defeito do código.
+       */
+      const dia = (n: number, hora: number) =>
+        new Date(AGORA.getTime() - n * 86_400_000 + hora * 3_600_000);
+      // Meia hora de duração: a janela de serviço tem `CHECK` de fim > início.
+      const marcar = (id: string, cliente: string, quando: Date) => {
+        const fim = new Date(quando.getTime() + 30 * 60_000).toISOString();
+        const inicio = quando.toISOString();
+        return `
+        INSERT INTO appointments
+          (id, tenant_id, location_id, professional_id, customer_id, status,
+           starts_at, ends_at, service_starts_at, service_ends_at)
+        VALUES ('${id}', '${TENANT}', '${LOCAL}', '${RUAN}', '${cliente}', 'completed',
+                '${inicio}', '${fim}', '${inicio}', '${fim}');
+      `;
+      };
+      await exec(
+        /**
+         * Carlos corta a cada 20 dias — 73, 53, 33 — e está há 33 sem vir:
+         * passou do **próprio** ritmo e ainda não do dobro dele, que é
+         * exatamente `em_risco`. Um ciclo largo o deixaria dentro do prazo e o
+         * teste mediria outra coisa.
+         */
+        marcar('16565656-0000-4000-8000-000000000011', CARLOS, dia(73, 0)) +
+          marcar('16565656-0000-4000-8000-000000000012', CARLOS, dia(53, 0)) +
+          marcar('16565656-0000-4000-8000-000000000013', CARLOS, dia(33, 0)) +
+          marcar('16565656-0000-4000-8000-000000000021', BRUNO, dia(33, 2)),
+      );
+    };
+
+    const varrer = () =>
+      varrerAutomacoes({ tenantId: TENANT, agora: AGORA, timeZone: 'America/Bahia' });
+
+    const quemFoiMarcado = async (): Promise<string[]> => {
+      const linhas = await admin.$queryRawUnsafe<{ customer_id: string }[]>(
+        `SELECT customer_id FROM automation_sends ORDER BY customer_id`,
+      );
+      return linhas.map((l) => l.customer_id);
+    };
+
+    it('sem público, todo mundo que cruzou o gatilho entra', async () => {
+      // O comportamento anterior, e o padrão: quem não decidir nada continua
+      // com o que tinha. Sem este caso, o de baixo passaria com a varredura
+      // quebrada para todo mundo.
+      await doisSumidos();
+      await automacao();
+      await varrer();
+      expect((await quemFoiMarcado()).sort()).toEqual([CARLOS, BRUNO].sort());
+    });
+
+    it('com público, só quem está naquele segmento entra', async () => {
+      await doisSumidos();
+      await automacao({ publico: 'em_risco' });
+      await varrer();
+      // Carlos passou do próprio ritmo; Bruno veio uma vez e é `novo`.
+      expect(await quemFoiMarcado()).toEqual([CARLOS]);
+    });
+
+    it('quem fica de fora do público não vira disparo pulado', async () => {
+      /**
+       * Fora do público não é pulo: pulo é "deveria receber e não recebeu", e
+       * quem não é do público nunca esteve na conta. Gravar encheria a lista de
+       * "por que não chegou" do bloco 97 com a base inteira menos o público.
+       */
+      await doisSumidos();
+      await automacao({ publico: 'em_risco' });
+      await varrer();
+      const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+        `SELECT count(*) AS n FROM automation_sends WHERE customer_id = '${BRUNO}'`,
+      );
+      expect(Number(linhas[0]?.n ?? 0)).toBe(0);
+    });
+
+    it('salvar sem mandar o campo não apaga o público', async () => {
+      /**
+       * `undefined` é "não mexa", e `null` é "todo mundo" — a mesma distinção de
+       * `templateId`. Sem o `CASE` no `UPDATE`, qualquer chamador que não
+       * conheça este campo apagaria a restrição em silêncio, e a automação
+       * voltaria a mandar para a base inteira.
+       *
+       * Pelo `salvarAutomacao` e não pela porta de ligar/desligar: aquela usa um
+       * `UPDATE` estreito que só toca `active` desde o bloco 92 e **nunca**
+       * chega ao `ON CONFLICT` — o teste passaria com o conserto removido.
+       */
+      const { id } = await automacao({ publico: 'vip' });
+      await automacao({ id, nome: 'Outro nome' });
+
+      const lista = await automacoesDaCasa(TENANT);
+      const salva = lista.find((a) => a.id === id);
+      expect(salva?.nome).toBe('Outro nome');
+      expect(salva?.publico).toBe('vip');
+    });
+
+    it('voltar para "todo mundo" é possível', async () => {
+      /**
+       * `null` é valor legítimo e não "não mexa". Com um `COALESCE` no lugar do
+       * `CASE`, ninguém conseguiria desfazer a restrição pela tela — e a saída
+       * seria criar outra automação, que é o defeito que o bloco 98 fechou.
+       */
+      const { id } = await automacao({ publico: 'vip' });
+      await automacao({ id, publico: null });
+      const lista = await automacoesDaCasa(TENANT);
+      expect(lista.find((a) => a.id === id)?.publico).toBeNull();
+    });
+
+    it('segmento desconhecido no banco não vira público', async () => {
+      // A coluna tem `CHECK`, mas a leitura não pode confiar nela: um valor que
+      // este pacote ainda não conhece precisa virar "todo mundo" na tela, e não
+      // um rótulo em branco ao lado de "só para".
+      const { id } = await automacao();
+      await exec(`UPDATE automations SET audience = NULL WHERE id = '${id}'`);
+      const lista = await automacoesDaCasa(TENANT);
+      expect(lista.find((a) => a.id === id)?.publico).toBeNull();
+    });
   });
 });

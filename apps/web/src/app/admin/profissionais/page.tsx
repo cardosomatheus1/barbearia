@@ -9,7 +9,7 @@ import {
   type ProfissionalDoCadastro,
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { ESPECIALIDADES, ROTULO_DA_ESPECIALIDADE } from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import {
@@ -562,7 +562,7 @@ function Meta({
         />
         <p className="ui-field__hint">
           {atual === null && sugestao !== null
-            ? `No mês passado foi R$ ${reaisDoCampo(sugestao)}. Deixe em branco para ficar sem meta.`
+            ? `No mês passado foi ${reais(sugestao)}. Deixe em branco para ficar sem meta.`
             : 'Deixe em branco para ficar sem meta. Ele vê o quanto falta e o ritmo, ninguém vê a dos outros.'}
         </p>
       </div>

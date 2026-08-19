@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { TIPOS_DE_NOTIFICACAO } from '@barbearia/core';
+import {
+  BOTOES_DA_MENSAGEM,
+  BOTOES_QUE_LEVAM,
+  TIPOS_DE_CAMPANHA,
+  TIPOS_DE_NOTIFICACAO,
+} from '@barbearia/core';
 
 /**
  * A borda do WhatsApp (bloco 55).
@@ -26,6 +31,34 @@ export const cadastroDoWhatsAppSchema = z.object({
 
 export const templateSchema = z.object({
   tipo: z.enum(TIPOS_DE_NOTIFICACAO),
+  /**
+   * O nome que a barbearia deu ao texto, em português (bloco 94).
+   *
+   * É dele que sai o identificador da Meta, e é por isso que dois títulos
+   * diferentes produzem dois textos — que é o que faz onze automações deixarem
+   * de mandar a mesma frase.
+   */
+  titulo: z.string().trim().min(1).max(80).optional(),
+  /**
+   * Os botões deste texto.
+   *
+   * A borda confere a **forma** — que é botão conhecido do produto —, e o
+   * domínio confere se aquele aviso o aceita: `confirmar` mexe num agendamento
+   * provado, e uma campanha não tem nenhum. As duas camadas existem porque uma
+   * delas é a que sobrevive, e a que sabe a regra é a de baixo.
+   *
+   * Três é o teto da Meta para botões de resposta rápida.
+   */
+  botoes: z.array(z.enum(BOTOES_DA_MENSAGEM)).max(3).optional(),
+  /**
+   * Os botões que levam a algum lugar (bloco 95).
+   *
+   * O destino **não** vem da tela: sai do slug da barbearia e do telefone da
+   * unidade, resolvidos no domínio. Um campo de endereço aqui seria um link
+   * digitado errado uma vez e mandado para mil pessoas — e o lugar onde alguém
+   * cola um endereço que não é da casa.
+   */
+  acoes: z.array(z.enum(BOTOES_QUE_LEVAM)).max(2).optional(),
   /**
    * Opcional: por padrão o nome na Meta é o próprio tipo do aviso.
    *
@@ -131,4 +164,25 @@ export const signupDaTelaSchema = z.object({
    */
   redirectUri: enderecoDeVolta.optional(),
   state: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+});
+
+/**
+ * Mandar uma mensagem para um cliente (bloco 92).
+ *
+ * `TIPOS_DE_CAMPANHA` e não os seis avisos, pela razão da automação: quem
+ * recebe uma mensagem avulsa **não tem horário marcado**, então `lembrete_24h`
+ * prometeria um horário que não existe — e `senha_de_acesso` é credencial.
+ */
+export const mensagemAvulsaSchema = z.object({
+  customerId: z.string().uuid(),
+  /**
+   * Um dos dois, e o texto vence (bloco 96).
+   *
+   * A ficha listava os três convites de retorno aprovados com um botão cada, e
+   * os três mandavam o mesmo: o formulário postava o `tipo`, e o motor pegava o
+   * primeiro aprovado dele. `tipo` continua aceito para quem chama pela API sem
+   * saber o id do texto.
+   */
+  tipo: z.enum(TIPOS_DE_CAMPANHA).optional(),
+  templateId: z.string().uuid().optional(),
 });

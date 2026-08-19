@@ -4,6 +4,7 @@ import { LUGARES_EM_DESTAQUE } from '@barbearia/core';
 import { contestacoesNaApi, destaquesNaApi, listarBarbearias } from '@/lib/plataforma-api';
 import { lerSessaoDaPlataforma } from '@/lib/sessao-plataforma';
 import { acaoCancelarDestaque, acaoReverterContestacao, acaoVenderDestaque } from '../acoes';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * Destaque vendido e contestação de comissão (bloco 75).
@@ -28,8 +29,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const reais = (centavos: number): string =>
-  (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const dia = (iso: string): string => new Date(iso).toLocaleDateString('pt-BR');
 

@@ -10,6 +10,7 @@ import {
   type RecursoDaBarbearia,
 } from '@/lib/plataforma-api';
 import { lerSessaoDaPlataforma } from '@/lib/sessao-plataforma';
+import { reais } from '@/lib/dinheiro';
 import {
   acaoBloquear,
   acaoDefinirRecurso,
@@ -65,8 +66,6 @@ const FEITO: Record<string, string> = {
   desbloqueio: 'Conta reativada.',
 };
 
-const reais = (centavos: number): string =>
-  `R$ ${(centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
 const dia = (iso: string): string =>
   new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });

@@ -1,4 +1,9 @@
 import { semTenant, withTenant, type TransactionClient } from '@barbearia/db';
+import {
+  instantToLocal,
+  SILENCIO_COMECA_MINUTO,
+  SILENCIO_TERMINA_MINUTO,
+} from '@barbearia/core';
 
 /**
  * A fila de trabalho.
@@ -253,4 +258,99 @@ export async function enfileirarAvulso(
   tarefa: Parameters<typeof enfileirar>[1],
 ): Promise<void> {
   await withTenant(tenantId, (tx) => enfileirar(tx, tarefa));
+}
+
+// ---------------------------------------------------------------------------
+// A fila está andando?
+// ---------------------------------------------------------------------------
+
+/**
+ * Quanto tempo sem concluir nada já é a fila **parada** (bloco 101).
+ *
+ * O worker roda a cada cinco segundos e a barbearia mais parada do mundo tem
+ * varredura de hora em hora, então quinze minutos sem uma única conclusão com
+ * tarefa vencida esperando não é lentidão — é processo fora do ar.
+ *
+ * Generoso de propósito: alarme que dispara à toa é alarme que se aprende a
+ * ignorar, e um canal ignorado é pior que canal nenhum.
+ */
+export const SILENCIO_QUE_PREOCUPA_MS = 15 * 60_000;
+
+export interface SaudeDaFila {
+  /** Vencidas: `run_after` já passou e ninguém as executou. */
+  readonly atrasadas: number;
+  /** Esperando a hora — o lembrete de amanhã. Normal, e não é alarme. */
+  readonly agendadas: number;
+  /** Quando a fila concluiu alguma coisa pela última vez. */
+  readonly ultimaConclusao: string | null;
+  /**
+   * É a janela de silêncio **da unidade** agora (bloco 101).
+   *
+   * Entre 21h e 8h nada sai, de propósito. A tela mostrava o mesmo zero que
+   * mostra quando o processo caiu — duas razões diferentes para o mesmo número,
+   * e nenhuma escrita: quem lê não sabe se espera ou se avisa alguém.
+   *
+   * Respondido aqui e não na tela porque o fuso vem da **unidade**, nunca do
+   * aparelho — é a regra do projeto, e a tela não tem o fuso à mão.
+   */
+  readonly emSilencio: boolean;
+  /**
+   * A fila parou de andar.
+   *
+   * Só quando há **tarefa vencida** e nada foi concluído há muito tempo: uma
+   * barbearia que não tem nada a fazer tem a fila vazia e silenciosa, e isso é
+   * o certo. Sem esta condição, o alarme apareceria em toda casa nova.
+   */
+  readonly parada: boolean;
+}
+
+/**
+ * A fila está andando para esta barbearia?
+ *
+ * Existe porque **nenhuma tela do produto sabia responder isso**. A campanha
+ * dizia "entrou na fila", a automação prometia "rodam de hora em hora" e a tela
+ * de WhatsApp mostrava o canal de pé — com trinta e três mensagens paradas e o
+ * processo que as manda fora do ar. Todas as quatro afirmavam o contrário do
+ * que estava acontecendo, e o dono só descobriria pelo cliente que não voltou.
+ *
+ * `semTenant` porque `jobs` não tem RLS — é decisão do bloco 20, e o filtro por
+ * barbearia é escrito aqui, explicitamente, como em todo acesso a esta tabela.
+ */
+export async function saudeDaFila(
+  tenantId: string,
+  agora: Date,
+  timeZone: string,
+): Promise<SaudeDaFila> {
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { atrasadas: bigint; agendadas: bigint; ultima: Date | null }[]
+    >`
+      SELECT
+        count(*) FILTER (WHERE status = 'pending' AND run_after <= ${agora}) AS atrasadas,
+        count(*) FILTER (WHERE status = 'pending' AND run_after > ${agora}) AS agendadas,
+        max(finished_at) AS ultima
+        FROM jobs
+       WHERE tenant_id = ${tenantId}::uuid
+    `;
+    const l = linhas[0];
+    const atrasadas = Number(l?.atrasadas ?? 0);
+    const ultima = l?.ultima ?? null;
+    const paradaHa = ultima === null ? Infinity : agora.getTime() - ultima.getTime();
+
+    const minutoLocal = instantToLocal(timeZone, agora).minutes;
+    const emSilencio =
+      minutoLocal >= SILENCIO_COMECA_MINUTO || minutoLocal < SILENCIO_TERMINA_MINUTO;
+
+    return {
+      atrasadas,
+      agendadas: Number(l?.agendadas ?? 0),
+      ultimaConclusao: ultima?.toISOString() ?? null,
+      emSilencio,
+      /**
+       * Na janela de silêncio, tarefa parada é o **certo** — e o alarme diria o
+       * contrário. Sem isto, toda barbearia acenderia o aviso às 21h01.
+       */
+      parada: !emSilencio && atrasadas > 0 && paradaHa > SILENCIO_QUE_PREOCUPA_MS,
+    };
+  });
 }

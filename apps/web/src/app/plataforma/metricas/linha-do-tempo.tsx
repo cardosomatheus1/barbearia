@@ -23,7 +23,15 @@ import type { MesDoMrrNaTela, SafraNaTela } from '@/lib/plataforma-api';
  * exigência que uma rampa de baixo contraste traz junto.
  */
 
-const reais = (centavos: number): string =>
+/**
+ * **Sem centavos**, e é a única exceção ao formatador do produto.
+ *
+ * Este é rótulo direto num gráfico, onde o que se lê é a ordem de grandeza: com
+ * os centavos, "R$ 32.432,00" ocupa o dobro do eixo e some no próprio excesso.
+ * O motivo está escrito porque um formatador local é exatamente o que produziu
+ * quatro formatos de dinheiro no produto.
+ */
+const reaisRedondo = (centavos: number): string =>
   (centavos / 100).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
@@ -68,13 +76,13 @@ export function MrrMesAMes({
       <ol className="mrr">
         {meses.map((m) => (
           <li className="mrr__mes" key={m.mes}>
-            <span className="mrr__valor">{reais(m.mrrCents)}</span>
+            <span className="mrr__valor">{reaisRedondo(m.mrrCents)}</span>
             {/* A barra é um `div` com altura em porcentagem, e não um SVG: uma
                 barra é um retângulo, e um retângulo é CSS. */}
             <span
               className="mrr__barra"
               style={{ blockSize: `${Math.max(2, (m.mrrCents / maior) * 100)}%` }}
-              title={`${mesCurto(m.mes)}: ${reais(m.mrrCents)} de ${m.barbeariasPagantes} barbearias`}
+              title={`${mesCurto(m.mes)}: ${reaisRedondo(m.mrrCents)} de ${m.barbeariasPagantes} barbearias`}
             />
             <span className="mrr__rotulo">{mesCurto(m.mes)}</span>
             <span className="mrr__quantas">{m.barbeariasPagantes}</span>

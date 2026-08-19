@@ -137,7 +137,11 @@ export const MODULOS = [
       { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'o número por onde tudo sai — conecte antes de enviar', grupo: 'Envios' },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar', grupo: 'Envios' },
       { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha', grupo: 'Envios' },
-      { href: '/admin/avisos', nome: 'Lembretes', secao: 'avisos', nota: 'confirmação, lembrete e retorno', grupo: 'Envios', recurso: 'avisos' },
+      // "Lembretes" no menu e "Avisos ao cliente" no título da própria tela — e
+      // o botão do onboarding, a primeira coisa que um dono novo vê, também diz
+      // "Avisos ao cliente". O produto mandava para um nome e escondia atrás de
+      // outro (§6, pergunta 2).
+      { href: '/admin/avisos', nome: 'Avisos ao cliente', secao: 'avisos', nota: 'confirmação, lembrete e retorno', grupo: 'Envios', recurso: 'avisos' },
       { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', nota: 'quem está indo embora, e por quê', grupo: 'Retorno' },
       { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', nota: 'pontos, visitas ou cashback', grupo: 'Retorno' },
     ],

@@ -11,6 +11,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSair, acaoSalvarMetaDaRede } from '../acoes';
 import { secao } from '../secoes';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * Indicadores consolidados da rede (bloco 77).
@@ -43,10 +44,13 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const reais = (centavos: number | null): string =>
-  centavos === null
-    ? '—'
-    : (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+/**
+ * Nulo é "não dá para dizer", e é diferente de zero — a franqueada que ainda
+ * não faturou nada não aparece como R$ 0,00. O formato delega para o único
+ * formatador do produto.
+ */
+const reaisOuTraco = (valor: number | null): string =>
+  valor === null ? '—' : reais(valor);
 
 const pct = (bps: number | null): string =>
   bps === null ? '—' : `${(bps / 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`;
@@ -87,10 +91,10 @@ function Linha({ linha }: { readonly linha: LinhaDaRedeNaApi }) {
   return (
     <tr>
       <td>{linha.nome ?? '—'}</td>
-      <td className="tabular">{reais(linha.receitaCents)}</td>
+      <td className="tabular">{reaisOuTraco(linha.receitaCents)}</td>
       <td className="tabular">{linha.vendas}</td>
-      <td className="tabular">{reais(linha.ticketMedioCents)}</td>
-      <td className="tabular">{reais(linha.metaCents)}</td>
+      <td className="tabular">{reaisOuTraco(linha.ticketMedioCents)}</td>
+      <td className="tabular">{reaisOuTraco(linha.metaCents)}</td>
       <td className="tabular">
         {linha.progressoBps === null ? (
           /* Sem meta é diferente de zero por cento: a tela não acusa quem não
@@ -189,15 +193,15 @@ export default async function RedePage({ searchParams }: Props) {
         <>
           <section className="painel__grupo">
             <div className="rede-numeros">
-              <Numero rotulo="Faturamento da rede" valor={reais(rede.receitaTotalCents)} />
+              <Numero rotulo="Faturamento da rede" valor={reaisOuTraco(rede.receitaTotalCents)} />
               <Numero
                 rotulo="Ticket médio"
-                valor={reais(rede.ticketMedioCents)}
+                valor={reaisOuTraco(rede.ticketMedioCents)}
                 nota={`${rede.vendasTotais} vendas`}
               />
               <Numero
                 rotulo="Mediana por unidade"
-                valor={reais(rede.medianaDaReceitaCents)}
+                valor={reaisOuTraco(rede.medianaDaReceitaCents)}
                 nota={
                   rede.medianaDaReceitaCents === null
                     ? `a partir de ${MINIMO_PARA_COMPARAR_REDE} franqueadas`
@@ -285,15 +289,15 @@ export default async function RedePage({ searchParams }: Props) {
         <>
           <section className="painel__grupo">
             <div className="rede-numeros">
-              <Numero rotulo="Seu faturamento" valor={reais(meu.minha.receitaCents)} />
+              <Numero rotulo="Seu faturamento" valor={reaisOuTraco(meu.minha.receitaCents)} />
               <Numero
                 rotulo="Seu ticket médio"
-                valor={reais(meu.minha.ticketMedioCents)}
+                valor={reaisOuTraco(meu.minha.ticketMedioCents)}
                 nota={`${meu.minha.vendas} vendas`}
               />
               <Numero
                 rotulo="Mediana da rede"
-                valor={reais(meu.medianaDaReceitaCents)}
+                valor={reaisOuTraco(meu.medianaDaReceitaCents)}
                 nota={
                   meu.medianaDaReceitaCents === null
                     ? `a partir de ${MINIMO_PARA_COMPARAR_REDE} franqueadas`
@@ -302,7 +306,7 @@ export default async function RedePage({ searchParams }: Props) {
               />
               <Numero
                 rotulo="Sua meta"
-                valor={reais(meu.minha.metaCents)}
+                valor={reaisOuTraco(meu.minha.metaCents)}
                 nota={
                   meu.minha.progressoBps === null
                     ? 'nenhuma combinada'

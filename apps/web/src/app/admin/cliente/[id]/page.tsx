@@ -10,8 +10,11 @@ import {
   ROTULO_DA_ASSINATURA,
   ROTULO_DO_PACOTE,
   ROTULO_DO_SEGMENTO,
+  TIPOS_DE_CAMPANHA,
+  corpoComExemplos,
   saldoPorExtenso,
   type Segmento,
+  nomeDoAviso,
 } from '@barbearia/core';
 import {
   confiancaDoCliente,
@@ -30,6 +33,7 @@ import {
   type SaldoDeFidelidade,
   consentimentosDaFicha,
   fotosDoClienteNaApi,
+  templatesDoWhatsAppNaApi,
   fichaDoCliente,
   type ConfiancaDoCliente,
   type ConsentimentosNaFicha,
@@ -37,8 +41,8 @@ import {
   type VisitaNaFicha,
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
-import { reaisDoCampo } from '@/lib/dinheiro';
-import { lerSessaoGestor } from '@/lib/sessao-gestor';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
+import { lerMotivoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
 import {
   acaoAbrirPedidoDeDados,
@@ -60,6 +64,7 @@ import {
   acaoTransferirPacote,
   acaoDefinirLimiteDeFiado,
   acaoLancarSaldoInicialDeFiado,
+  acaoMandarMensagem,
   acaoSair,
 } from '../../acoes';
 import { secao } from '../../secoes';
@@ -95,6 +100,12 @@ const first = (valor: string | string[] | undefined): string | undefined =>
 
 const FALHA: Record<string, string> = {
   cliente_nao_encontrado: 'Este cliente não existe mais.',
+  // A mensagem avulsa (bloco 92). "Não saiu" não é falha nossa: são as guardas
+  // de consentimento, teto e janela de silêncio, e o motivo vem logo abaixo.
+  nao_saiu: 'A mensagem não saiu.',
+  sem_canal: 'O WhatsApp da casa ainda não está ligado, então nada chega ao cliente.',
+  sem_texto_aprovado: 'Não há texto aprovado para este aviso.',
+  tipo_invalido: 'Este texto fala de um horário marcado e não serve para mensagem avulsa.',
   confirmacao_invalida: 'Para apagar, digite APAGAR no campo de confirmação.',
   forbidden_anonimizar: 'Sua conta não apaga dados de cliente.',
   preferencia_invalida: 'Escolha uma das opções de conversa.',
@@ -309,6 +320,86 @@ function Fotos({
           </button>
         </form>
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * Mandar uma mensagem para esta pessoa, do balcão (bloco 92).
+ *
+ * Até aqui uma mensagem só saía por quatro caminhos, e os quatro decidiam
+ * sozinhos quem recebe: lembrete de agendamento, "sua vez" na fila, automação e
+ * campanha em massa. Não havia como falar com **uma** pessoa — e é o pedido do
+ * balcão o dia inteiro: "avisa o Carlos que abriu vaga".
+ *
+ * O que a barbearia fazia era pegar o celular pessoal, e aí a conversa sai de um
+ * número que não é o da casa, não conta no teto do mês e não respeita quem pediu
+ * para não receber promoção.
+ *
+ * Um botão por texto aprovado, e nenhum quando não há: a lista sai do que a
+ * Meta já liberou, então não existe caminho para escolher algo que ela recusaria
+ * na hora do envio.
+ */
+function MandarMensagem({
+  customerId,
+  textos,
+}: {
+  readonly customerId: string;
+  /**
+   * Os textos aprovados, **por id** (bloco 96).
+   *
+   * A lista era `{ tipo, corpo }` e o botão postava o `tipo`: com três convites
+   * de retorno cadastrados, os três apareciam com um botão cada e os três
+   * mandavam o primeiro. A recepção lia um texto, apertava, e o cliente recebia
+   * outro. O `key` também era o tipo, então os três eram a mesma chave.
+   */
+  readonly textos: readonly {
+    readonly id: string;
+    readonly tipo: string;
+    readonly titulo: string | null;
+    readonly corpo: string;
+  }[];
+}) {
+  return (
+    <section aria-labelledby="mandar-mensagem" className="secao">
+      <h2 className="secao__titulo" id="mandar-mensagem">
+        Mandar uma mensagem
+      </h2>
+      {textos.length === 0 ? (
+        <p className="secao__vazio">
+          Nenhum texto aprovado ainda. A Meta precisa aprovar cada texto antes de ele poder
+          sair — <a href="/admin/whatsapp">mande um para aprovação</a>.
+        </p>
+      ) : (
+        <>
+          <p className="secao__nota">
+            Sai pelo WhatsApp da casa, com o nome desta pessoa no lugar certo. Respeita quem
+            pediu para não receber promoção, o teto do mês e a janela de silêncio.
+          </p>
+          <ul className="lista-cadastro">
+            {textos.map((t) => (
+              <li key={t.id}>
+                <article className="item-cadastro">
+                  <div className="item-cadastro__corpo">
+                    <p className="item-cadastro__nome">{t.titulo ?? nomeDoAviso(t.tipo)}</p>
+                    {/* O texto inteiro e **preenchido**: quem aperta precisa
+                        saber o que a pessoa vai ler, e as chaves duplas são
+                        vocabulário da Meta — lidas no balcão, parecem falta. */}
+                    <p className="item-cadastro__linha">{corpoComExemplos(t.tipo, t.corpo)}</p>
+                  </div>
+                  <form action={acaoMandarMensagem}>
+                    <input name="customerId" type="hidden" value={customerId} />
+                    <input name="templateId" type="hidden" value={t.id} />
+                    <button className="ui-button ui-button--secondary" type="submit">
+                      Mandar
+                    </button>
+                  </form>
+                </article>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }
@@ -604,11 +695,11 @@ function Fiado({
 
       <div className="saldo-fidelidade">
         <p className="saldo-fidelidade__numero tabular">
-          {divida > 0 ? `Deve R$ ${reaisDoCampo(divida)}` : 'Nada em aberto'}
+          {divida > 0 ? `Deve ${reais(divida)}` : 'Nada em aberto'}
         </p>
         <p className="saldo-fidelidade__nota">
           {fiado.limiteCents > 0
-            ? `Pode levar até R$ ${reaisDoCampo(fiado.limiteCents)} sem pagar na hora.`
+            ? `Pode levar até ${reais(fiado.limiteCents)} sem pagar na hora.`
             : 'Sem limite: hoje esta pessoa não leva fiado.'}
         </p>
 
@@ -1200,6 +1291,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const { id } = await params;
   const query = await searchParams;
   const erro = first(query['erro']);
+  const motivo = erro ? await lerMotivoDaMeta() : null;
   const salvo = first(query['salvo']) === '1';
   // Só dois destinos, e conferidos: valor de query virando `href` de volta é o
   // mesmo buraco de um `redirect` cru com entrada externa.
@@ -1225,8 +1317,12 @@ export default async function FichaPage({ params, searchParams }: Props) {
   const veClube = estado.staff.permissions.includes('finance.subscription_manage');
   // Ver foto é permissão própria e a rota audita a leitura: pedir sem ela
   // devolveria 403 em toda abertura de ficha da recepção, e encheria a trilha.
+  /** Mandar mensagem é `marketing.send`; a lista de textos é `whatsapp.manage`. */
+  const podeMandar =
+    estado.staff.permissions.includes('marketing.send') &&
+    estado.staff.permissions.includes('whatsapp.manage');
   const veFotos = estado.staff.permissions.includes('customers.view_photos');
-  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube, fiado, fotos] =
+  const [ficha, consentimentos, confianca, fidelidade, pacotes, avaliacoes, assinatura, planosDoClube, fiado, fotos, textos] =
     await Promise.all([
     fichaDoCliente(token, id),
     consentimentosDaFicha(token, id),
@@ -1250,6 +1346,14 @@ export default async function FichaPage({ params, searchParams }: Props) {
     // uma pessoa identificada.
     veSaldo ? fiadoDoClienteNaApi(token, id) : Promise.resolve(null),
     veFotos ? fotosDoClienteNaApi(token, id) : Promise.resolve(null),
+    /**
+     * Os textos aprovados, para o balcão poder falar com esta pessoa.
+     *
+     * Só para quem manda mensagem: a rota exige `whatsapp.manage` para listar, e
+     * pedi-la sem a permissão devolveria 403 em toda abertura de ficha da
+     * recepção — que é o defeito que as linhas acima já evitam.
+     */
+    podeMandar ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
   ]);
 
   /**
@@ -1335,6 +1439,17 @@ export default async function FichaPage({ params, searchParams }: Props) {
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
           {FALHA[erro] ?? FALHA['request_failed']}
+          {/* Quando a mensagem não saiu, o motivo é a informação inteira: as
+              quatro razões legítimas — revogou o marketing, já recebeu hoje,
+              teto do mês, janela de silêncio — não são erro, e sem a frase o
+              balcão aperta de novo achando que falhou. */}
+          {motivo ? <p className="whatsapp__motivo">{motivo}</p> : null}
+        </div>
+      ) : null}
+
+      {first(query['feito']) === 'mensagem' ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          Mensagem enviada pelo WhatsApp da casa.
         </div>
       ) : null}
 
@@ -1492,6 +1607,34 @@ export default async function FichaPage({ params, searchParams }: Props) {
           atendimento e o que ela deve continuam, porque a lei obriga a guardar — o que saiu foi
           tudo que identificava quem era.
         </div>
+      ) : null}
+
+      {/* Falar com esta pessoa, do balcão (bloco 92).
+
+          Fica antes dos consentimentos porque é ação do dia a dia, e eles são
+          cadastro. Some para quem foi anonimizado: não há para onde mandar, e
+          o telefone saiu junto com o resto. */}
+      {podeMandar && textos?.ok && !ficha.dados.anonimizado ? (
+        <MandarMensagem
+          customerId={ficha.dados.customerId}
+          textos={textos.dados.templates
+            /**
+             * Aprovado **e** de campanha (bloco 96).
+             *
+             * A lista trazia os seis textos aprovados, incluindo confirmação e
+             * os dois lembretes — e os três falam de um horário marcado, que
+             * quem recebe uma mensagem avulsa não tem. O domínio já os recusava
+             * com `tipo_invalido` desde o bloco 92: eram três botões "Mandar"
+             * que só podiam dar erro, que é a §6 pergunta 1 na forma mais
+             * direta.
+             */
+            .filter(
+              (t) =>
+                t.estado === 'aprovado' &&
+                (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
+            )
+            .map((t) => ({ id: t.id, tipo: t.tipo, titulo: t.titulo, corpo: t.corpo }))}
+        />
       ) : null}
 
       {consentimentos.ok && !ficha.dados.anonimizado ? (

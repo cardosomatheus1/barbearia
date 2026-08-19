@@ -9,6 +9,7 @@ import {
   type SaudeDaBarbearia,
 } from '@/lib/plataforma-api';
 import { lerSessaoDaPlataforma } from '@/lib/sessao-plataforma';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * Como vai a plataforma.
@@ -37,8 +38,6 @@ interface Props {
 
 const JANELAS = [7, 30, 90] as const;
 
-const reais = (centavos: number): string =>
-  `R$ ${(centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
 const dia = (iso: string): string =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });

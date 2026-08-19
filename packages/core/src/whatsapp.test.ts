@@ -211,6 +211,7 @@ describe('o provedor de mentira', () => {
       idioma: 'pt_BR',
       corpo: 'Olá {{1}}',
       botoes: ['confirmar'],
+      tipo: 'lembrete_24h',
     });
     expect(resposta.estado).toBe('pendente');
   });

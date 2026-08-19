@@ -1,4 +1,5 @@
 import type { PontoDaSerieNaTela } from '@/lib/admin-api';
+import { reais } from '@/lib/dinheiro';
 
 /**
  * A linha de faturamento por dia, em SVG servido pelo servidor (bloco 62).
@@ -35,8 +36,6 @@ const ALTURA = 200;
 const MARGEM_BAIXO = 22;
 const MARGEM_TOPO = 12;
 
-const reais = (centavos: number): string =>
-  (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const diaCurto = (dia: string): string => {
   const partes = dia.split('-');

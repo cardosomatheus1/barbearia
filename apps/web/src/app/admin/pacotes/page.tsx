@@ -9,7 +9,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair, acaoSalvarPacote } from '../acoes';
 import { secao } from '../secoes';
 
@@ -53,7 +53,7 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const dinheiro = (cents: number) => `R$ ${reaisDoCampo(cents)}`;
+const dinheiro = reais;
 
 /** O formulário de um pacote — o mesmo para criar e para editar. */
 function CamposDoPacote({

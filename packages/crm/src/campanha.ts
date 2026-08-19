@@ -80,6 +80,15 @@ export interface CampanhaNaTela {
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * O nome do texto que esta campanha manda (bloco 96).
+   *
+   * Nulo é campanha anterior ao bloco, que resolve por tipo. A lista dizia só
+   * "Convite de retorno" — o nome do **tipo** — com três convites de retorno
+   * diferentes cadastrados, e quem abre a tela para conferir o que saiu não
+   * tinha como saber qual dos três foi.
+   */
+  readonly textoTitulo: string | null;
   readonly estado: 'rascunho' | 'enviando' | 'enviada';
   readonly criadaEm: string;
   /** As seis colunas da SPEC §4.13. A última é a que importa. */
@@ -90,6 +99,33 @@ export interface CampanhaNaTela {
   readonly cliques: number;
   readonly agendamentos: number;
   readonly receitaCents: number;
+  /**
+   * Quantos saíram **pelo WhatsApp**, e não pelo canal de reserva (bloco 97).
+   *
+   * `enviarPeloWhatsApp` devolve nulo quando não há canal ligado — SPEC §4.12:
+   * canal indisponível não lança, cai para o outro caminho —, e o alvo é
+   * carimbado assim mesmo. A campanha aparecia verde, com "27 enviados", e
+   * nada tinha chegado a ninguém.
+   *
+   * É a regra do número que ignora parte do dado: ele sai completo, com cara
+   * de completo, e o dono decide em cima dele.
+   */
+  readonly enviadosPeloWhatsApp: number;
+  /** Quantos foram pulados, por motivo. Vazio quando ninguém foi pulado. */
+  readonly pulados: readonly { readonly motivo: string; readonly quantos: number }[];
+}
+
+/**
+ * Uma pessoa que **não** recebeu, com o motivo (bloco 97).
+ *
+ * O motivo de cada pulo é gravado desde o bloco 20 e a tela mostrava só a
+ * contagem: o dono lia "3 enviados · 27 pulados" e não tinha como saber quem
+ * nem por quê sem ir ao banco. Dado que existe e ninguém lê é a §6 pergunta 4.
+ */
+export interface PuladoDaCampanha {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly motivo: string;
 }
 
 /**
@@ -110,6 +146,7 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
         filter_value: number | null;
         filter_weekday: number | null;
         kind: TipoDeNotificacao;
+        texto_titulo: string | null;
         status: 'rascunho' | 'enviando' | 'enviada';
         created_at: Date;
         publico: bigint;
@@ -119,21 +156,39 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
         cliques: bigint;
         agendamentos: bigint;
         receita: bigint | null;
+        pelo_whatsapp: bigint;
+        pulados: readonly { motivo: string; quantos: number }[] | null;
       }[]
     >`
       SELECT c.id, c.name, c.filter::text AS filter, c.filter_value, c.filter_weekday,
-             c.kind::text AS kind, c.status::text AS status, c.created_at,
+             c.kind::text AS kind, w.titulo AS texto_titulo,
+             c.status::text AS status, c.created_at,
              count(t.id) AS publico,
              count(t.id) FILTER (WHERE t.sent_at IS NOT NULL) AS enviados,
              count(t.id) FILTER (WHERE m.delivered_at IS NOT NULL) AS entregues,
              count(t.id) FILTER (WHERE m.read_at IS NOT NULL) AS lidos,
              count(t.id) FILTER (WHERE t.clicked_at IS NOT NULL) AS cliques,
              count(t.id) FILTER (WHERE t.goal_met_at IS NOT NULL) AS agendamentos,
-             COALESCE(sum(t.goal_amount_cents), 0) AS receita
+             COALESCE(sum(t.goal_amount_cents), 0) AS receita,
+             -- Enviado **pelo WhatsApp** é o que tem wamid: sem canal ligado o
+             -- alvo é carimbado do mesmo jeito e nada chega a ninguém.
+             count(t.id) FILTER (WHERE t.wamid IS NOT NULL) AS pelo_whatsapp,
+             COALESCE(mot.motivos, '[]'::jsonb) AS pulados
         FROM campaigns c
         LEFT JOIN campaign_targets t ON t.campaign_id = c.id
         LEFT JOIN whatsapp_messages m ON m.wamid = t.wamid
-       GROUP BY c.id
+        LEFT JOIN whatsapp_templates w ON w.id = c.template_id
+        -- Os motivos por campanha, dentro da **mesma** consulta: uma ida ao
+        -- banco por linha da lista seria o N+1 que a regra proíbe.
+        LEFT JOIN LATERAL (
+          SELECT jsonb_agg(jsonb_build_object('motivo', p.motivo, 'quantos', p.quantos)
+                             ORDER BY p.quantos DESC, p.motivo) AS motivos
+            FROM (SELECT ct.skipped_reason AS motivo, count(*)::int AS quantos
+                    FROM campaign_targets ct
+                   WHERE ct.campaign_id = c.id AND ct.skipped_reason IS NOT NULL
+                   GROUP BY ct.skipped_reason) p
+        ) mot ON true
+       GROUP BY c.id, w.titulo, mot.motivos
        ORDER BY c.created_at DESC
     `;
     return linhas.map((l) => ({
@@ -143,6 +198,7 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
       valorDoFiltro: l.filter_value,
       diaDaSemana: l.filter_weekday,
       tipo: l.kind,
+      textoTitulo: l.texto_titulo,
       estado: l.status,
       criadaEm: l.created_at.toISOString(),
       publico: Number(l.publico),
@@ -152,6 +208,45 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
       cliques: Number(l.cliques),
       agendamentos: Number(l.agendamentos),
       receitaCents: Number(l.receita ?? 0),
+      enviadosPeloWhatsApp: Number(l.pelo_whatsapp),
+      pulados: l.pulados ?? [],
+    }));
+  });
+}
+
+/**
+ * Quem não recebeu, com o nome e o motivo (bloco 97).
+ *
+ * A contagem já vem na lista; o que faltava era **agir sobre ela**. "Vinte e
+ * sete pulados" sem nomes obriga o dono a abrir a base e procurar um por um, e
+ * é a lista que ninguém abre duas vezes.
+ *
+ * Curta de propósito: quem precisa falar com todos usa a campanha, que é o
+ * botão ao lado. O teto é dito na tela, como manda a regra do limite de itens.
+ *
+ * Ordenada por motivo e nome para a lista não trocar de ordem entre dois
+ * carregamentos — empate desempatado por campo estável, nunca pela consulta.
+ */
+export async function puladosDaCampanha(
+  tenantId: string,
+  campanhaId: string,
+  limite = 50,
+): Promise<readonly PuladoDaCampanha[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      { customer_id: string; nome: string | null; motivo: string }[]
+    >`
+      SELECT t.customer_id, c.name AS nome, t.skipped_reason AS motivo
+        FROM campaign_targets t
+        JOIN customers c ON c.id = t.customer_id
+       WHERE t.campaign_id = ${campanhaId}::uuid AND t.skipped_reason IS NOT NULL
+       ORDER BY t.skipped_reason, c.name
+       LIMIT ${limite}
+    `;
+    return linhas.map((l) => ({
+      customerId: l.customer_id,
+      nome: l.nome ?? 'sem nome',
+      motivo: l.motivo,
     }));
   });
 }
@@ -169,7 +264,30 @@ export async function criarCampanha(params: {
   readonly filtro: FiltroDeCampanha;
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
-  readonly tipo: TipoDeNotificacao;
+  /**
+   * O tipo, quando não há texto escolhido.
+   *
+   * Opcional desde o bloco 96 e é o par de `templateId`: quem escolhe o texto
+   * já disse o tipo, porque o texto tem um. Exigir os dois seria pedir duas
+   * vezes a mesma coisa e aceitar que as respostas divirjam.
+   */
+  readonly tipo?: TipoDeNotificacao;
+  /**
+   * Qual texto esta campanha manda (bloco 96).
+   *
+   * A automação passou a escolher no bloco 94 e a campanha ficou para trás,
+   * ainda resolvendo por **tipo** — e o motor pega o primeiro aprovado daquele
+   * tipo com `LIMIT 1`. Com três textos de convite de retorno cadastrados, a
+   * campanha para "quem costuma vir naquele horário" saía com "seu pacote está
+   * acabando", para gente que nunca comprou pacote.
+   *
+   * O pior formato de defeito que este produto pode ter: a tela mostrava a
+   * prévia de um texto, o motor mandava outro, e o único jeito de descobrir era
+   * o cliente responder "que pacote?".
+   *
+   * Congelado como o público: trocar o texto depois não reescreve o que já saiu.
+   */
+  readonly templateId?: string | null;
   readonly janelaDias: number;
   readonly agora: Date;
   readonly staffId: string;
@@ -204,19 +322,51 @@ export async function criarCampanha(params: {
    * que é credencial, ou com `lembrete_24h`, que promete um horário que não
    * existe.
    */
-  if (!tipoDeCampanhaValido(params.tipo)) {
+  if (params.tipo !== undefined && !tipoDeCampanhaValido(params.tipo)) {
     throw new CampanhaError('invalida', 'Este texto não serve para campanha.');
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    /**
+     * O tipo sai do texto escolhido, conferido sob RLS antes de gravar.
+     *
+     * A checagem de integridade referencial do Postgres ignora row security: a
+     * chave estrangeira aceitaria o texto de outra barbearia sem reclamar. E o
+     * tipo tem que vir dele, não de um campo ao lado — separados, a campanha
+     * declararia um e mandaria o texto de outro, com o opt-out e o teto do mês
+     * decididos pelo primeiro.
+     */
+    let tipo = params.tipo;
+    if (params.templateId) {
+      const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
+        SELECT kind::text AS kind FROM whatsapp_templates
+         WHERE id = ${params.templateId}::uuid AND status = 'aprovado'
+      `;
+      const achado = doTexto[0];
+      if (!achado) {
+        // Aprovado também: a tela só oferece aprovados, mas a borda aceita
+        // qualquer uuid — e uma campanha apontada para um rascunho sairia
+        // com o público congelado e nenhuma mensagem, sem erro nenhum.
+        throw new CampanhaError('invalida', 'Este texto não existe ou não foi aprovado.');
+      }
+      tipo = achado.kind;
+      if (!tipoDeCampanhaValido(tipo)) {
+        throw new CampanhaError('invalida', 'Este texto não serve para campanha.');
+      }
+    }
+    if (tipo === undefined) {
+      throw new CampanhaError('invalida', 'Escolha o texto que a campanha vai mandar.');
+    }
+
     const criadas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO campaigns
-        (tenant_id, name, filter, filter_value, filter_weekday, kind, goal_window_days, created_by)
+        (tenant_id, name, filter, filter_value, filter_weekday, kind, goal_window_days,
+         created_by, template_id)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.filtro}::campaign_filter,
               ${params.valorDoFiltro}, ${params.diaDaSemana},
-              ${params.tipo}::notification_kind, ${params.janelaDias},
-              ${params.staffId}::uuid)
+              ${tipo}::notification_kind, ${params.janelaDias},
+              ${params.staffId}::uuid, ${params.templateId ?? null}::uuid)
       RETURNING id
     `;
     const campanha = criadas[0];
@@ -347,6 +497,14 @@ export interface AlvoAEnviar {
   readonly clienteNome: string;
   readonly barbearia: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * O texto que esta campanha escolheu, congelado na criação (bloco 96).
+   *
+   * Ele viaja com o alvo e não é lido de novo no envio: quem trocar o texto da
+   * campanha amanhã não reescreve o que já saiu, pela mesma razão de o público
+   * ser congelado.
+   */
+  readonly templateId: string | null;
 }
 
 export async function alvosAEnviar(
@@ -363,10 +521,11 @@ export async function alvosAEnviar(
         name: string;
         barbearia: string;
         kind: TipoDeNotificacao;
+        template_id: string | null;
       }[]
     >`
       SELECT t.id, t.customer_id, c.phone_e164, c.name, tn.name AS barbearia,
-             ca.kind::text AS kind
+             ca.kind::text AS kind, ca.template_id
         FROM campaign_targets t
         JOIN campaigns ca ON ca.id = t.campaign_id
         JOIN customers c ON c.id = t.customer_id
@@ -382,6 +541,7 @@ export async function alvosAEnviar(
       clienteNome: l.name,
       barbearia: l.barbearia,
       tipo: l.kind,
+      templateId: l.template_id,
     }));
   });
 }

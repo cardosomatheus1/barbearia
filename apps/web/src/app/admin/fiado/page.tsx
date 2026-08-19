@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { quemDeve, type Devedor } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoReceberFiado, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
@@ -41,7 +41,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
 function Devendo({ devedor }: { readonly devedor: Devedor }) {
   const divida = -devedor.saldoCents;

@@ -1,12 +1,19 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
-import { AutomacaoError, automacoesDaCasa, salvarAutomacao } from '@barbearia/crm';
-import type { Gatilho, Objetivo, TipoDeNotificacao } from '@barbearia/core';
+import { Body, Controller, Get, Patch, Put, UseGuards } from '@nestjs/common';
+import {
+  AutomacaoError,
+  automacoesDaCasa,
+  definirAutomacaoAtiva,
+  salvarAutomacao,
+} from '@barbearia/crm';
+import { saudeDaFila } from '@barbearia/jobs';
+import type { Gatilho, Objetivo, Segmento, TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
-import { automacaoSchema } from './automacao.schemas.js';
+import { automacaoSchema, estadoDaAutomacaoSchema } from './automacao.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * As automações da casa (bloco 56, SPEC §4.11).
@@ -38,10 +45,57 @@ export class AutomacaoController {
    * consegue defender nem matar — que é o que a SPEC §4.11 proíbe em letras:
    * *"sem isso não há como desligar o que não funciona"*.
    */
+  /**
+   * A fila está andando? (bloco 101)
+   *
+   * `marketing.send` e nada mais: a resposta são três contagens e um instante —
+   * não devolve cadastro, nem nome, nem centavo. Quem monta campanha é quem
+   * precisa saber se o que ela promete vai acontecer.
+   */
+  @Exige('marketing.send')
+  @Get('fila')
+  async fila(@Staff() staff: AuthenticatedStaff) {
+    // O fuso vem da **unidade**, nunca do aparelho: é a regra do projeto, e é
+    // ela que decide se agora é a janela de silêncio.
+    const local = await unidadeDoBalcao(staff);
+    return saudeDaFila(staff.tenantId, new Date(), local.timezone);
+  }
+
   @Exige('marketing.send')
   @Get()
   async listar(@Staff() staff: AuthenticatedStaff) {
     return { automacoes: await automacoesDaCasa(staff.tenantId) };
+  }
+
+  /**
+   * Ligar e desligar, por porta própria.
+   *
+   * `PATCH` e não `PUT`: isto muda **uma** coluna, e a diferença não é
+   * cosmética. Enquanto o freio passava pelo formulário inteiro, uma regra nova
+   * sobre o conteúdo da automação trancava a saída das linhas antigas — e foi o
+   * que aconteceu quando o tipo foi fechado em `TIPOS_DE_CAMPANHA`: a automação
+   * com tipo velho respondia 400 e continuava ligada, sem saída pela tela.
+   *
+   * Desligar é o freio de emergência de um canal que fala com cliente. Ele não
+   * pode depender de o resto da linha ainda ser válido.
+   */
+  @Exige('marketing.send')
+  @Patch('estado')
+  async estado(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(estadoDaAutomacaoSchema)) body: { id: string; ativa: boolean },
+  ) {
+    try {
+      return await definirAutomacaoAtiva({
+        tenantId: staff.tenantId,
+        id: body.id,
+        ativa: body.ativa,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+      });
+    } catch (erro) {
+      return toHttp(erro);
+    }
   }
 
   @Exige('marketing.send')
@@ -55,6 +109,8 @@ export class AutomacaoController {
       limiar: number | null;
       atrasoMinutos: number;
       tipo: TipoDeNotificacao;
+      templateId?: string | null;
+      publico?: Segmento | null;
       objetivo: Objetivo;
       janelaDias: number;
       ativa: boolean;
@@ -69,6 +125,10 @@ export class AutomacaoController {
         limiar: body.limiar,
         atrasoMinutos: body.atrasoMinutos,
         tipo: body.tipo,
+        templateId: body.templateId ?? null,
+        // Ausente é "não mexa": o spread condicional é o que preserva a
+        // distinção entre "todo mundo" (null) e "não veio no corpo".
+        ...(body.publico === undefined ? {} : { publico: body.publico }),
         objetivo: body.objetivo,
         janelaDias: body.janelaDias,
         ativa: body.ativa,

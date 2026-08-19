@@ -60,6 +60,166 @@ export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
  * e `{{2}}` na campanha são textos diferentes, aprovados em separado. O que não
  * pode variar é dentro do mesmo tipo.
  */
+/**
+ * O nome de cada aviso, como o produto o chama na tela.
+ *
+ * Mora aqui e não na tela porque **duas** telas o mostram desde o bloco 92 — a
+ * de WhatsApp e a ficha do cliente —, e uma lista escrita ao lado é a que fica
+ * para trás no primeiro aviso novo. É a mesma decisão dos públicos de campanha,
+ * que viraram teste pelo mesmo motivo.
+ */
+/**
+ * Os avisos que o **banco** conhece e este pacote ainda não.
+ *
+ * `notification_kind` tem `pedido_de_avaliacao` desde o bloco 46 e nenhum código
+ * o usa — mas a semente cria a automação, e a tela mostrava "Pedido de
+ * avaliacao", sem acento, porque o humanizador só troca sublinhado por espaço.
+ *
+ * Nomear aqui é mais honesto que acentuar por adivinhação: o humanizador
+ * continua existindo para o valor que ninguém previu, e este mapa é onde se
+ * escreve o nome de quem já se conhece.
+ */
+const NOME_DO_QUE_O_BANCO_CONHECE: Readonly<Record<string, string>> = {
+  pedido_de_avaliacao: 'Pedido de avaliação',
+};
+
+export const NOME_DO_AVISO: Readonly<Record<TipoDeNotificacao, string>> = {
+  confirmacao: 'Confirmação do agendamento',
+  lembrete_24h: 'Lembrete de 24 horas',
+  lembrete_2h: 'Lembrete de 2 horas',
+  sua_vez: 'Sua vez na fila',
+  senha_de_acesso: 'Senha de primeiro acesso',
+  retorno: 'Convite de retorno',
+};
+
+/**
+ * A maior posição de variável usada no corpo, que é o que a Meta conta.
+ *
+ * Posição e não ocorrência: um texto que usa `{{1}}` duas vezes pede **uma**
+ * variável, e um que usa só `{{2}}` pede duas — a Meta preenche por índice.
+ *
+ * Mora no `core` porque é lógica pura sobre uma string, e porque quem precisa
+ * dela agora são dois: o envio, que corta as variáveis pelo tamanho do texto
+ * aprovado, e a submissão, que manda uma amostra por posição.
+ */
+export function variaveisDoCorpo(corpo: string): number {
+  let maior = 0;
+  for (const achado of corpo.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    const posicao = Number(achado[1]);
+    if (Number.isFinite(posicao) && posicao > maior) maior = posicao;
+  }
+  return maior;
+}
+
+/**
+ * Um exemplo de cada variável, para a Meta analisar o texto (bloco 93).
+ *
+ * ## Por que isto existe
+ *
+ * A Meta **recusa** template cujas variáveis chegam sem amostra. A recusa vem
+ * com o nome da política — *"Variáveis de modelo sem texto de amostra"* — e o
+ * texto fica rejeitado sem nunca ter sido lido por ninguém: o produto mandava
+ * `Olá {{1}}, é sua vez na fila para a {{2}}` e a Meta não tinha como saber se
+ * `{{1}}` é um nome, um valor em reais ou um link.
+ *
+ * Aconteceu com o primeiro texto de verdade deste produto, e nada do nosso lado
+ * apontava para isso: a submissão respondia sucesso, o estado virava `pendente`,
+ * e a rejeição chegava depois pelo painel da Meta.
+ *
+ * ## Por que sai daqui, e casado com o significado
+ *
+ * A amostra precisa ser **plausível para aquela posição**: mandar "exemplo" nas
+ * três faria a Meta analisar um texto que não se parece com o que vai sair, e é
+ * pela verossimilhança que ela decide. Como o significado de cada posição já
+ * mora em `VARIAVEIS_DO_AVISO`, a amostra é casada com ele — e uma variável nova
+ * ali sem amostra aqui fica visível no `Record`, que o compilador cobra.
+ *
+ * Nomes inventados de propósito: a amostra vai para a Meta e não é cliente
+ * nenhum. É o mesmo cuidado de não pôr dado pessoal em log.
+ */
+export const EXEMPLO_DA_VARIAVEL: Readonly<Record<string, string>> = {
+  'o nome do cliente': 'Carlos',
+  'o nome da barbearia': 'Barbearia Domari',
+  'a hora do agendamento': 'terça-feira, 19 de agosto às 15:30',
+  'o nome do profissional': 'Ruan',
+};
+
+/**
+ * As amostras que acompanham um corpo, na ordem das posições que ele usa.
+ *
+ * Quem manda é o **corpo escrito**, não a lista do tipo: a barbearia pode
+ * escrever um texto com uma variável só, e mandar três amostras para duas
+ * posições é recusado pela Meta com a mesma cara de erro de conteúdo.
+ */
+export function exemplosDoCorpo(tipo: TipoDeNotificacao, corpo: string): readonly string[] {
+  const quantas = variaveisDoCorpo(corpo);
+  const significados = VARIAVEIS_DO_AVISO[tipo];
+  return Array.from({ length: quantas }, (_, i) => {
+    const qual = significados[i];
+    return (qual ? EXEMPLO_DA_VARIAVEL[qual] : undefined) ?? 'exemplo';
+  });
+}
+
+/**
+ * O corpo como o **cliente vai ler**, com cada `{{n}}` já preenchido (bloco 96).
+ *
+ * A tela mostrava o texto cru — "Oi {{1}}, sentimos sua falta na {{2}}" — e
+ * pedia que o balcão decidisse, em cima daquilo, se a mensagem estava boa. As
+ * chaves duplas são vocabulário da Meta, não do produto: quem lê "{{1}}"
+ * entende que falta alguma coisa, e a decisão que a tela pede é justamente
+ * sobre o que **não** está faltando.
+ *
+ * Preenchido com as mesmas amostras que vão para a Meta, e não com um segundo
+ * conjunto: se o exemplo da tela e o exemplo aprovado divergissem, o texto
+ * conferido aqui não seria o texto submetido lá.
+ *
+ * Posição sem significado declarado vira `exemplo`, como em `exemplosDoCorpo` —
+ * deixar `{{4}}` na frase seria a tela dizendo que sabe menos do que sabe.
+ *
+ * `tipo` como `string` pelo motivo de `nomeDoAviso`: quem chama é a tela, e o
+ * tipo dela vem da API. Um `as` para calar o compilador esconderia justamente o
+ * caso em que o banco tem um valor que este pacote ainda não conhece.
+ */
+export function corpoComExemplos(tipo: string, corpo: string): string {
+  const significados =
+    (VARIAVEIS_DO_AVISO as Record<string, readonly string[] | undefined>)[tipo] ?? [];
+  return corpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (inteiro, digitos: string) => {
+    const posicao = Number(digitos);
+    if (!Number.isInteger(posicao) || posicao < 1) return inteiro;
+    const qual = significados[posicao - 1];
+    return (qual ? EXEMPLO_DA_VARIAVEL[qual] : undefined) ?? 'exemplo';
+  });
+}
+
+/**
+ * O nome do aviso a partir de um texto qualquer.
+ *
+ * A tela recebe o tipo como `string` — ele vem da API, do banco, de um campo de
+ * formulário. Um `as` para calar o compilador aqui esconderia justamente o caso
+ * que interessa: o tipo que chegou e que este mapa não conhece. Devolver o
+ * próprio valor é o que a tela já fazia, agora com o compilador de acordo.
+ */
+export function nomeDoAviso(tipo: string): string {
+  const conhecido =
+    (NOME_DO_AVISO as Record<string, string | undefined>)[tipo] ??
+    NOME_DO_QUE_O_BANCO_CONHECE[tipo];
+  if (conhecido) return conhecido;
+  /**
+   * O que o produto não conhece vira frase, nunca identificador (bloco 96).
+   *
+   * `notification_kind` é enum do **banco** e é mais largo que a união deste
+   * pacote — `pedido_de_avaliacao` está lá desde o bloco 46 e nenhum código o
+   * usa. O painel mostrava a linha "manda pedido_de_avaliacao" para quem opera
+   * o balcão: nome de coluna vazando para a tela, e a única pista que a pessoa
+   * tinha de que aquela automação não manda nada.
+   *
+   * Humanizar não conserta a falta — quem responde por isso é a lacuna
+   * declarada —, mas devolve o identificador ao lugar dele, que é o banco.
+   */
+  const frase = tipo.replace(/_/g, ' ').trim();
+  return frase.charAt(0).toUpperCase() + frase.slice(1);
+}
+
 export const VARIAVEIS_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly string[]>> = {
   // Os três que falam de um horário marcado: é o que o cliente precisa ler.
   confirmacao: ['o nome do cliente', 'a hora do agendamento', 'o nome do profissional'],
@@ -86,6 +246,48 @@ export type NaturezaDaMensagem = 'transacional' | 'promocional';
  */
 export function naturezaDe(tipo: TipoDeNotificacao): NaturezaDaMensagem {
   return tipo === 'retorno' ? 'promocional' : 'transacional';
+}
+
+/**
+ * A categoria que a Meta cobra, aprova e limita — derivada do **tipo**.
+ *
+ * ## Por que não sai mais dos botões
+ *
+ * A primeira versão respondia `UTILITY` quando havia botão e `MARKETING` quando
+ * não havia. Botão é um bom palpite — o lembrete tem três, a campanha tem um —,
+ * e é só um palpite: `sua_vez` não tem botão nenhum e é a mensagem mais
+ * transacional que existe neste produto. Ela ia para a Meta declarada como
+ * marketing.
+ *
+ * Não é detalhe de etiqueta. Marketing tem regra de aprovação mais dura, custa
+ * diferente por mensagem, e é a categoria que a Meta limita quando o número é
+ * novo — então declarar utilidade como promoção é reprovar mais, pagar mais e
+ * mandar menos, tudo ao mesmo tempo.
+ *
+ * ## Por que da natureza, e não de um campo no formulário
+ *
+ * `naturezaDe` já decide quem respeita opt-out e quem conta no teto do mês, e a
+ * Meta separa as duas coisas pelo mesmo critério. Duas fontes para a mesma
+ * pergunta divergiriam no primeiro aviso novo — e a divergência apareceria como
+ * texto reprovado sem explicação, que é o defeito que este bloco veio consertar.
+ *
+ * Um seletor na tela seria pior ainda: a Meta **recategoriza** o que ela discorda,
+ * e a barbearia estaria escolhendo um campo que não decide nada e que a faz
+ * pagar mais quando escolhe errado.
+ *
+ * ## Sobre `AUTHENTICATION`
+ *
+ * A Meta tem uma terceira categoria, e `senha_de_acesso` seria dela. Não é usada
+ * de propósito: template de autenticação tem formato fechado — corpo fixo, botão
+ * de copiar código, nada de texto livre —, e o nosso é escrito pela barbearia.
+ * Declará-lo assim seria recusa garantida. `UTILITY` é o que ele de fato é do
+ * ponto de vista de quem recebe, e fica escrito aqui para ninguém "consertar"
+ * isto depois sem saber o que custa.
+ */
+export type CategoriaDoTemplate = 'UTILITY' | 'MARKETING';
+
+export function categoriaDoAviso(tipo: TipoDeNotificacao): CategoriaDoTemplate {
+  return naturezaDe(tipo) === 'promocional' ? 'MARKETING' : 'UTILITY';
 }
 
 /**

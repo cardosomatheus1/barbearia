@@ -261,6 +261,20 @@ export const BOTOES_DA_MENSAGEM = [
   'remarcar',
   'cancelar',
   'agendar_novamente',
+  /**
+   * Sair da lista de promoções, pelo próprio botão (bloco 94).
+   *
+   * A Meta recomenda opt-out em texto de marketing, e o motivo é dela: quem não
+   * acha como sair marca como spam, e spam derruba a qualidade do número — que
+   * derruba **tudo**, lembrete de horário junto. O botão é mais barato que a
+   * denúncia.
+   *
+   * É o único botão deste produto que age sem horário marcado, e por isso é o
+   * único que um texto escrito pela barbearia pode carregar junto de
+   * `agendar_novamente`. `confirmar` e `cancelar` precisam de um agendamento
+   * provado, que uma campanha não tem.
+   */
+  'parar_de_receber',
 ] as const;
 export type BotaoDaMensagem = (typeof BOTOES_DA_MENSAGEM)[number];
 
@@ -277,7 +291,172 @@ export const ROTULO_DO_BOTAO: Readonly<Record<BotaoDaMensagem, string>> = {
   remarcar: 'Remarcar',
   cancelar: 'Cancelar',
   agendar_novamente: 'Agendar novamente',
+  parar_de_receber: 'Parar de receber',
 };
+
+/**
+ * O que acontece quando o cliente aperta, em português e na tela.
+ *
+ * Botão é a única parte da mensagem em que o cliente **age**, e quem monta o
+ * texto precisa saber o que vai acontecer antes de oferecer. Sem isto a escolha
+ * seria por adivinhação, e "Agendar novamente" pareceria marcar sozinho.
+ */
+export const EFEITO_DO_BOTAO: Readonly<Record<BotaoDaMensagem, string>> = {
+  confirmar: 'a presença é confirmada na agenda, na hora',
+  remarcar: 'a casa fica sabendo que a pessoa quer outro horário — quem remarca é ela, no site',
+  cancelar: 'o horário é cancelado na agenda, na hora',
+  agendar_novamente: 'abre a página de agendamento da barbearia',
+  parar_de_receber: 'a pessoa sai da lista de promoções na hora, e fica registrado',
+};
+
+/**
+ * Os botões que um texto escrito pela barbearia pode carregar.
+ *
+ * Os outros dois — confirmar e cancelar — mexem num **agendamento provado**, e
+ * quem recebe uma campanha não tem horário marcado. Oferecê-los produziria a
+ * pior combinação: o cliente aperta, o produto responde "o horário não é de
+ * quem respondeu", e nada acontece sem que ninguém saiba por quê.
+ */
+/**
+ * Quais botões cada aviso **pode** carregar, para a barbearia escolher.
+ *
+ * ## Por que agora dá para escolher, e antes não dava
+ *
+ * A regra deste repositório era categórica: botão sai do tipo, nunca do
+ * formulário, porque *"o que a Meta aprova precisa ser o que o motor manda"*.
+ * Ela existia por um mecanismo — o motor montava os botões de
+ * `BOTOES_DO_AVISO` na hora do envio, e a Meta casa a resposta do cliente pela
+ * **posição**: um texto aprovado com dois botões recebendo três do motor faria
+ * o cliente apertar "Confirmar" e o produto entender "Cancelar".
+ *
+ * Esse mecanismo mudou no bloco 94: o motor lê os botões **da linha do
+ * template**, que é o que a Meta aprovou. A divergência deixou de ser possível,
+ * e com ela caiu o motivo de a escolha não existir.
+ *
+ * ## O que continua fechado, e por quê
+ *
+ * A lista por tipo, e não uma lista só. Confirmar, remarcar e cancelar mexem
+ * num **agendamento provado**: num texto de campanha o cliente apertaria, o
+ * produto responderia "o horário não é de quem respondeu", e nada aconteceria
+ * sem que ninguém soubesse por quê.
+ *
+ * `sua_vez` e `senha_de_acesso` ficam sem nenhum, e é decisão: a primeira é a
+ * pessoa já dentro da barbearia esperando a vez — não há o que confirmar —, e a
+ * segunda é credencial, onde qualquer botão é superfície a mais.
+ *
+ * `BOTOES_DO_AVISO` continua sendo o **padrão** de cada aviso, e é o que sai
+ * quando a barbearia não escolhe.
+ */
+export const BOTOES_POSSIVEIS: Readonly<Record<TipoDeNotificacao, readonly BotaoDaMensagem[]>> = {
+  confirmacao: ['confirmar', 'remarcar', 'cancelar'],
+  lembrete_24h: ['confirmar', 'remarcar', 'cancelar'],
+  /**
+   * "Remarcar" continua disponível aqui, e a tela **avisa** em vez de proibir.
+   *
+   * Duas horas antes não há grade para remanejar no mesmo dia, e oferecer
+   * produz a frustração de tentar e não ter — o motivo escrito em
+   * `BOTOES_DO_AVISO`, que é por isso que o padrão não o traz. Mas é opinião de
+   * produto sobre o negócio de outra pessoa, e a barbearia que abre a agenda no
+   * mesmo dia está certa em querê-lo. Proibir seria o produto sabendo mais que
+   * o dono sobre a agenda dele.
+   */
+  lembrete_2h: ['confirmar', 'remarcar', 'cancelar'],
+  sua_vez: [],
+  senha_de_acesso: [],
+  retorno: ['agendar_novamente', 'parar_de_receber'],
+};
+
+/**
+ * Os botões que este aviso desaconselha, com o motivo.
+ *
+ * Aviso e não recusa: a tela diz o que acontece e deixa decidir. Recusar seria
+ * o produto opinando sobre a agenda de quem opera.
+ */
+export const RESSALVA_DO_BOTAO: Readonly<
+  Partial<Record<TipoDeNotificacao, Partial<Record<BotaoDaMensagem, string>>>>
+> = {
+  lembrete_2h: {
+    remarcar:
+      'Duas horas antes costuma não haver grade para remanejar no mesmo dia — quem tenta e não '
+      + 'acha horário fica mais frustrado que quem não recebeu a oferta.',
+  },
+};
+
+/**
+ * O rótulo de um botão a partir de um texto qualquer.
+ *
+ * A tela recebe o botão como `string` — ele vem do `jsonb` da linha, que é
+ * `unknown` do lado de cá. Um `as` esconderia justamente o caso que interessa:
+ * o botão gravado por uma versão anterior e que este mapa não conhece.
+ */
+export function rotuloDoBotao(botao: string): string {
+  /**
+   * Os dois mapas, porque a linha do template guarda os dois tipos juntos.
+   *
+   * `whatsapp_templates.buttons` é um arranjo de nomes, e desde o bloco 95 ele
+   * mistura resposta rápida com os que levam a algum lugar. A tela não precisa
+   * saber a diferença para escrever o nome; quem precisa é o envio, e lá o
+   * filtro é por `botaoConhecido`.
+   */
+  const dos = ROTULO_DO_BOTAO as Record<string, string | undefined>;
+  const levam = ROTULO_DO_BOTAO_QUE_LEVA as Record<string, string | undefined>;
+  return dos[botao] ?? levam[botao] ?? botao;
+}
+
+/**
+ * Os botões que **levam a algum lugar**, e não voltam como resposta (bloco 95).
+ *
+ * ## Os três tipos da Meta, e por que só um era usado
+ *
+ * Ela aceita `QUICK_REPLY` — que volta para nós como mensagem —, `URL` e
+ * `PHONE_NUMBER`, que não voltam: o aparelho abre o navegador ou o discador e
+ * pronto. O produto só usava o primeiro, e isso deixava de fora as duas coisas
+ * que uma barbearia mais quer oferecer.
+ *
+ * ## O que isso conserta em `agendar_novamente`
+ *
+ * Aquele botão é resposta rápida, e o cliente que o aperta **não vai a lugar
+ * nenhum**: o produto registra "quer agendar de novo" e a pessoa continua na
+ * conversa, esperando algo acontecer. O comentário do executor já dizia por quê
+ * — escolher horário exige ver a grade, e a mensagem não tem grade — e a
+ * conclusão certa não era registrar a intenção: era **levar à grade**.
+ *
+ * `abrir_agenda` faz isso. `agendar_novamente` continua existindo para os
+ * textos já aprovados com ele, e a tela recomenda o novo.
+ *
+ * ## Por que o endereço não é digitado
+ *
+ * Sai do slug da barbearia e do telefone da unidade, que o produto já tem. Um
+ * campo livre seria um link que a barbearia digita errado uma vez e manda para
+ * mil pessoas — e, pior, um lugar onde alguém cola um endereço que não é dela.
+ */
+export const BOTOES_QUE_LEVAM = ['abrir_agenda', 'ligar'] as const;
+export type BotaoQueLeva = (typeof BOTOES_QUE_LEVAM)[number];
+
+export const ROTULO_DO_BOTAO_QUE_LEVA: Readonly<Record<BotaoQueLeva, string>> = {
+  abrir_agenda: 'Agendar',
+  ligar: 'Ligar para a barbearia',
+};
+
+export const EFEITO_DO_BOTAO_QUE_LEVA: Readonly<Record<BotaoQueLeva, string>> = {
+  abrir_agenda: 'abre a página de agendamento da barbearia no navegador do cliente',
+  ligar: 'abre o discador do celular já com o número da barbearia',
+};
+
+export function botaoQueLevaConhecido(valor: string): valor is BotaoQueLeva {
+  return (BOTOES_QUE_LEVAM as readonly string[]).includes(valor);
+}
+
+/**
+ * O teto da Meta, e ele é por tipo.
+ *
+ * Três de resposta rápida, e no máximo um de link e um de ligação. Mandar mais
+ * é recusa dela, e a recusa chega horas depois pelo painel — o formato de falha
+ * que este produto já pagou caro duas vezes.
+ */
+export const TETO_DE_RESPOSTA_RAPIDA = 3;
+export const TETO_DE_LINK = 1;
+export const TETO_DE_LIGACAO = 1;
 
 export function botaoConhecido(valor: string): valor is BotaoDaMensagem {
   return (BOTOES_DA_MENSAGEM as readonly string[]).includes(valor);
@@ -311,6 +490,23 @@ export interface TemplateParaAprovar {
   readonly idioma: string;
   readonly corpo: string;
   readonly botoes: readonly BotaoDaMensagem[];
+  /**
+   * Os botões que levam a algum lugar, com o destino já resolvido (bloco 95).
+   *
+   * O endereço e o telefone saem do cadastro da barbearia e chegam aqui
+   * prontos: o provedor não sabe consultar banco, e um destino montado lá
+   * dentro seria a segunda noção de "qual é a página desta casa".
+   */
+  readonly acoes?: readonly { readonly botao: BotaoQueLeva; readonly destino: string }[];
+  /**
+   * Qual aviso é, e existe para a **amostra** fazer sentido (bloco 93).
+   *
+   * A Meta recusa variável sem exemplo, e o exemplo precisa ser plausível para
+   * aquela posição — `{{2}}` é a hora num lembrete e o nome da casa numa
+   * campanha. Sem o tipo, a amostra seria genérica e o texto seria analisado
+   * como algo que não se parece com o que vai sair.
+   */
+  readonly tipo: TipoDeNotificacao;
 }
 
 export interface RespostaDoTemplate {
@@ -361,6 +557,15 @@ export interface WhatsAppProvider {
   enviar(mensagem: MensagemParaEnviar): Promise<MensagemEnviada>;
   /** Submete um texto para aprovação da Meta. */
   submeterTemplate(template: TemplateParaAprovar): Promise<RespostaDoTemplate>;
+  /**
+   * Reescreve um texto que a Meta **já conhece** (bloco 92).
+   *
+   * Criar e editar são endpoints diferentes do lado dela, e usar o de criar
+   * sobre um nome que já existe é recusado — o que fazia corrigir uma vírgula
+   * num texto aprovado ser impossível pela tela. O nome e o idioma não mudam na
+   * edição: o que se reescreve é o corpo e os botões.
+   */
+  editarTemplate(metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate>;
   /** Pergunta em que pé está. A rede de segurança da conciliação. */
   consultarTemplate(nome: string, idioma: string): Promise<RespostaDoTemplate>;
   /** Pergunta se a posse do número já foi provada. */
@@ -399,6 +604,15 @@ export class FakeWhatsAppProvider implements WhatsAppProvider {
     this.submetidos.push(template);
     return this.resposta(template.nome);
   }
+
+  /** Editado vira submetido também: o que o teste confere é o texto que saiu. */
+  async editarTemplate(_metaId: string, template: TemplateParaAprovar): Promise<RespostaDoTemplate> {
+    this.editados.push(template);
+    this.submetidos.push(template);
+    return this.resposta(template.nome);
+  }
+
+  readonly editados: TemplateParaAprovar[] = [];
 
   async consultarTemplate(nome: string, _idioma: string): Promise<RespostaDoTemplate> {
     return this.resposta(nome);
@@ -439,23 +653,47 @@ export class FakeWhatsAppProvider implements WhatsAppProvider {
  * como foi mandada, e ela viaja pelo aparelho do cliente: assumir que ela chega
  * intacta é o erro que este par de funções existe para não cometer.
  */
-export function montarPayload(botao: BotaoDaMensagem, agendamentoId: string): string {
-  return `${botao}:${agendamentoId}`;
+/**
+ * `agendamentoId` é opcional desde o bloco 94, e é o que faz botão de campanha
+ * existir.
+ *
+ * Enquanto ele era obrigatório, `enviarPeloWhatsApp` mandava **zero botões**
+ * quando não havia agendamento — que é o caso de toda campanha, toda automação
+ * e toda mensagem avulsa. O texto era aprovado com botão, a Meta o desenhava, e
+ * o produto não mandava nenhum: a barbearia via o botão no cadastro e o cliente
+ * não via botão nenhum.
+ *
+ * O separador continua sendo o primeiro `:`, então a metade vazia é lida como
+ * ausência sem formato novo.
+ */
+export function montarPayload(
+  botao: BotaoDaMensagem,
+  agendamentoId: string | null = null,
+): string {
+  return `${botao}:${agendamentoId ?? ''}`;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function lerPayload(
   payload: string | null | undefined,
-): { readonly botao: BotaoDaMensagem; readonly agendamentoId: string } | null {
+): { readonly botao: BotaoDaMensagem; readonly agendamentoId: string | null } | null {
   if (!payload) return null;
   const corte = payload.indexOf(':');
   if (corte < 0) return null;
   const botao = payload.slice(0, corte);
   const agendamentoId = payload.slice(corte + 1);
   if (!botaoConhecido(botao)) return null;
-  // O id é conferido aqui, mas **quem manda é a RLS**: um UUID bem formado de
-  // outra barbearia passaria por esta função e não passaria pela consulta.
+  /**
+   * Metade vazia é botão **sem** agendamento, e é legítimo desde o bloco 94:
+   * "Parar de receber" e "Agendar novamente" numa campanha não falam de horário
+   * nenhum.
+   *
+   * O que continua recusado é um id malformado — e quem manda mesmo é a RLS: um
+   * UUID bem formado de outra barbearia passa por aqui e não passa pela
+   * consulta.
+   */
+  if (agendamentoId === '') return { botao, agendamentoId: null };
   if (!UUID.test(agendamentoId)) return null;
   return { botao, agendamentoId };
 }

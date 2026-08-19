@@ -145,6 +145,41 @@ img, video, svg {
    * 360. "overflow" sozinho não segura quem se posiciona fora do fluxo.
    */
   position: relative;
+  /*
+   * A **pista de que rola** (bloco 99).
+   *
+   * Conteudo largo cortado na direita, sem barra visivel, le como conteudo que
+   * acabou: quem opera no celular nao descobre que ha mais tres colunas do
+   * heatmap ou mais quatro telas na barra de secoes. O gradiente de mascara
+   * apaga a borda direita **enquanto ha o que rolar** e some no fim, entao ele
+   * e a propria informacao e nao um enfeite fixo.
+   *
+   * A propriedade animation-timeline com scroll(self inline) faz isso sem um byte de
+   * JavaScript. Onde o navegador nao suporta, a regra inteira e ignorada e o
+   * recipiente fica como antes — degradacao silenciosa, nao quebra.
+   */
+  scroll-timeline: --rolagem-x inline;
+}
+
+@supports (animation-timeline: scroll(self inline)) {
+  .ui-scroll-x {
+    mask-image: linear-gradient(to right, #000 0 calc(100% - 2.5rem), transparent 100%);
+    animation: ui-fim-da-rolagem linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: contain;
+  }
+
+  /* No fim da rolagem nao ha mais o que anunciar: a mascara sai inteira. */
+  @keyframes ui-fim-da-rolagem {
+    to {
+      mask-image: linear-gradient(to right, #000 0 100%, #000 100%);
+    }
+  }
+
+  /* Quem pediu menos movimento nao perde a informacao: ela vira estatica. */
+  @media (prefers-reduced-motion: reduce) {
+    .ui-scroll-x { animation: none; }
+  }
 }
 
 /*

@@ -14,7 +14,7 @@ import {
 import type { DestinoDoInsight } from '@barbearia/core';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
 
@@ -27,7 +27,6 @@ interface Props {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 const primeiro = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 

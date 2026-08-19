@@ -6,6 +6,9 @@ import {
   medianaDaBase,
   NUMERO_DO_FILTRO,
   ROTULO_DO_FILTRO,
+  ROTULO_DO_SEGMENTO,
+  definicaoDoFiltro,
+  rotuloDoFiltro,
   segmentoDoCliente,
   SEGMENTO_DO_FILTRO,
   SEGMENTOS,
@@ -268,5 +271,49 @@ describe('o vocabulário dos públicos de campanha', () => {
     expect(oferecidos).not.toContain('frequente');
     expect(oferecidos).not.toContain('assinante');
     expect(oferecidos).not.toContain('novo');
+  });
+});
+
+/**
+ * Um nome só para a mesma gente (bloco 99).
+ *
+ * `ROTULO_DO_SEGMENTO` e `ROTULO_DO_FILTRO` davam nomes diferentes às mesmas
+ * pessoas, e as duas apareciam na **mesma tela**: o contador dizia "23 Em
+ * risco" e o seletor logo abaixo dizia "Passou do ritmo dele". Quem opera não
+ * tem como saber que são o mesmo grupo, e é a §6 pergunta 2.
+ */
+describe('o nome do público', () => {
+  it('filtro que é segmento usa o nome do segmento', () => {
+    for (const filtro of FILTROS_DE_CAMPANHA) {
+      const segmento = SEGMENTO_DO_FILTRO[filtro];
+      if (!segmento) continue;
+      expect(rotuloDoFiltro(filtro), filtro).toBe(ROTULO_DO_SEGMENTO[segmento]);
+    }
+  });
+
+  it('filtro que não é segmento mantém o nome próprio', () => {
+    // A outra metade: sem ela, `rotuloDoFiltro` podendo devolver qualquer
+    // coisa para os quatro que não têm segmento passaria no caso de cima.
+    for (const filtro of FILTROS_DE_CAMPANHA) {
+      if (SEGMENTO_DO_FILTRO[filtro]) continue;
+      expect(rotuloDoFiltro(filtro), filtro).toBe(ROTULO_DO_FILTRO[filtro]);
+    }
+  });
+
+  it('o que era o nome do filtro vira a definição ao lado', () => {
+    /**
+     * A definição não se perde ao deixar de ser nome: "Em risco — passou do
+     * ritmo dele" é o nome com o que ele quer dizer junto, e sem ela o seletor
+     * ficaria com sete rótulos que não explicam nada.
+     */
+    expect(definicaoDoFiltro('em_risco')).toBe('passou do ritmo dele');
+    expect(definicaoDoFiltro('inativos')).toBeNull();
+  });
+
+  it('nenhum nome de público colide com o de outro', () => {
+    // Dois públicos com o mesmo rótulo seriam duas opções idênticas no seletor,
+    // e quem escolhe não teria como saber qual pegou.
+    const nomes = FILTROS_DE_CAMPANHA.map((f) => rotuloDoFiltro(f));
+    expect(new Set(nomes).size).toBe(nomes.length);
   });
 });

@@ -171,6 +171,79 @@ export const EXPLICACAO_DE_NAO_DISPARAR: Readonly<Record<MotivoDeNaoDisparar, st
   teto_do_mes: `Já foram ${TETO_PROMOCIONAL_MES} mensagens promocionais neste mês.`,
 };
 
+/**
+ * Por que uma mensagem não saiu — **todos** os motivos que o produto escreve.
+ *
+ * Três colunas guardam motivo: `campaign_targets.skipped_reason`,
+ * `automation_sends.skipped_reason` e `notifications.reason`. As duas primeiras
+ * saem de `MotivoDeNaoDisparar`; a terceira, de `MotivoDeNaoEnviar` — e as duas
+ * uniões existem no código, então este mapa é **derivado delas**, nunca uma
+ * lista escrita ao lado.
+ *
+ * ## O que este mapa não tem, e por quê
+ *
+ * A primeira versão trazia `sem_consentimento`, `janela_de_silencio`,
+ * `ainda_no_prazo` e `provedor_indisponivel`. **Nenhum dos quatro é escrito por
+ * código nenhum**: dois vinham da semente de demonstração, que inventou valores
+ * próprios, e dois de um mapa velho na tela de avisos que ninguém tinha
+ * removido.
+ *
+ * Acomodá-los aqui foi o erro que a segunda volta deste bloco desfaz: ampliar o
+ * vocabulário do domínio para caber dado fabricado faz o produto parecer capaz
+ * de coisas que ele não faz — que é exatamente o que a semente já fazia. Quem
+ * conserta a semente é a semente, e há guarda que a cobra.
+ *
+ * `fora_da_janela` fica: ele é escrito por `despacharCampanha`, e não é recusa —
+ * é adiamento, por isso não está em `MotivoDeNaoDisparar`.
+ */
+const EXPLICACAO_DO_MOTIVO: Readonly<Record<string, string>> = {
+  ...EXPLICACAO_DE_NAO_DISPARAR,
+  fora_da_janela: 'Ficou para depois: entre 21h e 8h nada sai.',
+  // Os de `MotivoDeNaoEnviar` que a decisão de disparo não tem.
+  ja_enviada: 'Esta pessoa já tinha sido avisada.',
+  passou_da_hora: 'A hora do aviso já tinha passado.',
+  cancelado: 'O horário foi desmarcado.',
+};
+
+/**
+ * A frase inteira, para uma linha por pessoa.
+ *
+ * `string` na entrada pelo motivo de `nomeDoAviso`: quem chama é a tela, e o
+ * valor vem do banco. Motivo desconhecido é **humanizado**, nunca devolvido
+ * cru e nunca descartado: a primeira versão jogava fora a informação que o
+ * resumo ao lado mostrava, e a lista de "quem não recebeu" ficava mais vaga que
+ * o número que levava até ela.
+ */
+export function explicacaoDoPulo(motivo: string): string {
+  const conhecido = EXPLICACAO_DO_MOTIVO[motivo];
+  if (conhecido) return conhecido;
+  const frase = motivo.replace(/_/g, ' ').trim();
+  return frase ? `${frase.charAt(0).toUpperCase()}${frase.slice(1)}.` : 'Não deu para mandar.';
+}
+
+/**
+ * O mesmo motivo em duas palavras, para a contagem ao lado do número.
+ *
+ * A frase inteira serve para uma linha por pessoa; num resumo de quatro motivos
+ * ela vira parágrafo, e parágrafo num cartão é o que ninguém lê.
+ */
+export const RESUMO_DO_PULO: Readonly<Record<string, string>> = {
+  automacao_desligada: 'automação desligada',
+  ja_disparou_por_este_fato: 'já recebeu por este motivo',
+  ja_recebeu_hoje: 'já recebeu hoje',
+  sem_telefone: 'sem telefone',
+  optou_por_nao_receber: 'pediu para não receber',
+  teto_do_mes: 'teto do mês',
+  fora_da_janela: 'fora do horário',
+  ja_enviada: 'já tinha sido avisado',
+  passou_da_hora: 'a hora já tinha passado',
+  cancelado: 'horário desmarcado',
+};
+
+export function resumoDoPulo(motivo: string): string {
+  return RESUMO_DO_PULO[motivo] ?? motivo.replace(/_/g, ' ');
+}
+
 export interface DecisaoDeDisparo {
   readonly disparar: boolean;
   /** Quando mandar. Já sai fora da janela de silêncio, no fuso da unidade. */

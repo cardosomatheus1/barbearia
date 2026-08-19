@@ -15,3 +15,4 @@ export * from './whatsapp-signup.js';
 export * from './automacao.js';
 export * from './campanha.js';
 export * from './fotos.js';
+export * from './mensagem-avulsa.js';

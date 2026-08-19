@@ -3169,6 +3169,8 @@ export interface TemplateNaTelaDoAdmin {
   readonly id: string;
   readonly tipo: string;
   readonly nome: string;
+  /** O nome em português. Nulo é texto anterior ao bloco 94. */
+  readonly titulo: string | null;
   readonly idioma: string;
   readonly estado: 'rascunho' | 'pendente' | 'aprovado' | 'rejeitado' | 'pausado';
   readonly corpo: string;
@@ -3257,9 +3259,43 @@ export const templatesDoWhatsAppNaApi = (token: string) =>
     token,
   );
 
+/**
+ * Pergunta à Meta agora, sem esperar a volta do relógio.
+ *
+ * A conciliação roda de hora em hora e isso é certo para o conjunto; errado é
+ * ser o único caminho, porque quem aprova o texto no painel da Meta volta em
+ * segundos e lê "Na Meta".
+ */
+/**
+ * Manda o texto aprovado de um aviso para **um** cliente.
+ *
+ * `enviado: false` não é erro: é a guarda de consentimento, teto ou janela de
+ * silêncio dizendo por que não saiu, e o motivo vem escrito.
+ */
+/** Um dos dois: o texto escolhido vence, e é ele que a ficha manda. */
+export const mandarMensagemNaApi = (
+  token: string,
+  customerId: string,
+  qual: { readonly templateId: string } | { readonly tipo: string },
+) =>
+  chamar<{ enviado: boolean; wamid: string | null; motivo: string | null }>(
+    'POST',
+    '/v1/admin/whatsapp/mensagem',
+    { customerId, ...qual },
+    token,
+  );
+
+export const conciliarWhatsAppNaApi = (token: string) =>
+  chamar<{ promovido: boolean; templates: number }>(
+    'POST',
+    '/v1/admin/whatsapp/conciliar',
+    {},
+    token,
+  );
+
 export const submeterTemplateNaApi = (
   token: string,
-  corpo: { tipo: string; corpo: string },
+  corpo: { tipo: string; titulo?: string; botoes?: string[]; acoes?: string[]; corpo: string },
 ) => chamar<TemplateNaTelaDoAdmin>('POST', '/v1/admin/whatsapp/templates', corpo, token);
 
 // -- automação (bloco 56) ----------------------------------------------------
@@ -3271,12 +3307,44 @@ export interface AutomacaoNaTelaDoAdmin {
   readonly limiar: number | null;
   readonly atrasoMinutos: number;
   readonly tipo: string;
+  /**
+   * O nome do texto que esta automação escolheu (bloco 96).
+   *
+   * A API já o devolvia desde o bloco 94 e a tela não o declarava: a linha
+   * dizia "manda Convite de retorno" — o nome do **tipo** — com três convites
+   * de retorno diferentes cadastrados. O dado existia e ninguém lia, que é a
+   * §6 pergunta 4.
+   */
+  readonly textoTitulo: string | null;
+  /** O id do texto escolhido, que o formulário de edição precisa repor. */
+  readonly templateId: string | null;
+  /** Para quem ela manda; nulo é todo mundo que cruzou o gatilho. */
+  readonly publico: string | null;
   readonly objetivo: string;
   readonly janelaDias: number;
   readonly ativa: boolean;
   readonly enviadas: number;
   readonly alcancadas: number;
 }
+
+/**
+ * A fila está andando? (bloco 101)
+ *
+ * Nenhuma tela sabia responder: a campanha dizia "entrou na fila", a automação
+ * prometia "rodam de hora em hora" e o WhatsApp mostrava o canal de pé — com
+ * trinta e três mensagens paradas e o processo que as manda fora do ar.
+ */
+export interface SaudeDaFilaNaTela {
+  readonly atrasadas: number;
+  readonly agendadas: number;
+  readonly ultimaConclusao: string | null;
+  /** É a janela de silêncio da unidade agora: parado é o certo, e não alarme. */
+  readonly emSilencio: boolean;
+  readonly parada: boolean;
+}
+
+export const filaNaApi = (token: string) =>
+  chamar<SaudeDaFilaNaTela>('GET', '/v1/admin/automacoes/fila', undefined, token);
 
 export const automacoesNaApi = (token: string) =>
   chamar<{ automacoes: readonly AutomacaoNaTelaDoAdmin[] }>(
@@ -3285,6 +3353,19 @@ export const automacoesNaApi = (token: string) =>
     undefined,
     token,
   );
+
+/**
+ * Liga e desliga, sem passar pela validação do formulário.
+ *
+ * Porta própria porque o freio não pode depender de o resto da linha ainda ser
+ * válido: a automação criada antes de o tipo ser fechado respondia 400 no
+ * reenvio e ficava ligada para sempre.
+ */
+export const definirAutomacaoAtivaNaApi = (
+  token: string,
+  id: string,
+  ativa: boolean,
+) => chamar<{ id: string; ativa: boolean }>('PATCH', '/v1/admin/automacoes/estado', { id, ativa }, token);
 
 export const salvarAutomacaoNaApi = (
   token: string,
@@ -3295,6 +3376,10 @@ export const salvarAutomacaoNaApi = (
     limiar: number | null;
     atrasoMinutos: number;
     tipo: string;
+    /** Qual texto ela manda (bloco 94). Nulo resolve por tipo, como antes. */
+    templateId?: string | null;
+    /** Para quem ela manda (bloco 100). Nulo é todo mundo; ausente é "não mexa". */
+    publico?: string | null;
     objetivo: string;
     janelaDias: number;
     ativa: boolean;
@@ -3319,6 +3404,12 @@ export interface CampanhaNaTelaDoAdmin {
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
   readonly tipo: string;
+  /** O nome do texto escolhido; nulo é campanha anterior ao bloco 96. */
+  readonly textoTitulo: string | null;
+  /** Quantos saíram pelo WhatsApp de verdade; o resto caiu no canal de reserva. */
+  readonly enviadosPeloWhatsApp: number;
+  /** Quantos foram pulados, por motivo. Vazio quando ninguém foi pulado. */
+  readonly pulados: readonly { readonly motivo: string; readonly quantos: number }[];
   /**
    * A união, e não `string`.
    *
@@ -3351,10 +3442,27 @@ export const criarCampanhaNaApi = (
     filtro: string;
     valorDoFiltro: number | null;
     diaDaSemana: number | null;
-    tipo: string;
+    /** Um dos dois: o texto decide o tipo, e a borda recusa campanha sem nenhum. */
+    tipo?: string;
+    templateId?: string;
     janelaDias: number;
   },
 ) => chamar<{ id: string; publico: number }>('POST', '/v1/admin/campanhas', corpo, token);
+
+export interface PuladoNaTela {
+  readonly customerId: string;
+  readonly nome: string;
+  readonly motivo: string;
+}
+
+/** Quem não recebeu, com nome e motivo (bloco 97). */
+export const puladosDaCampanhaNaApi = (token: string, id: string) =>
+  chamar<{ pulados: readonly PuladoNaTela[] }>(
+    'GET',
+    `/v1/admin/campanhas/${id}/pulados`,
+    undefined,
+    token,
+  );
 
 export const enviarCampanhaNaApi = (token: string, id: string) =>
   chamar<{ estado: 'enviando' }>('POST', `/v1/admin/campanhas/${id}/enviar`, {}, token);

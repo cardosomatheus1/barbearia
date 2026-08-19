@@ -4,7 +4,7 @@ import { fraseDaMeta } from '@barbearia/core';
 import { comissaoDoPeriodo, meusNumeros } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { ProNav } from '../pro-nav';
 import { secao } from '../secoes';
@@ -44,7 +44,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para carregar. Tente de novo.',
 };
 
-const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
 
 const MES = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' });
 

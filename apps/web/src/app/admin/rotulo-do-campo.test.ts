@@ -3,21 +3,20 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Um rótulo aponta para **um** campo (bloco 93).
+ * Um rótulo aponta para **um** campo.
  *
- * ## O que a guarda existe para pegar
+ * ## O que quebra, e por que ninguém percebe
  *
- * `htmlFor` casa com `id`, e `id` é único no documento inteiro — não no
- * formulário. Quando um formulário passa a ser desenhado uma vez por linha da
- * lista, todo `id="nome"` literal vira o mesmo `id` repetido N vezes: o
- * navegador resolve todos para o primeiro, e clicar no rótulo da terceira
- * automação foca o campo da primeira. A tela continua salvando certo, porque o
- * `name` é do formulário; o que quebra é a única coisa que ninguém testa —
- * clicar no rótulo, e o teclado, que é como quem não usa mouse chega ao campo.
+ * `htmlFor` casa com `id`, e `id` é único no **documento** — não no formulário.
+ * Quando uma tela ganha o segundo formulário com os mesmos campos (o de criar e
+ * o de editar, o de cima e o do rodapé), todo `id="nome"` literal vira o mesmo
+ * `id` duas vezes: o navegador resolve os dois para o primeiro, e clicar no
+ * rótulo do segundo formulário foca o campo do primeiro.
  *
- * A tela de automações passou a ter um formulário por automação mais o de
- * criar. A saída é o prefixo (`a-${id}-nome`), que é o desenho da tela de
- * pacotes; esta guarda é o que cobra o prefixo na próxima.
+ * Salvar continua certo, porque quem carrega o valor é o `name` e o dono do
+ * `name` é o `<form>`. Por isso o defeito é invisível para quem usa mouse e
+ * clica direto no campo — ele só aparece para quem clica no rótulo, e para quem
+ * navega por teclado, que é justamente quem depende do rótulo estar certo.
  *
  * ## Por que só o `id` que é alvo de `htmlFor`
  *
@@ -28,16 +27,14 @@ import { describe, expect, it } from 'vitest';
  *
  * ## O que ela **não** vê, escrito para ninguém confiar demais
  *
- * Ela lê o fonte, e um componente escrito uma vez e desenhado dez vezes aparece
- * uma vez aqui. Se o prefixo desta tela for removido — `campo` passando a
- * devolver o nome cru —, o `id` continua sendo expressão e a guarda fica verde
- * sobre dez campos com o mesmo `id` no navegador. Isso foi verificado quebrando
- * de propósito, e não é conserto pendente: para enxergar aquilo seria preciso
- * renderizar a tela, e nada aqui renderiza React.
+ * Ela lê o fonte. Um componente escrito uma vez e desenhado dez vezes aparece
+ * uma vez aqui, então uma lista que repetisse campos por linha passaria verde
+ * com dez `id` iguais no navegador. Isso foi verificado quebrando de propósito,
+ * e não é conserto pendente: enxergar aquilo exigiria renderizar a tela, e nada
+ * neste arquivo renderiza React.
  *
  * O que ela pega é a regressão que de fato acontece — a segunda cópia do
- * formulário, escrita à mão dentro da linha com `id="nome"` literal, que é
- * exatamente o caminho curto que este bloco não seguiu.
+ * formulário, escrita à mão com `id="nome"` literal.
  */
 
 const RAIZ = join(process.cwd(), 'src/app/admin');
@@ -77,8 +74,8 @@ describe('o rótulo do campo', () => {
 
     expect(
       culpadas,
-      'o mesmo id de campo aparece duas vezes na tela: clicar no rótulo de uma linha foca o ' +
-        'campo de outra. Prefixe o id por linha, como em pacotes (`a-${id}-nome`)',
+      'o mesmo id de campo aparece duas vezes na tela: clicar no rótulo de um formulário foca o ' +
+        'campo do outro. Dê um id próprio a cada campo, ou derive-o de quem o desenha',
     ).toEqual([]);
   });
 });

@@ -22,7 +22,19 @@ export const campanhaSchema = z.object({
    * tudo que não é `retorno`, e o teto do mês e o opt-out só rodam sobre
    * promocional. Achado da `/security-review` do bloco 82.
    */
-  tipo: z.enum(TIPOS_DE_CAMPANHA),
+  tipo: z.enum(TIPOS_DE_CAMPANHA).optional(),
+  /**
+   * Qual texto sai, e é ele quem decide o tipo (bloco 96).
+   *
+   * A tela manda **um** dos dois, nunca os dois: o tipo é derivado do texto
+   * escolhido dentro da transação, conferido sob RLS. Aceitar os dois lado a
+   * lado seria o par que diverge — a campanha declarando um tipo e mandando o
+   * texto de outro, com o opt-out e o teto do mês decididos pelo primeiro.
+   *
+   * `tipo` continua aceito para quem cria campanha sem texto cadastrado ainda;
+   * quando os dois vêm, o texto vence, porque é o que de fato sai.
+   */
+  templateId: z.string().uuid().optional(),
   janelaDias: z.number().int().min(1).max(JANELA_MAXIMA_DIAS),
 });
 
