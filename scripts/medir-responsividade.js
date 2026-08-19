@@ -1483,6 +1483,34 @@ async function prepararMarketplace(slug) {
   );
 }
 
+/**
+ * Uma tarefa que desistiu, para a faixa de aviso ser fotografada (bloco 102).
+ *
+ * Sem ela, as telas de Automações e Campanhas são medidas no estado em que a
+ * faixa **não** aparece — e o print sairia da tela anterior ao bloco, com a
+ * medição dizendo "ok" sobre o que ninguém olhou. É a mesma regra do cadastro
+ * do WhatsApp no bloco 88.
+ *
+ * No banco da medição, que é descartável, e **não** na semente de demonstração:
+ * lá um alerta vermelho permanente faria o produto parecer quebrado em toda
+ * apresentação, que é exatamente a confusão entre "o que está pronto" e "o que
+ * está errado" que a semente já cobrou uma vez.
+ *
+ * `failed` com `finished_at` recente é o estado exato que a produção tinha e que
+ * o aviso do bloco 101 não enxergava: nada pendente, a fila andando, e a
+ * varredura da automação morrendo em toda volta havia quatro dias.
+ */
+async function prepararFalhaNaFila(slug) {
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  psql(
+    `INSERT INTO jobs (tenant_id, kind, payload, status, run_after, finished_at, attempts, last_error)
+     VALUES ('${tenant}', 'automacao.varrer', '{}'::jsonb, 'failed',
+             now() - interval '70 minutes', now() - interval '65 minutes', 3,
+             'Raw query failed. Code: 42883')`,
+  );
+}
+
 async function prepararPrecos(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   const local = psql(`select id from locations where tenant_id = '${tenant}' limit 1`);
@@ -2734,6 +2762,7 @@ async function main() {
   await prepararRecadosEFidelidade(slug);
   await prepararRecepcao(slug);
   await prepararPrecos(slug);
+  await prepararFalhaNaFila(slug);
   await prepararMarketplace(slug);
   const barbeiro = prepararPerfilDoBarbeiro(slug);
   prepararDestaque(slug);
