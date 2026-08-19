@@ -1454,7 +1454,7 @@ describeIfDb('a saúde da fila', () => {
      * A barbearia sem nada a fazer tem a fila vazia e silenciosa, e isso é o
      * certo. Alarme que dispara à toa é alarme que se aprende a ignorar.
      */
-    const saude = await saudeDaFila(TENANT, AGORA);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
     expect(saude).toMatchObject({ atrasadas: 0, agendadas: 0, parada: false });
   });
 
@@ -1462,7 +1462,7 @@ describeIfDb('a saúde da fila', () => {
     // O lembrete de amanhã nasce hoje com `run_after` no futuro. É o desenho da
     // fila desde o bloco 20, e não tem nada de errado.
     await tarefa(`status, run_after) VALUES ('${TENANT}', 'lembrete_24h', 'pending', '${haMinutos(-600)}'`);
-    const saude = await saudeDaFila(TENANT, AGORA);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
     expect(saude).toMatchObject({ atrasadas: 0, agendadas: 1, parada: false });
   });
 
@@ -1475,7 +1475,7 @@ describeIfDb('a saúde da fila', () => {
     await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
     await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'campanha.enviar', 'done', '${haMinutos(40)}', '${haMinutos(2)}'`);
 
-    const saude = await saudeDaFila(TENANT, AGORA);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
     expect(saude.atrasadas).toBe(1);
     expect(saude.parada).toBe(false);
   });
@@ -1484,7 +1484,7 @@ describeIfDb('a saúde da fila', () => {
     await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
     await tarefa(`status, run_after, finished_at) VALUES ('${TENANT}', 'campanha.enviar', 'done', '${haMinutos(200)}', '${haMinutos(180)}'`);
 
-    const saude = await saudeDaFila(TENANT, AGORA);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
     expect(saude).toMatchObject({ atrasadas: 1, parada: true });
     expect(saude.ultimaConclusao).toBe(new Date(haMinutos(180)).toISOString());
   });
@@ -1493,8 +1493,26 @@ describeIfDb('a saúde da fila', () => {
     // É o caso da instalação nova em que o worker nunca subiu — exatamente o
     // que a avaliação encontrou.
     await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
-    const saude = await saudeDaFila(TENANT, AGORA);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
     expect(saude).toMatchObject({ atrasadas: 1, ultimaConclusao: null, parada: true });
+  });
+
+  it('na janela de silêncio, tarefa parada é o certo e não vira alarme', async () => {
+    /**
+     * Entre 21h e 8h nada sai, de propósito. Sem esta distinção toda barbearia
+     * acenderia o aviso às 21h01 — e o alarme que dispara à toa é o que se
+     * aprende a ignorar.
+     *
+     * 23h no fuso da unidade: `AGORA` é 15:00Z, que em `Pacific/Kiritimati`
+     * (UTC+14) são 5h da manhã, dentro do silêncio.
+     */
+    await tarefa(`status, run_after) VALUES ('${TENANT}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
+    const dormindo = await saudeDaFila(TENANT, AGORA, 'Pacific/Kiritimati');
+    expect(dormindo).toMatchObject({ atrasadas: 1, emSilencio: true, parada: false });
+
+    // A mesma fila, no fuso em que já é dia, acusa.
+    const acordada = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
+    expect(acordada).toMatchObject({ atrasadas: 1, emSilencio: false, parada: true });
   });
 
   it('a fila parada da vizinha não acende o alarme desta barbearia', async () => {
@@ -1504,7 +1522,7 @@ describeIfDb('a saúde da fila', () => {
      * tela de todas as outras acusar.
      */
     await tarefa(`status, run_after) VALUES ('${RIVAL}', 'campanha.enviar', 'pending', '${haMinutos(30)}'`);
-    const saude = await saudeDaFila(TENANT, AGORA);
+    const saude = await saudeDaFila(TENANT, AGORA, 'America/Bahia');
     expect(saude).toMatchObject({ atrasadas: 0, parada: false });
   });
 });

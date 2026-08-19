@@ -1,4 +1,9 @@
 import { semTenant, withTenant, type TransactionClient } from '@barbearia/db';
+import {
+  instantToLocal,
+  SILENCIO_COMECA_MINUTO,
+  SILENCIO_TERMINA_MINUTO,
+} from '@barbearia/core';
 
 /**
  * A fila de trabalho.
@@ -279,6 +284,17 @@ export interface SaudeDaFila {
   /** Quando a fila concluiu alguma coisa pela última vez. */
   readonly ultimaConclusao: string | null;
   /**
+   * É a janela de silêncio **da unidade** agora (bloco 101).
+   *
+   * Entre 21h e 8h nada sai, de propósito. A tela mostrava o mesmo zero que
+   * mostra quando o processo caiu — duas razões diferentes para o mesmo número,
+   * e nenhuma escrita: quem lê não sabe se espera ou se avisa alguém.
+   *
+   * Respondido aqui e não na tela porque o fuso vem da **unidade**, nunca do
+   * aparelho — é a regra do projeto, e a tela não tem o fuso à mão.
+   */
+  readonly emSilencio: boolean;
+  /**
    * A fila parou de andar.
    *
    * Só quando há **tarefa vencida** e nada foi concluído há muito tempo: uma
@@ -300,7 +316,11 @@ export interface SaudeDaFila {
  * `semTenant` porque `jobs` não tem RLS — é decisão do bloco 20, e o filtro por
  * barbearia é escrito aqui, explicitamente, como em todo acesso a esta tabela.
  */
-export async function saudeDaFila(tenantId: string, agora: Date): Promise<SaudeDaFila> {
+export async function saudeDaFila(
+  tenantId: string,
+  agora: Date,
+  timeZone: string,
+): Promise<SaudeDaFila> {
   return semTenant(async (tx) => {
     const linhas = await tx.$queryRaw<
       { atrasadas: bigint; agendadas: bigint; ultima: Date | null }[]
@@ -317,11 +337,20 @@ export async function saudeDaFila(tenantId: string, agora: Date): Promise<SaudeD
     const ultima = l?.ultima ?? null;
     const paradaHa = ultima === null ? Infinity : agora.getTime() - ultima.getTime();
 
+    const minutoLocal = instantToLocal(timeZone, agora).minutes;
+    const emSilencio =
+      minutoLocal >= SILENCIO_COMECA_MINUTO || minutoLocal < SILENCIO_TERMINA_MINUTO;
+
     return {
       atrasadas,
       agendadas: Number(l?.agendadas ?? 0),
       ultimaConclusao: ultima?.toISOString() ?? null,
-      parada: atrasadas > 0 && paradaHa > SILENCIO_QUE_PREOCUPA_MS,
+      emSilencio,
+      /**
+       * Na janela de silêncio, tarefa parada é o **certo** — e o alarme diria o
+       * contrário. Sem isto, toda barbearia acenderia o aviso às 21h01.
+       */
+      parada: !emSilencio && atrasadas > 0 && paradaHa > SILENCIO_QUE_PREOCUPA_MS,
     };
   });
 }

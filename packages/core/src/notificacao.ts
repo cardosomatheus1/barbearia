@@ -68,6 +68,21 @@ export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
  * para trás no primeiro aviso novo. É a mesma decisão dos públicos de campanha,
  * que viraram teste pelo mesmo motivo.
  */
+/**
+ * Os avisos que o **banco** conhece e este pacote ainda não.
+ *
+ * `notification_kind` tem `pedido_de_avaliacao` desde o bloco 46 e nenhum código
+ * o usa — mas a semente cria a automação, e a tela mostrava "Pedido de
+ * avaliacao", sem acento, porque o humanizador só troca sublinhado por espaço.
+ *
+ * Nomear aqui é mais honesto que acentuar por adivinhação: o humanizador
+ * continua existindo para o valor que ninguém previu, e este mapa é onde se
+ * escreve o nome de quem já se conhece.
+ */
+const NOME_DO_QUE_O_BANCO_CONHECE: Readonly<Record<string, string>> = {
+  pedido_de_avaliacao: 'Pedido de avaliação',
+};
+
 export const NOME_DO_AVISO: Readonly<Record<TipoDeNotificacao, string>> = {
   confirmacao: 'Confirmação do agendamento',
   lembrete_24h: 'Lembrete de 24 horas',
@@ -185,7 +200,9 @@ export function corpoComExemplos(tipo: string, corpo: string): string {
  * próprio valor é o que a tela já fazia, agora com o compilador de acordo.
  */
 export function nomeDoAviso(tipo: string): string {
-  const conhecido = (NOME_DO_AVISO as Record<string, string | undefined>)[tipo];
+  const conhecido =
+    (NOME_DO_AVISO as Record<string, string | undefined>)[tipo] ??
+    NOME_DO_QUE_O_BANCO_CONHECE[tipo];
   if (conhecido) return conhecido;
   /**
    * O que o produto não conhece vira frase, nunca identificador (bloco 96).

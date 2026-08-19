@@ -131,11 +131,21 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
               pergunta sobre o texto, e a API já devolvia o título desde o bloco
               94 — dado que existe e ninguém lê (§6, pergunta 4).
             */}
+            {/*
+              Uma gramática só para o mesmo campo (bloco 101).
+
+              A linha dizia "manda *Volta que a gente sente falta*" numa
+              automação e "manda *o primeiro texto aprovado de Convite de
+              retorno*" na vizinha — duas frases com formas diferentes para o
+              mesmo fato, lado a lado na mesma lista.
+
+              O nome do texto sempre; a falta de escolha vira uma segunda frase,
+              que é o que ela é: uma ressalva, não um nome.
+            */}
             <p className="item-cadastro__linha">
               {automacao.ativa ? 'Ligada' : 'Desligada'} · manda{' '}
-              {automacao.textoTitulo ?? (
-                <em>o primeiro texto aprovado de {nomeDoAviso(automacao.tipo)}</em>
-              )}
+              <strong>{automacao.textoTitulo ?? nomeDoAviso(automacao.tipo)}</strong>
+              {automacao.textoTitulo === null ? ' (o primeiro aprovado deste aviso)' : ''}
             </p>
             {/*
               **Ligada e sem texto não manda nada** (bloco 97).
@@ -159,7 +169,8 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
             */}
             <p className="item-cadastro__linha">
               {automacao.enviadas} enviada{automacao.enviadas === 1 ? '' : 's'} ·{' '}
-              {automacao.alcancadas} alcançou o objetivo
+              {automacao.alcancadas}{' '}
+              {automacao.alcancadas === 1 ? 'alcançou' : 'alcançaram'} o objetivo
               {automacao.enviadas > 0
                 ? ` (${Math.round((automacao.alcancadas / automacao.enviadas) * 100)}%)`
                 : ''}

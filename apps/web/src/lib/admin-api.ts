@@ -3338,6 +3338,8 @@ export interface SaudeDaFilaNaTela {
   readonly atrasadas: number;
   readonly agendadas: number;
   readonly ultimaConclusao: string | null;
+  /** É a janela de silêncio da unidade agora: parado é o certo, e não alarme. */
+  readonly emSilencio: boolean;
   readonly parada: boolean;
 }
 

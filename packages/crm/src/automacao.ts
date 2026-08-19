@@ -3,6 +3,7 @@ import { segmentosDaBase } from './segmento.js';
 import {
   chaveDoFato,
   decidirDisparo,
+  EXPLICACAO_DA_FALHA,
   objetivoAlcancado,
   segmentoValido,
   validarAutomacao,
@@ -188,7 +189,19 @@ export async function salvarAutomacao(params: {
     atrasoMinutos: params.atrasoMinutos,
     janelaDias: params.janelaDias,
   });
-  if (falha) throw new AutomacaoError('invalida', falha);
+  /**
+   * A **frase**, não o código (bloco 101).
+   *
+   * Isto lançava `falha` — que é `limiar_obrigatorio`, o identificador — como
+   * mensagem, e a tarja vermelha da tela mostrava exatamente essa palavra.
+   * "Limiar" não é português de barbearia, e o campo na tela se chama "O
+   * número": o erro nomeava um campo que não existe ali.
+   *
+   * A frase certa já estava escrita em `EXPLICACAO_DA_FALHA` desde o bloco 56,
+   * e ninguém a lia — o `code` continua sendo o identificador, para quem
+   * programa contra a API.
+   */
+  if (falha) throw new AutomacaoError('invalida', EXPLICACAO_DA_FALHA[falha]);
   /**
    * Automação usa a **mesma** lista fechada da campanha, e faltava.
    *

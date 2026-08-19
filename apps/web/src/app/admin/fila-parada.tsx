@@ -27,6 +27,25 @@ import type { SaudeDaFilaNaTela } from '@/lib/admin-api';
  * ignorado é pior que canal nenhum.
  */
 export function FilaParada({ fila }: { readonly fila: SaudeDaFilaNaTela | null }) {
+  /**
+   * A janela de silêncio, nomeada (bloco 101).
+   *
+   * Às 23h26 tudo fica parado de propósito — nada sai entre 21h e 8h —, e a
+   * tela mostrava o mesmo zero que mostra quando o processo caiu. Duas razões
+   * diferentes para o mesmo número, e nenhuma escrita: quem lê não tem como
+   * saber se espera ou se avisa alguém.
+   *
+   * Quem responde é o domínio, porque o fuso vem da **unidade**, nunca do
+   * aparelho de quem abriu a tela.
+   */
+  if (fila?.emSilencio) {
+    return (
+      <div className="ui-alert painel__aviso" role="status">
+        <strong>É noite na barbearia.</strong> Nada sai entre 21h e 8h — o que estiver na
+        fila agora começa a sair às 8h. O que você montar aqui fica guardado até lá.
+      </div>
+    );
+  }
   if (!fila?.parada) return null;
   return (
     <div className="ui-alert ui-alert--danger painel__aviso" role="alert">

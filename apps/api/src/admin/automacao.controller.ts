@@ -13,6 +13,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { automacaoSchema, estadoDaAutomacaoSchema } from './automacao.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * As automações da casa (bloco 56, SPEC §4.11).
@@ -54,7 +55,10 @@ export class AutomacaoController {
   @Exige('marketing.send')
   @Get('fila')
   async fila(@Staff() staff: AuthenticatedStaff) {
-    return saudeDaFila(staff.tenantId, new Date());
+    // O fuso vem da **unidade**, nunca do aparelho: é a regra do projeto, e é
+    // ela que decide se agora é a janela de silêncio.
+    const local = await unidadeDoBalcao(staff);
+    return saudeDaFila(staff.tenantId, new Date(), local.timezone);
   }
 
   @Exige('marketing.send')

@@ -324,10 +324,8 @@ function Campanha({
               conferindo qual dos três foi.
             */}
             <p className="item-cadastro__linha">
-              Manda{' '}
-              {campanha.textoTitulo ?? (
-                <em>o primeiro texto aprovado de {nomeDoAviso(campanha.tipo)}</em>
-              )}
+              Manda <strong>{campanha.textoTitulo ?? nomeDoAviso(campanha.tipo)}</strong>
+              {campanha.textoTitulo === null ? ' (o primeiro aprovado deste aviso)' : ''}
             </p>
             <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
             {/*
