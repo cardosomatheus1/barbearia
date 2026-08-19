@@ -281,6 +281,20 @@ export interface SaudeDaFila {
   readonly atrasadas: number;
   /** Esperando a hora — o lembrete de amanhã. Normal, e não é alarme. */
   readonly agendadas: number;
+  /**
+   * Tarefas que esgotaram as tentativas e desistiram.
+   *
+   * Contadas porque a primeira versão desta função **não as via**, e isso não
+   * era detalhe: `failed` não é `pending`, então uma barbearia com a varredura
+   * de automação morrendo em toda volta tinha `atrasadas = 0`, `ultima`
+   * recente — porque os outros tipos de tarefa concluíam — e `parada = false`.
+   * O aviso que existe para dizer "as mensagens não estão saindo" afirmava
+   * saúde sobre um motor desligado havia quatro dias.
+   *
+   * Foi assim em produção: 84 `automacao.varrer` falhadas, nenhuma pendente, e
+   * nenhuma tela do produto com uma palavra a respeito.
+   */
+  readonly falhadas: number;
   /** Quando a fila concluiu alguma coisa pela última vez. */
   readonly ultimaConclusao: string | null;
   /**
@@ -302,6 +316,16 @@ export interface SaudeDaFila {
    * o certo. Sem esta condição, o alarme apareceria em toda casa nova.
    */
   readonly parada: boolean;
+  /**
+   * Alguma coisa desistiu de tentar.
+   *
+   * Separado de `parada` porque são dois defeitos diferentes com duas respostas
+   * diferentes: `parada` é o processo fora do ar e resolve-se subindo o worker;
+   * `desistiu` é o worker de pé executando uma tarefa que sempre falha, e
+   * resolve-se olhando o erro. Uma flag só mandaria quem opera reiniciar um
+   * processo que está funcionando.
+   */
+  readonly desistiu: boolean;
 }
 
 /**
@@ -323,11 +347,18 @@ export async function saudeDaFila(
 ): Promise<SaudeDaFila> {
   return semTenant(async (tx) => {
     const linhas = await tx.$queryRaw<
-      { atrasadas: bigint; agendadas: bigint; ultima: Date | null }[]
+      { atrasadas: bigint; agendadas: bigint; falhadas: bigint; ultima: Date | null }[]
     >`
       SELECT
         count(*) FILTER (WHERE status = 'pending' AND run_after <= ${agora}) AS atrasadas,
         count(*) FILTER (WHERE status = 'pending' AND run_after > ${agora}) AS agendadas,
+        -- Só as recentes: a tarefa que falhou no mês passado e nunca mais foi
+        -- tentada é um fato encerrado, e contá-la deixaria o aviso aceso para
+        -- sempre — que é como se ensina a ignorar um alarme.
+        count(*) FILTER (
+          WHERE status = 'failed'
+            AND finished_at > ${agora}::timestamptz - interval '2 days'
+        ) AS falhadas,
         max(finished_at) AS ultima
         FROM jobs
        WHERE tenant_id = ${tenantId}::uuid
@@ -341,11 +372,22 @@ export async function saudeDaFila(
     const emSilencio =
       minutoLocal >= SILENCIO_COMECA_MINUTO || minutoLocal < SILENCIO_TERMINA_MINUTO;
 
+    const falhadas = Number(l?.falhadas ?? 0);
+
     return {
       atrasadas,
       agendadas: Number(l?.agendadas ?? 0),
+      falhadas,
       ultimaConclusao: ultima?.toISOString() ?? null,
       emSilencio,
+      /**
+       * Sem a janela de silêncio na conta, ao contrário de `parada`.
+       *
+       * Silêncio explica tarefa **esperando**; não explica tarefa que desistiu.
+       * Uma falha às 22h continua sendo uma falha às 8h da manhã seguinte, e
+       * escondê-la até lá é adiar a única notícia que importa.
+       */
+      desistiu: falhadas > 0,
       /**
        * Na janela de silêncio, tarefa parada é o **certo** — e o alarme diria o
        * contrário. Sem isto, toda barbearia acenderia o aviso às 21h01.

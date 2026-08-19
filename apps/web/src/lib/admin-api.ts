@@ -3337,10 +3337,20 @@ export interface AutomacaoNaTelaDoAdmin {
 export interface SaudeDaFilaNaTela {
   readonly atrasadas: number;
   readonly agendadas: number;
+  /** Desistiram depois de esgotar as tentativas, nas últimas 48h. */
+  readonly falhadas: number;
   readonly ultimaConclusao: string | null;
   /** É a janela de silêncio da unidade agora: parado é o certo, e não alarme. */
   readonly emSilencio: boolean;
   readonly parada: boolean;
+  /**
+   * Obrigatório, nunca opcional.
+   *
+   * `desistiu?` chegaria `undefined` na primeira tela que esquecesse dele, e
+   * `undefined` é falso: o aviso sumiria com o compilador calado, que é
+   * exatamente o defeito que este campo existe para acabar.
+   */
+  readonly desistiu: boolean;
 }
 
 export const filaNaApi = (token: string) =>

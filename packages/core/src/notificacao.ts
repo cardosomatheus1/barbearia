@@ -79,7 +79,15 @@ export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
  * continua existindo para o valor que ninguém previu, e este mapa é onde se
  * escreve o nome de quem já se conhece.
  */
-const NOME_DO_QUE_O_BANCO_CONHECE: Readonly<Record<string, string>> = {
+/**
+ * Exportado para o teste poder provar que o exemplo dele **é** desconhecido.
+ *
+ * A guarda do caso genérico usava `pedido_de_avaliacao`, que era desconhecido
+ * quando ela foi escrita e ganhou nome próprio aqui no bloco seguinte: o teste
+ * ficou vermelho por ter sido corrigido o que ele cobria. Com os dois mapas à
+ * mão ele afirma a ausência antes de afirmar a frase, e não volta a apodrecer.
+ */
+export const NOME_DO_QUE_O_BANCO_CONHECE: Readonly<Record<string, string>> = {
   pedido_de_avaliacao: 'Pedido de avaliação',
 };
 

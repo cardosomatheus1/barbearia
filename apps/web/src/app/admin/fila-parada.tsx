@@ -28,6 +28,50 @@ import type { SaudeDaFilaNaTela } from '@/lib/admin-api';
  */
 export function FilaParada({ fila }: { readonly fila: SaudeDaFilaNaTela | null }) {
   /**
+   * A ordem das três perguntas, e por que ela não é a de escrita.
+   *
+   * `parada` primeiro porque é o defeito que engole os outros: com o processo
+   * fora do ar, nada mais é notícia. `desistiu` **antes** do silêncio porque
+   * silêncio explica tarefa esperando e não explica tarefa que desistiu — e
+   * uma falha às 22h continua sendo uma falha às 8h.
+   *
+   * Escrita na ordem inversa, a tela dizia "é noite na barbearia" sobre um
+   * motor que tinha morrido de manhã.
+   */
+  if (fila?.parada) {
+    return (
+      <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+        <strong>As mensagens não estão saindo.</strong> Há {fila.atrasadas}{' '}
+        {fila.atrasadas === 1 ? 'tarefa parada' : 'tarefas paradas'} na fila
+        {fila.ultimaConclusao
+          ? ` e nada foi processado desde ${quandoCurto(fila.ultimaConclusao)}`
+          : ' e nada foi processado ainda'}
+        . O que você montar aqui fica guardado, mas não chega a ninguém enquanto isso não
+        voltar — avise quem cuida do sistema.
+      </div>
+    );
+  }
+
+  /**
+   * O worker de pé executando uma tarefa que sempre falha (bloco 102).
+   *
+   * Texto separado porque a resposta é outra: em `parada` alguém sobe um
+   * processo, aqui alguém lê um erro. Uma frase só mandaria a barbearia
+   * reiniciar o que está funcionando, e a varredura continuaria morrendo.
+   */
+  if (fila?.desistiu) {
+    return (
+      <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+        <strong>Alguma coisa parou de tentar.</strong> {fila.falhadas}{' '}
+        {fila.falhadas === 1 ? 'tarefa desistiu' : 'tarefas desistiram'} nas últimas 48
+        horas, depois de esgotar as tentativas. A fila continua andando, então as outras
+        mensagens saem normalmente — mas o que falhou não vai sozinho para o ar. Avise quem
+        cuida do sistema.
+      </div>
+    );
+  }
+
+  /**
    * A janela de silêncio, nomeada (bloco 101).
    *
    * Às 23h26 tudo fica parado de propósito — nada sai entre 21h e 8h —, e a
@@ -46,18 +90,7 @@ export function FilaParada({ fila }: { readonly fila: SaudeDaFilaNaTela | null }
       </div>
     );
   }
-  if (!fila?.parada) return null;
-  return (
-    <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-      <strong>As mensagens não estão saindo.</strong> Há {fila.atrasadas}{' '}
-      {fila.atrasadas === 1 ? 'tarefa parada' : 'tarefas paradas'} na fila
-      {fila.ultimaConclusao
-        ? ` e nada foi processado desde ${quandoCurto(fila.ultimaConclusao)}`
-        : ' e nada foi processado ainda'}
-      . O que você montar aqui fica guardado, mas não chega a ninguém enquanto isso não
-      voltar — avise quem cuida do sistema.
-    </div>
-  );
+  return null;
 }
 
 /** "19/08 às 23:26" — o suficiente para saber se foi hoje. */

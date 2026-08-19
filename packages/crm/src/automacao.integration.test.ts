@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { GATILHOS, gatilhoPedeLimiar } from '@barbearia/core';
 import {
   atribuirObjetivos,
   automacoesDaCasa,
@@ -539,6 +540,59 @@ describeIfDb('automação', () => {
    * — o assinante que paga mensalidade e o visitante de uma vez só, com a mesma
    * frase.
    */
+  /**
+   * Toda consulta de gatilho **roda**, e não só as quatro que alguém testou.
+   *
+   * ## O defeito que ela existe para não repetir
+   *
+   * `primeiro_atendimento` selecionava `min(a.id)::text`, e `a.id` é `uuid`.
+   * `min(uuid)` não existe no Postgres. A consulta passou pelo typecheck, pelo
+   * build e pelo `pnpm verify` inteiro — porque **nenhum teste a executava** —,
+   * e falhou em produção em toda volta do relógio por quatro dias. Como a
+   * varredura de uma barbearia é uma tarefa só, dentro de uma transação só, a
+   * exceção de um gatilho matava os outros dez junto.
+   *
+   * É a regra escrita do projeto: *"SQL cru não é conferido por ninguém até
+   * rodar. Toda consulta nova precisa de um teste que a execute."*
+   *
+   * ## Por que derivada de `GATILHOS`
+   *
+   * Uma lista escrita aqui ao lado teria o mesmo destino da cobertura que
+   * existia: quatro dos onze, e o gatilho do bloco seguinte nascendo de fora.
+   * Derivada, a consulta nova é executada sem ninguém lembrar dela.
+   *
+   * ## Por que ela não pode passar por engano
+   *
+   * `varrerAutomacoes` só consulta o gatilho de regra **ativa**: uma automação
+   * recusada em silêncio pela validação faria o teste ficar verde sem ter
+   * executado nada. Por isso o conjunto de gatilhos ativos é conferido contra
+   * `GATILHOS` antes de a varredura ser chamada.
+   */
+  it('a varredura executa a consulta de todos os gatilhos, não só a dos testados', async () => {
+    for (const gatilho of GATILHOS) {
+      await automacao({
+        nome: `Guarda de ${gatilho}`,
+        gatilho,
+        limiar: gatilhoPedeLimiar(gatilho) ? 3 : null,
+      });
+    }
+
+    const ativas = (await automacoesDaCasa(TENANT)).filter((a) => a.ativa);
+    expect(new Set(ativas.map((a) => a.gatilho))).toEqual(new Set(GATILHOS));
+
+    /**
+     * Se qualquer consulta estiver quebrada, a transação aborta e isto lança.
+     * Não se espera candidato nenhum: o que está sob teste é a consulta rodar,
+     * e semear onze cenários diferentes traria de volta a lista escrita à mão.
+     */
+    const resultado = await varrerAutomacoes({
+      tenantId: TENANT,
+      agora: AGORA,
+      timeZone: 'America/Bahia',
+    });
+    expect(resultado.marcados).toBeGreaterThanOrEqual(0);
+  });
+
   describe('o público da automação', () => {
     /**
      * Dois clientes no mesmo gatilho e em segmentos diferentes.
