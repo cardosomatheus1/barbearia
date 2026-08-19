@@ -18,6 +18,7 @@ import {
   cadastroDoWhatsAppNaApi,
   templatesDoWhatsAppNaApi,
   type AutomacaoNaTelaDoAdmin,
+  type TemplateNaTelaDoAdmin,
 } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -76,9 +77,11 @@ const NOME_DO_AVISO: Record<string, string> = {
  * mantém uma porta de escrita só — a mesma que o formulário de baixo usa, com a
  * mesma validação de borda.
  */
-function Automacao({ automacao, podeMexer }: {
+function Automacao({ automacao, podeMexer, textos, umaMensagemSo }: {
   readonly automacao: AutomacaoNaTelaDoAdmin;
   readonly podeMexer: boolean;
+  readonly textos: readonly TemplateNaTelaDoAdmin[];
+  readonly umaMensagemSo: boolean;
 }) {
   const gatilho = automacao.gatilho as Gatilho;
   const varre = (GATILHOS_COM_VARREDURA as readonly string[]).includes(gatilho);
@@ -134,8 +137,318 @@ function Automacao({ automacao, podeMexer }: {
             </form>
           ) : null}
         </div>
+        {/*
+          Editar na própria linha, recolhido — é o desenho da tela de pacotes, e
+          o precedente decide. Uma tela separada exigiria rota, carregamento e
+          uma volta; a dobra abre onde a pessoa está olhando o número que quer
+          mudar.
+
+          Ligar/desligar continua sendo botão de um clique **e** caixa aqui
+          dentro: a mesma transição por dois caminhos, com o mesmo nome nos dois.
+          Trocar 30 por 45 não deveria custar abrir uma dobra, e conferir o resto
+          antes de salvar não deveria custar dois lugares.
+        */}
+        {podeMexer ? (
+          <details className="dobra">
+            <summary className="dobra__titulo">Editar</summary>
+            <CamposDaAutomacao
+              automacao={automacao}
+              prefixo={`a-${automacao.id}`}
+              textos={textos}
+              umaMensagemSo={umaMensagemSo}
+            />
+          </details>
+        ) : null}
       </article>
     </li>
+  );
+}
+
+/**
+ * Os campos, escritos uma vez e usados nos dois lugares (bloco 93).
+ *
+ * Criar e editar são o mesmo formulário — a ação recebe `id` desde o bloco 56 e
+ * o `PUT` é do objeto inteiro. Escrever a segunda cópia dentro da linha era o
+ * caminho curto, e seria a lista paralela de sempre: o campo que o bloco
+ * seguinte acrescentasse apareceria em criar e não em editar, com a suíte
+ * verde, porque cada tela sozinha continuaria coerente.
+ *
+ * O `prefixo` existe porque a tela passa a ter um formulário por automação mais
+ * o de criar: `id="nome"` repetido faz todo `htmlFor` do documento apontar para
+ * o primeiro, e o rótulo da terceira linha passa a focar o campo da primeira.
+ * `name` repetido não é problema — o dono do rádio é o `<form>`, e cada
+ * formulário é o seu.
+ */
+function CamposDaAutomacao({
+  automacao,
+  prefixo,
+  textos,
+  umaMensagemSo,
+}: {
+  readonly automacao?: AutomacaoNaTelaDoAdmin;
+  readonly prefixo: string;
+  readonly textos: readonly TemplateNaTelaDoAdmin[];
+  readonly umaMensagemSo: boolean;
+}) {
+  const campo = (nome: string) => `${prefixo}-${nome}`;
+  return (
+    <form action={acaoSalvarAutomacao} className="formulario">
+      {automacao ? <input name="id" type="hidden" value={automacao.id} /> : null}
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={campo('nome')}>
+          Nome
+        </label>
+        <input
+          className="ui-field__input"
+          defaultValue={automacao?.nome ?? ''}
+          id={campo('nome')}
+          maxLength={80}
+          name="nome"
+          placeholder="Volta pro corte"
+          required
+        />
+        <p className="ui-field__hint">Só você vê. O cliente nunca lê este nome.</p>
+      </div>
+
+      <fieldset className="etapa">
+        <legend className="etapa__titulo">1. Quando ela dispara</legend>
+
+      {/*
+        Escolha aberta, e não seletor.
+
+        O significado do número muda por gatilho, e o produto não tem
+        componente de cliente para trocar um rótulo ao mexer no seletor.
+        A versão anterior resolvia repetindo: a opção dizia "Sumiu há um
+        tempo — depois de quantos dias sem vir", e uma lista de seis
+        definições logo abaixo dizia a mesma coisa de novo, ocupando o
+        maior bloco da tela. Duas cópias do mesmo mapa, e nenhuma visível
+        na hora de preencher — porque o texto da opção some quando o
+        seletor fecha.
+
+        Aberto, cada gatilho carrega o próprio significado **e continua
+        na tela** enquanto a pessoa digita o número. Uma cópia só, sem
+        JavaScript, e a lista de definições deixa de existir.
+      */}
+      <div className="ui-field">
+        <span className="ui-field__label">O gatilho</span>
+        <div className="alternativas" role="radiogroup" aria-label="O gatilho">
+          {GATILHOS.map((g, i) => {
+            const pede = LIMIAR_DO_GATILHO[g];
+            const varre = (GATILHOS_COM_VARREDURA as readonly string[]).includes(g);
+            return (
+              <label className="alternativa" key={g}>
+                <input
+                  defaultChecked={automacao ? automacao.gatilho === g : i === 0}
+                  name="gatilho"
+                  required
+                  type="radio"
+                  value={g}
+                />
+                <span className="alternativa__corpo">
+                  <span className="alternativa__nome">{ROTULO_DO_GATILHO[g]}</span>
+                  {/* A pergunta que o número responde, com o ponto de
+                      interrogação: "O número é: quantos dias antes." era
+                      o rótulo do domínio empurrado para dentro de uma
+                      frase que ele não cabe. */}
+                  <span className="alternativa__nota">
+                    {pede ? `${pede}?` : 'Não pede número.'}
+                  </span>
+                  {/* Gatilho que ainda não varre aparece marcado, nunca
+                      escondido: escondido faria a SPEC parecer entregue. */}
+                  {varre ? null : (
+                    <span className="alternativa__nota alternativa__nota--risco">
+                      Ainda não dispara sozinho.
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={campo('limiar')}>
+          O número
+        </label>
+        <input
+          className="ui-field__input"
+          defaultValue={automacao?.limiar ?? ''}
+          id={campo('limiar')}
+          inputMode="numeric"
+          name="limiar"
+          placeholder="30"
+        />
+        <p className="ui-field__hint">
+          Responde à pergunta da opção marcada acima. Deixe em branco quando ela diz que
+          não pede número.
+        </p>
+      </div>
+
+      {/*
+        Ajuste fino, recolhido: zero serve para quase todo mundo, e um
+        campo que ninguém mexe competindo com os que decidem a automação é
+        o que faz a tela parecer maior do que a decisão.
+      */}
+      <details className="dobra">
+        <summary className="dobra__titulo">Esperar antes de mandar</summary>
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor={campo('atrasoMinutos')}>
+            Esperar quantos minutos
+          </label>
+          <input
+            className="ui-field__input"
+            defaultValue={automacao?.atrasoMinutos ?? 0}
+            id={campo('atrasoMinutos')}
+            inputMode="numeric"
+            name="atrasoMinutos"
+          />
+          <p className="ui-field__hint">
+            Zero manda na primeira varredura depois do fato. Serve para quase tudo.
+          </p>
+        </div>
+      </details>
+
+      </fieldset>
+
+      <fieldset className="etapa">
+        <legend className="etapa__titulo">2. O que a pessoa recebe</legend>
+
+      {/*
+        **O texto que sai, ao lado do nome que o escolhe.**
+
+        A versão anterior mostrava *todos* os textos aprovados embaixo de
+        um seletor, com a frase "é este o texto que o cliente vai ler" no
+        singular. Com o seletor em "Convite de retorno — sem texto
+        aprovado" e a caixa mostrando "Lembrete de 24 horas", a tela
+        afirmava que sairia um texto que aquela automação nunca manda —
+        duas telas discordando sobre o mesmo fato (§6, pergunta 6), dentro
+        de uma só.
+
+        Agora cada tipo carrega **o texto dele**, casado por `tipo`, e a
+        ausência é escrita em letras: card sem o dado principal lê como
+        defeito de carregamento.
+
+        `TIPOS_DE_CAMPANHA` e não os seis avisos: a automação fala com quem
+        **não tem horário marcado**, então lembrete e confirmação mentiriam
+        no texto — e `senha_de_acesso` é credencial.
+
+        O `input` é escondido enquanto a lista tem um item só. Um seletor
+        de uma opção é escolha de mentira: ele pede uma decisão que não
+        existe, e quem abre procura a segunda opção que nunca vai achar. O
+        dia em que houver a segunda, ela vira rádio sozinha — a lista é a
+        mesma, e é dela que a tela deriva.
+      */}
+      <div className="ui-field">
+        <span className="ui-field__label">
+          {umaMensagemSo ? 'A mensagem' : 'Qual mensagem'}
+        </span>
+        <div
+          className="alternativas"
+          {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
+        >
+          {TIPOS_DE_CAMPANHA.map((t, i) => {
+            const texto = textos.find((x) => x.tipo === t);
+            return (
+              <label className="alternativa" key={t}>
+                <input
+                  defaultChecked={automacao ? automacao.tipo === t : i === 0}
+                  name="tipo"
+                  type={umaMensagemSo ? 'hidden' : 'radio'}
+                  value={t}
+                />
+                <span className="alternativa__corpo">
+                  <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
+                  {texto ? (
+                    <span className="alternativa__texto">{texto.corpo}</span>
+                  ) : (
+                    <span className="alternativa__nota alternativa__nota--risco">
+                      Sem texto aprovado — nada vai sair.
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <p className="ui-field__hint">
+          É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
+          cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
+        </p>
+      </div>
+
+      </fieldset>
+
+      <fieldset className="etapa">
+        <legend className="etapa__titulo">3. O que isso precisa produzir</legend>
+        <p className="etapa__texto">
+          É o que a lista lá em cima vai contar, para você saber se vale manter ligada.
+        </p>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={campo('objetivo')}>
+          O que precisa acontecer
+        </label>
+        <select
+          className="ui-field__input"
+          defaultValue={automacao?.objetivo}
+          id={campo('objetivo')}
+          name="objetivo"
+          required
+        >
+          {OBJETIVOS.map((o) => (
+            <option key={o} value={o}>
+              {ROTULO_DO_OBJETIVO[o]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={campo('janelaDias')}>
+          Em quantos dias isso vale
+        </label>
+        <input
+          className="ui-field__input"
+          defaultValue={automacao?.janelaDias ?? 7}
+          id={campo('janelaDias')}
+          inputMode="numeric"
+          max={JANELA_MAXIMA_DIAS}
+          min={1}
+          name="janelaDias"
+        />
+        <p className="ui-field__hint">
+          De 1 a {JANELA_MAXIMA_DIAS}. Prazo largo demais dá crédito a esta mensagem por um
+          corte que a pessoa marcaria de qualquer jeito.
+        </p>
+      </div>
+
+      </fieldset>
+
+      {/*
+        `.marca` e não um `<input>` solto dentro do rótulo: o padrão do
+        navegador é 13px e reprova o piso de 44px em qualquer largura. É a
+        mesma caixa da tela de avisos.
+      */}
+      <div className="ui-field">
+        <label className="marca" htmlFor={campo('ativa')}>
+          <input
+            defaultChecked={automacao ? automacao.ativa : true}
+            id={campo('ativa')}
+            name="ativa"
+            type="checkbox"
+          />
+          <span>{automacao ? 'Ligada' : 'Começar ligada'}</span>
+        </label>
+        <p className="ui-field__hint">
+          Desligar não apaga o que ela já mediu.
+        </p>
+      </div>
+
+      <button className="ui-button ui-button--primary ui-button--block" type="submit">
+        {automacao ? 'Salvar alterações' : 'Salvar automação'}
+      </button>
+    </form>
   );
 }
 
@@ -234,7 +547,13 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         ) : (
           <ul className="lista-cadastro">
             {automacoes.map((a) => (
-              <Automacao automacao={a} key={a.id} podeMexer={podeMexer} />
+              <Automacao
+                automacao={a}
+                key={a.id}
+                podeMexer={podeMexer}
+                textos={textos}
+                umaMensagemSo={umaMensagemSo}
+              />
             ))}
           </ul>
         )}
@@ -253,249 +572,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
           <p className="cartao-balcao__texto">
             São três perguntas. Depois de salva, ela roda sozinha — você não precisa voltar aqui.
           </p>
-          <form action={acaoSalvarAutomacao} className="formulario">
-            <div className="ui-field">
-              <label className="ui-field__label" htmlFor="nome">
-                Nome
-              </label>
-              <input
-                className="ui-field__input"
-                id="nome"
-                maxLength={80}
-                name="nome"
-                placeholder="Volta pro corte"
-                required
-              />
-              <p className="ui-field__hint">Só você vê. O cliente nunca lê este nome.</p>
-            </div>
-
-            <fieldset className="etapa">
-              <legend className="etapa__titulo">1. Quando ela dispara</legend>
-
-            {/*
-              Escolha aberta, e não seletor.
-
-              O significado do número muda por gatilho, e o produto não tem
-              componente de cliente para trocar um rótulo ao mexer no seletor.
-              A versão anterior resolvia repetindo: a opção dizia "Sumiu há um
-              tempo — depois de quantos dias sem vir", e uma lista de seis
-              definições logo abaixo dizia a mesma coisa de novo, ocupando o
-              maior bloco da tela. Duas cópias do mesmo mapa, e nenhuma visível
-              na hora de preencher — porque o texto da opção some quando o
-              seletor fecha.
-
-              Aberto, cada gatilho carrega o próprio significado **e continua
-              na tela** enquanto a pessoa digita o número. Uma cópia só, sem
-              JavaScript, e a lista de definições deixa de existir.
-            */}
-            <div className="ui-field">
-              <span className="ui-field__label">O gatilho</span>
-              <div className="alternativas" role="radiogroup" aria-label="O gatilho">
-                {GATILHOS.map((g, i) => {
-                  const pede = LIMIAR_DO_GATILHO[g];
-                  const varre = (GATILHOS_COM_VARREDURA as readonly string[]).includes(g);
-                  return (
-                    <label className="alternativa" key={g}>
-                      <input
-                        defaultChecked={i === 0}
-                        name="gatilho"
-                        required
-                        type="radio"
-                        value={g}
-                      />
-                      <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{ROTULO_DO_GATILHO[g]}</span>
-                        {/* A pergunta que o número responde, com o ponto de
-                            interrogação: "O número é: quantos dias antes." era
-                            o rótulo do domínio empurrado para dentro de uma
-                            frase que ele não cabe. */}
-                        <span className="alternativa__nota">
-                          {pede ? `${pede}?` : 'Não pede número.'}
-                        </span>
-                        {/* Gatilho que ainda não varre aparece marcado, nunca
-                            escondido: escondido faria a SPEC parecer entregue. */}
-                        {varre ? null : (
-                          <span className="alternativa__nota alternativa__nota--risco">
-                            Ainda não dispara sozinho.
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field__label" htmlFor="limiar">
-                O número
-              </label>
-              <input
-                className="ui-field__input"
-                id="limiar"
-                inputMode="numeric"
-                name="limiar"
-                placeholder="30"
-              />
-              <p className="ui-field__hint">
-                Responde à pergunta da opção marcada acima. Deixe em branco quando ela diz que
-                não pede número.
-              </p>
-            </div>
-
-            {/*
-              Ajuste fino, recolhido: zero serve para quase todo mundo, e um
-              campo que ninguém mexe competindo com os que decidem a automação é
-              o que faz a tela parecer maior do que a decisão.
-            */}
-            <details className="dobra">
-              <summary className="dobra__titulo">Esperar antes de mandar</summary>
-              <div className="ui-field">
-                <label className="ui-field__label" htmlFor="atrasoMinutos">
-                  Esperar quantos minutos
-                </label>
-                <input
-                  className="ui-field__input"
-                  defaultValue="0"
-                  id="atrasoMinutos"
-                  inputMode="numeric"
-                  name="atrasoMinutos"
-                />
-                <p className="ui-field__hint">
-                  Zero manda na primeira varredura depois do fato. Serve para quase tudo.
-                </p>
-              </div>
-            </details>
-
-            </fieldset>
-
-            <fieldset className="etapa">
-              <legend className="etapa__titulo">2. O que a pessoa recebe</legend>
-
-            {/*
-              **O texto que sai, ao lado do nome que o escolhe.**
-
-              A versão anterior mostrava *todos* os textos aprovados embaixo de
-              um seletor, com a frase "é este o texto que o cliente vai ler" no
-              singular. Com o seletor em "Convite de retorno — sem texto
-              aprovado" e a caixa mostrando "Lembrete de 24 horas", a tela
-              afirmava que sairia um texto que aquela automação nunca manda —
-              duas telas discordando sobre o mesmo fato (§6, pergunta 6), dentro
-              de uma só.
-
-              Agora cada tipo carrega **o texto dele**, casado por `tipo`, e a
-              ausência é escrita em letras: card sem o dado principal lê como
-              defeito de carregamento.
-
-              `TIPOS_DE_CAMPANHA` e não os seis avisos: a automação fala com quem
-              **não tem horário marcado**, então lembrete e confirmação mentiriam
-              no texto — e `senha_de_acesso` é credencial.
-
-              O `input` é escondido enquanto a lista tem um item só. Um seletor
-              de uma opção é escolha de mentira: ele pede uma decisão que não
-              existe, e quem abre procura a segunda opção que nunca vai achar. O
-              dia em que houver a segunda, ela vira rádio sozinha — a lista é a
-              mesma, e é dela que a tela deriva.
-            */}
-            <div className="ui-field">
-              <span className="ui-field__label">
-                {umaMensagemSo ? 'A mensagem' : 'Qual mensagem'}
-              </span>
-              <div
-                className="alternativas"
-                {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
-              >
-                {TIPOS_DE_CAMPANHA.map((t, i) => {
-                  const texto = textos.find((x) => x.tipo === t);
-                  return (
-                    <label className="alternativa" key={t}>
-                      <input
-                        defaultChecked={i === 0}
-                        name="tipo"
-                        type={umaMensagemSo ? 'hidden' : 'radio'}
-                        value={t}
-                      />
-                      <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
-                        {texto ? (
-                          <span className="alternativa__texto">{texto.corpo}</span>
-                        ) : (
-                          <span className="alternativa__nota alternativa__nota--risco">
-                            Sem texto aprovado — nada vai sair.
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="ui-field__hint">
-                É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
-                cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
-              </p>
-            </div>
-
-            </fieldset>
-
-            <fieldset className="etapa">
-              <legend className="etapa__titulo">3. O que isso precisa produzir</legend>
-              <p className="etapa__texto">
-                É o que a lista lá em cima vai contar, para você saber se vale manter ligada.
-              </p>
-
-            <div className="ui-field">
-              <label className="ui-field__label" htmlFor="objetivo">
-                O que precisa acontecer
-              </label>
-              <select className="ui-field__input" id="objetivo" name="objetivo" required>
-                {OBJETIVOS.map((o) => (
-                  <option key={o} value={o}>
-                    {ROTULO_DO_OBJETIVO[o]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="ui-field">
-              <label className="ui-field__label" htmlFor="janelaDias">
-                Em quantos dias isso vale
-              </label>
-              <input
-                className="ui-field__input"
-                defaultValue="7"
-                id="janelaDias"
-                inputMode="numeric"
-                max={JANELA_MAXIMA_DIAS}
-                min={1}
-                name="janelaDias"
-              />
-              <p className="ui-field__hint">
-                De 1 a {JANELA_MAXIMA_DIAS}. Prazo largo demais dá crédito a esta mensagem por um
-                corte que a pessoa marcaria de qualquer jeito.
-              </p>
-            </div>
-
-            </fieldset>
-
-            {/*
-              `.marca` e não um `<input>` solto dentro do rótulo: o padrão do
-              navegador é 13px e reprova o piso de 44px em qualquer largura. É a
-              mesma caixa da tela de avisos.
-            */}
-            <div className="ui-field">
-              <label className="marca" htmlFor="ativa">
-                <input defaultChecked id="ativa" name="ativa" type="checkbox" />
-                <span>Começar ligada</span>
-              </label>
-              <p className="ui-field__hint">
-                Você pode desligar depois sem perder o que ela já mediu.
-              </p>
-            </div>
-
-            <button className="ui-button ui-button--primary ui-button--block" type="submit">
-              Salvar automação
-            </button>
-          </form>
+          <CamposDaAutomacao prefixo="nova" textos={textos} umaMensagemSo={umaMensagemSo} />
         </section>
       ) : null}
     </main>
