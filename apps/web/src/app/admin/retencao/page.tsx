@@ -241,8 +241,11 @@ export default async function RetencaoPage({ searchParams }: Props) {
                 ritmo dele" e o seletor de Campanhas chama a mesma opção de "Em
                 risco" desde o bloco 99. Duas telas mandando procurar coisas com
                 nomes diferentes (§6, pergunta 2). */}
-            Para chamar todos de uma vez, use <strong>{rotuloDoFiltro('em_risco')}</strong> em{' '}
-            <a href="/admin/campanhas">Campanhas</a>.
+            Para chamar <strong>todos estes</strong> de uma vez, use{' '}
+            <a href="/admin/campanhas?filtro=risco_de_abandono#nova-campanha">
+              {rotuloDoFiltro('risco_de_abandono')}
+            </a>{' '}
+            em Campanhas.
           </p>
         </section>
       ) : null}

@@ -14,10 +14,21 @@ import { PlataformaError, registrarNaTrilha } from './plataforma.js';
  *
  * ## `semTenant`, e por que isto não é brecha
  *
- * `marketplace_ads` não tem RLS pelo mesmo motivo de `marketplace_listings`: a
- * busca lê antes de existir tenant no contexto. E o conteúdo é o que a torna
- * segura — um anúncio diz que a barbearia X está em destaque em Salvador, que é
- * público por definição: é a coisa que ela comprou para ser vista.
+ * `marketplace_ads` **tem** RLS, e `FORCE` — ao contrário de
+ * `marketplace_listings`. Este comentário dizia o contrário desde que o arquivo
+ * foi escrito, e a diferença é o conteúdo: a vitrine só guarda o que a página
+ * pública já mostra, e o anúncio guarda preço, fatura, motivo do cancelamento e
+ * autor. "Tabela sem RLS pelo argumento 'isto é público' só quando **todas** as
+ * colunas são" — quatro delas não são.
+ *
+ * A política é a de `invoices`: leitura com **ou sem** tenant (a busca anônima
+ * roda sem; a barbearia vê o que é dela), escrita só sem tenant, porque destaque
+ * é vendido pela plataforma e não solicitado pela barbearia. É por isso que as
+ * funções daqui rodam em `semTenant` — não porque a tabela seja aberta.
+ *
+ * Comentário que afirma o oposto do schema é pior que comentário nenhum: ele é
+ * exatamente o raciocínio que já produziu um achado de segurança neste
+ * repositório, escrito no topo do arquivo como se fosse a decisão vigente.
  */
 
 export interface Destaque {

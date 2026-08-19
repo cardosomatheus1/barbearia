@@ -257,6 +257,25 @@ export function naturezaDe(tipo: TipoDeNotificacao): NaturezaDaMensagem {
 }
 
 /**
+ * Os tipos que contam no teto do mês e na regra de uma por dia — **derivados**.
+ *
+ * Quem precisa deles é SQL: a consulta que conta quantas promocionais a pessoa
+ * já recebeu. Escritos à mão lá dentro (`kind = 'retorno'`), eles seriam a
+ * sétima lista paralela deste código, e a primeira a divergir seria a do dia em
+ * que um tipo promocional novo entrasse — o teto deixaria de contá-lo sem nada
+ * ficar vermelho.
+ *
+ * Derivar de `naturezaDe` também documenta o inverso: a consulta **não** pode
+ * contar confirmação e lembrete. Antes do bloco 108 ela contava tudo, e em
+ * produção — onde o lembrete de fato grava — quem tinha quatro agendamentos no
+ * mês ficava barrado de receber qualquer promoção, por um teto que a tela
+ * descreve como sendo de promoções.
+ */
+export const TIPOS_PROMOCIONAIS: readonly TipoDeNotificacao[] = TIPOS_DE_NOTIFICACAO.filter(
+  (t) => naturezaDe(t) === 'promocional',
+);
+
+/**
  * A categoria que a Meta cobra, aprova e limita — derivada do **tipo**.
  *
  * ## Por que não sai mais dos botões
@@ -322,6 +341,17 @@ export function categoriaDoAviso(tipo: TipoDeNotificacao): CategoriaDoTemplate {
  */
 export const TIPOS_DE_CAMPANHA = ['retorno'] as const;
 export type TipoDeCampanha = (typeof TIPOS_DE_CAMPANHA)[number];
+
+/**
+ * O tipo que vale quando a tela não perguntou.
+ *
+ * Hoje a lista tem um item só, e o seletor de uma opção só nem é desenhado —
+ * então a ação precisa de um valor. Escrito `'retorno'` à mão em dois lugares
+ * (era assim), ele fica para trás no dia em que a lista tiver o segundo: a tela
+ * ofereceria dois e a ação continuaria mandando o primeiro. Derivado da lista,
+ * o padrão acompanha.
+ */
+export const TIPO_PADRAO_DE_CAMPANHA: TipoDeCampanha = TIPOS_DE_CAMPANHA[0];
 
 export function tipoDeCampanhaValido(tipo: string): tipo is TipoDeCampanha {
   return (TIPOS_DE_CAMPANHA as readonly string[]).includes(tipo);

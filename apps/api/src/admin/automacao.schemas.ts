@@ -23,7 +23,16 @@ export const automacaoSchema = z.object({
    * de domínio, e ela mora em `validarAutomacao` — repeti-la aqui criaria duas
    * listas para a mesma regra.
    */
-  limiar: z.number().int().positive().nullable(),
+  /**
+   * Zero é aceito **aqui**, e recusado lá quando não couber.
+   *
+   * `.positive()` tornava impossível a automação de aniversário mais óbvia que
+   * existe — "hoje é seu aniversário" —, porque o mínimo virava um dia antes.
+   * Qual gatilho aceita zero é decisão de domínio (`LIMIAR_MINIMO`), e o
+   * comentário acima já dizia que repetir a regra aqui criaria duas listas para
+   * a mesma coisa. O que a borda cobra é a forma: inteiro, não negativo.
+   */
+  limiar: z.number().int().min(0).nullable(),
   atrasoMinutos: z.number().int().min(0).max(10_080),
   /**
    * A mesma lista fechada da campanha, e pela mesma razão.

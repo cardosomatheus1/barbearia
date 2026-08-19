@@ -5,6 +5,7 @@ import {
   ROTULO_DO_FILTRO,
   SEGMENTO_DO_FILTRO,
   TIPOS_DE_CAMPANHA,
+  TIPOS_PROMOCIONAIS,
   tipoDeCampanhaValido,
   type FiltroDeCampanha,
   type Segmento,
@@ -12,6 +13,7 @@ import {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { enfileirarPara } from '@barbearia/jobs';
+import { churnDaBase } from './churn.js';
 import { segmentosDaBase } from './segmento.js';
 
 /**
@@ -380,6 +382,26 @@ export async function criarCampanha(params: {
      * cadastrado entre o cálculo e a gravação do público.
      */
     const segmento = segmentoDoFiltro(params.filtro);
+    /**
+     * `risco_de_abandono` sai do **score de churn**, não do ciclo individual.
+     *
+     * É a mesma lista que a tela de Retenção mostra, e ela não é a mesma gente
+     * que `em_risco`: aquela tela apontava quarenta e uma pessoas e mandava
+     * chamá-las por um filtro que alcançava catorze — vinte e duas já eram
+     * `perdido` e cinco não tinham segmento nenhum. Duas telas classificando as
+     * mesmas pessoas com a mesma palavra e discordando (§6, pergunta 6).
+     *
+     * A carga entra na **mesma transação** pelo motivo de sempre: o score
+     * depende da base inteira, e lê-la fora daqui abre a janela em que alguém é
+     * cadastrado entre o cálculo e a gravação do público.
+     */
+    const doChurn =
+      params.filtro === 'risco_de_abandono'
+        ? (await churnDaBase(params.tenantId, params.agora, tx))
+            .filter((c) => c.faixa !== 'baixo')
+            .map((c) => c.customerId)
+        : [];
+
     const doSegmento =
       segmento === null
         ? []
@@ -406,7 +428,7 @@ export async function criarCampanha(params: {
       params.agora,
       params.valorDoFiltro ?? 0,
       params.diaDaSemana ?? 0,
-      doSegmento,
+      params.filtro === 'risco_de_abandono' ? doChurn : doSegmento,
     );
 
     await audit(tx, {
@@ -448,6 +470,7 @@ function condicaoDoFiltro(filtro: FiltroDeCampanha): string {
     case 'em_risco':
     case 'perdido':
     case 'vip':
+    case 'risco_de_abandono':
       /**
        * A lista já veio decidida por `packages/core`, e ela sai de uma consulta
        * feita sob a RLS **desta** barbearia — ninguém de fora entra por aqui.
@@ -624,15 +647,45 @@ export async function despacharCampanha(params: {
 
   for (const alvo of alvos) {
     const contagem = await withTenant(params.tenantId, async (tx) => {
+      /**
+       * As duas contagens saem de `notifications`, e o dia é o **da unidade**.
+       *
+       * Três consertos numa consulta só (bloco 108):
+       *
+       * 1. **O teto do mês contava zero.** Ele já lia `notifications`, e nem o
+       *    despacho de campanha nem o de automação escreviam ali — só o envio
+       *    avulso do balcão, cujo comentário diz, em letras, que a linha existe
+       *    "para esta mensagem contar no teto: sem ela o envio avulso seria o
+       *    furo do teto do mês, quatro pelo motor e quantas quisessem pelo
+       *    balcão". Os quatro pelo motor não existiam. A tela de Automações
+       *    promete "no máximo quatro promoções por mês" desde o bloco 100.
+       *
+       * 2. **E contava a coisa errada.** Sem filtro de tipo, ele somava
+       *    confirmação e lembrete — que a Meta cobra como utilidade e que o
+       *    cliente pediu ao marcar. Em produção, onde o lembrete de fato grava,
+       *    quem tinha quatro agendamentos no mês ficava barrado de receber
+       *    qualquer promoção. `TIPOS_PROMOCIONAIS` vem de `naturezaDe`, e não
+       *    escrito aqui dentro.
+       *
+       * 3. **A regra de uma por dia era por mecanismo.** Contando
+       *    `campaign_targets`, uma campanha e uma automação chegavam ao mesmo
+       *    celular no mesmo dia, cada uma correta sozinha — que é exatamente o
+       *    conjunto que a SPEC §4.11 chama de spam. Agora as duas escrevem no
+       *    mesmo lugar e leem do mesmo lugar.
+       *
+       * E o corte do dia usa o fuso da unidade: em UTC−5 o dia virava às 19h
+       * locais, abrindo duas horas em que a segunda mensagem saía.
+       */
       const linhas = await tx.$queryRaw<{ hoje: bigint; no_mes: bigint; aceita: boolean }[]>`
         SELECT
-          (SELECT count(*) FROM campaign_targets o
-            WHERE o.customer_id = ${alvo.customerId}::uuid
-              AND o.sent_at IS NOT NULL
-              AND (o.sent_at AT TIME ZONE 'UTC')::date
-                = (${params.agora}::timestamptz AT TIME ZONE 'UTC')::date) AS hoje,
           (SELECT count(*) FROM notifications n
             WHERE n.customer_id = ${alvo.customerId}::uuid AND n.status = 'sent'
+              AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
+              AND (n.sent_at AT TIME ZONE ${params.timeZone})::date
+                = (${params.agora}::timestamptz AT TIME ZONE ${params.timeZone})::date) AS hoje,
+          (SELECT count(*) FROM notifications n
+            WHERE n.customer_id = ${alvo.customerId}::uuid AND n.status = 'sent'
+              AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
               AND n.sent_at > ${params.agora}::timestamptz - interval '30 days') AS no_mes,
           (SELECT accepts_marketing FROM customers WHERE id = ${alvo.customerId}::uuid) AS aceita
       `;
@@ -695,7 +748,33 @@ export async function despacharCampanha(params: {
         UPDATE campaign_targets SET sent_at = ${params.agora}
          WHERE id = ${alvo.id}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
       `;
-      return afetadas === 1;
+      if (afetadas !== 1) return false;
+
+      /**
+       * A linha em `notifications`, **na mesma transação do carimbo**.
+       *
+       * É ela que faz esta mensagem contar no teto do mês e na regra de uma por
+       * dia — as duas leem daqui. Fora da transação, um processo que caísse
+       * entre o carimbo e a gravação deixaria uma mensagem enviada que não
+       * conta em lugar nenhum, e o teto voltaria a valer menos do que promete.
+       */
+      /**
+       * `sent_at` sai do relógio **injetado**, e não do `DEFAULT now()`.
+       *
+       * O carimbo em `campaign_targets` logo acima usa `params.agora`; deixar
+       * esta linha no relógio do banco faz as duas discordarem, e quem conta o
+       * dia compara `agora` com uma coluna gravada por outro relógio. Foi assim
+       * que a primeira versão deste conserto passou o teste do teto e reprovou
+       * o de "uma por dia": a linha existia, com a data de hoje, e a pergunta
+       * era sobre o dia de `AGORA`.
+       */
+      await tx.$executeRaw`
+        INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked, sent_at)
+        VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+                ${alvo.tipo}::notification_kind, ${alvo.customerId}::uuid,
+                'sent', NULL, ${params.agora})
+      `;
+      return true;
     });
     if (!nosso) continue;
 

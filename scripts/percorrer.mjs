@@ -468,6 +468,50 @@ await percurso('cliente marca pela conversa', async (page) => {
 });
 
 // ---------------------------------------------------------------------------
+// 1c — o dono monta uma campanha no primeiro dia, sem WhatsApp ligado
+// ---------------------------------------------------------------------------
+
+await percurso('dono monta uma campanha sem texto aprovado', async (page) => {
+  /**
+   * O estado do **dia 1 de toda barbearia** (bloco 108).
+   *
+   * Sem WhatsApp conectado não há texto aprovado, e sem texto aprovado a tela
+   * não desenha nem o rádio de mensagem nem o campo de tipo. A ação mandava
+   * `tipo: ''`, o `z.enum` recusava, e o botão primário da tela de Campanhas
+   * devolvia **"Parâmetro inválido: tipo"** — o nome técnico de um campo que
+   * não existe na tela. A automação, ao lado, sempre teve queda para o padrão.
+   *
+   * Montar o público antes de ter texto é caso legítimo: o público é congelado
+   * na criação, o envio é outro botão, e `campanhaEnviavel` já guarda o Enviar.
+   *
+   * A semente ajuda de graça: o texto de `retorno` nasce **pausado** de
+   * propósito — a Meta pausa o que já aprovou quando o índice de qualidade cai,
+   * e a tela precisa mostrar esse estado. É exatamente o estado que quebrava.
+   */
+  await entrarNoPainel(page, DONO, SENHA_DO_DONO);
+  await page.goto(`${WEB}/admin/campanhas`, { waitUntil: 'networkidle' });
+
+  const nome = `Campanha do percurso ${Date.now()}`;
+  await page.fill('input[name="nome"]', nome);
+  await submeter(page, 'criar a campanha', botao(page, 'Criar campanha'));
+
+  const url = page.url();
+  if (!url.includes('feito=criada')) {
+    const aviso = await page.locator('.ui-alert, [role="alert"]').first().innerText().catch(() => '');
+    throw new Error(`a campanha não foi criada — parou em ${url}${aviso ? ` dizendo "${aviso.slice(0, 120)}"` : ''}`);
+  }
+
+  // O nome é gerado aqui e só tem letras, espaço e dígito — não há aspas para
+  // escapar, e é por isso que ele pode entrar direto na consulta de conferência.
+  const criadas = consultar(
+    `SELECT count(*) FROM campaigns WHERE name = '${nome}'`,
+  );
+  if (criadas !== '1') {
+    throw new Error(`a campanha não chegou ao banco (achei ${criadas})`);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 2 — o balcão abre o caixa, fecha uma comanda e fecha o dia
 // ---------------------------------------------------------------------------
 

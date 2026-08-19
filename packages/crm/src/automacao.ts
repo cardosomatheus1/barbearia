@@ -6,6 +6,7 @@ import {
   EXPLICACAO_DA_FALHA,
   objetivoAlcancado,
   segmentoValido,
+  TIPOS_PROMOCIONAIS,
   validarAutomacao,
   type Gatilho,
   type Objetivo,
@@ -633,22 +634,34 @@ export async function varrerAutomacoes(params: {
        * Perguntá-los dentro do laço seria uma ida ao banco por candidato — o
        * N+1 que a regra proíbe, e aqui ele é sobre a base inteira de clientes.
        */
+      /**
+       * Os dois contadores saem de `notifications`, e o dia é o **da unidade**.
+       *
+       * Mesma consulta em três frentes que a campanha (bloco 108): o teto do mês
+       * contava tudo que já havia em `notifications` — incluindo confirmação e
+       * lembrete, que são transacionais —, a regra de uma por dia olhava só
+       * `automation_sends` e portanto não via a campanha do mesmo dia, e o corte
+       * do dia era UTC em vez do fuso da unidade.
+       *
+       * O `LEFT JOIN` com `automation_sends` sai junto: ele não é mais lido, e
+       * uma junção que ninguém usa numa consulta sobre a base inteira é varredura
+       * paga por nada.
+       */
       const ids = lista.map((c) => c.customerId);
       const contagens = await tx.$queryRaw<
         { customer_id: string; hoje: bigint; no_mes: bigint }[]
       >`
         SELECT c.id AS customer_id,
-               count(s.id) FILTER (
-                 WHERE s.sent_at IS NOT NULL
-                   AND (s.sent_at AT TIME ZONE 'UTC')::date
-                     = (${params.agora}::timestamptz AT TIME ZONE 'UTC')::date
+               count(n.id) FILTER (
+                 WHERE (n.sent_at AT TIME ZONE ${params.timeZone})::date
+                     = (${params.agora}::timestamptz AT TIME ZONE ${params.timeZone})::date
                ) AS hoje,
                count(n.id) FILTER (
                  WHERE n.sent_at > ${params.agora}::timestamptz - interval '30 days'
                ) AS no_mes
           FROM customers c
-          LEFT JOIN automation_sends s ON s.customer_id = c.id
           LEFT JOIN notifications n ON n.customer_id = c.id AND n.status = 'sent'
+                AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
          WHERE c.id = ANY(${ids}::uuid[])
          GROUP BY c.id
       `;
@@ -813,19 +826,50 @@ export async function marcarDisparoEnviado(params: {
    */
   const carimbar = () =>
     withTenant(params.tenantId, async (tx) => {
+      /**
+       * A última linha de defesa do "uma por dia" passa a olhar `notifications`.
+       *
+       * Ela olhava só `automation_sends`, e por isso não via a campanha do mesmo
+       * dia: duas mensagens promocionais no mesmo celular, cada mecanismo
+       * correto sozinho. Agora os dois escrevem e leem no mesmo lugar.
+       *
+       * O fuso continua sendo o do banco aqui de propósito — este `NOT EXISTS`
+       * é a guarda entre **processos**, e ela roda com `now()`, não com o
+       * relógio injetado. Quem decide de verdade é `decidirDisparo`, que recebe
+       * o fuso da unidade; isto é a rede embaixo.
+       */
       const afetadas = await tx.$executeRaw`
         UPDATE automation_sends AS s SET sent_at = now()
          WHERE s.id = ${params.disparoId}::uuid
            AND s.sent_at IS NULL
            AND s.skipped_reason IS NULL
            AND NOT EXISTS (
-             SELECT 1 FROM automation_sends outro
-              WHERE outro.customer_id = s.customer_id
-                AND outro.sent_at IS NOT NULL
-                AND (outro.sent_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date
+             SELECT 1 FROM notifications n
+              WHERE n.customer_id = s.customer_id
+                AND n.status = 'sent'
+                AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
+                AND (n.sent_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date
            )
       `;
-      return afetadas === 1;
+      if (afetadas !== 1) return false;
+
+      /**
+       * E a linha que faz este disparo **contar**, na mesma transação.
+       *
+       * Sem ela o teto do mês seguiria valendo zero: as duas contagens leem
+       * `notifications`, e até o bloco 108 nenhum dos dois motores escrevia lá.
+       */
+      // O tipo mora em `automations.kind`, não no disparo: `automation_sends`
+      // guarda o fato e o desfecho, e quem a mensagem é sai da regra.
+      await tx.$executeRaw`
+        INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
+        SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+               a.kind, s.customer_id, 'sent', NULL
+          FROM automation_sends s
+          JOIN automations a ON a.id = s.automation_id
+         WHERE s.id = ${params.disparoId}::uuid
+      `;
+      return true;
     });
 
   let carimbou = false;

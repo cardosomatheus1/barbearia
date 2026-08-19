@@ -278,6 +278,20 @@ export const FILTROS_DE_CAMPANHA = [
   'em_risco',
   'perdido',
   'vip',
+  /**
+   * Exatamente quem a tela de Retenção lista (bloco 108).
+   *
+   * Ela mostrava quarenta e uma pessoas e mandava chamá-las com **Em risco** —
+   * que alcançava catorze. As duas populações têm nomes parecidos e origens
+   * diferentes: `em_risco` sai do ciclo individual (`segmentosDaBase`), e a
+   * lista de retenção sai do score de sete sinais (`churnDaBase`), onde vinte e
+   * duas daquelas pessoas já são `perdido` e cinco não têm segmento nenhum.
+   *
+   * É a §6 pergunta 6 — duas telas classificando as mesmas pessoas com a mesma
+   * palavra "risco" e discordando —, e a convenção que ela quebra é a de que a
+   * contagem que a tela promete sai do **mesmo filtro que o botão abre**.
+   */
+  'risco_de_abandono',
 ] as const;
 export type FiltroDeCampanha = (typeof FILTROS_DE_CAMPANHA)[number];
 
@@ -302,6 +316,7 @@ export const ROTULO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string>> = {
   em_risco: 'Passou do ritmo dele',
   perdido: 'Passou do dobro do ritmo dele',
   vip: 'Quem mais gasta na casa',
+  risco_de_abandono: 'Quem a Retenção aponta como em risco',
 };
 
 /**
@@ -408,4 +423,5 @@ export const NUMERO_DO_FILTRO: Readonly<Record<FiltroDeCampanha, string | null>>
   em_risco: null,
   perdido: null,
   vip: null,
+  risco_de_abandono: null,
 };

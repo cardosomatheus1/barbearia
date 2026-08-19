@@ -5,6 +5,7 @@ import {
   GATILHOS,
   JANELA_MAXIMA_DIAS,
   LIMIAR_DO_GATILHO,
+  LIMIAR_MINIMO,
   OBJETIVOS,
   ROTULO_DO_GATILHO,
   ROTULO_DO_OBJETIVO,
@@ -87,7 +88,47 @@ describe('a automação é montável?', () => {
      * e só apareceria na conta da Meta.
      */
     expect(validarAutomacao({ ...valida, limiar: null })).toBe('limiar_obrigatorio');
+    // `sem_retorno` é o gatilho de `valida`, e nele zero continua sendo recusa.
     expect(validarAutomacao({ ...valida, limiar: 0 })).toBe('limiar_invalido');
+  });
+
+  it('o aniversário aceita zero, que é "no dia"', () => {
+    /**
+     * O mínimo não é sempre um (bloco 108).
+     *
+     * "Feliz aniversário! Hoje seu corte tem 20%" é a automação de aniversário
+     * que qualquer barbearia quer, e ela não era cadastrável: a regra recusava
+     * `<= 0` para todo gatilho, então o mais cedo possível era um dia antes. A
+     * consulta já sabia fazer "no dia" — `const antes = limiar ?? 0` —, e aquele
+     * caminho era código morto.
+     */
+    expect(validarAutomacao({ ...valida, gatilho: 'aniversario', limiar: 0 })).toBeNull();
+    expect(validarAutomacao({ ...valida, gatilho: 'assinatura_vencendo', limiar: 0 })).toBeNull();
+  });
+
+  it('zero continua recusado onde ele significa "todo mundo"', () => {
+    /**
+     * O caso que a distinção existe para preservar, e sem ele o teste acima
+     * passaria com a regra simplesmente removida.
+     *
+     * `sem_retorno` conta dias de ausência: zero é quem não vem há zero dias —
+     * a base inteira, incluindo quem acabou de sair da cadeira. Estrela zero não
+     * existe, e pacote com zero unidades restantes já acabou, que é tarde demais
+     * para o aviso que o gatilho promete.
+     */
+    for (const gatilho of ['sem_retorno', 'avaliacao_positiva', 'pacote_acabando'] as const) {
+      expect(validarAutomacao({ ...valida, gatilho, limiar: 0 }), gatilho).toBe('limiar_invalido');
+    }
+  });
+
+  it('todo gatilho que pede número tem mínimo declarado', () => {
+    /**
+     * Derivado, para o gatilho do bloco seguinte nascer com uma decisão tomada
+     * em vez de cair num padrão que ninguém escolheu.
+     */
+    for (const gatilho of GATILHOS) {
+      expect(LIMIAR_MINIMO[gatilho], gatilho).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it('gatilho que não pede número passa sem ele', () => {

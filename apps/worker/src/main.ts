@@ -19,6 +19,7 @@ import {
   aplicarReguaDoClube,
   conciliarCobrancas,
   entregarNotasAutorizadas,
+  expirarSaldos,
   conciliarRecebedores,
   liquidarRepasses,
   montarAvisoDoClube,
@@ -513,6 +514,45 @@ async function main(): Promise<void> {
         }
 
         await atribuirObjetivos({ tenantId, agora });
+
+        /**
+         * A receita das campanhas é atribuída **aqui**, de hora em hora.
+         *
+         * Ela morava só dentro de `campanha.enviar` — e naquele instante nenhuma
+         * venda pode satisfazer `closed_at > sent_at`, porque a mensagem acabou
+         * de sair. `campanha.enviar` é tarefa de uma vez só e não se reprograma,
+         * então "a única coluna que importa numa campanha" ficava em R$ 0,00 até
+         * alguém despachar a **próxima** campanha. Para quem roda uma por mês, o
+         * número que decide se marketing vale a pena era zero por um mês; para
+         * quem rodou uma só, zero para sempre.
+         *
+         * A varredura de automação é o lugar certo por já ser o que é: roda de
+         * hora em hora, por barbearia, com o tenant no contexto. É o mesmo
+         * desenho de `atribuirObjetivos` logo acima, que sempre esteve certo — e
+         * é a diferença entre as duas que fazia uma funcionar e a outra não.
+         *
+         * `atribuirReceita` varre os alvos enviados de **todas** as campanhas da
+         * casa, então uma volta por hora dá conta de qualquer número delas.
+         */
+        await atribuirReceita({ tenantId, agora });
+
+        /**
+         * E o vencimento do saldo de fidelidade, que não tinha chamador nenhum.
+         *
+         * O saldo já **some da leitura** no instante em que vence — quem lê usa
+         * `saldoDisponivel`, que olha o relógio. O que faltava era o extrato: sem
+         * a linha de `expiracao`, a soma das linhas não bate com o saldo
+         * mostrado, e a primeira pessoa a conferir a conta na mão encontra uma
+         * diferença que ninguém sabe explicar. Numa tela cujo assunto é
+         * *"por que caiu?"*, isso é o pior desfecho possível.
+         *
+         * De hora em hora é seguro porque a conta é idempotente:
+         * `quantidadeAExpirar` desconta o que já foi expirado, então a segunda
+         * volta encontra zero e não escreve nada.
+         *
+         * Achada pela guarda que este bloco criou, não pela revisão.
+         */
+        await expirarSaldos(tenantId, agora);
 
         if (varrida.marcados > 0 || enviados > 0) {
           // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.

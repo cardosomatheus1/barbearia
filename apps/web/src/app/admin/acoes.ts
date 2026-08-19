@@ -165,6 +165,7 @@ import {
   MOTIVOS_DA_CONTESTACAO,
   MOTIVOS_DA_CONTESTACAO_DE_COMISSAO,
   ehConversa,
+  TIPO_PADRAO_DE_CAMPANHA,
   type MotivoDaContestacao,
 } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
@@ -2930,7 +2931,27 @@ export async function acaoCriarCampanha(form: FormData): Promise<void> {
     filtro: texto(form, 'filtro'),
     valorDoFiltro: valor ? Number(valor) : null,
     diaDaSemana: dia ? Number(dia) : null,
-    ...(templateId ? { templateId } : { tipo: texto(form, 'tipo') }),
+    /**
+     * O tipo cai no padrão quando a tela não desenhou o campo (bloco 108).
+     *
+     * Sem texto aprovado — que é o estado do **dia 1 de toda barbearia**, antes
+     * de o WhatsApp estar ligado — o formulário não renderiza nem o rádio de
+     * `templateId` nem o campo de `tipo`. A ação mandava `tipo: ''`, o `z.enum`
+     * recusava, e o botão primário da tela devolvia "Parâmetro inválido: tipo"
+     * sobre um campo que não existe na tela.
+     *
+     * A automação, na linha 2992, sempre teve esta queda. A assimetria é o que
+     * mostra que era descuido e não regra: as duas telas dizem a mesma frase
+     * vermelha ("Nenhum texto aprovado — nada vai sair"), e só uma delas
+     * deixava salvar.
+     *
+     * E montar o público antes de ter texto é caso legítimo: o público é
+     * congelado na criação, o envio é outro botão, e `campanhaEnviavel` já
+     * guarda o **Enviar**.
+     */
+    ...(templateId
+      ? { templateId }
+      : { tipo: texto(form, 'tipo') || TIPO_PADRAO_DE_CAMPANHA }),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
   });
   if (!resultado.ok) {
@@ -2989,7 +3010,7 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
      * é só o padrão para a automação sem texto escolhido; com texto, o domínio
      * lê o tipo dele e ignora este campo, senão os dois divergiriam.
      */
-    tipo: texto(form, 'tipo') || 'retorno',
+    tipo: texto(form, 'tipo') || TIPO_PADRAO_DE_CAMPANHA,
     templateId: texto(form, 'templateId') || null,
     /**
      * Para quem ela manda (bloco 100).
@@ -3005,7 +3026,21 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
   });
   if (!resultado.ok) {
     await guardarOQueFoiDigitado(form, CAMPOS_DA_AUTOMACAO, resultado.message);
-    falhar(ROTA_AUTOMACOES, resultado.code);
+    /**
+     * A recusa volta **para a edição**, e não para o formulário de criar.
+     *
+     * `falhar(ROTA_AUTOMACOES, ...)` perdia o `editar=`, e `id` não está em
+     * `CAMPOS_DA_AUTOMACAO` — é campo escondido, sem `defaultValue`, então o
+     * rascunho não o repunha. O formulário voltava com tudo digitado, o título
+     * trocado de "Editando X" para "Nova automação" e sem o `id`: quem corrigia
+     * o campo e salvava ficava com **duas** automações de mesmo nome, a
+     * original ainda ligada e mandando.
+     *
+     * O par "enviadas / alcançadas", que a SPEC §4.11 exige para poder matar o
+     * que não funciona, passava a ficar repartido entre as duas — e a decisão
+     * de desligar deixava de ser possível de tomar.
+     */
+    falhar(id ? `${ROTA_AUTOMACOES}?editar=${encodeURIComponent(id)}` : ROTA_AUTOMACOES, resultado.code);
   }
   redirect(`${ROTA_AUTOMACOES}?feito=salva`);
 }

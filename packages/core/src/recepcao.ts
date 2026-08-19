@@ -140,6 +140,25 @@ const PALAVRAS_VAZIAS = new Set([
   'estao',
 ]);
 
+/**
+ * Os dias que aparecem numa pergunta sobre jornada, do jeito que se escreve.
+ *
+ * Sem acento e sem caixa porque a comparação é sobre o texto normalizado — é o
+ * mesmo tratamento que a chave da pergunta já recebe.
+ */
+const DIAS_DA_SEMANA = [
+  'segunda',
+  'terca',
+  'quarta',
+  'quinta',
+  'sexta',
+  'sabado',
+  'domingo',
+  'hoje',
+  'amanha',
+  'feriado',
+] as const;
+
 const PISTAS: readonly { readonly assunto: AssuntoDaRecepcao; readonly palavras: readonly string[] }[] = [
   /**
    * `preco` e `valor` sozinhos, e o motivo é gênero.
@@ -155,9 +174,28 @@ const PISTAS: readonly { readonly assunto: AssuntoDaRecepcao; readonly palavras:
    * inventando o assunto.
    */
   { assunto: 'preco', palavras: ['quanto custa', 'preco', 'valor do', 'valor da', 'quanto e', 'quanto fica'] },
+  /**
+   * Jornada exige **um dia** junto do verbo, e o motivo é uma pergunta real.
+   *
+   * `atende` sozinho classificava *"vocês atendem criança?"* como jornada do
+   * profissional, e a lista do dono mandava ele cadastrar em **Profissionais** —
+   * onde nenhum cadastro torna aquela pergunta respondível. Ele vai, não acha
+   * nada, volta, e a linha continua lá; se clicar em "Já cadastrei", ela reabre
+   * no próximo cliente que perguntar.
+   *
+   * O lado do cliente já estava protegido — `responderRecepcao` só responde
+   * jornada quando o nome do profissional aparece na frase. O defeito era só na
+   * tela do dono, que é justamente o produto desta parte.
+   *
+   * Sem dia reconhecido a frase cai fora de todos os assuntos e vira "sem
+   * assunto reconhecido", que é honesto e já tem tratamento na tela: a pergunta
+   * continua contada, sem mandar ninguém para o lugar errado.
+   */
   {
     assunto: 'jornada_do_profissional',
-    palavras: ['trabalha', 'atende', 'esta la', 'vai estar'],
+    palavras: DIAS_DA_SEMANA.flatMap((dia) =>
+      ['trabalha', 'atende', 'esta la', 'vai estar'].map((verbo) => `${verbo} ${dia}`),
+    ),
   },
   {
     assunto: 'horario_de_funcionamento',

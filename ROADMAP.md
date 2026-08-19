@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 107 de 107 blocos.**
+**Status: 108 de 108 blocos.**
 
 ---
 
@@ -73,6 +73,8 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| A varredura da vitrine do marketplace não tem quem a dispare | `varrerVitrine` existe, é exportada, tem teste e refaz preço e nota de todo card a partir do que a página pública mostra; `atualizarVitrineDaCasa` é chamada nos dois pontos de evento (publicar e contestar avaliação), então o card não fica velho pelos caminhos óbvios | **o disparo periódico**. Preço e nota mudam por caminhos que não conhecem a vitrine — uma alteração de catálogo, uma avaliação nova que vence a janela de 48h —, e a varredura é a rede que pega isso. Sem chamador, o card só se atualiza quando alguém publica de novo, e o cabeçalho da migração 0067 afirma o contrário | sem bloco definido: precisa de tipo de tarefa próprio e de lugar no laço periódico de `packages/jobs/src/worker.ts`, que é trabalho de agendamento. Achado pela guarda `scripts/varredura-com-chamador.test.mjs`, criada no bloco 108 |
+| `webhook.varrer` tem tratador e ninguém a enfileira | o tratador está escrito em `packages/jobs/src/worker.ts`, alcança o primeiro degrau da escada de entrega e tudo que a tarefa perdeu, e roda sem tenant como a política da tabela permite | **o produtor**. Nenhum caminho enfileira a tarefa, então a rede que existe para pegar a entrega cuja tarefa se perdeu nunca roda. A entrega normal continua funcionando por `next_attempt_at`; o que falta é o resgate | sem bloco definido: entra junto do disparo da vitrine, que precisa do mesmo lugar no laço periódico. Achado ao investigar a guarda do bloco 108 |
 | O agente de conversa não responde pelo WhatsApp | a porta do site está no ar desde o bloco 106: `/[slug]/conversar`, com a resposta em cookie de dois minutos, os horários levando ao passo 4 do agendamento de sempre, medição e percurso de navegador do texto livre até a linha no banco. As rotas `POST /v1/b/:slug/agente` e `/agente/meu` continuam sendo o único caminho de leitura, e nenhuma delas grava | o **encaminhamento da mensagem recebida**: hoje o webhook da Meta manda tudo para `registrarResposta`, e uma mensagem que não responde a nada nenhum caminho lê. Precisa decidir o que é conversa e o que é resposta a um aviso, e o que fazer com quem escreve dentro da janela de silêncio | sem bloco definido: depende de a barbearia ter número próprio verificado, que é o estado que o bloco 88 tornou explícito e que nenhuma barbearia da base tem ainda. Entra junto do primeiro bloco que ligue o número de verdade |
 | Conciliação com a Meta só na unidade principal | a varredura de hora em hora (bloco 90) promove o número a `ativo` quando a Meta confirma a posse, e tira os textos de "Na Meta" — pela `primaryLocation` de cada barbearia | cobrir **todas** as unidades: `whatsapp_settings` é por unidade desde o bloco 55, e uma rede com número próprio por loja concilia só o da matriz | sem bloco definido: nenhuma barbearia deste produto tem hoje número por filial, e um laço sobre unidades seria caminho que nada exercita — o defeito de `blocks` outra vez. O que segura a decisão é dado, não código: entra quando existir a primeira rede com dois números. Enquanto isso o sintoma é conhecido e limitado — a filial fica em "falta confirmar" com o canal funcionando, que é o estado de antes do bloco 90 |
 | O `payload` de uma importação abandonada nunca é apagado | o `CHECK` do bloco 25 garante que importação **aplicada** não guarda `payload`, e a análise seguinte limpa o que passou de sete dias | uma varredura que alcance quem **nunca mais abriu a tela**. A limpeza pega carona no início da próxima análise, e o caso mais provável é o que nunca é limpo: a barbearia sobe o CSV uma vez, olha a conferência, desiste e some — deixando nome, telefone e aniversário da base legada inteira, de gente que talvez nunca vire cliente | sem bloco definido: entra junto da próxima tarefa de fila por tenant. `imports` tem RLS, então não serve varredura sem tenant: precisa ser uma tarefa por barbearia, como `fiscal.emitir`. Achado da avaliação cega do bloco 104, e não é vulnerabilidade — é postura de dado herdada em vez de decidida, que é o critério do bloco 66 |
@@ -428,6 +430,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 105 | O que a avaliação cega do cliente final achou: o passo 4 mostra o preço que o motor grava, a disputa por um horário deixa de virar 500, e a busca ganha os filtros que a API já aceitava | ✅ |
 | 106 | A porta do agente: o cliente escreve o que precisa, e a proposta leva ao passo de confirmar | ✅ |
 | 107 | O agente entende substantivo: "quero um corte amanhã" para de ser "não entendi" | ✅ |
+| 108 | O que a avaliação cega do marketing achou: o teto de quatro promoções por mês volta a contar, a receita atribuída deixa de esperar a próxima campanha, e a Retenção manda ao público que ela mostra | ✅ |
 
 ---
 

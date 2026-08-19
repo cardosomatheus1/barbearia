@@ -242,6 +242,86 @@ describeIfDb('campanhas', () => {
     expect(resultado.enviados).toBe(0);
   });
 
+  it('a quinta promoção do mês é barrada, e o motivo fica escrito', async () => {
+    /**
+     * O teto que a tela promete e que valia **zero** (bloco 108).
+     *
+     * As duas contagens — a do dia e a do mês — leem `notifications`, e nem o
+     * despacho de campanha nem o de automação escreviam ali. O teto contava
+     * zero para todo cliente, sempre, enquanto a tela de Automações afirmava em
+     * letras "no máximo quatro promoções por mês".
+     *
+     * Nenhuma suíte pegava: `teto_do_mes` era testado só em `core`, com o número
+     * passado por argumento. A função pura estava certa; ninguém mandava cinco
+     * campanhas para a mesma pessoa e cobrava que a quinta parasse.
+     *
+     * Cada campanha vai num dia diferente porque a regra de uma por dia barraria
+     * antes — e barrar pelo motivo errado é o teste passando pelo motivo errado.
+     */
+    const diaSeguinte = (n: number) => new Date(AGORA.getTime() + n * 24 * 60 * 60 * 1000);
+
+    for (let i = 0; i < 4; i += 1) {
+      const criada = await campanha({ nome: `Promo ${i}` });
+      const r = await despacharCampanha({
+        tenantId: TENANT,
+        campanhaId: criada.id,
+        agora: diaSeguinte(i),
+        timeZone: 'America/Bahia',
+        enviar: async () => null,
+      });
+      expect(r.enviados, `a promoção ${i + 1} de 4 deveria sair`).toBe(3);
+    }
+
+    const quinta = await campanha({ nome: 'Promo 5' });
+    const resultado = await despacharCampanha({
+      tenantId: TENANT,
+      campanhaId: quinta.id,
+      agora: diaSeguinte(4),
+      timeZone: 'America/Bahia',
+      enviar: async () => {
+        throw new Error('a quinta do mês não pode sair');
+      },
+    });
+
+    expect(resultado).toMatchObject({ enviados: 0, pulados: 3 });
+    const motivos = await admin.$queryRawUnsafe<{ skipped_reason: string }[]>(
+      `SELECT DISTINCT skipped_reason FROM campaign_targets WHERE skipped_reason IS NOT NULL`,
+    );
+    expect(motivos.map((m) => m.skipped_reason)).toEqual(['teto_do_mes']);
+  });
+
+  it('lembrete e confirmação não gastam o teto de promoções', async () => {
+    /**
+     * O outro lado, e ele era falso na direção contrária.
+     *
+     * Sem filtro de tipo, a consulta somava tudo que houvesse em
+     * `notifications` — inclusive confirmação e lembrete, que a Meta cobra como
+     * utilidade e que o cliente pediu ao marcar. Em produção, onde o lembrete de
+     * fato grava, quem tinha quatro agendamentos no mês ficava barrado de
+     * receber qualquer promoção, por um teto que a tela descreve como sendo de
+     * promoções.
+     *
+     * Sem este caso, o teste acima passaria com a consulta contando tudo.
+     */
+    await exec(`
+      INSERT INTO notifications (tenant_id, kind, customer_id, status)
+      SELECT '${TENANT}', k.kind::notification_kind, c.id, 'sent'
+        FROM customers c
+        CROSS JOIN (VALUES ('confirmacao'), ('lembrete_24h'), ('lembrete_2h'), ('confirmacao'))
+             AS k(kind)
+    `);
+
+    const criada = await campanha({ nome: 'Depois de quatro lembretes' });
+    const resultado = await despacharCampanha({
+      tenantId: TENANT,
+      campanhaId: criada.id,
+      agora: AGORA,
+      timeZone: 'America/Bahia',
+      enviar: async () => null,
+    });
+    expect(resultado.enviados).toBe(3);
+  });
+
   it('as seis colunas saem da mesma consulta', async () => {
     const criada = await campanha();
     await despacharCampanha({
@@ -344,6 +424,35 @@ describeIfDb('campanhas', () => {
     // Bruno nunca veio.
   };
 
+  /**
+   * Quem passou do **dobro** do ritmo: `perdido` para o segmento, e na lista da
+   * Retenção do mesmo jeito.
+   *
+   * É a pessoa que separa os dois públicos. Sem ela na base, os dois filtros
+   * devolvem o mesmo conjunto e o teste que compara os dois passa sem provar
+   * nada — a semente precisa produzir o cenário, e o cenário aqui é a
+   * **diferença**.
+   */
+  const PERDIDO = '99999999-9999-9999-9999-999999999999';
+  const quemJaFoi = async () => {
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164, accepts_marketing)
+      VALUES ('${PERDIDO}', '${TENANT}', 'Antônio Some', '+5571955554444', true)
+    `);
+    /**
+     * Cortava a cada 15 dias e sumiu há 91: seis ciclos.
+     *
+     * Os dias são **deslocados de propósito**. `atendimento` marca sempre na
+     * mesma hora, na mesma cadeira: 120 dias atrás já é o corte do Carlos, e a
+     * constraint anti-overbooking recusa a linha inteira — a cicatriz que o
+     * `CLAUDE.md` cataloga em "semente que cria agendamento no relógio".
+     */
+    await atendimento(PERDIDO, 91, 'f0000000-0000-0000-0000-000000000021');
+    await atendimento(PERDIDO, 106, 'f0000000-0000-0000-0000-000000000022');
+    await atendimento(PERDIDO, 121, 'f0000000-0000-0000-0000-000000000023');
+    await atendimento(PERDIDO, 136, 'f0000000-0000-0000-0000-000000000024');
+  };
+
   const publicoDe = async (campanhaId: string): Promise<readonly string[]> => {
     const linhas = await admin.$queryRawUnsafe<{ customer_id: string }[]>(
       `SELECT customer_id FROM campaign_targets WHERE campaign_id = '${campanhaId}'`,
@@ -356,6 +465,35 @@ describeIfDb('campanhas', () => {
 
     const criada = await campanha({ nome: 'Senti sua falta', filtro: 'em_risco' });
     expect(await publicoDe(criada.id)).toEqual([SUMIDO]);
+  });
+
+  it('"risco de abandono" alcança quem a Retenção lista, e não é o mesmo que "em risco"', async () => {
+    /**
+     * A tela de Retenção mandava chamar quarenta e uma pessoas por um botão que
+     * alcançava catorze (bloco 108).
+     *
+     * As duas populações têm nomes parecidos e origens diferentes: `em_risco`
+     * sai do ciclo individual, e a lista de Retenção sai do score de sete
+     * sinais. Quem já passou do **dobro** do ritmo cai em `perdido` e some do
+     * primeiro filtro — mas continua na lista de Retenção, que é onde o dono
+     * está olhando quando lê a frase "para chamar todos de uma vez".
+     *
+     * A asserção que prende a regra é a **diferença** entre os dois públicos:
+     * comparar cada um com uma lista escrita à mão passaria mesmo se os dois
+     * filtros lessem a mesma consulta.
+     */
+    await ritmos();
+    await quemJaFoi();
+
+    const doRitmo = await campanha({ nome: 'Ritmo', filtro: 'em_risco' });
+    const doChurn = await campanha({ nome: 'Churn', filtro: 'risco_de_abandono' });
+
+    const a = await publicoDe(doRitmo.id);
+    const b = await publicoDe(doChurn.id);
+
+    // O que a Retenção aponta contém quem o ritmo aponta, e vai além dele.
+    expect(b).toEqual(expect.arrayContaining([...a]));
+    expect(b.length).toBeGreaterThan(a.length);
   });
 
   it('o filtro de dias fixos erra os dois na mesma base', async () => {

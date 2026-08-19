@@ -195,3 +195,42 @@ describe('todo assunto declarado é alcançável', () => {
     }
   });
 });
+
+describe('a pergunta que não é sobre jornada', () => {
+  /**
+   * A lista do dono mandava para o cadastro errado (bloco 108).
+   *
+   * `atende` sozinho classificava *"vocês atendem criança?"* como jornada do
+   * profissional, e a tela dizia "cadastre em Profissionais" — onde nenhum
+   * cadastro torna aquela pergunta respondível. O dono vai, não acha nada,
+   * volta, e a linha continua lá.
+   *
+   * "Sem assunto reconhecido" é a resposta honesta: a pergunta continua contada
+   * e agrupada, sem mandar ninguém para o lugar errado.
+   */
+  it('pergunta com o verbo mas sem dia não vira jornada', () => {
+    expect(assuntoDaPergunta('vocês atendem criança?')).toBeNull();
+    expect(assuntoDaPergunta('vocês atendem com hora marcada?')).toBeNull();
+  });
+
+  it('pergunta sobre o dia de um profissional continua sendo jornada', () => {
+    /**
+     * O caso que a pista existe para pegar, e sem ele o teste acima passaria
+     * com a pista simplesmente apagada.
+     */
+    expect(assuntoDaPergunta('o João trabalha domingo?')).toBe('jornada_do_profissional');
+    expect(assuntoDaPergunta('o Ruan atende sábado?')).toBe('jornada_do_profissional');
+    expect(assuntoDaPergunta('o Ítalo vai estar amanhã?')).toBe('jornada_do_profissional');
+  });
+
+  it('preço com preposição feminina continua sendo preço', () => {
+    /**
+     * `preco do` não casava "preço **da** barba", então a pergunta escapava da
+     * recepção — e com a regra do substantivo do bloco 107 ela passaria a virar
+     * oferta de horário. Uma lista de preposições fica sempre uma flexão atrás
+     * da língua.
+     */
+    expect(assuntoDaPergunta('qual o preço da barba?')).toBe('preco');
+    expect(assuntoDaPergunta('quanto fica o corte?')).toBe('preco');
+  });
+});

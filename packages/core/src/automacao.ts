@@ -60,11 +60,48 @@ export const ROTULO_DO_GATILHO: Readonly<Record<Gatilho, string>> = {
  * schema. Um gatilho que pedisse dois números precisaria de outra decisão, e ela
  * não existe porque nenhum pede.
  */
+/**
+ * O menor número que cada gatilho aceita, e ele **não é sempre um**.
+ *
+ * A regra era `limiar <= 0 → invalido` para todos, e com isso a automação de
+ * aniversário mais óbvia que existe — *"Feliz aniversário! Hoje seu corte tem
+ * 20%"* — não era cadastrável: o mínimo era um dia antes. A consulta já sabia
+ * fazer "no dia" (`const antes = limiar ?? 0` em `crm/automacao.ts`), e aquele
+ * caminho era código morto, porque a validação nunca deixava o zero chegar.
+ *
+ * A distinção é entre **contar dias até um evento** e **contar uma quantidade**:
+ *
+ * - `aniversario` e `assinatura_vencendo` contam dias até uma data conhecida, e
+ *   zero é "no próprio dia" — a leitura mais natural das duas.
+ * - `sem_retorno` conta dias de ausência, e zero seria "quem não vem há zero
+ *   dias", ou seja, a base inteira, inclusive quem acabou de sair da cadeira.
+ * - `avaliacao_positiva` e `avaliacao_negativa` contam estrelas, e não existe
+ *   avaliação de zero estrela.
+ * - `pacote_acabando` conta unidades restantes, e zero é o pacote já esgotado —
+ *   avisar aí é tarde, que é o oposto do que o gatilho promete.
+ *
+ * A frase de recusa também estava errada para o aniversário: "sem ele, ele
+ * dispara para todo mundo" descreve `sem_retorno`, não uma data de nascimento.
+ */
+export const LIMIAR_MINIMO: Readonly<Record<Gatilho, number>> = {
+  primeiro_atendimento: 1,
+  aniversario: 0,
+  sem_retorno: 1,
+  assinatura_vencendo: 0,
+  pacote_acabando: 1,
+  cancelamento: 1,
+  avaliacao_positiva: 1,
+  avaliacao_negativa: 1,
+  servico_realizado: 1,
+  produto_comprado: 1,
+  vaga_na_espera: 1,
+};
+
 export const LIMIAR_DO_GATILHO: Readonly<Record<Gatilho, string | null>> = {
   primeiro_atendimento: null,
-  aniversario: 'Quantos dias antes',
+  aniversario: 'Quantos dias antes (0 = no dia)',
   sem_retorno: 'Depois de quantos dias sem vir',
-  assinatura_vencendo: 'Quantos dias antes de vencer',
+  assinatura_vencendo: 'Quantos dias antes de vencer (0 = no dia)',
   pacote_acabando: 'Quando faltarem quantas unidades',
   cancelamento: null,
   avaliacao_positiva: 'A partir de quantas estrelas',
@@ -135,7 +172,7 @@ export function validarAutomacao(params: {
   if (params.nome.trim().length === 0) return 'nome_obrigatorio';
   if (gatilhoPedeLimiar(params.gatilho)) {
     if (params.limiar === null) return 'limiar_obrigatorio';
-    if (params.limiar <= 0) return 'limiar_invalido';
+    if (params.limiar < LIMIAR_MINIMO[params.gatilho]) return 'limiar_invalido';
   }
   if (params.atrasoMinutos < 0) return 'atraso_invalido';
   if (params.janelaDias < 1 || params.janelaDias > JANELA_MAXIMA_DIAS) return 'janela_invalida';
@@ -144,8 +181,8 @@ export function validarAutomacao(params: {
 
 export const EXPLICACAO_DA_FALHA: Readonly<Record<FalhaDaAutomacao, string>> = {
   nome_obrigatorio: 'Dê um nome para você reconhecer esta automação depois.',
-  limiar_obrigatorio: 'Este gatilho precisa de um número — sem ele, ele dispara para todo mundo.',
-  limiar_invalido: 'O número precisa ser maior que zero.',
+  limiar_obrigatorio: 'Este gatilho precisa de um número — sem ele, não há quando disparar.',
+  limiar_invalido: 'Esse número não serve para este gatilho — veja o mínimo ao lado do campo.',
   janela_invalida: `A janela do objetivo vai de 1 a ${JANELA_MAXIMA_DIAS} dias.`,
   atraso_invalido: 'O atraso não pode ser negativo.',
 };
