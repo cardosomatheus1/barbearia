@@ -900,6 +900,69 @@ export async function buscarBarbearias(
   return (await resposta.json()) as BuscaDeBarbearias;
 }
 
+/**
+ * A conversa do cliente com o agente (blocos 65 e 66, SPEC §4.16).
+ *
+ * A resposta é uma **união**, e a tela desenha um caso por vez. Escrever o tipo
+ * como um objeto de campos opcionais faria a tela ter que adivinhar em qual
+ * situação está — e adivinhar errado é como um "não entendi" apareceria ao lado
+ * de três horários.
+ */
+/**
+ * O que o agente entendeu até aqui — um **objeto**, e a tela precisa saber disso.
+ *
+ * Declarado como `string`, ele passava pelo compilador e quebrava no navegador:
+ * React não renderiza objeto, e o que a pessoa via era a tela de erro em cima de
+ * uma resposta que existia. O `vitest` não veria — ele apaga os tipos sem
+ * conferi-los —, e o `tsc` também não, porque quem afirmava o tipo errado era
+ * esta declaração.
+ */
+export interface EntendidoAteAqui {
+  servico: string | null;
+  profissional: string | null;
+  emQuantosDias: number | null;
+  aPartirDeMinuto: number | null;
+  ateMinuto: number | null;
+}
+
+export type RespostaDoAgente =
+  | { entendi: false; escalar: true }
+  | { entendi: true; escalar: true; intencao?: string }
+  | { entendi: true; escalar: false; resposta: string }
+  | { entendi: true; escalar: false; intencao: string; precisaEntrar: true }
+  | {
+      entendi: true;
+      escalar: false;
+      intencao: string;
+      pergunta: string;
+      entendido: EntendidoAteAqui;
+    }
+  | {
+      entendi: true;
+      escalar: false;
+      intencao: string;
+      entendido: EntendidoAteAqui;
+      /** Sem ele o link da proposta cai no passo 1 e a conversa é jogada fora. */
+      servicoId: string;
+      data: string;
+      horarios: { comecaEm: string; profissionalId: string }[];
+      nenhumServe: boolean;
+    };
+
+export async function conversarComOAgente(
+  slug: string,
+  texto: string,
+): Promise<RespostaDoAgente | null> {
+  const resposta = await fetch(`${BASE}/v1/b/${slug}/agente`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ texto }),
+    cache: 'no-store',
+  });
+  if (!resposta.ok) return null;
+  return (await resposta.json()) as RespostaDoAgente;
+}
+
 export interface PerfilDoBarbeiroNaApi {
   professionalId: string;
   locationId: string;

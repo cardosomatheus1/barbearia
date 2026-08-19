@@ -178,9 +178,23 @@ describeIfDb('o agente de agendamento pela HTTP', () => {
     expect(r.body.horarios.length).toBeGreaterThan(0);
 
     const perfil = await http().get(`/v1/b/${SLUG}`).expect(200);
+    /**
+     * A proposta carrega o **serviço**, e sem ele ela não leva a lugar nenhum.
+     *
+     * O passo do agendamento é marcado na URL e exige `s=`: um link com só o dia
+     * e a hora cai no passo 1, e a pessoa recomeça escolhendo serviço — a
+     * conversa inteira jogada fora exatamente no clique que deveria aproveitá-la.
+     * A rota tinha o dado na mão e não o devolvia, e a tela do bloco 106 é a
+     * primeira a precisar dele.
+     */
+    expect(typeof r.body.servicoId).toBe('string');
     const servico = perfil.body.categories.flatMap((c: { services: { id: string; name: string }[] }) =>
       c.services,
     ).find((s: { name: string }) => s.name === 'Corte');
+    // E é o **mesmo** serviço que a grade conferida abaixo usa: um `servicoId`
+    // de outro serviço levaria o cliente ao passo 4 com a duração e o preço de
+    // outra coisa.
+    expect(r.body.servicoId).toBe(servico.id);
 
     const grade = await http()
       .get(

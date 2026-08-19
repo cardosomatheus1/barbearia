@@ -182,6 +182,19 @@ export default async function BarbershopPage({ params }: Params) {
                 </a>
               </div>
             )}
+
+            {/* A entrada da conversa fica **aqui**, colada na agenda, porque é
+                aqui que mora a intenção de marcar — e é um link dentro de frase,
+                não um botão: a ação primária da tela continua sendo "Agendar
+                horário", e duas ações em destaque não são duas, são nenhuma.
+
+                É diferente de "Fale com a gente" lá embaixo, e a diferença está
+                escrita nas duas: aqui se pergunta e se recebe horário agora; lá
+                se deixa recado para a equipe ler depois. */}
+            <p className="politica agenda__conversa">
+              Não achou o que queria? <a href={`/${slug}/conversar`}>Escreva o que você
+              precisa</a> — em português mesmo, como no balcão.
+            </p>
           </div>
         </section>
 

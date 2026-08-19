@@ -133,7 +133,7 @@ async function percurso(nome, corpo) {
  * O sintoma era perfeito para culpar o produto — "o agendamento não chegou ao
  * banco" — e o defeito era do arnês.
  */
-async function submeter(page, oque, alvo) {
+async function submeter(page, oque, alvo, aparece) {
   const antes = page.url();
   /**
    * O botão é **dito**, não o primeiro da tela.
@@ -147,7 +147,19 @@ async function submeter(page, oque, alvo) {
   const botao = alvo ?? page.locator('button[type="submit"]').first();
   await botao.click();
   try {
-    await page.waitForURL((u) => u.toString() !== antes, { timeout: 15_000 });
+    /**
+     * Nem todo envio muda de endereço, e o que não muda é o **certo**.
+     *
+     * A conversa do cliente faz POST e volta para a mesma URL de propósito: a
+     * pergunta é texto livre e não pode ir para a barra de endereço, então a
+     * resposta vem por cookie de dois minutos e a página se redesenha no mesmo
+     * lugar. Um helper que só sabe esperar mudança de URL declara isso quebrado
+     * — e o conserto errado seria mexer no produto para agradar o helper.
+     *
+     * Quando o chamador diz o que **aparece**, é isso que se espera.
+     */
+    if (aparece) await page.locator(aparece).first().waitFor({ timeout: 15_000 });
+    else await page.waitForURL((u) => u.toString() !== antes, { timeout: 15_000 });
   } catch {
     /**
      * E **por que** ela não saiu, quando o navegador é quem barrou.
@@ -163,8 +175,9 @@ async function submeter(page, oque, alvo) {
       const campo = document.querySelector('input:invalid, select:invalid, textarea:invalid');
       return campo ? `${campo.getAttribute('name') ?? campo.tagName}: ${campo.validationMessage}` : null;
     });
+    const esperado = aparece ? `nada apareceu em ${aparece}` : `a tela não saiu de ${antes}`;
     throw new Error(
-      `${oque}: a tela não saiu de ${antes}${invalido ? ` — o navegador barrou em ${invalido}` : ''}`,
+      `${oque}: ${esperado}${invalido ? ` — o navegador barrou em ${invalido}` : ''}`,
     );
   }
   await page.waitForLoadState('networkidle');
@@ -368,6 +381,89 @@ await percurso('cliente marca pelo site', async (page) => {
       `a tela prometeu ${centavosNaTela} centavos e o banco gravou ${gravado} — `
         + 'é o preço do catálogo aparecendo no lugar do preço do motor',
     );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 1b — o cliente conversa, e a proposta vira agendamento
+// ---------------------------------------------------------------------------
+
+await percurso('cliente marca pela conversa', async (page) => {
+  /**
+   * A porta do agente, do texto livre até a linha no banco (bloco 106).
+   *
+   * O motor e as rotas existiam desde o bloco 66 e **ninguém conseguia falar com
+   * eles**: nenhuma tela, nenhum canal, nenhum helper. O que este percurso prende
+   * não é o motor — ele tem e2e próprio — e sim a porta: que a entrada existe na
+   * página pública, que a resposta aparece, e que o horário oferecido leva ao
+   * passo 4 **com tudo preenchido**.
+   *
+   * A última parte é a que mais importa. A rota não devolvia o serviço, então o
+   * link caía no passo 1 e a conversa inteira era jogada fora exatamente no
+   * clique que deveria aproveitá-la — sem nada quebrar, porque a página do
+   * passo 1 é uma página válida.
+   */
+  const telefone = `(71) 9${String(Date.now()).slice(-8)}`;
+
+  await page.goto(`${WEB}/${slug}`, { waitUntil: 'networkidle' });
+  await clicar(page, `a[href="/${slug}/conversar"]`, 'a entrada da conversa');
+
+  /**
+   * "Amanhã" e não "hoje", pela mesma razão do percurso anterior: um horário
+   * encostado na antecedência mínima deixa de ser marcável entre a proposta e a
+   * confirmação, e o percurso falharia uma vez em seis.
+   */
+  /**
+   * A frase nomeia o serviço, e ele sai do **catálogo desta base**.
+   *
+   * Duas razões, e as duas já custaram uma execução vermelha. "Quero cortar o
+   * cabelo amanhã" é entendida como pedido e o agente responde *"o que você quer
+   * fazer?"* — porque o cardápio tem mais de um serviço começando com "Corte" e
+   * a palavra sozinha não decide entre eles. Perguntar ali é o comportamento
+   * certo, e não é o caminho que este percurso precisa exercitar.
+   *
+   * E o nome escrito à mão amarra o percurso a uma semente: a da medição tem
+   * outro cardápio, e "corte masculino" não existe nela. Lido do banco, ele
+   * funciona em qualquer base — que é o mesmo motivo de o slug e o dono também
+   * saírem de consulta.
+   */
+  const servico = consultar(
+    `SELECT name FROM services WHERE active ORDER BY length(name) DESC LIMIT 1`,
+  );
+  if (!servico) throw new Error('a base não tem serviço ativo nenhum');
+
+  const frase = `quero marcar ${servico} amanhã`;
+  await page.fill('textarea[name="texto"]', frase);
+  // A resposta volta no mesmo endereço, então o sinal é ela aparecer.
+  await submeter(page, 'a pergunta ao agente', undefined, '.conversar__troca');
+
+  const oferecidos = await page.locator('.conversar__horarios .hora').count();
+  if (oferecidos === 0) {
+    const dito = (await page.locator('.conversar__resposta').innerText()).slice(0, 200);
+    throw new Error(`o agente não ofereceu horário para "${frase}" — ele respondeu: ${dito}`);
+  }
+
+  await clicar(page, '.conversar__horarios .hora', 'um horário oferecido');
+
+  /**
+   * E a prova de que a proposta **chegou inteira**: o passo 4 é o que tem o
+   * campo de nome. Caindo no passo 1 a página existe, o percurso seguiria, e o
+   * defeito passaria — é por isso que a asserção é sobre o passo, não sobre a
+   * página ter carregado.
+   */
+  await esperarUrl(page, /e=d/, 'o passo de confirmar');
+
+  await page.fill('input[name="name"]', 'Cliente da Conversa');
+  await page.fill('input[name="phone"]', telefone);
+  await submeter(page, 'confirmar o agendamento');
+
+  const marcados = consultar(
+    `SELECT count(*) FROM appointments a
+       JOIN customers c ON c.id = a.customer_id
+      WHERE c.phone_e164 = '+55${telefone.replace(/\D/g, '')}'`,
+  );
+  if (marcados !== '1') {
+    throw new Error(`a conversa não virou agendamento (achei ${marcados} para ${telefone})`);
   }
 });
 

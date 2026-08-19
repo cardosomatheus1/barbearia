@@ -190,6 +190,19 @@ export class AgenteController {
       escalar: false as const,
       intencao: pedido.intencao,
       entendido: resumo(pedido),
+      /**
+       * O serviço que o agente casou, e **por que ele sai daqui**.
+       *
+       * Sem ele a proposta não tem para onde levar: o passo do agendamento é
+       * marcado na URL e exige `s=`, então um link com só o dia e a hora cai no
+       * passo 1 e a pessoa recomeça escolhendo serviço — a conversa inteira
+       * jogada fora no clique que deveria aproveitá-la. É a §6 pergunta 1, e a
+       * rota tinha o dado na mão.
+       *
+       * Não é vazamento: o id do serviço já está no perfil público, que é a
+       * mesma resposta de onde o agente o leu.
+       */
+      servicoId: pedido.servicoId!,
       data: dia,
       /**
        * Três, e não a grade inteira.

@@ -2893,6 +2893,9 @@ async function main() {
     { nome: 'retorno do pagamento', url: '/pagamento?pago=1' },
     { nome: 'pública', url: `/${slug}` },
     { nome: 'agendar', url: `/${slug}/agendar` },
+    // A porta do agente (bloco 106). O estado sem resposta é o que todo mundo vê
+    // primeiro; o com resposta tem percurso, que é onde ele é exercitado.
+    { nome: 'conversar', url: `/${slug}/conversar` },
     ...(agendamento
       ? [
           {
