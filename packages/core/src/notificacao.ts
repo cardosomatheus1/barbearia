@@ -146,6 +146,37 @@ export function exemplosDoCorpo(tipo: TipoDeNotificacao, corpo: string): readonl
 }
 
 /**
+ * O corpo como o **cliente vai ler**, com cada `{{n}}` já preenchido (bloco 96).
+ *
+ * A tela mostrava o texto cru — "Oi {{1}}, sentimos sua falta na {{2}}" — e
+ * pedia que o balcão decidisse, em cima daquilo, se a mensagem estava boa. As
+ * chaves duplas são vocabulário da Meta, não do produto: quem lê "{{1}}"
+ * entende que falta alguma coisa, e a decisão que a tela pede é justamente
+ * sobre o que **não** está faltando.
+ *
+ * Preenchido com as mesmas amostras que vão para a Meta, e não com um segundo
+ * conjunto: se o exemplo da tela e o exemplo aprovado divergissem, o texto
+ * conferido aqui não seria o texto submetido lá.
+ *
+ * Posição sem significado declarado vira `exemplo`, como em `exemplosDoCorpo` —
+ * deixar `{{4}}` na frase seria a tela dizendo que sabe menos do que sabe.
+ *
+ * `tipo` como `string` pelo motivo de `nomeDoAviso`: quem chama é a tela, e o
+ * tipo dela vem da API. Um `as` para calar o compilador esconderia justamente o
+ * caso em que o banco tem um valor que este pacote ainda não conhece.
+ */
+export function corpoComExemplos(tipo: string, corpo: string): string {
+  const significados =
+    (VARIAVEIS_DO_AVISO as Record<string, readonly string[] | undefined>)[tipo] ?? [];
+  return corpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (inteiro, digitos: string) => {
+    const posicao = Number(digitos);
+    if (!Number.isInteger(posicao) || posicao < 1) return inteiro;
+    const qual = significados[posicao - 1];
+    return (qual ? EXEMPLO_DA_VARIAVEL[qual] : undefined) ?? 'exemplo';
+  });
+}
+
+/**
  * O nome do aviso a partir de um texto qualquer.
  *
  * A tela recebe o tipo como `string` — ele vem da API, do banco, de um campo de
@@ -154,7 +185,22 @@ export function exemplosDoCorpo(tipo: TipoDeNotificacao, corpo: string): readonl
  * próprio valor é o que a tela já fazia, agora com o compilador de acordo.
  */
 export function nomeDoAviso(tipo: string): string {
-  return (NOME_DO_AVISO as Record<string, string | undefined>)[tipo] ?? tipo;
+  const conhecido = (NOME_DO_AVISO as Record<string, string | undefined>)[tipo];
+  if (conhecido) return conhecido;
+  /**
+   * O que o produto não conhece vira frase, nunca identificador (bloco 96).
+   *
+   * `notification_kind` é enum do **banco** e é mais largo que a união deste
+   * pacote — `pedido_de_avaliacao` está lá desde o bloco 46 e nenhum código o
+   * usa. O painel mostrava a linha "manda pedido_de_avaliacao" para quem opera
+   * o balcão: nome de coluna vazando para a tela, e a única pista que a pessoa
+   * tinha de que aquela automação não manda nada.
+   *
+   * Humanizar não conserta a falta — quem responde por isso é a lacuna
+   * declarada —, mas devolve o identificador ao lugar dele, que é o banco.
+   */
+  const frase = tipo.replace(/_/g, ' ').trim();
+  return frase.charAt(0).toUpperCase() + frase.slice(1);
 }
 
 export const VARIAVEIS_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly string[]>> = {

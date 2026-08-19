@@ -10,6 +10,7 @@ import {
   ROTULO_DO_GATILHO,
   ROTULO_DO_OBJETIVO,
   TIPOS_DE_CAMPANHA,
+  corpoComExemplos,
   nomeDoAviso,
   rotuloDoBotao,
   type Gatilho,
@@ -86,9 +87,19 @@ function Automacao({ automacao, podeMexer }: {
               {automacao.limiar !== null ? ` · ${automacao.limiar}` : ''} ·{' '}
               {ROTULO_DO_OBJETIVO[automacao.objetivo as Objetivo]} em {automacao.janelaDias} dias
             </p>
+            {/*
+              **Qual texto ela manda**, e não o nome do tipo (bloco 96).
+
+              A linha dizia "manda Convite de retorno" com três convites de
+              retorno diferentes cadastrados: o nome do tipo respondendo uma
+              pergunta sobre o texto, e a API já devolvia o título desde o bloco
+              94 — dado que existe e ninguém lê (§6, pergunta 4).
+            */}
             <p className="item-cadastro__linha">
               {automacao.ativa ? 'Ligada' : 'Desligada'} · manda{' '}
-              {nomeDoAviso(automacao.tipo)}
+              {automacao.textoTitulo ?? (
+                <em>o primeiro texto aprovado de {nomeDoAviso(automacao.tipo)}</em>
+              )}
             </p>
             {/*
               Os dois números que decidem desligar. Sem eles a lista seria de
@@ -442,7 +453,9 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                         <span className="alternativa__nome">
                           {texto.titulo ?? nomeDoAviso(texto.tipo)}
                         </span>
-                        <span className="alternativa__texto">{texto.corpo}</span>
+                        <span className="alternativa__texto">
+                          {corpoComExemplos(texto.tipo, texto.corpo)}
+                        </span>
                         {texto.botoes.length > 0 ? (
                           <span className="alternativa__nota">
                             Com botão: {texto.botoes.map((b) => rotuloDoBotao(b)).join(' · ')}

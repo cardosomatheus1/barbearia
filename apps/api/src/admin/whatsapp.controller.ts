@@ -286,7 +286,8 @@ export class WhatsAppController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(mensagemAvulsaSchema)) body: {
       customerId: string;
-      tipo: TipoDeNotificacao;
+      tipo?: TipoDeNotificacao;
+      templateId?: string;
     },
   ) {
     const local = await this.unidade(staff);
@@ -304,7 +305,8 @@ export class WhatsAppController {
         tenantId: staff.tenantId,
         locationId: local.id,
         customerId: body.customerId,
-        tipo: body.tipo,
+        ...(body.tipo === undefined ? {} : { tipo: body.tipo }),
+        ...(body.templateId === undefined ? {} : { templateId: body.templateId }),
         agora: new Date(),
         timeZone: local.timezone,
         staffId: staff.staffUserId,
@@ -313,7 +315,11 @@ export class WhatsAppController {
           const saiu = await enviarPeloWhatsApp({
             tenantId: staff.tenantId,
             locationId: local.id,
-            tipo: body.tipo,
+            // O tipo do **texto escolhido**, resolvido pelo domínio: aqui o
+            // corpo pode nem trazer `tipo`, e reler `body.tipo` faria a
+            // mensagem sair pelo primeiro aprovado de outro tipo.
+            tipo: destino.tipo,
+            templateId: destino.templateId,
             telefone: destino.telefone,
             // A ordem é a de `VARIAVEIS_DO_AVISO` para os tipos de campanha:
             // nome do cliente, nome da barbearia. Quem corta pelo tamanho do

@@ -175,5 +175,14 @@ export const signupDaTelaSchema = z.object({
  */
 export const mensagemAvulsaSchema = z.object({
   customerId: z.string().uuid(),
-  tipo: z.enum(TIPOS_DE_CAMPANHA),
+  /**
+   * Um dos dois, e o texto vence (bloco 96).
+   *
+   * A ficha listava os três convites de retorno aprovados com um botão cada, e
+   * os três mandavam o mesmo: o formulário postava o `tipo`, e o motor pegava o
+   * primeiro aprovado dele. `tipo` continua aceito para quem chama pela API sem
+   * saber o id do texto.
+   */
+  tipo: z.enum(TIPOS_DE_CAMPANHA).optional(),
+  templateId: z.string().uuid().optional(),
 });

@@ -12,6 +12,7 @@ import {
   ROTULO_DO_BOTAO_QUE_LEVA,
   RESSALVA_DO_BOTAO,
   EFEITO_DO_BOTAO,
+  corpoComExemplos,
   nomeDoAviso,
   TIPOS_DE_NOTIFICACAO,
   oQueFazerNaMeta,
@@ -141,10 +142,27 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
       >
         <div className="item-cadastro__cabeca">
           <div className="item-cadastro__quem">
+            {/*
+              O nome que a barbearia deu, e não o do tipo (bloco 96).
+
+              Com três convites de retorno cadastrados, os três apareciam nesta
+              lista como "Convite de retorno" — três linhas idênticas, sendo que
+              o título existe desde o bloco 94 e é ele que a automação e a
+              campanha oferecem. O tipo continua visível na linha de baixo.
+            */}
             <h3 className="item-cadastro__nome">
-              {nomeDoAviso(template.tipo)}
+              {template.titulo ?? nomeDoAviso(template.tipo)}
             </h3>
+            {/*
+              O tipo só quando ele **acrescenta** algo.
+
+              Texto sem título cai no nome do aviso lá em cima, e repeti-lo aqui
+              dava "Confirmação do agendamento · Confirmação do agendamento" —
+              a mesma frase duas vezes ensina a pular a linha que existe para
+              explicar o que o título não diz.
+            */}
             <p className="item-cadastro__linha">
+              {template.titulo ? `${nomeDoAviso(template.tipo)} · ` : ''}
               {template.nome} · {ROTULO_DO_TEMPLATE[template.estado]}
             </p>
             <p className="item-cadastro__linha">{EXPLICACAO_DO_TEMPLATE[template.estado]}</p>
@@ -153,7 +171,19 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
                 {template.motivoDaRecusa}
               </p>
             ) : null}
+            {/*
+              O texto cru **e** como ele chega.
+
+              Esta é a tela em que o texto se escreve, então `{{1}}` importa: é
+              o que a pessoa digitou e o que a Meta aprovou. Mas ler a frase com
+              as chaves duplas não responde se ela ficou boa — e é essa a
+              decisão que a tela pede. As duas linhas, e a segunda com o rótulo
+              dizendo o que ela é.
+            */}
             <p className="item-cadastro__linha">{template.corpo}</p>
+            <p className="item-cadastro__linha">
+              Chega assim: {corpoComExemplos(template.tipo, template.corpo)}
+            </p>
             {template.botoes.length > 0 ? (
               <p className="item-cadastro__linha">
                 Botões:{' '}

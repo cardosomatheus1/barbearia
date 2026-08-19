@@ -64,7 +64,8 @@ export class CampanhaController {
       filtro: FiltroDeCampanha;
       valorDoFiltro: number | null;
       diaDaSemana: number | null;
-      tipo: TipoDeNotificacao;
+      tipo?: TipoDeNotificacao;
+      templateId?: string;
       janelaDias: number;
     },
   ) {
@@ -75,7 +76,8 @@ export class CampanhaController {
         filtro: body.filtro,
         valorDoFiltro: body.valorDoFiltro,
         diaDaSemana: body.diaDaSemana,
-        tipo: body.tipo,
+        ...(body.tipo === undefined ? {} : { tipo: body.tipo }),
+        ...(body.templateId === undefined ? {} : { templateId: body.templateId }),
         janelaDias: body.janelaDias,
         agora: new Date(),
         staffId: staff.staffUserId,

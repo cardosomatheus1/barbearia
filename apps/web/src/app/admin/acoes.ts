@@ -2850,12 +2850,25 @@ export async function acaoCriarCampanha(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const valor = texto(form, 'valorDoFiltro');
   const dia = texto(form, 'diaDaSemana');
+  /**
+   * O texto escolhido, e é **ele** quem diz o tipo (bloco 96).
+   *
+   * A tela mandava um `tipo` fixo e o motor pegava o primeiro texto aprovado
+   * daquele tipo com `LIMIT 1`. Com três convites de retorno cadastrados, a
+   * campanha da célula fria saía com "seu pacote está acabando" para quem nunca
+   * comprou pacote — e a prévia na tela mostrava outro texto.
+   *
+   * Um campo só, e não os dois: o `tipo` continua existindo na borda para quem
+   * cria campanha sem nenhum texto cadastrado, e mandar os dois daqui seria o
+   * par que diverge.
+   */
+  const templateId = texto(form, 'templateId');
   const resultado = await criarCampanhaNaApi(token, {
     nome: texto(form, 'nome'),
     filtro: texto(form, 'filtro'),
     valorDoFiltro: valor ? Number(valor) : null,
     diaDaSemana: dia ? Number(dia) : null,
-    tipo: texto(form, 'tipo'),
+    ...(templateId ? { templateId } : { tipo: texto(form, 'tipo') }),
     janelaDias: Number(texto(form, 'janelaDias') || '7'),
   });
   if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
@@ -3016,7 +3029,14 @@ export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
 export async function acaoMandarMensagem(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const customerId = texto(form, 'customerId');
-  const resultado = await mandarMensagemNaApi(token, customerId, texto(form, 'tipo'));
+  // O texto escolhido, e não o tipo: os três convites de retorno da ficha
+  // apareciam com um botão cada e os três mandavam o primeiro.
+  const templateId = texto(form, 'templateId');
+  const resultado = await mandarMensagemNaApi(
+    token,
+    customerId,
+    templateId ? { templateId } : { tipo: texto(form, 'tipo') },
+  );
   const rota = `/admin/cliente/${customerId}`;
   if (!resultado.ok) {
     await guardarMotivoDaMeta(resultado.message);

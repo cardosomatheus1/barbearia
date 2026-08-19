@@ -12,7 +12,10 @@ import {
   ROTULO_DO_FILTRO,
   TIPOS_DE_CAMPANHA,
   campanhaEnviavel,
+  corpoComExemplos,
   nomeDaCelula,
+  nomeDoAviso,
+  rotuloDoBotao,
 } from '@barbearia/core';
 import {
   cadastroDoWhatsAppNaApi,
@@ -67,15 +70,6 @@ const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
 const reais = (centavos: number): string => `R$ ${reaisDoCampo(centavos)}`;
-
-const NOME_DO_AVISO: Record<string, string> = {
-  confirmacao: 'Confirmação do agendamento',
-  lembrete_24h: 'Lembrete de 24 horas',
-  lembrete_2h: 'Lembrete de 2 horas',
-  sua_vez: 'Sua vez na fila',
-  senha_de_acesso: 'Senha de primeiro acesso',
-  retorno: 'Convite de retorno',
-};
 
 /**
  * O nome de cada público sai de `packages/core`, nunca escrito aqui.
@@ -253,6 +247,20 @@ function Campanha({
                 : ''}{' '}
               · {campanha.publico} pessoa{campanha.publico === 1 ? '' : 's'}
             </p>
+            {/*
+              **Qual texto esta campanha manda**, e não o nome do tipo.
+
+              A linha dizia "Convite de retorno" com três convites de retorno
+              diferentes cadastrados — o nome do tipo respondendo uma pergunta
+              sobre o texto. Quem abre a lista depois do envio está justamente
+              conferindo qual dos três foi.
+            */}
+            <p className="item-cadastro__linha">
+              Manda{' '}
+              {campanha.textoTitulo ?? (
+                <em>o primeiro texto aprovado de {nomeDoAviso(campanha.tipo)}</em>
+              )}
+            </p>
             <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
             {/* As seis colunas da SPEC §4.13, na ordem em que ela as escreve. */}
             <p className="item-cadastro__linha">
@@ -305,7 +313,9 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const textos = (templates?.ok ? templates.dados.templates : []).filter(
     (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
-  const umaMensagemSo = TIPOS_DE_CAMPANHA.length === 1;
+  // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
+  // uma decisão que não existe e quem abre procura a segunda opção.
+  const umaMensagemSo = textos.length <= 1;
   const campanhas = resposta?.ok ? resposta.dados.campanhas : [];
   const grade = resposta?.ok ? resposta.dados.grade : [];
 
@@ -516,15 +526,23 @@ export default async function CampanhasPage({ searchParams }: Props) {
               <legend className="etapa__titulo">2. O que eles recebem</legend>
 
             {/*
-              Cada tipo com **o texto dele**, casado por `tipo` — a mesma forma
-              da tela de automações, e pela mesma razão: as duas respondem a
-              pergunta "o que vai sair?", e respondê-la de dois jeitos faria uma
-              discordar da outra sobre o mesmo fato (§6, pergunta 6).
+              **A campanha escolhe o texto**, como a automação desde o bloco 94.
 
-              O texto mora no template que a Meta aprova, e não se escreve aqui:
-              um campo livre prometeria o que o canal recusa. O `input` fica
-              escondido enquanto a lista tem um item só — um seletor de uma
-              opção pede uma decisão que não existe.
+              Ela ficava para trás escolhendo o **tipo**, e o motor pegava o
+              primeiro aprovado daquele tipo com `LIMIT 1`. Com três convites de
+              retorno cadastrados — "volte que sentimos sua falta", "seu pacote
+              está acabando", "promoção de terça" —, a campanha da célula fria
+              saía com o do pacote para gente que nunca comprou pacote. O pior
+              formato de defeito possível: a tela mostrava a prévia de um texto,
+              o motor mandava outro, e o único jeito de descobrir era o cliente
+              responder "que pacote?".
+
+              O corpo aparece com as variáveis **preenchidas**: "{{1}}" é
+              vocabulário da Meta, e quem lê isso entende que falta alguma coisa
+              — justamente na tela em que a decisão é sobre o que não falta.
+
+              O `input` fica escondido enquanto a lista tem um item só: um
+              seletor de uma opção pede uma decisão que não existe.
             */}
             <div className="ui-field">
               <span className="ui-field__label">
@@ -534,35 +552,42 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 className="alternativas"
                 {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
               >
-                {TIPOS_DE_CAMPANHA.map((t, i) => {
-                  const texto = textos.find((x) => x.tipo === t);
-                  return (
-                    <label className="alternativa" key={t}>
+                {textos.length === 0 ? (
+                  <p className="alternativa__nota alternativa__nota--risco">
+                    Nenhum texto aprovado — nada vai sair.
+                  </p>
+                ) : (
+                  textos.map((texto, i) => (
+                    <label className="alternativa" key={texto.id}>
                       <input
                         defaultChecked={i === 0}
-                        name="tipo"
+                        name="templateId"
                         type={umaMensagemSo ? 'hidden' : 'radio'}
-                        value={t}
+                        value={texto.id}
                       />
                       <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{NOME_DO_AVISO[t] ?? t}</span>
-                        {texto ? (
-                          <span className="alternativa__texto">{texto.corpo}</span>
-                        ) : (
-                          <span className="alternativa__nota alternativa__nota--risco">
-                            Sem texto aprovado — nada vai sair.
+                        <span className="alternativa__nome">
+                          {texto.titulo ?? nomeDoAviso(texto.tipo)}
+                        </span>
+                        <span className="alternativa__texto">
+                          {corpoComExemplos(texto.tipo, texto.corpo)}
+                        </span>
+                        {texto.botoes.length > 0 ? (
+                          <span className="alternativa__nota">
+                            Com botão: {texto.botoes.map((b) => rotuloDoBotao(b)).join(' · ')}
                           </span>
-                        )}
+                        ) : null}
                       </span>
                     </label>
-                  );
-                })}
+                  ))
+                )}
               </div>
               <p className="ui-field__hint">
-                É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
-                cada um antes de deixar enviar. <a href="/admin/whatsapp">Escrever em WhatsApp</a>.
-                Lembrete e confirmação não entram — são do agendamento, e como campanha
-                prometeriam um horário que a pessoa não tem.
+                É este o texto que chega no WhatsApp, com o nome e a barbearia já preenchidos, e
+                ele não se escreve aqui: a Meta aprova cada um antes de deixar enviar.{' '}
+                <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — cada texto novo vira
+                uma opção nesta lista. Lembrete e confirmação não entram: são do agendamento, e
+                como campanha prometeriam um horário que a pessoa não tem.
               </p>
             </div>
 

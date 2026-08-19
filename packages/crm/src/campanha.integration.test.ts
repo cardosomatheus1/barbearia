@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  alvosAEnviar,
   atribuirReceita,
   campanhasDaCasa,
   criarCampanha,
@@ -21,6 +22,15 @@ const APP_URL = process.env['APP_DATABASE_URL'];
 const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 
 const TENANT = '57575757-1111-1111-1111-111111111111';
+/**
+ * A barbearia vizinha existe para mandar o id dela numa rota desta (bloco 96).
+ *
+ * É o que a suíte inteira faz desde o bloco 1: a checagem de integridade
+ * referencial do Postgres ignora row security, então a chave estrangeira aceita
+ * o id alheio sem reclamar — quem recusa é a leitura sob RLS antes de gravar.
+ */
+const VIZINHO = '57575757-2222-2222-2222-222222222222';
+const VIZINHO_LOCAL = 'a7575757-0000-0000-0000-000000000002';
 const LOCAL = 'a7575757-0000-0000-0000-000000000001';
 const CARLOS = 'c7575757-0000-0000-0000-000000000001';
 const BRUNO = 'c7575757-0000-0000-0000-000000000002';
@@ -52,10 +62,13 @@ describeIfDb('campanhas', () => {
   beforeEach(async () => {
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
     await exec(`
-      INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
+      INSERT INTO tenants (id, name) VALUES
+        ('${TENANT}', 'Domari'),
+        ('${VIZINHO}', 'A Vizinha');
 
-      INSERT INTO locations (id, tenant_id, name, timezone)
-      VALUES ('${LOCAL}', '${TENANT}', 'Matriz', 'America/Bahia');
+      INSERT INTO locations (id, tenant_id, name, timezone) VALUES
+        ('${LOCAL}', '${TENANT}', 'Matriz', 'America/Bahia'),
+        ('${VIZINHO_LOCAL}', '${VIZINHO}', 'Matriz', 'America/Bahia');
 
       INSERT INTO customers (id, tenant_id, name, phone_e164, accepts_marketing) VALUES
         ('${CARLOS}', '${TENANT}', 'Carlos Souza', '+5571988887777', true),
@@ -418,6 +431,90 @@ describeIfDb('campanhas', () => {
     await expect(campanha({ tipo: 'senha_de_acesso' })).rejects.toThrow(/não serve para campanha/);
   });
 
+  /**
+   * A campanha escolhe **o texto**, e não o tipo (bloco 96).
+   *
+   * Até aqui ela guardava só `kind`, e o motor pegava o primeiro aprovado
+   * daquele tipo com `LIMIT 1`. Com três convites de retorno cadastrados, a
+   * campanha da célula fria saía com "seu pacote está acabando" para quem nunca
+   * comprou pacote — e a tela mostrava a prévia de outro texto.
+   */
+  describe('o texto escolhido', () => {
+    const texto = async (id: string, nome: string, kind = 'retorno', tenant = TENANT) => {
+      await exec(`
+        INSERT INTO whatsapp_templates
+          (id, tenant_id, location_id, kind, name, titulo, status, body)
+        VALUES ('${id}', '${tenant}', '${tenant === TENANT ? LOCAL : VIZINHO_LOCAL}',
+                '${kind}', '${nome}', 'O texto ${nome}', 'aprovado', 'Oi {{1}}');
+      `);
+    };
+
+    const T1 = 'f7575757-0000-4000-8000-000000000001';
+    const T2 = 'f7575757-0000-4000-8000-000000000002';
+
+    it('viaja até o alvo, para o motor não pegar o primeiro do tipo', async () => {
+      await texto(T1, 'volte_sempre');
+      await texto(T2, 'pacote_acabando');
+
+      const criada = await campanha({ tipo: undefined, templateId: T2 });
+      const alvos = await alvosAEnviar(TENANT, criada.id);
+      expect(alvos.length).toBe(3);
+      // Todos com **o segundo**, e não com o primeiro que a consulta acharia.
+      expect(alvos.every((a) => a.templateId === T2)).toBe(true);
+    });
+
+    it('é ele quem decide o tipo, e a lista mostra qual foi', async () => {
+      await texto(T1, 'volte_sempre');
+      const criada = await campanha({ tipo: undefined, templateId: T1 });
+      const lista = await campanhasDaCasa(TENANT);
+      expect(lista.find((c) => c.id === criada.id)).toMatchObject({
+        tipo: 'retorno',
+        // O nome que a barbearia deu, e não "Convite de retorno": com três
+        // convites de retorno cadastrados, o nome do tipo não responde qual.
+        textoTitulo: 'O texto volte_sempre',
+      });
+    });
+
+    it('o texto da barbearia vizinha é recusado', async () => {
+      /**
+       * A checagem de integridade referencial do Postgres **ignora** row
+       * security: a chave estrangeira aceitaria o id alheio sem reclamar, e a
+       * campanha sairia com o texto de outra casa. Quem recusa é a leitura sob
+       * RLS antes de gravar.
+       */
+      await texto(T1, 'da_vizinha', 'retorno', VIZINHO);
+      await expect(
+        campanha({ tipo: undefined, templateId: T1 }),
+      ).rejects.toThrow(/não existe/);
+    });
+
+    it('texto ainda não aprovado é recusado', async () => {
+      // A tela só oferece aprovados, mas a borda aceita qualquer uuid — e uma
+      // campanha apontada para um rascunho ficaria com o público congelado e
+      // nenhuma mensagem, sem erro nenhum.
+      await texto(T1, 'ainda_rascunho');
+      await exec(`UPDATE whatsapp_templates SET status = 'rascunho' WHERE id = '${T1}'`);
+      await expect(
+        campanha({ tipo: undefined, templateId: T1 }),
+      ).rejects.toThrow(/não foi aprovado/);
+    });
+
+    it('texto que não serve para campanha é recusado pelo tipo dele', async () => {
+      // O tipo sai do texto, então mandar o do lembrete é o mesmo furo por
+      // outro campo: "seu horário é amanhã" para quem não tem horário.
+      await texto(T1, 'lembrete', 'lembrete_24h');
+      await expect(
+        campanha({ tipo: undefined, templateId: T1 }),
+      ).rejects.toThrow(/não serve para campanha/);
+    });
+
+    it('sem texto e sem tipo, a campanha não é criada', async () => {
+      // Criada assim, ela existiria sem nada para mandar — e o botão "Enviar"
+      // não teria como falhar, porque não há texto que possa faltar.
+      await expect(campanha({ tipo: undefined })).rejects.toThrow(/Escolha o texto/);
+    });
+  });
+
   it('o botão "Enviar" enfileira o despacho dentro da própria transação', async () => {
     /**
      * As três coisas são o mesmo fato: a campanha sai de rascunho, a trilha
@@ -467,11 +564,10 @@ describeIfDb('campanhas', () => {
 
   it('campanha de outra barbearia não é despachável — a RLS não vê a linha', async () => {
     const criada = await campanha();
-    const RIVAL = '57575757-2222-2222-2222-222222222222';
-    await exec(`INSERT INTO tenants (id, name) VALUES ('${RIVAL}', 'Rival')`);
-
+    // A vizinha já vem da semente desde o bloco 96; criá-la de novo aqui era o
+    // `INSERT` duplicado que derrubava este caso.
     expect(
-      await marcarParaEnvio({ tenantId: RIVAL, campanhaId: criada.id, ...operador }),
+      await marcarParaEnvio({ tenantId: VIZINHO, campanhaId: criada.id, ...operador }),
     ).toBe(false);
   });
 

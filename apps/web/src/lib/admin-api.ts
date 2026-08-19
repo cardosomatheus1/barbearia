@@ -3272,11 +3272,16 @@ export const templatesDoWhatsAppNaApi = (token: string) =>
  * `enviado: false` não é erro: é a guarda de consentimento, teto ou janela de
  * silêncio dizendo por que não saiu, e o motivo vem escrito.
  */
-export const mandarMensagemNaApi = (token: string, customerId: string, tipo: string) =>
+/** Um dos dois: o texto escolhido vence, e é ele que a ficha manda. */
+export const mandarMensagemNaApi = (
+  token: string,
+  customerId: string,
+  qual: { readonly templateId: string } | { readonly tipo: string },
+) =>
   chamar<{ enviado: boolean; wamid: string | null; motivo: string | null }>(
     'POST',
     '/v1/admin/whatsapp/mensagem',
-    { customerId, tipo },
+    { customerId, ...qual },
     token,
   );
 
@@ -3302,6 +3307,15 @@ export interface AutomacaoNaTelaDoAdmin {
   readonly limiar: number | null;
   readonly atrasoMinutos: number;
   readonly tipo: string;
+  /**
+   * O nome do texto que esta automação escolheu (bloco 96).
+   *
+   * A API já o devolvia desde o bloco 94 e a tela não o declarava: a linha
+   * dizia "manda Convite de retorno" — o nome do **tipo** — com três convites
+   * de retorno diferentes cadastrados. O dado existia e ninguém lia, que é a
+   * §6 pergunta 4.
+   */
+  readonly textoTitulo: string | null;
   readonly objetivo: string;
   readonly janelaDias: number;
   readonly ativa: boolean;
@@ -3365,6 +3379,8 @@ export interface CampanhaNaTelaDoAdmin {
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
   readonly tipo: string;
+  /** O nome do texto escolhido; nulo é campanha anterior ao bloco 96. */
+  readonly textoTitulo: string | null;
   /**
    * A união, e não `string`.
    *
@@ -3397,7 +3413,9 @@ export const criarCampanhaNaApi = (
     filtro: string;
     valorDoFiltro: number | null;
     diaDaSemana: number | null;
-    tipo: string;
+    /** Um dos dois: o texto decide o tipo, e a borda recusa campanha sem nenhum. */
+    tipo?: string;
+    templateId?: string;
     janelaDias: number;
   },
 ) => chamar<{ id: string; publico: number }>('POST', '/v1/admin/campanhas', corpo, token);

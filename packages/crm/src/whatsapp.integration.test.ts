@@ -121,9 +121,16 @@ describeIfDb('WhatsApp oficial', () => {
     );
   };
 
+  /**
+   * `nome` por parâmetro desde o bloco 96: dois textos do **mesmo tipo** é o
+   * caso que este bloco existe para cobrir, e com o nome derivado do tipo os
+   * dois colidiriam na chave da Meta — o teste falharia por outro motivo que
+   * não a regra sob prova.
+   */
   const aprovarTemplate = async (
     tipo = 'lembrete_24h',
     corpo = 'Olá {{1}}, seu corte é amanhã às {{2}}.',
+    nome = `${tipo}_v1`,
   ) => {
     const provedor = new FakeWhatsAppProvider();
     provedor.proximoEstadoDoTemplate = 'aprovado';
@@ -131,7 +138,7 @@ describeIfDb('WhatsApp oficial', () => {
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: tipo as 'lembrete_24h',
-      nome: `${tipo}_v1`,
+      nome,
       corpo,
       provider: provedor,
       ...operador,
@@ -753,6 +760,122 @@ describeIfDb('WhatsApp oficial', () => {
       `SELECT count(*) AS n FROM notifications WHERE customer_id = '${CARLOS}' AND status = 'sent'`,
     );
     expect(Number(linhas[0]?.n ?? 0)).toBe(1);
+  });
+
+  /**
+   * A ficha manda **o texto que o balcão apertou** (bloco 96).
+   *
+   * Ela listava os três convites de retorno aprovados com um botão cada, e os
+   * três mandavam o mesmo: o formulário postava o `tipo`, e o motor pegava o
+   * primeiro aprovado dele. A recepção lia "volte que sentimos sua falta",
+   * apertava, e o cliente recebia "seu pacote está acabando".
+   */
+  it('mensagem avulsa manda o texto escolhido, e não o primeiro do tipo', async () => {
+    await ativar();
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+    await aprovarTemplate('retorno', 'Volte, {{1}}! Sentimos sua falta na {{2}}.');
+    const segundo = await aprovarTemplate(
+      'retorno',
+      'Oi {{1}}, seu pacote na {{2}} está acabando.',
+      'pacote_acabando',
+    );
+
+    let escolhido: string | null = 'nada';
+    const resultado = await enviarMensagemAvulsa({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      customerId: CARLOS,
+      templateId: segundo.id,
+      agora: new Date('2026-09-20T15:00:00Z'),
+      timeZone: 'America/Bahia',
+      ...operador,
+      enviar: async (destino) => {
+        escolhido = destino.templateId;
+        return 'wamid.escolhido';
+      },
+    });
+
+    expect(resultado.enviado).toBe(true);
+    // O segundo, e não o primeiro que a consulta por tipo acharia.
+    expect(escolhido).toBe(segundo.id);
+  });
+
+  it('mensagem avulsa recusa o texto da barbearia vizinha', async () => {
+    /**
+     * A checagem de integridade referencial do Postgres ignora row security: a
+     * chave estrangeira aceitaria o id alheio sem reclamar.
+     *
+     * Quem recusa aqui é a **política**, e não uma cláusula escrita — a leitura
+     * roda dentro de `withTenant`, e a linha da vizinha não existe para ela. O
+     * caso que prova o filtro escrito é o de baixo, o da outra loja: ali a
+     * política enxerga a linha, porque a RLS separa barbearias e não separa
+     * lojas dentro de uma.
+     */
+    await ativar();
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+    // A semente satisfaz **tudo menos** a regra sob teste: sem um `retorno`
+    // aprovado aqui, a recusa viria da falta de texto e o caso passaria verde
+    // com a conferência removida.
+    await aprovarTemplate('retorno', 'Volte, {{1}}! Sentimos sua falta na {{2}}.');
+    await exec(`
+      INSERT INTO whatsapp_templates (id, tenant_id, location_id, kind, name, status, body)
+      VALUES ('b5555555-0000-4000-8000-0000000000ff', '${RIVAL}', '${LOCAL_RIVAL}',
+              'retorno', 'deles_v1', 'aprovado', 'Oi {{1}}, na {{2}}.');
+    `);
+
+    await expect(
+      enviarMensagemAvulsa({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        customerId: CARLOS,
+        templateId: 'b5555555-0000-4000-8000-0000000000ff',
+        agora: new Date('2026-09-20T15:00:00Z'),
+        timeZone: 'America/Bahia',
+        ...operador,
+        enviar: async () => 'wamid.nao',
+      }),
+    ).rejects.toMatchObject({ code: 'sem_texto_aprovado' });
+  });
+
+  it('mensagem avulsa recusa o texto aprovado no número da outra loja', async () => {
+    /**
+     * A RLS separa barbearias e **não** separa lojas dentro de uma: a leitura
+     * sob RLS acha o texto da filial sem reclamar. Quem recusa é o filtro por
+     * unidade, e é ele que este caso prova — o da vizinha passa pela política e
+     * não exercita esta linha.
+     *
+     * Importa porque o template é aprovado **por número**: mandar o da filial
+     * pelo número da matriz é a Meta recusando a mensagem no balcão.
+     */
+    await ativar();
+    await exec(`UPDATE customers SET accepts_marketing = true WHERE id = '${CARLOS}'`);
+    // Mesma razão do caso da vizinha: sem um `retorno` aprovado nesta unidade,
+    // a recusa viria da falta de texto e não do filtro por unidade.
+    await aprovarTemplate('retorno', 'Volte, {{1}}! Sentimos sua falta na {{2}}.');
+    const FILIAL = 'a5555555-0000-0000-0000-000000000004';
+    await exec(`
+      INSERT INTO locations (id, tenant_id, name, timezone)
+      VALUES ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia');
+
+      INSERT INTO whatsapp_templates (id, tenant_id, location_id, kind, name, status, body)
+      VALUES ('b5555555-0000-4000-8000-0000000000fe', '${TENANT}', '${FILIAL}',
+              'retorno', 'da_filial_v1', 'aprovado', 'Oi {{1}}, na {{2}}.');
+    `);
+
+    await expect(
+      enviarMensagemAvulsa({
+        tenantId: TENANT,
+        locationId: LOCAL,
+        customerId: CARLOS,
+        templateId: 'b5555555-0000-4000-8000-0000000000fe',
+        // Recusado antes de qualquer envio: se a conferência sumir, esta
+        // chamada acontece e o caso fica vermelho por não ter lançado.
+        agora: new Date('2026-09-20T15:00:00Z'),
+        timeZone: 'America/Bahia',
+        ...operador,
+        enviar: async () => 'wamid.nao',
+      }),
+    ).rejects.toMatchObject({ code: 'sem_texto_aprovado' });
   });
 
   it('mensagem avulsa recusa texto que fala de horário marcado', async () => {

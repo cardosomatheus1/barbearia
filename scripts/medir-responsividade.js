@@ -1930,6 +1930,37 @@ function prepararWhatsApp(slug) {
              'Conteúdo promocional em template de categoria utilitária — reenvie como marketing')
      ON CONFLICT DO NOTHING`,
   );
+
+  /**
+   * **Dois** convites de retorno aprovados, com títulos diferentes (bloco 96).
+   *
+   * São eles que fazem a campanha e a automação desenharem a escolha do texto:
+   * com nenhum, as duas telas mostram "Nenhum texto aprovado — nada vai sair" e
+   * a medição fotografa o estado de antes do bloco. Com um só, o rádio vira
+   * campo escondido e a escolha some.
+   *
+   * É a regra da semente que confere a resposta, aplicada ao que a medição
+   * fotografa: semente que prepara o estado errado mede o que ela acha que
+   * preparou, sem nada ficar vermelho.
+   */
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, titulo, status, body, buttons)
+     VALUES ('${tenant}', '${local}', 'retorno', 'volta_sentimos_falta',
+             'Volta que a gente sente falta', 'aprovado',
+             'Oi {{1}}, faz tempo! Volte à {{2}} — a cadeira está esperando.',
+             '["agendar_novamente","parar_de_receber"]'::jsonb)
+     ON CONFLICT DO NOTHING`,
+  );
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, titulo, status, body, buttons)
+     VALUES ('${tenant}', '${local}', 'retorno', 'pacote_no_fim',
+             'Seu pacote está no fim', 'aprovado',
+             'Oi {{1}}, seu pacote na {{2}} está acabando. Quer renovar?',
+             '["agendar_novamente"]'::jsonb)
+     ON CONFLICT DO NOTHING`,
+  );
 }
 
 /**

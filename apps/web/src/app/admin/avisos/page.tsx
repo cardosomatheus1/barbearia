@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { nomeDoAviso } from '@barbearia/core';
 import { avisos, type EnvioRegistrado, type TipoDeAviso } from '@/lib/admin-api';
 import { exigirRecurso, painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -36,15 +37,6 @@ const FALHA: Record<string, string> = {
   forbidden: 'Sua conta não altera a configuração da barbearia.',
   location_not_found: 'Esta barbearia ainda não tem unidade cadastrada.',
   request_failed: 'Não deu para salvar. Tente de novo.',
-};
-
-const NOME_DO_AVISO: Record<TipoDeAviso, string> = {
-  confirmacao: 'Confirmação',
-  lembrete_24h: 'Lembrete de 24h',
-  lembrete_2h: 'Lembrete de 2h',
-  sua_vez: 'É a sua vez',
-  senha_de_acesso: 'Senha de acesso',
-  retorno: 'Convite de retorno',
 };
 
 /**
@@ -234,7 +226,17 @@ export default async function AvisosPage({ searchParams }: Props) {
           {log.map((envio) => (
             <li className="envios__item" key={envio.id}>
               <div className="envios__linha">
-                <span className="envios__tipo">{NOME_DO_AVISO[envio.tipo]}</span>
+                {/*
+                  O nome sai de `packages/core` (bloco 96).
+
+                  Esta tela tinha o mapa escrito à mão, com **outras palavras**
+                  para as mesmas seis coisas: "É a sua vez" aqui, "Sua vez na
+                  fila" em WhatsApp; "Confirmação" aqui, "Confirmação do
+                  agendamento" lá. Terceira cópia da mesma lista, e as três
+                  divergiram — §6 pergunta 2, a mesma coisa com nomes
+                  diferentes em telas do mesmo produto.
+                */}
+                <span className="envios__tipo">{nomeDoAviso(envio.tipo)}</span>
                 <span
                   className={`envios__status envios__status--${envio.status}`}
                   data-status={envio.status}

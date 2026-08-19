@@ -305,6 +305,9 @@ class CanalDaCasa implements NotificationProvider {
       telefone: mensagem.phoneE164,
       clienteNome: mensagem.clienteNome,
       barbearia: mensagem.barbearia,
+      // O texto que esta campanha escolheu. Sem ele o motor pegava o primeiro
+      // aprovado do tipo, e a prévia da tela mentia sobre o que ia sair.
+      templateId: mensagem.templateId,
     });
     if (wamid) return wamid;
     return this.reserva.enviarDeCampanha(mensagem);
@@ -547,6 +550,7 @@ async function main(): Promise<void> {
               clienteNome: alvo.clienteNome,
               barbearia: alvo.barbearia,
               tipo: alvo.tipo,
+              templateId: alvo.templateId,
             }),
         });
 

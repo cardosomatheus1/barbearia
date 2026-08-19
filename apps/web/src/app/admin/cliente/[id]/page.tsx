@@ -10,6 +10,8 @@ import {
   ROTULO_DA_ASSINATURA,
   ROTULO_DO_PACOTE,
   ROTULO_DO_SEGMENTO,
+  TIPOS_DE_CAMPANHA,
+  corpoComExemplos,
   saldoPorExtenso,
   type Segmento,
   nomeDoAviso,
@@ -343,7 +345,20 @@ function MandarMensagem({
   textos,
 }: {
   readonly customerId: string;
-  readonly textos: readonly { readonly tipo: string; readonly corpo: string }[];
+  /**
+   * Os textos aprovados, **por id** (bloco 96).
+   *
+   * A lista era `{ tipo, corpo }` e o botão postava o `tipo`: com três convites
+   * de retorno cadastrados, os três apareciam com um botão cada e os três
+   * mandavam o primeiro. A recepção lia um texto, apertava, e o cliente recebia
+   * outro. O `key` também era o tipo, então os três eram a mesma chave.
+   */
+  readonly textos: readonly {
+    readonly id: string;
+    readonly tipo: string;
+    readonly titulo: string | null;
+    readonly corpo: string;
+  }[];
 }) {
   return (
     <section aria-labelledby="mandar-mensagem" className="secao">
@@ -363,17 +378,18 @@ function MandarMensagem({
           </p>
           <ul className="lista-cadastro">
             {textos.map((t) => (
-              <li key={t.tipo}>
+              <li key={t.id}>
                 <article className="item-cadastro">
                   <div className="item-cadastro__corpo">
-                    <p className="item-cadastro__nome">{nomeDoAviso(t.tipo)}</p>
-                    {/* O texto inteiro, e não o nome do aviso: quem aperta
-                        precisa saber o que a pessoa vai ler. */}
-                    <p className="item-cadastro__linha">{t.corpo}</p>
+                    <p className="item-cadastro__nome">{t.titulo ?? nomeDoAviso(t.tipo)}</p>
+                    {/* O texto inteiro e **preenchido**: quem aperta precisa
+                        saber o que a pessoa vai ler, e as chaves duplas são
+                        vocabulário da Meta — lidas no balcão, parecem falta. */}
+                    <p className="item-cadastro__linha">{corpoComExemplos(t.tipo, t.corpo)}</p>
                   </div>
                   <form action={acaoMandarMensagem}>
                     <input name="customerId" type="hidden" value={customerId} />
-                    <input name="tipo" type="hidden" value={t.tipo} />
+                    <input name="templateId" type="hidden" value={t.id} />
                     <button className="ui-button ui-button--secondary" type="submit">
                       Mandar
                     </button>
@@ -1602,8 +1618,22 @@ export default async function FichaPage({ params, searchParams }: Props) {
         <MandarMensagem
           customerId={ficha.dados.customerId}
           textos={textos.dados.templates
-            .filter((t) => t.estado === 'aprovado')
-            .map((t) => ({ tipo: t.tipo, corpo: t.corpo }))}
+            /**
+             * Aprovado **e** de campanha (bloco 96).
+             *
+             * A lista trazia os seis textos aprovados, incluindo confirmação e
+             * os dois lembretes — e os três falam de um horário marcado, que
+             * quem recebe uma mensagem avulsa não tem. O domínio já os recusava
+             * com `tipo_invalido` desde o bloco 92: eram três botões "Mandar"
+             * que só podiam dar erro, que é a §6 pergunta 1 na forma mais
+             * direta.
+             */
+            .filter(
+              (t) =>
+                t.estado === 'aprovado' &&
+                (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
+            )
+            .map((t) => ({ id: t.id, tipo: t.tipo, titulo: t.titulo, corpo: t.corpo }))}
         />
       ) : null}
 

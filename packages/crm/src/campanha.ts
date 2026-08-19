@@ -80,6 +80,15 @@ export interface CampanhaNaTela {
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * O nome do texto que esta campanha manda (bloco 96).
+   *
+   * Nulo é campanha anterior ao bloco, que resolve por tipo. A lista dizia só
+   * "Convite de retorno" — o nome do **tipo** — com três convites de retorno
+   * diferentes cadastrados, e quem abre a tela para conferir o que saiu não
+   * tinha como saber qual dos três foi.
+   */
+  readonly textoTitulo: string | null;
   readonly estado: 'rascunho' | 'enviando' | 'enviada';
   readonly criadaEm: string;
   /** As seis colunas da SPEC §4.13. A última é a que importa. */
@@ -110,6 +119,7 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
         filter_value: number | null;
         filter_weekday: number | null;
         kind: TipoDeNotificacao;
+        texto_titulo: string | null;
         status: 'rascunho' | 'enviando' | 'enviada';
         created_at: Date;
         publico: bigint;
@@ -122,7 +132,8 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
       }[]
     >`
       SELECT c.id, c.name, c.filter::text AS filter, c.filter_value, c.filter_weekday,
-             c.kind::text AS kind, c.status::text AS status, c.created_at,
+             c.kind::text AS kind, w.titulo AS texto_titulo,
+             c.status::text AS status, c.created_at,
              count(t.id) AS publico,
              count(t.id) FILTER (WHERE t.sent_at IS NOT NULL) AS enviados,
              count(t.id) FILTER (WHERE m.delivered_at IS NOT NULL) AS entregues,
@@ -133,7 +144,8 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
         FROM campaigns c
         LEFT JOIN campaign_targets t ON t.campaign_id = c.id
         LEFT JOIN whatsapp_messages m ON m.wamid = t.wamid
-       GROUP BY c.id
+        LEFT JOIN whatsapp_templates w ON w.id = c.template_id
+       GROUP BY c.id, w.titulo
        ORDER BY c.created_at DESC
     `;
     return linhas.map((l) => ({
@@ -143,6 +155,7 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
       valorDoFiltro: l.filter_value,
       diaDaSemana: l.filter_weekday,
       tipo: l.kind,
+      textoTitulo: l.texto_titulo,
       estado: l.status,
       criadaEm: l.created_at.toISOString(),
       publico: Number(l.publico),
@@ -169,7 +182,30 @@ export async function criarCampanha(params: {
   readonly filtro: FiltroDeCampanha;
   readonly valorDoFiltro: number | null;
   readonly diaDaSemana: number | null;
-  readonly tipo: TipoDeNotificacao;
+  /**
+   * O tipo, quando não há texto escolhido.
+   *
+   * Opcional desde o bloco 96 e é o par de `templateId`: quem escolhe o texto
+   * já disse o tipo, porque o texto tem um. Exigir os dois seria pedir duas
+   * vezes a mesma coisa e aceitar que as respostas divirjam.
+   */
+  readonly tipo?: TipoDeNotificacao;
+  /**
+   * Qual texto esta campanha manda (bloco 96).
+   *
+   * A automação passou a escolher no bloco 94 e a campanha ficou para trás,
+   * ainda resolvendo por **tipo** — e o motor pega o primeiro aprovado daquele
+   * tipo com `LIMIT 1`. Com três textos de convite de retorno cadastrados, a
+   * campanha para "quem costuma vir naquele horário" saía com "seu pacote está
+   * acabando", para gente que nunca comprou pacote.
+   *
+   * O pior formato de defeito que este produto pode ter: a tela mostrava a
+   * prévia de um texto, o motor mandava outro, e o único jeito de descobrir era
+   * o cliente responder "que pacote?".
+   *
+   * Congelado como o público: trocar o texto depois não reescreve o que já saiu.
+   */
+  readonly templateId?: string | null;
   readonly janelaDias: number;
   readonly agora: Date;
   readonly staffId: string;
@@ -204,19 +240,51 @@ export async function criarCampanha(params: {
    * que é credencial, ou com `lembrete_24h`, que promete um horário que não
    * existe.
    */
-  if (!tipoDeCampanhaValido(params.tipo)) {
+  if (params.tipo !== undefined && !tipoDeCampanhaValido(params.tipo)) {
     throw new CampanhaError('invalida', 'Este texto não serve para campanha.');
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    /**
+     * O tipo sai do texto escolhido, conferido sob RLS antes de gravar.
+     *
+     * A checagem de integridade referencial do Postgres ignora row security: a
+     * chave estrangeira aceitaria o texto de outra barbearia sem reclamar. E o
+     * tipo tem que vir dele, não de um campo ao lado — separados, a campanha
+     * declararia um e mandaria o texto de outro, com o opt-out e o teto do mês
+     * decididos pelo primeiro.
+     */
+    let tipo = params.tipo;
+    if (params.templateId) {
+      const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
+        SELECT kind::text AS kind FROM whatsapp_templates
+         WHERE id = ${params.templateId}::uuid AND status = 'aprovado'
+      `;
+      const achado = doTexto[0];
+      if (!achado) {
+        // Aprovado também: a tela só oferece aprovados, mas a borda aceita
+        // qualquer uuid — e uma campanha apontada para um rascunho sairia
+        // com o público congelado e nenhuma mensagem, sem erro nenhum.
+        throw new CampanhaError('invalida', 'Este texto não existe ou não foi aprovado.');
+      }
+      tipo = achado.kind;
+      if (!tipoDeCampanhaValido(tipo)) {
+        throw new CampanhaError('invalida', 'Este texto não serve para campanha.');
+      }
+    }
+    if (tipo === undefined) {
+      throw new CampanhaError('invalida', 'Escolha o texto que a campanha vai mandar.');
+    }
+
     const criadas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO campaigns
-        (tenant_id, name, filter, filter_value, filter_weekday, kind, goal_window_days, created_by)
+        (tenant_id, name, filter, filter_value, filter_weekday, kind, goal_window_days,
+         created_by, template_id)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.filtro}::campaign_filter,
               ${params.valorDoFiltro}, ${params.diaDaSemana},
-              ${params.tipo}::notification_kind, ${params.janelaDias},
-              ${params.staffId}::uuid)
+              ${tipo}::notification_kind, ${params.janelaDias},
+              ${params.staffId}::uuid, ${params.templateId ?? null}::uuid)
       RETURNING id
     `;
     const campanha = criadas[0];
@@ -347,6 +415,14 @@ export interface AlvoAEnviar {
   readonly clienteNome: string;
   readonly barbearia: string;
   readonly tipo: TipoDeNotificacao;
+  /**
+   * O texto que esta campanha escolheu, congelado na criação (bloco 96).
+   *
+   * Ele viaja com o alvo e não é lido de novo no envio: quem trocar o texto da
+   * campanha amanhã não reescreve o que já saiu, pela mesma razão de o público
+   * ser congelado.
+   */
+  readonly templateId: string | null;
 }
 
 export async function alvosAEnviar(
@@ -363,10 +439,11 @@ export async function alvosAEnviar(
         name: string;
         barbearia: string;
         kind: TipoDeNotificacao;
+        template_id: string | null;
       }[]
     >`
       SELECT t.id, t.customer_id, c.phone_e164, c.name, tn.name AS barbearia,
-             ca.kind::text AS kind
+             ca.kind::text AS kind, ca.template_id
         FROM campaign_targets t
         JOIN campaigns ca ON ca.id = t.campaign_id
         JOIN customers c ON c.id = t.customer_id
@@ -382,6 +459,7 @@ export async function alvosAEnviar(
       clienteNome: l.name,
       barbearia: l.barbearia,
       tipo: l.kind,
+      templateId: l.template_id,
     }));
   });
 }

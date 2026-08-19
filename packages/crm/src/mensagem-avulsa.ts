@@ -3,6 +3,7 @@ import {
   decidirDisparo,
   maskPhone,
   tipoDeCampanhaValido,
+  type TipoDeCampanha,
   type TipoDeNotificacao,
 } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
@@ -83,7 +84,23 @@ export async function enviarMensagemAvulsa(params: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly customerId: string;
-  readonly tipo: TipoDeNotificacao;
+  /**
+   * O tipo, quando não há texto escolhido.
+   *
+   * Opcional desde o bloco 96, pelo par de `templateId`: quem escolhe o texto
+   * já disse o tipo, porque o texto tem um.
+   */
+  readonly tipo?: TipoDeNotificacao;
+  /**
+   * Qual dos textos aprovados o balcão apertou (bloco 96).
+   *
+   * A ficha listava os três convites de retorno cadastrados, cada um com um
+   * botão "Mandar", e os três mandavam **o mesmo**: o formulário postava o
+   * `tipo`, e o motor pegava o primeiro aprovado daquele tipo. A recepção lia
+   * "volte que sentimos sua falta", apertava, e o cliente recebia "seu pacote
+   * está acabando".
+   */
+  readonly templateId?: string | null;
   readonly agora: Date;
   readonly timeZone: string;
   readonly staffId: string;
@@ -92,13 +109,56 @@ export async function enviarMensagemAvulsa(params: {
     readonly telefone: string;
     readonly clienteNome: string;
     readonly barbearia: string;
+    /** Qual texto mandar; nulo cai no primeiro aprovado do tipo, como antes. */
+    readonly templateId: string | null;
+    /**
+     * O tipo **resolvido**, que é o do texto quando há um.
+     *
+     * Quem chama não pode relê-lo do corpo da requisição: ali ele pode nem
+     * existir, e quando existe é o campo que o texto vence.
+     */
+    readonly tipo: TipoDeNotificacao;
   }) => Promise<string | null>;
 }): Promise<ResultadoDoEnvioAvulso> {
-  if (!tipoDeCampanhaValido(params.tipo)) {
+  if (params.tipo !== undefined && !tipoDeCampanhaValido(params.tipo)) {
     throw new EnvioAvulsoError(
       'tipo_invalido',
       'Este texto não serve para mensagem avulsa: ele fala de um horário marcado.',
     );
+  }
+
+  /**
+   * O tipo sai do texto escolhido, conferido sob RLS **e pela unidade**.
+   *
+   * A checagem de integridade referencial do Postgres ignora row security, e a
+   * RLS separa barbearias e não separa lojas dentro de uma: sem as duas
+   * conferências, o id de outra casa — ou o texto aprovado no número da filial
+   * — viraria a mensagem que sai daqui.
+   */
+  let tipo: TipoDeCampanha | undefined = params.tipo;
+  if (params.templateId) {
+    const doTexto = await withTenant(params.tenantId, async (tx) => {
+      const linhas = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
+        SELECT kind::text AS kind FROM whatsapp_templates
+         WHERE id = ${params.templateId}::uuid
+           AND location_id = ${params.locationId}::uuid
+           AND status = 'aprovado'
+      `;
+      return linhas[0] ?? null;
+    });
+    if (!doTexto) {
+      throw new EnvioAvulsoError('sem_texto_aprovado', 'Este texto não existe ou não foi aprovado.');
+    }
+    if (!tipoDeCampanhaValido(doTexto.kind)) {
+      throw new EnvioAvulsoError(
+        'tipo_invalido',
+        'Este texto não serve para mensagem avulsa: ele fala de um horário marcado.',
+      );
+    }
+    tipo = doTexto.kind;
+  }
+  if (tipo === undefined) {
+    throw new EnvioAvulsoError('tipo_invalido', 'Escolha o texto que vai ser mandado.');
   }
 
   const dados = await withTenant(params.tenantId, async (tx) => {
@@ -126,7 +186,7 @@ export async function enviarMensagemAvulsa(params: {
                  AND n.sent_at > ${params.agora}::timestamptz - interval '30 days') AS no_mes,
              EXISTS (SELECT 1 FROM whatsapp_templates t
                       WHERE t.location_id = ${params.locationId}::uuid
-                        AND t.kind = ${params.tipo}::notification_kind
+                        AND t.kind = ${tipo}::notification_kind
                         AND t.status = 'aprovado') AS aprovado
         FROM customers c
        WHERE c.id = ${params.customerId}::uuid AND c.anonymized_at IS NULL
@@ -153,7 +213,7 @@ export async function enviarMensagemAvulsa(params: {
    */
   const decisao = decidirDisparo({
     ativa: true,
-    tipo: params.tipo,
+    tipo,
     natureza: 'promocional',
     jaDisparouPorEsteFato: false,
     jaRecebeuHoje: Number(dados.hoje) > 0,
@@ -189,6 +249,8 @@ export async function enviarMensagemAvulsa(params: {
     telefone,
     clienteNome: dados.nome ?? 'cliente',
     barbearia: dados.barbearia,
+    templateId: params.templateId ?? null,
+    tipo,
   });
 
   /**
@@ -201,7 +263,7 @@ export async function enviarMensagemAvulsa(params: {
     await tx.$executeRaw`
       INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-              ${params.tipo}::notification_kind, ${params.customerId}::uuid,
+              ${tipo}::notification_kind, ${params.customerId}::uuid,
               'sent', ${maskPhone(telefone)})
     `;
 
@@ -211,7 +273,7 @@ export async function enviarMensagemAvulsa(params: {
       action: 'campaign.sent',
       entity: 'customers',
       entityId: params.customerId,
-      after: { tipo: params.tipo, avulsa: true },
+      after: { tipo, avulsa: true },
     });
   });
 
