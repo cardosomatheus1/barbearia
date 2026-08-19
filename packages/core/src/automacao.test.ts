@@ -8,9 +8,12 @@ import {
   OBJETIVOS,
   ROTULO_DO_GATILHO,
   ROTULO_DO_OBJETIVO,
+  RESUMO_DO_PULO,
   chaveDoFato,
   decidirDisparo,
+  explicacaoDoPulo,
   gatilhoPedeLimiar,
+  resumoDoPulo,
   objetivoAlcancado,
   validarAutomacao,
 } from './automacao.js';
@@ -294,5 +297,63 @@ describe('a atribuição do objetivo', () => {
         janelaDias: 7,
       }),
     ).toBe(true);
+  });
+});
+
+/**
+ * O vocabulário de motivo é **o que o produto escreve** (bloco 101).
+ *
+ * A primeira versão deste catálogo trazia `sem_consentimento`,
+ * `janela_de_silencio`, `ainda_no_prazo` e `provedor_indisponivel`. Nenhum dos
+ * quatro é escrito por código nenhum: dois vinham da semente de demonstração —
+ * que inventou valores próprios — e dois de um mapa velho numa tela.
+ *
+ * Ampliar o domínio para caber dado fabricado faz o produto parecer capaz de
+ * coisas que ele não faz. É a mesma família do `blocks`: campo que o motor
+ * aceita e ninguém preenche, agora ao contrário — frase que a tela sabe dizer
+ * sobre um fato que nunca acontece.
+ */
+describe('o vocabulário de motivo', () => {
+  /**
+   * Os motivos que o produto de fato grava, derivados das duas uniões mais o
+   * adiamento da campanha. Escrever a lista aqui é o que a guarda existe para
+   * cobrar — e por isso ela vem das constantes, não de uma cópia.
+   */
+  const REAIS = [
+    ...Object.keys(EXPLICACAO_DE_NAO_DISPARAR),
+    'fora_da_janela',
+    'ja_enviada',
+    'passou_da_hora',
+    'cancelado',
+  ];
+
+  it('explica todo motivo que o produto escreve', () => {
+    for (const motivo of REAIS) {
+      // Frase de verdade, e não o identificador humanizado de volta.
+      expect(explicacaoDoPulo(motivo), motivo).not.toContain('_');
+      expect(resumoDoPulo(motivo), motivo).not.toContain('_');
+    }
+  });
+
+  it('não explica motivo que ninguém grava', () => {
+    /**
+     * A outra metade, e é a que pega o defeito: uma frase para
+     * `sem_consentimento` faz a tela parecer conhecer um estado que o produto
+     * nunca produz — e foi assim que a semente contaminou o domínio.
+     */
+    for (const inventado of [
+      'sem_consentimento',
+      'janela_de_silencio',
+      'ainda_no_prazo',
+      'provedor_indisponivel',
+    ]) {
+      expect(RESUMO_DO_PULO[inventado], inventado).toBeUndefined();
+    }
+  });
+
+  it('motivo desconhecido vira frase, nunca some e nunca sai cru', () => {
+    // Humanizado: o produto não conhece, mas quem lê a tela não precisa ver o
+    // nome de uma coluna. E não descartado — a informação vale mais que nada.
+    expect(explicacaoDoPulo('motivo_novo_do_futuro')).toBe('Motivo novo do futuro.');
   });
 });

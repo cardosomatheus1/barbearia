@@ -172,34 +172,37 @@ export const EXPLICACAO_DE_NAO_DISPARAR: Readonly<Record<MotivoDeNaoDisparar, st
 };
 
 /**
- * Por que uma mensagem não saiu — **todos** os motivos, num lugar só.
+ * Por que uma mensagem não saiu — **todos** os motivos que o produto escreve.
  *
- * Três colunas guardam motivo neste produto: `campaign_targets.skipped_reason`,
+ * Três colunas guardam motivo: `campaign_targets.skipped_reason`,
  * `automation_sends.skipped_reason` e `notifications.reason`. As duas primeiras
- * saem de `MotivoDeNaoDisparar`; a terceira tem um vocabulário próprio, escrito
- * pelo motor de aviso — e a explicação dela morava **escrita à mão na tela de
- * avisos**, com palavras diferentes para os mesmos fatos.
+ * saem de `MotivoDeNaoDisparar`; a terceira, de `MotivoDeNaoEnviar` — e as duas
+ * uniões existem no código, então este mapa é **derivado delas**, nunca uma
+ * lista escrita ao lado.
  *
- * `sem_consentimento` e `optou_por_nao_receber` são a mesma coisa dita duas
- * vezes, e a segunda cópia é o que fez a lista de "quem não recebeu" mostrar
- * "Não deu para mandar" sobre um motivo que o produto sabe explicar. Os dois
- * ficam aqui, apontando para a mesma frase, porque os dois estão gravados em
- * bancos que já existem — desfazer isso é migração, e a tela não pode esperar.
+ * ## O que este mapa não tem, e por quê
  *
- * É a quinta lista paralela de motivo que este repositório encontra, e a última.
+ * A primeira versão trazia `sem_consentimento`, `janela_de_silencio`,
+ * `ainda_no_prazo` e `provedor_indisponivel`. **Nenhum dos quatro é escrito por
+ * código nenhum**: dois vinham da semente de demonstração, que inventou valores
+ * próprios, e dois de um mapa velho na tela de avisos que ninguém tinha
+ * removido.
+ *
+ * Acomodá-los aqui foi o erro que a segunda volta deste bloco desfaz: ampliar o
+ * vocabulário do domínio para caber dado fabricado faz o produto parecer capaz
+ * de coisas que ele não faz — que é exatamente o que a semente já fazia. Quem
+ * conserta a semente é a semente, e há guarda que a cobra.
+ *
+ * `fora_da_janela` fica: ele é escrito por `despacharCampanha`, e não é recusa —
+ * é adiamento, por isso não está em `MotivoDeNaoDisparar`.
  */
 const EXPLICACAO_DO_MOTIVO: Readonly<Record<string, string>> = {
   ...EXPLICACAO_DE_NAO_DISPARAR,
-  // `campaign_targets`, quando a decisão empurrou o envio para depois. Não é
-  // recusa, é adiamento, e por isso não está em `MotivoDeNaoDisparar`.
   fora_da_janela: 'Ficou para depois: entre 21h e 8h nada sai.',
-  // `notifications.reason`, escrito pelo motor de aviso.
-  sem_consentimento: 'A pessoa pediu para não receber promoção.',
-  cancelado: 'O horário foi desmarcado.',
+  // Os de `MotivoDeNaoEnviar` que a decisão de disparo não tem.
   ja_enviada: 'Esta pessoa já tinha sido avisada.',
   passou_da_hora: 'A hora do aviso já tinha passado.',
-  ainda_no_prazo: 'Ainda está dentro do prazo de retorno.',
-  provedor_indisponivel: 'O canal de mensagem estava fora do ar.',
+  cancelado: 'O horário foi desmarcado.',
 };
 
 /**
@@ -230,14 +233,11 @@ export const RESUMO_DO_PULO: Readonly<Record<string, string>> = {
   ja_recebeu_hoje: 'já recebeu hoje',
   sem_telefone: 'sem telefone',
   optou_por_nao_receber: 'pediu para não receber',
-  sem_consentimento: 'pediu para não receber',
   teto_do_mes: 'teto do mês',
   fora_da_janela: 'fora do horário',
-  cancelado: 'horário desmarcado',
   ja_enviada: 'já tinha sido avisado',
   passou_da_hora: 'a hora já tinha passado',
-  ainda_no_prazo: 'ainda no prazo',
-  provedor_indisponivel: 'canal fora do ar',
+  cancelado: 'horário desmarcado',
 };
 
 export function resumoDoPulo(motivo: string): string {

@@ -937,7 +937,21 @@ function marketing({ tenant, local, fieis, hoje, balcao }) {
     { nome: 'Boas-vindas depois do primeiro corte', gatilho: 'primeiro_atendimento', atraso: 120, tipo: 'retorno', objetivo: 'agendamento', janela: 45, ativa: true },
     { nome: 'Aniversário — 20% no mês', gatilho: 'aniversario', atraso: 0, tipo: 'retorno', objetivo: 'agendamento', janela: 30, ativa: true },
     { nome: 'Sumiu há 60 dias', gatilho: 'sem_retorno', limiar: 60, atraso: 0, tipo: 'retorno', objetivo: 'agendamento', janela: 30, ativa: true },
-    { nome: 'Pedido de avaliação depois do atendimento', gatilho: 'servico_realizado', atraso: 180, tipo: 'pedido_de_avaliacao', objetivo: 'avaliacao', janela: 7, ativa: true },
+    /**
+     * **Desligada, e com o tipo que o produto de fato manda.**
+     *
+     * Ela era `tipo: 'pedido_de_avaliacao'` e `ativa: true`, com disparos
+     * semeados dando "4 enviadas · 1 alcançou o objetivo". Nada disso existe:
+     * `pedido_de_avaliacao` é valor de `notification_kind` desde o bloco 46 e
+     * nenhum código o usa — não há texto, não há variáveis, não há caminho de
+     * envio.
+     *
+     * A semente estava **fabricando resultado para um recurso que não existe**,
+     * que é o oposto da regra do projeto: o que ainda não funciona aparece
+     * marcado, nunca disfarçado de funcionando. Quem abrisse a demonstração não
+     * tinha como separar o que está pronto do que não está.
+     */
+    { nome: 'Pedido de avaliação depois do atendimento', gatilho: 'servico_realizado', atraso: 180, tipo: 'retorno', objetivo: 'avaliacao', janela: 7, ativa: false },
     { nome: 'Pacote acabando', gatilho: 'pacote_acabando', limiar: 1, atraso: 0, tipo: 'retorno', objetivo: 'venda', janela: 30, ativa: false },
   ].map((a) => ({ ...a, id: id() }));
 
@@ -946,7 +960,12 @@ function marketing({ tenant, local, fieis, hoje, balcao }) {
   const disparos = publico.map((c, i) => ({
     id: id(), tenant_id: tenant, campaign_id: campanhaId, customer_id: c.id,
     sent_at: i < 44 ? somarDias(hoje, -9) : null,
-    skipped_reason: i < 44 ? null : 'sem_consentimento',
+    // O motivo é o que o produto **escreve** — `optou_por_nao_receber`.
+    // `sem_consentimento` era invenção desta semente, e ela chegou a contaminar
+    // o vocabulário do domínio: a tela passou a saber explicar um estado que
+    // nunca acontece. Semente que inventa faz o produto parecer capaz do que
+    // não é.
+    skipped_reason: i < 44 ? null : 'optou_por_nao_receber',
     // Janela de atribuição com as duas pontas: sem a de baixo, um agendamento
     // feito antes da mensagem seria creditado a ela.
     goal_met_at: i < 12 ? somarDias(hoje, -entre(2, 7)) : null,
@@ -966,7 +985,9 @@ function marketing({ tenant, local, fieis, hoje, balcao }) {
       trigger_key: `${automacao.gatilho}:${cliente.id}`,
       triggered_at: quando, scheduled_for: quando,
       sent_at: saiu ? quando : null,
-      skipped_reason: saiu ? null : 'janela_de_silencio',
+      // `fora_da_janela` é o que `despacharCampanha` grava; `janela_de_silencio`
+      // não existe em lugar nenhum do código.
+      skipped_reason: saiu ? null : 'fora_da_janela',
       goal_met_at: saiu && i % 3 === 0 ? somarDias(quando, 3) : null,
     });
   }
