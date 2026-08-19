@@ -82,10 +82,30 @@ describe('o nome do aviso', () => {
   it('o que o produto não conhece vira frase, nunca identificador', () => {
     /**
      * `notification_kind` é enum do banco e é mais largo que a união deste
-     * pacote: `pedido_de_avaliacao` está lá desde o bloco 46 e nenhum código o
-     * usa. O painel mostrava "manda pedido_de_avaliacao" no balcão.
+     * pacote. O painel mostrava "manda pedido_de_avaliacao" no balcão: nome de
+     * coluna vazando para quem opera.
+     *
+     * O exemplo **não** pode ser `pedido_de_avaliacao`, e essa é a correção. O
+     * bloco 101 deu nome escrito a ele, e a partir dali esta asserção deixou de
+     * exercitar o humanizador — passou a medir a busca no mapa, com a frase
+     * antiga na expectativa. Ficou vermelha, e o vermelho era o certo: teste que
+     * pergunta por um caso que virou o oposto do que ele testava é pior que
+     * teste ausente, porque ele afirma cobertura que não existe.
+     *
+     * O exemplo agora é um tipo que o banco pode ganhar amanhã e que ninguém
+     * escreveu — que é a situação que a regra existe para cobrir.
      */
-    expect(nomeDoAviso('pedido_de_avaliacao')).toBe('Pedido de avaliacao');
+    expect(nomeDoAviso('lembrete_de_pagamento')).toBe('Lembrete de pagamento');
+  });
+
+  it('o que o banco conhece e o pacote não tem o nome escrito, com acento', () => {
+    /**
+     * A outra metade, e a que faltava: humanizar troca `_` por espaço e não
+     * inventa acento. `pedido_de_avaliacao` sairia "Pedido de avaliacao" na
+     * tela do balcão — quase certo é o pior resultado, porque ninguém repara e
+     * o produto passa a escrever errado em português.
+     */
+    expect(nomeDoAviso('pedido_de_avaliacao')).toBe('Pedido de avaliação');
   });
 });
 
