@@ -520,18 +520,38 @@ export async function definirVitrine(params: {
 }
 
 /** Se a barbearia está na vitrine hoje, para a tela desenhar o interruptor. */
-export async function lerVitrine(
-  tenantId: string,
-): Promise<{ readonly ligado: boolean; readonly naVitrine: number }> {
+export async function lerVitrine(tenantId: string): Promise<{
+  readonly ligado: boolean;
+  readonly naVitrine: number;
+  /**
+   * Quantas unidades **de fato** aparecem na busca (bloco 115).
+   *
+   * O interruptor ligado não basta: `atualizarVitrine` delista quem não tem
+   * coordenada, e nenhuma tela do produto a escrevia. O cartão dizia "sua
+   * barbearia aparece na busca" enquanto `/buscar` respondia "nenhuma barbearia
+   * publicada ainda" — duas telas do mesmo produto afirmando o oposto sobre o
+   * mesmo fato, e a do dono era a que mentia.
+   *
+   * Com o número, o cartão ganha o terceiro estado: ligado **e** no ar, ligado
+   * **e** sem endereço no mapa, desligado.
+   */
+  readonly listadas: number;
+}> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<{ ligado: boolean; publicadas: bigint }[]>`
+    const linhas = await tx.$queryRaw<
+      { ligado: boolean; publicadas: bigint; listadas: bigint }[]
+    >`
       SELECT bool_or(l.listed_in_marketplace) AS ligado,
-             count(*) FILTER (WHERE l.listed_in_marketplace)::bigint AS publicadas
+             count(*) FILTER (WHERE l.listed_in_marketplace)::bigint AS publicadas,
+             (SELECT count(*) FROM marketplace_listings m
+               WHERE m.tenant_id = l.tenant_id)::bigint AS listadas
         FROM locations l
+       GROUP BY l.tenant_id
     `;
     return {
       ligado: linhas[0]?.ligado === true,
       naVitrine: Number(linhas[0]?.publicadas ?? 0),
+      listadas: Number(linhas[0]?.listadas ?? 0),
     };
   });
 }

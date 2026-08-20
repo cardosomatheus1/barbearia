@@ -1,3 +1,4 @@
+import { resolverCoordenada } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
 import { CatalogError } from './servicos.js';
@@ -59,16 +60,32 @@ export async function criarUnidade(request: {
   readonly nome: string;
   readonly timezone: string;
   readonly cidade?: string | null;
+  /**
+   * A UF e o link do mapa, para a filial entrar na busca (bloco 115).
+   *
+   * Sem coordenada, `atualizarVitrine` delista a unidade — e a segunda loja
+   * nascia assim, invisível no marketplace, enquanto a matriz aparecia. A
+   * assimetria não tinha explicação nenhuma na tela.
+   */
+  readonly estado?: string | null;
+  readonly linkDoMapa?: string | null;
   readonly ator: { readonly id: string; readonly name: string };
 }): Promise<{ readonly id: string }> {
   const nome = request.nome.trim();
   if (nome.length < 2) throw new CatalogError('invalid_location', 'O nome da unidade é curto demais.');
 
   return withTenant(request.tenantId, async (tx) => {
+    const ponto = resolverCoordenada({
+      ...(request.linkDoMapa !== undefined ? { linkDoMapa: request.linkDoMapa } : {}),
+      ...(request.estado !== undefined ? { estado: request.estado } : {}),
+    });
+
     const criadas = await tx.$queryRaw<{ id: string }[]>`
-      INSERT INTO locations (tenant_id, name, timezone, city)
+      INSERT INTO locations (tenant_id, name, timezone, city, state, latitude, longitude)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-              ${nome}, ${request.timezone}, ${request.cidade?.trim() || null})
+              ${nome}, ${request.timezone}, ${request.cidade?.trim() || null},
+              ${request.estado?.trim().toUpperCase() || null},
+              ${ponto?.latitude ?? null}, ${ponto?.longitude ?? null})
       RETURNING id
     `;
     const criada = criadas[0];

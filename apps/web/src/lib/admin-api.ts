@@ -93,6 +93,8 @@ export interface EstadoOnboarding {
     about: string | null;
     timezone: string;
     amenities: string[];
+    latitude: number | null;
+    longitude: number | null;
   };
   slug: string;
   step: number;
@@ -916,6 +918,8 @@ export const encerrarRecadoNaApi = (token: string, id: string) =>
 export interface VitrineDaCasa {
   ligado: boolean;
   naVitrine: number;
+  /** Quantas unidades **de fato** aparecem na busca (bloco 115). */
+  listadas: number;
 }
 
 export const vitrineDaCasa = (token: string) =>

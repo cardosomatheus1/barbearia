@@ -117,16 +117,43 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
       <section className="quadro vitrine-config">
         <div className="quadro__topo">
           <div>
+            {/*
+              Três estados, e o terceiro é o que faltava (bloco 115).
+
+              O cartão tinha dois — ligado e desligado — e afirmava "sua
+              barbearia aparece na busca" sobre o interruptor. Mas
+              `atualizarVitrine` delista quem não tem coordenada, e nenhuma tela
+              a escrevia: a casa lia "aparece na busca" enquanto `/buscar`
+              respondia "nenhuma barbearia publicada ainda", culpando-a por algo
+              que ela já tinha feito (§6, pergunta 6, entre a tela do dono e a
+              do cliente).
+
+              Agora o cartão lê o que **de fato** está listado, e o estado do
+              meio diz o que fazer.
+            */}
             <p className="quadro__titulo">
-              {vitrine.ok && vitrine.dados.ligado
-                ? 'Sua barbearia aparece na busca'
-                : 'Sua barbearia está fora da busca'}
+              {!vitrine.ok
+                ? 'Não deu para ler o estado da busca'
+                : !vitrine.dados.ligado
+                  ? 'Sua barbearia está fora da busca'
+                  : vitrine.dados.listadas > 0
+                    ? 'Sua barbearia aparece na busca'
+                    : 'Falta o endereço no mapa'}
             </p>
             <p className="quadro__sub">
-              {vitrine.ok && vitrine.dados.ligado
-                ? 'Quem procurar barbearia na sua cidade vê seu nome, sua nota e o preço de entrada — o mesmo que já está na sua página.'
-                : 'Ninguém encontra sua barbearia pela busca. Quem tiver o link da sua página continua chegando normalmente.'}
+              {!vitrine.ok
+                ? 'Tente de novo daqui a pouco.'
+                : !vitrine.dados.ligado
+                  ? 'Ninguém encontra sua barbearia pela busca. Quem tiver o link da sua página continua chegando normalmente.'
+                  : vitrine.dados.listadas > 0
+                    ? 'Quem procurar barbearia na sua cidade vê seu nome, sua nota e o preço de entrada — o mesmo que já está na sua página.'
+                    : 'A busca mostra quem está perto, e para isso ela precisa saber onde você fica. Cole o link do seu Google Maps no cadastro da empresa e você entra.'}
             </p>
+            {vitrine.ok && vitrine.dados.ligado && vitrine.dados.listadas === 0 ? (
+              <p className="painel__nota">
+                <a href="/admin/onboarding?e=2">Pôr minha barbearia no mapa</a>
+              </p>
+            ) : null}
           </div>
           {vitrine.ok ? (
             <form action={acaoDefinirVitrine}>

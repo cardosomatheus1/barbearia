@@ -78,6 +78,13 @@ export const businessSchema = z.object({
   state: z.string().trim().optional().transform(vazioApaga)
     .refine((v) => v == null || v.length === 2, 'UF tem duas letras'),
   postalCode: z.string().trim().max(12).optional().transform(vazioApaga),
+  /**
+   * O link do mapa, que é por onde a coordenada entra (bloco 115).
+   *
+   * Vazio apaga, como os vizinhos: quem colou o link errado precisa poder
+   * tirá-lo, e aí a casa volta ao centro da capital.
+   */
+  linkDoMapa: z.string().trim().max(500).optional().transform(vazioApaga),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   /**

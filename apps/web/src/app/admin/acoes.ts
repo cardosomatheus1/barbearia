@@ -334,6 +334,7 @@ export async function acaoEmpresa(form: FormData): Promise<void> {
     phone: texto(form, 'phone'),
     whatsapp: texto(form, 'whatsapp'),
     instagram: texto(form, 'instagram'),
+    linkDoMapa: texto(form, 'linkDoMapa'),
     about: texto(form, 'about'),
     // O fuso vem da unidade, nunca do aparelho de quem visita — é aqui, e só
     // aqui, que ele é escolhido. Vazio nunca: é um `select` com padrão.

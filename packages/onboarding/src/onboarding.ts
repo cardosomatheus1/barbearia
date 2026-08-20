@@ -1,5 +1,6 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
+  resolverCoordenada,
   SERVICE_TEMPLATES,
   validateCombos,
   type ServiceTemplate,
@@ -81,6 +82,9 @@ export interface OnboardingState {
     readonly about: string | null;
     readonly timezone: string;
     readonly amenities: readonly string[];
+    /** O ponto no mapa, para a tela dizer se a casa aparece na busca. */
+    readonly latitude: number | null;
+    readonly longitude: number | null;
   };
   readonly counts: {
     readonly services: number;
@@ -121,6 +125,8 @@ export async function getOnboardingState(
         about: string | null;
         timezone: string;
         amenities: string[];
+        latitude: string | null;
+        longitude: string | null;
         services: bigint;
         professionals: bigint;
         schedules: bigint;
@@ -130,6 +136,7 @@ export async function getOnboardingState(
              s.slug, l.id AS location_id,
              l.street, l.district, l.city, l.state, l.postal_code,
              l.phone_e164, l.whatsapp_e164, l.about, l.timezone, l.amenities,
+             l.latitude, l.longitude,
              (SELECT count(*) FROM services WHERE active) AS services,
              (SELECT count(*) FROM professionals WHERE active AND kind = 'professional')
                AS professionals,
@@ -164,6 +171,8 @@ export async function getOnboardingState(
         about: linha.about,
         timezone: linha.timezone,
         amenities: linha.amenities,
+        latitude: linha.latitude === null ? null : Number(linha.latitude),
+        longitude: linha.longitude === null ? null : Number(linha.longitude),
       },
       counts: {
         services: Number(linha.services),
@@ -213,6 +222,31 @@ async function recusarSeJaPublicada(tx: TransactionClient, onde: string): Promis
   }
 }
 
+/**
+ * Qual coordenada gravar, e quando não mexer na que está lá.
+ *
+ * A ordem é a da precisão: o número explícito, o link colado, o centro da
+ * capital. Nenhum dos três presente devolve `undefined` nos dois campos — que é
+ * "não mexa", e não "apague": corrigir o telefone não pode tirar a barbearia do
+ * mapa.
+ */
+function coordenadaParaGravar(input: BusinessInput): {
+  readonly latitude: number | null | undefined;
+  readonly longitude: number | null | undefined;
+} {
+  if (input.latitude !== undefined || input.longitude !== undefined) {
+    return { latitude: input.latitude, longitude: input.longitude };
+  }
+
+  const resolvida = resolverCoordenada({
+    ...(input.linkDoMapa !== undefined ? { linkDoMapa: input.linkDoMapa } : {}),
+    ...(input.state !== undefined ? { estado: input.state } : {}),
+  });
+  if (!resolvida) return { latitude: undefined, longitude: undefined };
+
+  return { latitude: resolvida.latitude, longitude: resolvida.longitude };
+}
+
 // -- Etapa 2: empresa --------------------------------------------------------
 
 export interface BusinessInput {
@@ -242,6 +276,15 @@ export interface BusinessInput {
   readonly postalCode?: string | null;
   readonly latitude?: number | null;
   readonly longitude?: number | null;
+  /**
+   * O link do mapa que a pessoa colou (bloco 115).
+   *
+   * É por aqui que a coordenada entra no produto: latitude e longitude cruas
+   * são campo que ninguém preenche, e um provedor de geocodificação exige conta
+   * contratada. Todo mundo sabe achar a própria barbearia no Google Maps e
+   * copiar o endereço da barra — e ele já carrega o ponto.
+   */
+  readonly linkDoMapa?: string | null;
   readonly phone?: string | null;
   readonly whatsapp?: string | null;
   readonly instagram?: string | null;
@@ -292,6 +335,18 @@ export async function saveBusiness(input: BusinessInput): Promise<{ slug: string
      * torna segura é o formulário passar a vir preenchido — sem isso, abrir a
      * tela já era desmarcar tudo.
      */
+    /**
+     * A coordenada sai do link colado, ou do centro da capital.
+     *
+     * Resolvida **dentro** da transação que grava o endereço: fora dela, a
+     * unidade ficaria um instante com UF nova e ponto antigo, e a vitrine —
+     * atualizada logo em seguida pelo controller — copiaria o par errado.
+     *
+     * Latitude e longitude explícitas ainda vencem, para quem já as tem; a
+     * ausência das três preserva o que está lá, como todo campo desta função.
+     */
+    const daCoordenada = coordenadaParaGravar(input);
+
     const afetadas = await tx.$executeRaw`
       UPDATE locations SET
         name = ${input.name},
@@ -305,10 +360,10 @@ export async function saveBusiness(input: BusinessInput): Promise<{ slug: string
                     THEN state ELSE ${input.state ?? null} END,
         postal_code = CASE WHEN ${input.postalCode === undefined}::boolean
                     THEN postal_code ELSE ${input.postalCode ?? null} END,
-        latitude = CASE WHEN ${input.latitude === undefined}::boolean
-                    THEN latitude ELSE ${input.latitude ?? null} END,
-        longitude = CASE WHEN ${input.longitude === undefined}::boolean
-                    THEN longitude ELSE ${input.longitude ?? null} END,
+        latitude = CASE WHEN ${daCoordenada.latitude === undefined}::boolean
+                    THEN latitude ELSE ${daCoordenada.latitude ?? null} END,
+        longitude = CASE WHEN ${daCoordenada.longitude === undefined}::boolean
+                    THEN longitude ELSE ${daCoordenada.longitude ?? null} END,
         phone_e164 = CASE WHEN ${input.phone === undefined}::boolean
                     THEN phone_e164 ELSE ${input.phone ?? null} END,
         whatsapp_e164 = CASE WHEN ${input.whatsapp === undefined}::boolean

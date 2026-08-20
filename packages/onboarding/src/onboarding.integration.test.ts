@@ -330,6 +330,82 @@ describeIfDb('onboarding', () => {
     expect(Number(vivos[0]?.n)).toBe(templates.length);
   });
 
+  it('o link do mapa colado vira a coordenada que põe a casa na busca', async () => {
+    /**
+     * O bloco 115 fecha a lacuna que tornava o marketplace inalcançável:
+     * `atualizarVitrine` delista quem não tem coordenada, `saveBusiness` era o
+     * único caminho que a escrevia, e o formulário não tinha o campo. A casa
+     * lia "sua barbearia aparece na busca" enquanto `/buscar` respondia
+     * "nenhuma barbearia publicada ainda".
+     *
+     * Latitude crua seria campo que ninguém preenche; geocodificar exige conta
+     * contratada. Colar o link do mapa todo mundo sabe fazer.
+     */
+    const { tenantId } = await percorrer();
+    const local = (await getOnboardingState(tenantId))!.locationId;
+
+    await saveBusiness({
+      tenantId,
+      locationId: local,
+      name: 'Domari Barber Club',
+      linkDoMapa: 'https://www.google.com/maps/place/Domari/@-12.9850,-38.4720,17z/data=!3m1',
+    });
+
+    const depois = await admin.$queryRawUnsafe<{ latitude: string; longitude: string }[]>(
+      `SELECT latitude, longitude FROM locations WHERE id = '${local}'`,
+    );
+    expect(Number(depois[0]?.latitude)).toBeCloseTo(-12.985, 4);
+    expect(Number(depois[0]?.longitude)).toBeCloseTo(-38.472, 4);
+  });
+
+  it('sem link, a UF põe a casa no centro da capital — e sem UF ela fica de fora', async () => {
+    /**
+     * O centro da capital serve à busca por cidade, não à navegação: quem
+     * procura barbearia em Recife encontra a de Recife. Sem UF nenhuma, a casa
+     * fica **sem** coordenada de propósito — um ponto chutado a poria no mapa
+     * no lugar errado, e quem busca por raio receberia o que não serve.
+     */
+    const conta = await cadastrar({ ...CONTA, email: 'semlink@teste.com.br' });
+    const local = (await getOnboardingState(conta.tenantId))!.locationId;
+
+    await saveBusiness({
+      tenantId: conta.tenantId, locationId: local, name: 'Sem Link', state: 'PE',
+    });
+    const comUf = await admin.$queryRawUnsafe<{ latitude: string | null }[]>(
+      `SELECT latitude FROM locations WHERE id = '${local}'`,
+    );
+    expect(Number(comUf[0]?.latitude)).toBeCloseTo(-8.0476, 3);
+
+    const outra = await cadastrar({ ...CONTA, email: 'semuf@teste.com.br' });
+    const dela = (await getOnboardingState(outra.tenantId))!.locationId;
+    await saveBusiness({ tenantId: outra.tenantId, locationId: dela, name: 'Sem UF' });
+    const semUf = await admin.$queryRawUnsafe<{ latitude: string | null }[]>(
+      `SELECT latitude FROM locations WHERE id = '${dela}'`,
+    );
+    expect(semUf[0]?.latitude).toBeNull();
+  });
+
+  it('corrigir o telefone não tira a barbearia do mapa', async () => {
+    // A coordenada segue a regra dos vizinhos: ausente é "não mexa". Um `?? null`
+    // aqui faria uma edição sem relação apagar o ponto e delistar a casa da
+    // busca, em silêncio.
+    const { tenantId } = await percorrer();
+    const local = (await getOnboardingState(tenantId))!.locationId;
+
+    await saveBusiness({
+      tenantId, locationId: local, name: 'Domari Barber Club',
+      linkDoMapa: 'https://www.google.com/maps/@-12.9850,-38.4720,17z',
+    });
+    await saveBusiness({
+      tenantId, locationId: local, name: 'Domari Barber Club', phone: '+557133334444',
+    });
+
+    const depois = await admin.$queryRawUnsafe<{ latitude: string | null }[]>(
+      `SELECT latitude FROM locations WHERE id = '${local}'`,
+    );
+    expect(Number(depois[0]?.latitude)).toBeCloseTo(-12.985, 4);
+  });
+
   it('renomear a barbearia não quebra o link antigo', async () => {
     // O concorrente trocou Box Seis por Domari e o slug antigo continua
     // resolvendo. É a única coisa que ele acertou e que não se pode perder.

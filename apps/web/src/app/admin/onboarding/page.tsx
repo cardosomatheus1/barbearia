@@ -91,6 +91,28 @@ export default async function OnboardingPage({ searchParams }: Props) {
   const empresa = estado.dados.empresa;
 
   /**
+   * O que a tela diz sobre o ponto que a casa tem hoje.
+   *
+   * Três estados, e o terceiro é o que faltava: sem coordenada a barbearia
+   * **não entra** na busca, e ela precisa saber disso aqui — não descobrir pelo
+   * telefone que não toca.
+   */
+  const mapa =
+    empresa.latitude === null || empresa.longitude === null
+      ? {
+          link: '',
+          frase:
+            'Sua barbearia ainda não está no mapa, e por isso não aparece na busca. Abra sua ' +
+            'barbearia no Google Maps, copie o endereço da barra e cole aqui.',
+        }
+      : {
+          link: `https://www.google.com/maps/@${empresa.latitude},${empresa.longitude},17z`,
+          frase:
+            'Sua barbearia está no mapa e aparece na busca. Para mudar o ponto, cole aqui o ' +
+            'endereço novo do Google Maps.',
+        };
+
+  /**
    * Depois de a casa abrir, as etapas 3 e 4 não desenham formulário.
    *
    * Elas **substituem** o catálogo e a equipe inteiros — certo para quem está
@@ -223,6 +245,37 @@ export default async function OnboardingPage({ searchParams }: Props) {
                      name="whatsapp" placeholder="(71) 99999-0000" type="tel" />
             </div>
           </div>
+          {/*
+            O link do mapa — por onde a coordenada entra no produto (bloco 115).
+
+            Sem ela `atualizarVitrine` delista a unidade, e a barbearia nunca
+            aparecia na busca: Configurações dizia "sua barbearia aparece na
+            busca" e `/buscar` respondia "nenhuma barbearia publicada ainda",
+            culpando a casa por algo que ela já tinha feito.
+
+            Um campo de latitude seria campo que ninguém preenche; um provedor
+            de geocodificação exige conta contratada. Colar o link do mapa todo
+            mundo sabe fazer, e o endereço da barra já carrega o ponto.
+          */}
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="linkDoMapa">
+              Link do mapa <span className="ui-field__hint">(opcional)</span>
+            </label>
+            <input className="ui-field__input" id="linkDoMapa" name="linkDoMapa" maxLength={500}
+                   defaultValue={mapa.link}
+                   placeholder="https://www.google.com/maps/place/..." />
+            {/*
+              * A frase inteira sai do estado, e não uma parte dela.
+              *
+              * A primeira versão emendava o estado com a instrução fixa, e para
+              * quem já estava no mapa saía "Sua barbearia está no mapa. Abra sua
+              * barbearia no Google Maps, copie o endereço e cole aqui" — a tela
+              * dizendo que está pronto e mandando fazer, na mesma linha (§6,
+              * pergunta 6, entre duas metades da mesma frase).
+              */}
+            <p className="ui-field__hint">{mapa.frase}</p>
+          </div>
+
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="instagram">Instagram</label>
             <input className="ui-field__input" id="instagram" name="instagram" maxLength={80}

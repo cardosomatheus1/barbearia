@@ -72,3 +72,4 @@ export * from './fusos.js';
 export * from './compartilhado.js';
 export * from './multiunidade.js';
 export * from './slug.js';
+export * from './geo.js';
