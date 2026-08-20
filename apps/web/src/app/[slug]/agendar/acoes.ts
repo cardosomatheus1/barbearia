@@ -63,11 +63,14 @@ export async function criarAgendamento(form: FormData): Promise<void> {
      *
      * `?erro=score_no_pico` fica no histórico do navegador, no autocompletar e
      * em qualquer referrer que a página gere — uma frase visível dizendo que um
-     * *score* julgou a pessoa numa hora de *pico*. O número não vazava; a
-     * existência do julgamento vazava, no único lugar em que o código teve o
-     * cuidado de não pô-lo. Achado da `/security-review` do bloco 60.
+     * *score* julgou a pessoa numa hora de *pico*.
+     *
+     * A troca deixou de morar aqui: ela vale para **toda** superfície da API,
+     * e não só para a que passa por esta tela. A API já entrega `so_recepcao`
+     * (`apps/api/src/common/booking-http.ts`), e repetir a regra nesta linha
+     * seria a segunda cópia dela — que é como uma das duas fica para trás.
      */
-    retorno.set('erro', resultado.code === 'score_no_pico' ? 'so_recepcao' : resultado.code);
+    retorno.set('erro', resultado.code);
     redirect(`/${slug}/agendar?${retorno.toString()}`);
   }
 

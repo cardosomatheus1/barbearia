@@ -80,6 +80,21 @@ describeIfDb('destaque pago na busca', () => {
       INSERT INTO platform_admins (id, email_key, name, password_hash, role)
       VALUES ('${ADMIN}', 'super-75', 'Super', 'x', 'operator')
     `);
+
+    /**
+     * As duas casas entram na vitrine antes de qualquer venda.
+     *
+     * O destaque casa com o resultado por `JOIN marketplace_listings`, e desde
+     * o bloco 116 o domínio recusa vender para quem a busca não desenha —
+     * fatura emitida com card invisível queima o lugar exclusivo da cidade sem
+     * nada ficar vermelho.
+     *
+     * A semente precisa satisfazer **tudo menos** a regra sob teste: sem estas
+     * duas linhas, os casos de escassez e de cancelamento passariam a falhar
+     * por uma precondição que não é o assunto deles.
+     */
+    await atualizarVitrine({ tenantId: CASA, locationId: LOCAL, agora: DENTRO });
+    await atualizarVitrine({ tenantId: VIZINHA, locationId: LOCAL_VIZINHA, agora: DENTRO });
   }, 30_000);
 
   it('vender um destaque emite fatura própria com o preço do período', async () => {
@@ -196,6 +211,44 @@ describeIfDb('destaque pago na busca', () => {
       adminId: ADMIN, tenantId: VIZINHA, locationId: LOCAL_VIZINHA, lugar: 1, de: DE, ate: ATE,
     });
     expect(outro.id).toBeTruthy();
+  });
+
+  it('não se vende destaque para unidade que a busca não desenha', async () => {
+    /**
+     * O card patrocinado casa com o resultado por `JOIN marketplace_listings`.
+     * Vender para uma unidade sem linha de vitrine produz o pior desfecho deste
+     * módulo: a fatura é emitida, o lugar exclusivo da cidade é consumido pela
+     * constraint de exclusão, e o card **nunca aparece**. Nada fica vermelho —
+     * a venda responde 201, a trilha registra, o painel mostra `ativo`, e o
+     * concorrente que quisesse aquele lugar leva 409 por um anúncio invisível.
+     *
+     * Duas coisas tiram a unidade da vitrine e a guarda cobre as duas: a
+     * barbearia sair da busca, e a unidade não ser a que `/{slug}` desenha —
+     * desde que a vitrine passou a publicar uma loja só, para o card e a página
+     * concordarem.
+     */
+    await semTenant(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `DELETE FROM marketplace_listings WHERE location_id = '${LOCAL}'`,
+      );
+    });
+
+    await expect(
+      venderDestaque({
+        adminId: ADMIN, tenantId: CASA, locationId: LOCAL, lugar: 1, de: DE, ate: ATE,
+      }),
+    ).rejects.toThrow(/não aparece na busca/);
+
+    // Nem fatura, nem lugar ocupado: a recusa é antes das duas gravações.
+    const faturas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM invoices WHERE kind = 'ad'`,
+    );
+    expect(Number(faturas[0]?.n)).toBe(0);
+
+    const anuncios = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM marketplace_ads`,
+    );
+    expect(Number(anuncios[0]?.n)).toBe(0);
   });
 
   it('o lugar fora da faixa é recusado antes de qualquer ida ao banco', async () => {

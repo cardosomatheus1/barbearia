@@ -11,7 +11,6 @@ import {
 import {
   applyAttendance,
   BoardError,
-  BookingError,
   createAppointment,
   findCustomer,
   getAvailabilityRange,
@@ -24,6 +23,7 @@ import { pode, type AttendanceAction } from '@barbearia/core';
 import { OtpError, resolveGuestCustomer, type AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { traduzirReserva } from '../common/booking-http.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { appointmentIdSchema } from '../booking/booking.schemas.js';
@@ -44,19 +44,11 @@ const BOARD_STATUS: Record<string, number> = {
   slot_taken: 409,
 };
 
-const BOOKING_STATUS: Record<string, number> = {
-  unknown_location: 404,
-  slot_not_available: 409,
-  slot_taken: 409,
-};
-
 function toHttp(error: unknown): never {
   if (error instanceof BoardError) {
     throw new DomainError(error.code, BOARD_STATUS[error.code] ?? 400, error.message);
   }
-  if (error instanceof BookingError) {
-    throw new DomainError(error.code, BOOKING_STATUS[error.code] ?? 400, error.message);
-  }
+  traduzirReserva(error);
   if (error instanceof OtpError) {
     throw new DomainError(error.code, error.code === 'invalid_phone' ? 400 : 401, error.message);
   }

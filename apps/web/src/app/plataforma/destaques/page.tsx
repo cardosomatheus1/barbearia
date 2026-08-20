@@ -45,6 +45,14 @@ const FALHA: Record<string, string> = {
   slot_taken: 'Este lugar já está vendido para o período escolhido. A escassez é o produto: escolha outro lugar, outra cidade ou outro período.',
   invalid_period: 'O período precisa começar antes de terminar.',
   invalid_slot: 'Este lugar não existe.',
+  /*
+   * As duas recusas de unidade pedem coisas diferentes, e por isso têm códigos
+   * diferentes. Sem estas duas linhas as duas caíam em "tente de novo", que é a
+   * única resposta que nunca vai funcionar — o mapa parcial virando caixa de
+   * erro errada, com a chave larga escondendo a falta.
+   */
+  unknown_location: 'Falta cidade e estado no cadastro desta unidade. Complete o cadastro e volte aqui.',
+  fora_da_busca: 'Esta unidade não aparece na busca, então o card não renderizaria — a fatura sairia e o lugar da cidade ficaria ocupado por um anúncio invisível. Publique a barbearia na busca primeiro.',
   unknown_tenant: 'Esta barbearia não existe mais.',
   unknown_ad: 'Este destaque não existe mais.',
   already_in_franchise: 'Esta barbearia já está em uma rede. Tire dela primeiro.',

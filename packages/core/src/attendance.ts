@@ -33,6 +33,39 @@ export const STATUSES = [
 export type AppointmentStatus = (typeof STATUSES)[number];
 
 /**
+ * Os quatro estados em que o horário **devolve a cadeira**.
+ *
+ * São exatamente os que a constraint `appointments_no_overlap` exclui do
+ * `EXCLUDE USING gist`: cancelado pelo cliente, cancelado pela casa, falta e
+ * remarcado. Todo o resto — inclusive `waiting`, que é quem foi chamado e ainda
+ * não sentou — segura o horário e conta como ocupação.
+ */
+export const ESTADOS_QUE_LIBERAM_A_AGENDA = [
+  'cancelled_customer',
+  'cancelled_business',
+  'no_show',
+  'rescheduled',
+] as const;
+
+/**
+ * Os estados que ocupam a agenda, **derivados** e não escritos.
+ *
+ * Três consultas de `ocupacao.ts` escreviam esta lista à mão e as três
+ * esqueceram `waiting`: a ocupação medida saía menor que a real justamente na
+ * hora cheia, que é onde ela decide se o cliente paga sinal e se o preço sobe.
+ * Escrita quatro vezes, a lista divergiu — que é o que este código já pagou com
+ * `secoes.ts`, com os rótulos de campanha e com o estado que ocupa uma venda.
+ *
+ * Derivar do complemento também amarra o dia em que o enum crescer: um estado
+ * novo entra ocupando, que é o padrão seguro — contar a mais numa ocupação faz
+ * a casa parecer cheia, contar a menos faz o produto deixar de cobrar sinal e
+ * de sugerir preço num sábado lotado.
+ */
+export const ESTADOS_QUE_OCUPAM_A_AGENDA: readonly AppointmentStatus[] = STATUSES.filter(
+  (estado) => !(ESTADOS_QUE_LIBERAM_A_AGENDA as readonly string[]).includes(estado),
+);
+
+/**
  * Os tipos de cadeira, iguais ao enum `professional_kind` do banco.
  *
  * A borda aceitava `station` e `room`, que não existem no enum: escolher

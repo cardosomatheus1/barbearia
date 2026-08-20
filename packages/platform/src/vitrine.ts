@@ -395,25 +395,55 @@ export async function atualizarVitrine(params: {
 }
 
 /**
- * Refaz a vitrine de **todas** as unidades de uma barbearia.
+ * Refaz a vitrine de uma barbearia — a unidade que a página pública desenha.
  *
  * É o que os caminhos de escrita chamam: quem publica ou edita o cadastro não
  * sabe — e não deve saber — quantas lojas a rede tem.
+ *
+ * ## Uma loja, porque `/{slug}` desenha uma
+ *
+ * `marketplace_listings` é por unidade e a tabela continua assim: ela está
+ * pronta para o dia em que a página pública souber desenhar uma loja escolhida.
+ * Hoje `getPublicProfile` faz `ORDER BY created_at LIMIT 1`, e publicar as
+ * outras produzia o card mais caro que este produto pode emitir — o nome da
+ * rede, a coordenada da filial de Feira de Santana e um link que abre a página
+ * com o endereço, o telefone e a grade de Salvador.
+ *
+ * Quem clicasse marcaria uma cadeira na cidade errada e culparia a barbearia.
+ * Não aparecer na busca é ruim; aparecer prometendo o que a página não entrega
+ * é pior, e é a regra do card que não pode falar de outro serviço.
+ *
+ * A varredura delista o que sobrou: uma rede que publicou antes desta linha
+ * tinha N cards, e deixar N-1 vivos seria o mesmo defeito com prazo de validade
+ * indefinido.
  */
 export async function atualizarVitrineDaCasa(
   tenantId: string,
   agora: Date = new Date(),
 ): Promise<number> {
   const unidades = await withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM locations`;
+    const linhas = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM locations ORDER BY created_at
+    `;
     return linhas.map((l) => l.id);
   });
 
-  let vivas = 0;
-  for (const locationId of unidades) {
-    if (await atualizarVitrine({ tenantId, locationId, agora })) vivas += 1;
+  const [naPagina, ...asOutras] = unidades;
+  if (naPagina === undefined) return 0;
+
+  const viva = await atualizarVitrine({ tenantId, locationId: naPagina, agora });
+
+  for (const locationId of asOutras) {
+    await withTenant(tenantId, async (tx) => {
+      await tx.$executeRaw`
+        DELETE FROM marketplace_listings
+         WHERE location_id = ${locationId}::uuid
+           AND tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+      `;
+    });
   }
-  return vivas;
+
+  return viva ? 1 : 0;
 }
 
 /**

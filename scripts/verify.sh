@@ -194,6 +194,10 @@ lancar "@Param com pipe" npx vitest run scripts/param-com-pipe.test.mjs
 # Métrica no catálogo que ninguém calcula responde "—" para sempre, e o link
 # "conferir na tela" precisa levar a uma tela que mostre o número.
 lancar "métrica com resposta" npx vitest run scripts/metrica-com-resposta.test.mjs
+# `professionals` guarda balcao, sala e quem atende fora junto de quem atende.
+# Contados como cadeira, o denominador da ocupacao cresce e a hora cheia deixa
+# de parecer cheia -- e e ela que decide sinal, preco de pico e hora fria.
+lancar "capacidade com tipo de cadeira" npx vitest run scripts/cadeira-com-tipo.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
 # nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.

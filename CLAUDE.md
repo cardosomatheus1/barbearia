@@ -1182,6 +1182,18 @@ repositório, nesta máquina.
   o que mais estava rodando — e a resposta certa é repetir com a máquina livre,
   não anotar "provavelmente foi contenção" e seguir.
 
+- **Deixar o piloto de pé durante `pnpm verify`.** Cada pacote cria e destrói o
+  próprio banco descartável no **mesmo** Postgres, e o portão roda as suítes em
+  paralelo. Com a API e o web do piloto segurando conexões, seis pacotes
+  falharam de uma vez com `Database "barbearia_<pacote>_test" does not exist` —
+  que lê como catástrofe de código e é contenção de ambiente. A repetição com
+  `fuser -k 3010/tcp && fuser -k 3011/tcp` antes deu verde no mesmo commit.
+
+  É a mesma lição da carga, com outro sintoma: **falha de infraestrutura que
+  parece defeito** custa a mesma hora que número inventado. Antes de investigar
+  um erro de banco que aparece em muitos pacotes ao mesmo tempo, derrube o que
+  estiver falando com o Postgres e rode de novo.
+
 O portão está em ~90s (era ~208s). Como se chegou lá, e o que a medição
 desmentiu, está no cabeçalho de `scripts/verify.sh` — vale ler antes de tentar
 otimizar de novo, porque o palpite mais óbvio (trocar as migrações por

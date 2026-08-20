@@ -1474,7 +1474,20 @@ export async function listCustomerAppointments(params: {
         canCancel: cancel?.allowed ?? false,
         canReschedule: reschedule?.allowed ?? false,
         blockedReason: refused && !refused.allowed ? refused.refusal : null,
-        minHoursToChange: row.cancel_min_hours,
+        /**
+         * O prazo é o **da recusa que apareceu**, não o de cancelar sempre.
+         *
+         * A tela escreve "só até N horas antes" ao lado de `blockedReason`, e a
+         * recusa pode vir da janela de remarcação — que a barbearia costuma
+         * deixar mais folgada, porque remarcar preserva a receita e cancelar
+         * não. Citando o prazo de cancelar, o cliente lia "remarque com até 2
+         * horas" numa casa que exige 6, tentava às 3 e era recusado de novo.
+         *
+         * `canReschedule` já devolve o próprio `minHours`; ele estava sendo
+         * descartado.
+         */
+        minHoursToChange:
+          refused && !refused.allowed ? refused.minHours : row.cancel_min_hours,
       };
     });
   });

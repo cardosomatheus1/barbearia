@@ -108,6 +108,49 @@ export async function venderDestaque(entrada: {
     throw new PlataformaError('unknown_location', 'A unidade precisa de cidade e estado no cadastro');
   }
 
+  /**
+   * Não se vende destaque para quem a busca não desenha.
+   *
+   * O card patrocinado casa com o resultado por `JOIN marketplace_listings`
+   * (`destaquesDaCidade`), então uma unidade sem linha de vitrine produz o pior
+   * desfecho que este módulo tem: a fatura é emitida, o lugar exclusivo da
+   * cidade é consumido pela constraint, e o card **nunca aparece**. Nada fica
+   * vermelho — a venda responde 201, a trilha registra, o painel mostra
+   * `ativo`, e só a busca não o desenha. O concorrente que quisesse aquele
+   * lugar leva 409 por um anúncio invisível.
+   *
+   * Duas coisas tiram a unidade da vitrine, e a guarda cobre as duas: a
+   * barbearia saiu da busca (ou nunca entrou, ou ficou sem coordenada), e a
+   * unidade não é a que `/{slug}` desenha — desde que a vitrine passou a
+   * publicar uma loja só, porque o card e a página precisam concordar.
+   *
+   * A pergunta é feita à **linha da vitrine**, e não a uma segunda regra do
+   * tipo "a mais antiga": duas noções de "quem aparece na busca" divergiriam no
+   * primeiro bloco que mexesse numa delas.
+   */
+  const naVitrine = await semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*)::bigint AS n FROM marketplace_listings
+       WHERE location_id = ${unidade.id}::uuid
+         AND tenant_id = ${entrada.tenantId}::uuid
+    `;
+    return Number(linhas[0]?.n ?? 0) > 0;
+  });
+  if (!naVitrine) {
+    /**
+     * Código próprio, e não `unknown_location`.
+     *
+     * As duas recusas pedem coisas diferentes de quem opera: uma manda
+     * completar cidade e estado no cadastro, a outra manda publicar a barbearia
+     * na busca. Compartilhando o código, a tela teria uma frase só para as duas
+     * e mandaria fazer a coisa errada em metade dos casos.
+     */
+    throw new PlataformaError(
+      'fora_da_busca',
+      'Esta unidade não aparece na busca — publique a barbearia antes de vender destaque',
+    );
+  }
+
   return semTenant(async (tx) => {
     const planos = await tx.$queryRaw<{ plan_code: string }[]>`
       SELECT plan_code FROM subscriptions WHERE tenant_id = ${entrada.tenantId}::uuid

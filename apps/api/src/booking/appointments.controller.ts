@@ -12,8 +12,6 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import {
-  BookingError,
-  BookingRecusadoPorScore,
   bookingPolicy,
   cancelAppointment,
   createAppointment,
@@ -32,6 +30,7 @@ import {
   type AuthenticatedCustomer,
 } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
+import { traduzirReserva } from '../common/booking-http.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Customer, CustomerGuard, TenantId } from '../auth/customer.guard.js';
 import { TenantService } from '../tenant/tenant.service.js';
@@ -42,43 +41,13 @@ import {
 } from '../auth/auth.schemas.js';
 import { appointmentIdSchema, rescheduleRangeSchema, slugSchema } from './booking.schemas.js';
 
-const BOOKING_STATUS: Record<string, number> = {
-  unknown_location: 404,
-  slot_not_available: 409,
-  slot_taken: 409,
-  appointment_not_found: 404,
-  appointment_not_active: 409,
-  hold_expired: 409,
-  // 409, não 403: a regra é sobre o estado do agendamento no tempo, não sobre
-  // quem está pedindo. O mesmo cliente podia ontem e não pode agora.
-  too_late: 409,
-  too_many_reschedules: 409,
-  already_started: 409,
-};
-
 const OTP_STATUS: Record<string, number> = {
   invalid_phone: 400,
   invalid_session: 401,
 };
 
 function toHttp(error: unknown): never {
-  /**
-   * 409, e não 403 (bloco 60).
-   *
-   * 403 é "você não tem acesso a isto", e a pessoa **tem**: ela pode ser
-   * atendida, pelo balcão, naquela mesma hora. O que não cabe é marcar sozinha
-   * numa hora cheia — um conflito com o estado, que é o que 409 diz.
-   *
-   * E a mensagem nunca cita score: ele é interno por regra da SPEC §2.13, e
-   * "seu score é 32" no navegador do cliente é o constrangimento que a regra 5
-   * existe para impedir.
-   */
-  if (error instanceof BookingRecusadoPorScore) {
-    throw new DomainError(error.code, 409, error.message);
-  }
-  if (error instanceof BookingError) {
-    throw new DomainError(error.code, BOOKING_STATUS[error.code] ?? 400, error.message);
-  }
+  traduzirReserva(error);
   if (error instanceof OtpError) {
     throw new DomainError(error.code, OTP_STATUS[error.code] ?? 400, error.message);
   }

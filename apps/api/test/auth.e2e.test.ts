@@ -577,6 +577,47 @@ describeIfDb('fluxo do cliente', () => {
     expect(item.minHoursToChange).toBe(2);
   });
 
+  it('o prazo citado é o da recusa que apareceu, não sempre o de cancelar', async () => {
+    /**
+     * A tela escreve *"Alterações até N horas antes"* ao lado de
+     * `blockedReason`, e o N vinha sempre de `cancel_min_hours`. A recusa pode
+     * ser da janela de **remarcação**, que a barbearia costuma deixar mais
+     * folgada — remarcar preserva a receita, cancelar não.
+     *
+     * Com 2 horas para cancelar e 6 para remarcar, um horário a 3 horas de
+     * distância ainda cancela e já não remarca: a frase dizia "até 2 horas
+     * antes" para quem estava a 3 e acabara de ser recusado. `canReschedule` já
+     * devolvia o próprio prazo; ele estava sendo descartado.
+     */
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET cancel_min_hours = 2, reschedule_min_hours = 6
+        WHERE id = '${LOCATION}'`,
+    );
+
+    const token = await login(CARLOS);
+    const criado = await agendar(token).expect(201);
+    await aproximar(criado.body.id, 180);
+
+    const lista = await http()
+      .get('/v1/b/domari/appointments')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const item = lista.body.appointments.find(
+      (a: { id: string }) => a.id === criado.body.id,
+    );
+
+    expect(item.canCancel).toBe(true);
+    expect(item.canReschedule).toBe(false);
+    expect(item.blockedReason).toBe('too_late');
+    expect(item.minHoursToChange).toBe(6);
+
+    await admin.$executeRawUnsafe(
+      `UPDATE locations SET cancel_min_hours = 2, reschedule_min_hours = 2
+        WHERE id = '${LOCATION}'`,
+    );
+  });
+
   it('a lista libera os botões quando há folga', async () => {
     const token = await login(CARLOS);
     const criado = await agendar(token).expect(201);

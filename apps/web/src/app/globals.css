@@ -1996,6 +1996,31 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
 .saldo-fidelidade__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .saldo-fidelidade__ajuste { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
 
+/*
+ * Os bolsos por loja, quando o programa vale só onde foi ganho.
+ *
+ * Lista e nao tabela: sao duas ou tres linhas, e uma tabela de duas colunas com
+ * cabecalho ocupa a altura que o celular nao tem. O nome cresce e o numero fica
+ * grudado nele -- `min-width: 0` no primeiro para o nome comprido nao empurrar o
+ * numero para fora, que e o piso `min-content` do bloco 82.
+ */
+.saldo-fidelidade__lojas {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+}
+.saldo-fidelidade__lojas li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+.saldo-fidelidade__loja { min-width: 0; color: var(--color-text-muted); }
+
 @container (min-width: 34rem) {
   .fidelidade__numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

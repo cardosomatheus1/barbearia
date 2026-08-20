@@ -1,7 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
   AgendaError,
-  BookingError,
   createException,
   deleteException,
   getAgenda,
@@ -13,6 +12,7 @@ import { MOTIVO_DA_FALHA, pode, type FalhaDaExcecao, type TipoDeExcecao } from '
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { traduzirReserva } from '../common/booking-http.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { appointmentIdSchema } from '../booking/booking.schemas.js';
@@ -70,9 +70,7 @@ function toHttp(error: unknown): never {
       error.detail,
     );
   }
-  if (error instanceof BookingError) {
-    throw new DomainError(error.code, STATUS[error.code] ?? 400, error.message);
-  }
+  traduzirReserva(error);
   throw error;
 }
 

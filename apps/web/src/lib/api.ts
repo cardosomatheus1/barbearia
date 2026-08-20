@@ -357,6 +357,17 @@ export interface MeuSaldoDeFidelidade {
   modo: 'nenhum' | 'pontos' | 'visitas' | 'cashback';
   saldo: number;
   faltaParaPremio: number | null;
+  /** Quanto do saldo vale em qualquer loja. Igual a `saldo` sob `empresa`. */
+  saldoCompartilhado: number;
+  /**
+   * O bolso de cada loja, quando o programa é por unidade.
+   *
+   * `saldo` é tudo o que a pessoa tem; esta lista diz **onde cada parte vale**,
+   * e é ela que impede o resgate que a comanda recusaria. Vem vazia sob
+   * `empresa`, e vazia também quando há um bolso só — ali repetiria o número de
+   * cima. Com `saldoCompartilhado` na frente, a lista soma o total.
+   */
+  porUnidade: { unidadeId: string; unidade: string; saldo: number }[];
   extrato: {
     id: string;
     tipo: 'acumulo' | 'resgate' | 'expiracao' | 'ajuste';

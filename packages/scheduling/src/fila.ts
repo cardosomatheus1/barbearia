@@ -812,61 +812,81 @@ export interface MinhaPosicao {
   readonly professionalName: string | null;
 }
 
+/**
+ * A unidade sai **da entrada**, nunca da unidade principal da barbearia.
+ *
+ * A rota chamava `primaryLocation(tenantId)` e montava a fila da matriz. Numa
+ * rede, quem entrou na fila da filial não aparecia nela: o link dizia *"Seu
+ * atendimento já foi encerrado"* para quem estava sentado esperando, porque a
+ * entrada existia e a fila carregada era outra. A pior forma do defeito — a
+ * tela não some, ela mente.
+ *
+ * O token é a credencial e ele já sabe onde a pessoa está: `queue_entries` tem
+ * `location_id` desde que a fila existe. Perguntar a ele em vez de adivinhar
+ * tira a rota inteira do alcance de `primaryLocation`, que é o defeito do
+ * bloco 58 aparecendo pela porta pública.
+ */
 export async function queuePositionByToken(params: {
   readonly tenantId: string;
-  readonly locationId: string;
-  readonly timezone: string;
   readonly token: string;
   readonly now?: Date;
 }): Promise<MinhaPosicao | null> {
   const now = params.now ?? new Date();
   const hash = hashDoToken(params.token);
 
+  const achada = await withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        id: string;
+        status: QueueStatus;
+        customer_name: string;
+        location_id: string;
+        timezone: string;
+      }[]
+    >`
+      SELECT q.id, q.status, c.name AS customer_name,
+             q.location_id, l.timezone
+        FROM queue_entries q
+        JOIN customers c ON c.id = q.customer_id
+        JOIN locations l ON l.id = q.location_id
+       WHERE q.public_token_hash = ${hash}
+    `;
+    return linhas[0] ?? null;
+  });
+  if (!achada) return null;
+
   const fila = await getQueue({
     tenantId: params.tenantId,
-    locationId: params.locationId,
-    timezone: params.timezone,
+    locationId: achada.location_id,
+    timezone: achada.timezone,
     now,
   });
 
-  return withTenant(params.tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<
-      { id: string; status: QueueStatus; customer_name: string }[]
-    >`
-      SELECT q.id, q.status, c.name AS customer_name
-        FROM queue_entries q
-        JOIN customers c ON c.id = q.customer_id
-       WHERE q.public_token_hash = ${hash}
-    `;
-    const minha = linhas[0];
-    if (!minha) return null;
-
-    const naFila = fila.entries.find((entrada) => entrada.id === minha.id);
-    if (!naFila) {
-      // Já saiu da fila — sentou, terminou ou desistiu. A página diz isso em
-      // vez de sumir: link que dá 404 depois de funcionar parece defeito.
-      return {
-        posicao: 0,
-        status: minha.status,
-        esperaMinutos: null,
-        frase:
-          minha.status === 'in_service'
-            ? 'É a sua vez. Pode ir até a cadeira.'
-            : 'Seu atendimento já foi encerrado.',
-        nome: minha.customer_name,
-        services: [],
-        professionalName: null,
-      };
-    }
-
+  const naFila = fila.entries.find((entrada) => entrada.id === achada.id);
+  if (!naFila) {
+    // Já saiu da fila — sentou, terminou ou desistiu. A página diz isso em
+    // vez de sumir: link que dá 404 depois de funcionar parece defeito.
     return {
-      posicao: naFila.posicao,
-      status: naFila.status,
-      esperaMinutos: naFila.esperaMinutos,
-      frase: naFila.frase,
-      nome: naFila.customerName,
-      services: naFila.services,
-      professionalName: naFila.professionalName,
+      posicao: 0,
+      status: achada.status,
+      esperaMinutos: null,
+      frase:
+        achada.status === 'in_service'
+          ? 'É a sua vez. Pode ir até a cadeira.'
+          : 'Seu atendimento já foi encerrado.',
+      nome: achada.customer_name,
+      services: [],
+      professionalName: null,
     };
-  });
+  }
+
+  return {
+    posicao: naFila.posicao,
+    status: naFila.status,
+    esperaMinutos: naFila.esperaMinutos,
+    frase: naFila.frase,
+    nome: naFila.customerName,
+    services: naFila.services,
+    professionalName: naFila.professionalName,
+  };
 }

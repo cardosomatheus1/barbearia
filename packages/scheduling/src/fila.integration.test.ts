@@ -8,7 +8,7 @@ import {
   queuePositionByToken,
   seatQueueEntry,
 } from './fila.js';
-import { applyAttendance } from './dayboard.js';
+import { applyAttendance, primaryLocation } from './dayboard.js';
 
 /**
  * Fila presencial, contra Postgres real.
@@ -25,6 +25,9 @@ const TENANT = '11111111-1111-1111-1111-111111111111';
 const RIVAL = '22222222-2222-2222-2222-222222222222';
 const LOCATION = 'aaaaaaaa-0000-0000-0000-000000000001';
 const LOCAL_RIVAL = 'aaaaaaaa-0000-0000-0000-000000000002';
+/** A segunda loja da **mesma** barbearia, criada depois — a filial. */
+const FILIAL = 'aaaaaaaa-0000-0000-0000-000000000003';
+const BRUNO = 'bbbbbbbb-0000-0000-0000-000000000003';
 const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
 const GLEIDSON = 'bbbbbbbb-0000-0000-0000-000000000002';
 const CABELO = 'eeeeeeee-0000-0000-0000-000000000001';
@@ -68,20 +71,28 @@ describeIfDb('fila presencial', () => {
       VALUES ('${LOCATION}', '${TENANT}', 'Matriz', '${TZ}', 15),
              ('${LOCAL_RIVAL}', '${RIVAL}', 'Rival', '${TZ}', 15);
 
+      -- A filial nasce depois da matriz, e é isso que faz a unidade primaria
+      -- ser a matriz. O created_at e explicito porque a semente insere as duas
+      -- no mesmo instante e o desempate ficaria por conta do acaso.
+      INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes, created_at)
+      VALUES ('${FILIAL}', '${TENANT}', 'Filial', '${TZ}', 15, now() + interval '1 minute');
+
       INSERT INTO professionals (id, tenant_id, location_id, name, kind)
       VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional'),
-             ('${GLEIDSON}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional');
+             ('${GLEIDSON}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional'),
+             ('${BRUNO}', '${TENANT}', '${FILIAL}', 'Bruno', 'professional');
 
       INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)
       VALUES ('${CABELO}', '${TENANT}', 'Cabelo', 4900, 30);
 
       INSERT INTO professional_services (professional_id, service_id, tenant_id)
       VALUES ('${RUAN}', '${CABELO}', '${TENANT}'),
-             ('${GLEIDSON}', '${CABELO}', '${TENANT}');
+             ('${GLEIDSON}', '${CABELO}', '${TENANT}'),
+             ('${BRUNO}', '${CABELO}', '${TENANT}');
 
       INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
       SELECT '${TENANT}', p.id, d.weekday, 480, 1320
-      FROM (VALUES ('${RUAN}'::uuid), ('${GLEIDSON}'::uuid)) AS p(id),
+      FROM (VALUES ('${RUAN}'::uuid), ('${GLEIDSON}'::uuid), ('${BRUNO}'::uuid)) AS p(id),
            (VALUES (0), (1), (2), (3), (4), (5), (6)) AS d(weekday);
 
       INSERT INTO customers (id, tenant_id, name, phone_e164) VALUES
@@ -551,8 +562,6 @@ describeIfDb('fila presencial', () => {
 
     const minha = await queuePositionByToken({
       tenantId: TENANT,
-      locationId: LOCATION,
-      timezone: TZ,
       token: carlos.token,
       now: AGORA,
     });
@@ -562,12 +571,44 @@ describeIfDb('fila presencial', () => {
     expect(JSON.stringify(minha)).not.toContain('Joao');
   });
 
+  it('o link de quem entrou na filial mostra a fila da filial', async () => {
+    /**
+     * A rota carregava a fila da `primaryLocation` — a matriz. Numa rede, quem
+     * entrou na fila da filial não aparecia nela: a entrada existia, a fila
+     * carregada era outra, e o link dizia **"Seu atendimento já foi
+     * encerrado"** para quem estava sentado esperando.
+     *
+     * A pior forma do defeito, porque a tela não some — ela mente, e a pessoa
+     * vai embora.
+     */
+    const naFilial = await joinQueue({
+      tenantId: TENANT,
+      locationId: FILIAL,
+      customerId: CARLOS,
+      serviceIds: [CABELO],
+      professionalId: BRUNO,
+      now: AGORA,
+    });
+
+    // A matriz continua sendo a primeira, que é o que a rota adivinhava.
+    const primeira = await primaryLocation(TENANT, AGORA);
+    expect(primeira?.id).toBe(LOCATION);
+
+    const minha = await queuePositionByToken({
+      tenantId: TENANT,
+      token: naFilial.token,
+      now: AGORA,
+    });
+
+    expect(minha?.posicao).toBe(1);
+    expect(minha?.status).toBe('waiting');
+    expect(minha?.frase).not.toContain('encerrado');
+  });
+
   it('token inventado não abre a fila de ninguém', async () => {
     await entrar(CARLOS);
     const minha = await queuePositionByToken({
       tenantId: TENANT,
-      locationId: LOCATION,
-      timezone: TZ,
       token: 'chute-de-quem-nao-tem-o-link',
       now: AGORA,
     });
@@ -587,8 +628,6 @@ describeIfDb('fila presencial', () => {
 
     const minha = await queuePositionByToken({
       tenantId: TENANT,
-      locationId: LOCATION,
-      timezone: TZ,
       token: entrada.token,
       now: AGORA,
     });
@@ -614,8 +653,6 @@ describeIfDb('fila presencial', () => {
     // Nem com o token na mão: a RLS filtra antes de o hash ser comparado.
     const posicao = await queuePositionByToken({
       tenantId: RIVAL,
-      locationId: LOCAL_RIVAL,
-      timezone: TZ,
       token: entrada.token,
       now: AGORA,
     });

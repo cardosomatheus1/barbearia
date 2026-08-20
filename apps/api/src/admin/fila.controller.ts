@@ -5,7 +5,6 @@ import {
   joinQueue,
   moveQueueEntry,
   QueueError,
-  queuePositionByToken,
   seatQueueEntry,
   type QueueStatus,
 } from '@barbearia/scheduling';

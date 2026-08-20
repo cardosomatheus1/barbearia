@@ -1,6 +1,5 @@
 import { Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import {
-  BookingError,
   OfertaError,
   aceitarOferta,
   createAppointment,
@@ -9,6 +8,7 @@ import {
 import { recursoLigado } from '@barbearia/platform';
 import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { traduzirReserva } from '../common/booking-http.js';
 import { TenantService } from '../tenant/tenant.service.js';
 import { slugSchema } from './booking.schemas.js';
 import { queueTokenSchema } from '../admin/fila.schemas.js';
@@ -94,9 +94,7 @@ export function conviteParaHttp(erro: unknown): never {
       erro.message,
     );
   }
-  if (erro instanceof BookingError) {
-    throw new DomainError(erro.code, 409, erro.message);
-  }
+  traduzirReserva(erro);
   throw erro;
 }
 

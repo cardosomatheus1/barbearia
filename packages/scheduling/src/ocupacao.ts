@@ -1,5 +1,6 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
+  ESTADOS_QUE_OCUPAM_A_AGENDA,
   ehHorarioDePico,
   horasDaGrade,
   horasDePico,
@@ -66,7 +67,7 @@ async function carregarCelulas(
         sum(EXTRACT(EPOCH FROM (a.ends_at - a.starts_at)) / 60)::int AS vendidos
         FROM appointments a
        WHERE a.location_id = ${locationId}::uuid
-         AND a.status IN ('completed', 'in_progress', 'checked_in', 'confirmed', 'pending')
+         AND a.status = ANY(${[...ESTADOS_QUE_OCUPAM_A_AGENDA]}::appointment_status[])
          AND a.starts_at >= ${agora}::timestamptz - ${JANELA_DO_HEATMAP_DIAS} * interval '1 day'
          AND a.starts_at < ${agora}::timestamptz
        GROUP BY 1, 2
@@ -80,8 +81,12 @@ async function carregarCelulas(
      * se contratei mais um barbeiro?".
      */
     cadeiras AS (
+      -- Só quem atende. O balcão da recepção, a sala e quem trabalha fora
+      -- moram na mesma tabela e nao sao cadeira: contados aqui, o denominador
+      -- cresce e a hora cheia deixa de parecer cheia.
       SELECT count(*)::int AS total FROM professionals
        WHERE location_id = ${locationId}::uuid AND active
+         AND kind = 'professional'
     )
     SELECT g.dia, g.hora,
            COALESCE(at.vendidos, 0) AS vendidos,
@@ -207,7 +212,7 @@ export async function agendasApertadas(params: {
                sum(EXTRACT(EPOCH FROM (a.ends_at - a.starts_at)) / 60)::int AS minutos
           FROM appointments a, janela j
          WHERE a.location_id = ${params.locationId}::uuid
-           AND a.status IN ('completed', 'in_progress', 'checked_in', 'confirmed', 'pending')
+           AND a.status = ANY(${[...ESTADOS_QUE_OCUPAM_A_AGENDA]}::appointment_status[])
            AND a.starts_at >= j.desde AND a.starts_at < j.ate
          GROUP BY a.professional_id
       ),
@@ -228,6 +233,7 @@ export async function agendasApertadas(params: {
         LEFT JOIN vendidos v  ON v.professional_id  = p.id
         LEFT JOIN pedidos  pe ON pe.professional_id = p.id
        WHERE p.location_id = ${params.locationId}::uuid AND p.active
+         AND p.kind = 'professional'
     `;
 
     return linhas
@@ -450,7 +456,7 @@ export async function horasMedidas(params: {
         FROM appointments a
         JOIN locations l ON l.id = a.location_id
        WHERE a.location_id = ${params.locationId}::uuid
-         AND a.status IN ('completed', 'in_progress', 'checked_in', 'confirmed', 'pending')
+         AND a.status = ANY(${[...ESTADOS_QUE_OCUPAM_A_AGENDA]}::appointment_status[])
          AND a.starts_at >= ${params.agora}::timestamptz
                             - ${JANELA_DO_HEATMAP_DIAS} * interval '1 day'
          AND a.starts_at < ${params.agora}::timestamptz

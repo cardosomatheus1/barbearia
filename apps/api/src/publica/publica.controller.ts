@@ -12,6 +12,7 @@ import { listServices, unidadesDoCadastro } from '@barbearia/catalog';
 import { createAppointment, getAvailabilityRange, getPublicProfile } from '@barbearia/scheduling';
 import { resolveGuestCustomer } from '@barbearia/identity';
 import { badRequest, DomainError } from '../common/errors.js';
+import { traduzirReserva } from '../common/booking-http.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { ChaveGuard, Escopo, type ChaveRequest } from './chave.guard.js';
 import { agendamentoPublicoSchema, disponibilidadePublicaSchema } from './publica.schemas.js';
@@ -155,18 +156,37 @@ export class PublicaController {
       phone: body.telefone,
     });
 
-    const agendamento = await createAppointment({
-      tenantId: chave.tenantId,
-      customerId: guest.customerId,
-      locationId: body.locationId,
-      serviceIds: body.serviceIds,
-      professionalId: body.professionalId,
-      date: body.date,
-      start: body.start,
-      source: 'api' as const,
-      idempotencyKey,
-      ...(body.notes ? { notes: body.notes } : {}),
-    });
+    /**
+     * A recusa do motor é traduzida aqui, e não deixada para o tratador
+     * genérico.
+     *
+     * Esta rota nasceu sem `catch`, e por isso `slot_taken` — "esse horário
+     * acabou de ser marcado" — saía como **500 `internal_error`** para o
+     * integrador, enquanto as outras quatro portas do mesmo motor respondiam
+     * 409. Quem lê 500 retenta o mesmo horário, e o monitoramento conta como
+     * falha de infraestrutura o produto funcionando.
+     *
+     * `traduzirReserva` é o mesmo tradutor das outras quatro: cinco cópias à
+     * mão davam três respostas diferentes para a mesma recusa.
+     */
+    let agendamento;
+    try {
+      agendamento = await createAppointment({
+        tenantId: chave.tenantId,
+        customerId: guest.customerId,
+        locationId: body.locationId,
+        serviceIds: body.serviceIds,
+        professionalId: body.professionalId,
+        date: body.date,
+        start: body.start,
+        source: 'api' as const,
+        idempotencyKey,
+        ...(body.notes ? { notes: body.notes } : {}),
+      });
+    } catch (erro) {
+      traduzirReserva(erro);
+      throw erro;
+    }
 
     /**
      * A resposta traz o que foi criado, e nada do cadastro.

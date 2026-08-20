@@ -290,6 +290,71 @@ describeIfDb('a API pública pela HTTP', () => {
     expect(Number(contagem?.n)).toBe(1);
   });
 
+  it('horário já tomado responde 409 à integração, nunca 500', async () => {
+    /**
+     * Esta rota nasceu sem `catch`, e a recusa do motor caía no tratador
+     * genérico: `slot_taken` — *"esse horário acabou de ser marcado"* — saía
+     * como **500 `internal_error`** para o integrador, enquanto as outras
+     * quatro portas do mesmo motor respondiam 409.
+     *
+     * Quem lê 500 retenta o mesmo horário, e o monitoramento conta como falha
+     * de infraestrutura o produto funcionando. É a §6 pergunta 6 entre duas
+     * portas da mesma API.
+     */
+    const token = await abrirBarbearia();
+    const chave = await emitir(token, ['appointments.view', 'appointments.create']);
+
+    const casa = await comChave(chave)(http().get('/v1/publica/barbearia')).expect(200);
+    const local = casa.body.unidades[0].id;
+    const profissional = casa.body.profissionais[0].id;
+    const servicos = await comChave(chave)(http().get('/v1/publica/servicos')).expect(200);
+    const servico = servicos.body.servicos[0].id;
+
+    const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const grade = await comChave(chave)(
+      http().get(
+        `/v1/publica/disponibilidade?locationId=${local}&serviceIds=${servico}&de=${amanha}`,
+      ),
+    ).expect(200);
+    const horario: string = grade.body.dias[0].slots[0].start;
+
+    const corpo = {
+      locationId: local,
+      serviceIds: [servico],
+      professionalId: profissional,
+      date: amanha,
+      start: horario,
+      telefone: '+5571988886666',
+      nome: 'Ana Prado',
+    };
+
+    await comChave(chave)(
+      http().post('/v1/publica/agendamentos').set('Idempotency-Key', 'tomado-1').send(corpo),
+    ).expect(201);
+
+    // Chave nova: a idempotência não pode ser o que responde aqui — o que se
+    // quer provar é a recusa do motor, e não o eco da chamada anterior.
+    const segundo = await comChave(chave)(
+      http()
+        .post('/v1/publica/agendamentos')
+        .set('Idempotency-Key', 'tomado-2')
+        .send({ ...corpo, telefone: '+5571988885555', nome: 'Bruno Lima' }),
+    );
+
+    /**
+     * 409 e um código que o integrador consegue tratar.
+     *
+     * `slot_not_available` é a grade já não oferecendo o horário e `slot_taken`
+     * é a constraint de exclusão disparando — qual das duas aparece depende de
+     * a segunda chamada chegar antes ou depois de a primeira ser vista pela
+     * leitura da grade. As duas são a mesma recusa para quem integra; o que
+     * este teste prende é que **nenhuma** delas sai como 500.
+     */
+    expect(segundo.status).not.toBe(500);
+    expect(segundo.status).toBe(409);
+    expect(['slot_taken', 'slot_not_available']).toContain(segundo.body.error.code);
+  });
+
   it('conta bloqueada não opera pela integração, e a chave para junto', async () => {
     /**
      * O `StaffGuard` confere o bloqueio a cada requisição, e a página pública

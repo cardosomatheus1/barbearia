@@ -1,5 +1,5 @@
 import { Controller, Get, Inject, Param } from '@nestjs/common';
-import { primaryLocation, queuePositionByToken } from '@barbearia/scheduling';
+import { queuePositionByToken } from '@barbearia/scheduling';
 import { recursoLigado } from '@barbearia/platform';
 import { notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -37,15 +37,15 @@ export class FilaPublicaController {
       throw notFound('queue_entry_not_found', 'Este link não está mais válido');
     }
 
-    const local = await primaryLocation(tenantId);
-    if (!local) throw notFound('establishment_not_found', 'Estabelecimento não encontrado');
-
-    const minha = await queuePositionByToken({
-      tenantId,
-      locationId: local.id,
-      timezone: local.timezone,
-      token,
-    });
+    /**
+     * A unidade sai do **token**, não da unidade principal.
+     *
+     * Esta rota chamava `primaryLocation(tenantId)` e montava a fila da matriz:
+     * numa rede, quem entrou na fila da filial lia "Seu atendimento já foi
+     * encerrado" sentado na cadeira esperando. Quem sabe onde a pessoa está é a
+     * entrada, e o token já leva até ela.
+     */
+    const minha = await queuePositionByToken({ tenantId, token });
 
     // Mesma resposta para token inválido e para token de outra barbearia: a
     // diferença diria a quem varre links que aquele existe em algum lugar.

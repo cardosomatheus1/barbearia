@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   agendasApertadas,
+  gradeDeOcupacao,
   apagarFaixaDePreco,
   criarFaixaDePreco,
   faixasDaUnidade,
@@ -32,6 +33,8 @@ const JOAO = '67bbbbbb-0000-0000-0000-000000000001';
 const RUAN = '67bbbbbb-0000-0000-0000-000000000002';
 const CLIENTE = '67cccccc-0000-0000-0000-000000000001';
 const DONO = '67eeeeee-0000-0000-0000-000000000001';
+/** O balcão da recepção: mora na mesma tabela e não é cadeira. */
+const BALCAO = '67bbbbbb-0000-0000-0000-000000000003';
 
 const AGORA = new Date('2026-08-12T12:00:00Z');
 
@@ -61,7 +64,13 @@ function jornada(profissional: string, comPausa: boolean): string {
 }
 
 /** Um atendimento de `minutos` a `diasAtras` dias, na cadeira pedida. */
-function atendimento(id: string, profissional: string, diasAtras: number, minutos: number): string {
+function atendimento(
+  id: string,
+  profissional: string,
+  diasAtras: number,
+  minutos: number,
+  status = 'completed',
+): string {
   const comeca = new Date(AGORA.getTime() - diasAtras * 86_400_000);
   const termina = new Date(comeca.getTime() + minutos * 60_000);
   return `INSERT INTO appointments
@@ -69,7 +78,7 @@ function atendimento(id: string, profissional: string, diasAtras: number, minuto
              starts_at, ends_at, service_starts_at, service_ends_at, status)
           VALUES ('${id}', '${TENANT}', '${LOCAL}', '${CLIENTE}', '${profissional}',
                   '${comeca.toISOString()}', '${termina.toISOString()}',
-                  '${comeca.toISOString()}', '${termina.toISOString()}', 'completed')`;
+                  '${comeca.toISOString()}', '${termina.toISOString()}', '${status}')`;
 }
 
 /** Alguém que não achou horário e entrou na lista de espera. */
@@ -111,9 +120,10 @@ describeIfDb('a agenda que não está dando conta', () => {
         ('${LOCAL}', '${TENANT}', 'Centro', 'America/Bahia'),
         ('${LOCAL_VIZINHA}', '${VIZINHA}', 'Outra', 'America/Bahia');
 
-      INSERT INTO professionals (id, tenant_id, location_id, name) VALUES
-        ('${JOAO}', '${TENANT}', '${LOCAL}', 'João'),
-        ('${RUAN}', '${TENANT}', '${LOCAL}', 'Ruan');
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind) VALUES
+        ('${JOAO}', '${TENANT}', '${LOCAL}', 'João', 'professional'),
+        ('${RUAN}', '${TENANT}', '${LOCAL}', 'Ruan', 'professional'),
+        ('${BALCAO}', '${TENANT}', '${LOCAL}', 'Balcão', 'counter');
 
       INSERT INTO customers (id, tenant_id, name, phone_e164) VALUES
         ('${CLIENTE}', '${TENANT}', 'Carlos', '+5571988887777');
@@ -144,6 +154,80 @@ describeIfDb('a agenda que não está dando conta', () => {
     const joao = agendas.find((a) => a.nome === 'João');
     const ruan = agendas.find((a) => a.nome === 'Ruan');
     expect(joao?.ocupacaoBps).toBeGreaterThan(ruan?.ocupacaoBps ?? 0);
+  });
+
+  it('quem foi chamado e ainda não sentou conta como ocupação', async () => {
+    /**
+     * `waiting` é quem o balcão chamou e ainda não está na cadeira. A constraint
+     * anti-overbooking segura o horário para ele desde o bloco 1 — só quatro
+     * estados o devolvem: cancelado pelo cliente, cancelado pela casa, falta e
+     * remarcado.
+     *
+     * As três consultas de ocupação escreviam a lista à mão e as três
+     * esqueceram `waiting`: a ocupação medida saía **menor** que a real, e sai
+     * menor justamente na hora cheia, que é onde ela decide se o cliente paga
+     * sinal e se o preço sobe. A lista mora em `core` agora, derivada do
+     * complemento.
+     *
+     * Os dois atendimentos caem na mesma célula do heatmap — mesmo dia da
+     * semana, mesma hora — em semanas diferentes, porque na mesma o `EXCLUDE`
+     * recusaria o segundo.
+     */
+    await exec([jornada(JOAO, false), jornada(RUAN, false)].join(';'));
+    await exec(
+      [
+        atendimento(idDe(1), JOAO, 7, 60, 'completed'),
+        atendimento(idDe(2), JOAO, 14, 60, 'waiting'),
+      ].join(';'),
+    );
+
+    const grade = await gradeDeOcupacao({ tenantId: TENANT, locationId: LOCAL, agora: AGORA });
+    const vendidos = grade.reduce((soma, c) => soma + c.minutosVendidos, 0);
+    expect(vendidos).toBe(120);
+  });
+
+  it('a capacidade do heatmap conta cadeira, não balcão', async () => {
+    /**
+     * O denominador é `cadeiras × 60 × semanas`. Com o balcão dentro, ele cresce
+     * um terço e a hora cheia deixa de parecer cheia — e é `horaCheia` que
+     * decide o quarto termo do sinal e o acréscimo de preço de pico.
+     *
+     * O balcão recebe jornada de propósito: sem ela, o teste passaria com o
+     * filtro removido, porque não é a jornada dele que entra nesta conta.
+     */
+    await exec([jornada(JOAO, false), jornada(RUAN, false), jornada(BALCAO, false)].join(';'));
+    await exec(atendimento(idDe(1), JOAO, 7, 60));
+
+    const grade = await gradeDeOcupacao({ tenantId: TENANT, locationId: LOCAL, agora: AGORA });
+    // A célula que tem movimento: `montarGrade` preenche a semana inteira com
+    // zeros, e a linha de domingo não sabe nada sobre capacidade.
+    const celula = grade.find((c) => c.minutosVendidos > 0);
+    // Duas cadeiras × 60 minutos × 8 semanas. Com o balcão seriam 1440.
+    expect(celula?.minutosDeJornada).toBe(960);
+  });
+
+  it('o balcão da recepção não aparece como agenda apertada', async () => {
+    /**
+     * `professionals` guarda quatro coisas: quem atende, o balcão, a sala e
+     * quem atende fora. Sete consultas do produto filtram `kind`; esta e a do
+     * heatmap não filtravam.
+     *
+     * O defeito estava **inalcançável** até o bloco 114, porque o `z.enum` da
+     * borda não aceitava `counter` — consertar a borda tornou o outro
+     * exploitável, que é a forma como este repositório costuma descobrir que
+     * tinha dois defeitos e não um.
+     *
+     * A semente dá jornada ao balcão de propósito: sem ela, o denominador zero
+     * o esconderia pelo motivo errado e o teste passaria com o filtro removido.
+     */
+    await exec([jornada(JOAO, false), jornada(BALCAO, false)].join(';'));
+    const vendas = [];
+    for (let i = 1; i <= 50; i += 1) vendas.push(atendimento(idDe(i), JOAO, i, 480));
+    await exec(vendas.join(';'));
+
+    const nomes = (await ler(0)).map((a) => a.nome);
+    expect(nomes).toContain('João');
+    expect(nomes).not.toContain('Balcão');
   });
 
   it('só entra quem passou do corte', async () => {

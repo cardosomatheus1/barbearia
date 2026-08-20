@@ -139,6 +139,62 @@ describeIfDb('fidelidade e fiado entre unidades', () => {
     expect((await saldoDoCliente(TENANT, CARLOS, AGORA, FILIAL)).saldo).toBe(0);
   });
 
+  it('o cliente, que não está em loja nenhuma, vê o bolso de cada uma', async () => {
+    /**
+     * A tela do cliente não tem unidade: ele abre o app em casa, e não há
+     * balcão que tenha escolhido a loja por ele. A rota passava `null`, e
+     * `null` não casa com bolso nenhum — quem ganhou 340 na Pituba lia **zero**
+     * enquanto o balcão oferecia os 340.
+     *
+     * A resposta certa não é somar tudo num número só: R$ 10 na matriz mais
+     * R$ 20 na filial não são R$ 30 em lugar nenhum, e um total faria a pessoa
+     * pedir no balcão um resgate que a comanda recusa. A tela mostra os bolsos
+     * com o nome da loja.
+     */
+    await ligar({ escopo: 'unidade' });
+    await venderEm(MATRIZ);
+    await venderEm(FILIAL);
+    await venderEm(FILIAL);
+
+    const meu = await saldoDoCliente(TENANT, CARLOS, AGORA);
+
+    // Nada é compartilhado: tudo nasceu com escopo de unidade.
+    expect(meu.saldoCompartilhado).toBe(0);
+    // E o número de cima é tudo o que ele tem, não o compartilhado vazio: a
+    // tela escrevia "0 pontos" sobre uma lista que dizia 3000.
+    expect(meu.saldo).toBe(3000);
+    expect(meu.porUnidade.map((l) => [l.unidade, l.saldo])).toEqual([
+      ['Filial Pituba', 2000],
+      ['Matriz', 1000],
+    ]);
+  });
+
+  it('bolso único sem compartilhado não vira lista de um item', async () => {
+    /**
+     * A barbearia de uma loja só com programa por unidade tem um bolso e nada
+     * compartilhado: a lista repetiria embaixo o número que já está em cima.
+     * É a decisão do seletor de uma opção só — uma lista de um item não é
+     * informação, é a tela dizendo duas vezes a mesma coisa.
+     */
+    await ligar({ escopo: 'unidade' });
+    await venderEm(MATRIZ);
+
+    const meu = await saldoDoCliente(TENANT, CARLOS, AGORA);
+    expect(meu.saldo).toBe(1000);
+    expect(meu.porUnidade).toEqual([]);
+  });
+
+  it('sob empresa o cliente não vê lista de loja nenhuma', async () => {
+    // O compartilhado já é tudo; uma lista repetiria o mesmo número embaixo
+    // dele, e a tela passaria a somar duas vezes aos olhos de quem lê.
+    await ligar();
+    await venderEm(MATRIZ);
+
+    const meu = await saldoDoCliente(TENANT, CARLOS, AGORA);
+    expect(meu.saldo).toBe(1000);
+    expect(meu.porUnidade).toEqual([]);
+  });
+
   it('trocar o interruptor não faz o saldo antigo sumir', async () => {
     /**
      * É a razão de o escopo ser congelado em cada lançamento em vez de lido do

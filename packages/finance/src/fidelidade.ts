@@ -227,6 +227,35 @@ export function saldoNosBolsos(
   return { compartilhado, daUnidade, total: compartilhado + daUnidade };
 }
 
+/**
+ * O saldo de cada loja, para a leitura que não está em nenhuma.
+ *
+ * O FIFO de vencimento é **do bolso**, então cada loja é somada com o seu, e
+ * não com um recorte do total: uma saída que consumiu lote da Pituba não pode
+ * aparecer descontando o do Rio Vermelho. É a mesma razão de `separarPorBolso`
+ * devolver os dois lados em vez de um número.
+ *
+ * Loja sem nada some da lista, e não entra com zero: "você tem 0 pontos no Rio
+ * Vermelho" é uma linha sobre uma loja em que a pessoa nunca esteve.
+ */
+function bolsosPorUnidade(
+  extrato: readonly (LancamentoDeFidelidade & LancamentoNaTela)[],
+  agora: Date,
+): readonly { readonly unidadeId: string; readonly unidade: string; readonly saldo: number }[] {
+  const lojas = new Map<string, string>();
+  for (const linha of extrato) {
+    if (linha.escopo !== 'unidade' || linha.unidadeId === null) continue;
+    lojas.set(linha.unidadeId, linha.unidade ?? 'Unidade');
+  }
+
+  const bolsos: { unidadeId: string; unidade: string; saldo: number }[] = [];
+  for (const [unidadeId, unidade] of lojas) {
+    const saldo = saldoNosBolsos(extrato, unidadeId, agora).daUnidade;
+    if (saldo > 0) bolsos.push({ unidadeId, unidade, saldo });
+  }
+  return bolsos.sort((a, b) => b.saldo - a.saldo || a.unidade.localeCompare(b.unidade, 'pt-BR'));
+}
+
 export interface SaldoDoCliente {
   readonly modo: ModoDeFidelidade;
   readonly escopo: EscopoMultiunidade;
@@ -234,6 +263,24 @@ export interface SaldoDoCliente {
   readonly saldo: number;
   /** Quanto do saldo vale em qualquer loja. Igual ao total sob `empresa`. */
   readonly saldoCompartilhado: number;
+  /**
+   * O bolso de cada loja, para quem não está numa.
+   *
+   * A tela do cliente não tem unidade: ele abre o app em casa, e não há balcão
+   * que tenha escolhido a loja por ele. Sob `escopo = 'unidade'` a leitura
+   * passava `null`, e `null` não casa com bolso nenhum — o cliente com 340
+   * pontos ganhos na Pituba lia **zero** enquanto o balcão oferecia os 340.
+   *
+   * A resposta certa não é somar tudo num número só: 300 na Pituba e 120 no Rio
+   * Vermelho não são 420 em lugar nenhum, e um total faria a pessoa pedir um
+   * resgate que a comanda recusa. A tela mostra os bolsos com o nome da loja, e
+   * a lista é vazia sob `empresa`, em que o compartilhado já é tudo.
+   */
+  readonly porUnidade: readonly {
+    readonly unidadeId: string;
+    readonly unidade: string;
+    readonly saldo: number;
+  }[];
   /** Quanto falta para o prêmio. Só faz sentido no modo `visitas`. */
   readonly faltaParaPremio: number | null;
   readonly extrato: readonly LancamentoNaTela[];
@@ -302,13 +349,58 @@ export async function saldoDoCliente(
     const bolsos = saldoNosBolsos(extrato, unidadeId, agora);
     const saldo = bolsos.total;
 
+    /**
+     * Quem não está numa loja recebe os bolsos das outras, nomeados.
+     *
+     * Só faz sentido quando o escopo é `unidade` **e** ninguém disse de qual
+     * loja se está falando: no balcão a unidade é conhecida e já entrou em
+     * `saldo`; sob `empresa` não existe bolso de loja para listar.
+     *
+     * A lista some quando não acrescenta nada — um bolso só, sem compartilhado
+     * ao lado, repetiria embaixo o número que já está em cima. É a decisão do
+     * seletor de uma opção só: uma lista de um item não é informação, é a tela
+     * dizendo duas vezes a mesma coisa.
+     */
+    const bolsosDeLoja =
+      unidadeId === null && p.escopo === 'unidade' ? bolsosPorUnidade(extrato, agora) : [];
+    const porUnidade =
+      bolsosDeLoja.length > 1 || (bolsosDeLoja.length === 1 && bolsos.compartilhado > 0)
+        ? bolsosDeLoja
+        : [];
+
+    /**
+     * Sem loja escolhida, o saldo é **tudo o que a pessoa tem**.
+     *
+     * `saldoNosBolsos(extrato, null, ...)` devolve só o compartilhado, porque
+     * `null` não casa com bolso de loja nenhum. Isso é a resposta certa para o
+     * balcão, que sempre diz de qual loja fala — e a errada para o cliente, que
+     * abre o app em casa: quem ganhou 340 na Pituba lia **zero**, com a tela
+     * escrevendo "0 pontos" em cima de uma lista que dizia 340.
+     *
+     * Um número que ignora bolso é pior que um número que soma bolsos: a lista
+     * logo abaixo diz onde cada parte vale, e é ela que impede o resgate que a
+     * comanda recusaria.
+     */
+    const meuTotal =
+      unidadeId === null
+        ? bolsos.compartilhado + bolsosDeLoja.reduce((soma, l) => soma + l.saldo, 0)
+        : saldo;
+
     return {
       modo: p.modo,
       escopo: p.escopo,
-      saldo,
+      saldo: meuTotal,
+      porUnidade,
       saldoCompartilhado: bolsos.compartilhado,
+      /**
+       * Conta contra o total da pessoa, e não contra o bolso de uma loja.
+       *
+       * "Faltam 3 para o corte grátis" é uma frase sobre o cartão dela; medida
+       * contra o compartilhado sozinho, ela ficaria parada em "faltam 10" para
+       * quem já tem nove visitas ganhas na Pituba.
+       */
       faltaParaPremio:
-        p.modo === 'visitas' ? Math.max(0, p.visitasParaPremio - saldo) : null,
+        p.modo === 'visitas' ? Math.max(0, p.visitasParaPremio - meuTotal) : null,
       extrato: extrato.map((l) => ({
         id: l.id,
         tipo: l.tipo,

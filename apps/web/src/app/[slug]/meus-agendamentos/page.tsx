@@ -12,7 +12,7 @@ import {
   type AgendamentoDoCliente,
   type EsperaDoCliente,
 } from '@/lib/api';
-import { saldoPorExtenso } from '@barbearia/core';
+import { ROTULO_DO_ESCOPO, saldoPorExtenso } from '@barbearia/core';
 import { humanInstant } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
 import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
@@ -169,11 +169,22 @@ const ESTADO: Record<string, string> = {
   rescheduled: 'Remarcado',
 };
 
-/** Por que o botão não está lá. Ausência sem explicação parece defeito. */
+/**
+ * Por que o botão não está lá. Ausência sem explicação parece defeito.
+ *
+ * A frase nomeia **o que** ficou bloqueado, e não "alterações" em geral. A
+ * janela de remarcação costuma ser mais folgada que a de cancelamento —
+ * remarcar preserva a receita, cancelar não —, então existe o caso em que
+ * cancelar ainda dá e remarcar já não: com a frase genérica, o cartão dizia
+ * "alterações até 6 horas antes" **ao lado do botão Cancelar funcionando**, que
+ * é a §6 pergunta 6 acontecendo dentro de um cartão só.
+ */
 function motivoBloqueio(item: AgendamentoDoCliente): string | null {
   if (item.blockedReason === 'too_late') {
     const horas = item.minHoursToChange === 1 ? '1 hora' : `${item.minHoursToChange} horas`;
-    return `Alterações até ${horas} antes. Para mudar agora, fale com a barbearia.`;
+    return item.canCancel
+      ? `Remarcar, só até ${horas} antes. Ainda dá para cancelar, ou falar com a barbearia.`
+      : `Alterações até ${horas} antes. Para mudar agora, fale com a barbearia.`;
   }
   if (item.blockedReason === 'already_started') return 'Este horário já começou.';
   if (item.blockedReason === 'too_many_reschedules') {
@@ -346,6 +357,40 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
                   ? 'Cartão completo — seu próximo corte pode sair de graça.'
                   : `Faltam ${fidelidade.faltaParaPremio} para o corte grátis.`}
             </p>
+            {/*
+              Onde cada parte do saldo vale, quando o programa é por unidade.
+              O número acima é tudo o que a pessoa tem; a lista é o que impede
+              que ela peça no balcão um resgate que a comanda recusaria. Vem
+              vazia sob `empresa`, e vazia também quando há um bolso só — ali
+              ela repetiria o número de cima.
+            */}
+            {fidelidade.porUnidade.length > 0 ? (
+              <ul className="saldo-fidelidade__lojas">
+                {/*
+                  O bolso que vale em qualquer loja abre a lista, e ele não é
+                  opcional: sem esta linha o cartão mostrava 951 em cima e
+                  180 + 95 embaixo, três números que não fecham e nenhuma frase
+                  explicando a diferença. A lista tem que somar o número de
+                  cima, senão ela levanta a pergunta que existe para responder.
+                */}
+                {fidelidade.saldoCompartilhado > 0 ? (
+                  <li>
+                    <span className="saldo-fidelidade__loja">{ROTULO_DO_ESCOPO.empresa}</span>
+                    <span className="tabular">
+                      {saldoPorExtenso(fidelidade.modo, fidelidade.saldoCompartilhado)}
+                    </span>
+                  </li>
+                ) : null}
+                {fidelidade.porUnidade.map((loja) => (
+                  <li key={loja.unidadeId}>
+                    <span className="saldo-fidelidade__loja">Só na {loja.unidade}</span>
+                    <span className="tabular">
+                      {saldoPorExtenso(fidelidade.modo, loja.saldo)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         </section>
       ) : null}

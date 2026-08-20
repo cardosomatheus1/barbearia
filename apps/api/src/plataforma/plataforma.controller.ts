@@ -557,7 +557,10 @@ export class PlataformaController {
         adminId: admin.id,
         tenantId,
         // Ausente é a unidade primária, a mais antiga — a mesma que a página
-        // pública mostra. A rede que quiser destacar outra loja manda o id.
+        // pública mostra e a única que a vitrine publica hoje. O id continua
+        // sendo aceito para o dia em que houver página por unidade; o domínio
+        // recusa a loja que a busca não desenha, porque vender um card que não
+        // renderiza emite fatura e queima o lugar exclusivo da cidade.
         ...(corpo.locationId ? { locationId: corpo.locationId } : {}),
         lugar: corpo.lugar,
         de: new Date(`${corpo.de}T00:00:00Z`),
