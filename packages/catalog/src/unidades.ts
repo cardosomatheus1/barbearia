@@ -91,6 +91,27 @@ export async function criarUnidade(request: {
     const criada = criadas[0];
     if (!criada) throw new CatalogError('invalid_location', 'Não deu para criar a unidade.');
 
+    /**
+     * A loja nova nasce com gaveta.
+     *
+     * Sem ela, o formulário "Transferir entre contas" da filial listava a
+     * gaveta da matriz e **sempre** respondia "Esta conta não existe" —
+     * `transferirEntreContas` exige `is_cash && location_id === locationId`.
+     * Botão que só dá erro, sem saída na tela (§6, pergunta 3).
+     *
+     * Aqui e não em `packages/finance`: a seta vai de `catalog` para `db`, e
+     * `financial_accounts` é cadastro, não movimento — é a mesma tabela que a
+     * migração 0054 semeia para quem já existia. O nome sai do nome da loja
+     * porque o índice de nome é por barbearia, e "Caixa da loja" colidiria na
+     * segunda.
+     */
+    await tx.$executeRaw`
+      INSERT INTO financial_accounts (tenant_id, location_id, name, is_cash)
+      VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+              ${criada.id}::uuid, ${`Caixa · ${nome}`}, true)
+      ON CONFLICT DO NOTHING
+    `;
+
     await audit(tx, {
       actorId: request.ator.id,
       actorName: request.ator.name,

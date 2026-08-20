@@ -344,12 +344,13 @@ describeIfDb('financeiro', () => {
      */
     await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 100_000, ...operador });
     const gaveta = await criarContaFinanceira({
+      autorizadas: [],
       tenantId: TENANT,
       nome: 'Gaveta da Matriz',
       locationId: LOCATION,
       ehGaveta: true,
     });
-    const banco = await criarContaFinanceira({ tenantId: TENANT, nome: 'Banco do Brasil' });
+    const banco = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Banco do Brasil' });
 
     await transferirEntreContas({
       tenantId: TENANT,
@@ -381,7 +382,7 @@ describeIfDb('financeiro', () => {
       INSERT INTO financial_accounts (id, tenant_id, name)
       VALUES ('a5151515-0000-0000-0000-000000000009', '${RIVAL}', 'Banco deles');
     `);
-    const minha = await criarContaFinanceira({ tenantId: TENANT, nome: 'Cofre' });
+    const minha = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Cofre' });
 
     await expect(
       transferirEntreContas({
@@ -406,12 +407,13 @@ describeIfDb('financeiro', () => {
      */
     await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 10_000, ...operador });
     const gaveta = await criarContaFinanceira({
+      autorizadas: [],
       tenantId: TENANT,
       nome: 'Gaveta da Matriz',
       locationId: LOCATION,
       ehGaveta: true,
     });
-    const cofre = await criarContaFinanceira({ tenantId: TENANT, nome: 'Cofre' });
+    const cofre = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Cofre' });
 
     await transferirEntreContas({
       tenantId: TENANT,
@@ -435,8 +437,8 @@ describeIfDb('financeiro', () => {
      * transferência da repetição da primeira. É o oposto do saldo inicial, que a
      * própria existência do extrato barra.
      */
-    const cofre = await criarContaFinanceira({ tenantId: TENANT, nome: 'Cofre' });
-    const banco = await criarContaFinanceira({ tenantId: TENANT, nome: 'Banco' });
+    const cofre = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Cofre' });
+    const banco = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Banco' });
     const pedir = () =>
       transferirEntreContas({
         tenantId: TENANT,
@@ -457,7 +459,7 @@ describeIfDb('financeiro', () => {
   });
 
   it('transferir para a mesma conta é recusado antes de tocar o banco', async () => {
-    const cofre = await criarContaFinanceira({ tenantId: TENANT, nome: 'Cofre' });
+    const cofre = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Cofre' });
     await expect(
       transferirEntreContas({
         tenantId: TENANT,
@@ -473,6 +475,7 @@ describeIfDb('financeiro', () => {
 
   it('a gaveta é uma por unidade', async () => {
     await criarContaFinanceira({
+      autorizadas: [],
       tenantId: TENANT,
       nome: 'Gaveta',
       locationId: LOCATION,
@@ -480,6 +483,7 @@ describeIfDb('financeiro', () => {
     });
     await expect(
       criarContaFinanceira({
+        autorizadas: [],
         tenantId: TENANT,
         nome: 'Gaveta 2',
         locationId: LOCATION,

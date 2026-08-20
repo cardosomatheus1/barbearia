@@ -134,7 +134,7 @@ describeIfDb('split de pagamento', () => {
       tipo: 'payment_intent.succeeded',
       pagamentoId: cobranca.pagamentoId,
       estado: 'pago',
-      hojeNaUnidade: HOJE,
+      agora: AGORA,
     });
   }
 
@@ -206,7 +206,7 @@ describeIfDb('split de pagamento', () => {
       if (!c) throw new Error('sem cobrança');
       await confirmarCobranca({
         tenantId: TENANT, eventoId: 'ev-2', tipo: 'payment_intent.succeeded',
-        pagamentoId: c.psp_payment_id, estado: 'pago', hojeNaUnidade: HOJE,
+        pagamentoId: c.psp_payment_id, estado: 'pago', agora: AGORA,
       });
     });
 
@@ -644,7 +644,7 @@ describeIfDb('split de pagamento', () => {
     await fecharComanda({
       tenantId: TENANT, locationId: LOCATION, orderId,
       pagamentos: [{ forma: 'cash', valorCents: 10_000 }],
-      hojeNaUnidade: HOJE, agora: AGORA, ...operador,
+      hojeNaUnidade: HOJE, ...operador,
     });
 
     expect(await splitDaVenda(TENANT, orderId)).toBeNull();

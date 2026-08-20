@@ -85,7 +85,9 @@ export class EstoqueController {
     // tela e aquele cartão davam prazos diferentes para o mesmo produto.
     const local = await unidadeDoBalcao(staff);
     const [lista, consumo] = await Promise.all([
-      produtos(staff.tenantId, todos === 'true', agora),
+      // O saldo é **desta loja**, como o consumo ao lado: a linha dizia
+      // "44 un em estoque" da rede e "acaba em N dias" da filial.
+      produtos(staff.tenantId, todos === 'true', agora, local.id),
       consumoMedido({ tenantId: staff.tenantId, agora, locationId: local.id }),
     ]);
 
@@ -173,7 +175,10 @@ export class EstoqueController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    return { movimentos: await movimentosDoProduto(staff.tenantId, id) };
+    // O extrato é da prateleira desta loja: da rede, ele não explica o saldo
+    // de nenhuma delas.
+    const local = await unidadeDoBalcao(staff);
+    return { movimentos: await movimentosDoProduto(staff.tenantId, id, local.id) };
   }
 
   @Exige('inventory.adjust')
@@ -258,15 +263,17 @@ export class EstoqueController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string },
   ) {
-    const hoje = query.dia ?? (await this.hoje(staff));
+    const local = await unidadeDoBalcao(staff);
+    const hoje = query.dia ?? diaNaUnidade(null, local.timezone, new Date()).dia;
     // Do primeiro dia do mês até o dia pedido: é a leitura que decide preço, e
     // um dia sozinho não diz nada sobre rentabilidade.
     const de = `${hoje.slice(0, 7)}-01`;
     return {
       de,
       ate: hoje,
-      servicos: await margemPorServico(staff.tenantId, de, hoje),
-      cmv: await cmvDoPeriodo(staff.tenantId, de, hoje),
+      // A margem e o CMV são **desta loja**, como as dez consultas do DRE.
+      servicos: await margemPorServico(staff.tenantId, de, hoje, local.id),
+      cmv: await cmvDoPeriodo(staff.tenantId, de, hoje, local.id),
     };
   }
 }

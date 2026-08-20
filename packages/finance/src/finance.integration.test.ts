@@ -398,6 +398,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     // acrescentasse um item — e a conta que o cliente já viu mudaria sozinha.
     const com = await comItem(10000);
     const ajustada = await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: com.id,
       desconto: { tipo: 'percent', valor: 10, motivo: 'Cliente antigo' },
       ...operador,
@@ -427,6 +428,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     // O padrão da migração 0032 é 20%: R$ 25 numa conta de R$ 100 não passa.
     await expect(
       ajustarComanda({
+        locationId: LOCATION,
         tenantId: TENANT, orderId: com.id,
         desconto: { tipo: 'amount', valor: 2500, motivo: 'exagerado' },
         ...operador,
@@ -435,6 +437,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     // R$ 20 passa, e o desconto anterior continua zero: a recusa não gravou.
     const dentro = await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: com.id,
       desconto: { tipo: 'amount', valor: 2000, motivo: 'no limite' },
       ...operador,
@@ -449,6 +452,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     const com = await comItem(10000);
     await expect(
       ajustarComanda({
+        locationId: LOCATION,
         tenantId: TENANT, orderId: com.id,
         desconto: { tipo: 'percent', valor: 100, motivo: 'cortesia total' },
         ...operador,
@@ -463,6 +467,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     try {
       const com = await comItem(10000);
       const ajustada = await ajustarComanda({
+        locationId: LOCATION,
         tenantId: TENANT, orderId: com.id,
         desconto: { tipo: 'percent', valor: 50, motivo: 'promoção de inverno' },
         ...operador,
@@ -492,15 +497,17 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     // 20% de R$ 250,00 são R$ 50,00 — passa no teto, e é o serviço inteiro.
     const descontada = await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: com.id,
       desconto: { tipo: 'amount', valor: 5000, motivo: 'no limite do inflado' },
       ...operador,
     });
     expect(descontada.descontoCents).toBe(5000);
 
-    const inflada = await getComanda(TENANT, com.id);
+    const inflada = await getComanda(TENANT, com.id, LOCATION);
     const linha = inflada!.itens.find((i) => i.descricao === 'Linha inflada');
     const depois = await removerItem({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: com.id, itemId: linha!.id,
     });
 
@@ -851,6 +858,7 @@ describeIfDb('comanda, caixa e fiado', () => {
   it('o desconto entra na trilha; a gorjeta não', async () => {
     const com = await comItem(10000);
     await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: com.id,
       desconto: { tipo: 'amount', valor: 1500, motivo: 'Cliente antigo' },
       gorjetaCents: 500,

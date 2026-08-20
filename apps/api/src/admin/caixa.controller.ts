@@ -231,7 +231,9 @@ export class CaixaController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
     try {
-      return await getComanda(staff.tenantId, id);
+      // A comanda é **desta** loja. A RLS separa barbearias e não separa lojas.
+      const local = await this.unidade(staff);
+      return await getComanda(staff.tenantId, id, local.id);
     } catch (error) {
       return toHttp(error);
     }
@@ -309,8 +311,10 @@ export class CaixaController {
     @Param('itemId', new ZodValidationPipe(uuidSchema)) itemId: string,
   ) {
     try {
+      const local = await this.unidade(staff);
       return await removerItem({
         tenantId: staff.tenantId,
+        locationId: local.id,
         orderId: id,
         itemId,
         ator: { id: staff.staffUserId, name: staff.name },
@@ -347,8 +351,10 @@ export class CaixaController {
     body: { desconto?: DescontoDaComanda | null; gorjetaCents?: number },
   ) {
     try {
+      const local = await this.unidade(staff);
       return await ajustarComanda({
         tenantId: staff.tenantId,
+        locationId: local.id,
         orderId: id,
         desconto: body.desconto ?? null,
         ...(body.gorjetaCents === undefined ? {} : { gorjetaCents: body.gorjetaCents }),

@@ -115,6 +115,13 @@ export interface EstadoOnboarding {
    * tela da plataforma, que lê o catálogo. Aqui só se pergunta "existe?".
    */
   recursos: string[];
+  /**
+   * A loja da sessão, para o casco dizer onde a pessoa está.
+   *
+   * `ehRede` é falso na barbearia de uma loja só — ali o nome da unidade
+   * embaixo do nome da casa é ruído, e a linha some.
+   */
+  unidade: { id: string; nome: string; ehRede: boolean } | null;
 }
 
 export const estadoDoPainel = (token: string) =>

@@ -66,7 +66,7 @@ const novoProduto = (extra: Partial<Parameters<typeof salvarProduto>[0]> = {}) =
   });
 
 const saldoDe = async (id: string) =>
-  (await produtos(TENANT, true)).find((p) => p.id === id)?.saldo ?? 0;
+  (await produtos(TENANT, true, new Date(), LOCAL)).find((p) => p.id === id)?.saldo ?? 0;
 
 describeIfDb('estoque', () => {
   beforeAll(async () => {
@@ -126,7 +126,7 @@ describeIfDb('estoque', () => {
     });
 
     expect(await saldoDe(id)).toBe(17);
-    const historico = await movimentosDoProduto(TENANT, id);
+    const historico = await movimentosDoProduto(TENANT, id, LOCAL);
     expect(historico).toHaveLength(2);
     expect(historico[0]).toMatchObject({ tipo: 'perda', quantidade: -3, quem: 'Matheus' });
   });
@@ -207,13 +207,13 @@ describeIfDb('estoque', () => {
     ).rejects.toMatchObject({ code: 'produto_invalido' });
 
     const { id } = await novoProduto({ nome: 'Shampoo', tipo: 'internal', precoCents: 900 });
-    const shampoo = (await produtos(TENANT, true)).find((p) => p.id === id);
+    const shampoo = (await produtos(TENANT, true, new Date(), LOCAL)).find((p) => p.id === id);
     expect(shampoo?.precoCents).toBeNull();
   });
 
   it('a vizinha não vê o estoque desta casa', async () => {
     await novoProduto();
-    expect(await produtos(RIVAL, true)).toEqual([]);
+    expect(await produtos(RIVAL, true, new Date(), LOCAL)).toEqual([]);
   });
 
   // -- a ficha técnica ---------------------------------------------------------
@@ -398,7 +398,7 @@ describeIfDb('estoque', () => {
       diaDaUnidade: HOJE, locationId: LOCAL, motivo: 'caixa amassada na entrega', ator,
     });
 
-    const cmv = await cmvDoPeriodo(TENANT, HOJE, HOJE);
+    const cmv = await cmvDoPeriodo(TENANT, HOJE, HOJE, LOCAL);
     expect(cmv.perdaCents).toBe(2400);
     expect(cmv.vendaCents).toBe(0);
   });
@@ -437,7 +437,7 @@ describeIfDb('estoque', () => {
       pagamentos: [{ forma: 'cash', valorCents: 6000 }], ...fecha,
     });
 
-    const margens = await margemPorServico(TENANT, HOJE, HOJE);
+    const margens = await margemPorServico(TENANT, HOJE, HOJE, LOCAL);
     const corte = margens.find((m) => m.serviceId === CORTE);
 
     expect(corte).toMatchObject({
@@ -482,7 +482,7 @@ describeIfDb('estoque', () => {
       });
     }
 
-    const corte = (await margemPorServico(TENANT, HOJE, HOJE)).find((m) => m.serviceId === CORTE);
+    const corte = (await margemPorServico(TENANT, HOJE, HOJE, LOCAL)).find((m) => m.serviceId === CORTE);
     expect(corte?.vezes).toBe(2);
     expect(corte?.insumosCents).toBe(600);
   });
@@ -583,7 +583,7 @@ describeIfDb('estoque', () => {
       pagamentos: [{ forma: 'cash', valorCents: 6000 }], ...fecha,
     });
 
-    const antes = (await margemPorServico(TENANT, HOJE, HOJE)).find((m) => m.serviceId === CORTE);
+    const antes = (await margemPorServico(TENANT, HOJE, HOJE, LOCAL)).find((m) => m.serviceId === CORTE);
     expect(antes?.insumosCents).toBe(300);
 
     // O fornecedor dobra o preço, e a barbearia atualiza o cadastro.
@@ -594,7 +594,7 @@ describeIfDb('estoque', () => {
     // E a ficha inteira muda.
     await salvarFicha({ tenantId: TENANT, serviceId: CORTE, itens: [], ator });
 
-    const depois = (await margemPorServico(TENANT, HOJE, HOJE)).find((m) => m.serviceId === CORTE);
+    const depois = (await margemPorServico(TENANT, HOJE, HOJE, LOCAL)).find((m) => m.serviceId === CORTE);
     expect(depois?.insumosCents).toBe(300);
     expect(depois?.margemCents).toBe(antes?.margemCents);
   });

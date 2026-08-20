@@ -97,7 +97,8 @@ export class InsightController {
       segmentosDaBase(tenantId, agora),
       servicoMaisVendido({ tenantId, locationId: local.id, agora }),
       consumoMedido({ tenantId, agora, locationId: local.id }),
-      produtos(tenantId, false, agora),
+      // Mesma loja de `consumoMedido` logo acima: o insight compara os dois.
+      produtos(tenantId, false, agora, local.id),
     ]);
 
     /**

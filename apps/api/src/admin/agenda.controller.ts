@@ -350,12 +350,17 @@ export class AgendaController {
         );
       }
 
+      // O agendamento é **desta** loja. Era a única rota deste controller que
+      // não passava por `this.unidade(staff)`.
+      const local = await this.unidade(staff);
+
       const movido = await rescheduleAppointment({
         tenantId: staff.tenantId,
         appointmentId: id,
         date: body.date,
         start: body.start,
         onlyProfessionalId: recorte,
+        onlyLocationId: local.id,
         ...(body.professionalId ? { professionalId: body.professionalId } : {}),
       });
 

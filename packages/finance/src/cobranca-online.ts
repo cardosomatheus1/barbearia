@@ -1,4 +1,5 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
+import { diaNaUnidade } from '@barbearia/core';
 import { enfileirarPara } from '@barbearia/jobs';
 import type {
   CobrancaCriada,
@@ -189,7 +190,12 @@ export async function criarCobrancaDaComanda(params: {
       SELECT o.id, o.status::text, o.total_cents, c.name AS customer_name
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
+       -- A comanda e desta loja. Sem esta linha, a cobranca nascia com a
+       -- location_id de uma loja em order_charges e a de outra em orders: a
+       -- mesma cobranca apontando para duas gavetas, e o fechamento pelo
+       -- webhook do Pix levando o dinheiro para a errada.
        WHERE o.id = ${params.orderId}::uuid
+         AND o.location_id = ${params.locationId}::uuid
        FOR UPDATE OF o
     `;
     const comanda = comandas[0];
@@ -403,6 +409,33 @@ export interface ResultadoDaConfirmacao {
  * 'aguardando'` do `UPDATE` trava a sequencial — a segunda não depende de
  * ninguém ter lembrado de registrar o evento.
  */
+/**
+ * O dia da loja **da cobrança**, e não o da unidade mais antiga.
+ *
+ * `orders.business_day` é o dia da unidade, e é ele que decide o mês do acerto
+ * do barbeiro. Os dois caminhos que chegam aqui — o webhook do adquirente e a
+ * varredura de conciliação — resolviam o fuso por `primaryLocation(tenantId)`:
+ * numa rede Salvador + Rio Branco, com duas horas de diferença e as duas
+ * oferecidas no cadastro de unidade, uma venda da filial confirmada às 22h30
+ * era datada pelo dia da matriz. É o defeito D2 que os dois comentários citam,
+ * aplicado à loja errada.
+ *
+ * A cobrança já carrega `location_id`, então a resposta está a um `JOIN` de
+ * distância — e resolvê-la aqui dentro impede a terceira porta de errar de
+ * novo.
+ */
+async function diaDaLojaDaCobranca(
+  tx: TransactionClient,
+  locationId: string,
+  agora: Date,
+): Promise<string> {
+  const linhas = await tx.$queryRaw<{ timezone: string }[]>`
+    SELECT timezone FROM locations WHERE id = ${locationId}::uuid
+  `;
+  const fuso = linhas[0]?.timezone ?? 'America/Sao_Paulo';
+  return diaNaUnidade(null, fuso, agora).dia;
+}
+
 export async function confirmarCobranca(params: {
   readonly tenantId: string;
   readonly eventoId: string;
@@ -410,7 +443,8 @@ export async function confirmarCobranca(params: {
   readonly pagamentoId: string;
   readonly estado: EstadoDoPagamento;
   readonly motivo?: string | undefined;
-  readonly hojeNaUnidade: string;
+  /** O relógio. O **dia** sai da loja da cobrança, lá dentro. */
+  readonly agora: Date;
 }): Promise<ResultadoDaConfirmacao> {
   return withTenant(params.tenantId, async (tx) => {
     const registrados = await tx.$executeRaw`
@@ -512,7 +546,7 @@ export async function confirmarCobranca(params: {
       // webhook não tem gente atrás, e a trilha ficaria sem responsável.
       staffId: cobranca.created_by ?? '00000000-0000-0000-0000-000000000000',
       staffName: cobranca.created_by_name,
-      hojeNaUnidade: params.hojeNaUnidade,
+      hojeNaUnidade: await diaDaLojaDaCobranca(tx, cobranca.location_id, params.agora),
       idempotencyKey: `cobranca:${cobranca.id}`,
       tx,
     });
@@ -565,7 +599,9 @@ async function fecharComandaOuDivergencia(
   params: Parameters<typeof fecharComanda>[0],
 ): Promise<Comanda | null> {
   const aberta = await tx.$queryRaw<{ status: string; total_cents: number }[]>`
-    SELECT status::text, total_cents FROM orders WHERE id = ${params.orderId}::uuid
+    SELECT status::text, total_cents FROM orders
+     WHERE id = ${params.orderId}::uuid
+       AND location_id = ${params.locationId}::uuid
   `;
   const comanda = aberta[0];
   if (!comanda || comanda.status !== 'open') return null;
@@ -685,7 +721,6 @@ export interface ResultadoDaVarredura {
 export async function conciliarCobrancas(params: {
   readonly tenantId: string;
   readonly provider: PaymentProvider;
-  readonly hojeNaUnidade: string;
   readonly agora: Date;
 }): Promise<ResultadoDaVarredura> {
   const contagem = { consultadas: 0, pagas: 0, encerradas: 0, concluidas: 0, comFalha: 0 };
@@ -738,7 +773,7 @@ export async function conciliarCobrancas(params: {
         tipo: 'conciliacao',
         pagamentoId: viva.psp_payment_id,
         estado,
-        hojeNaUnidade: params.hojeNaUnidade,
+        agora: params.agora,
       });
 
       if (resultado.desfecho === 'pago' || resultado.desfecho === 'pago_sem_caixa') {
@@ -772,7 +807,7 @@ export async function conciliarCobrancas(params: {
  */
 async function concluirPagasSemCaixa(params: {
   readonly tenantId: string;
-  readonly hojeNaUnidade: string;
+  readonly agora: Date;
 }): Promise<number> {
   const pendentes = await withTenant(params.tenantId, async (tx) => {
     return tx.$queryRaw<
@@ -806,7 +841,7 @@ async function concluirPagasSemCaixa(params: {
           ],
           staffId: cobranca.created_by ?? '00000000-0000-0000-0000-000000000000',
           staffName: cobranca.created_by_name,
-          hojeNaUnidade: params.hojeNaUnidade,
+          hojeNaUnidade: await diaDaLojaDaCobranca(tx, cobranca.location_id, params.agora),
           idempotencyKey: `cobranca:${cobranca.id}`,
           tx,
         }),

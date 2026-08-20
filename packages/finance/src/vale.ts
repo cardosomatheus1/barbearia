@@ -212,7 +212,16 @@ export async function conceberVale(params: {
              ${params.motivo?.trim() || null}, ${movimentoId}::uuid,
              ${params.idempotencyKey ?? null},
              ${params.staffId}::uuid, ${params.staffName}
-       WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
+       -- O profissional precisa ser **desta loja**, e nao so existir.
+       -- A versao anterior conferia a unidade, nunca a cadeira: a gerente
+       -- escopada a filial concedia vale ao barbeiro da matriz tirando o
+       -- dinheiro da gaveta dela. O fechamento da folha descontava na loja onde
+       -- ele trabalha, e a gaveta da filial fechava faltando.
+       WHERE EXISTS (
+         SELECT 1 FROM professionals p
+          WHERE p.id = ${params.professionalId}::uuid
+            AND p.location_id = ${params.locationId}::uuid
+       )
       RETURNING id
     `;
     const criado = linhas[0];
@@ -287,6 +296,13 @@ async function sangriaDoVale(
 
 export async function cancelarVale(params: {
   readonly tenantId: string;
+  /**
+   * A loja do balcão. Cancelar devolve o dinheiro à gaveta **do vale** — isso
+   * já estava certo —, mas qualquer loja podia cancelar o vale de qualquer
+   * outra: a gerente da filial cancelava o adiantamento que a matriz tinha
+   * concedido, e o teto do barbeiro de lá voltava inteiro.
+   */
+  readonly locationId: string;
   readonly valeId: string;
   readonly motivo: string;
   readonly staffId: string;
@@ -307,6 +323,7 @@ export async function cancelarVale(params: {
       SELECT status::text AS status, amount_cents, cash_movement_id, location_id
         FROM professional_advances
        WHERE id = ${params.valeId}::uuid
+         AND location_id = ${params.locationId}::uuid
        FOR UPDATE
     `;
     const vale = linhas[0];
@@ -395,6 +412,13 @@ async function devolucaoDoVale(
 
 export async function valesDoPeriodo(params: {
   readonly tenantId: string;
+  /**
+   * A loja do balcão. `professional_advances.location_id` é `NOT NULL` e
+   * preenchida em toda linha desde que a coluna existe — e nenhuma leitura a
+   * usava: a tela de Comissão da filial listava os vales da rede inteira, cada
+   * um com botão "Cancelar" ao lado. É a coluna que existe e ninguém lê.
+   */
+  readonly locationId: string;
   readonly de: string;
   readonly ate: string;
   readonly somenteProfessionalId?: string | null;
@@ -418,7 +442,8 @@ export async function valesDoPeriodo(params: {
              v.created_by_name
         FROM professional_advances v
         JOIN professionals p ON p.id = v.professional_id
-       WHERE v.granted_on BETWEEN ${params.de}::date AND ${params.ate}::date
+       WHERE v.location_id = ${params.locationId}::uuid
+         AND v.granted_on BETWEEN ${params.de}::date AND ${params.ate}::date
          AND (${params.somenteProfessionalId ?? null}::uuid IS NULL
               OR v.professional_id = ${params.somenteProfessionalId ?? null}::uuid)
        ORDER BY v.granted_on DESC, v.created_at DESC

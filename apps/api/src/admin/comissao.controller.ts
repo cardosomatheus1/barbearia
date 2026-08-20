@@ -89,6 +89,15 @@ export class ComissaoController {
     return staff.professionalId ?? '00000000-0000-0000-0000-000000000000';
   }
 
+  /**
+   * O período e **a loja**. A unidade era resolvida aqui só para pegar o fuso.
+   *
+   * A folha é dos profissionais desta loja, como o DRE ao lado. Antes deste
+   * bloco a gerente escopada à filial lia "a casa tem a pagar R$ 7.676,40" com
+   * os três barbeiros da matriz nomeados, enquanto o DRE da mesma sessão dizia
+   * R$ 30,80 — duas telas do mesmo painel, mesmo período, 250 vezes de
+   * diferença (§6, pergunta 6, sobre dinheiro).
+   */
   private async periodoPadrao(staff: AuthenticatedStaff, query: { de?: string; ate?: string }) {
     const local = await unidadeDoBalcao(staff);
 
@@ -97,7 +106,7 @@ export class ComissaoController {
     const hoje = diaNaUnidade(null, local.timezone, new Date()).dia;
     const de = query.de ?? `${hoje.slice(0, 7)}-01`;
     const ate = query.ate ?? hoje;
-    return { de, ate };
+    return { de, ate, locationId: local.id };
   }
 
   /** A própria comissão. Sem segundo fator: é o holerite de quem pergunta. */
@@ -108,6 +117,9 @@ export class ComissaoController {
     @Query(new ZodValidationPipe(periodoSchema)) query: { de?: string; ate?: string },
   ) {
     const { de, ate } = await this.periodoPadrao(staff, query);
+    // Sem recorte de loja: o filtro por profissional já é o escopo, e ele
+    // trabalha numa loja só. Escopar de novo esconderia a comissão de quem
+    // mudou de unidade no meio do período.
     return extratoDeComissao({
       tenantId: staff.tenantId,
       de,
@@ -134,14 +146,20 @@ export class ComissaoController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoSchema)) query: { de?: string; ate?: string },
   ) {
-    const { de, ate } = await this.periodoPadrao(staff, query);
-    return extratoDeComissao({ tenantId: staff.tenantId, de, ate });
+    const { de, ate, locationId } = await this.periodoPadrao(staff, query);
+    return extratoDeComissao({ tenantId: staff.tenantId, de, ate, locationId });
   }
 
   @Exige('commission.view_all')
   @Get('closures')
   async fechamentos(@Staff() staff: AuthenticatedStaff) {
-    return { fechamentos: await fechamentosDeComissao({ tenantId: staff.tenantId }) };
+    const local = await unidadeDoBalcao(staff);
+    return {
+      fechamentos: await fechamentosDeComissao({
+        tenantId: staff.tenantId,
+        locationId: local.id,
+      }),
+    };
   }
 
   /**
@@ -159,8 +177,12 @@ export class ComissaoController {
     body: { de: string; ate: string; notas?: string },
   ) {
     try {
+      // Fecha **esta** loja. Irreversível por gatilho, e antes deste bloco a
+      // gerente de uma filial fechava o período dos barbeiros da matriz.
+      const local = await unidadeDoBalcao(staff);
       return await fecharPeriodoDeComissao({
         tenantId: staff.tenantId,
+        locationId: local.id,
         de: body.de,
         ate: body.ate,
         staffId: staff.staffUserId,

@@ -400,6 +400,8 @@ export async function extratoDeComissao(params: {
   readonly ate: string;
   /** Recorte do barbeiro que só pode ver a própria comissão. */
   readonly somenteProfessionalId?: string | null;
+  /** A loja do balcão. Nula é a rede inteira. */
+  readonly locationId?: string | null;
 }): Promise<ExtratoDeComissao> {
   return withTenant(params.tenantId, async (tx) => {
     const lancamentos = await lancamentosAbertos(tx, params);
@@ -479,9 +481,23 @@ interface LinhaBruta {
 
 export async function lancamentosAbertos(
   tx: TransactionClient,
-  params: { readonly de: string; readonly ate: string; readonly somenteProfessionalId?: string | null },
+  params: {
+    readonly de: string;
+    readonly ate: string;
+    readonly somenteProfessionalId?: string | null;
+    /**
+     * A loja. Nula é a rede inteira — o que toda barbearia de uma loja quer, e
+     * o que o dono quer ao fechar tudo de uma vez.
+     *
+     * A comissão é do profissional, e ele trabalha numa loja: sem este recorte,
+     * a gerente escopada à filial lia o extrato dos três barbeiros da matriz e
+     * tinha o botão de fechar o período ao lado.
+     */
+    readonly locationId?: string | null;
+  },
 ): Promise<LinhaBruta[]> {
   const recorte = params.somenteProfessionalId ?? null;
+  const loja = params.locationId ?? null;
   return tx.$queryRaw<LinhaBruta[]>`
     SELECT e.id, e.professional_id, p.name AS professional_name,
            e.rule_id, e.mode, e.value, e.tiers, e.base_cents, e.sign,
@@ -492,6 +508,7 @@ export async function lancamentosAbertos(
        AND e.earned_on >= ${params.de}::date
        AND e.earned_on <= ${params.ate}::date
        AND (${recorte}::uuid IS NULL OR e.professional_id = ${recorte}::uuid)
+       AND (${loja}::uuid IS NULL OR p.location_id = ${loja}::uuid)
      ORDER BY e.earned_on, e.id
   `;
 }
@@ -607,6 +624,14 @@ export async function fecharPeriodoDeComissao(params: {
   readonly tenantId: string;
   readonly de: string;
   readonly ate: string;
+  /**
+   * A loja cujo período está sendo fechado. Nula fecha a rede inteira.
+   *
+   * Fechar é irreversível — o gatilho torna o lançamento imutável —, e antes
+   * deste bloco a gerente de uma filial fechava o período dos barbeiros da
+   * matriz sem nem conseguir vê-los na própria tela como sendo de outra loja.
+   */
+  readonly locationId?: string | null;
   readonly staffId: string;
   readonly staffName: string;
   readonly notas?: string | null;
@@ -616,9 +641,11 @@ export async function fecharPeriodoDeComissao(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    const loja = params.locationId ?? null;
     const jaFechado = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM commission_closures
        WHERE starts_on = ${params.de}::date AND ends_on = ${params.ate}::date
+         AND location_id IS NOT DISTINCT FROM ${loja}::uuid
     `;
     if (jaFechado[0]) {
       throw new ComissaoError('periodo_ja_fechado', 'Este período já foi fechado.');
@@ -639,9 +666,10 @@ export async function fecharPeriodoDeComissao(params: {
 
     const criado = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO commission_closures
-        (tenant_id, starts_on, ends_on, closed_by, closed_by_name, notes)
+        (tenant_id, location_id, starts_on, ends_on, closed_by, closed_by_name, notes)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        ${loja}::uuid,
         ${params.de}::date, ${params.ate}::date,
         ${params.staffId}::uuid, ${params.staffName}, ${params.notas ?? null}
       )
@@ -731,10 +759,13 @@ export interface FechamentoDeComissao {
 export async function fechamentosDeComissao(params: {
   readonly tenantId: string;
   readonly somenteProfessionalId?: string | null;
+  /** A loja do balcão. Nula lista os fechamentos da rede. */
+  readonly locationId?: string | null;
   readonly limite?: number;
 }): Promise<readonly FechamentoDeComissao[]> {
   const limite = Math.min(Math.max(1, params.limite ?? 12), 60);
   const recorte = params.somenteProfessionalId ?? null;
+  const loja = params.locationId ?? null;
 
   return withTenant(params.tenantId, async (tx) => {
     // Duas consultas e um agrupamento em memória, nunca uma por fechamento:
@@ -744,6 +775,12 @@ export async function fechamentosDeComissao(params: {
     >`
       SELECT id, starts_on, ends_on, closed_at, closed_by_name
         FROM commission_closures
+       -- O fechamento da rede (loja nula) aparece em toda loja: o dinheiro e da
+       -- barbearia, e some-lo de todas seria pior que aparecer em cada uma. E o
+       -- mesmo criterio da mensalidade do clube anterior ao bloco 58.
+       WHERE ${loja}::uuid IS NULL
+          OR location_id IS NULL
+          OR location_id = ${loja}::uuid
        ORDER BY starts_on DESC
        LIMIT ${limite}
     `;

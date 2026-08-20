@@ -158,15 +158,25 @@ export class StripeWebhookController {
     if (estado === null) return { desfecho: 'ignorado' };
 
     /**
-     * O dia da unidade, não o do servidor.
+     * O dia da unidade, não o do servidor — e a unidade é a **da cobrança**.
      *
      * A comissão é datada pelo dia da barbearia: às 22h de Salvador o UTC já
      * virou, e ela cairia no mês seguinte do acerto do barbeiro (defeito D2, o
      * mesmo que erra a grade). Aqui isso importa ainda mais do que no balcão,
      * porque o webhook chega quando o adquirente quiser.
+     *
+     * O fuso saía de `primaryLocation`, a loja mais antiga: numa rede com loja
+     * em Salvador e em Rio Branco, a venda da filial era datada pelo dia da
+     * matriz. Quem sabe a loja é a própria cobrança, e o domínio a lê.
+     *
+     * A chamada continua aqui por **outra** razão, e ela é a que o teste do
+     * bloco 74 prende: um evento assinado pode apontar para um tenant que não
+     * existe — assinatura prova origem, não intenção —, e abrir transação com
+     * ele responde 500 em vez do `ignorado` que o adquirente precisa receber
+     * para parar de reentregar. O que se usa dela é só a existência.
      */
-    const local = await primaryLocation(tenantId);
-    if (!local) return { desfecho: 'ignorado' };
+    const existe = await primaryLocation(tenantId);
+    if (!existe) return { desfecho: 'ignorado' };
 
     const resultado = await confirmarCobranca({
       tenantId,
@@ -175,7 +185,7 @@ export class StripeWebhookController {
       pagamentoId: objeto.id,
       estado,
       ...(objeto.last_payment_error?.code ? { motivo: objeto.last_payment_error.code } : {}),
-      hojeNaUnidade: diaNaUnidade(null, local.timezone, new Date()).dia,
+      agora: new Date(),
     });
 
     return { desfecho: resultado.desfecho };

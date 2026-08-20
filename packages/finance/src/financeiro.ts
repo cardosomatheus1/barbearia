@@ -43,7 +43,8 @@ export type FinanceiroFailure =
   | 'cliente_nao_encontrado'
   | 'motivo_obrigatorio'
   | 'nome_repetido'
-  | 'ja_tem_extrato';
+  | 'ja_tem_extrato'
+  | 'gaveta_ja_existe';
 
 export class FinanceiroError extends Error {
   constructor(readonly code: FinanceiroFailure, message: string) {
@@ -68,6 +69,7 @@ const MENSAGEM: Readonly<Record<FinanceiroFailure, string>> = {
   nome_repetido: 'Já existe uma com esse nome.',
   ja_tem_extrato:
     'Este cliente já tem movimento no fiado. O saldo inicial só vale para quem ainda não tem nenhum.',
+  gaveta_ja_existe: 'Esta loja já tem uma gaveta. Cada unidade tem uma só.',
 };
 
 function recusar(code: FinanceiroFailure): never {
@@ -185,6 +187,11 @@ export async function criarContaFinanceira(params: {
   readonly nome: string;
   /** A gaveta de uma unidade. Sem unidade, é conta do negócio (banco, cofre). */
   readonly locationId?: string | null;
+  /**
+   * As lojas que o ator opera. Vazio significa **todas**, como em
+   * `staff_locations` — e a lista sai do banco, nunca do corpo.
+   */
+  readonly autorizadas: readonly string[];
   readonly ehGaveta?: boolean;
 }): Promise<ContaBancaria> {
   const nome = params.nome.trim();
@@ -198,6 +205,41 @@ export async function criarContaFinanceira(params: {
        WHERE lower(btrim(name)) = lower(btrim(${nome}))
     `;
     if (repetida.length > 0) recusar('nome_repetido');
+
+    /**
+     * Uma gaveta por loja, conferida **antes** do `INSERT`.
+     *
+     * O índice único parcial `financial_accounts (location_id) WHERE is_cash`
+     * garante a regra, e sozinho ele a entregava como **500 "Erro interno"**:
+     * entrada válida que bate em constraint tem que ser 400 com motivo, e é a
+     * regra de borda deste repositório desde o telefone brasileiro do bloco 1.
+     */
+    if (ehGaveta && params.locationId) {
+      const gaveta = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM financial_accounts
+         WHERE is_cash AND location_id = ${params.locationId}::uuid
+      `;
+      if (gaveta.length > 0) recusar('gaveta_ja_existe');
+    }
+
+    /**
+     * A unidade do corpo precisa estar entre as que o ator opera.
+     *
+     * `EXISTS (SELECT 1 FROM locations ...)` confere que a loja existe **nesta
+     * barbearia** — a RLS faz esse recorte. O que ela não faz é separar lojas
+     * dentro de uma: a gerente escopada à filial criava "Conta do Bradesco da
+     * matriz" mandando o id da matriz no corpo, e recebia 201.
+     *
+     * Lista vazia significa "todas", como em todo o resto do schema de
+     * `staff_locations`, e `null` é a conta que vale para a rede.
+     */
+    if (
+      params.locationId &&
+      params.autorizadas.length > 0 &&
+      !params.autorizadas.includes(params.locationId)
+    ) {
+      recusar('conta_bancaria_invalida');
+    }
 
     // Conferida sob RLS: a chave estrangeira aceitaria a unidade de outra
     // barbearia, porque a checagem referencial ignora row security.
@@ -369,6 +411,7 @@ export async function criarContaDoFinanceiro(params: {
       direcao: params.direcao,
       categoriaId: params.categoriaId ?? null,
       contaId: params.contaId ?? null,
+      locationId: params.locationId ?? null,
     });
 
     const linhas = await tx.$queryRaw<{ id: string }[]>`
@@ -418,6 +461,8 @@ async function conferirClassificacao(
     readonly direcao: DirecaoDaConta;
     readonly categoriaId: string | null;
     readonly contaId: string | null;
+    /** A loja da conta a pagar/receber, para casar com a da conta bancária. */
+    readonly locationId: string | null;
   },
 ): Promise<void> {
   if (params.categoriaId) {
@@ -430,8 +475,17 @@ async function conferirClassificacao(
   }
 
   if (params.contaId) {
+    /**
+     * A conta é da loja da conta a pagar, ou da rede (`location_id` nulo).
+     *
+     * Sem a segunda condição, uma conta a pagar da filial era gravada apontando
+     * para a conta bancária da matriz: o pagamento sairia de uma gaveta e a
+     * dívida estaria registrada na outra loja.
+     */
     const linhas = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM financial_accounts WHERE id = ${params.contaId}::uuid
+      SELECT id FROM financial_accounts
+       WHERE id = ${params.contaId}::uuid
+         AND (location_id IS NULL OR location_id = ${params.locationId ?? null}::uuid)
     `;
     if (linhas.length === 0) recusar('conta_bancaria_invalida');
   }

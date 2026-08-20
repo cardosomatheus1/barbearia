@@ -928,13 +928,12 @@ async function main(): Promise<void> {
        * barbeiro (defeito D2, o mesmo que erra a grade).
        */
       conciliarCobrancas: async (tenantId, agora) => {
-        const local = await primaryLocation(tenantId);
-        // Barbearia sem unidade não tem comanda, então não há o que conferir.
-        if (!local) return { pagas: 0, encerradas: 0 };
+        // O fuso não sai mais daqui: cada cobrança carrega a própria loja, e o
+        // domínio resolve o dia com o fuso dela. Pela unidade mais antiga, a
+        // venda de uma filial em outro fuso era datada pelo dia da matriz.
         const resultado = await conciliarCobrancas({
           tenantId,
           provider: adquirenteDaComanda(),
-          hojeNaUnidade: diaNaUnidade(null, local.timezone, agora).dia,
           agora,
         });
         if (resultado.pagas > 0 || resultado.encerradas > 0) {

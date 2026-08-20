@@ -79,10 +79,6 @@ export async function saveResources(params: {
     const tipos = params.pools.map((p) => p.resourceType);
 
     await tx.$executeRaw`
-      DELETE FROM service_resource_requirements
-      WHERE NOT (resource_type = ANY(${tipos}::text[]))
-    `;
-    await tx.$executeRaw`
       DELETE FROM resource_pools
       WHERE location_id = ${params.locationId}::uuid
         AND NOT (resource_type = ANY(${tipos}::text[]))
@@ -99,6 +95,29 @@ export async function saveResources(params: {
         DO UPDATE SET capacity = EXCLUDED.capacity
       `;
     }
+
+    /**
+     * A exigência some quando o tipo não existe em **loja nenhuma** — e esta é
+     * a última instrução da transação, de propósito.
+     *
+     * `resource_pools` é por unidade; `service_resource_requirements` é da
+     * barbearia. A versão anterior apagava a exigência de todo tipo ausente
+     * *desta* lista, e rodava antes das gravações: salvar a tela de Recursos de
+     * uma loja nova, com a lista vazia, apagava a exigência de lavatório da
+     * matriz junto. A grade de lá parava de reservar o recurso e passava a
+     * vender dois banhos no mesmo horário, sem trilha e sem nada ficar
+     * vermelho.
+     *
+     * A pergunta certa é sobre a rede, e a RLS já a recorta para esta
+     * barbearia. Rodando por último, a subconsulta enxerga os pools que este
+     * mesmo `UPSERT` acabou de gravar.
+     */
+    await tx.$executeRaw`
+      DELETE FROM service_resource_requirements r
+      WHERE NOT EXISTS (
+        SELECT 1 FROM resource_pools p WHERE p.resource_type = r.resource_type
+      )
+    `;
   });
 }
 

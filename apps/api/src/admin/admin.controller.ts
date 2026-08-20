@@ -215,6 +215,22 @@ export class OnboardingController {
     const local = await this.unidadeOuNada(staff);
     const estado = await getOnboardingState(staff.tenantId, local);
     if (!estado) throw notFound('unknown_tenant', 'Barbearia não encontrada');
+
+    /**
+     * A loja em que a pessoa está, para o casco dizer.
+     *
+     * A tela de Unidades promete em letras — *"Caixa, comanda e agenda são
+     * desta loja. Trocar aqui troca em todas as telas"* — e nenhuma das outras
+     * mencionava a loja: cinco telas visitadas depois de trocar continuavam
+     * exibindo só o nome da rede. A recepcionista que atende nas duas abria o
+     * Caixa sem saber qual gaveta ia abrir, e é isso que transforma um erro de
+     * escopo em erro de operação.
+     *
+     * `ehRede` decide se a linha aparece: numa barbearia de uma loja só, o nome
+     * da unidade embaixo do nome da casa é ruído — é a mesma decisão do seletor
+     * de uma opção só.
+     */
+    const selecao = await selecaoDoBalcao(staff);
     // As permissões saem daqui, resolvidas do papel na mesma consulta da
     // sessão: a tela mostra o que a API aplica, nunca uma cópia da lista
     // (CLAUDE.md). E é uma ida ao banco a menos que uma rota `/me` por página.
@@ -254,6 +270,14 @@ export class OnboardingController {
          */
         suporte: staff.impersonatedBy !== null,
       },
+      unidade: selecao.atual
+        ? {
+            id: selecao.atual.id,
+            nome: selecao.atual.nome,
+            /** Só numa rede a linha vale a pena; com uma loja é ruído. */
+            ehRede: selecao.disponiveis.length > 1,
+          }
+        : null,
     };
   }
 

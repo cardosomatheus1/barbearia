@@ -78,6 +78,7 @@ export default async function AdminLayout({ children }: { readonly children: Rea
         nome={estado.dados.staff.name}
         papel={suporte ? 'suporte' : estado.dados.staff.role}
         recursos={estado.dados.recursos}
+        unidade={estado.dados.unidade?.ehRede ? estado.dados.unidade.nome : null}
       >
         {children}
       </Casco>

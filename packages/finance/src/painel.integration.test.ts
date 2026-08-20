@@ -250,6 +250,7 @@ describeIfDb('painel do proprietário', () => {
       quantidade: 1, precoUnitarioCents: 5000, professionalId: RUAN,
     });
     await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: aberta.id, desconto: null, gorjetaCents: 1000,
       staffId: STAFF, staffName: 'Maria',
     });

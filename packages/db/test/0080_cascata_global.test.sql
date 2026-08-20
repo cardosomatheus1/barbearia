@@ -151,4 +151,48 @@ BEGIN
   RAISE NOTICE 'OK 3 — o privilegio real bate com o que o comentario promete';
 END $$;
 
+
+-- ----------------------------------------------------------------------------
+-- 4 — nenhuma cascata para `locations`, exceto `tenant_id`
+--
+-- O recorte do item 1 e "tabela em que a aplicacao nao pode apagar", e por isso
+-- ele nao alcanca `orders`, `appointments` e `cash_sessions` — a aplicacao tem
+-- DELETE nas tres. Mas a regra escrita desde o bloco 51 e outra e mais larga:
+-- *chave estrangeira para `locations` em tabela de dinheiro e `RESTRICT`, nunca
+-- `CASCADE`* — e o comentario de `packages/catalog/src/unidades.ts` afirma que
+-- **toda** chave para `locations` e `RESTRICT`.
+--
+-- Dez nao eram, entre elas `orders` e `cash_sessions`. O fecho transitivo
+-- alcancava vinte e duas tabelas, incluindo `order_items`, `order_payments` e
+-- `commission_rules`. Ninguem apaga unidade hoje — "fechar" e `active = false` —
+-- mas o dia em que alguem acrescentar "excluir unidade" a operacao leva a venda
+-- junto, passando por cima do REVOKE, porque acao referencial roda com os
+-- direitos do dono.
+--
+-- E cascata para `locations` e pior que a media: `staff_locations` mostrou por
+-- que no bloco 58 — como ausencia significa "todas as lojas", apagar uma
+-- unidade promoveria em silencio todo operador escopado a ela a operador da
+-- rede inteira.
+-- ----------------------------------------------------------------------------
+DO $$
+DECLARE
+  achado text;
+BEGIN
+  SELECT string_agg(format('%s.%s', c.conrelid::regclass, a.attname), ', ')
+    INTO achado
+    FROM pg_constraint c
+    JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+   WHERE c.contype = 'f'
+     AND c.confrelid = 'locations'::regclass
+     AND c.confdeltype = 'c'
+     AND a.attname <> 'tenant_id';
+
+  IF achado IS NOT NULL THEN
+    RAISE EXCEPTION 'cascata para locations (use RESTRICT): %', achado;
+  END IF;
+
+  RAISE NOTICE 'OK 4 — nenhuma chave para locations cascateia';
+END $$;
+
 ROLLBACK;

@@ -1102,6 +1102,19 @@ export interface RescheduleRequest {
    * de um terceiro.
    */
   readonly onlyProfessionalId?: string | null;
+  /**
+   * A loja do balcão, quando quem remarca é a equipe.
+   *
+   * A RLS não separa lojas dentro de uma barbearia: a gerente escopada à filial
+   * movia o agendamento da matriz mandando o id por `curl`, e o cliente da
+   * outra loja tinha o horário mexido sem o balcão de lá saber. As vizinhas do
+   * mesmo controller já filtravam — `createException` e `deleteException`
+   * casam pela loja ou pela loja do profissional.
+   *
+   * Nulo é a porta do **cliente**, que remarca o próprio horário e não tem
+   * balcão nenhum: ali quem recorta é `customerId`.
+   */
+  readonly onlyLocationId?: string | null;
   readonly now?: Date;
 }
 
@@ -1161,6 +1174,8 @@ export async function rescheduleAppointment(
         -- colega — bastava ter o id, e a lista de conflitos dava o id.
         AND (${request.onlyProfessionalId ?? null}::uuid IS NULL
              OR a.professional_id = ${request.onlyProfessionalId ?? null}::uuid)
+        AND (${request.onlyLocationId ?? null}::uuid IS NULL
+             OR a.location_id = ${request.onlyLocationId ?? null}::uuid)
       GROUP BY a.id
     `;
 

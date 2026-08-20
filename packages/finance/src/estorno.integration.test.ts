@@ -214,9 +214,10 @@ describeIfDb('vale, estorno e DRE', () => {
       ator,
     });
     await exec(`
-      INSERT INTO stock_movements (tenant_id, product_id, kind, quantity, unit_cost_cents,
-                                   business_day, reason)
-      VALUES ('${TENANT}', '${produto.id}', 'entrada', 10, 1200, '${HOJE}', 'compra');
+      INSERT INTO stock_movements (tenant_id, product_id, location_id, kind, quantity,
+                                   unit_cost_cents, business_day, reason)
+      VALUES ('${TENANT}', '${produto.id}', '${LOCATION}', 'entrada', 10, 1200,
+              '${HOJE}', 'compra');
     `);
 
     const aberta = await abrirComanda({
@@ -483,7 +484,7 @@ describeIfDb('vale, estorno e DRE', () => {
     expect(linha[0]?.amount_cents).toBe(4000);
     expect(linha[0]?.advance_cents).toBe(1500);
 
-    const vales = await valesDoPeriodo({ tenantId: TENANT, de: '2026-11-01', ate: '2026-11-30' });
+    const vales = await valesDoPeriodo({ locationId: LOCATION, tenantId: TENANT, de: '2026-11-01', ate: '2026-11-30' });
     expect(vales[0]?.estado).toBe('descontado');
   });
 
@@ -512,6 +513,7 @@ describeIfDb('vale, estorno e DRE', () => {
     });
 
     await cancelarVale({
+      locationId: LOCATION,
       tenantId: TENANT,
       valeId: vale.id,
       motivo: 'Lançado no profissional errado',
@@ -609,7 +611,7 @@ describeIfDb('vale, estorno e DRE', () => {
     const primeiro = await pedir();
     const segundo = await pedir();
     expect(segundo.id).toBe(primeiro.id);
-    expect(await valesDoPeriodo({ tenantId: TENANT, de: '2026-11-01', ate: '2026-11-30' }))
+    expect(await valesDoPeriodo({ locationId: LOCATION, tenantId: TENANT, de: '2026-11-01', ate: '2026-11-30' }))
       .toHaveLength(1);
   });
 
@@ -628,17 +630,18 @@ describeIfDb('vale, estorno e DRE', () => {
     });
 
     await expect(
-      cancelarVale({ tenantId: TENANT, valeId: vale.id, motivo: 'x', ...operador }),
+      cancelarVale({ locationId: LOCATION, tenantId: TENANT, valeId: vale.id, motivo: 'x', ...operador }),
     ).rejects.toMatchObject({ code: 'motivo_obrigatorio' });
 
     await cancelarVale({
+      locationId: LOCATION,
       tenantId: TENANT,
       valeId: vale.id,
       motivo: 'Lançado no profissional errado',
       ...operador,
     });
     await expect(
-      cancelarVale({ tenantId: TENANT, valeId: vale.id, motivo: 'de novo', ...operador }),
+      cancelarVale({ locationId: LOCATION, tenantId: TENANT, valeId: vale.id, motivo: 'de novo', ...operador }),
     ).rejects.toMatchObject({ code: 'vale_nao_aberto' });
 
     // Cancelado sai da conta do teto: o dinheiro voltou.
@@ -719,6 +722,7 @@ describeIfDb('vale, estorno e DRE', () => {
       ...operador,
     });
     await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT,
       orderId: comanda.id,
       desconto: { tipo: 'amount', valor: 1000, motivo: 'cliente de sempre, combinado com o dono' },

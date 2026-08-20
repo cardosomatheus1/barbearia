@@ -4773,6 +4773,21 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
   color: var(--color-accent);
   overflow-wrap: anywhere;
 }
+/*
+ * A loja da sessao, entre o nome da casa e "Painel de gestao".
+ *
+ * Peso e tamanho abaixo do nome da rede e acima do rotulo: e a segunda coisa
+ * mais importante do cabecalho, porque decide de qual gaveta o caixa fala. Sem
+ * caixa alta nem cor de acento -- quem manda no bloco continua sendo o nome da
+ * barbearia, e dois acentos brigando seriam dois destaques.
+ */
+.contexto__unidade {
+  margin: 2px 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
 .contexto__sub {
   margin: 2px 0 0;
   font-size: var(--font-size-xs);

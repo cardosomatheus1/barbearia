@@ -131,9 +131,11 @@ export class DreController {
       professionalId?: string;
     },
   ) {
+    const local = await this.unidade(staff);
     return {
       vales: await valesDoPeriodo({
         tenantId: staff.tenantId,
+        locationId: local.id,
         de: query.de,
         ate: query.ate,
         somenteProfessionalId: query.professionalId ?? null,
@@ -201,8 +203,10 @@ export class DreController {
     @Body(new ZodValidationPipe(cancelamentoDeValeSchema)) body: { motivo: string },
   ) {
     try {
+      const local = await this.unidade(staff);
       await cancelarVale({
         tenantId: staff.tenantId,
+        locationId: local.id,
         valeId: id,
         motivo: body.motivo,
         staffId: staff.staffUserId,

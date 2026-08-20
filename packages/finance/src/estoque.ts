@@ -113,10 +113,25 @@ interface LinhaDoProduto {
  * abre com cinquenta produtos, e cinquenta idas ao banco fariam dela a mais
  * lenta do painel.
  */
+/**
+ * O saldo e **da loja**, e o parametro dela e o $2 de toda consulta que use
+ * este trecho.
+ *
+ * `products` e o cadastro da barbearia; `stock_movements` e por loja desde o
+ * bloco 58. Somando a rede, a tela de Estoque da filial dizia "Bone da casa —
+ * 44 un em estoque" e "Nada abaixo do minimo" sobre uma prateleira vazia, com
+ * "acaba em N dias" calculado do consumo **da filial** ao lado: as duas metades
+ * da mesma linha, uma da rede e outra da loja.
+ *
+ * A tela de transferencia ja acertava e mostra por que: ela escreve "44 na
+ * rede" e usa `saldosPorUnidade`. Esta copiava o numero e largava o rotulo.
+ */
 const SELECT_DO_PRODUTO = `
   SELECT p.id, p.sku, p.barcode, p.name, p.category, p.supplier, p.kind,
          p.cost_cents, p.price_cents, p.min_stock, p.unit, p.expires_on, p.active,
-         (SELECT sum(m.quantity) FROM stock_movements m WHERE m.product_id = p.id) AS saldo
+         (SELECT sum(m.quantity) FROM stock_movements m
+           WHERE m.product_id = p.id
+             AND ($2::uuid IS NULL OR m.location_id = $2::uuid)) AS saldo
     FROM products p
 `;
 
@@ -156,11 +171,14 @@ export async function produtos(
   tenantId: string,
   incluirInativos = false,
   agora: Date = new Date(),
+  /** A loja. Nula soma a rede — e a tela que a passar nula precisa dizer isso. */
+  locationId: string | null = null,
 ): Promise<readonly ProdutoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRawUnsafe<LinhaDoProduto[]>(
       `${SELECT_DO_PRODUTO} WHERE ($1::boolean OR p.active) ORDER BY p.name`,
       incluirInativos,
+      locationId,
     );
     return linhas.map((l) => paraTela(l, agora));
   });
@@ -283,7 +301,16 @@ export async function moverEstoque(
     readonly tipo: TipoDeMovimentoDeEstoque;
     readonly quantidade: number;
     readonly diaDaUnidade: string;
-    readonly locationId?: string | null;
+    /**
+     * A loja do movimento — **obrigatória**.
+     *
+     * Opcional, ela nasceu ausente num caminho e o saldo por loja somava zero
+     * em toda parte: era gravada pela venda, pelo consumo e pelo estorno, e não
+     * pela entrada, que é por onde o produto chega. Quando um caminho preenche
+     * e o outro não, o campo mente pior do que se estivesse vazio — ele tem
+     * número. Obrigatória, o compilador cobra o caminho novo.
+     */
+    readonly locationId: string;
     readonly orderId?: string | null;
     readonly appointmentId?: string | null;
     readonly motivo?: string | null;
@@ -292,9 +319,19 @@ export async function moverEstoque(
     readonly custoUnitarioCents?: number | null;
   },
 ): Promise<void> {
+  /**
+   * O saldo que a validacao le e o **da loja do movimento**.
+   *
+   * Somando a rede, venda, consumo e perda numa loja eram validados contra o
+   * estoque da outra: a filial sem nenhuma unidade de pomada lancava perda de 5
+   * e recebia `{"lancado":true}`, deixando o saldo de la em −5 enquanto o da
+   * rede seguia positivo.
+   */
   const linhas = await tx.$queryRaw<{ cost_cents: number; saldo: bigint | null }[]>`
     SELECT p.cost_cents,
-           (SELECT sum(m.quantity) FROM stock_movements m WHERE m.product_id = p.id) AS saldo
+           (SELECT sum(m.quantity) FROM stock_movements m
+             WHERE m.product_id = p.id
+               AND m.location_id = ${params.locationId}::uuid) AS saldo
       FROM products p
      WHERE p.id = ${params.produtoId}::uuid
      FOR UPDATE OF p
@@ -409,6 +446,12 @@ export interface MovimentoNaTela {
 export async function movimentosDoProduto(
   tenantId: string,
   produtoId: string,
+  /**
+   * A loja. É o extrato que responde *"por que só tem 12 se eu comprei 20?"*,
+   * e da rede ele não responde por loja nenhuma — a pergunta é sempre sobre a
+   * prateleira que a pessoa está olhando.
+   */
+  locationId: string,
   limite = 50,
 ): Promise<readonly MovimentoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
@@ -429,6 +472,7 @@ export async function movimentosDoProduto(
         FROM stock_movements m
         LEFT JOIN staff_users s ON s.id = m.staff_user_id
        WHERE m.product_id = ${produtoId}::uuid
+         AND m.location_id = ${locationId}::uuid
        ORDER BY m.created_at DESC
        LIMIT ${limite}
     `;
@@ -578,7 +622,8 @@ export async function consumirFicha(
     readonly orderId: string;
     readonly diaDaUnidade: string;
     readonly appointmentId?: string | null;
-    readonly locationId?: string | null;
+    /** A loja da baixa. Obrigatória: o saldo que ela consome é o de lá. */
+    readonly locationId: string;
   },
 ): Promise<void> {
   if (params.servicos.length === 0) return;
@@ -619,7 +664,7 @@ export async function consumirFicha(
         orderId: params.orderId,
         custoUnitarioCents: item.cost_cents,
         ...(params.appointmentId ? { appointmentId: params.appointmentId } : {}),
-        ...(params.locationId ? { locationId: params.locationId } : {}),
+        locationId: params.locationId,
       });
     } catch (erro) {
       // Só o saldo insuficiente é engolido, e com o motivo escrito acima.
@@ -635,7 +680,8 @@ export async function baixarVendas(
   params: {
     readonly orderId: string;
     readonly diaDaUnidade: string;
-    readonly locationId?: string | null;
+    /** A loja da baixa. Obrigatória: o saldo que ela consome é o de lá. */
+    readonly locationId: string;
   },
 ): Promise<void> {
   const itens = await tx.$queryRaw<{ product_id: string; quantity: number; cost_cents: number }[]>`
@@ -655,7 +701,7 @@ export async function baixarVendas(
         diaDaUnidade: params.diaDaUnidade,
         orderId: params.orderId,
         custoUnitarioCents: item.cost_cents,
-        ...(params.locationId ? { locationId: params.locationId } : {}),
+        locationId: params.locationId,
       });
     } catch (erro) {
       /**
@@ -705,6 +751,14 @@ export async function margemPorServico(
   tenantId: string,
   de: string,
   ate: string,
+  /**
+   * A loja. É a tela que decide preço, sob `finance.view_profit`, e ela
+   * devolvia byte a byte o mesmo corpo nas duas lojas — a margem da matriz —
+   * enquanto o DRE ao lado, que filtra por unidade em todas as dez consultas,
+   * mostrava outro número. O gerente da filial lia a margem da matriz e
+   * decidia o preço da dele.
+   */
+  locationId: string,
 ): Promise<readonly MargemDoServico[]> {
   return withTenant(tenantId, async (tx) => {
     /**
@@ -735,6 +789,7 @@ export async function margemPorServico(
         JOIN services s ON s.id = i.service_id
        WHERE i.service_id IS NOT NULL
          AND o.status = 'paid'
+         AND o.location_id = ${locationId}::uuid
          AND o.business_day >= ${de}::date
          AND o.business_day <= ${ate}::date
     `;
@@ -866,12 +921,15 @@ export async function cmvDoPeriodo(
   tenantId: string,
   de: string,
   ate: string,
+  /** A loja. O custo do que saiu da prateleira de lá, não o da rede. */
+  locationId: string,
 ): Promise<{ readonly vendaCents: number; readonly consumoCents: number; readonly perdaCents: number }> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ kind: TipoDeMovimentoDeEstoque; custo: bigint }[]>`
       SELECT kind, sum(abs(quantity) * unit_cost_cents)::bigint AS custo
         FROM stock_movements
-       WHERE business_day >= ${de}::date AND business_day <= ${ate}::date
+       WHERE location_id = ${locationId}::uuid
+         AND business_day >= ${de}::date AND business_day <= ${ate}::date
          AND kind IN ('venda', 'consumo', 'perda')
        GROUP BY kind
     `;

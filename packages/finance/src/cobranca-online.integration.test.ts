@@ -280,7 +280,6 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider: new FakePaymentProvider(),
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
@@ -298,7 +297,7 @@ describeIfDb('a cobrança online da comanda', () => {
       tipo: 'payment_intent.succeeded',
       pagamentoId,
       estado: 'pago',
-      hojeNaUnidade: HOJE,
+      agora: AGORA,
     });
 
   it('a confirmação dispara a cadeia: fecha comanda, entra no caixa e gera comissão', async () => {
@@ -318,7 +317,7 @@ describeIfDb('a cobrança online da comanda', () => {
     expect(resultado.desfecho).toBe('pago');
     expect(resultado.comanda?.status).toBe('paid');
 
-    const comanda = await getComanda(TENANT, orderId);
+    const comanda = await getComanda(TENANT, orderId, LOCATION);
     expect(comanda.status).toBe('paid');
     expect(comanda.pagamentos[0]).toMatchObject({ forma: 'pix', valorCents: 4900 });
 
@@ -377,7 +376,7 @@ describeIfDb('a cobrança online da comanda', () => {
     const resultado = await confirmar(cobranca.pagamentoId ?? '');
 
     expect(resultado.desfecho).toBe('pago_sem_caixa');
-    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
     expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('pago');
 
     // E abrindo o caixa, a conciliação não refaz nada: a cobrança já saiu de
@@ -386,7 +385,6 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider: new FakePaymentProvider(),
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
     expect(varredura.consultadas).toBe(0);
@@ -405,11 +403,11 @@ describeIfDb('a cobrança online da comanda', () => {
       pagamentoId: cobranca.pagamentoId ?? '',
       estado: 'recusado',
       motivo: 'card_declined',
-      hojeNaUnidade: HOJE,
+      agora: AGORA,
     });
 
     expect(resultado.desfecho).toBe('recusado');
-    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
     // E dá para cobrar de novo: o índice único só vale para `aguardando`.
     const outra = await cobrar(orderId, provider, 'toque-2');
     expect(outra.estado).toBe('aguardando');
@@ -509,7 +507,7 @@ describeIfDb('a cobrança online da comanda', () => {
     });
 
     expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('aguardando');
-    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
 
     const eventos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ event_id: string }[]>`
       SELECT event_id FROM order_charge_events
@@ -616,14 +614,13 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider: quebrado,
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
     expect(varredura.comFalha).toBe(1);
     // A segunda foi conferida e fechada mesmo com a primeira estourando.
     expect(varredura.pagas).toBe(1);
-    expect((await getComanda(TENANT, segunda)).status).toBe('paid');
+    expect((await getComanda(TENANT, segunda, LOCATION)).status).toBe('paid');
   });
 
   it('cancelar mata o código no adquirente, não só aqui', async () => {
@@ -719,18 +716,17 @@ describeIfDb('a cobrança online da comanda', () => {
     const cobranca = await cobrar(orderId, provider);
 
     expect((await confirmar(cobranca.pagamentoId ?? '')).desfecho).toBe('pago_sem_caixa');
-    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
 
     await abrirGaveta();
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider,
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
     expect(varredura.concluidas).toBe(1);
-    expect((await getComanda(TENANT, orderId)).status).toBe('paid');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('paid');
   });
 
   it('com a cobrança já paga, a comanda não aceita item novo', async () => {
@@ -766,12 +762,11 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider,
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
     expect(varredura).toMatchObject({ consultadas: 1, pagas: 1 });
-    expect((await getComanda(TENANT, orderId)).status).toBe('paid');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('paid');
   });
 
   it('a conciliação não conta o pagamento de novo quando o webhook já contou', async () => {
@@ -791,7 +786,6 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider,
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
@@ -813,7 +807,6 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider,
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
@@ -834,7 +827,6 @@ describeIfDb('a cobrança online da comanda', () => {
     const varredura = await conciliarCobrancas({
       tenantId: TENANT,
       provider,
-      hojeNaUnidade: HOJE,
       agora: AGORA,
     });
 
@@ -887,11 +879,11 @@ describeIfDb('a cobrança online da comanda', () => {
       tipo: 'payment_intent.succeeded',
       pagamentoId: cobranca.pagamentoId ?? '',
       estado: 'pago',
-      hojeNaUnidade: HOJE,
+      agora: AGORA,
     });
 
     expect(resultado.desfecho).toBe('ignorado');
-    expect((await getComanda(TENANT, orderId)).status).toBe('open');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
   });
 
   it('caixa fechado depois da emissão não perde o pagamento', async () => {

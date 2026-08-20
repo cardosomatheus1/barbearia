@@ -119,6 +119,7 @@ describeIfDb('comissão', () => {
 
     if (params.descontoCents || params.gorjetaCents) {
       await ajustarComanda({
+        locationId: LOCATION,
         tenantId: TENANT, orderId: aberta.id,
         desconto: params.descontoCents
           ? { tipo: 'amount', valor: params.descontoCents, motivo: 'Cliente antigo' }
@@ -241,6 +242,7 @@ describeIfDb('comissão', () => {
       precoUnitarioCents: 6_000, professionalId: GLEIDSON,
     });
     await ajustarComanda({
+      locationId: LOCATION,
       tenantId: TENANT, orderId: aberta.id,
       desconto: { tipo: 'amount', valor: 1_000, motivo: 'Cliente antigo' }, ...operador,
     });

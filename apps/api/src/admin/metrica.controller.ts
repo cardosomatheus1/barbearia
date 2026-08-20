@@ -296,7 +296,7 @@ async function responder(
      * faz; as fatias são os serviços, do de maior sobra para o de menor, que é o
      * que a pergunta "qual serviço dá a maior margem?" quer saber.
      */
-    const servicos = await margemPorServico(tenantId, pergunta.de, pergunta.ate);
+    const servicos = await margemPorServico(tenantId, pergunta.de, pergunta.ate, locationId);
     const preco = servicos.reduce((soma, s) => soma + s.precoCents, 0);
     const margem = servicos.reduce((soma, s) => soma + s.margemCents, 0);
     return {

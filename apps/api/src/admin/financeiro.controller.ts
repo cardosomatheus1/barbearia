@@ -87,6 +87,7 @@ const STATUS: Record<string, number> = {
   motivo_obrigatorio: 400,
   nome_repetido: 409,
   ja_tem_extrato: 409,
+  gaveta_ja_existe: 409,
 };
 
 function toHttp(erro: unknown): never {
@@ -258,7 +259,14 @@ export class FinanceiroController {
     },
   ) {
     try {
-      return await criarContaFinanceira({ tenantId: staff.tenantId, ...body });
+      // A lista que a tela oferece decide o que ela **mostra**; o `POST` recebe
+      // o id do corpo. A conferência é do domínio, com as lojas que o ator
+      // opera lidas do banco — bloco 58, na porta do financeiro.
+      return await criarContaFinanceira({
+        tenantId: staff.tenantId,
+        autorizadas: staff.unidadesAutorizadas,
+        ...body,
+      });
     } catch (erro) {
       return toHttp(erro);
     }

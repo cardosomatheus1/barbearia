@@ -230,7 +230,9 @@ export class MultiunidadeController {
   async transferencias(@Staff() staff: AuthenticatedStaff) {
     const [lista, catalogo, saldos, selecao] = await Promise.all([
       transferenciasDaCasa(staff.tenantId, staff.unidadesAutorizadas),
-      produtos(staff.tenantId, false),
+      // Aqui o saldo da rede é o certo, e a tela escreve "na rede" ao lado:
+      // é a transferência que decide de qual loja o produto sai.
+      produtos(staff.tenantId, false, new Date(), null),
       saldosPorUnidade(staff.tenantId, staff.unidadesAutorizadas),
       selecaoDoBalcao(staff),
     ]);

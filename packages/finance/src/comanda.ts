@@ -81,7 +81,18 @@ export interface Comanda {
   readonly conta: { readonly saldoCents: number; readonly limiteCents: number } | null;
 }
 
-async function carregar(tx: TransactionClient, orderId: string): Promise<Comanda> {
+/**
+ * Carrega a comanda. Com `locationId`, ela precisa ser **daquela loja**.
+ *
+ * `null` significa "a loja já foi conferida por quem chamou" — e só os
+ * caminhos internos, depois de `exigirAberta`, o usam. Nenhuma porta de fora
+ * do módulo passa `null`.
+ */
+async function carregar(
+  tx: TransactionClient,
+  orderId: string,
+  locationId: string | null,
+): Promise<Comanda> {
   const cabecas = await tx.$queryRaw<
     {
       id: string;
@@ -106,6 +117,7 @@ async function carregar(tx: TransactionClient, orderId: string): Promise<Comanda
       FROM orders o
       LEFT JOIN customers c ON c.id = o.customer_id
      WHERE o.id = ${orderId}::uuid
+       AND (${locationId}::uuid IS NULL OR o.location_id = ${locationId}::uuid)
   `;
   const cabeca = cabecas[0];
   if (!cabeca) {
@@ -181,8 +193,12 @@ async function carregar(tx: TransactionClient, orderId: string): Promise<Comanda
   };
 }
 
-export async function getComanda(tenantId: string, orderId: string): Promise<Comanda> {
-  return withTenant(tenantId, (tx) => carregar(tx, orderId));
+export async function getComanda(
+  tenantId: string,
+  orderId: string,
+  locationId: string,
+): Promise<Comanda> {
+  return withTenant(tenantId, (tx) => carregar(tx, orderId, locationId));
 }
 
 /**
@@ -331,7 +347,7 @@ async function comandaAbertaDoAtendimento(
        AND status = 'open'
   `;
   const aberta = abertas[0];
-  return aberta ? carregar(tx, aberta.id) : null;
+  return aberta ? carregar(tx, aberta.id, null) : null;
 }
 
 async function inserirComanda(params: {
@@ -350,7 +366,7 @@ async function inserirComanda(params: {
            AND idempotency_key = ${params.idempotencyKey}
       `;
       const jaExiste = anterior[0];
-      if (jaExiste) return carregar(tx, jaExiste.id);
+      if (jaExiste) return carregar(tx, jaExiste.id, params.locationId);
     }
 
     let customerId = params.customerId ?? null;
@@ -437,7 +453,7 @@ async function inserirComanda(params: {
     }
 
     await recalcular(tx, id);
-    return carregar(tx, id);
+    return carregar(tx, id, params.locationId);
   });
 }
 
@@ -460,7 +476,7 @@ async function inserirComanda(params: {
  * e mora em outra tabela.
  */
 async function recalcular(tx: TransactionClient, orderId: string): Promise<void> {
-  const comanda = await carregar(tx, orderId);
+  const comanda = await carregar(tx, orderId, null);
 
   const teto = tetoDoDesconto(comanda.subtotalCents, await tetoDaBarbearia(tx));
   const descontoCents = Math.min(comanda.descontoCents, teto);
@@ -530,23 +546,53 @@ async function exigirSemCobrancaViva(tx: TransactionClient, orderId: string): Pr
   }
 }
 
+/**
+ * A comanda desta loja, aberta — a porta única de toda escrita sobre `orders`.
+ *
+ * ## `locationId` é obrigatório, e é o conserto
+ *
+ * A RLS separa barbearias e **não** separa lojas dentro de uma. Esta função
+ * lia `WHERE id = $1` e nada mais, e por ela passam acrescentar item, remover
+ * item, dar desconto e **fechar**: a gerente escopada à filial fechava a
+ * comanda da matriz mandando o id por `curl`, e o dinheiro caía na gaveta da
+ * filial com `orders.location_id` continuando matriz.
+ *
+ * O sintoma não é abstrato: o caixa da matriz fecha faltando, o da filial
+ * sobrando, e nenhuma das duas telas explica. É a única coisa que a exigência
+ * de caixa aberto desde o bloco 18 existe para dar — a divergência do
+ * fechamento ter dono.
+ *
+ * Pelo Pix acontece **sem ninguém clicar**: o webhook confirma e o fechamento
+ * roda com o `locationId` da linha de cobrança.
+ *
+ * O parâmetro é obrigatório de propósito. Opcional, ele nasceria ausente na
+ * primeira rota nova e o buraco voltaria sem nada ficar vermelho — é o defeito
+ * de `blocks`, e este arquivo é o lugar mais caro do produto para repeti-lo.
+ *
+ * A recusa usa a **mesma mensagem** de comanda inexistente: "existe, mas não é
+ * sua" confirma o id para quem o adivinhou.
+ */
 async function exigirAberta(
   tx: TransactionClient,
   orderId: string,
+  locationId: string,
   travar = false,
 ): Promise<Comanda> {
   if (travar) {
     // Só a chave: `carregar` faz JOIN com `customers` e `professionals`, e
     // `FOR UPDATE` sobre junção travaria linha que não é desta operação.
     const travadas = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM orders WHERE id = ${orderId}::uuid FOR UPDATE
+      SELECT id FROM orders
+       WHERE id = ${orderId}::uuid
+         AND location_id = ${locationId}::uuid
+       FOR UPDATE
     `;
     if (!travadas[0]) {
       throw new ComandaError('comanda_nao_encontrada', 'Esta comanda não existe mais.');
     }
   }
 
-  const comanda = await carregar(tx, orderId);
+  const comanda = await carregar(tx, orderId, locationId);
   if (comanda.status !== 'open') {
     throw new ComandaError('comanda_fechada', 'Esta comanda já foi fechada.');
   }
@@ -580,7 +626,7 @@ export async function adicionarItem(params: {
   readonly productId?: string | null;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
-    await exigirAberta(tx, params.orderId);
+    await exigirAberta(tx, params.orderId, params.locationId);
     await exigirSemCobrancaViva(tx, params.orderId);
 
     const falha = validarItem({
@@ -676,7 +722,7 @@ export async function adicionarItem(params: {
     `;
 
     await recalcular(tx, params.orderId);
-    return carregar(tx, params.orderId);
+    return carregar(tx, params.orderId, null);
   });
 }
 
@@ -705,12 +751,14 @@ export async function adicionarItem(params: {
  */
 export async function removerItem(params: {
   readonly tenantId: string;
+  /** A loja do balcão. A comanda de outra loja é recusada como inexistente. */
+  readonly locationId: string;
   readonly orderId: string;
   readonly itemId: string;
   readonly ator?: { readonly id: string; readonly name: string };
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
-    await exigirAberta(tx, params.orderId);
+    await exigirAberta(tx, params.orderId, params.locationId);
     await exigirSemCobrancaViva(tx, params.orderId);
 
     const alvo = await tx.$queryRaw<
@@ -745,7 +793,7 @@ export async function removerItem(params: {
     }
 
     await recalcular(tx, params.orderId);
-    return carregar(tx, params.orderId);
+    return carregar(tx, params.orderId, null);
   });
 }
 
@@ -772,6 +820,8 @@ const reais = (centavos: number): string =>
  */
 export async function ajustarComanda(params: {
   readonly tenantId: string;
+  /** A loja do balcão. A comanda de outra loja é recusada como inexistente. */
+  readonly locationId: string;
   readonly orderId: string;
   readonly desconto?: DescontoDaComanda | null;
   readonly gorjetaCents?: number;
@@ -779,7 +829,7 @@ export async function ajustarComanda(params: {
   readonly staffName: string;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
-    const atual = await exigirAberta(tx, params.orderId);
+    const atual = await exigirAberta(tx, params.orderId, params.locationId);
     await exigirSemCobrancaViva(tx, params.orderId);
 
     if (params.desconto) {
@@ -844,7 +894,7 @@ export async function ajustarComanda(params: {
       });
     }
 
-    return carregar(tx, params.orderId);
+    return carregar(tx, params.orderId, null);
   });
 }
 
@@ -961,10 +1011,10 @@ export async function fecharComanda(params: {
          WHERE close_idempotency_key = ${params.idempotencyKey}
       `;
       const jaCobrada = anterior[0];
-      if (jaCobrada) return carregar(tx, jaCobrada.id);
+      if (jaCobrada) return carregar(tx, jaCobrada.id, params.locationId);
     }
 
-    const comanda = await exigirAberta(tx, params.orderId, true);
+    const comanda = await exigirAberta(tx, params.orderId, params.locationId, true);
     /**
      * O fechamento manual também respeita a cobrança viva — achado HIGH.
      *
@@ -1471,7 +1521,7 @@ export async function fecharComanda(params: {
       },
     });
 
-    return carregar(tx, params.orderId);
+    return carregar(tx, params.orderId, null);
   };
 
   return params.tx ? dentro(params.tx) : withTenant(params.tenantId, dentro);

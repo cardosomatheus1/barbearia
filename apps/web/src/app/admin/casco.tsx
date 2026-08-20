@@ -63,12 +63,15 @@ export function Casco({
   nome,
   papel,
   barbearia,
+  unidade,
   recursos,
 }: {
   readonly children: ReactNode;
   readonly nome: string;
   readonly papel: string;
   readonly barbearia: string;
+  /** A loja da sessão, quando a barbearia tem mais de uma. */
+  readonly unidade: string | null;
   readonly recursos: readonly string[];
 }) {
   const modulos = modulosVisiveis(recursos);
@@ -104,6 +107,15 @@ export function Casco({
       <aside className="contexto">
         <div className="contexto__topo">
           <p className="contexto__casa">{barbearia}</p>
+          {/*
+            A loja em que a pessoa está, e só numa rede.
+
+            A tela de Unidades prometia "trocar aqui troca em todas as telas" e
+            nenhuma das outras dizia qual era — a recepcionista que atende nas
+            duas abria o Caixa sem saber qual gaveta ia abrir. Numa barbearia de
+            uma loja só a linha não aparece: seria repetir o nome da casa.
+          */}
+          {unidade ? <p className="contexto__unidade">{unidade}</p> : null}
           <p className="contexto__sub">Painel de gestão</p>
         </div>
 
