@@ -269,6 +269,90 @@ describeIfDb('a comissão do marketplace', () => {
     expect(linhas[0]?.status).toBe('faturada');
   });
 
+  it('a linha que chega depois da fatura não é carimbada contra ela', async () => {
+    /**
+     * `attributed_at` é a data do **atendimento**, e a varredura roda todo dia:
+     * a atribuição de julho nasce no dia 2 de agosto, quando o balcão conclui
+     * os atendimentos do fim do mês. Ela caía na mesma janela, encontrava a
+     * fatura já emitida e era carimbada `faturada` contra um valor que nunca a
+     * incluiu — comissão que ninguém cobra e que os dois lados veem como paga.
+     *
+     * O `UPDATE` por id, escrito para consertar isto, fecha a corrida dentro de
+     * uma execução; entre execuções ela continuava.
+     */
+    const julho = new Date('2026-07-15T14:00:00Z');
+    const fimDeJulho = new Date('2026-07-31T18:00:00Z');
+    await exec(`
+      UPDATE customers SET created_at = '${julho.toISOString()}' WHERE id = '${NOVO}';
+
+      INSERT INTO plans (code, name, price_cents) VALUES ('pro', 'Pro', 19900)
+      ON CONFLICT (code) DO NOTHING;
+
+      INSERT INTO subscriptions (tenant_id, plan_code, price_cents, status, period_start, period_end)
+      VALUES ('${CASA}', 'pro', 19900, 'active', '2026-07-01T00:00:00Z', '2026-08-01T00:00:00Z')
+      ON CONFLICT (tenant_id) DO UPDATE SET plan_code = 'pro'
+    `);
+
+    await atendimento({
+      id: '72dddddd-0000-0000-0000-000000000061',
+      customerId: NOVO,
+      source: 'marketplace',
+      criadoEm: julho,
+      quando: julho,
+    });
+    await atribuirDaBarbearia(CASA, julho);
+
+    const primeira = await emitirComissaoDoMarketplace({ tenantId: CASA, agora: AGORA });
+    expect(primeira?.valorCents).toBe(1100);
+
+    /**
+     * A segunda pessoa, atendida no dia 31 e concluída em agosto.
+     *
+     * O cliente é outro — a atribuição é única por `(tenant, customer)` — e a
+     * data cai dentro de julho, que é o mês que a fatura já fechou.
+     */
+    const outro = '72cccccc-0000-0000-0000-0000000000a1';
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164, created_at)
+      VALUES ('${outro}', '${CASA}', 'Chegou depois', '+5571988887777',
+              '${fimDeJulho.toISOString()}')
+    `);
+    await atendimento({
+      id: '72dddddd-0000-0000-0000-000000000062',
+      customerId: outro,
+      source: 'marketplace',
+      criadoEm: fimDeJulho,
+      quando: fimDeJulho,
+    });
+    await atribuirDaBarbearia(CASA, fimDeJulho);
+
+    // A emissão do dia seguinte encontra a fatura de julho fechada e **não**
+    // carimba a linha nova contra ela.
+    expect(await emitirComissaoDoMarketplace({ tenantId: CASA, agora: AGORA })).toBeNull();
+
+    const daFatura = await admin.$queryRawUnsafe<{ soma: bigint; n: bigint }[]>(`
+      SELECT coalesce(sum(m.fee_cents), 0)::bigint AS soma, count(*)::bigint AS n
+        FROM marketplace_attributions m
+       WHERE m.tenant_id = '${CASA}' AND m.status = 'faturada'
+    `);
+    // Uma linha faturada, e a soma dela é exatamente a fatura emitida.
+    expect(Number(daFatura[0]?.n ?? 0)).toBe(1);
+    expect(Number(daFatura[0]?.soma ?? 0)).toBe(primeira?.valorCents);
+
+    // A que chegou depois continua pendente — e é isso que a faz ser cobrada.
+    const pendentes = await admin.$queryRawUnsafe<{ n: bigint }[]>(`
+      SELECT count(*)::bigint AS n FROM marketplace_attributions
+       WHERE tenant_id = '${CASA}' AND status = 'pendente'
+    `);
+    expect(Number(pendentes[0]?.n ?? 0)).toBe(1);
+
+    // E no mês seguinte ela vira fatura, com a data dela própria na lista.
+    const setembro = new Date('2026-09-02T03:00:00Z');
+    const atrasada = await emitirComissaoDoMarketplace({ tenantId: CASA, agora: setembro });
+    expect(atrasada).not.toBeNull();
+    expect(atrasada?.valorCents).toBeGreaterThan(0);
+  });
+
   it('contestar sem motivo escrito é recusado', async () => {
     /**
      * Contestar renuncia a uma cobrança de forma **permanente**: o índice único

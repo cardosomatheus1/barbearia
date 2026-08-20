@@ -346,6 +346,61 @@ export async function criarAdminDaPlataforma(entrada: {
   });
 }
 
+/**
+ * Troca a senha de uma conta de plataforma, ou a desliga.
+ *
+ * ## Por que isto precisava existir
+ *
+ * `platform_admins.password_hash` nunca recebia `UPDATE` em lugar nenhum do
+ * repositório, e `disabled_at` era **lido** no login e escrito por ninguém — o
+ * campo de revogação de acesso da conta mais poderosa do produto era o defeito
+ * de `blocks`. `criarAdminDaPlataforma` recusa e-mail repetido, então nem
+ * recriar servia: a única saída era `UPDATE` à mão, que é exatamente o estado
+ * que o `--operador` corrigiu para o papel.
+ *
+ * É o mesmo raciocínio da §6, um nível acima: a conta que bloqueia qualquer
+ * barbearia e entra na conta de qualquer dono não pode ser a única sem saída na
+ * interface — aqui, na única interface que ela tem, que é o script.
+ *
+ * ## As sessões caem junto
+ *
+ * Trocar a senha revoga todas as sessões abertas, como no painel da barbearia:
+ * quem roubou a sessão continuaria dentro depois da troca, e trocar a senha é
+ * justamente o que a pessoa faz quando desconfia. Desligar também — uma conta
+ * desligada com sessão viva é uma conta ligada.
+ */
+export async function reconfigurarAdminDaPlataforma(entrada: {
+  readonly email: string;
+  readonly senha?: string;
+  readonly desligar?: boolean;
+}): Promise<{ readonly id: string; readonly sessoesRevogadas: number }> {
+  if (entrada.senha !== undefined && entrada.senha.length < 12) {
+    throw new PlataformaError('weak_password', 'A senha precisa de pelo menos 12 caracteres');
+  }
+
+  const hash = entrada.senha === undefined ? null : await hashPassword(entrada.senha);
+  const chave = emailKey(entrada.email, pepper());
+
+  return semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{ id: string }[]>`
+      UPDATE platform_admins
+         SET password_hash = COALESCE(${hash}, password_hash),
+             disabled_at = CASE WHEN ${entrada.desligar === true} THEN now()
+                                WHEN ${entrada.desligar === false} THEN NULL
+                                ELSE disabled_at END
+       WHERE email_key = ${chave}
+      RETURNING id
+    `;
+    const admin = linhas[0];
+    if (!admin) throw new PlataformaError('unknown_admin', 'Conta de plataforma não encontrada');
+
+    const revogadas = await tx.$executeRaw`
+      DELETE FROM platform_sessions WHERE admin_id = ${admin.id}::uuid
+    `;
+    return { id: admin.id, sessoesRevogadas: revogadas };
+  });
+}
+
 export interface SessaoDaPlataforma {
   readonly token: string;
   readonly admin: AdminDaPlataforma;

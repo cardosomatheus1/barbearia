@@ -85,8 +85,20 @@ export const entrarNaPlataforma = (email: string, senha: string) =>
 export const sairDaPlataforma = (token: string) =>
   chamar<{ revoked: boolean }>('POST', '/v1/plataforma/logout', {}, token);
 
+/**
+ * As barbearias **e o papel de quem está lendo**.
+ *
+ * O papel vem junto porque as cinco telas da plataforma já chamam esta rota: um
+ * segundo pedido só para saber quem é seria uma ida a mais em toda navegação, e
+ * um cookie gravado no login continuaria dizendo o que era verdade ontem.
+ */
 export const listarBarbearias = (token: string) =>
-  chamar<{ barbearias: BarbeariaNaPlataforma[] }>('GET', '/v1/plataforma/barbearias', undefined, token);
+  chamar<{ papel: 'viewer' | 'operator'; barbearias: BarbeariaNaPlataforma[] }>(
+    'GET',
+    '/v1/plataforma/barbearias',
+    undefined,
+    token,
+  );
 
 export const listarPlanos = (token: string) =>
   chamar<{ planos: Plano[] }>('GET', '/v1/plataforma/planos', undefined, token);

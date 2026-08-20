@@ -41,14 +41,45 @@
  * conta já existe sem precisar consultar nada.
  */
 import { createInterface } from 'node:readline';
-import { criarAdminDaPlataforma, PlataformaError } from '../packages/platform/dist/index.js';
+import {
+  criarAdminDaPlataforma,
+  PlataformaError,
+  reconfigurarAdminDaPlataforma,
+} from '../packages/platform/dist/index.js';
 
 const argumentos = process.argv.slice(2);
 const papel = argumentos.includes('--operador') ? 'operator' : 'viewer';
-const [nome, email] = argumentos.filter((a) => !a.startsWith('--'));
+
+/**
+ * Trocar senha, desligar e religar — as três que faltavam.
+ *
+ * `password_hash` nunca recebia `UPDATE` em lugar nenhum do repositório, e
+ * `disabled_at` era lido no login e escrito por ninguém: a conta que bloqueia
+ * qualquer barbearia e entra na conta de qualquer dono não tinha rotação de
+ * senha nem desligamento. Criar de novo é recusado por e-mail repetido, então
+ * a única saída era `UPDATE` à mão — o mesmo estado sem saída que o
+ * `--operador` corrigiu para o papel.
+ */
+const trocarSenha = argumentos.includes('--trocar-senha');
+const desativar = argumentos.includes('--desativar');
+const reativar = argumentos.includes('--reativar');
+
+const posicionais = argumentos.filter((a) => !a.startsWith('--'));
+const reconfigurar = trocarSenha || desativar || reativar;
+// Nas três, o e-mail basta: a conta já existe e o nome não muda.
+const [nome, email] = reconfigurar ? [posicionais[0], posicionais[0]] : posicionais;
+
+if (desativar && reativar) {
+  console.error('--desativar e --reativar são opostos; escolha um.');
+  process.exit(2);
+}
 
 if (!nome || !email) {
-  console.error('uso: node scripts/criar-super-admin.mjs "Nome" email@dominio [--operador]');
+  console.error(
+    'uso: node scripts/criar-super-admin.mjs "Nome" email@dominio [--operador]\n' +
+      '     node scripts/criar-super-admin.mjs email@dominio --trocar-senha\n' +
+      '     node scripts/criar-super-admin.mjs email@dominio --desativar | --reativar',
+  );
   process.exit(2);
 }
 
@@ -84,6 +115,18 @@ async function lerSenha() {
 }
 
 try {
+  if (reconfigurar) {
+    const alvo = await reconfigurarAdminDaPlataforma({
+      email,
+      ...(trocarSenha ? { senha: await lerSenha() } : {}),
+      ...(desativar ? { desligar: true } : {}),
+      ...(reativar ? { desligar: false } : {}),
+    });
+    const oque = trocarSenha ? 'senha trocada' : desativar ? 'conta desligada' : 'conta religada';
+    console.log(`${oque}: ${alvo.id} — ${alvo.sessoesRevogadas} sessão(ões) revogada(s)`);
+    process.exit(0);
+  }
+
   const admin = await criarAdminDaPlataforma({ nome, email, senha: await lerSenha(), papel });
   console.log(`conta criada: ${admin.nome} (${admin.id}) — ${admin.papel}`);
   process.exit(0);

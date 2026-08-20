@@ -62,6 +62,20 @@ export const MESES_DA_LINHA = 12;
  * função do relógio, e ler `now()` no banco tornaria o resultado impossível de
  * testar sem esperar o tempo passar.
  */
+/**
+ * Quantos meses da safra já aconteceram, contando o próprio mês de entrada.
+ *
+ * É o que separa "todas saíram" de "ainda não chegou" no triângulo: sem ele, a
+ * cauda de uma safra morta some da tela e vira boa notícia.
+ */
+function mesesAte(safra: string, agora: Date): number {
+  const [ano, mes] = safra.split('-').map(Number);
+  if (!ano || !mes) return 0;
+  const meses =
+    (agora.getUTCFullYear() - ano) * 12 + (agora.getUTCMonth() + 1 - mes);
+  return Math.max(0, meses + 1);
+}
+
 export async function linhaDoTempoDaPlataforma(
   agora: Date = new Date(),
   meses: number = MESES_DA_LINHA,
@@ -148,14 +162,27 @@ export async function linhaDoTempoDaPlataforma(
           safra,
           entraram: retidas[0] ?? 0,
           /**
-           * O buraco vira zero, não `undefined`.
+           * O buraco vira zero, e a **cauda** também.
            *
            * Um mês em que nenhuma barbearia da safra pagou é um zero de verdade
            * — todas saíram —, e um vetor esparso desenharia a célula vazia como
            * se o dado não existisse. São coisas diferentes, e a segunda é a que
            * o dono da plataforma precisa ver.
+           *
+           * O comprimento vinha do **último mês com retenção**, e por isso o
+           * zero só valia para buraco no meio: a safra que perdeu a última
+           * barbearia em novembro terminava o vetor ali, e a tela desenhava os
+           * meses seguintes como "ainda não aconteceu". O dono lia a pior safra
+           * da história como a que ainda não maturou.
+           *
+           * A distância até o mês corrente é o comprimento certo: o que ainda
+           * não chegou continua fora do vetor, e o que chegou e deu zero
+           * aparece como zero. O teste que existia provava só o buraco interior.
            */
-          retidas: Array.from({ length: retidas.length }, (_, i) => retidas[i] ?? 0),
+          retidas: Array.from(
+            { length: Math.max(retidas.length, mesesAte(safra, agora)) },
+            (_, i) => retidas[i] ?? 0,
+          ),
         }))
         .sort((a, b) => a.safra.localeCompare(b.safra)),
       maiorMrrCents: mrr.reduce((m, l) => Math.max(m, Number(l.total)), 0),

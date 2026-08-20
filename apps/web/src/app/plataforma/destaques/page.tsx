@@ -32,7 +32,39 @@ export const metadata: Metadata = {
 
 const dia = (iso: string): string => new Date(iso).toLocaleDateString('pt-BR');
 
-export default async function DestaquesPage() {
+/**
+ * O motivo da recusa, que estas telas engoliam (bloco 113).
+ *
+ * `acoes.ts` redireciona para `?erro=<code>` em toda falha e nenhuma das duas
+ * lia o parâmetro: vender o lugar que já está vendido — a recusa que **é o
+ * produto**, porque a escassez é o que se compra — recarregava a página
+ * idêntica, sem uma palavra. O mesmo para escolher uma barbearia que já está em
+ * outra rede, que é o erro mais provável na tela de franquias.
+ */
+const FALHA: Record<string, string> = {
+  slot_taken: 'Este lugar já está vendido para o período escolhido. A escassez é o produto: escolha outro lugar, outra cidade ou outro período.',
+  invalid_period: 'O período precisa começar antes de terminar.',
+  invalid_slot: 'Este lugar não existe.',
+  unknown_tenant: 'Esta barbearia não existe mais.',
+  unknown_ad: 'Este destaque não existe mais.',
+  already_in_franchise: 'Esta barbearia já está em uma rede. Tire dela primeiro.',
+  is_franchisor: 'Esta barbearia é a franqueadora da rede — ela não entra como franqueada.',
+  unknown_franchise: 'Esta rede não existe mais.',
+  missing_reason: 'Escreva o motivo — é o que explica a decisão depois.',
+  unknown_attribution: 'Esta contestação não existe ou já foi revertida.',
+  forbidden: 'Sua conta só consulta a plataforma. Peça a quem opera para fazer isto.',
+  unauthorized: 'A sessão venceu. Entre de novo.',
+  request_failed: 'Não deu para concluir. Tente de novo.',
+};
+
+interface Props {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function DestaquesPage({ searchParams }: Props) {
+  const query = await searchParams;
+  const erro = typeof query['erro'] === 'string' ? query['erro'] : undefined;
+
   const token = await lerSessaoDaPlataforma();
   if (!token) redirect('/plataforma/entrar');
 
@@ -48,6 +80,12 @@ export default async function DestaquesPage() {
 
   return (
     <main className="ui-container painel__conteudo">
+      {erro ? (
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          {FALHA[erro] ?? FALHA['request_failed']}
+        </div>
+      ) : null}
+
       <h1 className="painel__titulo">Destaques e contestações</h1>
       <p className="painel__sub">
         São {LUGARES_EM_DESTAQUE} lugares por cidade, e o banco recusa o segundo anúncio no mesmo

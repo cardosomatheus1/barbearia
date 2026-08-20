@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Request } from 'express';
 import {
   Body,
   Controller,
@@ -63,6 +64,7 @@ import {
   reativarAssinatura,
   type AdminDaPlataforma,
 } from '@barbearia/platform';
+import { BloqueioDeLogin } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { TenantService } from '../tenant/tenant.service.js';
@@ -188,6 +190,21 @@ const faturaParaJson = (f: Fatura) => ({
 });
 
 function paraHttp(erro: unknown): never {
+  /**
+   * A escada de espera tem explicação e prazo — não é erro do servidor.
+   *
+   * Sem este ramo, `BloqueioDeLogin` caía no tratador genérico e virava **500**:
+   * o Super Admin errava a senha seis vezes e na sétima lia "não foi possível
+   * entrar, tente de novo" — que é a pior instrução possível, porque tentar de
+   * novo rearma a escada. O login da barbearia tem o mesmo ramo desde o bloco
+   * 33, com o comentário descrevendo exatamente este defeito; a porta da
+   * plataforma ficou de fora.
+   */
+  if (erro instanceof BloqueioDeLogin) {
+    throw new DomainError('too_many_attempts', 429, erro.message, {
+      retryAfterSeconds: erro.esperarSegundos,
+    });
+  }
   if (erro instanceof PlataformaError) {
     throw new DomainError(erro.code, STATUS[erro.code] ?? 400, erro.message);
   }
@@ -198,9 +215,26 @@ function paraHttp(erro: unknown): never {
 @Controller('v1/plataforma')
 export class PlataformaAuthController {
   @Post('login')
-  async login(@Body(new ZodValidationPipe(loginDaPlataformaSchema)) corpo: { email: string; senha: string }) {
+  async login(
+    @Body(new ZodValidationPipe(loginDaPlataformaSchema)) corpo: { email: string; senha: string },
+    @Req() requisicao: Request,
+  ) {
     try {
-      const sessao = await entrarNaPlataforma(corpo);
+      /**
+       * O IP entra na escada, como no login da barbearia.
+       *
+       * `entrarNaPlataforma` aceita `ip` e o documenta como "para a escada ser
+       * por conta **e** aparelho"; o único chamador nunca o mandava. Com `ip`
+       * nulo, a chave `(email_key, COALESCE(ip, '::'))` põe **toda tentativa de
+       * um e-mail num balde só**, de qualquer origem — e o achado da revisão do
+       * bloco 33 volta a valer nesta porta: errar de propósito uma senha a cada
+       * meia hora, de qualquer endereço, tranca a conta mais privilegiada do
+       * produto para fora dele.
+       */
+      const sessao = await entrarNaPlataforma({
+        ...corpo,
+        ...(requisicao.ip ? { ip: requisicao.ip } : {}),
+      });
       return {
         token: sessao.token,
         admin: sessao.admin,
@@ -240,9 +274,21 @@ export class PlataformaController {
   }
 
   @Get('barbearias')
-  async barbearias() {
+  async barbearias(@Admin() admin: RequisicaoDaPlataforma['admin']) {
     const barbearias = await listarBarbearias();
     return {
+      /**
+       * O papel de quem está lendo, para a tela parar de mentir (bloco 113).
+       *
+       * Conta de plataforma nasce `viewer`, e o painel desenhava "Bloquear",
+       * "Reativar" e "Entrar na conta" para todo mundo. O `viewer` clicava,
+       * levava 403 e lia "não deu para concluir, tente de novo" — que é
+       * exatamente o que a guarda escolheu 403 em vez de 404 para **evitar**.
+       *
+       * Sai daqui e não de um segundo cookie: o papel muda no banco, e um
+       * cookie gravado no login continuaria dizendo o que era verdade ontem.
+       */
+      papel: admin?.papel ?? 'viewer',
       barbearias: barbearias.map((b) => ({
         ...b,
         bloqueadaEm: b.bloqueadaEm?.toISOString() ?? null,

@@ -12,6 +12,7 @@ import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { uuidSchema } from './caixa.schemas.js';
 import { adocaoSchema, itemDoPadraoSchema } from './franquia.schemas.js';
 
 /**
@@ -107,7 +108,13 @@ export class FranquiaController {
 
   @Exige('franchise.manage')
   @Delete('padrao/:itemId')
-  async despublicar(@Staff() staff: AuthenticatedStaff, @Param('itemId') itemId: string) {
+  async despublicar(
+    @Staff() staff: AuthenticatedStaff,
+    // O único `@Param` da API que não passava por pipe: id torto chegava a
+    // `${itemId}::uuid` e virava 500 sobre entrada externa, que é a definição
+    // de validação faltando na borda.
+    @Param('itemId', new ZodValidationPipe(uuidSchema)) itemId: string,
+  ) {
     try {
       await despublicarItemDoPadrao(staff.tenantId, itemId);
       return { ok: true };

@@ -247,7 +247,37 @@ async function prepararPlataforma() {
       ` '4242', 11, 2029 FROM tenant_platform ON CONFLICT DO NOTHING`,
   );
 
-  return token;
+  /**
+   * E uma conta de **consulta**, que é como toda conta de plataforma nasce.
+   *
+   * O painel desenhava Bloquear, Reativar e Entrar na conta para o `viewer`, que
+   * a guarda recusa com 403 — e a tela traduzia isso como "não deu para
+   * concluir, tente de novo". Sem este segundo login, a tela que o bloco 113
+   * mudou não seria fotografada em largura nenhuma: a conta da medição é
+   * operadora, e para ela nada mudou.
+   */
+  const emailViewer = `consulta${Date.now()}@plataforma.teste`;
+  let tokenViewer = null;
+  try {
+    execFileSync('node', ['scripts/criar-super-admin.mjs', 'Consulta', emailViewer], {
+      env: {
+        ...process.env,
+        SUPER_ADMIN_PASSWORD: senha,
+        DATABASE_URL: process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL,
+      },
+      stdio: 'pipe',
+    });
+    const entradaViewer = await fetch(`${API}/v1/plataforma/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: emailViewer, senha }),
+    });
+    if (entradaViewer.ok) tokenViewer = (await entradaViewer.json()).token;
+  } catch (erro) {
+    console.warn(`  aviso: conta de consulta não criada (${erro.message.split('\n')[0]})`);
+  }
+
+  return { token, tokenViewer };
 }
 
 /** Prepara uma barbearia publicada e uma sessão de gestor. */
@@ -2892,7 +2922,9 @@ async function main() {
   if (!prepararRetencao(balcao.clienteId)) {
     console.warn('  aviso: retenção não preparada; o aviso prévio entra vazio');
   }
-  const tokenPlataforma = await prepararPlataforma();
+  const daPlataforma = await prepararPlataforma();
+  const tokenPlataforma = daPlataforma?.token ?? null;
+  const tokenDeConsulta = daPlataforma?.tokenViewer ?? null;
   const agendamento = await prepararAgendamentoPublico(slug);
   if (!agendamento) {
     console.warn('  aviso: nenhum horário com preço de faixa; os passos 3 e 4 não entram');
@@ -2937,6 +2969,17 @@ async function main() {
     ...(tokenPlataforma
       ? [
           { nome: 'plataforma — barbearias', url: '/plataforma', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          ...(tokenDeConsulta
+            ? [
+                {
+                  // A mesma tela para quem só consulta: sem botão de ação e com
+                  // a frase que explica a ausência deles.
+                  nome: 'plataforma — consulta',
+                  url: '/plataforma',
+                  cookie: { nome: 'plataforma', valor: tokenDeConsulta, caminho: '/plataforma' },
+                },
+              ]
+            : []),
           { nome: 'plataforma — métricas', url: '/plataforma/metricas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — destaques', url: '/plataforma/destaques', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — franquias', url: '/plataforma/franquias', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },

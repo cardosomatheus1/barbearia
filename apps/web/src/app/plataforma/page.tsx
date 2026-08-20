@@ -56,6 +56,15 @@ const FALHA: Record<string, string> = {
   no_support: 'Não há suporte aberto nesta conta.',
   tenant_blocked: 'Reative a conta antes de entrar nela.',
   request_failed: 'Não deu para concluir. Tente de novo.',
+  /**
+   * O `viewer` — que é como toda conta de plataforma nasce.
+   *
+   * A guarda responde 403 de propósito, com o argumento escrito: quem está do
+   * outro lado está autenticado e a rota existe. O painel, porém, não traduzia
+   * o código, e a pessoa lia "não deu para concluir, tente de novo" e tentava
+   * de novo — que é exatamente o que a escolha do 403 existia para evitar.
+   */
+  forbidden: 'Sua conta só consulta a plataforma. Peça a quem opera para fazer isto.',
 };
 
 const FEITO: Record<string, string> = {
@@ -75,11 +84,23 @@ function Linha({
   planos,
   recursos,
   comSuporte,
+  opera,
 }: {
   readonly barbearia: BarbeariaNaPlataforma;
   readonly planos: readonly Plano[];
   readonly recursos: readonly RecursoDaBarbearia[];
   readonly comSuporte: boolean;
+  /**
+   * `operator` age; `viewer` só lê — e é como **toda conta nasce**.
+   *
+   * Sem isto o painel desenhava Bloquear, Reativar, Salvar plano, ligar recurso
+   * e Entrar na conta para quem a guarda recusa. A pessoa clicava, levava 403 e
+   * lia "não deu para concluir, tente de novo" — abrindo chamado achando que o
+   * painel quebrou, que é literalmente o que a guarda escolheu 403 em vez de
+   * 404 para evitar. A recusa de verdade continua na API; isto é a tela parando
+   * de prometer.
+   */
+  readonly opera: boolean;
 }) {
   const oferecidos = planos.filter((p) => p.active || p.code === barbearia.plano?.code);
 
@@ -106,6 +127,14 @@ function Linha({
         ) : null}
       </div>
 
+      {!opera ? (
+        // O plano continua visível — é o que a conta de consulta existe para
+        // consultar. O que sai é o formulário que a guarda recusaria.
+        <div className="conta__plano">
+          <p className="ui-field__label">Plano</p>
+          <p className="conta__plano-atual">{barbearia.plano?.name ?? 'sem plano'}</p>
+        </div>
+      ) : (
       <form action={acaoTrocarPlano} className="conta__plano">
         <input name="tenantId" type="hidden" value={barbearia.tenantId} />
         <label className="ui-field__label" htmlFor={`plano-${barbearia.tenantId}`}>
@@ -136,12 +165,28 @@ function Linha({
           </button>
         </div>
       </form>
+      )}
 
       <div className="conta__recursos">
         <p className="ui-field__label">Recursos</p>
         <ul className="recursos">
           {recursos.map((recurso) => (
             <li className="recursos__item" key={recurso.code}>
+              {/*
+                Para quem consulta, o recurso é **estado**, não interruptor: o
+                botão levaria 403 e a tela diria "tente de novo".
+              */}
+              {!opera ? (
+                <span
+                  className={`recursos__botao ${recurso.ligado ? 'recursos__botao--ligado' : ''}`}
+                  title={recurso.descricao}
+                >
+                  {recurso.nome}
+                  <span className="recursos__estado">
+                    {recurso.ligado ? 'ligado' : 'desligado'}
+                  </span>
+                </span>
+              ) : (
               <form action={acaoDefinirRecurso} className="recursos__forma">
                 <input name="tenantId" type="hidden" value={barbearia.tenantId} />
                 <input name="code" type="hidden" value={recurso.code} />
@@ -156,11 +201,22 @@ function Linha({
                   <span className="recursos__estado">{recurso.ligado ? 'ligado' : 'desligado'}</span>
                 </button>
               </form>
+              )}
             </li>
           ))}
         </ul>
       </div>
 
+      {/*
+        Tudo aqui dentro é ação, e ação é de quem opera.
+
+        A primeira versão deste bloco escondia só Bloquear e Reativar — "Entrar
+        na conta" e "Encerrar suporte" continuavam desenhados, e os dois levam
+        403 pela mesma guarda. O print da conta de consulta foi quem mostrou: a
+        tela ficava com a frase "sua conta consulta" logo acima de três botões
+        de operação.
+      */}
+      {!opera ? null : (
       <div className="conta__acao">
         {barbearia.bloqueada ? (
           <form action={acaoDesbloquear}>
@@ -240,6 +296,7 @@ function Linha({
           </details>
         )}
       </div>
+      )}
     </li>
   );
 }
@@ -271,6 +328,7 @@ export default async function BarbeariasPage({ searchParams }: Props) {
   }
 
   const barbearias = lista.dados.barbearias;
+  const opera = lista.dados.papel === 'operator';
   const planos = catalogo.ok ? catalogo.dados.planos : [];
   const bloqueadas = barbearias.filter((b) => b.bloqueada).length;
 
@@ -296,6 +354,20 @@ export default async function BarbeariasPage({ searchParams }: Props) {
         {barbearias.length} {barbearias.length === 1 ? 'conta' : 'contas'}
         {bloqueadas > 0 ? ` · ${bloqueadas} bloqueada${bloqueadas === 1 ? '' : 's'}` : null}
       </p>
+
+      {/*
+        O que **esta** conta pode fazer, dito antes de qualquer botão.
+
+        Sem a frase, o `viewer` — que é como toda conta de plataforma nasce —
+        percorre a tela sem entender por que nada acontece. Com ela, a ausência
+        dos botões passa a ter explicação em vez de parecer defeito.
+      */}
+      {!opera ? (
+        <p className="ui-alert ui-alert--warning painel__aviso" role="status">
+          Sua conta <strong>consulta</strong> a plataforma. Bloquear, trocar plano, ligar recurso e
+          entrar numa conta são de quem opera — peça a quem tem esse acesso.
+        </p>
+      ) : null}
 
       {feito ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
@@ -323,6 +395,7 @@ export default async function BarbeariasPage({ searchParams }: Props) {
               key={barbearia.tenantId}
               planos={planos}
               comSuporte={comSuporte.has(barbearia.tenantId)}
+              opera={opera}
               recursos={recursos.get(barbearia.tenantId) ?? []}
             />
           ))}

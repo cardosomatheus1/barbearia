@@ -145,6 +145,36 @@ describeIfDb('a linha do tempo da plataforma', () => {
     expect(marco?.retidas[2]).toBe(1);
   });
 
+  it('a safra que morreu e não voltou termina em zeros, não em vazio', async () => {
+    /**
+     * O comprimento do vetor vinha do **último mês com retenção**, então o zero
+     * só valia para buraco no meio: a safra que perdeu a última barbearia em
+     * março terminava ali, e a tela desenhava os meses seguintes como "ainda
+     * não aconteceu" — o dono lia a pior safra da história como a que ainda não
+     * maturou.
+     *
+     * Célula vazia e célula zero são coisas opostas num triângulo de safra, e
+     * pintá-las igual é o gráfico mentindo sobre o futuro.
+     */
+    await abrir(1);
+    await fatura({ n: 1, mes: '2026-03' });
+    // E nunca mais. `AGORA` é junho, então março, abril, maio e junho existem.
+
+    const linha = await linhaDoTempoDaPlataforma(AGORA);
+    const marco = linha.safras.find((s) => s.safra === '2026-03');
+
+    expect(marco?.retidas[0]).toBe(1);
+    // Os três meses seguintes aconteceram e deram zero — eles precisam existir
+    // no vetor para a tela pintar "todas saíram" em vez de vazio.
+    expect(marco?.retidas.length).toBeGreaterThanOrEqual(4);
+    expect(marco?.retidas[1]).toBe(0);
+    expect(marco?.retidas[2]).toBe(0);
+    expect(marco?.retidas[3]).toBe(0);
+
+    // E o que ainda não chegou continua fora: julho não é zero, é ausência.
+    expect(marco?.retidas[4]).toBeUndefined();
+  });
+
   it('a safra é a da primeira fatura paga, não a de qualquer fatura', async () => {
     // Uma fatura aberta e nunca paga em janeiro não faz de janeiro a safra
     // desta barbearia: ela nunca chegou a ser cliente pagante ali.

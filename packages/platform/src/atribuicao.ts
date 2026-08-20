@@ -233,11 +233,34 @@ export async function emitirComissaoDoMarketplace(entrada: {
    * segunda, e marca as linhas que faltavam. É o mesmo desenho da régua, que
    * roda a cada volta do laço de propósito.
    */
+  /**
+   * **Todo pendente já vencido**, e não a janela do mês passado.
+   *
+   * A janela parecia igual e não era. `attributed_at` é a data do
+   * **atendimento**, e a varredura roda todo dia: a atribuição de julho nasce
+   * no dia 2 de agosto, quando o balcão conclui os atendimentos do fim do mês.
+   * Ela caía na janela de julho, encontrava a fatura de julho já emitida no dia
+   * 1º e era carimbada `faturada` contra um valor que nunca a incluiu.
+   *
+   * Comissão que ninguém cobra e que os dois lados veem como paga — a
+   * barbearia lê "Faturada" no extrato dela, a plataforma lê a fatura fechada,
+   * e ninguém investiga. O `UPDATE` por id, escrito para consertar isto, fecha
+   * a corrida **dentro** de uma execução; entre execuções ela continuava.
+   *
+   * `reverterContestacao` produzia o espelho: ela devolve a linha para
+   * `pendente` mantendo o `attributed_at` antigo, e num mês posterior essa
+   * linha nunca mais caía na janela de emissão nenhuma — pendente para sempre,
+   * contando no "Total pendente" da tela e nunca virando fatura.
+   *
+   * Sem a ponta de baixo, as duas somem: o que está pendente e pertence a um
+   * mês já encerrado entra na emissão desta volta. A linha carrega a própria
+   * data, então a lista que a barbearia confere continua explicando cada uma.
+   */
   const somadas = await withTenant(entrada.tenantId, async (tx) =>
     tx.$queryRaw<{ id: string; fee_cents: number }[]>`
       SELECT id, fee_cents
         FROM marketplace_attributions
-       WHERE status = 'pendente' AND attributed_at >= ${inicio} AND attributed_at < ${fim}
+       WHERE status = 'pendente' AND attributed_at < ${fim}
     `,
   );
   const total = somadas.reduce((soma, l) => soma + Number(l.fee_cents), 0);
@@ -290,6 +313,39 @@ export async function emitirComissaoDoMarketplace(entrada: {
    * pendente e entra na emissão seguinte. Achado da `/security-review` deste
    * bloco.
    */
+  /**
+   * A fatura que já existia só recebe carimbo se **a conta bate**.
+   *
+   * `ON CONFLICT DO NOTHING` esconde a diferença entre dois casos que precisam
+   * de respostas opostas:
+   *
+   * - **A volta que conserta o passo perdido.** O processo caiu entre criar a
+   *   fatura e marcar as linhas: a fatura vale exatamente o que está pendente,
+   *   e marcar é o certo.
+   * - **A linha que chegou depois.** A fatura foi emitida ontem com R$ 5,00 e
+   *   hoje há R$ 14,00 pendentes: marcar carimbaria R$ 9,00 contra um documento
+   *   que não os contém, e ninguém cobraria nunca.
+   *
+   * A conta que distingue os dois é **o que já está anexado mais o que se quer
+   * anexar**, contra o valor da fatura. Comparar só o pendente com o valor
+   * seria enganado pelo caso em que as duas somas coincidem por acaso — duas
+   * comissões do mesmo ticket dão o mesmo número, e foi assim que a primeira
+   * versão desta guarda passou verde no teste que a cobra.
+   *
+   * Não batendo, as linhas ficam pendentes e entram na emissão do período
+   * seguinte — carregando a própria data, que é o que a lista mostra à
+   * barbearia.
+   */
+  const jaAnexado = await withTenant(entrada.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ soma: bigint }[]>`
+      SELECT coalesce(sum(fee_cents), 0)::bigint AS soma
+        FROM marketplace_attributions
+       WHERE invoice_id = ${fatura.id}::uuid
+    `;
+    return Number(linhas[0]?.soma ?? 0);
+  });
+  if (jaAnexado + total !== Number(fatura.amount_cents)) return null;
+
   const ids = somadas.map((l) => l.id);
   const marcadas = await withTenant(entrada.tenantId, async (tx) =>
     tx.$executeRaw`

@@ -31,6 +31,7 @@ import {
   bloquearBarbearia,
   bloqueioDaBarbearia,
   criarAdminDaPlataforma,
+  reconfigurarAdminDaPlataforma,
   desbloquearBarbearia,
   entrarNaPlataforma,
   listarBarbearias,
@@ -241,6 +242,74 @@ describeIfDb('camada de plataforma', () => {
 
     expect(sessao.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect((await resolverSessaoDaPlataforma(sessao.token)).nome).toBe('Suporte');
+  });
+
+  it('trocar a senha derruba as sessões abertas, e a nova senha entra', async () => {
+    /**
+     * `password_hash` nunca recebia `UPDATE` em lugar nenhum do repositório, e
+     * `disabled_at` era **lido** no login e escrito por ninguém: a conta que
+     * bloqueia qualquer barbearia e entra na conta de qualquer dono não tinha
+     * rotação de senha nem desligamento. Criar de novo é recusado por e-mail
+     * repetido, então a única saída era `UPDATE` à mão.
+     *
+     * As sessões caem junto pela mesma razão do painel da barbearia: quem
+     * roubou a sessão continuaria dentro depois da troca, e trocar a senha é
+     * justamente o que a pessoa faz quando desconfia.
+     */
+    await comAdmin();
+    const antiga = await entrarNaPlataforma({
+      email: 'suporte@plataforma.com',
+      senha: 'senha-bem-comprida',
+    });
+    expect((await resolverSessaoDaPlataforma(antiga.token)).nome).toBe('Suporte');
+
+    const feito = await reconfigurarAdminDaPlataforma({
+      email: 'suporte@plataforma.com',
+      senha: 'outra-senha-bem-comprida',
+    });
+    expect(feito.sessoesRevogadas).toBeGreaterThan(0);
+
+    await expect(resolverSessaoDaPlataforma(antiga.token)).rejects.toMatchObject({
+      code: 'unauthorized',
+    });
+    await expect(
+      entrarNaPlataforma({ email: 'suporte@plataforma.com', senha: 'senha-bem-comprida' }),
+    ).rejects.toMatchObject({ code: 'invalid_credentials' });
+
+    const nova = await entrarNaPlataforma({
+      email: 'suporte@plataforma.com',
+      senha: 'outra-senha-bem-comprida',
+    });
+    expect((await resolverSessaoDaPlataforma(nova.token)).nome).toBe('Suporte');
+  });
+
+  it('desligar a conta fecha a porta, e religar a reabre', async () => {
+    // Uma conta desligada com sessão viva é uma conta ligada.
+    await comAdmin();
+    const viva = await entrarNaPlataforma({
+      email: 'suporte@plataforma.com',
+      senha: 'senha-bem-comprida',
+    });
+
+    await reconfigurarAdminDaPlataforma({ email: 'suporte@plataforma.com', desligar: true });
+
+    await expect(resolverSessaoDaPlataforma(viva.token)).rejects.toBeTruthy();
+    await expect(
+      entrarNaPlataforma({ email: 'suporte@plataforma.com', senha: 'senha-bem-comprida' }),
+    ).rejects.toBeTruthy();
+
+    await reconfigurarAdminDaPlataforma({ email: 'suporte@plataforma.com', desligar: false });
+    const depois = await entrarNaPlataforma({
+      email: 'suporte@plataforma.com',
+      senha: 'senha-bem-comprida',
+    });
+    expect((await resolverSessaoDaPlataforma(depois.token)).nome).toBe('Suporte');
+  });
+
+  it('reconfigurar conta que não existe é recusado', async () => {
+    await expect(
+      reconfigurarAdminDaPlataforma({ email: 'ninguem@x.com', desligar: true }),
+    ).rejects.toMatchObject({ code: 'unknown_admin' });
   });
 
   it('e-mail inexistente e senha errada devolvem exatamente a mesma coisa', async () => {

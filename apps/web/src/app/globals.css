@@ -5805,6 +5805,8 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
 }
 
 .conta__plano { min-width: 0; }
+/* O plano visto por quem só consulta: mesmo lugar, sem formulário. */
+.conta__plano-atual { margin: var(--space-1) 0 0; font-weight: 600; }
 /* Campo em cima, botão embaixo — e não lado a lado.
 
    Lado a lado, o `<select>` fica com a largura da coluna menos o botão, e
