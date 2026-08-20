@@ -2804,6 +2804,16 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
 .para-cobrar__detalhe { font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
 .para-cobrar__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
 
+/* Duas ações na linha da comanda aberta: abrir e cancelar. `wrap` porque em
+   360px os dois botões não cabem lado a lado com o valor, e o piso de toque é
+   44px em qualquer largura. */
+.para-cobrar__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .cartao-seguranca {
   margin-top: var(--space-4);
   padding: var(--space-4);
@@ -7105,6 +7115,10 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
   font-weight: var(--font-weight-medium);
   color: var(--color-accent);
 }
+
+/* O botão de sair da lista, alinhado à esquerda dentro do item da espera. O
+   piso de 44px vem do design system e vale em qualquer largura. */
+.esperando__sair { justify-self: start; margin-top: var(--space-1); }
 
 /* ---------------------------------------------------------------------------
    Pacotes (bloco 42)

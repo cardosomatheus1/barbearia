@@ -233,6 +233,128 @@ export async function getComanda(
   return withTenant(tenantId, (tx) => carregar(tx, orderId, locationId));
 }
 
+export interface ComandaAberta {
+  readonly id: string;
+  readonly abertaEm: string;
+  readonly customerName: string | null;
+  /** Nulo é venda avulsa: ninguém foi atendido, alguém entrou só para comprar. */
+  readonly appointmentId: string | null;
+  readonly itens: number;
+  readonly totalCents: number;
+}
+
+/**
+ * As comandas abertas desta unidade.
+ *
+ * A tela de cobrar listava **os atendimentos do dia** e nada mais, e a comanda
+ * avulsa não nasce de atendimento nenhum: aberta, ela existia só na URL para
+ * onde o botão redirecionava. Fechar a aba era perder a única porta, e a linha
+ * ficava `open` para sempre — invisível no dia, no caixa, no financeiro e no
+ * DRE, porque nenhuma daquelas telas pergunta por comanda aberta.
+ *
+ * O índice que esta consulta usa — `orders_abertas_idx`, parcial em `status =
+ * 'open'` — foi criado na migração 0018 **para uma listagem que nunca foi
+ * escrita**. Ele estava lá desde o bloco 18, esperando por ela.
+ *
+ * Sem `tenant_id` no `WHERE` de propósito: quem filtra é a política de RLS. O
+ * recorte por unidade é outro assunto — a RLS separa barbearias e **não** separa
+ * lojas dentro de uma.
+ */
+export async function comandasAbertas(
+  tenantId: string,
+  locationId: string,
+): Promise<readonly ComandaAberta[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<
+      {
+        id: string;
+        opened_at: Date;
+        customer_name: string | null;
+        appointment_id: string | null;
+        itens: bigint;
+        total_cents: number;
+      }[]
+    >`
+      SELECT o.id, o.opened_at, c.name AS customer_name, o.appointment_id,
+             count(i.id) AS itens, o.total_cents
+        FROM orders o
+        LEFT JOIN customers c ON c.id = o.customer_id
+        LEFT JOIN order_items i ON i.order_id = o.id
+       WHERE o.location_id = ${locationId}::uuid AND o.status = 'open'
+       GROUP BY o.id, c.name
+       ORDER BY o.opened_at
+    `;
+
+    return linhas.map((l) => ({
+      id: l.id,
+      abertaEm: l.opened_at.toISOString(),
+      customerName: l.customer_name,
+      appointmentId: l.appointment_id,
+      itens: Number(l.itens),
+      totalCents: l.total_cents,
+    }));
+  });
+}
+
+/**
+ * Cancelar uma comanda aberta.
+ *
+ * `order_status` tem `cancelled` desde a migração 0018 e **nada no produto o
+ * escrevia**: o estado existia no enum, no tipo do domínio e em nenhum caminho.
+ * Uma comanda aberta por engano — e o botão fica a um clique, dentro de um
+ * `details` na tela de cobrar — só saía de `open` sendo paga, e uma comanda
+ * vazia não fecha, porque o fechamento exige pelo menos uma forma de pagamento.
+ * Era linha presa para sempre, alcançável sem erro nenhum de operação.
+ *
+ * Não mexe em estoque nem em comissão, e é por construção: os dois acontecem no
+ * **fechamento** (`baixarVendas`, `lancarComissoes`). Comanda aberta com itens
+ * ainda não tirou nada da prateleira.
+ *
+ * A cobrança viva barra o cancelamento pelo motivo de sempre: o cliente está
+ * com o código do Pix na mão, e o caminho explícito é cancelar a cobrança
+ * antes. É a mesma guarda que já protege item, remoção e desconto.
+ *
+ * O atendimento volta a ser cobrável sozinho — `comandaAbertaDoAtendimento` não
+ * acha mais nenhuma, e o botão "Cobrar" reaparece na lista do dia.
+ */
+export async function cancelarComanda(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly orderId: string;
+  readonly ator: { readonly id: string; readonly name: string };
+}): Promise<{ readonly cancelada: true }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const comanda = await exigirAberta(tx, params.orderId, params.locationId, true);
+    await exigirSemCobrancaViva(tx, params.orderId);
+
+    /**
+     * O estado no `WHERE`, com a contagem conferida: é ele que barra o segundo
+     * toque de outro aparelho, e não a trava — que cai no commit.
+     */
+    const canceladas = await tx.$executeRaw`
+      UPDATE orders
+         SET status = 'cancelled', closed_at = now()
+       WHERE id = ${params.orderId}::uuid AND status = 'open'
+    `;
+    if (canceladas === 0) {
+      throw new ComandaError('comanda_fechada', 'Esta comanda já foi fechada.');
+    }
+
+    await audit(tx, {
+      actorId: params.ator.id,
+      actorName: params.ator.name,
+      action: 'order.cancelled',
+      entity: 'orders',
+      entityId: params.orderId,
+      // A **contagem** e o total, nunca a descrição dos itens: a trilha é
+      // append-only e a anonimização não a alcança.
+      before: { itens: comanda.itens.length, totalCents: comanda.totalCents },
+    });
+
+    return { cancelada: true as const };
+  });
+}
+
 /**
  * Saldo e limite do cliente, com a linha travada até o fim da transação.
  *

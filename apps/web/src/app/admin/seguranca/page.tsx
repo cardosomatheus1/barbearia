@@ -18,6 +18,7 @@ import {
   acaoComecarSegundoFator,
   acaoPoliticaDeSegundoFator,
   acaoConfirmarSegundoFator,
+  acaoDesligarSegundoFator,
   acaoEncerrarSessao,
   acaoExpulsarSuporte,
   acaoPreferenciasDeAlerta,
@@ -309,6 +310,49 @@ export default async function SegurancaPage({ searchParams }: Props) {
               </button>
             </form>
           )}
+
+          {/* A saída, dobrada.
+
+              Ligar o segundo fator tinha botão; desligar tinha rota, domínio,
+              guarda e trilha desde o bloco 19 — e nenhum cliente. Quem trocou de
+              celular não desligava nem recadastrava (`iniciarCadastroMfa` recusa
+              com `already_enabled`) e, numa barbearia que exige segundo fator no
+              dinheiro, ficava sem operar o caixa. Só saía por `UPDATE` no banco.
+
+              Dentro de um `details` porque não é a ação daquele cartão: quem
+              abre esta tela quase sempre veio confirmar o código, não desistir
+              da proteção. */}
+          <details className="dobra">
+            <summary className="dobra__titulo">Desligar o segundo fator desta conta</summary>
+            <form action={acaoDesligarSegundoFator} className="formulario">
+              <p className="ui-field__hint">
+                Faz sentido ao trocar de celular: desligue aqui e ligue de novo no aparelho
+                novo. Enquanto estiver desligado, esta conta não passa pelas telas de dinheiro
+                se a barbearia exigir o segundo fator.
+              </p>
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="codigo-desligar">
+                  Código do aplicativo
+                </label>
+                <input
+                  autoComplete="one-time-code"
+                  className="ui-field__input campo-codigo"
+                  id="codigo-desligar"
+                  inputMode="numeric"
+                  name="codigo"
+                  placeholder="000000"
+                  required
+                />
+                <p className="ui-field__hint">
+                  Pedido pelo mesmo motivo que ligar pede: sem ele, quem pegasse a sessão
+                  aberta tiraria a proteção antes de mexer no dinheiro.
+                </p>
+              </div>
+              <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+                Desligar
+              </button>
+            </form>
+          </details>
         </section>
       ) : segredo || pendente ? (
         <section className="cartao-seguranca">

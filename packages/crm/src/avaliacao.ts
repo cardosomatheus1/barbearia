@@ -334,10 +334,32 @@ export async function painelDeAvaliacoes(
       SELECT rating, created_at, contested_at FROM reviews
     `;
 
+    /**
+     * As mais recentes **mais todas as contestadas**, e a segunda metade é o
+     * conserto de um estado sem saída.
+     *
+     * "Retirar a contestação" só existe dentro do cartão da avaliação, e o
+     * painel montava as trinta últimas: passadas trinta avaliações novas, a
+     * contestada não tinha mais tela nenhuma — a ficha do cliente lista notas e
+     * não desenha nem contestar nem retirar. Contestar por engano tirava a
+     * avaliação do perfil público **para sempre**, que é o "apagar com mais
+     * passos" que a decisão do bloco 74 existe para impedir. E o dono não
+     * percebe pelo número: a média interna continua contando a nota suspensa.
+     *
+     * Elas entram sem teto porque são lista de trabalho, como a fila de
+     * recuperação: cada uma é uma decisão que alguém tomou e pode desfazer, e o
+     * conjunto é pequeno por natureza — contestar exige motivo de lista fechada
+     * e deixa trilha.
+     */
     const linhas = await tx.$queryRawUnsafe<LinhaDaAvaliacao[]>(
-      `${SELECT_DA_AVALIACAO} ORDER BY r.created_at DESC LIMIT $1`,
+      `SELECT * FROM (
+         ${SELECT_DA_AVALIACAO} ORDER BY r.created_at DESC LIMIT $1
+       ) recentes
+       UNION
+       ${SELECT_DA_AVALIACAO} WHERE r.contested_at IS NOT NULL`,
       limite,
     );
+    linhas.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
     const naTela = linhas.map((l) => paraTela(l, agora));
 
     /**

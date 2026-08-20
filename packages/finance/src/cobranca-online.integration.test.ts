@@ -3,7 +3,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakePaymentProvider } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa, fecharCaixaDaUnidade } from './caixa.js';
-import { abrirComanda, adicionarItem, fecharComanda, getComanda } from './comanda.js';
+import {
+  abrirComanda,
+  adicionarItem,
+  cancelarComanda,
+  comandasAbertas,
+  fecharComanda,
+  getComanda,
+} from './comanda.js';
 import {
   cancelarCobranca,
   cobrancasDaComanda,
@@ -911,4 +918,95 @@ describeIfDb('a cobrança online da comanda', () => {
     expect(resultado.desfecho).toBe('pago_sem_caixa');
     expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('pago');
   });
+
+  describe('a comanda aberta tem saída', () => {
+    /**
+     * `order_status` tem `cancelled` desde a migração 0018 e nada o escrevia:
+     * uma comanda aberta por engano só saía de `open` sendo paga, e comanda
+     * vazia não fecha — o fechamento exige pelo menos uma forma de pagamento.
+     * Era linha presa para sempre.
+     */
+    it('a comanda avulsa aparece na lista de abertas', async () => {
+      const comanda = await abrirComanda({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        ...operador,
+      });
+
+      const abertas = await comandasAbertas(TENANT, LOCATION);
+      expect(abertas.map((c) => c.id)).toContain(comanda.id);
+      // Sem atendimento e sem cliente: é a venda avulsa, e a tela precisa
+      // distinguir para não escrever o nome de ninguém.
+      expect(abertas.find((c) => c.id === comanda.id)?.appointmentId).toBeNull();
+    });
+
+    it('cancelar tira a comanda da lista, e a comanda cancelada não cancela de novo', async () => {
+      const orderId = await comandaDe4900();
+
+      await cancelarComanda({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        orderId,
+        ator: { id: STAFF, name: 'Maria Recepção' },
+      });
+
+      expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('cancelled');
+      expect((await comandasAbertas(TENANT, LOCATION)).map((c) => c.id)).not.toContain(orderId);
+
+      // Quem recusa aqui é `exigirAberta`, que já leu `cancelled`. O `WHERE
+      // status = 'open'` do `UPDATE` é a segunda camada, para duas transações
+      // simultâneas — e essa **não** é provada por este teste: as duas se
+      // serializariam sozinhas, e um teste de corrida que passa com e sem o
+      // conserto não prende regra nenhuma.
+      await expect(
+        cancelarComanda({
+          tenantId: TENANT,
+          locationId: LOCATION,
+          orderId,
+          ator: { id: STAFF, name: 'Maria Recepção' },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('a comanda com cobrança viva não é cancelada', async () => {
+      const orderId = await comandaDe4900();
+      const provider = new FakePaymentProvider();
+      await cobrar(orderId, provider);
+
+      // O cliente está com o código na mão: o caminho é cancelar a cobrança
+      // antes, e é a mesma guarda que já protege item, remoção e desconto.
+      await expect(
+        cancelarComanda({
+          tenantId: TENANT,
+          locationId: LOCATION,
+          orderId,
+          ator: { id: STAFF, name: 'Maria Recepção' },
+        }),
+      ).rejects.toThrow();
+
+      expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
+    });
+
+    it('a comanda da loja vizinha não é cancelada pelo id', async () => {
+      const orderId = await comandaDe4900();
+      const OUTRA_LOJA = '35353535-aaaa-0000-0000-000000000009';
+
+      // A RLS separa barbearias e **não** separa lojas dentro de uma: sem o
+      // filtro por unidade, o gerente da filial cancelaria a comanda da matriz
+      // mandando o id. O filtro é duplo — no `SELECT ... FOR UPDATE` e em
+      // `carregar` —, e quebrando um deles o outro ainda recusa: é defesa em
+      // profundidade, e este teste prova que ela existe, não qual camada agiu.
+      await expect(
+        cancelarComanda({
+          tenantId: TENANT,
+          locationId: OUTRA_LOJA,
+          orderId,
+          ator: { id: STAFF, name: 'Maria Recepção' },
+        }),
+      ).rejects.toThrow();
+
+      expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
+    });
+  });
+
 });

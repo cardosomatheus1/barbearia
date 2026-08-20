@@ -16,6 +16,7 @@ import {
   type FiltroDeCampanha,
   TIPOS_DE_CAMPANHA,
   campanhaEnviavel,
+  campanhaParada,
   corpoComExemplos,
   explicacaoDoPulo,
   resumoDoPulo,
@@ -39,7 +40,12 @@ import {
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerRascunho, lerRecusa, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
-import { acaoCriarCampanha, acaoEnviarCampanha, acaoSair } from '../acoes';
+import {
+  acaoCriarCampanha,
+  acaoEnviarCampanha,
+  acaoRetomarCampanha,
+  acaoSair,
+} from '../acoes';
 import { FilaParada } from '../fila-parada';
 import { secao } from '../secoes';
 
@@ -285,11 +291,14 @@ function somaDosPulados(
 const TETO_DE_PULADOS = 50;
 
 function Campanha({
+  agora,
   campanha,
   podeMexer,
   podeVerNomes,
   pulados,
 }: {
+  /** O relógio da renderização: `campanhaParada` o compara com o último movimento. */
+  readonly agora: Date;
   readonly campanha: CampanhaNaTelaDoAdmin;
   readonly podeMexer: boolean;
   readonly podeVerNomes: boolean;
@@ -481,6 +490,25 @@ function Campanha({
               </div>
             </details>
           ) : null}
+
+          {/* A saída de `enviando`.
+
+              `enviando` só vira `enviada` no fim do despacho: esgotadas as
+              cinco tentativas da tarefa, a campanha ficava ali para sempre, e a
+              tela repetia "Na fila" sobre uma fila que já tinha desistido.
+
+              Quem decide se apareceu é o domínio, pelo relógio — uma hora sem
+              nada se mexer. Durante um envio que está andando o botão não
+              existe: duas voltas simultâneas leriam o mesmo alvo, e mensagem
+              repetida no celular do cliente não se desfaz. */}
+          {podeMexer && campanhaParada(estado, new Date(campanha.ultimoMovimentoEm), agora) ? (
+            <form action={acaoRetomarCampanha}>
+              <input name="id" type="hidden" value={campanha.id} />
+              <button className="ui-button ui-button--secondary" type="submit">
+                Retomar o envio
+              </button>
+            </form>
+          ) : null}
         </div>
       </article>
     </li>
@@ -494,6 +522,9 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
   const query = await searchParams;
   const podeMexer = podeNaTela(estado, 'marketing.send');
+  // Um relógio só para a página inteira: duas leituras dariam respostas
+  // diferentes para duas campanhas na mesma renderização.
+  const agora = new Date();
 
   /**
    * O estado do canal, quando quem abriu pode resolvê-lo.
@@ -940,6 +971,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
           <ul className="lista-cadastro">
             {campanhas.map((c) => (
               <Campanha
+                agora={agora}
                 campanha={c}
                 key={c.id}
                 podeMexer={podeMexer}

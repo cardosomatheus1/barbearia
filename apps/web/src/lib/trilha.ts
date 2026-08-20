@@ -37,6 +37,7 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'cash.withdrawal': 'fez sangria no caixa',
   'cash.supply': 'fez suprimento no caixa',
   'order.closed': 'fechou a comanda',
+  'order.cancelled': 'cancelou uma comanda aberta',
   'order.discount': 'deu desconto na comanda',
   // "Tirou", e não "removeu": é a palavra do balcão, e a frase diz o que a
   // pergunta do dia seguinte procura — quem tirou aquele item da conta.

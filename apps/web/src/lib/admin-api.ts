@@ -1312,6 +1312,29 @@ export const fecharOCaixa = (token: string, countedCents: number, notes?: string
 export const comandaAberta = (token: string, id: string) =>
   chamar<Comanda>('GET', `/v1/admin/orders/${id}`, undefined, token);
 
+export interface ComandaAbertaNaTela {
+  id: string;
+  abertaEm: string;
+  customerName: string | null;
+  appointmentId: string | null;
+  itens: number;
+  totalCents: number;
+}
+
+/** As comandas que ficaram abertas — a listagem que a tela de cobrar não tinha. */
+export const comandasAbertasDaCasa = (token: string) =>
+  chamar<{ comandas: ComandaAbertaNaTela[] }>('GET', '/v1/admin/orders/abertas', undefined, token);
+
+export const cancelarComandaAberta = (token: string, id: string) =>
+  chamar<{ cancelada: true }>('DELETE', `/v1/admin/orders/${id}`, undefined, token);
+
+export const retomarCampanhaNaApi = (token: string, id: string) =>
+  chamar<{ estado: 'enviando' }>('POST', `/v1/admin/campanhas/${id}/retomar`, {}, token);
+
+/** Tira alguém da lista de espera pelo balcão — a saída que a lista não tinha. */
+export const tirarDaListaDeEspera = (token: string, id: string) =>
+  chamar<{ removida: true }>('DELETE', `/v1/admin/agenda/espera/${id}`, undefined, token);
+
 export const abrirComandaNoBalcao = (
   token: string,
   dados: { appointmentId?: string; customerId?: string },
@@ -1472,6 +1495,18 @@ export const comecarSegundoFator = (token: string) =>
 
 export const confirmarSegundoFator = (token: string, codigo: string) =>
   chamar<{ codigosDeRecuperacao: string[] }>('POST', '/v1/admin/mfa/confirm', { codigo }, token);
+
+/**
+ * Desligar o segundo fator da própria conta.
+ *
+ * A rota e `desligarMfa` existem desde o bloco 19, com guarda, trilha e
+ * derrubada da prova em todas as sessões — e **nenhum cliente**. Quem ligou o
+ * TOTP e trocou de celular não desligava nem recadastrava (`iniciarCadastroMfa`
+ * recusa com `already_enabled`), e ficava sem mover dinheiro se a barbearia
+ * exigisse segundo fator. Só saía por `UPDATE` no banco.
+ */
+export const desligarSegundoFator = (token: string, codigo: string) =>
+  chamar<{ ok: true }>('POST', '/v1/admin/mfa/disable', { codigo }, token);
 
 export const definirPoliticaDeSegundoFator = (
   token: string,
@@ -3508,6 +3543,8 @@ export interface CampanhaNaTelaDoAdmin {
    */
   readonly estado: EstadoDeCampanha;
   readonly criadaEm: string;
+  /** O disparo mais recente, ou a criação quando nada saiu. */
+  readonly ultimoMovimentoEm: string;
   readonly publico: number;
   readonly enviados: number;
   readonly entregues: number;

@@ -1,5 +1,6 @@
 import { withTenant } from '@barbearia/db';
 import {
+  campanhaParada,
   decidirDisparo,
   FILTROS_DE_CAMPANHA,
   ROTULO_DO_FILTRO,
@@ -7,6 +8,7 @@ import {
   TIPOS_DE_CAMPANHA,
   TIPOS_PROMOCIONAIS,
   tipoDeCampanhaValido,
+  type EstadoDeCampanha,
   type FiltroDeCampanha,
   type Segmento,
   type TipoDeNotificacao,
@@ -93,6 +95,13 @@ export interface CampanhaNaTela {
   readonly textoTitulo: string | null;
   readonly estado: 'rascunho' | 'enviando' | 'enviada';
   readonly criadaEm: string;
+  /**
+   * O disparo mais recente, ou a criação quando nada saiu.
+   *
+   * É o que `campanhaParada` compara com o relógio: `campaigns` não tem
+   * `updated_at`, e uma coluna nova diria a mesma coisa que este `max` já diz.
+   */
+  readonly ultimoMovimentoEm: string;
   /** As seis colunas da SPEC §4.13. A última é a que importa. */
   readonly publico: number;
   readonly enviados: number;
@@ -169,6 +178,7 @@ export async function campanhasDaCasa(params: {
         texto_titulo: string | null;
         status: 'rascunho' | 'enviando' | 'enviada';
         created_at: Date;
+        ultimo_movimento: Date;
         publico: bigint;
         enviados: bigint;
         entregues: bigint;
@@ -183,6 +193,7 @@ export async function campanhasDaCasa(params: {
       SELECT c.id, c.name, c.filter::text AS filter, c.filter_value, c.filter_weekday,
              c.kind::text AS kind, w.titulo AS texto_titulo,
              c.status::text AS status, c.created_at,
+             COALESCE(max(t.sent_at), c.created_at) AS ultimo_movimento,
              count(t.id) AS publico,
              count(t.id) FILTER (WHERE t.sent_at IS NOT NULL) AS enviados,
              count(t.id) FILTER (WHERE m.delivered_at IS NOT NULL) AS entregues,
@@ -221,6 +232,7 @@ export async function campanhasDaCasa(params: {
       textoTitulo: l.texto_titulo,
       estado: l.status,
       criadaEm: l.created_at.toISOString(),
+      ultimoMovimentoEm: l.ultimo_movimento.toISOString(),
       publico: Number(l.publico),
       enviados: Number(l.enviados),
       entregues: Number(l.entregues),
@@ -825,6 +837,68 @@ export async function despacharCampanha(params: {
   });
 
   return { enviados, pulados };
+}
+
+/**
+ * Retomar uma campanha que ficou parada em `enviando`.
+ *
+ * A saída que faltava. `enviando` só vira `enviada` no fim de
+ * `despacharCampanha`; esgotadas as cinco tentativas da tarefa, a campanha
+ * ficava ali para sempre, com a tela repetindo *"Na fila. As mensagens saem aos
+ * poucos"* sobre uma fila que já tinha desistido.
+ *
+ * Retomar é seguro porque o despacho é idempotente por alvo: ele só lê quem
+ * tem `sent_at IS NULL AND skipped_reason IS NULL`. Quem já recebeu não recebe
+ * de novo.
+ *
+ * Quem decide se **pode** retomar é `campanhaParada`, em `packages/core`, e a
+ * condição é o relógio: uma hora sem nada se mexer. O botão não aparece durante
+ * um envio que está andando — duas voltas simultâneas leriam o mesmo alvo, e
+ * mensagem repetida no celular do cliente é o único estrago irreversível deste
+ * caminho.
+ *
+ * A chave da tarefa carrega o instante de propósito: a de `marcarParaEnvio` é
+ * `campanha:<id>` e já foi consumida: reusá-la faria o `ON CONFLICT` descartar
+ * a retomada em silêncio, que é o defeito que o filtro e o índice parcial já
+ * cobraram neste repositório.
+ */
+export async function retomarCampanha(params: {
+  readonly tenantId: string;
+  readonly campanhaId: string;
+  readonly staffId: string;
+  readonly staffName: string;
+  readonly agora: Date;
+}): Promise<boolean> {
+  return withTenant(params.tenantId, async (tx) => {
+    const [linha] = await tx.$queryRaw<
+      { status: EstadoDeCampanha; ultimo_movimento: Date }[]
+    >`
+      SELECT c.status::text AS status,
+             COALESCE(max(t.sent_at), c.created_at) AS ultimo_movimento
+        FROM campaigns c
+        LEFT JOIN campaign_targets t ON t.campaign_id = c.id
+       WHERE c.id = ${params.campanhaId}::uuid
+       GROUP BY c.id
+       FOR UPDATE OF c
+    `;
+    if (!linha) return false;
+    if (!campanhaParada(linha.status, linha.ultimo_movimento, params.agora)) return false;
+
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'campaign.sent',
+      entity: 'campaigns',
+      entityId: params.campanhaId,
+    });
+
+    await enfileirarPara(tx, params.tenantId, {
+      kind: 'campanha.enviar',
+      payload: { campanhaId: params.campanhaId },
+      idempotencyKey: `campanha:${params.campanhaId}:${params.agora.toISOString()}`,
+    });
+    return true;
+  });
 }
 
 /**

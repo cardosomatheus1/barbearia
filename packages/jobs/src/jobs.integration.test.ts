@@ -106,6 +106,7 @@ const liquidacoesRodadas: { tenantId: string; agora: Date }[] = [];
 const avisosDoClube: { tenantId: string; assinaturaId: string; motivo: string }[] = [];
 
 let notasProcessadas: { tenantId: string; invoiceId: string }[] = [];
+let conciliacoesDeNota: { tenantId: string }[] = [];
 let entregasDeNota: { tenantId: string; agora: Date }[] = [];
 let respostasDeWhatsApp: { tenantId: string; inboundId: string }[] = [];
 let conciliacoesDeWhatsApp: { tenantId: string; agora: Date }[] = [];
@@ -121,6 +122,9 @@ const ligacoesDaPlataforma = () => ({
   },
   entregarNotas: async (tenantId: string, agora: Date) => {
     entregasDeNota.push({ tenantId, agora });
+  },
+  conciliarNotas: async (tenantId: string) => {
+    conciliacoesDeNota.push({ tenantId });
   },
   responderWhatsApp: async (tenantId: string, inboundId: string) => {
     respostasDeWhatsApp.push({ tenantId, inboundId });

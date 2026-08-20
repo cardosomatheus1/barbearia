@@ -4,6 +4,7 @@ import {
   chaveDaNota,
   comissaoDoPeriodo,
   decisaoDaEntregaDaNota,
+  ESTADOS_EM_VOO,
   ESTADOS_NAO_TERMINAIS,
   ESTADOS_QUE_OCUPAM_A_VENDA,
   motivoParaNaoEmitir,
@@ -791,7 +792,13 @@ export async function gravarResposta(params: {
   });
 }
 
-/** As notas que ainda esperam resposta da prefeitura. */
+/**
+ * As notas que ainda esperam resposta da prefeitura — emissão **ou**
+ * cancelamento.
+ *
+ * `ESTADOS_EM_VOO` e não `ESTADOS_NAO_TERMINAIS`: `cancelando` não sai sozinho
+ * por `fiscal.emitir`, que acompanha só a emissão.
+ */
 export async function notasEmCurso(
   tenantId: string,
   limite = 50,
@@ -799,12 +806,57 @@ export async function notasEmCurso(
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ id: string; provider_invoice_id: string | null }[]>`
       SELECT id, provider_invoice_id FROM fiscal_invoices
-       WHERE status::text = ANY(${[...ESTADOS_NAO_TERMINAIS]}::text[])
+       WHERE status::text = ANY(${[...ESTADOS_EM_VOO]}::text[])
        ORDER BY requested_at
        LIMIT ${limite}
     `;
     return linhas.map((l) => ({ id: l.id, providerInvoiceId: l.provider_invoice_id }));
   });
+}
+
+/**
+ * A conciliação das notas paradas em voo — o chamador que `notasEmCurso` não
+ * tinha.
+ *
+ * `fiscal.emitir` acompanha **uma** nota e morre com ela: esgotadas as cinco
+ * tentativas, nada mais a olha. A comanda ficava com "Na fila. Ela sai sozinha
+ * em alguns minutos" para sempre, sem botão — a tela não desenha emissão em
+ * estado em voo —, e a venda não aceitava nota nova, porque o estado a ocupa.
+ * Saía por `UPDATE` no banco.
+ *
+ * Ela pergunta de novo ao emissor por cada nota parada. `enviarNota` é
+ * idempotente do lado de lá pela chave da **linha da nota** (nunca a da venda),
+ * então reperguntar sobre a mesma nota devolve o desfecho dela em vez de criar
+ * uma segunda.
+ *
+ * `cancelando` entra porque `ESTADOS_EM_VOO` o inclui: era o estado que nem
+ * varredura futura alcançaria, e o único do qual a venda não sai.
+ *
+ * O erro de uma nota não derruba as outras: a prefeitura fora do ar é o caso
+ * normal desta integração, e uma exceção aqui pararia o laço no meio,
+ * deixando as seguintes para a próxima volta sem que ninguém soubesse por quê.
+ */
+export async function conciliarNotas(params: {
+  readonly tenantId: string;
+  readonly provider: FiscalProvider;
+  readonly limite?: number;
+}): Promise<number> {
+  const paradas = await notasEmCurso(params.tenantId, params.limite ?? 50);
+
+  let conciliadas = 0;
+  for (const nota of paradas) {
+    try {
+      await enviarNota({
+        tenantId: params.tenantId,
+        invoiceId: nota.id,
+        provider: params.provider,
+      });
+      conciliadas += 1;
+    } catch {
+      // Segue para a próxima: o desfecho desta volta na hora seguinte.
+    }
+  }
+  return conciliadas;
 }
 
 export async function cancelarNota(params: {

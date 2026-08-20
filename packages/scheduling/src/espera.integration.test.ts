@@ -9,6 +9,7 @@ import {
   expirarEsperas,
   quemEstaEsperando,
   sairDaEspera,
+  tirarDaEspera,
 } from './espera.js';
 
 /**
@@ -160,6 +161,28 @@ describeIfDb('lista de espera', () => {
     await expect(esperar({ de: '2026-09-11', ate: '2026-09-11' })).resolves.toMatchObject({
       status: 'waiting',
     });
+  });
+
+  it('o balcão tira alguém da lista, e não alcança a loja vizinha', async () => {
+    /**
+     * A lista era desenhada no painel com nome, telefone e convite vivo, e sem
+     * nenhum controle: quem ligava dizendo "já resolvi" continuava recebendo
+     * convite, e cada convite segura o horário fora da grade pública por dez
+     * minutos. A única saída era o cliente entrar na conta dele.
+     *
+     * O recorte é a **unidade**, uma loja acima do recorte do cliente: a RLS
+     * separa barbearias e não separa lojas dentro de uma.
+     */
+    const doCarlos = await esperar();
+    const OUTRA_LOJA = '38383838-aaaa-0000-0000-000000000009';
+
+    await expect(
+      tirarDaEspera({ tenantId: TENANT, locationId: OUTRA_LOJA, entryId: doCarlos.id }),
+    ).rejects.toBeInstanceOf(EsperaError);
+    expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(1);
+
+    await tirarDaEspera({ tenantId: TENANT, locationId: LOCATION, entryId: doCarlos.id });
+    expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(0);
   });
 
   it('um cliente não tira outro da lista', async () => {

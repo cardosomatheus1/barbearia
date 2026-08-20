@@ -6,6 +6,7 @@ import {
   getAgenda,
   MAX_DIAS_DA_AGENDA,
   quemEstaEsperando,
+  tirarDaEspera,
   rescheduleAppointment,
 } from '@barbearia/scheduling';
 import { MOTIVO_DA_FALHA, pode, type FalhaDaExcecao, type TipoDeExcecao } from '@barbearia/core';
@@ -135,6 +136,35 @@ export class AgendaController {
       this.recorte(staff),
     );
     return { esperando };
+  }
+
+  /**
+   * Tirar alguém da lista de espera, pelo balcão.
+   *
+   * A lista era desenhada no painel com nome, telefone e convite vivo — e sem
+   * nenhum controle. O cliente ligava dizendo "já resolvi" e a recepção não
+   * tinha o que apertar: a única saída era ele entrar na conta dele. Enquanto
+   * isso o convite continuava saindo, e cada convite segura o horário fora da
+   * grade pública por dez minutos.
+   *
+   * `appointments.cancel` e não `appointments.view`: é escrita, e tirar alguém
+   * da fila de uma vaga é da mesma família de decidir que um horário não vai
+   * acontecer. Um write guardado por permissão de leitura é defeito, não
+   * economia.
+   */
+  @Exige('appointments.cancel')
+  @Delete('espera/:id')
+  async tirarDaLista(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(excecaoIdSchema)) id: string,
+  ) {
+    const local = await this.unidade(staff);
+    try {
+      await tirarDaEspera({ tenantId: staff.tenantId, locationId: local.id, entryId: id });
+      return { removida: true as const };
+    } catch (error) {
+      return toHttp(error);
+    }
   }
 
   @Exige('appointments.view')

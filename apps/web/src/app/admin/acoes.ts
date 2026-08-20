@@ -127,6 +127,9 @@ import {
   movimentarOCaixa,
   fecharOCaixa,
   abrirComandaNoBalcao,
+  cancelarComandaAberta,
+  retomarCampanhaNaApi,
+  tirarDaListaDeEspera,
   adicionarNaComanda,
   removerDaComanda,
   ajustarAComanda,
@@ -137,6 +140,7 @@ import {
   comecarSegundoFator,
   definirPoliticaDeSegundoFator,
   confirmarSegundoFator,
+  desligarSegundoFator,
   verificarSegundoFatorAgora,
   type FormaDePagamento,
   salvarRegraDeComissao,
@@ -1471,6 +1475,46 @@ export async function acaoAbrirComanda(form: FormData): Promise<void> {
   redirect(`/admin/comanda/${resultado.dados.id}`);
 }
 
+/**
+ * Cancelar uma comanda aberta.
+ *
+ * A saída que faltava: aberta por engano, ela não tinha como sair de `open` —
+ * fechar exige pagamento, e uma comanda vazia não fecha.
+ */
+export async function acaoCancelarComanda(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await cancelarComandaAberta(token, texto(form, 'orderId'));
+  if (!resultado.ok) return falhar('/admin/comanda', resultado);
+  redirect('/admin/comanda?feito=cancelada');
+}
+
+/**
+ * Retoma uma campanha que ficou parada em `enviando`.
+ *
+ * O despacho é idempotente por alvo — quem já recebeu não recebe de novo —, e o
+ * domínio só aceita quando nada se mexe há uma hora.
+ */
+export async function acaoRetomarCampanha(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await retomarCampanhaNaApi(token, texto(form, 'id'));
+  if (!resultado.ok) return falhar(ROTA_CAMPANHAS, resultado);
+  redirect(`${ROTA_CAMPANHAS}?feito=enviando`);
+}
+
+/**
+ * Tira alguém da lista de espera, pelo balcão.
+ *
+ * A lista era desenhada no painel com nome, telefone e convite vivo, e sem
+ * nenhum controle: quem ligava dizendo "já resolvi" continuava recebendo
+ * convite, com o horário segurado fora da grade a cada um deles.
+ */
+export async function acaoTirarDaEspera(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await tirarDaListaDeEspera(token, texto(form, 'entryId'));
+  if (!resultado.ok) return falhar('/admin/agenda', resultado);
+  redirect('/admin/agenda?feito=espera_removida');
+}
+
 export async function acaoAdicionarItem(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'orderId');
@@ -1688,6 +1732,21 @@ export async function acaoConfirmarSegundoFator(form: FormData): Promise<void> {
 
   await guardarCodigosDeRecuperacao(resultado.dados.codigosDeRecuperacao);
   redirect('/admin/seguranca?ativado=1');
+}
+
+/**
+ * Desliga o segundo fator da própria conta.
+ *
+ * A saída que a rota tinha e a tela não. Pede o código pelo mesmo motivo que
+ * ligar pede: sem ele, quem pegasse a sessão aberta tiraria a proteção antes de
+ * mexer no dinheiro. A frase da tela já dizia que "desligar o segundo fator de
+ * uma conta pede o código" — sobre um botão que não existia.
+ */
+export async function acaoDesligarSegundoFator(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await desligarSegundoFator(token, texto(form, 'codigo'));
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
+  redirect('/admin/seguranca?feito=desligado');
 }
 
 /**

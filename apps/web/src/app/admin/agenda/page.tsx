@@ -23,6 +23,7 @@ import {
   acaoMoverAgendamento,
   acaoRemoverExcecao,
   acaoSair,
+  acaoTirarDaEspera,
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
@@ -761,6 +762,18 @@ function Esperando({ esperando }: { esperando: readonly QuemEspera[] }) {
                   <span className="tabular">{quem.convite.minutosRestantes}</span> min
                 </span>
               ) : null}
+              {/* A saída da lista, pelo balcão.
+
+                  A lista era só leitura: quem ligava dizendo "já resolvi"
+                  continuava recebendo convite, e cada convite segura o horário
+                  fora da grade pública por dez minutos. A única saída era o
+                  cliente entrar na conta dele. */}
+              <form action={acaoTirarDaEspera}>
+                <input name="entryId" type="hidden" value={quem.id} />
+                <button className="ui-button ui-button--ghost esperando__sair" type="submit">
+                  Tirar da lista
+                </button>
+              </form>
             </li>
           ))}
         </ul>

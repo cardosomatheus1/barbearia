@@ -54,6 +54,7 @@ export type AuditAction =
   | 'cash.withdrawal'
   | 'cash.supply'
   | 'order.closed'
+  | 'order.cancelled'
   | 'order.discount'
   /**
    * Uma linha tirada da comanda (revisão de segurança do bloco 80).
@@ -395,6 +396,7 @@ export const ACOES_DE_DINHEIRO: readonly AuditAction[] = [
   'cash.withdrawal',
   'cash.supply',
   'order.closed',
+  'order.cancelled',
   'order.discount',
   'order.item_removed',
   'debt.received',

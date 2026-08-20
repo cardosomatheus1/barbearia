@@ -13,6 +13,7 @@ import { agendarApuracaoDeTodas, apuracaoPendente, apurarDiaDaBarbearia } from '
 import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
 import {
   agendarAutomacaoDeTodas,
+  agendarConciliacaoDeNotasDeTodas,
   agendarEntregaDeNotasDeTodas,
   entregaDeNotasPendente,
 } from './fiscal.js';
@@ -118,6 +119,14 @@ export interface Contexto {
    * a nota deixaria de chegar ao cliente sem nada ficar vermelho.
    */
   readonly entregarNotas: (tenantId: string, agora: Date) => Promise<void>;
+  /**
+   * A conciliação das notas paradas em voo (bloco 121), injetada.
+   *
+   * Obrigatória no tipo pela razão de sempre: opcional, o primeiro worker novo
+   * a esqueceria e a nota cuja tarefa morreu voltaria a ficar presa — sem erro,
+   * sem alerta, e com a venda sem aceitar emissão nova.
+   */
+  readonly conciliarNotas: (tenantId: string) => Promise<void>;
   /**
    * Uma volta do motor de automação (bloco 56), injetada.
    *
@@ -493,6 +502,18 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
 
   'fiscal.entregar': async (tarefa, contexto) => {
     await contexto.entregarNotas(tarefa.tenantId, contexto.relogio.agora());
+  },
+
+  /**
+   * A rede para a nota cuja tarefa morreu (bloco 121).
+   *
+   * `fiscal.emitir` acompanha uma nota e se reprograma; esgotadas as tentativas
+   * ele desiste, e nada mais olhava aquela linha. Separada de `fiscal.entregar`
+   * porque são duas perguntas: uma é "esta nota já saiu da prefeitura?", a
+   * outra é "esta nota autorizada já chegou ao cliente?".
+   */
+  'fiscal.conciliar': async (tarefa, contexto) => {
+    await contexto.conciliarNotas(tarefa.tenantId);
   },
 
   'notificacao.confirmacao': avisoDeAgendamento('confirmacao'),
@@ -919,6 +940,9 @@ export async function rodarWorker(
     if (entrega.hora !== ultimaEntregaDeNotas) {
       ultimaEntregaDeNotas = entrega.hora;
       await agendarEntregaDeNotasDeTodas(entrega);
+      // A conciliação na mesma cadência: a prefeitura responde em minutos ou
+      // em horas, e uma volta de hora em hora é a ordem de grandeza certa.
+      await agendarConciliacaoDeNotasDeTodas(entrega);
     }
 
     /**

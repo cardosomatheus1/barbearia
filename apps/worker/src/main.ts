@@ -18,6 +18,7 @@ import {
 import {
   aplicarReguaDoClube,
   conciliarCobrancas,
+  conciliarNotas,
   entregarNotasAutorizadas,
   expirarSaldos,
   conciliarRecebedores,
@@ -625,6 +626,24 @@ async function main(): Promise<void> {
           // Só a contagem: o link é documento público, mas o que ele identifica
           // é uma pessoa e o que ela comprou.
           console.log('[fiscal] notas entregues', { tenantId, enviadas: resultado.enviadas });
+        }
+      },
+
+      /**
+       * A conciliação das notas paradas em voo (bloco 121).
+       *
+       * Mesmo emissor de `processarNota`: `exigirEmissorFiscal()` falha alto
+       * quando não há um configurado, e é o certo — uma conciliação que caísse
+       * num emissor de mentira responderia "autorizada" sobre nota que nunca
+       * foi à prefeitura.
+       */
+      conciliarNotas: async (tenantId) => {
+        const conciliadas = await conciliarNotas({
+          tenantId,
+          provider: exigirEmissorFiscal(),
+        });
+        if (conciliadas > 0) {
+          console.log('[fiscal] notas reperguntadas', { tenantId, conciliadas });
         }
       },
       /**

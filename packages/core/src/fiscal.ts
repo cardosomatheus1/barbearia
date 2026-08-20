@@ -69,6 +69,23 @@ export const EXPLICACAO_DA_NOTA: Readonly<Record<EstadoDaNota, string>> = {
   cancelada: 'Cancelada junto à prefeitura.',
 };
 
+/**
+ * Estados em que **alguma viagem está em voo** — emissão ou cancelamento.
+ *
+ * Diferente de `ESTADOS_NAO_TERMINAIS`, que é só a emissão: `cancelando` não
+ * sai sozinho por `fiscal.emitir`, que acompanha a nota até ela ser autorizada
+ * e para ali. Sem esta lista, a nota que ficasse em `cancelando` — o processo
+ * caiu entre gravar o estado e receber a resposta da prefeitura — não era
+ * alcançada por nada: nem pela tarefa, que já morreu, nem por varredura, que
+ * não existia, nem pela tela, que não desenha botão em estado em voo. E a venda
+ * ficava sem aceitar nota nova, porque `cancelando` a ocupa.
+ */
+export const ESTADOS_EM_VOO: readonly EstadoDaNota[] = [
+  'pendente',
+  'processando',
+  'cancelando',
+];
+
 /** Estado do qual a nota ainda pode sair sozinha. */
 export const ESTADOS_NAO_TERMINAIS: readonly EstadoDaNota[] = ['pendente', 'processando'];
 
@@ -92,10 +109,8 @@ export function notaEmCurso(estado: EstadoDaNota): boolean {
  * volta a aceitar outra — é o que a recusa da prefeitura manda fazer.
  */
 export const ESTADOS_QUE_OCUPAM_A_VENDA: readonly EstadoDaNota[] = [
-  'pendente',
-  'processando',
+  ...ESTADOS_EM_VOO,
   'autorizada',
-  'cancelando',
 ];
 
 /** A venda pode receber nota nova? `null` é a venda que nunca teve nenhuma. */

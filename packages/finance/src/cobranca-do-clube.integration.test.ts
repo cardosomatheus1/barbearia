@@ -352,6 +352,42 @@ describeIfDb('cobrança recorrente do clube', () => {
     expect(depois).toMatchObject({ estado: 'cancelada', valorCents: 14_900 });
   });
 
+  it('perdoar a mensalidade de quem estava suspenso devolve o benefício', async () => {
+    /**
+     * A barbearia produzia sozinha uma assinatura sem saída: `suspensa` só é
+     * desfeita quando uma fatura é **paga**, e cancelar era o caminho para não
+     * haver mais nenhuma fatura aberta para pagar. A ficha do cliente continuava
+     * dizendo "dar baixa na mensalidade em Clube devolve o benefício", e em
+     * Clube não havia linha nenhuma daquele assinante.
+     *
+     * Destravava sozinho só na virada do ciclo, quando a régua emitisse a
+     * fatura seguinte: até um mês depois.
+     */
+    const assinatura = await assinaturaDe();
+    await comCartao(assinatura);
+    provider.proximoResultado = { pago: false, motivo: 'saldo insuficiente', definitiva: false };
+    await aplicarReguaDoClube({ tenantId: TENANT, provider, agora: VENCIMENTO });
+    await aplicarReguaDoClube({ tenantId: TENANT, provider, agora: VENCIMENTO });
+    await aplicarReguaDoClube({ tenantId: TENANT, provider, agora: emDias(15) });
+    expect(await estadoDa(assinatura)).toBe('suspensa');
+
+    const [fatura] = await faturasDoClube(TENANT, { agora: emDias(15) });
+    if (!fatura) throw new Error('sem fatura');
+
+    await cancelarFatura({
+      tenantId: TENANT,
+      faturaId: fatura.id,
+      motivo: 'cliente ficou doente no mês, a casa perdoou',
+      ator,
+    });
+
+    // Quem perdoa a mensalidade decidiu que aquele mês não é devido — e a
+    // suspensão existia por causa dele.
+    expect(await estadoDa(assinatura)).toBe('ativa');
+    const [depois] = await faturasDoClube(TENANT, { agora: emDias(15) });
+    expect(depois?.estado).toBe('cancelada');
+  });
+
   // -- o cancelamento self-service --------------------------------------------
 
   it('o cancelamento vale até o fim do ciclo pago, e o benefício continua', async () => {

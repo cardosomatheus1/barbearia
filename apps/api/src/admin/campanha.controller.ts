@@ -5,6 +5,7 @@ import {
   criarCampanha,
   puladosDaCampanha,
   marcarParaEnvio,
+  retomarCampanha,
   type FiltroDeCampanha,
 } from '@barbearia/crm';
 import { gradeDeOcupacao } from '@barbearia/scheduling';
@@ -157,6 +158,42 @@ export class CampanhaController {
         'ja_enviada',
         409,
         'Esta campanha não está mais em rascunho. Só um rascunho pode ser enviado.',
+      );
+    }
+    return { estado: 'enviando' as const };
+  }
+
+  /**
+   * Retomar uma campanha parada em `enviando`.
+   *
+   * `enviando` só vira `enviada` no fim do despacho. Esgotadas as cinco
+   * tentativas da tarefa, a campanha ficava ali para sempre — o botão "Enviar"
+   * só existe para `rascunho`, e é ele que segura o segundo toque. A tela
+   * repetia "Na fila. As mensagens saem aos poucos" sobre uma fila que já tinha
+   * desistido.
+   *
+   * Quem decide se pode retomar é o domínio, pelo relógio: uma hora sem nada se
+   * mexer. Recusar as duas situações — parada e andando — com a mesma frase,
+   * pelo mesmo motivo da recusa acima.
+   */
+  @Exige('marketing.send')
+  @Post(':id/retomar')
+  async retomar(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(campanhaIdSchema)) id: string,
+  ) {
+    const retomada = await retomarCampanha({
+      tenantId: staff.tenantId,
+      campanhaId: id,
+      staffId: staff.staffUserId,
+      staffName: staff.name,
+      agora: new Date(),
+    });
+    if (!retomada) {
+      throw new DomainError(
+        'nao_parada',
+        409,
+        'Esta campanha não está parada. Se o envio começou há pouco, espere ele terminar.',
       );
     }
     return { estado: 'enviando' as const };

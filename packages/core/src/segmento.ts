@@ -381,6 +381,46 @@ export function campanhaEnviavel(estado: EstadoDeCampanha): boolean {
 }
 
 /**
+ * Quanto tempo sem nada se mexer antes de uma campanha em `enviando` ser dada
+ * como parada.
+ *
+ * Uma hora porque o despacho de uma campanha grande leva minutos, não horas — a
+ * janela de silêncio é decidida por disparo e não segura o laço —, e porque a
+ * fila retenta cinco vezes antes de desistir. Menos que isso ofereceria
+ * "retomar" no meio de um envio que está andando, e duas voltas simultâneas
+ * podem ler o mesmo alvo ainda não enviado: mensagem repetida no celular do
+ * cliente, que é o único estrago irreversível deste caminho.
+ */
+export const MINUTOS_PARA_CAMPANHA_PARADA = 60;
+
+/**
+ * A campanha travada em `enviando`, que a tela precisa poder retomar.
+ *
+ * `enviando` só vira `enviada` no fim de `despacharCampanha`. Esgotadas as
+ * cinco tentativas da tarefa, a campanha ficava ali **para sempre**: o botão
+ * "Enviar" só é desenhado para `rascunho` — corretamente, é ele que segura o
+ * segundo toque —, e a tela repetia *"Na fila. As mensagens saem aos poucos"*
+ * sobre uma fila que já tinha desistido.
+ *
+ * Derivada do relógio e não de coluna, como a publicação da avaliação: uma
+ * coluna `parada` estaria errada em todo minuto entre a desistência da fila e a
+ * varredura que a marcasse.
+ *
+ * `ultimoMovimentoEm` é o disparo mais recente da campanha, ou a criação dela
+ * quando nenhum alvo saiu — que é o caso da tarefa que morreu antes do
+ * primeiro envio.
+ */
+export function campanhaParada(
+  estado: EstadoDeCampanha,
+  ultimoMovimentoEm: Date,
+  agora: Date,
+): boolean {
+  if (estado !== 'enviando') return false;
+  const minutos = (agora.getTime() - ultimoMovimentoEm.getTime()) / 60_000;
+  return minutos >= MINUTOS_PARA_CAMPANHA_PARADA;
+}
+
+/**
  * Os três filtros que saem do segmento derivado, e não de uma condição em SQL.
  *
  * `novo`, `ativo`, `frequente` e `assinante` ficam de fora **de propósito**: são

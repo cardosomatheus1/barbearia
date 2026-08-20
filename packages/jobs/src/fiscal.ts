@@ -45,6 +45,51 @@ export async function agendarEntregaDeNotasDeTodas(params: {
 }
 
 /**
+ * A conciliação das notas em voo.
+ *
+ * ## O estado que não tinha saída
+ *
+ * `notasEmCurso` — a única consulta que junta as notas paradas, escrita no
+ * bloco 53 com o comentário *"as notas que ainda esperam resposta da
+ * prefeitura"* — **não era chamada por ninguém**. E `fiscal.emitir` nasce com
+ * cinco tentativas: esgotadas, a tarefa vira `failed` e nada mais olha aquela
+ * nota. A comanda ficava com "Na fila. Ela sai sozinha em alguns minutos" para
+ * sempre, sem botão — `vendaAceitaNota` é falso em estado em voo —, e a venda
+ * não aceitava emissão nova. Saída: `UPDATE fiscal_invoices`.
+ *
+ * `cancelando` era pior: fora de `ESTADOS_NAO_TERMINAIS`, nem uma varredura
+ * futura o alcançaria.
+ *
+ * É o caso que o repositório já nomeou em *"reprogramar uma tarefa **e** ter
+ * varredura — escolha uma"*: ali a conclusão foi que o webhook não precisa de
+ * varredura porque `next_attempt_at` já responde "quando tentar de novo". Aqui
+ * não ficou nenhuma das duas para a tarefa morta, e a diferença é que a
+ * resposta não vem de nós: vem da prefeitura, que pode demorar horas.
+ *
+ * ## Uma por barbearia, pela razão de sempre
+ *
+ * `fiscal_invoices` tem RLS: uma varredura sem tenant enxerga zero linhas,
+ * sempre e em silêncio. Mesma forma de `agendarEntregaDeNotasDeTodas`.
+ */
+export async function agendarConciliacaoDeNotasDeTodas(params: {
+  readonly hora: string;
+  readonly quando?: Date;
+}): Promise<number> {
+  return semTenant(async (tx) =>
+    tx.$executeRaw`
+      INSERT INTO jobs (tenant_id, kind, payload, run_after, idempotency_key, max_attempts)
+      SELECT tp.tenant_id, 'fiscal.conciliar', '{}'::jsonb,
+             ${params.quando ?? new Date()},
+             'nota-conciliar:' || tp.tenant_id::text || ':' || ${params.hora},
+             3
+      FROM tenant_platform tp
+      WHERE tp.blocked_at IS NULL
+      ON CONFLICT DO NOTHING
+    `,
+  );
+}
+
+/**
  * De hora em hora, e não uma vez por dia.
  *
  * A retenção varre de madrugada porque o que ela faz é irreversível e pesado. A

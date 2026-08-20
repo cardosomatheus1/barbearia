@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseG
 import {
   abrirCaixa,
   abrirComanda,
+  cancelarComanda,
+  comandasAbertas,
   adicionarItem,
   ajustarComanda,
   caixaAberto,
@@ -217,6 +219,25 @@ export class CaixaController {
   // -- Comanda ----------------------------------------------------------------
 
   /**
+   * As comandas abertas desta unidade.
+   *
+   * **Antes de `orders/:id`, e a ordem é o que faz a rota existir.** O Nest
+   * casa na ordem de declaração: com o parâmetro declarado primeiro,
+   * `/orders/abertas` entrava em `orders/:id` com `id = 'abertas'` e morria na
+   * validação de uuid — 400 sobre uma rota que o código tem. O sintoma foi a
+   * seção nova não aparecer na medição, com a suíte inteira verde.
+   *
+   * `customers.view` junto porque a listagem devolve o nome de quem está na
+   * comanda: rota que agrega declara **todas** as permissões do que devolve.
+   */
+  @Exige('cashier.open', 'customers.view')
+  @Get('orders/abertas')
+  async abertas(@Staff() staff: AuthenticatedStaff) {
+    const local = await this.unidade(staff);
+    return { comandas: await comandasAbertas(staff.tenantId, local.id) };
+  }
+
+  /**
    * A comanda **redige** o cadastro do cliente para quem não tem
    * `customers.view` — nome, id e a conta de fiado.
    *
@@ -285,6 +306,37 @@ export class CaixaController {
         ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
         }),
         podeVerCliente: pode(staff.permissions, 'customers.view'),
+      });
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  /**
+   * Cancelar uma comanda aberta — a saída que `order_status` tinha no enum e
+   * não tinha em lugar nenhum do produto.
+   *
+   * Mesma permissão que abre, e é o desenho certo: quem cria a linha desfaz
+   * enquanto ela não virou dinheiro. O segundo fator vem junto pelo prefixo
+   * `cashier.`, como em toda operação do balcão.
+   *
+   * Sem `Idempotency-Key`: aqui existe estado que distingue a repetição —
+   * `status = 'open'` no `WHERE`, com a contagem conferida —, e é ele que barra
+   * o segundo toque. A chave é para quando não há esse estado.
+   */
+  @Exige('cashier.open')
+  @Delete('orders/:id')
+  async cancelarComandaAberta(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+  ) {
+    const local = await this.unidade(staff);
+    try {
+      return await cancelarComanda({
+        tenantId: staff.tenantId,
+        locationId: local.id,
+        orderId: id,
+        ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (error) {
       return toHttp(error);

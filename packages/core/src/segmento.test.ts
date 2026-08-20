@@ -13,6 +13,8 @@ import {
   SEGMENTO_DO_FILTRO,
   SEGMENTOS,
   type CicloDoCliente,
+  campanhaParada,
+  MINUTOS_PARA_CAMPANHA_PARADA,
 } from './segmento.js';
 
 const dia = (n: number) => new Date(2026, 0, n, 12, 0, 0);
@@ -315,5 +317,33 @@ describe('o nome do público', () => {
     // e quem escolhe não teria como saber qual pegou.
     const nomes = FILTROS_DE_CAMPANHA.map((f) => rotuloDoFiltro(f));
     expect(new Set(nomes).size).toBe(nomes.length);
+  });
+});
+
+describe('a campanha parada em enviando', () => {
+  const AGORA = new Date('2026-08-20T15:00:00Z');
+
+  it('rascunho e enviada nunca estão paradas — só `enviando` tem a saída', () => {
+    const velho = new Date('2026-08-19T15:00:00Z');
+    expect(campanhaParada('rascunho', velho, AGORA)).toBe(false);
+    expect(campanhaParada('enviada', velho, AGORA)).toBe(false);
+  });
+
+  it('envio que começou agora não oferece retomar', () => {
+    // O botão durante um envio que anda faria duas voltas lerem o mesmo alvo,
+    // e mensagem repetida no celular do cliente não se desfaz.
+    const haCincoMinutos = new Date(AGORA.getTime() - 5 * 60_000);
+    expect(campanhaParada('enviando', haCincoMinutos, AGORA)).toBe(false);
+  });
+
+  it('uma hora sem nada se mexer é campanha parada', () => {
+    const noLimite = new Date(AGORA.getTime() - MINUTOS_PARA_CAMPANHA_PARADA * 60_000);
+    expect(campanhaParada('enviando', noLimite, AGORA)).toBe(true);
+    expect(campanhaParada('enviando', new Date(noLimite.getTime() - 60_000), AGORA)).toBe(true);
+  });
+
+  it('um minuto antes do limite ainda não está parada', () => {
+    const quase = new Date(AGORA.getTime() - (MINUTOS_PARA_CAMPANHA_PARADA - 1) * 60_000);
+    expect(campanhaParada('enviando', quase, AGORA)).toBe(false);
   });
 });

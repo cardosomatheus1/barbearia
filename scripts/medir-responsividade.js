@@ -616,11 +616,41 @@ async function prepararBalcao(token) {
     });
   }
 
+  /**
+   * Uma comanda **avulsa aberta**, para a tela de cobrar ser medida com a
+   * seção que o bloco 121 criou.
+   *
+   * Sem ela o print sai da tela de antes da mudança e a medição diz "ok" sobre
+   * o que não foi olhado — é a mesma regra da semente que confere a resposta.
+   * Avulsa e não de atendimento porque é ela que era invisível: aberta, existia
+   * só na URL do redirecionamento.
+   */
+  const avulsa = await fetch(`${API}/v1/admin/orders`, {
+    method: 'POST',
+    headers: { ...cabecalho, 'idempotency-key': 'medicao-avulsa-121' },
+    body: JSON.stringify({}),
+  });
+  if (!avulsa.ok) throw new Error(`não abriu a comanda avulsa da medição: ${avulsa.status}`);
+  const comandaAvulsa = await avulsa.json();
+
+  await fetch(`${API}/v1/admin/orders/${comandaAvulsa.id}/items`, {
+    method: 'POST',
+    headers: cabecalho,
+    body: JSON.stringify({
+      tipo: 'service',
+      serviceId: servico.id,
+      descricao: servico.name,
+      quantidade: 1,
+      precoUnitarioCents: servico.priceCents,
+    }),
+  });
+
   return {
     dia: dataLivre,
     servicoId: servico.id,
     dataLivre,
     clienteId,
+    comandaAvulsa: comandaAvulsa.id,
     horaLivre: grade.days[0]?.slots?.[0]?.start,
     profissionalLivre: grade.days[0]?.slots?.[0]?.professionalId,
   };

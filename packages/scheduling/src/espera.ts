@@ -415,6 +415,61 @@ export async function sairDaEspera(params: {
   });
 }
 
+/**
+ * O **balcão** tira alguém da lista de espera.
+ *
+ * Existe separada de `sairDaEspera` porque a autorização é outra: lá quem age é
+ * o cliente e o filtro obrigatório é `customer_id`, porque a RLS separa
+ * barbearias e não separa clientes dentro de uma; aqui quem age é a barbearia,
+ * e o recorte é a **unidade** — pela mesma razão, uma loja acima: a RLS também
+ * não separa lojas dentro de uma barbearia.
+ *
+ * Ela faltava, e o custo era concreto. A lista aparecia no painel com nome,
+ * telefone e convite vivo, e **sem um único controle**: o cliente ligava
+ * dizendo "já resolvi" e a recepção não tinha o que apertar. A pessoa continuava
+ * recebendo convite, e cada convite nasce com um `slot_holds` que tira o
+ * horário da grade pública por dez minutos — vaga vendável segurada por uma
+ * espera que já não existe. A única saída era o cliente entrar na conta dele.
+ *
+ * O corpo é o mesmo de `sairDaEspera` de propósito: o convite morre junto e o
+ * hold é apagado na mesma transação. Duas formas de sair que fizessem coisas
+ * diferentes seriam duas noções de "sair da lista".
+ */
+export async function tirarDaEspera(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly entryId: string;
+}): Promise<void> {
+  await withTenant(params.tenantId, async (tx) => {
+    const afetadas = await tx.$executeRaw`
+      UPDATE waitlist_entries
+         SET status = 'left', closed_at = now(), updated_at = now()
+       WHERE id = ${params.entryId}::uuid
+         AND location_id = ${params.locationId}::uuid
+         AND status = 'waiting'
+    `;
+    if (afetadas === 0) {
+      // Mesma mensagem de inexistente: "existe, mas não é da sua loja" confirma
+      // o id para quem o adivinhou.
+      throw new EsperaError('espera_nao_encontrada', 'Esta espera não existe ou já terminou.');
+    }
+
+    const canceladas = await tx.$queryRaw<{ hold_id: string | null }[]>`
+      UPDATE waitlist_offers
+         SET status = 'cancelada', answered_at = now(), updated_at = now()
+       WHERE entry_id = ${params.entryId}::uuid
+         AND status = 'aberta'
+      RETURNING hold_id
+    `;
+    const holds = canceladas
+      .map((linha) => linha.hold_id)
+      .filter((id): id is string => Boolean(id));
+    if (holds.length > 0) {
+      await tx.$executeRaw`DELETE FROM slot_holds WHERE id = ANY(${holds}::uuid[])`;
+    }
+  });
+}
+
 export interface CandidatoDaVaga extends EntradaDeEspera {
   readonly customerId: string;
   readonly customerNome: string;

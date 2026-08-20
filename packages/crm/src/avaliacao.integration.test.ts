@@ -791,4 +791,54 @@ describeIfDb('avaliações', () => {
     expect(depois.contestadaEm).not.toBeNull();
   });
 
+
+  it('a contestada continua no painel depois de trinta avaliações novas', async () => {
+    /**
+     * "Retirar a contestação" só existe dentro do cartão da avaliação, e o
+     * painel montava as **trinta últimas**. Passadas trinta avaliações novas, a
+     * contestada não tinha mais tela nenhuma — a ficha do cliente lista notas e
+     * não desenha nem contestar nem retirar.
+     *
+     * Contestar por engano tirava a nota do perfil público **para sempre**, que
+     * é o "apagar com mais passos" que a decisão do bloco 74 existe para
+     * impedir. E o dono não percebe pelo número: a média interna continua
+     * contando a nota suspensa.
+     */
+    const primeiro = await atendimento();
+    await avaliarAtendimento({
+      tenantId: TENANT, customerId: CARLOS, appointmentId: primeiro,
+      nota: 1, comentario: 'nunca fui atendido aqui', agora: AGORA,
+    });
+    const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]!;
+
+    await contestarAvaliacao({
+      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
+      nota: 'Não temos atendimento no nome dela.', ator, agora: AGORA,
+    });
+
+    /**
+     * Trinta e cinco avaliações novas, cada uma **um minuto depois da
+     * anterior**.
+     *
+     * O relógio distinto é o que faz a semente produzir o cenário: com todas em
+     * `AGORA`, `ORDER BY created_at DESC LIMIT 30` escolhe trinta quaisquer das
+     * trinta e seis, e a contestada entrava por sorte — o teste passava com e
+     * sem o conserto.
+     */
+    for (let i = 0; i < 35; i += 1) {
+      const id = await atendimento();
+      await avaliarAtendimento({
+        tenantId: TENANT,
+        customerId: CARLOS,
+        appointmentId: id,
+        nota: 5,
+        agora: new Date(AGORA.getTime() + (i + 1) * 60_000),
+      });
+    }
+
+    const painel = await painelDeAvaliacoes(TENANT, new Date(AGORA.getTime() + 60 * 60_000));
+    expect(painel.ultimas.map((a) => a.id)).toContain(alvo.id);
+    expect(painel.ultimas.find((a) => a.id === alvo.id)?.contestadaEm).not.toBeNull();
+  });
+
 });

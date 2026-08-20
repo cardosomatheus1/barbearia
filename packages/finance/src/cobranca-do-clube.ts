@@ -620,6 +620,15 @@ export async function cancelarFatura(entrada: {
   }
 
   return withTenant(entrada.tenantId, async (tx) => {
+    const [fatura] = await tx.$queryRaw<{ subscription_id: string }[]>`
+      SELECT subscription_id FROM club_invoices
+       WHERE id = ${entrada.faturaId}::uuid AND status = 'aberta'
+       FOR UPDATE
+    `;
+    if (!fatura) {
+      throw new AssinaturaError('fatura_nao_encontrada', 'Esta fatura não está aberta.');
+    }
+
     const canceladas = await tx.$executeRaw`
       UPDATE club_invoices
          SET status = 'cancelada', void_reason = ${motivo}, updated_at = now()
@@ -628,6 +637,26 @@ export async function cancelarFatura(entrada: {
     if (canceladas === 0) {
       throw new AssinaturaError('fatura_nao_encontrada', 'Esta fatura não está aberta.');
     }
+
+    /**
+     * Perdoar a dívida **devolve o benefício**, na mesma transação.
+     *
+     * Sem isto, a barbearia produzia sozinha uma assinatura sem saída: a
+     * suspensão só é desfeita por `reativar`, que só roda quando uma fatura é
+     * **paga**, e cancelar era o caminho para não haver mais nenhuma fatura
+     * aberta para pagar. A ficha do cliente continuava dizendo em letras *"dar
+     * baixa na mensalidade em Clube devolve o benefício"*, e em Clube não havia
+     * linha nenhuma daquele assinante — a tela mandando a recepção para uma
+     * lista onde ele não está, com o cliente na frente do balcão.
+     *
+     * Destravava sozinho só na virada do ciclo, quando a régua emitisse a
+     * fatura seguinte: até um mês depois.
+     *
+     * Perdoar e manter suspenso também seria incoerente com o que o gesto diz:
+     * quem perdoa a mensalidade decidiu que aquele mês não é devido, e a
+     * suspensão existia por causa dele.
+     */
+    await reativar(tx, fatura.subscription_id, new Date());
 
     await audit(tx, {
       actorId: entrada.ator.id,
