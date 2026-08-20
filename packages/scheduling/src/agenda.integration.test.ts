@@ -121,6 +121,85 @@ describeIfDb('agenda e exceções', () => {
       ...extra,
     });
 
+  // -- alcance de quem só enxerga a própria cadeira ---------------------------
+
+  describe('o barbeiro que só vê a própria agenda', () => {
+    /**
+     * `onlyProfessionalId` recortava a **leitura** e não tocava a escrita
+     * (bloco 109).
+     *
+     * O alvo do bloqueio vinha do corpo, e `null` significa "a barbearia
+     * toda" — o seletor "De quem" **abre** nessa opção, então não era preciso
+     * requisição forjada: bastava não mexer no campo. O barbeiro que quisesse
+     * fechar o próprio almoço fechava a casa inteira.
+     *
+     * E `conflitosDaExcecao` já filtrava por esse mesmo recorte, então a lista
+     * de "quem está marcado dentro" mostrava um cliente onde havia quatro. Ele
+     * confirmava lendo "só o Wesley" e derrubava três cadeiras.
+     */
+    it('não bloqueia a barbearia inteira', async () => {
+      await expect(
+        bloquear({ professionalId: null, onlyProfessionalId: GLEIDSON }),
+      ).rejects.toMatchObject({ code: 'fora_do_alcance' });
+    });
+
+    it('não bloqueia a cadeira do colega', async () => {
+      await expect(
+        bloquear({ professionalId: RUAN, onlyProfessionalId: GLEIDSON }),
+      ).rejects.toMatchObject({ code: 'fora_do_alcance' });
+    });
+
+    it('bloqueia a própria, que é o caso legítimo', async () => {
+      const criado = await bloquear({
+        professionalId: GLEIDSON,
+        onlyProfessionalId: GLEIDSON,
+        confirmarConflitos: true,
+      });
+      expect(criado.saved).toBe(true);
+    });
+
+    it('quem enxerga a casa inteira continua fechando a casa inteira', async () => {
+      /**
+       * O contraponto, e sem ele a guarda passaria com o recorte aplicado a
+       * todo mundo — o dono deixaria de conseguir fechar o feriado.
+       */
+      const criado = await bloquear({
+        professionalId: null,
+        onlyProfessionalId: null,
+        confirmarConflitos: true,
+      });
+      expect(criado.saved).toBe(true);
+    });
+
+    it('não apaga o bloqueio da cadeira do colega', async () => {
+      /**
+       * A simetria de **tipo** existia desde que a rota nasceu; a de **dono**
+       * não. Sem ela bastava apagar o bloqueio para desfazer a folga alheia — e
+       * a mensagem é a de inexistente, porque "existe, mas não é sua" confirma
+       * o id para quem o adivinhou.
+       */
+      const doRuan = await bloquear({ professionalId: RUAN, confirmarConflitos: true });
+      if (!doRuan.saved) throw new Error('a semente não criou o bloqueio do Ruan');
+
+      await expect(
+        deleteException({
+          tenantId: TENANT,
+          locationId: LOCATION,
+          exceptionId: doRuan.id,
+          onlyProfessionalId: GLEIDSON,
+        }),
+      ).rejects.toMatchObject({ code: 'exception_not_found' });
+
+      // E ele continua de pé para quem é dono dele.
+      await deleteException({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        exceptionId: doRuan.id,
+        onlyProfessionalId: RUAN,
+      });
+    });
+  });
+
   // -- o que este bloco existe para provar -----------------------------------
 
   it('bloqueio criado pela tela recorta a grade de verdade', async () => {
@@ -318,6 +397,45 @@ describeIfDb('agenda e exceções', () => {
     await exec(admin, `
       UPDATE appointments SET status = 'cancelled_customer' WHERE id = '${criado.id}'
     `);
+
+    const { days } = await agenda();
+    expect(days[0]?.entries).toEqual([]);
+  });
+
+  it('o atendimento concluído continua na grade — ele aconteceu', async () => {
+    /**
+     * A grade **apagava o que já tinha sido atendido** (bloco 109).
+     *
+     * `completed` estava fora de `OCUPAM` sem ninguém ter decidido: o comentário
+     * ali falava de cancelado e falta. O efeito é o pior possível numa tela de
+     * planejamento — às quatro da tarde de um sábado a agenda vai esvaziando
+     * conforme os cortes são encerrados, o contador por cadeira desconta cada
+     * um, e um dia passado abre sempre vazio.
+     *
+     * E discordava do painel do dia sobre o mesmo dia, no mesmo instante:
+     * `/admin/dia` dizia "1 atendido" e `/admin/agenda` dizia "Nada marcado".
+     *
+     * Este caso ficava de fora porque o único teste sobre o filtro era o do
+     * cancelado, logo acima — e `completed` não é cancelado.
+     */
+    const criado = await marcar('10:00');
+    await exec(admin, `UPDATE appointments SET status = 'completed' WHERE id = '${criado.id}'`);
+
+    const { days } = await agenda();
+    expect(days[0]?.entries).toHaveLength(1);
+    expect(days[0]?.entries[0]).toMatchObject({ start: '10:00', status: 'completed' });
+  });
+
+  it('a falta some da grade, porque ela devolve o horário', async () => {
+    /**
+     * O contraponto, e sem ele o teste acima passaria com o filtro removido.
+     *
+     * Falta libera o horário de verdade — desfazê-la passa pela constraint
+     * anti-overbooking de novo, e é por isso que ela pode ser recusada. O
+     * concluído não libera nada.
+     */
+    const criado = await marcar('11:00');
+    await exec(admin, `UPDATE appointments SET status = 'no_show' WHERE id = '${criado.id}'`);
 
     const { days } = await agenda();
     expect(days[0]?.entries).toEqual([]);

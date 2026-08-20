@@ -3350,7 +3350,18 @@ async function main() {
         )) {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
-          if (r.height < 44) {
+          /**
+           * As **duas** medidas, e a segunda foi um achado (bloco 109).
+           *
+           * A guarda media só a altura. Uma seta de 39×44 passava verde nas
+           * quatro larguras — e era exatamente o caso de `.balcao__seta`, o
+           * "← Dia anterior" que troca o dia no painel e nas três vistas da
+           * agenda: o controle mais usado do dia a dia.
+           *
+           * A regra do projeto é sobre o **alvo**, não sobre uma das dimensões
+           * dele: "alvo de toque abaixo de 44px, em qualquer largura".
+           */
+          if (r.height < 44 || r.width < 44) {
             // Caixa e rádio dentro de um `<label>`: o alvo é o rótulo inteiro,
             // porque clicar em qualquer parte dele aciona o controle — que é
             // exatamente o que a WCAG 2.5.8 mede. Medir a caixinha de 13px
@@ -3360,7 +3371,8 @@ async function main() {
             const tipo = el.getAttribute('type');
             if (el.tagName === 'INPUT' && (tipo === 'checkbox' || tipo === 'radio')) {
               const rotulo = el.closest('label');
-              if (rotulo && rotulo.getBoundingClientRect().height >= 44) continue;
+              const caixa = rotulo?.getBoundingClientRect();
+              if (caixa && caixa.height >= 44 && caixa.width >= 44) continue;
             }
             const dentroDeTexto = el.tagName === 'A' && el.parentElement
               && ['P', 'SPAN', 'LI', 'TD'].includes(el.parentElement.tagName)
@@ -3368,7 +3380,8 @@ async function main() {
             if (dentroDeTexto) continue;
             pequenos.push(
               `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0] || '(sem classe)'}`
-              + ` "${(el.textContent ?? '').trim().slice(0, 24)}" ${Math.round(r.height)}px`,
+              + ` "${(el.textContent ?? '').trim().slice(0, 24)}"`
+              + ` ${Math.round(r.width)}×${Math.round(r.height)}px`,
             );
           }
         }

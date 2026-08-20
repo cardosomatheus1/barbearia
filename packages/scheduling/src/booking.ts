@@ -546,27 +546,40 @@ async function insertAppointment(
  * Idempotente por `idempotencyKey`: duplo toque em celular lento devolve o
  * mesmo agendamento em vez de criar dois (CLAUDE.md §2).
  */
-export async function createAppointment(
-  request: CreateAppointmentRequest,
-): Promise<AppointmentRef> {
+/**
+ * Registra a recusa por score, e relança — **nos dois caminhos de escrita**.
+ *
+ * O registro acontece depois da transação, e por isso mora num `catch`: a
+ * transação voltou atrás, foi ela que recusou, então não há onde gravar de
+ * dentro. E uma falha no registro não pode virar erro genérico na tela de quem
+ * está com o telefone na mão — a recusa é explicada, e é isso que a pessoa
+ * precisa ler.
+ *
+ * Ele estava embrulhando só `createAppointment` (bloco 109). O bloco 60 já
+ * tinha acrescentado a **guarda** a `rescheduleAppointment` — o comentário lá
+ * diz por quê: sem ela, marcar a hora vazia e remarcar para a cheia era a porta
+ * dos fundos, em dois cliques pelo caminho normal da tela. O que ficou de fora
+ * foi o **registro**: a lista de "quem eu recusei", que a convenção exige ao
+ * lado de todo interruptor que recusa, continuava subcontando exatamente pelo
+ * caminho que aquele bloco existiu para fechar.
+ *
+ * Uma função e não duas cópias porque a segunda cópia é o que já falhou aqui —
+ * e porque `guarda nova num caminho de escrita vale em todos os caminhos que
+ * chegam ao mesmo lugar`.
+ */
+async function comRegistroDaRecusa<T>(
+  contexto: { readonly tenantId: string; readonly locationId: string; readonly customerId?: string | undefined },
+  corpo: () => Promise<T>,
+): Promise<T> {
   try {
-    return await criarDentroDaTransacao(request);
+    return await corpo();
   } catch (erro) {
-    /**
-     * O registro da recusa acontece **depois** da transação, e por isso o
-     * `catch` está aqui.
-     *
-     * A transação voltou atrás — foi ela que recusou —, então não há onde
-     * gravar de dentro. E uma falha no registro não pode virar erro genérico na
-     * tela de quem está com o telefone na mão: a recusa é explicada, e é isso
-     * que o cliente precisa ler.
-     */
-    if (erro instanceof BookingRecusadoPorScore && request.customerId) {
+    if (erro instanceof BookingRecusadoPorScore && contexto.customerId) {
       try {
         await registrarRecusaOnline({
-          tenantId: request.tenantId,
-          locationId: request.locationId,
-          customerId: request.customerId,
+          tenantId: contexto.tenantId,
+          locationId: contexto.locationId,
+          customerId: contexto.customerId,
           score: erro.score,
           limiar: erro.limiar,
           comecaEm: erro.comecaEm,
@@ -578,6 +591,19 @@ export async function createAppointment(
     }
     throw erro;
   }
+}
+
+export async function createAppointment(
+  request: CreateAppointmentRequest,
+): Promise<AppointmentRef> {
+  return comRegistroDaRecusa(
+    {
+      tenantId: request.tenantId,
+      locationId: request.locationId,
+      ...(request.customerId ? { customerId: request.customerId } : {}),
+    },
+    () => criarDentroDaTransacao(request),
+  );
 }
 
 async function criarDentroDaTransacao(
@@ -1074,7 +1100,20 @@ export interface RescheduleRequest {
 export async function rescheduleAppointment(
   request: RescheduleRequest,
 ): Promise<AppointmentRef> {
-  return withTenant(request.tenantId, async (tx) => {
+  /**
+   * O mesmo embrulho da criação: a recusa por score entra na lista do dono.
+   *
+   * A `locationId` só se conhece lendo o agendamento, então ela é preenchida
+   * lá dentro e o registro a lê daqui — é o único jeito de o `catch` de fora
+   * saber em que unidade a recusa aconteceu sem uma segunda consulta.
+   */
+  const contexto: { tenantId: string; locationId: string; customerId?: string } = {
+    tenantId: request.tenantId,
+    locationId: '',
+  };
+
+  return comRegistroDaRecusa(contexto, () =>
+    withTenant(request.tenantId, async (tx) => {
     const current = await tx.$queryRaw<
       {
         id: string;
@@ -1195,6 +1234,14 @@ export async function rescheduleAppointment(
      *
      * Achado da `/security-review` do bloco 60.
      */
+    /**
+     * O contexto do registro é preenchido **antes** da checagem que pode
+     * recusar: quem grava a recusa é o `catch` de fora, e ele não tem como
+     * reler o agendamento sem uma segunda consulta.
+     */
+    contexto.locationId = appointment.location_id;
+    if (request.customerId) contexto.customerId = request.customerId;
+
     const online = await conferirMarcacaoOnline(tx, {
       locationId: appointment.location_id,
       customerId: request.customerId ?? null,
@@ -1257,7 +1304,8 @@ export async function rescheduleAppointment(
       depositReason: sinal.motivo,
       deduplicated: false,
     };
-  });
+    }),
+  );
 }
 
 export interface CustomerAppointment {

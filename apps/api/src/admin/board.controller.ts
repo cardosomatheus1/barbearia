@@ -146,11 +146,16 @@ export class BoardController {
     @Param('id', new ZodValidationPipe(appointmentIdSchema)) id: string,
     @Body(new ZodValidationPipe(attendanceSchema)) body: { action: AttendanceAction },
   ) {
+    const unidade = await unidadeDoBalcao(staff);
     try {
       return await applyAttendance({
         tenantId: staff.tenantId,
         appointmentId: id,
         action: body.action,
+        // A loja em que este balcão está. Sem ela, um operador escopado à
+        // filial marcava falta num atendimento da matriz com o id na mão — a
+        // RLS separa barbearias e não separa lojas dentro de uma.
+        locationId: unidade.id,
         /**
          * Cancelar devolve quem espera pela vaga, com nome e telefone — e
          * identidade de cliente é `customers.view` nesta casa.

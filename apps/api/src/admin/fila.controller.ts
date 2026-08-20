@@ -153,10 +153,14 @@ export class FilaController {
     @Param('id', new ZodValidationPipe(queueEntryIdSchema)) id: string,
     @Body(new ZodValidationPipe(moveQueueSchema)) body: { para: QueueStatus },
   ) {
+    const unidade = await unidadeDoBalcao(staff);
     try {
       return await moveQueueEntry({
         tenantId: staff.tenantId,
         queueEntryId: id,
+        // A loja deste balcão: sem ela, o operador da filial mexia na fila da
+        // matriz com o id na mão.
+        locationId: unidade.id,
         para: body.para,
       });
     } catch (error) {
@@ -178,10 +182,12 @@ export class FilaController {
     @Param('id', new ZodValidationPipe(queueEntryIdSchema)) id: string,
     @Body(new ZodValidationPipe(seatQueueSchema)) body: { professionalId: string },
   ) {
+    const unidade = await unidadeDoBalcao(staff);
     try {
       return await seatQueueEntry({
         tenantId: staff.tenantId,
         queueEntryId: id,
+        locationId: unidade.id,
         professionalId: body.professionalId,
       });
     } catch (error) {

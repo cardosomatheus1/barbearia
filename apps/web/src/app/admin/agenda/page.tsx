@@ -367,6 +367,10 @@ export default async function AgendaPage({ searchParams }: Props) {
         : a.dia.date.localeCompare(b.dia.date),
     );
 
+  /** As entradas de um dia, ordenadas — a lista agrupa por dia desde o 109. */
+  const compromissosDoDia = (dia: (typeof agenda.days)[number]) =>
+    [...dia.entries].sort((a, b) => a.start.localeCompare(b.start));
+
   return (
     <main className="ui-container balcao" {...secao('agenda')}>
       <header className="painel__topo">
@@ -387,7 +391,11 @@ export default async function AgendaPage({ searchParams }: Props) {
       </header>
 
       <h1 className="painel__titulo balcao__titulo">
-        Agenda <span className="balcao__data tabular">{de === hoje ? 'hoje' : de}</span>
+        {/* Em pt-BR, como o painel do dia — `2026-08-20` não é como se lê data
+            no Brasil, e as duas telas da mesma área mostravam formatos
+            diferentes para o mesmo fato. */}
+        Agenda{' '}
+        <span className="balcao__data tabular">{de === hoje ? 'hoje' : diaCurto(de)}</span>
       </h1>
 
       <nav aria-label="Como ver" className="cadastro-nav ui-scroll-x">
@@ -506,17 +514,40 @@ export default async function AgendaPage({ searchParams }: Props) {
               </p>
             </div>
           ) : (
-            <ul className="compromissos">
-              {todosOsCompromissos.map(({ dia, entrada }) => (
-                <Cartao
-                  data={dia.date}
-                  entrada={entrada}
-                  key={entrada.id}
-                  profissionais={agenda.professionals}
-                  vista={vista}
-                />
-              ))}
-            </ul>
+            /* Agrupada por dia, e não uma pilha lisa (bloco 109).
+
+               A lista é a vista que responde "quando o fulano vem?", e o cartão
+               nunca desenhava a data: sete dias empilhados, o mesmo nome
+               aparecendo três vezes em horários parecidos, e o relógio voltando
+               do 11:00 para o 09:00 sem nada explicar por quê. Os cabeçalhos
+               existiam só no ramo da semana.
+
+               O `dia.entries` já vem ordenado, e `todosOsCompromissos` só o
+               achatava — então agrupar é voltar a usar o que a consulta traz. */
+            agenda.days
+              .filter((dia) => compromissosDoDia(dia).length > 0)
+              .map((dia) => (
+                <section className="agenda-dia" key={dia.date}>
+                  <h2 className="agenda-dia__titulo" id={`lista-${dia.date}`}>
+                    <span className="agenda-dia__semana">
+                      {weekdayShort(agenda.timezone, dia.date)}
+                    </span>{' '}
+                    <span className="tabular">{dia.date.slice(8, 10)}/{dia.date.slice(5, 7)}</span>
+                    {dia.date === hoje ? <span className="agenda-dia__hoje">hoje</span> : null}
+                  </h2>
+                  <ul className="compromissos">
+                    {compromissosDoDia(dia).map((entrada) => (
+                      <Cartao
+                        data={dia.date}
+                        entrada={entrada}
+                        key={entrada.id}
+                        profissionais={agenda.professionals}
+                        vista={vista}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))
           )}
         </section>
       ) : (
@@ -683,7 +714,7 @@ export default async function AgendaPage({ searchParams }: Props) {
  */
 function Esperando({ esperando }: { esperando: readonly QuemEspera[] }) {
   return (
-    <section aria-labelledby="esperando" className="secao" id="esperando">
+    <section aria-labelledby="esperando-titulo" className="secao" id="esperando">
       <h2 className="rotulo" id="esperando-titulo">
         Esperando uma vaga
       </h2>

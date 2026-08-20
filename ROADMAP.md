@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 108 de 108 blocos.**
+**Status: 109 de 109 blocos.**
 
 ---
 
@@ -73,6 +73,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| O aviso da vaga liberada não mostra **quem** o motor casou | `quemQuerAVagaLiberada` roda dentro da transação do cancelamento, nas duas portas, e devolve os candidatos com nome e telefone; o painel do dia mostra a contagem no instante em que o horário abre, que é o único instante em que ela serve | levar os **nomes** até a tela. Hoje o link vai para a lista de espera inteira da unidade, e o texto foi corrigido para não prometer o recorte (bloco 109). Nome de cliente não pode ir na URL — fica no histórico do navegador do balcão — e o cookie de vida curta, que seria o caminho, **não funciona a partir de server action** neste app: o `Set-Cookie` não sai da resposta, verificado com `curl -D` no bloco 106 | sem bloco definido: depende de a ação de atendimento passar a responder por route handler, como a conversa do cliente passou a fazer. Achado da avaliação cega do bloco 109 |
 | A varredura da vitrine do marketplace não tem quem a dispare | `varrerVitrine` existe, é exportada, tem teste e refaz preço e nota de todo card a partir do que a página pública mostra; `atualizarVitrineDaCasa` é chamada nos dois pontos de evento (publicar e contestar avaliação), então o card não fica velho pelos caminhos óbvios | **o disparo periódico**. Preço e nota mudam por caminhos que não conhecem a vitrine — uma alteração de catálogo, uma avaliação nova que vence a janela de 48h —, e a varredura é a rede que pega isso. Sem chamador, o card só se atualiza quando alguém publica de novo, e o cabeçalho da migração 0067 afirma o contrário | sem bloco definido: precisa de tipo de tarefa próprio e de lugar no laço periódico de `packages/jobs/src/worker.ts`, que é trabalho de agendamento. Achado pela guarda `scripts/varredura-com-chamador.test.mjs`, criada no bloco 108 |
 | `webhook.varrer` tem tratador e ninguém a enfileira | o tratador está escrito em `packages/jobs/src/worker.ts`, alcança o primeiro degrau da escada de entrega e tudo que a tarefa perdeu, e roda sem tenant como a política da tabela permite | **o produtor**. Nenhum caminho enfileira a tarefa, então a rede que existe para pegar a entrega cuja tarefa se perdeu nunca roda. A entrega normal continua funcionando por `next_attempt_at`; o que falta é o resgate | sem bloco definido: entra junto do disparo da vitrine, que precisa do mesmo lugar no laço periódico. Achado ao investigar a guarda do bloco 108 |
 | O agente de conversa não responde pelo WhatsApp | a porta do site está no ar desde o bloco 106: `/[slug]/conversar`, com a resposta em cookie de dois minutos, os horários levando ao passo 4 do agendamento de sempre, medição e percurso de navegador do texto livre até a linha no banco. As rotas `POST /v1/b/:slug/agente` e `/agente/meu` continuam sendo o único caminho de leitura, e nenhuma delas grava | o **encaminhamento da mensagem recebida**: hoje o webhook da Meta manda tudo para `registrarResposta`, e uma mensagem que não responde a nada nenhum caminho lê. Precisa decidir o que é conversa e o que é resposta a um aviso, e o que fazer com quem escreve dentro da janela de silêncio | sem bloco definido: depende de a barbearia ter número próprio verificado, que é o estado que o bloco 88 tornou explícito e que nenhuma barbearia da base tem ainda. Entra junto do primeiro bloco que ligue o número de verdade |
@@ -431,6 +432,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 106 | A porta do agente: o cliente escreve o que precisa, e a proposta leva ao passo de confirmar | ✅ |
 | 107 | O agente entende substantivo: "quero um corte amanhã" para de ser "não entendi" | ✅ |
 | 108 | O que a avaliação cega do marketing achou: o teto de quatro promoções por mês volta a contar, a receita atribuída deixa de esperar a próxima campanha, e a Retenção manda ao público que ela mostra | ✅ |
+| 109 | O que a avaliação cega do atendimento achou: o barbeiro para de fechar a agenda da casa, a grade para de apagar o que foi atendido, e o escopo de unidade chega às três rotas que faltavam | ✅ |
 
 ---
 

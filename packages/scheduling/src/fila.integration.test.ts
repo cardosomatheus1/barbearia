@@ -318,6 +318,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS, RUAN);
     const sentado = await seatQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       professionalId: RUAN,
       now: AGORA,
@@ -343,6 +344,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS, RUAN);
     const sentado = await seatQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       professionalId: RUAN,
       now: AGORA,
@@ -350,6 +352,7 @@ describeIfDb('fila presencial', () => {
 
     await applyAttendance({
       tenantId: TENANT,
+      locationId: LOCATION,
       appointmentId: sentado.appointmentId,
       action: 'complete', podeVerCliente: true,
       now: new Date(AGORA.getTime() + 30 * 60_000),
@@ -375,6 +378,7 @@ describeIfDb('fila presencial', () => {
 
     const sentado = await seatQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       professionalId: RUAN,
       // Vinte minutos depois de entrar na fila: é essa a espera medida.
@@ -382,6 +386,7 @@ describeIfDb('fila presencial', () => {
     });
     await applyAttendance({
       tenantId: TENANT,
+      locationId: LOCATION,
       appointmentId: sentado.appointmentId,
       action: 'complete', podeVerCliente: true,
       now: new Date(AGORA.getTime() + 50 * 60_000),
@@ -399,6 +404,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS, RUAN);
     const sentado = await seatQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       professionalId: RUAN,
       now: AGORA,
@@ -406,6 +412,7 @@ describeIfDb('fila presencial', () => {
 
     await applyAttendance({
       tenantId: TENANT,
+      locationId: LOCATION,
       appointmentId: sentado.appointmentId,
       action: 'cancel', podeVerCliente: true,
       now: new Date(AGORA.getTime() + 5 * 60_000),
@@ -433,6 +440,7 @@ describeIfDb('fila presencial', () => {
     await expect(
       seatQueueEntry({
         tenantId: TENANT,
+      locationId: LOCATION,
         queueEntryId: entrada.id,
         professionalId: RUAN,
         now: AGORA,
@@ -449,6 +457,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS, RUAN);
     await seatQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       professionalId: RUAN,
       now: AGORA,
@@ -457,6 +466,7 @@ describeIfDb('fila presencial', () => {
     await expect(
       seatQueueEntry({
         tenantId: TENANT,
+      locationId: LOCATION,
         queueEntryId: entrada.id,
         professionalId: GLEIDSON,
         now: AGORA,
@@ -468,9 +478,10 @@ describeIfDb('fila presencial', () => {
 
   it('chamado que não aparece volta para a fila sem perder a hora de chegada', async () => {
     const entrada = await entrar(CARLOS);
-    await moveQueueEntry({ tenantId: TENANT, queueEntryId: entrada.id, para: 'called', now: AGORA });
+    await moveQueueEntry({ tenantId: TENANT, locationId: LOCATION, queueEntryId: entrada.id, para: 'called', now: AGORA });
     await moveQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       para: 'waiting',
       now: new Date(AGORA.getTime() + 120_000),
@@ -485,6 +496,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS);
     await moveQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       para: 'gave_up',
       now: AGORA,
@@ -500,6 +512,7 @@ describeIfDb('fila presencial', () => {
     const primeira = await entrar(CARLOS);
     await moveQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: primeira.id,
       para: 'gave_up',
       now: AGORA,
@@ -513,6 +526,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS);
     await moveQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       para: 'gave_up',
       now: AGORA,
@@ -521,6 +535,7 @@ describeIfDb('fila presencial', () => {
     await expect(
       moveQueueEntry({
         tenantId: TENANT,
+      locationId: LOCATION,
         queueEntryId: entrada.id,
         para: 'called',
         now: AGORA,
@@ -564,6 +579,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS);
     await moveQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: entrada.id,
       para: 'gave_up',
       now: AGORA,
@@ -608,6 +624,7 @@ describeIfDb('fila presencial', () => {
     await expect(
       moveQueueEntry({
         tenantId: RIVAL,
+      locationId: LOCATION,
         queueEntryId: entrada.id,
         para: 'gave_up',
         now: AGORA,
@@ -617,6 +634,7 @@ describeIfDb('fila presencial', () => {
     await expect(
       seatQueueEntry({
         tenantId: RIVAL,
+      locationId: LOCATION,
         queueEntryId: entrada.id,
         professionalId: RUAN,
         now: AGORA,
@@ -650,6 +668,7 @@ describeIfDb('fila presencial', () => {
 
     await seatQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: primeiro.id,
       professionalId: RUAN,
       now: AGORA,
@@ -663,6 +682,7 @@ describeIfDb('fila presencial', () => {
 
     await moveQueueEntry({
       tenantId: TENANT,
+      locationId: LOCATION,
       queueEntryId: primeiro.id,
       para: 'gave_up',
       now: AGORA,
@@ -675,7 +695,7 @@ describeIfDb('fila presencial', () => {
     // caminho comum de quem foi tomar um café. Uma mensagem, não quatro.
     const entrada = await entrar(CARLOS);
     for (const para of ['called', 'waiting', 'called'] as const) {
-      await moveQueueEntry({ tenantId: TENANT, queueEntryId: entrada.id, para, now: AGORA });
+      await moveQueueEntry({ tenantId: TENANT, locationId: LOCATION, queueEntryId: entrada.id, para, now: AGORA });
     }
     expect(await avisosDeFila()).toEqual([entrada.id]);
   });

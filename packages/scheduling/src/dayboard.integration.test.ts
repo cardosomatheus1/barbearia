@@ -16,6 +16,8 @@ const APP_URL = process.env['APP_DATABASE_URL'];
 
 const TENANT = '11111111-1111-1111-1111-111111111111';
 const LOCATION = 'aaaaaaaa-0000-0000-0000-000000000001';
+/** A segunda loja da **mesma** barbearia: a RLS não separa uma da outra. */
+const FILIAL = 'aaaaaaaa-0000-0000-0000-000000000009';
 const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
 const CABELO = 'eeeeeeee-0000-0000-0000-000000000001';
 
@@ -54,7 +56,8 @@ describeIfDb('painel do dia', () => {
       -- América/Bahia é UTC-3: um agendamento às 23:30 local cai no dia seguinte
       -- em UTC, e é assim que a consulta erra o dia se estiver mal escrita.
       INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes)
-      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20);
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20),
+             ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia', 20);
 
       INSERT INTO professionals (id, tenant_id, location_id, name, kind)
       VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional');
@@ -195,9 +198,9 @@ describeIfDb('painel do dia', () => {
   it('percorre chegada, início e fim, carimbando a hora de cada um', async () => {
     const criado = await marcar('09:00');
 
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true, now: new Date('2026-08-11T12:03:00Z') });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', podeVerCliente: true, now: new Date('2026-08-11T12:10:00Z') });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete', podeVerCliente: true, now: new Date('2026-08-11T12:38:00Z') });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'check_in', podeVerCliente: true, now: new Date('2026-08-11T12:03:00Z') });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'start', podeVerCliente: true, now: new Date('2026-08-11T12:10:00Z') });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'complete', podeVerCliente: true, now: new Date('2026-08-11T12:38:00Z') });
 
     const board = await painel(new Date('2026-08-11T13:00:00Z'));
     const item = board.entries[0];
@@ -212,7 +215,7 @@ describeIfDb('painel do dia', () => {
   it('recusa começar quem não chegou', async () => {
     const criado = await marcar('09:00');
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', podeVerCliente: true }),
+      applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'start', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'transition_not_allowed' });
   });
 
@@ -220,16 +223,16 @@ describeIfDb('painel do dia', () => {
     // Dois no balcão, o mesmo atendimento. A segunda ação não pode desfazer a
     // primeira em silêncio.
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'check_in', podeVerCliente: true });
 
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true }),
+      applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'check_in', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'transition_not_allowed' });
   });
 
   it('marca falta e devolve o horário para a grade', async () => {
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
 
     const board = await painel();
     expect(board.totals.faltaram).toBe(1);
@@ -244,27 +247,109 @@ describeIfDb('painel do dia', () => {
     // toque: a recepção marca falta, a vaga é reocupada, e alguém tenta
     // desfazer.
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
     await marcar('09:00');
 
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'undo_no_show', podeVerCliente: true }),
+      applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'undo_no_show', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'slot_taken' });
   });
 
   it('desfazer a falta funciona quando a vaga continua livre', async () => {
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });
 
     const voltou = await applyAttendance({
-      tenantId: TENANT, appointmentId: criado.id, action: 'undo_no_show', podeVerCliente: true,
+      tenantId: TENANT,
+      locationId: LOCATION, appointmentId: criado.id, action: 'undo_no_show', podeVerCliente: true,
     });
     expect(voltou.status).toBe('checked_in');
   });
 
+  it('o balcão da filial não mexe no atendimento da matriz', async () => {
+    /**
+     * A RLS separa barbearias e **não separa lojas dentro de uma** (bloco 109).
+     *
+     * `applyAttendance` filtrava por `id` e por profissional, nunca por loja:
+     * um operador escopado à filial que tivesse o id de um atendimento da matriz
+     * marcava falta nele, cancelava, ou o dava por concluído. É o mesmo defeito
+     * dos blocos 58 e 68, e a suíte não tinha nenhum caso de "id da outra loja".
+     *
+     * A recusa é "não encontrado" pelo motivo de sempre: "existe, mas não é
+     * seu" confirma o id para quem o adivinhou.
+     */
+    const marcado = await marcar('09:00');
+
+    await expect(
+      applyAttendance({
+        tenantId: TENANT,
+        locationId: FILIAL,
+        appointmentId: marcado.id,
+        action: 'no_show',
+        podeVerCliente: true,
+        now: AGORA,
+      }),
+    ).rejects.toMatchObject({ code: 'appointment_not_found' });
+
+    // E continua marcado, do jeito que estava.
+    const board = await painel();
+    expect(board.entries.find((e) => e.id === marcado.id)?.status).toBe('pending');
+  });
+
+  it('quem volta da falta volta com o relógio de espera andando', async () => {
+    /**
+     * `undo_no_show` leva a `checked_in` e não carimbava nada (bloco 109).
+     *
+     * `waitingMinutes` só existe com `checked_in_at` preenchido, então a pessoa
+     * voltava para "Na espera" sendo a única linha do painel **sem frase de
+     * contexto** — todas as outras dizem "Chegou agora" ou "Levou 12 min".
+     * Justamente quem foi marcado como falta por engano, e que portanto está
+     * esperando há mais tempo, era quem perdia o cronômetro que a recepção usa
+     * para decidir quem chamar.
+     *
+     * O teste que existia só conferia o `status`.
+     */
+    const marcado = await marcar('09:00');
+    const acao = (action: 'no_show' | 'undo_no_show' | 'check_in') =>
+      applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: marcado.id, action, podeVerCliente: true, now: AGORA });
+    await acao('no_show');
+    await acao('undo_no_show');
+
+    const board = await painel();
+    const entrada = board.entries.find((e) => e.id === marcado.id);
+    expect(entrada?.status).toBe('checked_in');
+    expect(entrada?.waitingMinutes).not.toBeNull();
+  });
+
+  it('a chegada de verdade não é reescrita pelo conserto', async () => {
+    /**
+     * Quem chegou, foi marcado como falta por engano e foi desfeito continua
+     * com a hora em que **chegou**, não com a hora do conserto — senão o
+     * cronômetro zera e a pessoa some do topo da fila de quem espera há mais
+     * tempo. É o `COALESCE` na instrução, e sem este caso ele poderia ser
+     * removido sem nada ficar vermelho.
+     */
+    const marcado = await marcar('10:00');
+    const acao = (action: 'no_show' | 'undo_no_show' | 'check_in', now: Date) =>
+      applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: marcado.id, action, podeVerCliente: true, now });
+
+    await acao('check_in', new Date('2026-08-11T12:03:00Z'));
+    const chegada = await admin.$queryRawUnsafe<{ checked_in_at: Date }[]>(
+      `SELECT checked_in_at FROM appointments WHERE id = '${marcado.id}'`,
+    );
+
+    await acao('no_show', new Date('2026-08-11T12:30:00Z'));
+    await acao('undo_no_show', new Date('2026-08-11T12:40:00Z'));
+
+    const depois = await admin.$queryRawUnsafe<{ checked_in_at: Date }[]>(
+      `SELECT checked_in_at FROM appointments WHERE id = '${marcado.id}'`,
+    );
+    expect(depois[0]?.checked_in_at).toEqual(chegada[0]?.checked_in_at);
+  });
+
   it('cancelar pelo balcão não pune o cliente', async () => {
     const criado = await marcar('09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'cancel', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'cancel', podeVerCliente: true });
 
     const linhas = await admin.$queryRawUnsafe<{ status: string }[]>(
       `SELECT status FROM appointments WHERE id = '${criado.id}'`,
@@ -290,7 +375,8 @@ describeIfDb('painel do dia', () => {
   it('quem já chegou deixa de ser cobrado de atraso e passa a contar espera', async () => {
     const criado = await marcar('09:00');
     await applyAttendance({
-      tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true,
+      tenantId: TENANT,
+      locationId: LOCATION, appointmentId: criado.id, action: 'check_in', podeVerCliente: true,
       now: new Date('2026-08-11T12:03:00Z'),
     });
 
@@ -329,7 +415,7 @@ describeIfDb('painel do dia', () => {
     await exec(admin, `INSERT INTO tenants (id, name) VALUES ('${rival}', 'Rival')`);
 
     await expect(
-      applyAttendance({ tenantId: rival, appointmentId: criado.id, action: 'check_in', podeVerCliente: true }),
+      applyAttendance({ tenantId: rival, locationId: LOCATION, appointmentId: criado.id, action: 'check_in', podeVerCliente: true }),
     ).rejects.toMatchObject({ code: 'appointment_not_found' });
   });
 });
@@ -360,7 +446,8 @@ describeIfDb('painel do dia — só a minha agenda', () => {
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
 
       INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes)
-      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20);
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 20),
+             ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia', 20);
 
       INSERT INTO professionals (id, tenant_id, location_id, name, kind) VALUES
         ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional'),
@@ -429,6 +516,7 @@ describeIfDb('painel do dia — só a minha agenda', () => {
     await expect(
       applyAttendance({
         tenantId: TENANT,
+      locationId: LOCATION,
         appointmentId: doColega.id,
         action: 'check_in', podeVerCliente: true,
         onlyProfessionalId: RUAN,
@@ -437,7 +525,7 @@ describeIfDb('painel do dia — só a minha agenda', () => {
 
     // E o dono, sem recorte, move normalmente.
     await expect(
-      applyAttendance({ tenantId: TENANT, appointmentId: doColega.id, action: 'check_in', podeVerCliente: true }),
+      applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: doColega.id, action: 'check_in', podeVerCliente: true }),
     ).resolves.toMatchObject({ status: 'checked_in' });
   });
 
@@ -446,9 +534,9 @@ describeIfDb('painel do dia — só a minha agenda', () => {
     // `appointments.view` daria a receita do dia a todo mundo com acesso ao
     // balcão. Ele volta no bloco 18, com o caixa e com MFA.
     const criado = await marcarCom(RUAN, '09:00');
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'check_in', podeVerCliente: true });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'start', podeVerCliente: true });
-    await applyAttendance({ tenantId: TENANT, appointmentId: criado.id, action: 'complete', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'check_in', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'start', podeVerCliente: true });
+    await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'complete', podeVerCliente: true });
 
     const board = await casaInteira();
     expect(JSON.stringify(board.totals)).not.toContain('realizado');

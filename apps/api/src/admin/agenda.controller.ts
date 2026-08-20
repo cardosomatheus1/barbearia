@@ -49,6 +49,7 @@ const STATUS: Record<string, number> = {
   unknown_professional: 404,
   invalid_exception: 422,
   kind_not_allowed: 403,
+  fora_do_alcance: 403,
   appointment_not_active: 409,
   slot_not_available: 409,
   slot_taken: 409,
@@ -296,6 +297,9 @@ export class AgendaController {
         // guarda da rota declara o piso; o tipo só se conhece depois de ler a
         // linha, e sem esta simetria a recepcionista reabriria o feriado.
         somenteBloqueio: !pode(staff.permissions, 'settings.manage'),
+        // E o mesmo recorte que a criação passou a exigir: quem enxerga uma
+        // cadeira só apaga o que é dela.
+        onlyProfessionalId: this.recorte(staff),
       });
       return { deleted: true };
     } catch (error) {

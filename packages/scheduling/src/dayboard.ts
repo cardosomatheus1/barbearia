@@ -351,8 +351,25 @@ export async function getDayBoard(params: {
   });
 }
 
+/**
+ * Qual coluna cada ação carimba — e `undo_no_show` carimba a chegada.
+ *
+ * Ele leva a `checked_in` como o `check_in`, e não carimbava nada: a pessoa
+ * voltava para "Na espera" **sem relógio de espera**. `waitingMinutes` só existe
+ * com `checked_in_at` preenchido, e a linha ficava sendo a única do painel sem
+ * frase de contexto — todas as outras dizem "Chegou agora", "Levou 12 min".
+ *
+ * Justamente quem foi marcado como falta por engano, e que portanto está
+ * esperando há mais tempo, era quem perdia o cronômetro que a recepção usa para
+ * decidir quem chamar.
+ *
+ * O `COALESCE` na instrução preserva o carimbo original quando ele existe: quem
+ * chegou, foi marcado como falta e foi desfeito continua com a hora em que
+ * chegou de verdade, não com a hora do conserto.
+ */
 const CARIMBO: Partial<Record<AttendanceAction, 'checked_in_at' | 'started_at' | 'completed_at'>> = {
   check_in: 'checked_in_at',
+  undo_no_show: 'checked_in_at',
   start: 'started_at',
   complete: 'completed_at',
 };
@@ -380,6 +397,20 @@ export async function applyAttendance(params: {
    */
   readonly onlyProfessionalId?: string | null;
   /**
+   * A unidade em que o balcão está, e ela é obrigatória (bloco 109).
+   *
+   * A função filtrava por `id` e por profissional, nunca por loja. Numa rede,
+   * um operador escopado à filial que tivesse o id de um atendimento da matriz
+   * marcava falta nele, cancelava, ou o dava por concluído — e a RLS não pega,
+   * porque ela separa barbearias e **não separa lojas dentro de uma**. É o
+   * mesmo defeito dos blocos 58 e 68.
+   *
+   * Obrigatória e não opcional pelo motivo de sempre: opcional, ela seria
+   * esquecida no primeiro chamador novo e a conferência deixaria de acontecer
+   * sem nada ficar vermelho.
+   */
+  readonly locationId: string;
+  /**
    * Quem chama pode ver nome e telefone de cliente (`customers.view`).
    *
    * Obrigatório no tipo, e não opcional: opcional, ele seria esquecido no
@@ -406,6 +437,7 @@ export async function applyAttendance(params: {
     const linhas = await tx.$queryRaw<{ status: AppointmentStatus }[]>`
       SELECT status FROM appointments
       WHERE id = ${params.appointmentId}::uuid
+        AND location_id = ${params.locationId}::uuid
         AND (${params.onlyProfessionalId ?? null}::uuid IS NULL
              OR professional_id = ${params.onlyProfessionalId ?? null}::uuid)
       FOR UPDATE
@@ -429,7 +461,8 @@ export async function applyAttendance(params: {
       await tx.$executeRaw`
         UPDATE appointments
         SET status = ${destino}::appointment_status,
-            checked_in_at = CASE WHEN ${carimbo === 'checked_in_at'} THEN ${now}
+            checked_in_at = CASE WHEN ${carimbo === 'checked_in_at'}
+                                 THEN COALESCE(checked_in_at, ${now})
                                  ELSE checked_in_at END,
             started_at    = CASE WHEN ${carimbo === 'started_at'} THEN ${now}
                                  ELSE started_at END,

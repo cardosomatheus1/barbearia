@@ -575,6 +575,17 @@ const TRANSICOES: Readonly<Record<QueueStatus, readonly QueueStatus[]>> = {
 export async function moveQueueEntry(params: {
   readonly tenantId: string;
   readonly queueEntryId: string;
+  /**
+   * A loja em que este balcão está — obrigatória (bloco 109).
+   *
+   * A função filtrava só por `id`. Numa rede, um operador escopado à filial que
+   * tivesse o id de uma entrada da matriz a movia — e a RLS não pega, porque ela
+   * separa barbearias e **não separa lojas dentro de uma**. Mesmo defeito dos
+   * blocos 58 e 68, e a convenção manda a conferência ser no domínio, não na
+   * borda: a lista que a tela oferece decide o que ela **mostra**; o `POST`
+   * recebe o id do corpo.
+   */
+  readonly locationId: string;
   readonly para: QueueStatus;
   readonly now?: Date;
 }): Promise<{ readonly status: QueueStatus }> {
@@ -582,7 +593,10 @@ export async function moveQueueEntry(params: {
 
   return withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ status: QueueStatus }[]>`
-      SELECT status FROM queue_entries WHERE id = ${params.queueEntryId}::uuid FOR UPDATE
+      SELECT status FROM queue_entries
+       WHERE id = ${params.queueEntryId}::uuid
+         AND location_id = ${params.locationId}::uuid
+       FOR UPDATE
     `;
     const atual = linhas[0];
     if (!atual) throw new QueueError('queue_entry_not_found', 'Esta pessoa não está mais na fila.');
@@ -647,6 +661,14 @@ export async function moveQueueEntry(params: {
 export async function seatQueueEntry(params: {
   readonly tenantId: string;
   readonly queueEntryId: string;
+  /**
+   * A loja do balcão, pelo mesmo motivo de `moveQueueEntry`.
+   *
+   * Aqui o profissional já era conferido contra a unidade **da entrada**, o que
+   * ajuda e não fecha: com o id de uma entrada da matriz e o id de um
+   * profissional da matriz, o operador da filial sentava alguém que não é dele.
+   */
+  readonly locationId: string;
   readonly professionalId: string;
   readonly now?: Date;
 }): Promise<{ readonly appointmentId: string; readonly endsAt: string }> {
@@ -666,6 +688,7 @@ export async function seatQueueEntry(params: {
                 FROM queue_entry_services qs WHERE qs.queue_entry_id = q.id) AS service_ids
         FROM queue_entries q
        WHERE q.id = ${params.queueEntryId}::uuid
+         AND q.location_id = ${params.locationId}::uuid
        FOR UPDATE
     `;
     const entrada = linhas[0];

@@ -573,7 +573,7 @@ describeIfDb('agenda do admin pela HTTP', () => {
   it('quem não administra não fecha a barbearia com um bloqueio do dia inteiro', async () => {
     const dono = await abrirBarbearia();
     const amanha = maisDias(await hoje(dono), 1);
-    const { serviceId, professionalId } = await catalogo(dono);
+    const { serviceId, professionalId, outroProfissional } = await catalogo(dono);
     const ruan = await barbeiroComConta(dono);
 
     // Sem profissional = a barbearia toda.
@@ -586,14 +586,31 @@ describeIfDb('agenda do admin pela HTTP', () => {
     // Com profissional, mas cobrindo o dia: isso é folga.
     await com(ruan)(
       http().post('/v1/admin/agenda/blocks').send({
-        kind: 'block', date: amanha, startMinute: 0, endMinute: 1440, professionalId,
+        kind: 'block', date: amanha, startMinute: 0, endMinute: 1440,
+        professionalId: outroProfissional,
       }),
     ).expect(403);
 
-    // O bloqueio de verdade continua passando.
+    /**
+     * A cadeira do **colega**, na duração que passaria (bloco 109).
+     *
+     * Esta linha usava `professionalId` — a primeira cadeira do catálogo, que
+     * não é a do Ruan — e esperava **201**: o teste encodava o defeito como
+     * comportamento certo. O recorte de `onlyProfessionalId` estreitava a
+     * leitura e não tocava a escrita, então o barbeiro fechava a agenda de quem
+     * quisesse, com a lista de conflitos filtrada para mostrar só a dele.
+     */
     await com(ruan)(
       http().post('/v1/admin/agenda/blocks').send({
         kind: 'block', date: amanha, startMinute: 840, endMinute: 900, professionalId,
+      }),
+    ).expect(403);
+
+    // O bloqueio de verdade — a **própria** cadeira — continua passando.
+    await com(ruan)(
+      http().post('/v1/admin/agenda/blocks').send({
+        kind: 'block', date: amanha, startMinute: 840, endMinute: 900,
+        professionalId: outroProfissional,
       }),
     ).expect(201);
 

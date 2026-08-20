@@ -1003,7 +1003,17 @@ main { padding-bottom: var(--space-8); }
 .balcao__sub a { color: var(--color-accent); }
 
 .balcao__dias { display: flex; gap: var(--space-2); }
-.balcao__seta { padding: 0 var(--space-3); }
+/* 44px nas **duas** medidas: a seta é um caractere só, e `padding` lateral não
+   chegava lá. Saía com 39×44 em todas as larguras — e ela é o controle mais
+   tocado do dia a dia, o que troca o dia no painel e na agenda. A medição só
+   olhava a altura, então passava verde; a guarda foi corrigida junto. */
+.balcao__seta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-touch);
+  padding: 0 var(--space-3);
+}
 .balcao__hoje { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
 
 /* Faixa de números: rola dentro de si, nunca leva a página junto. */

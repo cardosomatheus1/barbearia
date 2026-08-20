@@ -27,6 +27,8 @@ export type AgendaFailure =
   | 'exception_not_found'
   | 'invalid_exception'
   | 'unknown_professional'
+  /** Mexer na agenda de outra cadeira, ou na da casa, sem enxergá-la. */
+  | 'fora_do_alcance'
   | 'kind_not_allowed';
 
 export class AgendaError extends Error {
@@ -88,8 +90,40 @@ export interface Agenda {
   readonly days: readonly AgendaDay[];
 }
 
-/** Status que ocupam espaço na grade. Cancelado e falta deixam de ocupar. */
-const OCUPAM: readonly string[] = ['pending', 'confirmed', 'checked_in', 'waiting', 'in_progress'];
+/**
+ * Status que ocupam espaço na grade — e `completed` é um deles.
+ *
+ * O comentário anterior dizia "cancelado e falta deixam de ocupar", e estava
+ * certo sobre esses dois. O que ninguém decidiu foi o `completed`, que saiu
+ * junto: a partir daí a grade **apagava o que já tinha sido atendido**.
+ *
+ * O efeito é o pior possível numa tela de planejamento. Às quatro da tarde de um
+ * sábado, a aba Agenda vai esvaziando conforme os cortes são encerrados, o
+ * contador por cadeira desconta cada um, e no fim do dia todas marcam zero. Um
+ * dia passado abre sempre vazio. E `/admin/dia` do mesmo dia diz "1 atendido"
+ * enquanto `/admin/agenda` diz "Nada marcado" — §6 pergunta 6, sobre o mesmo
+ * fato, no mesmo instante.
+ *
+ * O horário nunca esteve livre de verdade: `TERMINAL_STATUSES`, que é quem o
+ * motor de disponibilidade consulta, mantém `completed` ocupando, e a constraint
+ * anti-overbooking também. Então a grade desenhava livre o que o motor recusa —
+ * não vira overbooking, vira tela mentindo.
+ *
+ * A própria tela acreditava que ele aparecia: o comentário de
+ * `apps/web/src/app/admin/agenda/page.tsx` descreve o cartão de "Atendido" e o
+ * que ele oferece, sobre um cartão que a consulta nunca produzia.
+ *
+ * `no_show` continua fora: falta libera o horário de verdade — desfazê-la passa
+ * pela constraint de novo, e é por isso que ela pode ser recusada.
+ */
+const OCUPAM: readonly string[] = [
+  'pending',
+  'confirmed',
+  'checked_in',
+  'waiting',
+  'in_progress',
+  'completed',
+];
 
 function diasEntre(from: string, to: string): string[] {
   const dias: string[] = [];
@@ -376,6 +410,35 @@ export async function createException(
 > {
   const alvoProfissional = params.professionalId ?? null;
 
+  /**
+   * Quem só enxerga a própria agenda só **fecha** a própria agenda (bloco 109).
+   *
+   * `onlyProfessionalId` é o recorte que o controller deriva de
+   * `appointments.view_all_professionals`: nulo para dono, gerente e recepção,
+   * o id da cadeira para o barbeiro. Ele recortava a **leitura** e não tocava a
+   * escrita — o alvo vinha do corpo, e `null` significa "a barbearia toda".
+   *
+   * O barbeiro que quisesse fechar o próprio almoço fechava a casa inteira, e o
+   * seletor "De quem" **abre** em "A barbearia toda": não era preciso requisição
+   * forjada, bastava não mexer no campo.
+   *
+   * A metade que tornava isso pior é a de cima: `conflitosDaExcecao` já filtra
+   * por `onlyProfessionalId`, então a lista de "quem está marcado dentro" vinha
+   * com um cliente quando havia quatro. Ele lia "só o Wesley", confirmava, e
+   * fechava três cadeiras com três clientes de colegas dentro da janela, sem ter
+   * sido avisado deles. A leitura foi estreitada por uma revisão de segurança e
+   * a escrita ficou larga: virou guarda que impede saber sem impedir agir.
+   *
+   * A rota vizinha já fazia certo — `mover` recusa destino na cadeira do colega
+   * com essa mesma frase. Aqui é a mesma regra, no caminho que faltava.
+   */
+  if (params.onlyProfessionalId && alvoProfissional !== params.onlyProfessionalId) {
+    throw new AgendaError(
+      'fora_do_alcance',
+      'Você só pode bloquear a sua própria agenda.',
+    );
+  }
+
   const falha = validarExcecao({
     tipo: params.kind,
     data: params.date,
@@ -458,10 +521,22 @@ export async function deleteException(params: {
    * existe depois de ler a linha, e por isso mora aqui e não no decorador.
    */
   readonly somenteBloqueio?: boolean;
+  /**
+   * E quem só enxerga a própria agenda só apaga o que é da própria cadeira.
+   *
+   * A simetria de **tipo** existia desde que a rota nasceu; a de **dono** não.
+   * Verificado: o dono criou um bloqueio na cadeira do Ruan e o barbeiro
+   * Gleidson apagou — sobre uma cadeira que ele nem enxerga na própria agenda.
+   * É o par do que a criação passou a recusar no bloco 109, e sem ele bastava
+   * apagar o bloqueio para desfazer a folga alheia.
+   */
+  readonly onlyProfessionalId?: string | null;
 }): Promise<void> {
   await withTenant(params.tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<{ id: string; kind: TipoDeExcecao }[]>`
-      SELECT e.id, e.kind
+    const linhas = await tx.$queryRaw<
+      { id: string; kind: TipoDeExcecao; professional_id: string | null }[]
+    >`
+      SELECT e.id, e.kind, e.professional_id
         FROM schedule_exceptions e
         LEFT JOIN professionals p ON p.id = e.professional_id
        WHERE e.id = ${params.exceptionId}::uuid
@@ -470,6 +545,17 @@ export async function deleteException(params: {
     `;
     const excecao = linhas[0];
     if (!excecao) {
+      throw new AgendaError('exception_not_found', 'Esta exceção não existe mais.');
+    }
+
+    /**
+     * A recusa tem a **mesma mensagem** de exceção inexistente.
+     *
+     * "Existe, mas não é sua" confirma o id para quem o adivinhou — é o
+     * precedente do OTP, que responde igual para telefone existente e
+     * inexistente, e o mesmo que a recusa de unidade já segue.
+     */
+    if (params.onlyProfessionalId && excecao.professional_id !== params.onlyProfessionalId) {
       throw new AgendaError('exception_not_found', 'Esta exceção não existe mais.');
     }
 

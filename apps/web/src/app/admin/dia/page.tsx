@@ -582,10 +582,23 @@ export default async function DiaPage({ searchParams }: Props) {
       */}
       {esperando > 0 ? (
         <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+          {/* O texto diz o que o destino **tem** (bloco 109).
+
+              Ele prometia "ver quem é" sobre uma lista que não é a dos
+              candidatos: o motor casou três pessoas com a vaga que abriu, e o
+              link levava à lista de espera inteira da unidade — seis, duas
+              das quais nem cabem no horário. A recepcionista com o telefone na
+              mão tinha que refazer na cabeça o cruzamento que o produto já
+              havia feito.
+
+              Levar os nomes exigiria carregá-los para a outra tela, e nem a
+              URL serve (nome de cliente fica no histórico) nem o cookie de
+              ação (server action não emite `Set-Cookie` neste app — bloco 106).
+              Está escrito como lacuna, com o que falta. */}
           {esperando === 1
             ? 'Uma pessoa esperava por um horário assim.'
             : `${esperando} pessoas esperavam por um horário assim.`}{' '}
-          <a href="/admin/agenda#esperando">Ver quem é e ligar</a>
+          <a href="/admin/agenda#esperando">Abrir a lista de espera</a>
         </div>
       ) : null}
 
