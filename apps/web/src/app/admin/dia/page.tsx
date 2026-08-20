@@ -21,13 +21,13 @@ import { painelDoBalcaoOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
   acaoAbrirComanda,
-  acaoAtendimento,
   acaoDevolverSinal,
   acaoRegistrarSinal,
   acaoSair,
 } from '../acoes';
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { secao } from '../secoes';
+import { QuemQueriaAVaga } from '../quem-queria-a-vaga';
 
 /**
  * O balcão: o dia da barbearia.
@@ -362,7 +362,7 @@ function Atendimento({
             || linha.deposit.reembolso?.desfecho === 'devolver')) ? (
         <div className="atendimento__acoes">
           {principal ? (
-            <form action={acaoAtendimento}>
+            <form action="/admin/dia/atender" method="post">
               <input type="hidden" name="id" value={linha.id} />
               <input type="hidden" name="action" value={principal} />
               <input type="hidden" name="voltar" value={voltarPara} />
@@ -434,7 +434,7 @@ function Atendimento({
           {secundarias.length > 0 ? (
             <div className="atendimento__outras">
               {secundarias.map((acao) => (
-                <form action={acaoAtendimento} key={acao}>
+                <form action="/admin/dia/atender" key={acao} method="post">
                   <input type="hidden" name="id" value={linha.id} />
                   <input type="hidden" name="action" value={acao} />
                   <input type="hidden" name="voltar" value={voltarPara} />
@@ -474,9 +474,6 @@ export default async function DiaPage({ searchParams }: Props) {
   const dataPedida = first(query['d']);
   const profissional = first(query['p']);
   const erro = first(query['erro']);
-  // Contagem, nunca nomes: o que vem da URL é entrada externa, e um número
-  // fora da faixa vira zero em vez de texto na tela.
-  const esperando = Math.max(0, Math.min(99, Number(first(query['esperando']) ?? 0) || 0));
 
   const painel = await painelDoDia(token, {
     ...(dataPedida ? { date: dataPedida } : {}),
@@ -572,35 +569,7 @@ export default async function DiaPage({ searchParams }: Props) {
         </div>
       ) : null}
 
-      {/*
-        A vaga que acabou de abrir tem gente esperando (bloco 38).
-
-        Aparece **no instante do cancelamento**, e é o único instante em que
-        serve: daqui a dez minutos o horário já pode ter sido marcado por quem
-        entrou no site. Só a contagem viaja pela URL — nome de cliente em barra
-        de endereço fica no histórico do navegador do balcão.
-      */}
-      {esperando > 0 ? (
-        <div className="ui-alert ui-alert--warning painel__aviso" role="status">
-          {/* O texto diz o que o destino **tem** (bloco 109).
-
-              Ele prometia "ver quem é" sobre uma lista que não é a dos
-              candidatos: o motor casou três pessoas com a vaga que abriu, e o
-              link levava à lista de espera inteira da unidade — seis, duas
-              das quais nem cabem no horário. A recepcionista com o telefone na
-              mão tinha que refazer na cabeça o cruzamento que o produto já
-              havia feito.
-
-              Levar os nomes exigiria carregá-los para a outra tela, e nem a
-              URL serve (nome de cliente fica no histórico) nem o cookie de
-              ação (server action não emite `Set-Cookie` neste app — bloco 106).
-              Está escrito como lacuna, com o que falta. */}
-          {esperando === 1
-            ? 'Uma pessoa esperava por um horário assim.'
-            : `${esperando} pessoas esperavam por um horário assim.`}{' '}
-          <a href="/admin/agenda#esperando">Abrir a lista de espera</a>
-        </div>
-      ) : null}
+      <QuemQueriaAVaga />
 
       <NasCadeiras hora={agora} linhas={dia.entries} />
 

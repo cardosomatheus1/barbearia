@@ -10,9 +10,10 @@ import { recortarMeuDia, fraseDoIntervalo } from '@barbearia/core';
 import { painelDoDia, type LinhaDoDia } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoAtendimento, acaoSair } from '../acoes';
+import { acaoSair } from '../acoes';
 import { ProNav } from '../pro-nav';
 import { secao } from '../secoes';
+import { QuemQueriaAVaga } from '../quem-queria-a-vaga';
 
 /**
  * O dia do barbeiro.
@@ -88,7 +89,7 @@ function Botao({
   readonly acao: AcaoAtendimento;
 }) {
   return (
-    <form action={acaoAtendimento}>
+    <form action="/admin/dia/atender" method="post">
       <input name="id" type="hidden" value={linha.id} />
       <input name="action" type="hidden" value={acao} />
       <input name="voltar" type="hidden" value="/admin/meu-dia" />
@@ -190,6 +191,8 @@ export default async function MeuDiaPage({ searchParams }: Props) {
           {FALHA[erro] ?? FALHA['request_failed']}
         </div>
       ) : null}
+
+      <QuemQueriaAVaga />
 
       <p className="meu-dia__intervalo">{fraseDoIntervalo(dia.minutosAteProximo)}</p>
 

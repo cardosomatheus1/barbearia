@@ -47,6 +47,19 @@ export const ACOES = [
 export type AttendanceAction = (typeof ACOES)[number];
 
 /**
+ * A ação veio de um formulário? — a mesma lista, uma vez só.
+ *
+ * A tela tinha a própria cópia dos oito nomes, e ela vivia dentro de um arquivo
+ * `'use server'`. Duas coisas ruins de uma vez: lista paralela que diverge no
+ * primeiro estado novo, e — porque um arquivo `'use server'` só exporta função
+ * assíncrona — uma lista que o handler que precisa dela **não consegue
+ * importar**. O build reprova, e é o build que contou.
+ */
+export function ehAcaoDeAtendimento(valor: string): valor is AttendanceAction {
+  return (ACOES as readonly string[]).includes(valor);
+}
+
+/**
  * Transições permitidas, por estado de origem.
  *
  * Duas escolhas que merecem explicação:

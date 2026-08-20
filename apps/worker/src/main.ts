@@ -50,6 +50,7 @@ import {
   atribuirDaBarbearia,
   atualizarVitrineDaCasa,
   emitirComissaoDoMarketplace,
+  varrerVitrine,
 } from '@barbearia/platform';
 import {
   ConsoleNotificationProvider,
@@ -643,6 +644,22 @@ async function main(): Promise<void> {
       },
       entregarWebhook: async (entregaId, agora) => entregarWebhook(entregaId, agora),
       varrerWebhooks: async (agora) => varrerEntregasPendentes(agora),
+
+      /**
+       * A vitrine do marketplace, refeita de hora em hora (bloco 110).
+       *
+       * `atualizarVitrineDaCasa` é chamada nos dois pontos de evento — publicar
+       * a página e contestar uma avaliação —, então o card não fica velho pelos
+       * caminhos óbvios. O que faltava era a rede: preço e nota mudam por
+       * caminhos que não conhecem a vitrine, e chamar a atualização de dentro de
+       * cada um espalharia a vitrine por cinco pacotes, com o primeiro caminho
+       * novo esquecendo dela.
+       *
+       * Ela existia, exportada e testada, **sem chamador nenhum** do bloco 70 ao
+       * 110 — enquanto o cabeçalho da migração 0067 afirmava o contrário. Quem
+       * achou foi a guarda do bloco 108.
+       */
+      varrerVitrine: async (agora) => varrerVitrine(agora),
       varrerRetencao: async (tenantId, agora) => {
         /**
          * O texto cru das perguntas anônimas vence junto (bloco 66).

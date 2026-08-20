@@ -268,17 +268,6 @@ async function guardarOQueFoiDigitado(
  */
 const TETO_DO_ARQUIVO = 8 * 1024 * 1024;
 
-/**
- * Lista fechada das ações que o balcão pode enviar.
- *
- * O `action` chega de um campo escondido do formulário, que é entrada externa
- * como qualquer outra. A API valida de novo — esta guarda existe para a tela
- * não gastar uma ida ao servidor com lixo, e para o erro ser o da tela.
- */
-const ACOES_DE_ATENDIMENTO: ReadonlySet<string> = new Set([
-  'confirm', 'check_in', 'wait', 'start', 'complete', 'no_show', 'undo_no_show', 'cancel',
-]);
-
 async function exigirSessao(): Promise<string> {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
@@ -513,44 +502,20 @@ export async function acaoJanela(form: FormData): Promise<void> {
 // -- Balcão ------------------------------------------------------------------
 
 /**
- * Move um atendimento pelo balcão.
+ * Mover um atendimento **não é ação de servidor** — é `dia/atender/route.ts`.
  *
- * Volta para o mesmo dia e o mesmo filtro de onde saiu — a recepção não pode
- * perder o lugar na lista a cada toque. O destino vem do formulário e é
- * conferido antes de virar redirecionamento: campo de formulário é entrada
- * externa, e um `redirect` cru com ele seria redirecionamento aberto.
+ * Ela morava aqui e não conseguia levar adiante o que o domínio devolve: quem
+ * espera pela vaga que o cancelamento acabou de abrir, com nome e telefone.
+ * Nome de cliente não vai para a URL, e cookie gravado dentro de uma server
+ * action não emite `Set-Cookie` neste app — então só a contagem atravessava, e
+ * o aviso mandava para a lista de espera inteira da unidade.
+ *
+ * O handler devolve uma resposta HTTP de verdade, e ali o cookie é cookie.
+ *
+ * A lista fechada das ações foi junto, para `packages/core` — ela era uma cópia
+ * à mão de `ACOES`, e morava num arquivo `'use server'`, que **só exporta função
+ * assíncrona**. O handler não conseguia importá-la, e o build foi quem disse.
  */
-export async function acaoAtendimento(form: FormData): Promise<void> {
-  const token = await exigirSessao();
-
-  const id = texto(form, 'id');
-  const acao = texto(form, 'action');
-  const voltar = destinoDoBalcao(texto(form, 'voltar'));
-
-  if (!ACOES_DE_ATENDIMENTO.has(acao)) falhar(voltar, 'request_failed');
-
-  const resultado = await moverAtendimento(token, id, acao as AcaoAtendimento);
-  if (!resultado.ok) falhar(voltar, resultado.code);
-
-  /**
-   * Cancelar abre uma vaga, e quem a quer aparece agora (bloco 38).
-   *
-   * A contagem viaja pela URL porque a ação redireciona — e ela precisa
-   * atravessar. Sem isto, a lista de espera existiria no domínio e o balcão
-   * nunca saberia dela no único instante em que ela serve: o cliente liga, a
-   * recepção desmarca, e o horário fica livre para quem marcar primeiro pelo
-   * site.
-   *
-   * Só a contagem, nunca os nomes: nome de cliente em barra de endereço fica no
-   * histórico do navegador do balcão e no log do servidor.
-   */
-  const esperando = resultado.dados.esperando.length;
-  if (esperando > 0) {
-    redirect(`${voltar}${voltar.includes('?') ? '&' : '?'}esperando=${esperando}`);
-  }
-
-  redirect(voltar);
-}
 
 /**
  * Marca alguém pelo balcão.

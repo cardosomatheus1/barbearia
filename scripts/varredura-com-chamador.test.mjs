@@ -91,20 +91,13 @@ describe('a varredura que ninguém chama', () => {
    * As órfãs conhecidas, com motivo e destino escritos.
    *
    * Uma lista de exceções é o lugar mais perigoso de um teste, e por isso cada
-   * linha aqui tem que dizer **por que** e **até quando**. As duas abaixo foram
-   * achadas por esta guarda no bloco 108 e não couberam nele: as duas precisam
-   * de tipo de tarefa novo e de lugar no laço periódico, que é trabalho de
-   * agendamento e não de marketing. Estão escritas em
-   * `ROADMAP.md` → Lacunas com dependência.
+   * linha aqui tem que dizer **por que** e **até quando**.
    *
-   * Quem acrescentar uma terceira linha aqui está adiando; quem tirar uma
-   * entregou.
+   * Ela nasceu com uma — `varrerVitrine`, achada por esta guarda no bloco 108 —
+   * e está **vazia** desde o 110, que a ligou ao laço periódico. Quem
+   * acrescentar uma linha aqui está adiando; quem tirar uma entregou.
    */
-  const CONHECIDAS = new Set([
-    // Preço e nota do card do marketplace só mudam quando alguém publica de
-    // novo. O cabeçalho da migração 0067 promete o contrário.
-    'varrerVitrine',
-  ]);
+  const CONHECIDAS = new Set([]);
 
   it('toda varredura e atribuição é mencionada por quem dispara trabalho de fundo', () => {
     const orfas = exportadas()

@@ -869,6 +869,51 @@ main { padding-bottom: var(--space-8); }
 .painel__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
 .painel__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .painel__aviso { margin-bottom: var(--space-5); }
+/*
+  O aviso da vaga que abriu, com quem ligar (bloco 110).
+
+  A janela pedida fica **abaixo** do nome no celular e ao lado no notebook: em
+  360px ela é a terceira informação da linha e empurraria o telefone para fora;
+  a partir de 768 sobra largura e a linha inteira vira uma frase que se lê de
+  uma vez. `min-width: 0` porque nome composto de cliente é o conteúdo que
+  decide a largura da coluna quando ninguém a segura.
+*/
+.vaga__titulo { margin: 0 0 var(--space-2); font-weight: 600; }
+.vaga__lista { margin: 0; padding: 0; list-style: none; }
+.vaga__quem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  padding: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--color-border);
+}
+.vaga__quem:first-child { border-top: 0; }
+.vaga__nome { min-width: 0; }
+.vaga__fone { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.vaga__janela { flex-basis: 100%; color: var(--color-text-muted); }
+/* De quem é a vez: a oferta é exclusiva e uma de cada vez, e a tela diz isso. */
+.vaga__vez {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.vaga__resto { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.vaga__lista-inteira {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  min-width: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+@media (min-width: 768px) {
+  .vaga__janela { flex-basis: auto; }
+}
+
 .painel__nota { margin: var(--space-6) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
 .painel__nota a, .painel__sub a { color: var(--color-accent); }
 

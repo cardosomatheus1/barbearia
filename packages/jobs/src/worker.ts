@@ -184,6 +184,15 @@ export interface Contexto {
   /** As entregas vencidas, para a varredura. Injetada pelo mesmo motivo. */
   readonly varrerWebhooks: (agora: Date) => Promise<readonly string[]>;
   /**
+   * Refaz a vitrine do marketplace — preço e nota de cada card.
+   *
+   * Obrigatória no `Contexto` e não opcional, pelo motivo de sempre: opcional,
+   * ela seria esquecida no primeiro worker novo e a varredura voltaria a não ter
+   * chamador — que é exatamente o estado em que ela passou do bloco 70 ao 110,
+   * com o cabeçalho da migração afirmando o contrário.
+   */
+  readonly varrerVitrine: (agora: Date) => Promise<number>;
+  /**
    * A vitrine do marketplace refeita (bloco 70), injetada.
    *
    * Mesma razão da retenção: ela vive em `packages/platform`, que é camada de
@@ -392,20 +401,6 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     const entregaId = String(tarefa.payload['entregaId'] ?? '');
     if (!entregaId) throw new Error('tarefa de webhook sem entrega');
     await contexto.entregarWebhook(entregaId, contexto.relogio.agora());
-  },
-
-  /**
-   * A varredura das entregas vencidas.
-   *
-   * Ela alcança o primeiro degrau da escada e tudo que a tarefa perdeu. Roda
-   * sem tenant, como a política da tabela permite — a fila de entregas não
-   * pertence a nenhuma barbearia.
-   */
-  'webhook.varrer': async (_tarefa, contexto) => {
-    const agora = contexto.relogio.agora();
-    for (const entregaId of await contexto.varrerWebhooks(agora)) {
-      await contexto.entregarWebhook(entregaId, agora);
-    }
   },
 
   'fiscal.emitir': async (tarefa, contexto) => {
@@ -872,6 +867,7 @@ export async function rodarWorker(
   let ultimaEntregaDeNotas: string | null = null;
   let ultimaConciliacaoDoWhatsApp: string | null = null;
   let ultimaAutomacao: string | null = null;
+  let ultimaVarreduraGlobal: string | null = null;
   /** E a de alerta, que roda de manhã em vez de de madrugada. */
   let ultimoAlerta: string | null = null;
   /** E a da cobrança do clube, que roda de madrugada e fala com o adquirente. */
@@ -923,6 +919,36 @@ export async function rodarWorker(
     if (entrega.hora !== ultimaEntregaDeNotas) {
       ultimaEntregaDeNotas = entrega.hora;
       await agendarEntregaDeNotasDeTodas(entrega);
+    }
+
+    /**
+     * As duas varreduras que **não podem ser tarefa** (bloco 110).
+     *
+     * `jobs.tenant_id` é `NOT NULL` de propósito, e o comentário da migração 20
+     * diz por quê: *"quem não tem tenant não tem o que fazer aqui"*. Uma
+     * varredura global não tem dono, então não há linha de `jobs` que a
+     * represente — e era exatamente por isso que ninguém enfileirava
+     * `webhook.varrer`, que tinha tratador e nenhum produtor desde que nasceu.
+     * O tratador saiu junto: guardar código que nada pode alcançar é a mesma
+     * promessa vazia que a guarda do bloco 108 existe para pegar.
+     *
+     * Aqui elas ficam ao lado de `soltarOrfas` e da régua de cobrança, que são
+     * as outras duas coisas que o worker faz **sem** ser uma tarefa.
+     *
+     * De hora em hora: a vitrine é cópia derivada com carimbo de defasagem, e
+     * a entrega vencida é a rede que pega o que a tarefa perdeu. Nenhuma das
+     * duas justifica correr a cada volta do laço.
+     */
+    if (entrega.hora !== ultimaVarreduraGlobal) {
+      ultimaVarreduraGlobal = entrega.hora;
+      const agora = contexto.relogio.agora();
+
+      const refeitos = await contexto.varrerVitrine(agora);
+      if (refeitos > 0) console.log('[vitrine]', { refeitos });
+
+      for (const entregaId of await contexto.varrerWebhooks(agora)) {
+        await contexto.entregarWebhook(entregaId, agora);
+      }
     }
 
     /**

@@ -1566,6 +1566,25 @@ async function prepararMarketplace(slug) {
  * o aviso do bloco 101 não enxergava: nada pendente, a fila andando, e a
  * varredura da automação morrendo em toda volta havia quatro dias.
  */
+/**
+ * A carga do cookie da vaga, no formato exato que `daEspera` produz.
+ *
+ * Escrita à mão porque o estado nasce de um POST que a medição não faz — ela
+ * abre telas, não opera o balcão. O formato é o que `lerVaga` confere, e há
+ * teste unitário do outro lado: se as duas pontas divergirem, o aviso some do
+ * print em vez de aparecer errado.
+ */
+function vagaDaMedicao() {
+  const nomes = [
+    { id: 'v1', nome: 'Maria Aparecida do Nascimento', fim4: '4821', de: '09:00', ate: '12:00' },
+    { id: 'v2', nome: 'Ruan Carlos', fim4: '7130', de: '08:30', ate: '11:00' },
+    { id: 'v3', nome: 'José Antônio da Silva Filho', fim4: null, de: '10:00', ate: '14:30' },
+    { id: 'v4', nome: 'Ana Beatriz', fim4: '2299', de: '09:30', ate: '10:30' },
+    { id: 'v5', nome: 'Wellington Souza', fim4: '5074', de: '11:00', ate: '13:00' },
+  ];
+  return { nomes, total: 6 };
+}
+
 async function prepararFalhaNaFila(slug) {
   const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
   if (!tenant) return;
@@ -2954,6 +2973,41 @@ async function main() {
         ]
       : []),
     { nome: 'balcão — o dia', url: `/admin/dia?d=${balcao.dia}`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    {
+      /**
+       * O aviso da vaga que acabou de abrir (bloco 110).
+       *
+       * Ele vive num cookie de dois minutos gravado pelo handler que move o
+       * atendimento — não dá para alcançá-lo por URL, e por isso a semente é o
+       * próprio cookie. Sem ela, o print seria da tela **antes** da mudança e a
+       * medição diria "ok" sobre o que ninguém olhou.
+       *
+       * Seis nomes contra o teto de cinco, de propósito: é o caso que mostra a
+       * frase do resto ("falta 1") e o nome composto longo, que é o conteúdo
+       * que decide a largura da coluna em 360px.
+       */
+      nome: 'balcão — vaga que abriu',
+      url: `/admin/dia?d=${balcao.dia}`,
+      cookie: [
+        { nome: 'gestor', valor: token, caminho: '/admin' },
+        { nome: 'vaga', valor: encodeURIComponent(JSON.stringify(vagaDaMedicao())), caminho: '/admin' },
+      ],
+    },
+    {
+      /**
+       * O mesmo aviso para quem **não pode ver cliente** (bloco 38).
+       *
+       * O domínio devolve a linha com o nome em branco, e a tela precisa dizer a
+       * contagem em vez de desenhar cinco nomes vazios. Sem este print, o caso
+       * da recepção sem `customers.view` só seria olhado quando acontecesse.
+       */
+      nome: 'balcão — vaga sem nomes',
+      url: `/admin/dia?d=${balcao.dia}`,
+      cookie: [
+        { nome: 'gestor', valor: token, caminho: '/admin' },
+        { nome: 'vaga', valor: encodeURIComponent(JSON.stringify({ nomes: [], total: 4 })), caminho: '/admin' },
+      ],
+    },
     { nome: 'balcão — serviço', url: '/admin/dia/marcar', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'balcão — horário', url: `/admin/dia/marcar?s=${balcao.servicoId}&d=${balcao.dataLivre}&e=c`, cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     {
@@ -3063,10 +3117,13 @@ async function main() {
         if (!bytes) return route.abort();
         await route.fulfill({ contentType: 'image/jpeg', body: bytes });
       });
-      if (tela.cookie) {
-        await ctx.addCookies([
-          { name: tela.cookie.nome, value: tela.cookie.valor, domain: '127.0.0.1', path: tela.cookie.caminho },
-        ]);
+      // Uma tela pode precisar de mais de um cookie: o aviso da vaga só existe
+      // sobre a sessão do gestor, e é o segundo cookie que o traz para a tela.
+      const cookies = tela.cookie ? [tela.cookie].flat() : [];
+      if (cookies.length > 0) {
+        await ctx.addCookies(
+          cookies.map((c) => ({ name: c.nome, value: c.valor, domain: '127.0.0.1', path: c.caminho })),
+        );
       }
       const page = await ctx.newPage();
       try {
