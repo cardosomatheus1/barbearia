@@ -199,6 +199,31 @@ export async function criarContaFinanceira(params: {
   const ehGaveta = params.ehGaveta ?? false;
   if (ehGaveta && !params.locationId) recusar('conta_bancaria_invalida');
 
+  /**
+   * A unidade do corpo precisa estar entre as que o ator opera — e a
+   * conferência vem **antes** de qualquer consulta que fale sobre aquela loja.
+   *
+   * `EXISTS (SELECT 1 FROM locations ...)` confere que a loja existe nesta
+   * barbearia; a RLS faz esse recorte e não separa lojas dentro de uma. A
+   * gerente escopada à filial criava "Conta do Bradesco da matriz" mandando o
+   * id no corpo, e recebia 201.
+   *
+   * A ordem importa: embaixo da conferência de gaveta duplicada, ela devolvia
+   * "esta loja já tem uma gaveta" para uma loja que a pessoa não opera — duas
+   * mensagens onde a convenção manda uma. E qualquer conferência nova que
+   * entrasse acima herdaria o oráculo. Achado da `/security-review`.
+   *
+   * Lista vazia significa "todas", como em todo o resto de `staff_locations`, e
+   * `null` é a conta que vale para a rede.
+   */
+  if (
+    params.locationId &&
+    params.autorizadas.length > 0 &&
+    !params.autorizadas.includes(params.locationId)
+  ) {
+    recusar('conta_bancaria_invalida');
+  }
+
   return withTenant(params.tenantId, async (tx) => {
     const repetida = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM financial_accounts
@@ -220,25 +245,6 @@ export async function criarContaFinanceira(params: {
          WHERE is_cash AND location_id = ${params.locationId}::uuid
       `;
       if (gaveta.length > 0) recusar('gaveta_ja_existe');
-    }
-
-    /**
-     * A unidade do corpo precisa estar entre as que o ator opera.
-     *
-     * `EXISTS (SELECT 1 FROM locations ...)` confere que a loja existe **nesta
-     * barbearia** — a RLS faz esse recorte. O que ela não faz é separar lojas
-     * dentro de uma: a gerente escopada à filial criava "Conta do Bradesco da
-     * matriz" mandando o id da matriz no corpo, e recebia 201.
-     *
-     * Lista vazia significa "todas", como em todo o resto do schema de
-     * `staff_locations`, e `null` é a conta que vale para a rede.
-     */
-    if (
-      params.locationId &&
-      params.autorizadas.length > 0 &&
-      !params.autorizadas.includes(params.locationId)
-    ) {
-      recusar('conta_bancaria_invalida');
     }
 
     // Conferida sob RLS: a chave estrangeira aceitaria a unidade de outra

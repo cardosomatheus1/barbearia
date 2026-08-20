@@ -150,7 +150,9 @@ export class DreController {
     @Param('professionalId', new ZodValidationPipe(uuidSchema)) professionalId: string,
     @Query(new ZodValidationPipe(periodoDoValeSchema)) query: { de: string; ate: string },
   ) {
+    const local = await this.unidade(staff);
     return tetoDoVale({
+      locationId: local.id,
       tenantId: staff.tenantId,
       professionalId,
       de: query.de,

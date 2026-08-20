@@ -378,6 +378,7 @@ describeIfDb('vale, estorno e DRE', () => {
     await venderCorte();
 
     const teto = await tetoDoVale({
+      locationId: LOCATION,
       tenantId: TENANT,
       professionalId: RUAN,
       de: '2026-11-01',
@@ -646,6 +647,7 @@ describeIfDb('vale, estorno e DRE', () => {
 
     // Cancelado sai da conta do teto: o dinheiro voltou.
     const teto = await tetoDoVale({
+      locationId: LOCATION,
       tenantId: TENANT,
       professionalId: RUAN,
       de: '2026-11-01',

@@ -160,7 +160,7 @@ describeIfDb('a cobrança online da comanda', () => {
 
     expect(segunda.id).toBe(primeira.id);
     expect(provider.cobrancas).toHaveLength(1);
-    expect(await cobrancasDaComanda(TENANT, orderId)).toHaveLength(1);
+    expect(await cobrancasDaComanda(TENANT, orderId, LOCATION)).toHaveLength(1);
   });
 
   it('duas chaves diferentes na mesma comanda: a segunda é recusada', async () => {
@@ -285,7 +285,7 @@ describeIfDb('a cobrança online da comanda', () => {
 
     // Nada a consultar — não há id para perguntar por.
     expect(varredura).toMatchObject({ consultadas: 0, encerradas: 1 });
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('expirado');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('expirado');
   });
 
   // -- confirmação -----------------------------------------------------------
@@ -377,7 +377,7 @@ describeIfDb('a cobrança online da comanda', () => {
 
     expect(resultado.desfecho).toBe('pago_sem_caixa');
     expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('pago');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('pago');
 
     // E abrindo o caixa, a conciliação não refaz nada: a cobrança já saiu de
     // `aguardando`, então ela não é mais varrida.
@@ -448,6 +448,7 @@ describeIfDb('a cobrança online da comanda', () => {
 
     // Cancelado o Pix, o balcão volta a mexer na conta.
     await cancelarCobranca({
+      locationId: LOCATION,
       tenantId: TENANT,
       orderId,
       chargeId: cobranca.id,
@@ -506,7 +507,7 @@ describeIfDb('a cobrança online da comanda', () => {
       code: 'pagamento_invalido',
     });
 
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('aguardando');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('aguardando');
     expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
 
     const eventos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ event_id: string }[]>`
@@ -584,7 +585,7 @@ describeIfDb('a cobrança online da comanda', () => {
 
     expect(resultado.desfecho).toBe('pago_com_divergencia');
     // O dinheiro fica registrado como recebido, e a linha é encontrável.
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('pago');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('pago');
     const eventos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ outcome: string }[]>`
       SELECT outcome FROM order_charge_events
     `);
@@ -634,6 +635,7 @@ describeIfDb('a cobrança online da comanda', () => {
     const cobranca = await cobrar(orderId, provider);
 
     await cancelarCobranca({
+      locationId: LOCATION,
       tenantId: TENANT,
       orderId,
       chargeId: cobranca.id,
@@ -652,6 +654,7 @@ describeIfDb('a cobrança online da comanda', () => {
     const provider = new FakePaymentProvider();
     const cobranca = await cobrar(orderId, provider);
     await cancelarCobranca({
+      locationId: LOCATION,
       tenantId: TENANT,
       orderId,
       chargeId: cobranca.id,
@@ -673,6 +676,7 @@ describeIfDb('a cobrança online da comanda', () => {
 
     await expect(
       cancelarCobranca({
+        locationId: LOCATION,
         tenantId: TENANT,
         orderId: segunda,
         chargeId: cobranca.id,
@@ -689,6 +693,7 @@ describeIfDb('a cobrança online da comanda', () => {
     const provider = new FakePaymentProvider();
     const cobranca = await cobrar(orderId, provider);
     await cancelarCobranca({
+      locationId: LOCATION,
       tenantId: TENANT,
       orderId,
       chargeId: cobranca.id,
@@ -811,7 +816,7 @@ describeIfDb('a cobrança online da comanda', () => {
     });
 
     expect(varredura.encerradas).toBe(1);
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('expirado');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('expirado');
     // E a comanda volta a aceitar cobrança. O mesmo provedor de propósito: o
     // fake numera do 1, e uma instância nova devolveria o id que já está
     // gravado — o índice único de `psp_payment_id` recusaria, com razão.
@@ -831,7 +836,7 @@ describeIfDb('a cobrança online da comanda', () => {
     });
 
     expect(varredura.encerradas).toBe(0);
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('aguardando');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('aguardando');
   });
 
   it('o balcão cancela o Pix quando o cliente muda de ideia', async () => {
@@ -841,6 +846,7 @@ describeIfDb('a cobrança online da comanda', () => {
     const cobranca = await cobrar(orderId, new FakePaymentProvider());
 
     await cancelarCobranca({
+      locationId: LOCATION,
       tenantId: TENANT,
       orderId,
       chargeId: cobranca.id,
@@ -848,9 +854,10 @@ describeIfDb('a cobrança online da comanda', () => {
       ...operador,
     });
 
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('expirado');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('expirado');
     await expect(
       cancelarCobranca({
+        locationId: LOCATION,
         tenantId: TENANT,
         orderId,
         chargeId: cobranca.id,
@@ -902,6 +909,6 @@ describeIfDb('a cobrança online da comanda', () => {
     const resultado = await confirmar(cobranca.pagamentoId ?? '');
 
     expect(resultado.desfecho).toBe('pago_sem_caixa');
-    expect((await cobrancasDaComanda(TENANT, orderId))[0]?.estado).toBe('pago');
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('pago');
   });
 });

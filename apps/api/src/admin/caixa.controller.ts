@@ -490,7 +490,9 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    return { cobrancas: await cobrancasDaComanda(staff.tenantId, id) };
+    // As cobranças são desta loja, como a comanda que elas cobram.
+    const local = await this.unidade(staff);
+    return { cobrancas: await cobrancasDaComanda(staff.tenantId, id, local.id) };
   }
 
   /**
@@ -546,8 +548,10 @@ export class CaixaController {
     @Param('chargeId', new ZodValidationPipe(uuidSchema)) chargeId: string,
   ) {
     try {
+      const local = await this.unidade(staff);
       await cancelarCobrancaDaComanda({
         tenantId: staff.tenantId,
+        locationId: local.id,
         orderId: id,
         chargeId,
         staffId: staff.staffUserId,

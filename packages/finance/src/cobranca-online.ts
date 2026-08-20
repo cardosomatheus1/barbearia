@@ -357,6 +357,16 @@ export async function criarCobrancaDaComanda(params: {
 export async function cobrancasDaComanda(
   tenantId: string,
   orderId: string,
+  /**
+   * A loja do balcão.
+   *
+   * Esta rota devolve `pix_payload` — o copia-e-cola, que é instrumento de
+   * pagamento —, `checkout_url` e o id da cobrança. Sem a loja, ela era a
+   * janela ao lado do `getComanda` que este bloco fechou, sobre o mesmo
+   * `orderId`: a operadora da filial lia as cobranças de uma comanda da matriz
+   * e ficava com o `chargeId` que a rota de cancelar precisa.
+   */
+  locationId: string,
 ): Promise<CobrancaDaComanda[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<Linha[]>`
@@ -365,6 +375,7 @@ export async function cobrancasDaComanda(
              created_by_name, created_at
         FROM order_charges
        WHERE order_id = ${orderId}::uuid
+         AND location_id = ${locationId}::uuid
        ORDER BY created_at DESC
     `;
     return linhas.map(paraCobranca);
@@ -635,6 +646,15 @@ async function encerrarEvento(
  */
 export async function cancelarCobranca(params: {
   readonly tenantId: string;
+  /**
+   * A loja do balcão.
+   *
+   * Cancelar mata o Pix **no adquirente**: o QR Code que o cliente está com o
+   * celular apontado deixa de ser pagável. Sem a loja, a operadora da filial
+   * cancelava a cobrança de uma comanda da matriz, e a trilha registrava o nome
+   * dela sem nenhum indício de que a loja não era a sua.
+   */
+  readonly locationId: string;
   /** A comanda da URL. Sem ela, um id de cobrança valeria em qualquer endereço. */
   readonly orderId: string;
   readonly chargeId: string;
@@ -648,6 +668,7 @@ export async function cancelarCobranca(params: {
          SET status = 'expirado', refused_reason = 'cancelada no balcão', updated_at = now()
        WHERE id = ${params.chargeId}::uuid
          AND order_id = ${params.orderId}::uuid
+         AND location_id = ${params.locationId}::uuid
          AND status = 'aguardando'
       RETURNING psp_payment_id
     `;

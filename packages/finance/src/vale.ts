@@ -118,11 +118,29 @@ export interface TetoDoVale {
 /** O que a tela mostra antes de alguém digitar um valor. */
 export async function tetoDoVale(params: {
   readonly tenantId: string;
+  /**
+   * A loja do balcão.
+   *
+   * O bloco escopou `conceberVale`, `valesDoPeriodo` e `cancelarVale` — as três
+   * do mesmo arquivo — e deixou esta de fora. Ela devolve comissão acumulada,
+   * já adiantado e disponível de **qualquer** profissional da barbearia, e o id
+   * dele é público: `GET /{slug}` lista os profissionais da página. Uma
+   * requisição entregava o holerite do barbeiro da outra loja.
+   */
+  readonly locationId: string;
   readonly professionalId: string;
   readonly de: string;
   readonly ate: string;
 }): Promise<TetoDoVale> {
   return withTenant(params.tenantId, async (tx) => {
+    const daLoja = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM professionals
+       WHERE id = ${params.professionalId}::uuid
+         AND location_id = ${params.locationId}::uuid
+    `;
+    // Mesma mensagem de inexistente: "existe, mas nao e seu" confirma o id.
+    if (daLoja.length === 0) recusar('profissional_nao_encontrado');
+
     const comissaoAcumuladaCents = await comissaoAcumulada(tx, params);
     const jaAdiantadoCents = await jaAdiantado(tx, params.professionalId);
     return {
@@ -173,8 +191,25 @@ export async function conceberVale(params: {
       if (anterior) return { id: anterior.id };
     }
 
+    /**
+     * A loja do profissional vem **antes** de qualquer conta sobre ele.
+     *
+     * A conferência existia, e existia na última instrução: o `WHERE EXISTS` do
+     * `INSERT`. Entre uma coisa e outra rodavam `comissaoAcumulada`,
+     * `jaAdiantado` e `podeAdiantar`, que recusam com
+     * `vale_maior_que_a_comissao` — e os dois códigos chegam ao cliente. Busca
+     * binária sobre o valor, contra um `professionalId` da matriz, encontrava a
+     * fronteira exata entre os dois códigos, que é o disponível ao centavo.
+     *
+     * O holerite do colega em trinta requisições, com uma permissão que a
+     * gerente da filial precisa ter para conceder vale na própria loja. Achado
+     * da `/security-review` deste bloco.
+     */
     const profissional = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM professionals WHERE id = ${params.professionalId}::uuid FOR UPDATE
+      SELECT id FROM professionals
+       WHERE id = ${params.professionalId}::uuid
+         AND location_id = ${params.locationId}::uuid
+       FOR UPDATE
     `;
     if (profissional.length === 0) recusar('profissional_nao_encontrado');
 

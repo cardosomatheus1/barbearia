@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda, getComanda } from './comanda.js';
-import { conceberVale, cancelarVale, valesDoPeriodo } from './vale.js';
+import { conceberVale, cancelarVale, tetoDoVale, valesDoPeriodo } from './vale.js';
 import { lancarMovimento, margemPorServico, produtos, salvarProduto } from './estoque.js';
 
 /**
@@ -240,6 +240,57 @@ describeIfDb('o que uma loja não alcança na outra', () => {
         staffName: 'Matheus',
       }),
     ).rejects.toThrow();
+  });
+
+  it('o teto do vale não conta a comissão do barbeiro da outra loja', async () => {
+    /**
+     * O bloco escopou conceder, listar e cancelar — as três do mesmo arquivo —
+     * e deixou o teto de fora. Ele devolve comissão acumulada, já adiantado e
+     * disponível de qualquer profissional, e o id é **público**: `GET /{slug}`
+     * lista os profissionais da página. Uma requisição entregava o holerite do
+     * barbeiro da outra loja, e `commission.view_own` existe justamente para
+     * que ninguém veja o do colega.
+     */
+    await expect(
+      tetoDoVale({ tenantId: TENANT, locationId: FILIAL, professionalId: RUAN, de: HOJE, ate: HOJE }),
+    ).rejects.toThrow();
+
+    const daLoja = await tetoDoVale({
+      tenantId: TENANT,
+      locationId: MATRIZ,
+      professionalId: RUAN,
+      de: HOJE,
+      ate: HOJE,
+    });
+    expect(daLoja.comissaoAcumuladaCents).toBeGreaterThan(0);
+  });
+
+  it('a recusa por loja vem antes da conta, e não vaza o disponível por código', async () => {
+    /**
+     * A conferência de loja existia, e existia na **última** instrução. Entre
+     * uma coisa e outra rodava `podeAdiantar`, que recusa com
+     * `vale_maior_que_a_comissao` — e os dois códigos chegam ao cliente. Busca
+     * binária sobre o valor encontrava a fronteira entre eles, que é o
+     * disponível ao centavo.
+     *
+     * Um valor **acima** do teto de Ruan, pedido pela filial: se a ordem
+     * estivesse errada, o código seria o do teto. Achado da revisão deste bloco.
+     */
+    await expect(
+      conceberVale({
+        tenantId: TENANT,
+        locationId: FILIAL,
+        professionalId: RUAN,
+        valorCents: 999_999_00,
+        concedidoEm: HOJE,
+        de: HOJE,
+        ate: HOJE,
+        motivo: 'sondagem',
+        pelaGaveta: false,
+        staffId: DONO,
+        staffName: 'Matheus',
+      }),
+    ).rejects.toMatchObject({ code: 'profissional_nao_encontrado' });
   });
 
   // -- o estoque --------------------------------------------------------------

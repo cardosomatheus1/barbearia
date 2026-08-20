@@ -109,7 +109,17 @@ export async function criarUnidade(request: {
       INSERT INTO financial_accounts (tenant_id, location_id, name, is_cash)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${criada.id}::uuid, ${`Caixa · ${nome}`}, true)
-      ON CONFLICT DO NOTHING
+      -- Alvo explicito, e nao um ON CONFLICT DO NOTHING solto.
+      --
+      -- Sem alvo, o DO NOTHING engole **qualquer** indice unico da tabela, e ha
+      -- dois. O nome da loja nao tem unicidade — duas lojas "Centro" sao
+      -- legitimas —, entao a segunda geraria "Caixa - Centro", colidiria no
+      -- indice de nome e a loja nasceria **sem gaveta**, em silencio: o estado
+      -- que o comentario acima descreve como botao que so da erro.
+      --
+      -- Com o alvo, so a reentrancia legitima e absorvida; a colisao de nome
+      -- estoura e vira erro tratavel. Achado da revisao de seguranca do bloco.
+      ON CONFLICT (location_id) WHERE is_cash DO NOTHING
     `;
 
     await audit(tx, {
