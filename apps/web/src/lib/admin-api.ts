@@ -3481,7 +3481,8 @@ export interface CampanhaNaTelaDoAdmin {
   readonly lidos: number;
   readonly cliques: number;
   readonly agendamentos: number;
-  readonly receitaCents: number;
+  /** Nulo para quem não pode ver receita (`finance.view`). */
+  readonly receitaCents: number | null;
 }
 
 export const campanhasNaApi = (token: string) =>

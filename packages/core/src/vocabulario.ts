@@ -1,4 +1,5 @@
 import type { AppointmentStatus, AttendanceAction } from './attendance.js';
+import type { Permissao } from './permissoes.js';
 
 /**
  * Como o produto chama cada coisa — em um lugar só (correção de fluxo, depois do bloco 36).
@@ -97,6 +98,37 @@ export const ROTULO_DO_ESTADO: Readonly<Record<AppointmentStatus, string>> = {
  * não de layout.
  */
 export const ACOES_PESADAS: ReadonlySet<AttendanceAction> = new Set(['no_show', 'cancel']);
+
+/**
+ * A permissão que **cada** ação do painel exige, além de `appointments.attend`.
+ *
+ * Mora aqui, e é um mapa, porque a guarda escrita à mão no controller cobria
+ * uma ação só. `cancel` passou a exigir `appointments.cancel` no bloco 118 —
+ * e `no_show`, que a `ACOES_PESADAS` logo acima já nomeia como igualmente
+ * pesada, ficou de fora: ela abre exatamente os mesmos estados, libera a mesma
+ * cadeira e ainda **pune** o cliente na confiabilidade, que o cancelamento
+ * feito pela casa não faz. Uma guarda que vale num caminho e não no vizinho é
+ * a porta dos fundos que a convenção do bloco 60 descreve.
+ *
+ * `no_show` continua sob `appointments.attend`, e isso é decisão escrita, não
+ * omissão: marcar falta é **registrar o que aconteceu no balcão**, que é o que
+ * `appointments.attend` significa — tirá-la da recepção seria tirar a metade
+ * do painel de quem passa o dia nele. Quem quiser separá-las ganha a linha
+ * neste mapa, e o controller passa a cobrar sem precisar lembrar dele.
+ *
+ * O mapa é total no tipo de propósito: ação nova sem entrada não compila, e o
+ * compilador é quem cobra a decisão — nunca esta lista lembrada por alguém.
+ */
+export const PERMISSAO_DA_ACAO: Readonly<Record<AttendanceAction, Permissao>> = {
+  confirm: 'appointments.attend',
+  check_in: 'appointments.attend',
+  wait: 'appointments.attend',
+  start: 'appointments.attend',
+  complete: 'appointments.attend',
+  no_show: 'appointments.attend',
+  undo_no_show: 'appointments.attend',
+  cancel: 'appointments.cancel',
+};
 
 /**
  * De quem se cobra: quem sentou na cadeira, e quem já saiu dela.

@@ -125,7 +125,7 @@ describeIfDb('campanhas', () => {
       VALUES ('c7575757-0000-0000-0000-0000000000ff', '${TENANT}', 'Novo', '+5571900000001');
     `);
 
-    const lista = await campanhasDaCasa(TENANT);
+    const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
     expect(lista[0]?.publico).toBe(3);
   });
 
@@ -332,7 +332,7 @@ describeIfDb('campanhas', () => {
       enviar: async () => null,
     });
 
-    const lista = await campanhasDaCasa(TENANT);
+    const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
     expect(lista[0]).toMatchObject({
       publico: 3,
       enviados: 3,
@@ -372,7 +372,7 @@ describeIfDb('campanhas', () => {
 
     expect(await atribuirReceita({ tenantId: TENANT, agora: AGORA })).toBe(1);
 
-    const lista = await campanhasDaCasa(TENANT);
+    const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
     expect(lista[0]).toMatchObject({ agendamentos: 1, receitaCents: 8900 });
   });
 
@@ -605,7 +605,7 @@ describeIfDb('campanhas', () => {
     it('é ele quem decide o tipo, e a lista mostra qual foi', async () => {
       await texto(T1, 'volte_sempre');
       const criada = await campanha({ tipo: undefined, templateId: T1 });
-      const lista = await campanhasDaCasa(TENANT);
+      const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
       expect(lista.find((c) => c.id === criada.id)).toMatchObject({
         tipo: 'retorno',
         // O nome que a barbearia deu, e não "Convite de retorno": com três
@@ -700,7 +700,7 @@ describeIfDb('campanhas', () => {
       expect(pulados.find((p) => p.customerId === CARLOS)?.nome).toBe('Carlos Souza');
 
       // E a contagem da lista, agregada por motivo na mesma consulta.
-      const lista = await campanhasDaCasa(TENANT);
+      const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
       const naLista = lista.find((c) => c.id === criada.id);
       expect(naLista?.pulados).toEqual([{ motivo: 'optou_por_nao_receber', quantos: 2 }]);
     });
@@ -735,7 +735,7 @@ describeIfDb('campanhas', () => {
         enviar: async () => null,
       });
 
-      const lista = await campanhasDaCasa(TENANT);
+      const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
       const naLista = lista.find((c) => c.id === criada.id);
       expect(naLista?.enviados).toBe(3);
       expect(naLista?.enviadosPeloWhatsApp).toBe(0);
@@ -753,7 +753,7 @@ describeIfDb('campanhas', () => {
         enviar: async (alvo) => `wamid.${alvo.customerId}`,
       });
 
-      const lista = await campanhasDaCasa(TENANT);
+      const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
       const naLista = lista.find((c) => c.id === criada.id);
       expect(naLista?.enviados).toBe(3);
       expect(naLista?.enviadosPeloWhatsApp).toBe(3);

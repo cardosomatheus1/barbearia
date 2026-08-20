@@ -345,9 +345,18 @@ function Campanha({
               · {campanha.entregues} entregues · {campanha.lidos} lidos ·{' '}
               {campanha.cliques} cliques · {campanha.agendamentos} voltaram
             </p>
-            <p className="item-cadastro__linha">
-              <strong>{reais(campanha.receitaCents)}</strong> de receita atribuída
-            </p>
+            {/*
+              A receita atribuída some para quem não tem `finance.view`, e some
+              **em letras** — a linha inteira desaparece em vez de mostrar
+              "R$ 0,00", que é o número errado com cara de certo. Quem não pode
+              ver o dinheiro continua vendo se a campanha saiu e quem voltou,
+              que é o que faz a campanha seguinte ser melhor.
+            */}
+            {campanha.receitaCents === null ? null : (
+              <p className="item-cadastro__linha">
+                <strong>{reais(campanha.receitaCents)}</strong> de receita atribuída
+              </p>
+            )}
 
             {/*
               **Enviado não é entregue quando o canal está desligado** (bloco 97).

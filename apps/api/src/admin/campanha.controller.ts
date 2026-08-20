@@ -8,7 +8,7 @@ import {
   type FiltroDeCampanha,
 } from '@barbearia/crm';
 import { gradeDeOcupacao } from '@barbearia/scheduling';
-import type { TipoDeNotificacao } from '@barbearia/core';
+import { pode, type TipoDeNotificacao } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -58,12 +58,26 @@ export class CampanhaController {
     return unidadeDoBalcao(staff);
   }
 
-  @Exige('marketing.send', 'finance.view')
+  /**
+   * A lista, com a receita atribuída **redigida** para quem não pode vê-la.
+   *
+   * A receita é `finance.view` nesta casa, e a listagem a devolve por campanha
+   * — somá-la ao `@Exige` era o conserto óbvio e estava errado: `@Exige` é
+   * conjuntivo, e um papel "Marketing" com `marketing.send` passava a criar e
+   * enviar campanha sem conseguir **ver** a que enviou. Estado sem saída na
+   * interface (§6 pergunta 3), criado por uma permissão que protege uma coluna
+   * só. Redigir e não recusar é o precedente de `applyAttendance` e o que o
+   * resto deste bloco fez com identidade de cliente.
+   */
+  @Exige('marketing.send')
   @Get()
   async listar(@Staff() staff: AuthenticatedStaff) {
     const local = await this.unidade(staff);
     const [campanhas, grade] = await Promise.all([
-      campanhasDaCasa(staff.tenantId),
+      campanhasDaCasa({
+        tenantId: staff.tenantId,
+        podeVerReceita: pode(staff.permissions, 'finance.view'),
+      }),
       gradeDeOcupacao({ tenantId: staff.tenantId, locationId: local.id, agora: new Date() }),
     ]);
     return { campanhas, grade };

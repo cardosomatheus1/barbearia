@@ -69,7 +69,15 @@ export function hashDoToken(token: string): string {
 export interface PessoaNaFila {
   readonly id: string;
   readonly posicao: number;
-  readonly customerId: string;
+  /**
+   * Nulo para quem não pode ver cliente, como em `BoardEntry`.
+   *
+   * O id é identidade: ele é a chave da ficha, do extrato de fiado e do saldo
+   * de fidelidade. Redigir nome e telefone e deixá-lo passar entrega a mesma
+   * pessoa por outra coluna — e o tipo `string` era o que impedia o compilador
+   * de cobrar a redação.
+   */
+  readonly customerId: string | null;
   readonly customerName: string;
   /** Só os quatro últimos dígitos: a tela fica virada para o salão. */
   readonly customerPhoneTail: string | null;
@@ -286,6 +294,12 @@ export async function getQueue(params: {
    * O nome vira string vazia e não nulo porque o tipo já é `string` e a tela
    * desenha o lugar dele — quem não pode ver lê a posição e a duração, que é o
    * que faz a fila andar.
+   *
+   * O `customerId` **passava**, e o parágrafo acima já dizia que os três saíam:
+   * era o comentário afirmando o que o código não fazia. Ele é a chave da
+   * ficha, do extrato de fiado e do saldo de fidelidade, e o tipo `string` era
+   * o que impedia o compilador de cobrar a redação. Achado da revisão de
+   * segurança do bloco 118.
    */
   readonly podeVerCliente: boolean;
   readonly now?: Date;
@@ -354,7 +368,7 @@ export async function getQueue(params: {
       return {
         id: linha.id,
         posicao: indice + 1,
-        customerId: linha.customer_id,
+        customerId: params.podeVerCliente ? linha.customer_id : null,
         customerName: params.podeVerCliente ? linha.customer_name : '',
         // Nulo depois da anonimização (bloco 32): a coluna aceita nulo desde a
         // migração 0034, e o `.slice` quebrava a fila inteira.

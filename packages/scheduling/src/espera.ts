@@ -423,6 +423,20 @@ export interface CandidatoDaVaga extends EntradaDeEspera {
 }
 
 /**
+ * O mesmo candidato, do jeito que ele chega à tela — com o id podendo ser nulo.
+ *
+ * `CandidatoDaVaga` é o do domínio: ele nasce **dentro** da transação, e o
+ * motor de convite precisa do id para segurar o horário e mandar a mensagem.
+ * Quem devolve a lista para o balcão é que redige, e sem este tipo o `null`
+ * não caberia — foi assim que a redação do painel do dia apagou nome e
+ * telefone e deixou o id passar. O id é identidade: com ele se abre a ficha, o
+ * extrato de fiado e o saldo de fidelidade.
+ */
+export interface CandidatoNaTela extends Omit<CandidatoDaVaga, 'customerId'> {
+  readonly customerId: string | null;
+}
+
+/**
  * Quem quer esta vaga.
  *
  * Chamada **dentro da transação do cancelamento**. O recorte grosso é do banco

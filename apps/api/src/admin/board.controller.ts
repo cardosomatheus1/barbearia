@@ -19,7 +19,12 @@ import {
   MAX_RANGE_DAYS,
   searchCustomers,
 } from '@barbearia/scheduling';
-import { pode, type AttendanceAction } from '@barbearia/core';
+import {
+  pode,
+  PERMISSAO_DA_ACAO,
+  VERBO_DA_ACAO,
+  type AttendanceAction,
+} from '@barbearia/core';
 import { OtpError, resolveGuestCustomer, type AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -144,25 +149,31 @@ export class BoardController {
     const unidade = await unidadeDoBalcao(staff);
 
     /**
-     * Cancelar exige `appointments.cancel` — a permissão que existia e nenhuma
-     * rota pedia.
+     * Cada ação cobra a **sua** permissão, derivada do mapa do domínio.
      *
-     * O catálogo a declara, a tela de permissões desenha a caixa "Cancelar
-     * horário", e o cabeçalho daquela tela usa **esta** permissão como exemplo
-     * do que ela veio resolver: *"tirar `appointments.cancel` da recepção era um
-     * `DELETE` no banco de produção"*. Desmarcá-la não fazia nada — cancelar
-     * passa por aqui, sob `appointments.attend`.
+     * Cancelar exige `appointments.cancel` — a permissão que existia e nenhuma
+     * rota pedia. O catálogo a declara, a tela de permissões desenha a caixa
+     * "Cancelar horário", e o cabeçalho daquela tela usa **esta** permissão
+     * como exemplo do que ela veio resolver: *"tirar `appointments.cancel` da
+     * recepção era um `DELETE` no banco de produção"*. Desmarcá-la não fazia
+     * nada — cancelar passa por aqui, sob `appointments.attend`.
      *
      * A conferência é da ação **de fato exercida**, e não um segundo nome no
      * `@Exige`: ele é conjuntivo, e somar a permissão trancaria quem só marca
      * presença. É o desenho de `metrica.controller.ts`, que decide uma métrica
      * de cada vez, e da própria `podeVerCliente` logo abaixo.
+     *
+     * E vem do mapa, não de um `if` sobre uma ação: escrito à mão ele cobria
+     * `cancel` e deixava `no_show` — igualmente pesada, mesmos estados de
+     * origem, mesma cadeira liberada e ainda com a punição na confiabilidade —
+     * passando por baixo. A ação nova nasce coberta porque o mapa é total.
      */
-    if (body.action === 'cancel' && !pode(staff.permissions, 'appointments.cancel')) {
+    const exigida = PERMISSAO_DA_ACAO[body.action];
+    if (!pode(staff.permissions, exigida)) {
       throw new DomainError(
         'forbidden',
         403,
-        'Sua conta não pode cancelar horário. Fale com quem administra a barbearia.',
+        `Sua conta não pode ${VERBO_DA_ACAO[body.action].toLowerCase()}. Fale com quem administra a barbearia.`,
       );
     }
 

@@ -17,7 +17,7 @@ import {
 } from '@barbearia/core';
 import { agendarOfertaDaVaga, registrarEventoDeWebhook } from '@barbearia/jobs';
 import { contencaoDeHorario } from './booking.js';
-import { quemQuerAVagaLiberada, type CandidatoDaVaga } from './espera.js';
+import { quemQuerAVagaLiberada, type CandidatoNaTela } from './espera.js';
 
 /**
  * O dia da barbearia, do ponto de vista de quem está no balcão.
@@ -453,7 +453,7 @@ export async function applyAttendance(params: {
    * espera, que é o caso comum. A tela distingue os dois pelo que faz: sem
    * candidato, não desenha nada.
    */
-  readonly esperando: readonly CandidatoDaVaga[];
+  readonly esperando: readonly CandidatoNaTela[];
 }> {
   const now = params.now ?? new Date();
 
@@ -631,10 +631,14 @@ export async function applyAttendance(params: {
      * Sem nome e sem telefone, a linha ainda diz o que a recepção precisa:
      * existe gente para este horário, procure quem pode ligar.
      */
-    const esperando = params.podeVerCliente
+    const esperando: readonly CandidatoNaTela[] = params.podeVerCliente
       ? encontrados
       : encontrados.map((quem) => ({
           ...quem,
+          // O id junto: redigir nome e telefone e deixá-lo passar entrega a
+          // mesma pessoa por outra coluna — ele é a chave da ficha, do fiado e
+          // do saldo de fidelidade.
+          customerId: null,
           customerNome: '',
           customerTelefoneFinal: null,
         }));

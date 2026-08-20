@@ -11,7 +11,7 @@ import {
   tomadorDaVenda,
   emissorFiscal,
 } from '@barbearia/finance';
-import { type FiscalProvider, type RegimeFiscal } from '@barbearia/core';
+import { pode, type FiscalProvider, type RegimeFiscal } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
@@ -185,19 +185,23 @@ export class FiscalController {
    *
    * A repartição do Salão-Parceiro é outra coisa e tem outro dono: ela é a
    * comissão do profissional naquela venda, e sai só para `commission.view_all`.
-   */
-  /**
-   * `customers.view` junto: a listagem devolve `clienteNome`.
    *
-   * A rota irmã, por comanda, já declarava as duas — esta não. O nome do
-   * tomador é a cópia **congelada** na nota, e por isso escapou da guarda que
-   * nasceu do bloco 54: aquela olha a leitura do cadastro **vivo**
-   * (`tomadorDaVenda`) e é uma lista escrita com um nome só.
+   * ## O nome do tomador é **redigido**, não recusado
    *
-   * O CPF continua fora de `NotaNaTela`, que é a outra metade daquele conserto
-   * e essa se manteve. Achado da varredura da rota que agrega.
+   * A listagem devolve `clienteNome`, e nesta casa identidade de cliente é
+   * `customers.view`. Somá-la ao `@Exige` era o conserto óbvio e estava
+   * errado: `@Exige` é conjuntivo, e um papel "Contador" — `fiscal.view` mais
+   * `finance.view`, sem ficha de cliente — ficava de fora de "as notas do mês
+   * saíram?", que é a pergunta inteira daquela tela. Estado sem saída na
+   * interface criado por uma permissão que protege um campo só.
+   *
+   * A rota irmã, por comanda, continua **recusando**: ali o tomador é o
+   * assunto, e uma nota sem saber para quem ela vai não responde nada.
+   *
+   * O CPF continua fora de `NotaNaTela`, que é a outra metade do conserto do
+   * bloco 54 e essa se manteve.
    */
-  @Exige('fiscal.view', 'finance.view', 'customers.view')
+  @Exige('fiscal.view', 'finance.view')
   @Get('notas')
   async notas(
     @Staff() staff: AuthenticatedStaff,
@@ -218,6 +222,7 @@ export class FiscalController {
          * `fiscal.view`, que a recepcionista tem por padrão.
          */
         comRepartição: staff.permissions.includes('commission.view_all'),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
       }),
     };
   }

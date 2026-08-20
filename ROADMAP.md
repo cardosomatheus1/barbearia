@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 118 de 118 blocos.**
+**Status: 119 de 119 blocos.**
 
 ---
 
@@ -444,6 +444,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 116 | A varredura geral: a ocupação que contava o balcão como cadeira, o 500 que a API pública devolvia por horário tomado, a fila da filial que o link não achava, o prazo citado errado e o saldo que o cliente lia como zero | ✅ |
 | 117 | Varredura de multiunidade: a comanda de uma loja fechada pela outra com o dinheiro na gaveta errada, a folha da matriz lida e fechada pela filial, o saldo da rede validando a perda da loja, e o painel que nunca dizia onde você está | ✅ |
 | 118 | Varredura da rota que agrega: a comanda entregando nome e dívida por cinco portas de trás, a receita de campanha fora do segundo fator, a agenda exportando a base inteira, e a permissão que o dono desmarcava sem efeito nenhum | ✅ |
+| 119 | O que a revisão do 118 achou: `customers.view` somada ao `@Exige` tirava o PDV inteiro de quem não a tem, marcar falta contornava a guarda de cancelar, e a varredura de pessoa era contornável declarando o interruptor sem usá-lo | ✅ |
 
 ---
 

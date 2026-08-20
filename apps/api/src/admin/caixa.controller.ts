@@ -9,7 +9,9 @@ import {
   cancelarCobranca as cancelarCobrancaDaComanda,
   CobrancaError,
   cobrancasDaComanda,
+  Comanda,
   ComandaError,
+  comandaVisivel,
   criarCobrancaDaComanda,
   faturamentoDoDia,
   fecharCaixaDaUnidade,
@@ -23,6 +25,7 @@ import {
 } from '@barbearia/finance';
 import {
   diaNaUnidade,
+  pode,
   type DescontoDaComanda,
   type MeioDePagamento,
   type Pagamento,
@@ -214,17 +217,21 @@ export class CaixaController {
   // -- Comanda ----------------------------------------------------------------
 
   /**
-   * `customers.view` junto, porque a comanda devolve o cadastro do cliente.
+   * A comanda **redige** o cadastro do cliente para quem não tem
+   * `customers.view` — nome, id e a conta de fiado.
    *
-   * Nome, saldo de fiado e teto de crédito saem daqui. Operar a comanda com o
-   * nome do cliente na frente é defensável — é o balcão —, mas quem não pode
-   * abrir a ficha também não recebe o saldo dela por esta porta.
+   * Operar a comanda com o nome do cliente na frente é defensável — é o balcão
+   * —, mas quem não pode abrir a ficha também não recebe o saldo dela por esta
+   * porta. Redigir e não recusar porque `@Exige` é conjuntivo: somar a
+   * permissão às seis rotas que devolvem uma comanda tirava o **PDV inteiro**
+   * de um papel de balcão a que o dono a negasse, e a venda é o que aquela
+   * tela existe para fazer. Quem redige é `comandaVisivel`, no domínio.
    *
    * `finance.view` **não** entra, e a decisão é escrita: o saldo e o teto são o
    * que decide se a venda pode sair fiada, e exigi-lo trancaria a recepção
    * para fora da operação que ela existe para fazer.
    */
-  @Exige('cashier.open', 'customers.view')
+  @Exige('cashier.open')
   @Get('orders/:id')
   async comanda(
     @Staff() staff: AuthenticatedStaff,
@@ -233,30 +240,26 @@ export class CaixaController {
     try {
       // A comanda é **desta** loja. A RLS separa barbearias e não separa lojas.
       const local = await this.unidade(staff);
-      return await getComanda(staff.tenantId, id, local.id);
+      return comandaVisivel({
+        comanda: await getComanda(staff.tenantId, id, local.id),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
+      });
     } catch (error) {
       return toHttp(error);
     }
   }
 
   /**
-   * `customers.view` nas **cinco** rotas que devolvem a comanda, e não só na
-   * leitura.
+   * A redação vale nas **cinco** rotas de escrita, e não só na leitura.
    *
-   * O comentário de `GET /orders/:id` diz por que ela precisa da permissão,
-   * nome por nome: a comanda carrega `customerName`, `conta.saldoCents` e
-   * `conta.limiteCents`. As cinco de escrita devolvem **o mesmo objeto** e
-   * declaravam só `cashier.open` — então os três campos que a porta da frente
-   * recusava saíam inteiros pela porta de trás, um cliente por vez, com os ids
-   * saindo de graça em `GET /day`.
-   *
-   * Os quatro papéis padrão já têm `customers.view`, então nada perde
-   * capacidade: o que muda é o papel de balcão a que o dono **negue** a
-   * permissão — a configuração que o comentário da leitura já antecipava.
-   *
-   * Achado da varredura da rota que agrega, nona reincidência da regra.
+   * Elas devolvem **o mesmo objeto** que `GET /orders/:id`: sem a passagem por
+   * `comandaVisivel`, os três campos que a porta da frente esconde saíam
+   * inteiros pela porta de trás, um cliente por vez. Achado da varredura da
+   * rota que agrega, nona reincidência da regra — e o conserto foi duas vezes:
+   * primeiro somando `customers.view` ao `@Exige`, que trancava o PDV de quem
+   * não a tem, e depois redigindo, que é o precedente de `applyAttendance`.
    */
-  @Exige('cashier.open', 'customers.view')
+  @Exige('cashier.open')
   @Post('orders')
   async abrirComandaNova(
     @Staff() staff: AuthenticatedStaff,
@@ -270,7 +273,8 @@ export class CaixaController {
 
     const local = await this.unidade(staff);
     try {
-      return await abrirComanda({
+      return comandaVisivel({
+        comanda: await abrirComanda({
         tenantId: staff.tenantId,
         locationId: local.id,
         staffId: staff.staffUserId,
@@ -279,13 +283,15 @@ export class CaixaController {
         // A chave é escopada por operador: ela vem do cliente e é livre, e duas
         // recepcionistas mandando "1" abririam a mesma comanda.
         ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        }),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
       });
     } catch (error) {
       return toHttp(error);
     }
   }
 
-  @Exige('cashier.open', 'customers.view')
+  @Exige('cashier.open')
   @Post('orders/:id/items')
   async item(
     @Staff() staff: AuthenticatedStaff,
@@ -303,7 +309,8 @@ export class CaixaController {
   ) {
     const local = await this.unidade(staff);
     try {
-      return await adicionarItem({
+      return comandaVisivel({
+        comanda: await adicionarItem({
         tenantId: staff.tenantId,
         locationId: local.id,
         orderId: id,
@@ -314,13 +321,15 @@ export class CaixaController {
         precoUnitarioCents: body.precoUnitarioCents,
         professionalId: body.professionalId ?? null,
         packageId: body.packageId ?? null,
+        }),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
       });
     } catch (error) {
       return toHttp(error);
     }
   }
 
-  @Exige('cashier.open', 'customers.view')
+  @Exige('cashier.open')
   @Delete('orders/:id/items/:itemId')
   async removerDaComanda(
     @Staff() staff: AuthenticatedStaff,
@@ -329,12 +338,15 @@ export class CaixaController {
   ) {
     try {
       const local = await this.unidade(staff);
-      return await removerItem({
+      return comandaVisivel({
+        comanda: await removerItem({
         tenantId: staff.tenantId,
         locationId: local.id,
         orderId: id,
         itemId,
         ator: { id: staff.staffUserId, name: staff.name },
+        }),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
       });
     } catch (error) {
       return toHttp(error);
@@ -359,7 +371,7 @@ export class CaixaController {
    * Permissão diz *quem*; `tenants.max_discount_bps` diz *quanto*. Sem o teto,
    * conceder desconto continuaria sendo conceder estorno com outro nome.
    */
-  @Exige('finance.discount', 'customers.view')
+  @Exige('finance.discount')
   @Patch('orders/:id')
   async ajustar(
     @Staff() staff: AuthenticatedStaff,
@@ -369,7 +381,8 @@ export class CaixaController {
   ) {
     try {
       const local = await this.unidade(staff);
-      return await ajustarComanda({
+      return comandaVisivel({
+        comanda: await ajustarComanda({
         tenantId: staff.tenantId,
         locationId: local.id,
         orderId: id,
@@ -377,13 +390,15 @@ export class CaixaController {
         ...(body.gorjetaCents === undefined ? {} : { gorjetaCents: body.gorjetaCents }),
         staffId: staff.staffUserId,
         staffName: staff.name,
+        }),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
       });
     } catch (error) {
       return toHttp(error);
     }
   }
 
-  @Exige('cashier.open', 'customers.view')
+  @Exige('cashier.open')
   @Post('orders/:id/close')
   async pagar(
     @Staff() staff: AuthenticatedStaff,
@@ -402,7 +417,8 @@ export class CaixaController {
 
     const local = await this.unidade(staff);
     try {
-      return await fecharComanda({
+      return comandaVisivel({
+        comanda: await fecharComanda({
         tenantId: staff.tenantId,
         locationId: local.id,
         orderId: id,
@@ -419,6 +435,8 @@ export class CaixaController {
         // Escopada por operador: a chave vem do cliente e é livre, e duas
         // recepcionistas mandando "1" devolveriam uma a comanda da outra.
         ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        }),
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
       });
     } catch (error) {
       return toHttp(error);

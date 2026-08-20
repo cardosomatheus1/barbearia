@@ -3,6 +3,7 @@ import { ACOES, STATUSES, allowedActions } from './attendance.js';
 import {
   ACAO_PRINCIPAL,
   ACOES_PESADAS,
+  PERMISSAO_DA_ACAO,
   ESTADOS_COBRAVEIS,
   ROTULO_DO_ESTADO,
   VERBO_CURTO,
@@ -60,6 +61,25 @@ describe('o destaque não oferece o que a máquina de estados recusa', () => {
     for (const acao of Object.values(ACAO_PRINCIPAL)) {
       expect(ACOES_PESADAS.has(acao)).toBe(false);
     }
+  });
+
+  it('toda ação pesada declara qual permissão ela cobra', () => {
+    /**
+     * O mapa é total no tipo, então o que este teste prende é outra coisa: que
+     * a permissão de uma ação **pesada** seja uma decisão escrita, e não a
+     * herdada de `appointments.attend` por descuido.
+     *
+     * `cancel` cobra `appointments.cancel`. `no_show` continua sob
+     * `appointments.attend` e isso é decisão — registrar o que aconteceu no
+     * balcão é o que aquela permissão significa —, mas as duas precisam estar
+     * no mapa: foi um `if` sobre `cancel` escrito à mão que deixou `no_show`,
+     * com os mesmos estados de origem e a mesma cadeira liberada, passando por
+     * baixo da guarda que tinha acabado de nascer.
+     */
+    for (const acao of ACOES_PESADAS) {
+      expect(PERMISSAO_DA_ACAO[acao], `permissão de ${acao}`).toBeTruthy();
+    }
+    expect(PERMISSAO_DA_ACAO.cancel).toBe('appointments.cancel');
   });
 
   it('todo estado com ação disponível tem um destaque, ou só ações pesadas', () => {

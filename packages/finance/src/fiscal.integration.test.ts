@@ -795,6 +795,7 @@ describeIfDb('fiscal', () => {
       locationId: LOCATION,
       de: ontem,
       ate: amanha,
+      podeVerCliente: true,
     });
     expect(paraRecepcao[0]).not.toHaveProperty('parceiroCents');
 
@@ -804,6 +805,7 @@ describeIfDb('fiscal', () => {
       de: ontem,
       ate: amanha,
       comRepartição: true,
+      podeVerCliente: true,
     });
     expect(paraQuemVeComissao[0]).toMatchObject({ parceiroCents: 2000, casaCents: 3000 });
   });

@@ -25,11 +25,21 @@ import { PERMISSOES, PERMISSOES_SEM_ROTA } from '../packages/core/dist/index.js'
  *
  * ## O que conta como exercer
  *
- * `@Exige(...)` e a conferência explícita `pode(..., 'x')` / `podeTudo(...)`.
+ * `@Exige(...)`, a conferência explícita `pode(..., 'x')` / `podeTudo(...)`, e
+ * o **mapa do domínio** que a rota indexa.
+ *
  * A segunda existe porque `@Exige` é **conjuntivo**: uma rota que decide por
  * ação — cancelar, dentro de `attendance` — não pode declarar a permissão no
  * decorador sem trancar quem só faz as outras ações. É o desenho de
  * `metrica.controller.ts`, que decide uma métrica de cada vez.
+ *
+ * A terceira nasceu quando aquele `if` sobre o nome da ação virou
+ * `PERMISSAO_DA_ACAO[body.action]` — porque escrito à mão ele cobria `cancel` e
+ * deixava `no_show` passar. O literal saiu de `apps/api` e a varredura, que só
+ * lia ali, passou a chamar `appointments.cancel` de letra morta: guarda cega
+ * para o conserto que a tornou desnecessária. O mapa só conta se algum
+ * controller o **indexa** — senão um mapa esquecido ressuscitaria a permissão
+ * que a guarda existe para enterrar.
  */
 
 const RAIZ = new URL('..', import.meta.url).pathname;
@@ -54,6 +64,35 @@ function exercidas() {
       achadas.add(m[1]);
     }
   }
+
+  /**
+   * E o mapa do domínio que algum controller indexa.
+   *
+   * `Record<..., Permissao>` é o tipo que diz "isto aqui é uma decisão de
+   * permissão por caso": ele é total, o compilador cobra o caso novo, e é
+   * exatamente por isso que ele substituiu o `if` escrito à mão.
+   */
+  const fonteDaApi = arquivos
+    .map((f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+    .join('\n');
+
+  const doCore = execFileSync('git', ['ls-files', 'packages/core/src'], {
+    cwd: RAIZ,
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((f) => f.endsWith('.ts') && !f.includes('.test.'));
+
+  for (const arquivo of doCore) {
+    const texto = readFileSync(new URL(`../${arquivo}`, import.meta.url), 'utf8');
+    for (const m of texto.matchAll(
+      /export const (\w+):[^=]*Record<[^>]*,\s*Permissao>[>\s]*=\s*\{([\s\S]*?)\n\};/g,
+    )) {
+      if (!new RegExp(`\\b${m[1]}\\s*\\[`).test(fonteDaApi)) continue;
+      for (const p of m[2].matchAll(/['"]([a-z_]+\.[a-z_]+)['"]/g)) achadas.add(p[1]);
+    }
+  }
+
   return achadas;
 }
 
@@ -84,7 +123,10 @@ describe('permissão do catálogo tem rota, ou está marcada', () => {
     // que é o contrário do que a guarda quer.
     const tem = exercidas();
     expect(tem.has('cashier.open')).toBe(true); // por `@Exige`
-    expect(tem.has('appointments.cancel')).toBe(true); // por `pode(...)`
+    // Pelo mapa do domínio: `PERMISSAO_DA_ACAO[body.action]` no controller do
+    // painel. Foi `pode(..., 'appointments.cancel')` até o mapa substituir o
+    // `if` que deixava `no_show` passar por baixo.
+    expect(tem.has('appointments.cancel')).toBe(true);
     expect(tem.has('customers.view')).toBe(true); // pelas duas
   });
 });

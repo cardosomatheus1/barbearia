@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Reflector } from '@nestjs/core';
@@ -25,7 +25,20 @@ import { PERMISSAO_EXIGIDA, PermissaoGuard } from '../src/admin/permissao.guard.
  * seja cobrada pelo segundo fator.
  */
 
-const CONTROLLERS = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'admin');
+/**
+ * **Todas** as pastas de controller, e não só `admin`.
+ *
+ * Só `admin` era o recorte da primeira versão, e ele desligava toda varredura
+ * deste arquivo em `booking/`, `plataforma/`, `publica/` e `auth/` — as quatro
+ * superfícies em que uma rota nova tem mais chance de nascer sem `@Exige`,
+ * porque ali a maioria das rotas legitimamente não o tem. Quem separa uma
+ * coisa da outra é `guardada`, que lê o `@UseGuards` da própria classe — e ela
+ * já existia. Achado da revisão de segurança do bloco 118.
+ */
+const RAIZ_DA_API = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+const CONTROLLERS = readdirSync(RAIZ_DA_API)
+  .map((p) => join(RAIZ_DA_API, p))
+  .filter((p) => existsSync(p) && statSync(p).isDirectory());
 
 /**
  * Cada **classe** de controller, com o próprio corpo.
@@ -36,11 +49,192 @@ const CONTROLLERS = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', '
  * declararem permissão — o que seria correto exigir de uma rota do painel e
  * absurdo de uma rota de login.
  */
+/**
+ * Os pacotes que as varreduras derivadas leem: **todos**.
+ *
+ * Três delas liam `core` + `finance`, e uma `core` + `scheduling`. O recorte era
+ * herdado de quando o assunto morava lá, e foi por baixo dele que a receita
+ * atribuída de campanha (`crm`) escapou do segundo fator, e que a agenda
+ * (`scheduling`), a fila e a jornada (`catalog`) entregavam a base.
+ *
+ * Guarda que lê dois pacotes de doze não é guarda mais barata — é guarda que
+ * responde verde sobre dez.
+ */
+function todosOsPacotes(): string[] {
+  const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
+  return readdirSync(raiz)
+    .map((p) => join(raiz, p, 'src'))
+    .filter((p) => existsSync(p));
+}
+
+/**
+ * O corpo de um bloco, por **contagem de chaves**.
+ *
+ * `\{([^}]*)\}` para no primeiro objeto aninhado: `DayBoard` declara
+ * `professionals: readonly { … }[]` antes de `entries`, e a composição nunca
+ * chegava a `entries`. As quatro varreduras usavam esse regex.
+ */
+function corpoDoBloco(fonte: string, abre: number): string {
+  let nivel = 0;
+  for (let i = abre; i < fonte.length; i += 1) {
+    if (fonte[i] === '{') nivel += 1;
+    else if (fonte[i] === '}') {
+      nivel -= 1;
+      if (nivel === 0) return fonte.slice(abre + 1, i);
+    }
+  }
+  return fonte.slice(abre);
+}
+
+/**
+ * As interfaces exportadas de um fonte, com o corpo inteiro.
+ *
+ * Uma função só, porque as quatro varreduras faziam a mesma coisa com o mesmo
+ * regex torto — e corrigir em quatro lugares é como três ficam para trás.
+ */
+/**
+ * As funções exportadas de um fonte, com o **tipo de retorno**.
+ *
+ * A assinatura acaba onde o parêntese fecha, contado — não numa janela de N
+ * caracteres. A janela já foi esticada de 900 para 3000 uma vez, com o
+ * comentário dizendo que a versão curta *"passava verde sobre a rota que a
+ * revisão de segurança tinha acabado de reprovar"*, e ainda deixava
+ * `fecharComanda` de fora: 3538 caracteres de assinatura.
+ *
+ * Contando, não há número para esticar da próxima vez.
+ */
+function funcoesDe(fonte: string): [string, string][] {
+  const achadas: [string, string][] = [];
+  for (const m of fonte.matchAll(/export (?:async )?function (\w+)\(/g)) {
+    const abre = (m.index ?? 0) + m[0].length - 1;
+    let nivel = 0;
+    let fecha = abre;
+    for (let i = abre; i < fonte.length; i += 1) {
+      if (fonte[i] === '(') nivel += 1;
+      else if (fonte[i] === ')') {
+        nivel -= 1;
+        if (nivel === 0) {
+          fecha = i;
+          break;
+        }
+      }
+    }
+    const depois = fonte.slice(fecha, fecha + 300);
+    const retorno =
+      /Promise<([^>]+(?:<[^>]*>)?[^>]*)>/.exec(depois)?.[1] ??
+      /^\)\s*:\s*([^{;]+)\{/.exec(depois)?.[1] ??
+      '';
+    achadas.push([m[1] ?? '', retorno]);
+  }
+  return achadas;
+}
+
+/**
+ * As funções que **redigem** em vez de recusar, e o que cada uma redige.
+ *
+ * Uma redigidora declara um interruptor `podeVer<Coisa>` na assinatura **e o
+ * usa no corpo**: declarar e não usar era a primeira forma de contornar a
+ * varredura de pessoa, e ela custava uma linha. Achado da revisão de segurança
+ * do bloco 118.
+ *
+ * A isenção continua sendo conquistada e não declarada — não há lista de
+ * arquivos isentos em lugar nenhum deste arquivo.
+ */
+function redigidoras(fontes: readonly string[]): Map<string, string> {
+  const achadas = new Map<string, string>();
+  for (const fonte of fontes) {
+    for (const m of fonte.matchAll(/export (?:async )?function (\w+)\(/g)) {
+      const abre = (m.index ?? 0) + m[0].length - 1;
+      let nivel = 0;
+      let fecha = abre;
+      for (let i = abre; i < fonte.length; i += 1) {
+        if (fonte[i] === '(') nivel += 1;
+        else if (fonte[i] === ')') {
+          nivel -= 1;
+          if (nivel === 0) {
+            fecha = i;
+            break;
+          }
+        }
+      }
+      const params = fonte.slice(abre, fecha);
+      const flag = /\b(podeVer\w+)\s*\??:/.exec(params)?.[1];
+      if (!flag) continue;
+      /**
+       * O `{` do **corpo**, não o do tipo de retorno.
+       *
+       * `): Promise<{ readonly futuros: ... }> {` tem dois, e o primeiro é o do
+       * tipo: pegá-lo fazia o corpo de `setProfessionalActive` ser a declaração
+       * do retorno, sem nenhuma menção ao interruptor — a função redigia e a
+       * varredura a acusava. O do corpo é o que fecha a linha.
+       */
+      let inicio = fonte.indexOf('{', fecha);
+      while (inicio > 0 && !/^[^\S\n]*\n/.test(fonte.slice(inicio + 1))) {
+        inicio = fonte.indexOf('{', inicio + 1);
+      }
+      if (inicio < 0) continue;
+      const corpo = corpoDoBloco(fonte, inicio);
+      // Usada, e não só declarada.
+      if (!new RegExp(`\\b${flag}\\b`).test(corpo)) continue;
+      achadas.set(m[1] ?? '', flag);
+    }
+  }
+  return achadas;
+}
+
+/**
+ * A chamada acusada está **dentro** dos argumentos de uma redigidora?
+ *
+ * É o que separa `return getComanda(...)` de
+ * `return comandaVisivel({ comanda: await getComanda(...), podeVerCliente })`.
+ * Estrutural e não por nome: fingir a isenção exige embrulhar a chamada numa
+ * função de redação de verdade, que é exatamente o que se queria que
+ * acontecesse.
+ */
+function envolvidaPorRedigidora(
+  codigo: string,
+  chamada: string,
+  redige: ReadonlyMap<string, string>,
+): boolean {
+  for (const nome of redige.keys()) {
+    for (const m of codigo.matchAll(new RegExp(`\\b${nome}\\s*\\(`, 'g'))) {
+      const abre = (m.index ?? 0) + m[0].length - 1;
+      let nivel = 0;
+      for (let i = abre; i < codigo.length; i += 1) {
+        if (codigo[i] === '(') nivel += 1;
+        else if (codigo[i] === ')') {
+          nivel -= 1;
+          if (nivel === 0) {
+            const dentro = codigo.slice(abre + 1, i);
+            if (new RegExp(`\\b${chamada}\\s*\\(`).test(dentro)) return true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function interfacesDe(fonte: string): [string, string][] {
+  const achadas: [string, string][] = [];
+  for (const m of fonte.matchAll(/export interface (\w+)[^{]*\{/g)) {
+    achadas.push([m[1] ?? '', corpoDoBloco(fonte, (m.index ?? 0) + m[0].length - 1)]);
+  }
+  return achadas;
+}
+
 function controllers(): { arquivo: string; classe: string; corpo: string; guardada: boolean }[] {
   const encontrados: { arquivo: string; classe: string; corpo: string; guardada: boolean }[] = [];
 
-  for (const nome of readdirSync(CONTROLLERS).filter((n) => n.endsWith('.controller.ts'))) {
-    const fonte = readFileSync(join(CONTROLLERS, nome), 'utf8');
+  const arquivos = CONTROLLERS.flatMap((pasta) =>
+    readdirSync(pasta)
+      .filter((n) => n.endsWith('.controller.ts'))
+      .map((n) => [n, join(pasta, n)] as const),
+  );
+
+  for (const [nome, caminho] of arquivos) {
+    const fonte = readFileSync(caminho, 'utf8');
     const marcos = [...fonte.matchAll(/export class (\w+)/g)];
 
     for (const [i, marco] of marcos.entries()) {
@@ -418,7 +612,7 @@ describe('as rotas do painel', () => {
      * teste dizia verde sem enxergá-la, que é o pior tipo de verde.
      */
     const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
-    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
+    const PASTAS = todosOsPacotes();
     /**
      * `margem`, `lucro`, `sobra`, `insumo` e `cmv` — e **não** `custo`.
      *
@@ -428,7 +622,15 @@ describe('as rotas do painel', () => {
      * Com `custo` na lista, a varredura acusava a listagem de produtos e a
      * comanda, que é falso positivo por palavra igual.
      */
-    const CAMPO_DE_LUCRO = /\b(margem\w*|insumo\w*|sobra\w*|lucro\w*|cmv)\s*:/i;
+    /**
+     * O campo diz resultado **e** diz dinheiro.
+     *
+     * Sem a segunda metade, `sobraMinutos` — a folga da cadeira, em minutos —
+     * casava, e a varredura ampliada a todos os pacotes acusava o custo de
+     * encaixe da fila. "Sobra" é palavra de dois assuntos; centavo e ponto-base
+     * são de um só, e é a unidade que diz qual deles.
+     */
+    const CAMPO_DE_LUCRO = /\b(margem|insumo|sobra|lucro|cmv)\w*(Cents|Bps)\s*\??:/i;
 
     /** As interfaces de `finance` que carregam decomposição de resultado. */
     const tiposDeLucro = new Set<string>();
@@ -441,8 +643,8 @@ describe('as rotas do painel', () => {
     );
 
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
-        if (CAMPO_DE_LUCRO.test(bloco[2] ?? '')) tiposDeLucro.add(bloco[1] ?? '');
+      for (const [nome, corpo] of interfacesDe(fonte)) {
+        if (CAMPO_DE_LUCRO.test(corpo)) tiposDeLucro.add(nome);
       }
     }
     /*
@@ -467,8 +669,8 @@ describe('as rotas do painel', () => {
     const corpoDaInterface = new Map<string, string>();
     const paiDaInterface = new Map<string, string>();
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
-        corpoDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
+      for (const [nome, corpo] of interfacesDe(fonte)) {
+        corpoDaInterface.set(nome, corpo);
       }
       for (const bloco of fonte.matchAll(/export interface (\w+) extends (\w+)/g)) {
         paiDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
@@ -496,10 +698,9 @@ describe('as rotas do painel', () => {
       }
     }
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(/export async function (\w+)[\s\S]{0,900}?Promise<([^>]+)>/g)) {
-        const retorno = bloco[2] ?? '';
+      for (const [nome, retorno] of funcoesDe(fonte)) {
         if ([...tiposDeLucro].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
-          funcoesDeLucro.add(bloco[1] ?? '');
+          funcoesDeLucro.add(nome);
         }
       }
     }
@@ -510,6 +711,7 @@ describe('as rotas do painel', () => {
     ).toBeGreaterThan(0);
     expect(funcoesDeLucro.size).toBeGreaterThan(0);
 
+    const redige = redigidoras(fontes);
     const faltando: string[] = [];
     for (const { arquivo, classe, corpo, guardada } of controllers()) {
       if (!guardada) continue;
@@ -557,6 +759,17 @@ describe('as rotas do painel', () => {
          * conferência de fato acontece.
          */
         if (isentoPeloSchemaSemantico(codigo)) continue;
+        /**
+         * A isenção por **redação**, e ela é estrutural.
+         *
+         * `campanhasDaCasa` devolve a receita atribuída por campanha e a rota
+         * não pode declarar `finance.view`: `@Exige` é conjuntivo, e um papel
+         * "Marketing" passava a criar e enviar campanha sem conseguir ver a que
+         * enviou. Quem decide é `podeVerReceita`, declarado **e usado** pela
+         * função — e a varredura confere as duas coisas.
+         */
+        if (redige.has(chamada)) continue;
+        if (envolvidaPorRedigidora(codigo, chamada, redige)) continue;
         faltando.push(`${arquivo} · ${classe} · chama ${chamada}`);
       }
     }
@@ -582,7 +795,7 @@ describe('as rotas do painel', () => {
      * e uma lista escrita ao lado seria a que ninguém atualiza.
      */
     const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
-    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
+    const PASTAS = todosOsPacotes();
 
     /**
      * `receita`, `faturamento`, `total...Cents`, `impacto...Cents` — e **não**
@@ -611,9 +824,9 @@ describe('as rotas do painel', () => {
     const corpoDaInterface = new Map<string, string>();
     const paiDaInterface = new Map<string, string>();
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
-        corpoDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
-        if (CAMPO_DE_RECEITA.test(bloco[2] ?? '')) tiposDeReceita.add(bloco[1] ?? '');
+      for (const [nome, corpo] of interfacesDe(fonte)) {
+        corpoDaInterface.set(nome, corpo);
+        if (CAMPO_DE_RECEITA.test(corpo)) tiposDeReceita.add(nome);
       }
       for (const bloco of fonte.matchAll(/export interface (\w+) extends (\w+)/g)) {
         paiDaInterface.set(bloco[1] ?? '', bloco[2] ?? '');
@@ -655,12 +868,9 @@ describe('as rotas do painel', () => {
        * alcança o defeito que a motivou é pior que guarda nenhuma, e foi só
        * quebrar a rota de propósito que isso apareceu.
        */
-      for (const bloco of fonte.matchAll(
-        /export async function (\w+)[\s\S]{0,3000}?Promise<([^>]+)>/g,
-      )) {
-        const retorno = bloco[2] ?? '';
+      for (const [nome, retorno] of funcoesDe(fonte)) {
         if ([...tiposDeReceita].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
-          funcoesDeReceita.add(bloco[1] ?? '');
+          funcoesDeReceita.add(nome);
         }
       }
 
@@ -674,14 +884,10 @@ describe('as rotas do painel', () => {
        * sem ser vista — o mesmo defeito da janela de 900 caracteres, um degrau
        * acima. Foi só tirar `finance.view` da rota de propósito para descobrir.
        */
-      for (const bloco of fonte.matchAll(
-        /export function (\w+)[\s\S]{0,3000}?\)\s*:\s*([^{;]+)\{/g,
-      )) {
-        const retorno = bloco[2] ?? '';
-        if ([...tiposDeReceita].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
-          funcoesDeReceita.add(bloco[1] ?? '');
-        }
-      }
+      // `funcoesDe` já cobre a síncrona: ela lê o retorno depois do parêntese
+      // que fecha, com ou sem `Promise<>`. Duas passadas eram duas chances de
+      // divergir sobre a mesma pergunta.
+
     }
 
     expect(
@@ -690,6 +896,7 @@ describe('as rotas do painel', () => {
     ).toBeGreaterThan(0);
     expect(funcoesDeReceita.size).toBeGreaterThan(0);
 
+    const redige = redigidoras(fontes);
     const faltando: string[] = [];
     for (const { arquivo, classe, corpo, guardada } of controllers()) {
       if (!guardada) continue;
@@ -721,6 +928,17 @@ describe('as rotas do painel', () => {
          * essa. Reprovar o certo é o que faz alguém desligar a guarda.
          */
         if (permissoes.includes("'commission.view_own'")) continue;
+        /**
+         * A isenção por **redação**, e ela é estrutural.
+         *
+         * `campanhasDaCasa` devolve a receita atribuída por campanha e a rota
+         * não pode declarar `finance.view`: `@Exige` é conjuntivo, e um papel
+         * "Marketing" passava a criar e enviar campanha sem conseguir ver a que
+         * enviou. Quem decide é `podeVerReceita`, declarado **e usado** pela
+         * função — e `redigidoras` confere as duas coisas.
+         */
+        if (redige.has(chamada)) continue;
+        if (envolvidaPorRedigidora(codigo, chamada, redige)) continue;
         /**
          * A exceção do schema semântico, e ela é **conquistada**, não declarada.
          *
@@ -768,7 +986,7 @@ describe('as rotas do painel', () => {
      * escrita ao lado seria a que ninguém atualiza.
      */
     const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
-    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'scheduling', 'src')];
+    const PASTAS = todosOsPacotes();
 
     /** Quem é a pessoa, e um número que a compara com as outras. */
     const CAMPO_DE_PESSOA = /\bprofissionalId\s*:/;
@@ -783,11 +1001,10 @@ describe('as rotas do painel', () => {
     );
 
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
-        const corpo = bloco[2] ?? '';
-        corpoDaInterface.set(bloco[1] ?? '', corpo);
+      for (const [nome, corpo] of interfacesDe(fonte)) {
+        corpoDaInterface.set(nome, corpo);
         if (CAMPO_DE_PESSOA.test(corpo) && CAMPO_DE_DESEMPENHO.test(corpo)) {
-          tiposDeDesempenho.add(bloco[1] ?? '');
+          tiposDeDesempenho.add(nome);
         }
       }
     }
@@ -811,12 +1028,9 @@ describe('as rotas do painel', () => {
 
     const funcoes = new Set<string>();
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(
-        /export (?:async )?function (\w+)[\s\S]{0,3000}?(?:Promise<([^>]+)>|\)\s*:\s*([^{;]+)\{)/g,
-      )) {
-        const retorno = `${bloco[2] ?? ''} ${bloco[3] ?? ''}`;
+      for (const [nome, retorno] of funcoesDe(fonte)) {
         if ([...tiposDeDesempenho].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
-          funcoes.add(bloco[1] ?? '');
+          funcoes.add(nome);
         }
       }
     }
@@ -870,7 +1084,7 @@ describe('as rotas do painel', () => {
      * permissão em toda rota que os sirva.
      */
     const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
-    const PASTAS = [join(RAIZ, 'core', 'src'), join(RAIZ, 'finance', 'src')];
+    const PASTAS = todosOsPacotes();
 
     const CAMPO_DE_PRODUTO = /\b(produtoId|minimo)\s*:/;
     const CAMPO_DE_ESTOQUE = /\b(saldo|diasAteAcabar|comprar\w*|saidasNaJanela)\s*:/;
@@ -884,11 +1098,10 @@ describe('as rotas do painel', () => {
     );
 
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(/export interface (\w+)[^{]*\{([^}]*)\}/g)) {
-        const corpo = bloco[2] ?? '';
-        corpoDaInterface.set(bloco[1] ?? '', corpo);
+      for (const [nome, corpo] of interfacesDe(fonte)) {
+        corpoDaInterface.set(nome, corpo);
         if (CAMPO_DE_PRODUTO.test(corpo) && CAMPO_DE_ESTOQUE.test(corpo)) {
-          tiposDeEstoque.add(bloco[1] ?? '');
+          tiposDeEstoque.add(nome);
         }
       }
     }
@@ -910,12 +1123,9 @@ describe('as rotas do painel', () => {
 
     const funcoes = new Set<string>();
     for (const fonte of fontes) {
-      for (const bloco of fonte.matchAll(
-        /export (?:async )?function (\w+)[\s\S]{0,3000}?(?:Promise<([^>]+)>|\)\s*:\s*([^{;]+)\{)/g,
-      )) {
-        const retorno = `${bloco[2] ?? ''} ${bloco[3] ?? ''}`;
+      for (const [nome, retorno] of funcoesDe(fonte)) {
         if ([...tiposDeEstoque].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) {
-          funcoes.add(bloco[1] ?? '');
+          funcoes.add(nome);
         }
       }
     }
@@ -1123,9 +1333,19 @@ describe('rota que devolve cadastro de cliente', () => {
       return '';
     };
 
+    const redige = redigidoras(fontes);
     const funcoesDePessoa = new Set<string>();
     for (const fonte of fontes) {
-      for (const m of fonte.matchAll(/export async function (\w+)\(/g)) {
+      /**
+       * `export function` também, e não só `export async function`.
+       *
+       * A primeira versão só via a assíncrona, e com isso não enxergava nada de
+       * `packages/core`, onde a função é pura e devolve o tipo direto. É o
+       * mesmo defeito que a varredura de receita já tinha corrigido um bloco
+       * antes — e ele voltou porque esta nasceu com regex próprio em vez de
+       * reusar o que já existia.
+       */
+      for (const m of fonte.matchAll(/export (?:async )?function (\w+)\(/g)) {
         const abre = (m.index ?? 0) + m[0].length - 1;
         const params = parametrosDe(fonte, abre);
         const depois = fonte.slice(abre + params.length + 2, abre + params.length + 260);
@@ -1138,16 +1358,21 @@ describe('rota que devolve cadastro de cliente', () => {
          * Não há lista de arquivos isentos — a função que decide mostrar ou não
          * o nome declara o parâmetro, e a varredura sai do caminho. Foi assim
          * que `applyAttendance` saiu, e é assim que a próxima sai.
+         *
+         * `redigidoras` cobra o interruptor **usado no corpo**, e não só
+         * declarado na assinatura: declarar e ignorar contornava a varredura
+         * inteira e custava uma linha. Achado da revisão de segurança do bloco
+         * 118.
          */
-        const redige =
-          /podeVerCliente\s*\??:/.test(params) ||
+        const redigeAqui =
+          redige.has(m[1] ?? '') ||
           // …ou o parâmetro é um tipo nomeado que o declara: `createException`
           // recebe `NovaExcecao`, e a isenção precisa seguir o tipo.
           [...corpoDaInterface].some(
             ([nome, corpo]) =>
               /podeVerCliente\s*\??:/.test(corpo) && new RegExp(`\\b${nome}\\b`).test(params),
           );
-        if (redige) continue;
+        if (redigeAqui) continue;
         funcoesDePessoa.add(m[1] ?? '');
       }
     }
@@ -1164,7 +1389,18 @@ describe('rota que devolve cadastro de cliente', () => {
         const codigo = handler[2] ?? '';
         if (/customers\.(view|export)\b/.test(permissoes)) continue;
         const chamada = [...funcoesDePessoa].find((f) => new RegExp(`\\b${f}\\s*\\(`).test(codigo));
-        if (chamada) faltando.push(`${arquivo} · @Exige(${permissoes.trim()}) · ${chamada}`);
+        if (!chamada) continue;
+        /**
+         * A redação também vale **na borda**, quando a chamada é embrulhada.
+         *
+         * As seis rotas da comanda devolvem o mesmo objeto e nenhuma das seis
+         * funções do domínio recebe o interruptor: quem redige é
+         * `comandaVisivel`, e a chamada acusada vai **dentro** dos argumentos
+         * dela. A conferência é estrutural — fingir a isenção exige embrulhar
+         * numa função de redação de verdade, que é o que se queria.
+         */
+        if (envolvidaPorRedigidora(codigo, chamada, redige)) continue;
+        faltando.push(`${arquivo} · @Exige(${permissoes.trim()}) · ${chamada}`);
       }
     }
 

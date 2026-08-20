@@ -370,6 +370,20 @@ export async function notasDoPeriodo(params: {
    * para esconder faria toda chamada nova nascer vazando.
    */
   readonly comRepartição?: boolean;
+  /**
+   * Quem chama pode ver identidade de cliente (`customers.view`).
+   *
+   * Obrigatório e não opcional: opcional, ele seria esquecido no primeiro
+   * chamador novo e o nome do tomador sairia para quem a barbearia decidiu não
+   * dar — que é a polaridade oposta de `comRepartição` acima, e é de propósito:
+   * lá o padrão é **não mostrar**, aqui não existe padrão.
+   *
+   * Redigir e não recusar: o nome do tomador é a única coisa pessoal desta
+   * listagem, e somá-lo ao `@Exige` trancava um papel "Contador" — que tem
+   * `fiscal.view` e `finance.view` e não precisa de ficha de cliente — para
+   * fora de "as notas do mês saíram?", que é a pergunta inteira daquela tela.
+   */
+  readonly podeVerCliente: boolean;
 }): Promise<readonly (NotaNaTela | NotaComRepartição)[]> {
   return withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
@@ -384,15 +398,18 @@ export async function notasDoPeriodo(params: {
       params.de,
       params.ate,
     );
-    return linhas.map((l) =>
-      params.comRepartição
+    return linhas.map((l) => {
+      const nota = params.podeVerCliente
+        ? paraTela(l)
+        : { ...paraTela(l), clienteNome: null };
+      return params.comRepartição
         ? {
-            ...paraTela(l),
+            ...nota,
             parceiroCents: l.partner_cents,
             casaCents: l.service_cents - l.partner_cents,
           }
-        : paraTela(l),
-    );
+        : nota;
+    });
   });
 }
 

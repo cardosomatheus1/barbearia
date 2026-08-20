@@ -637,6 +637,38 @@ describeIfDb('fila presencial', () => {
     expect(minha?.frase).toContain('encerrado');
   });
 
+  it('quem não pode ver cliente recebe a fila sem nome, sem telefone e sem id', async () => {
+    await entrar(CARLOS);
+
+    const semIdentidade = await getQueue({
+      podeVerCliente: false,
+      tenantId: TENANT,
+      locationId: LOCATION,
+      timezone: TZ,
+      now: AGORA,
+    });
+
+    const linha = semIdentidade.entries[0];
+    expect(linha, 'a linha continua na fila — redigir não é recusar').toBeTruthy();
+    expect(linha?.customerName).toBe('');
+    expect(linha?.customerPhoneTail).toBeNull();
+    /**
+     * O id junto, e é o que faltava.
+     *
+     * Nome e telefone já saíam redigidos, e o comentário de `getQueue` dizia
+     * que os **três** saíam. O id é a chave da ficha, do extrato de fiado e do
+     * saldo de fidelidade: redigir os dois primeiros e deixá-lo passar entrega
+     * a mesma pessoa por outra coluna. Achado da revisão de segurança do bloco
+     * 118.
+     */
+    expect(linha?.customerId).toBeNull();
+
+    // E a fila continua andando: posição e duração são o que faz o balcão
+    // trabalhar, e nenhum dos dois é identidade.
+    expect(linha?.posicao).toBe(1);
+    expect(linha?.duracaoMinutos).toBeGreaterThan(0);
+  });
+
   // -- a parede entre barbearias ---------------------------------------------
 
   it('a fila de uma barbearia não existe para a outra', async () => {

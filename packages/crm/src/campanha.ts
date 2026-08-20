@@ -100,7 +100,16 @@ export interface CampanhaNaTela {
   readonly lidos: number;
   readonly cliques: number;
   readonly agendamentos: number;
-  readonly receitaCents: number;
+  /**
+   * Nulo para quem não pode ver receita (`finance.view`).
+   *
+   * Redigir e não recusar: o número atribuído é a única coisa financeira desta
+   * lista, e somá-lo ao `@Exige` trancava a tela inteira para um papel
+   * "Marketing" que criava e enviava campanha e não conseguia **ver** a que
+   * enviou — estado sem saída na interface, criado por uma permissão que
+   * protege uma coluna só.
+   */
+  readonly receitaCents: number | null;
   /**
    * Quantos saíram **pelo WhatsApp**, e não pelo canal de reserva (bloco 97).
    *
@@ -138,8 +147,17 @@ export interface PuladoDaCampanha {
  * porque entregue e lido são fato **da Meta**, e não nosso — quem os grava é o
  * webhook do bloco 55.
  */
-export async function campanhasDaCasa(tenantId: string): Promise<readonly CampanhaNaTela[]> {
-  return withTenant(tenantId, async (tx) => {
+export async function campanhasDaCasa(params: {
+  readonly tenantId: string;
+  /**
+   * Quem chama pode ver receita (`finance.view`) — obrigatório, não opcional.
+   *
+   * Opcional, ele seria esquecido no primeiro chamador novo e a receita sairia
+   * para quem a barbearia decidiu não dar, sem nada ficar vermelho.
+   */
+  readonly podeVerReceita: boolean;
+}): Promise<readonly CampanhaNaTela[]> {
+  return withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
       {
         id: string;
@@ -209,7 +227,7 @@ export async function campanhasDaCasa(tenantId: string): Promise<readonly Campan
       lidos: Number(l.lidos),
       cliques: Number(l.cliques),
       agendamentos: Number(l.agendamentos),
-      receitaCents: Number(l.receita ?? 0),
+      receitaCents: params.podeVerReceita ? Number(l.receita ?? 0) : null,
       enviadosPeloWhatsApp: Number(l.pelo_whatsapp),
       pulados: l.pulados ?? [],
     }));
