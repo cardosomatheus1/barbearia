@@ -10,7 +10,10 @@ import {
   type ServicoDoCatalogo,
 } from '@/lib/admin-api';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
-import { ESPECIALIDADES, ROTULO_DA_ESPECIALIDADE } from '@barbearia/core';
+import { ESPECIALIDADES, ROTULO_DA_ESPECIALIDADE,
+  TIPOS_DE_CADEIRA,
+  type TipoDeCadeira,
+} from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import {
   lerConflitoDeJornada,
@@ -81,10 +84,27 @@ function falhaDaJornada(erro: string | undefined): string | null {
   return null;
 }
 
-const TIPO: Record<ProfissionalDoCadastro['kind'], string> = {
+/**
+ * Os quatro tipos, com os nomes que o banco tem (bloco 114).
+ *
+ * A tela oferecia "Estação" e "Sala" — `station` e `room` —, que não existem no
+ * enum `professional_kind`: escolher qualquer um dos dois respondia **500**,
+ * porque o domínio faz `${input.kind}::professional_kind`. A dica logo abaixo
+ * do seletor explicava por que o balcão não pode ser profissional, e não havia
+ * como cadastrá-lo de outro jeito.
+ */
+const TIPO: Record<TipoDeCadeira, string> = {
   professional: 'Profissional',
-  station: 'Estação',
-  room: 'Sala',
+  counter: 'Balcão',
+  resource_only: 'Sala ou posto',
+  external: 'Atende fora',
+};
+
+const EXPLICACAO_DO_TIPO: Record<TipoDeCadeira, string> = {
+  professional: 'Profissional — entra na ocupação e na comissão',
+  counter: 'Balcão — a conta da recepção, fora da ocupação e da comissão',
+  resource_only: 'Sala ou posto — espaço que se reserva, sem comissão',
+  external: 'Atende fora — não ocupa cadeira da casa',
 };
 
 function CamposDaPessoa({
@@ -128,9 +148,11 @@ function CamposDaPessoa({
           id={`${prefixo}-kind`}
           name="kind"
         >
-          <option value="professional">Profissional — entra na ocupação e na comissão</option>
-          <option value="station">Estação — cadeira ou posto, sem comissão</option>
-          <option value="room">Sala — espaço que se reserva, sem comissão</option>
+          {TIPOS_DE_CADEIRA.map((tipo) => (
+            <option key={tipo} value={tipo}>
+              {EXPLICACAO_DO_TIPO[tipo]}
+            </option>
+          ))}
         </select>
         <p className="ui-field__hint">
           Conta de balcão cadastrada como profissional destrói o relatório de ocupação: ela

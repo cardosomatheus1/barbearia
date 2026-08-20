@@ -81,9 +81,12 @@ export class EstoqueController {
   @Get('produtos')
   async lista(@Staff() staff: AuthenticatedStaff, @Query('todos') todos?: string) {
     const agora = new Date();
+    // A unidade da sessão, como o cartão do Painel já passava: sem ela, esta
+    // tela e aquele cartão davam prazos diferentes para o mesmo produto.
+    const local = await unidadeDoBalcao(staff);
     const [lista, consumo] = await Promise.all([
       produtos(staff.tenantId, todos === 'true', agora),
-      consumoMedido({ tenantId: staff.tenantId, agora }),
+      consumoMedido({ tenantId: staff.tenantId, agora, locationId: local.id }),
     ]);
 
     const previsao = new Map(consumo.map((c) => [c.produtoId, preverConsumo(c)]));

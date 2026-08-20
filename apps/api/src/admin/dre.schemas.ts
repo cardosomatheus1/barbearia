@@ -39,8 +39,24 @@ export const periodoDoDreSchema = z
 export function mesDaUnidade(hoje: string): { de: string; ate: string } {
   const [ano, mes] = hoje.split('-');
   if (!ano || !mes) return { de: hoje, ate: hoje };
-  const ultimo = new Date(Date.UTC(Number(ano), Number(mes), 0)).getUTCDate();
-  return { de: `${ano}-${mes}-01`, ate: `${ano}-${mes}-${String(ultimo).padStart(2, '0')}` };
+  /**
+   * Até **hoje**, nunca até o dia 31 (bloco 114).
+   *
+   * O padrão ia ao último dia do calendário, então no dia 20 a janela tinha 31
+   * dias — onze deles ainda não aconteceram — e `periodoAnterior`, que
+   * corretamente compara contra uma janela do mesmo tamanho, media 31 dias
+   * cheios contra 20 dias de movimento mais 11 de vazio.
+   *
+   * O resultado é que toda queda que a tela mostrava era, na maior parte, a
+   * diferença de duração: −38,9% em serviços onde a queda real era −6,3%. E o
+   * Painel, ao lado, dizia −8% sobre o mesmo fato, porque ele já recortava o mês
+   * anterior no mesmo dia do mês (§6, pergunta 6, entre duas telas do mesmo
+   * módulo).
+   *
+   * A janela também alcançava receita de amanhã: uma mensalidade com `paid_at`
+   * no dia 21 entrava no "resultado" consultado no dia 20.
+   */
+  return { de: `${ano}-${mes}-01`, ate: hoje };
 }
 
 /** Cem mil reais de vale é um zero a mais em qualquer barbearia. */

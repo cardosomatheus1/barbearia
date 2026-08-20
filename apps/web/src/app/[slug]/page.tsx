@@ -5,6 +5,7 @@ import {
   horariosRestantes,
   imagemPublica,
   PROPORCAO,
+  notaExibida,
 } from '@barbearia/core';
 import { getAvaliacoesPublicas, getProfile, getToday, type PublicProfile } from '@/lib/api';
 import { localDate } from '@/lib/date';
@@ -353,7 +354,7 @@ export default async function BarbershopPage({ params }: Params) {
               </h2>
               <p className="reputacao">
                 <span className="reputacao__nota tabular">
-                  {reputacao.media.toFixed(1)}
+                  {notaExibida(reputacao.media)}
                 </span>
                 <span aria-hidden="true">
                   {'\u2605'.repeat(Math.round(reputacao.media))}

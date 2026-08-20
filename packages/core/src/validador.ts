@@ -1,3 +1,4 @@
+import type { TipoDeCadeira } from './attendance.js';
 /**
  * Validador de integridade de catálogo — SPEC §5.7.
  *
@@ -79,7 +80,7 @@ export interface ComboNoCatalogo {
 export interface ProfissionalNoCatalogo {
   readonly id: string;
   readonly name: string;
-  readonly kind: string;
+  readonly kind: TipoDeCadeira | string;
   /** Minutos de jornada por dia da semana em que trabalha. */
   readonly minutosPorDia: readonly number[];
 }

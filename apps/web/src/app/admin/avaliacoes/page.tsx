@@ -10,8 +10,10 @@ import {
   ROTULO_DO_MOTIVO,
   VERBO_DA_RECUPERACAO,
   type CategoriaDaAvaliacao,
+  notaExibida,
 } from '@barbearia/core';
 import { painelDeAvaliacoesNaApi, type AvaliacaoNaTela } from '@/lib/admin-api';
+import { localTime } from '@/lib/date';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import {
@@ -67,19 +69,36 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para salvar. Tente de novo.',
 };
 
-const dia = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—';
+/**
+ * Data e hora **no fuso da unidade** (bloco 114).
+ *
+ * `toLocaleDateString` sem `timeZone` usa o fuso do **processo**, que em
+ * produção é UTC: uma avaliação escrita à 01h55 na Bahia aparecia com a data do
+ * dia seguinte, e o atendimento das 17h20 saía como 21h40. É o defeito D2 na
+ * tela em que a gerência tem 48h para ligar — ela procurava na agenda um
+ * horário numa casa que já estava fechada.
+ */
+const dia = (fuso: string, iso: string | null) =>
+  iso
+    ? new Intl.DateTimeFormat('pt-BR', {
+        timeZone: fuso,
+        day: '2-digit',
+        month: '2-digit',
+      }).format(new Date(iso))
+    : '—';
 
-const hora = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+const hora = (fuso: string, iso: string | null) => (iso ? localTime(fuso, iso) : '');
 
 /** O alerta da SPEC: "Cliente insatisfeito — Carlos, nota 2, atendimento de hoje 14:00". */
 function ARecuperar({
   avaliacao,
   podeContestar,
+  fuso,
 }: {
   readonly avaliacao: AvaliacaoNaTela;
   readonly podeContestar: boolean;
+  /** O fuso da unidade. Formatar no do processo é o defeito D2. */
+  readonly fuso: string;
 }) {
   return (
     <article className="avaliacao avaliacao--alerta">
@@ -98,7 +117,7 @@ function ARecuperar({
         {avaliacao.profissionalNome ? ` com ${avaliacao.profissionalNome}` : ''}
       </p>
       <p className="avaliacao__quando">
-        Atendimento de {dia(avaliacao.atendidoEm)} às {hora(avaliacao.atendidoEm)}
+        Atendimento de {dia(fuso, avaliacao.atendidoEm)} às {hora(fuso, avaliacao.atendidoEm)}
       </p>
 
       {avaliacao.comentario ? (
@@ -221,9 +240,11 @@ function Contestar({ avaliacao }: { readonly avaliacao: AvaliacaoNaTela }) {
 function Avaliacao({
   avaliacao,
   podeContestar,
+  fuso,
 }: {
   readonly avaliacao: AvaliacaoNaTela;
   readonly podeContestar: boolean;
+  readonly fuso: string;
 }) {
   const categorias = Object.entries(avaliacao.categorias) as [CategoriaDaAvaliacao, number][];
 
@@ -247,7 +268,7 @@ function Avaliacao({
         {avaliacao.servicoNome ? ` · ${avaliacao.servicoNome}` : ''}
         {avaliacao.profissionalNome ? ` com ${avaliacao.profissionalNome}` : ''}
       </p>
-      <p className="avaliacao__quando">{dia(avaliacao.criadaEm)}</p>
+      <p className="avaliacao__quando">{dia(fuso, avaliacao.criadaEm)}</p>
 
       {avaliacao.comentario ? (
         <blockquote className="avaliacao__texto">{avaliacao.comentario}</blockquote>
@@ -287,7 +308,7 @@ function Avaliacao({
             — {avaliacao.contestacaoNota}
             <br />
             <span className="avaliacao__quando">
-              Fora do seu perfil desde {dia(avaliacao.contestadaEm)}. Continua contando na sua
+              Fora do seu perfil desde {dia(fuso, avaliacao.contestadaEm)}. Continua contando na sua
               média.
             </span>
           </p>
@@ -319,6 +340,8 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
 
   const estado = await painelOuDesvio(token);
   const podeTratar = podeNaTela(estado, 'reviews.recover');
+  // O fuso vem da unidade, nunca do processo — que em produção é UTC.
+  const fuso = estado.empresa.timezone;
   const podeContestar = podeNaTela(estado, 'reviews.contest');
   const resposta = await painelDeAvaliacoesNaApi(token);
 
@@ -399,14 +422,14 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
         <dl className="pacotes__numeros">
           <div className="pacotes__numero pacotes__numero--peso">
             <dt>Sua média</dt>
-            <dd className="tabular">{media === null ? '—' : media.toFixed(1)}</dd>
+            <dd className="tabular">{notaExibida(media)}</dd>
             <p className="pacotes__nota">
               Conta todas as notas, publicadas ou não. É a real.
             </p>
           </div>
           <div className="pacotes__numero">
             <dt>No seu perfil</dt>
-            <dd className="tabular">{mediaPublica === null ? '—' : mediaPublica.toFixed(1)}</dd>
+            <dd className="tabular">{notaExibida(mediaPublica)}</dd>
             <p className="pacotes__nota">
               O que o cliente vê. Aparece a partir de três avaliações.
             </p>
@@ -437,12 +460,12 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
 
           {podeTratar ? (
             aRecuperar.map((a) => (
-              <ARecuperar avaliacao={a} key={a.id} podeContestar={podeContestar} />
+              <ARecuperar avaliacao={a} fuso={fuso} key={a.id} podeContestar={podeContestar} />
             ))
           ) : (
             <>
               {aRecuperar.map((a) => (
-                <Avaliacao avaliacao={a} key={a.id} podeContestar={podeContestar} />
+                <Avaliacao avaliacao={a} fuso={fuso} key={a.id} podeContestar={podeContestar} />
               ))}
               <p className="painel__nota">
                 Você vê as notas, mas quem trata é quem tem essa permissão.
@@ -473,7 +496,7 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
         <>
           <h2 className="rotulo">Últimas</h2>
           {tratadas.map((a) => (
-            <Avaliacao avaliacao={a} key={a.id} podeContestar={podeContestar} />
+            <Avaliacao avaliacao={a} fuso={fuso} key={a.id} podeContestar={podeContestar} />
           ))}
         </>
       ) : (

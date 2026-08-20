@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { fraseDaMeta } from '@barbearia/core';
+import { fraseDaMeta,
+  notaExibida,
+} from '@barbearia/core';
 import { comissaoDoPeriodo, meusNumeros } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -182,13 +184,13 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
         */}
         <Numero
           rotulo="Sua nota"
-          valor={nota.media === null ? '—' : nota.media.toFixed(1)}
+          valor={notaExibida(nota.media)}
           nota={
             nota.media === null
               ? 'ninguém avaliou ainda este mês'
               : notaAnterior.media === null
                 ? `${nota.total} ${nota.total === 1 ? 'avaliação' : 'avaliações'}`
-                : `mês passado: ${notaAnterior.media.toFixed(1)}`
+                : `mês passado: ${notaExibida(notaAnterior.media)}`
           }
         />
       </dl>

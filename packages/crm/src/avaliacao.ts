@@ -223,7 +223,14 @@ const SELECT_DA_AVALIACAO = `
          r.resolution_note,
          r.contested_at, r.contest_reason, r.contest_note,
          c.name AS cliente, p.name AS profissional,
-         a.ends_at AS atendido_em,
+         -- O **início do serviço**, não o fim da reserva (bloco 114).
+         --
+         -- O fim da reserva inclui o buffer, então o cartão dizia "atendimento de
+         -- 18/08 às 21:40" sobre um corte das 17:20 numa casa que fecha às 20h:
+         -- a recepção, com 48h para ligar, procurava na agenda um horário que
+         -- não existe. A SPEC pede "atendimento de hoje 14:00", que é a hora em
+         -- que a pessoa sentou.
+         a.service_starts_at AS atendido_em,
          (SELECT s.name FROM appointment_services aps
              JOIN services s ON s.id = aps.service_id
             WHERE aps.appointment_id = a.id ORDER BY aps.position LIMIT 1) AS servico,

@@ -191,6 +191,9 @@ lancar "evento de webhook com emissor" npx vitest run scripts/evento-de-webhook-
 lancar "escopo de chave × rota" npx vitest run scripts/escopo-com-rota.test.mjs
 # Id da URL sem pipe vira 500 sobre entrada externa, em vez de 400 com motivo.
 lancar "@Param com pipe" npx vitest run scripts/param-com-pipe.test.mjs
+# Métrica no catálogo que ninguém calcula responde "—" para sempre, e o link
+# "conferir na tela" precisa levar a uma tela que mostre o número.
+lancar "métrica com resposta" npx vitest run scripts/metrica-com-resposta.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
 # nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.

@@ -926,7 +926,18 @@ export async function consumoMedido(params: {
       { id: string; name: string; saldo: number | null; saidas: number | null; semanas: number }[]
     >`
       SELECT p.id, p.name,
-             (SELECT sum(m.quantity) FROM stock_movements m WHERE m.product_id = p.id) AS saldo,
+             -- O saldo tem o **mesmo recorte** das saídas (bloco 114).
+             --
+             -- O numerador somava os movimentos da barbearia inteira e o
+             -- denominador era filtrado pela loja: numa rede de duas lojas, o
+             -- prazo até acabar saía inflado na proporção do número de lojas, e
+             -- o produto sumia da lista "vai acabar" justamente quando estava
+             -- acabando. Pior, o mesmo produto ganhava dois prazos no produto —
+             -- o cartão do Painel passava a unidade e a tela de Estoque não.
+             (SELECT sum(m.quantity) FROM stock_movements m
+               WHERE m.product_id = p.id
+                 AND (${unidade}::text IS NULL OR m.location_id::text = ${unidade}::text)
+             ) AS saldo,
              COALESCE(saidas.total, 0) AS saidas,
              COALESCE(saidas.semanas, 0) AS semanas
         FROM products p

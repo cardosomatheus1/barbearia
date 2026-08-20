@@ -12,7 +12,7 @@ import {
   type ChaveDeMetrica,
   type FalhaDaPergunta,
 } from '@barbearia/core';
-import { medir, rentabilidadeDoClube } from '@barbearia/finance';
+import { margemPorServico, medir, rentabilidadeDoClube } from '@barbearia/finance';
 import { churnDaBase } from '@barbearia/crm';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
@@ -278,6 +278,33 @@ async function responder(
   if (pergunta.metrica === 'clientes_em_risco') {
     const todos = await churnDaBase(tenantId);
     return { total: todos.filter((c) => c.faixa !== 'baixo').length, fatias: [] };
+  }
+
+  if (pergunta.metrica === 'margem_por_servico') {
+    /**
+     * A terceira que mora fora, e a que ninguém tinha composto (bloco 114).
+     *
+     * `medir` devolve `{ total: null }` para ela de propósito — o comentário lá
+     * diz "quem as compõe é a borda" —, e a borda compunha duas das três. A
+     * pergunta ficava no catálogo, o dono clicava, e a resposta era **`—`**.
+     *
+     * O número existe e a tela de Estoque o mostra: indicador que nunca
+     * preenche é pior que indicador ausente, porque ocupa espaço prometendo uma
+     * resposta que não vem — e quem opera aprende a não olhar.
+     *
+     * O total é a margem do período em pontos-base, como `rentabilidade_do_clube`
+     * faz; as fatias são os serviços, do de maior sobra para o de menor, que é o
+     * que a pergunta "qual serviço dá a maior margem?" quer saber.
+     */
+    const servicos = await margemPorServico(tenantId, pergunta.de, pergunta.ate);
+    const preco = servicos.reduce((soma, s) => soma + s.precoCents, 0);
+    const margem = servicos.reduce((soma, s) => soma + s.margemCents, 0);
+    return {
+      total: preco > 0 ? Math.round((margem / preco) * 10_000) : null,
+      fatias: [...servicos]
+        .sort((a, b) => b.margemCents - a.margemCents)
+        .map((s) => ({ rotulo: s.nome, valor: s.margemBps })),
+    };
   }
 
   return medir({

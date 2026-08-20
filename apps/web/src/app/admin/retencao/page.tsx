@@ -12,6 +12,7 @@ import {
   type ClienteEmChurnNaTela,
   type CrescimentoNaTelaDoAdmin,
 } from '@/lib/admin-api';
+import { localDate } from '@/lib/date';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
@@ -50,8 +51,17 @@ const porcento = (bps: number): string => `${(bps / 100).toFixed(1).replace('.',
 /** Quantos dias a janela cobre por padrão. */
 const JANELA_PADRAO = 90;
 
-function diaMenos(dias: number): string {
-  return new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10);
+/**
+ * A janela sai do dia **da unidade**, não do relógio do processo (bloco 114).
+ *
+ * `Date.now()` cortado no ISO é UTC: entre 21h e a meia-noite na Bahia a janela
+ * avançava um dia antes de a barbearia virar o dia, e o dono via a retenção de
+ * amanhã. É a decisão que o próprio DRE recusa em comentário — "calcular o mês
+ * nesta tela reintroduziria o defeito D2".
+ */
+function diaMenos(hoje: string, dias: number): string {
+  const base = new Date(`${hoje}T12:00:00Z`);
+  return new Date(base.getTime() - dias * 86_400_000).toISOString().slice(0, 10);
 }
 
 function Indicador({
@@ -167,6 +177,8 @@ export default async function RetencaoPage({ searchParams }: Props) {
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
+  // O dia da unidade, nunca o do processo — que em produção é UTC.
+  const hoje = localDate(estado.empresa.timezone);
   const query = await searchParams;
   void query;
 
@@ -187,7 +199,7 @@ export default async function RetencaoPage({ searchParams }: Props) {
   const [risco, crescimento] = await Promise.all([
     podeVerRisco ? churnNaApi(token) : Promise.resolve(null),
     podeVerCrescimento
-      ? crescimentoNaApi(token, diaMenos(JANELA_PADRAO), diaMenos(0))
+      ? crescimentoNaApi(token, diaMenos(hoje, JANELA_PADRAO), hoje)
       : Promise.resolve(null),
   ]);
 

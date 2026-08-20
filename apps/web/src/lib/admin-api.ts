@@ -1,4 +1,4 @@
-import type { Conversa, EstadoDeCampanha, ServiceTemplate } from '@barbearia/core';
+import type { Conversa, EstadoDeCampanha, ServiceTemplate, TipoDeCadeira } from '@barbearia/core';
 
 /**
  * Cliente da API do painel.
@@ -600,7 +600,8 @@ export const exigenciasDoServico = (
 export interface ProfissionalDoCadastro {
   id: string;
   name: string;
-  kind: 'professional' | 'station' | 'room';
+  /** Os quatro do enum `professional_kind`. `station`/`room` nunca existiram. */
+  kind: TipoDeCadeira;
   bookableOnline: boolean;
   dailyLimit: number | null;
   active: boolean;
@@ -632,7 +633,8 @@ export const definirPerfilPublicoNaApi = (
 export interface EntradaDeProfissional {
   name: string;
   bio?: string | null;
-  kind: 'professional' | 'station' | 'room';
+  /** Os quatro do enum `professional_kind`. `station`/`room` nunca existiram. */
+  kind: TipoDeCadeira;
   bookableOnline: boolean;
   dailyLimit?: number | null;
   serviceIds?: string[];

@@ -62,6 +62,19 @@ const hora = (minuto: number): string =>
   `${String(Math.floor(minuto / 60)).padStart(2, '0')}:${String(minuto % 60).padStart(2, '0')}`;
 
 /** `+10%` / `−10%`, com o sinal que a pessoa lê antes do número. */
+/**
+ * Os degraus de variação que **esta** barbearia pode escolher.
+ *
+ * De 5% em 5% até o teto da marca, nos dois sentidos. Sem o zero: uma faixa que
+ * não varia preço é uma faixa que não precisa existir.
+ */
+function degrausDaVariacao(tetoBps: number): readonly number[] {
+  const passo = 500;
+  const quantos = Math.max(1, Math.floor(tetoBps / passo));
+  const positivos = Array.from({ length: quantos }, (_, i) => (i + 1) * passo);
+  return [...positivos.map((n) => -n).reverse(), ...positivos];
+}
+
 const variacao = (bps: number): string =>
   `${bps > 0 ? '+' : '−'}${Math.abs(bps / 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 
@@ -337,8 +350,17 @@ function Formulario({ tetoBps }: { readonly tetoBps: number }) {
           <label className="ui-field__label" htmlFor="faixa-delta">
             Variação
           </label>
+          {/*
+            Os degraus saem do **teto da marca**, não de uma lista fixa (bloco 114).
+
+            A lista ia até ±15% e a dica logo abaixo dizia "nada pode passar de
+            +20%" — o teto desta barbearia, que o `CHECK` deixa ir a 50%. A
+            própria sugestão da tela propunha +20% e o formulário não conseguia
+            criar isso: duas afirmações contraditórias na mesma tela, e a
+            recomendação do produto fora do alcance do produto.
+          */}
           <select className="ui-field__input" defaultValue="-1000" id="faixa-delta" name="deltaBps">
-            {[-1500, -1000, -500, 500, 1000, 1500].map((bps) => (
+            {degrausDaVariacao(tetoBps).map((bps) => (
               <option key={bps} value={bps}>
                 {variacao(bps)}
               </option>

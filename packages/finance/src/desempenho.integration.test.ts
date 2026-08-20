@@ -164,8 +164,17 @@ describeIfDb('os números do barbeiro', () => {
     await vender({ precoCents: 3000, dia: '2026-09-01' });
 
     const meu = await numeros();
+    // A regra é a fronteira: o dia 31 é de agosto e o dia 1º é de setembro.
     expect(meu.mesAtual.faturamentoCents).toBe(3000);
-    expect(meu.mesAnterior.faturamentoCents).toBe(7000);
+
+    /**
+     * O dia 31 fica **fora** da comparação, e é a mudança do bloco 114.
+     *
+     * A janela anterior agora vai até o mesmo dia do mês — 01 a 10 de agosto —,
+     * então uma venda do dia 31 não entra. Antes ela entrava, e era isso que
+     * fazia a tela comparar dez dias de movimento contra trinta e um.
+     */
+    expect(meu.mesAnterior.faturamentoCents).toBe(0);
   });
 
   it('produto vendido é contado à parte do serviço', async () => {
@@ -342,6 +351,41 @@ describeIfDb('os números do barbeiro', () => {
     const ruan = lista.find((m) => m.professionalId === RUAN);
     expect(ruan?.metaCents).toBeNull();
     expect(ruan?.anteriorCents).toBe(900_000);
+  });
+
+  it('a comparação é até o mesmo dia dos dois lados, não mês cheio contra mês pela metade', async () => {
+    /**
+     * O mês corrente ia até o último dia do calendário e o anterior era o mês
+     * **inteiro**: no dia 10, dez dias de movimento contra trinta e um. A tela
+     * dizia ao barbeiro "−40% que o mês passado" sobre uma queda real de −5% —
+     * e o cabeçalho dela diz "agosto, **até hoje**", que é a própria tela
+     * contando as duas versões.
+     *
+     * É a SPEC §4.21 do avesso: o indicador do barbeiro se compara com o
+     * próprio passado, e comparar com um passado maior é o mesmo que comparar
+     * com o colega mais movimentado.
+     */
+    // Setembro, até o dia 10 (HOJE): uma venda.
+    await vender({ precoCents: 10_000, dia: '2026-09-05' });
+
+    // Agosto: uma venda **antes** do dia 10 e outra **depois**. Só a primeira
+    // entra na comparação honesta; com o mês inteiro, as duas entravam.
+    await vender({ precoCents: 10_000, dia: '2026-08-05' });
+    await vender({ precoCents: 90_000, dia: '2026-08-25' });
+
+    const meu = await numeros(RUAN, HOJE);
+    expect(meu.mesAtual.faturamentoCents).toBe(10_000);
+    expect(meu.mesAnterior.faturamentoCents).toBe(10_000);
+    // Mesmo movimento nos dois recortes: variação zero, e não −90%.
+    expect(meu.variacaoDoFaturamento).toBe(0);
+  });
+
+  it('quem abre a tela no dia 31 compara contra o último dia de fevereiro', async () => {
+    // O mesmo dia do mês anterior, aparado: 31 de março não tem par em
+    // fevereiro, e comparar contra uma data que não existe devolveria zero.
+    await vender({ precoCents: 7_000, dia: '2028-02-29' });
+    const meu = await numeros(RUAN, '2028-03-31');
+    expect(meu.mesAnterior.faturamentoCents).toBe(7_000);
   });
 
   it('a virada do ano acha o mês anterior', async () => {

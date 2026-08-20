@@ -183,6 +183,21 @@ function mesAnteriorDe(primeiro: string): { primeiro: string; ultimo: string } {
 }
 
 /**
+ * O mesmo dia do mês anterior, aparado ao último dia dele.
+ *
+ * Quem abre a tela em 31 de março compara contra 28 de fevereiro, e não contra
+ * uma data que não existe.
+ */
+function mesmoDiaNoAnterior(
+  anterior: { readonly primeiro: string; readonly ultimo: string },
+  diaDoMes: number,
+): string {
+  const ultimoDoAnterior = Number(anterior.ultimo.slice(8, 10));
+  const dia = Math.min(diaDoMes, ultimoDoAnterior);
+  return `${anterior.primeiro.slice(0, 8)}${String(dia).padStart(2, '0')}`;
+}
+
+/**
  * O desempenho de uma cadeira no mês de `hoje`.
  *
  * `hoje` é a data **da unidade**, não a do processo: recebida já resolvida pela
@@ -208,9 +223,29 @@ export async function desempenhoDoProfissional(params: {
       throw new MetaError('profissional_nao_encontrado', 'Profissional não encontrado.');
     }
 
+    /**
+     * Até **hoje** dos dois lados (bloco 114).
+     *
+     * O mês corrente ia até o último dia do calendário e o anterior era o mês
+     * **inteiro**: no dia 20, vinte dias de movimento contra trinta e um. A
+     * tela dizia ao barbeiro "−40% que o mês passado" sobre uma queda real de
+     * −4,7% — e o cabeçalho dela diz "agosto, **até hoje**", que é a própria
+     * tela contando as duas versões.
+     *
+     * É a SPEC §4.21 do avesso: o indicador do barbeiro se compara com o
+     * próprio passado, e comparar com um passado maior é o mesmo que comparar
+     * com o colega mais movimentado.
+     *
+     * O anterior recorta no mesmo dia do mês, com o mínimo para fevereiro e
+     * para quem abre a tela no dia 31 — é o que `mesAnteriorAte` já faz no
+     * Painel, e as duas telas passam a dizer a mesma coisa sobre o mesmo fato.
+     */
+    const ateHoje = params.hoje;
+    const ateNoAnterior = mesmoDiaNoAnterior(anterior, diaDoMes);
+
     const [doMes, doAnterior, doDia] = await Promise.all([
-      totais(tx, params.professionalId, mes.primeiro, mes.ultimo),
-      totais(tx, params.professionalId, anterior.primeiro, anterior.ultimo),
+      totais(tx, params.professionalId, mes.primeiro, ateHoje),
+      totais(tx, params.professionalId, anterior.primeiro, ateNoAnterior),
       totais(tx, params.professionalId, params.hoje, params.hoje),
     ]);
 

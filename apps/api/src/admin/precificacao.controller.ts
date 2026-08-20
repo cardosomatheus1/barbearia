@@ -168,7 +168,15 @@ export class PrecificacaoController {
       recomendacoes: recomendarPrecos({
         horas: horas.filter((h) => !jaDecidida.has(`${h.diaDaSemana}-${h.hora}`)),
         ticketMedioCents: Math.round(ticket.total ?? 0),
-        tetoBps: faixas.tetoBps || TETO_DE_VARIACAO_BPS,
+        /**
+         * `??` e não `||` (bloco 114).
+         *
+         * Teto **zero** é valor legítimo — "esta casa não varia preço" —, e o
+         * `||` o trocava por 15%: a tela passava a recomendar +15% que
+         * `precoDoHorario` apara para zero, e o dono via uma sugestão que o
+         * produto se recusa a cumprir.
+         */
+        tetoBps: faixas.tetoBps ?? TETO_DE_VARIACAO_BPS,
       }),
     };
   }

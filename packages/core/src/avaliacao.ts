@@ -53,6 +53,21 @@ export const ROTULO_DA_CATEGORIA: Readonly<Record<CategoriaDaAvaliacao, string>>
  * ok" que costuma esconder um problema concreto — é exatamente a nota que vale
  * um telefonema.
  */
+/**
+ * A nota como ela aparece na tela: uma casa, vírgula decimal.
+ *
+ * Escrita uma vez porque quatro telas a mostravam e três usavam `toFixed(1)` —
+ * ponto — enquanto a página do barbeiro usava `toLocaleString('pt-BR')` —
+ * vírgula. Duas telas exibindo a nota da mesma pessoa com formatos diferentes é
+ * a §6 pergunta 6, e o comentário daquela página já dizia isso em letras.
+ *
+ * `null` vira travessão: nota que não existe não é zero.
+ */
+export function notaExibida(media: number | null): string {
+  if (media === null) return '—';
+  return media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 export const NOTA_QUE_SEGURA: Nota = 3;
 
 /** As 48 horas da SPEC §4.10. */

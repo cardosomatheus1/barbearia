@@ -12,7 +12,7 @@ import {
   type PeriodoPainel,
 } from '@/lib/admin-api';
 import type { DestinoDoInsight } from '@barbearia/core';
-import { painelOuDesvio, podeNaTela } from '@/lib/painel';
+import { casaDoPapel, painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
@@ -211,13 +211,41 @@ export default async function PainelPage({ searchParams }: Props) {
   );
 
   if (!operacao.ok) {
+    /**
+     * Recusa por permissão não é falha de rede (bloco 114).
+     *
+     * `GET /dashboard` exige `reports.operational`, que nem a recepção nem o
+     * barbeiro têm — cinco das oito contas de equipe do piloto batem aqui. Elas
+     * liam "não deu para carregar, tente de novo" e um botão **Recarregar** que
+     * nunca ia funcionar: diagnóstico falso e saída inexistente, que é a §6
+     * pergunta 3.
+     *
+     * A tela irmã já acerta: o DRE diz "sua conta não vê o resultado da
+     * barbearia — só quem tem acesso à margem vê", e manda para onde a pessoa
+     * pode ir.
+     */
+    const semPermissao = operacao.code === 'forbidden';
     return (
       <main className="ui-container painel__conteudo" {...secao('painel')}>
         {topo}
         <h1 className="painel__titulo">Painel</h1>
         <div className="ui-alert ui-alert--warning" role="alert">
-          Não deu para carregar os números. Tente de novo.
-          <a className="ui-button ui-button--secondary painel__saida" href="/admin/painel">Recarregar</a>
+          {semPermissao ? (
+            <>
+              Sua conta não vê os números do negócio — eles são de quem acompanha o resultado da
+              barbearia.
+              <a className="ui-button ui-button--secondary painel__saida" href={casaDoPapel(estado)}>
+                Ir para a minha tela
+              </a>
+            </>
+          ) : (
+            <>
+              Não deu para carregar os números. Tente de novo.
+              <a className="ui-button ui-button--secondary painel__saida" href="/admin/painel">
+                Recarregar
+              </a>
+            </>
+          )}
         </div>
       </main>
     );
@@ -243,10 +271,21 @@ export default async function PainelPage({ searchParams }: Props) {
    * não sabe qual dos dois responder primeiro.
    */
   const alertas: Array<{ selo: string; titulo: string; texto: string; href: string; acao: string; tom: 'aviso' | 'grave' | 'ok' }> = [];
+  /**
+   * O número **do período**, sob um título que diz "de hoje" (bloco 114).
+   *
+   * A seção chama-se "Sinais de hoje" e o alerta trazia a falta do período
+   * selecionado: com `periodo=mes`, a tela mostrava "Hoje → 33% Faltas" logo
+   * acima de "Faltas estão em 7% no período". Duas porcentagens de falta
+   * adjacentes, uma delas sob um cabeçalho que a contradiz.
+   *
+   * O alerta é do período — é ele que tem massa para dizer alguma coisa —, e o
+   * texto passa a dizer qual período é, em vez de o cabeçalho decidir por ele.
+   */
   if (operacao.dados.noShow.valor >= 7) {
     alertas.push({
       selo: 'Atenção',
-      titulo: `Faltas estão em ${operacao.dados.noShow.valor}% no período`,
+      titulo: `Faltas ${periodo === 'dia' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : 'no mês, até hoje'}: ${operacao.dados.noShow.valor}%`,
       texto: 'Revise confirmações e lembretes dos próximos horários para proteger a ocupação.',
       href: '/admin/avisos',
       acao: 'Ver lembretes',

@@ -32,6 +32,23 @@ export const STATUSES = [
 
 export type AppointmentStatus = (typeof STATUSES)[number];
 
+/**
+ * Os tipos de cadeira, iguais ao enum `professional_kind` do banco.
+ *
+ * A borda aceitava `station` e `room`, que não existem no enum: escolher
+ * "Estação" na tela respondia 500, porque o domínio faz
+ * `${input.kind}::professional_kind`. Não havia como cadastrar uma cadeira que
+ * não fosse profissional — e por isso o defeito D12, o balcão contado como
+ * cadeira no relatório de ocupação, estava inalcançável em vez de consertado.
+ *
+ * `counter` é o balcão da recepção; `resource_only` é sala ou lavatório;
+ * `external` é quem atende fora. Nenhum dos três é cadeira para efeito de
+ * receita por cadeira ou de hora aberta.
+ */
+export const TIPOS_DE_CADEIRA = ['professional', 'counter', 'resource_only', 'external'] as const;
+
+export type TipoDeCadeira = (typeof TIPOS_DE_CADEIRA)[number];
+
 /** O que o balcão pode fazer com um atendimento. Fechada, pelo mesmo motivo. */
 export const ACOES = [
   'confirm',

@@ -129,8 +129,15 @@ export async function crescimentoDaCasa(params: {
           WHERE o.status = 'paid' AND o.customer_id IS NOT NULL
             AND o.business_day BETWEEN ${de}::date AND ${ate}::date
             AND (${unidade}::uuid IS NULL OR o.location_id = ${unidade}::uuid))::bigint AS pagantes,
+        -- Cadeira é do tipo profissional, não qualquer linha da tabela.
+        --
+        -- O balcão da recepção e a sala de lavatório também moram nesta tabela,
+        -- e contá-los como cadeira é o defeito D12 da SPEC §1.4 — "dois dos
+        -- quatro profissionais eram contas de balcão com jornada 08:00–23:00, e
+        -- isso destruía qualquer relatório de ocupação". O resto do produto já
+        -- filtrava; estas duas consultas não.
         (SELECT count(*) FROM professionals p
-          WHERE p.active
+          WHERE p.active AND p.kind = 'professional'
             AND (${unidade}::uuid IS NULL OR p.location_id = ${unidade}::uuid))::bigint AS cadeiras
     `;
 
@@ -153,6 +160,7 @@ export async function crescimentoDaCasa(params: {
         FROM generate_series(${de}::date, ${ate}::date, interval '1 day') AS d
         JOIN work_schedules w ON w.weekday = EXTRACT(DOW FROM d)::int
         JOIN professionals p ON p.id = w.professional_id AND p.active
+                            AND p.kind = 'professional'
        WHERE (${unidade}::uuid IS NULL OR p.location_id = ${unidade}::uuid)
     `;
 

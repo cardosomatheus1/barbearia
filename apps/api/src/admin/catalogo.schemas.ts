@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { ESPECIALIDADES, MAXIMO_DE_ESPECIALIDADES } from '@barbearia/core';
+import { ESPECIALIDADES, MAXIMO_DE_ESPECIALIDADES,
+  TIPOS_DE_CADEIRA,
+} from '@barbearia/core';
 
 /**
  * Entrada do CRUD do admin, validada na borda.
@@ -69,7 +71,19 @@ export const activeSchema = z.object({ active: z.boolean() });
 export const professionalSchema = z.object({
   name: z.string().trim().min(2).max(80),
   bio: z.string().trim().max(600).nullish(),
-  kind: z.enum(['professional', 'station', 'room']),
+  /**
+   * Os quatro do enum, e não três nomes inventados (bloco 114).
+   *
+   * A borda aceitava `station` e `room`; `professional_kind` tem
+   * `professional`, `counter`, `resource_only` e `external`. O domínio faz
+   * `${input.kind}::professional_kind`, então escolher "Estação" na tela
+   * respondia **500** — não havia como cadastrar uma cadeira que não fosse
+   * profissional, e por isso o defeito D12 (balcão contado como cadeira nos
+   * relatórios) nunca doía: ele estava inalcançável.
+   *
+   * A lista sai do domínio, como toda lista fechada deste código.
+   */
+  kind: z.enum(TIPOS_DE_CADEIRA as unknown as [string, ...string[]]),
   bookableOnline: z.boolean(),
   dailyLimit: z.number().int().min(1).max(100).nullish(),
   serviceIds: z.array(idSchema).max(200).optional(),

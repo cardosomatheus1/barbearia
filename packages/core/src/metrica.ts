@@ -102,7 +102,16 @@ export const METRICAS = [
     unidade: 'centavos',
     exige: ['finance.view'],
     dimensoes: ['nenhuma', 'profissional', 'unidade'],
-    tela: '/admin/financeiro',
+    /**
+     * O Painel, e não Contas (bloco 114).
+     *
+     * `/admin/financeiro` chama-se **Contas** desde o bloco 103 e mostra o que a
+     * casa deve e tem a receber — não há faturamento nem ticket ali. O dono
+     * clicava em "Conferir na tela", não encontrava o número e concluía que um
+     * dos dois erra. A SPEC §4.15 pede o link para onde o número **pode ser
+     * conferido**, que é o que impede o assistente de virar oráculo.
+     */
+    tela: '/admin/painel',
     subirEBom: true,
   },
   {
@@ -112,7 +121,7 @@ export const METRICAS = [
     unidade: 'centavos',
     exige: ['finance.view'],
     dimensoes: ['nenhuma', 'profissional', 'unidade'],
-    tela: '/admin/financeiro',
+    tela: '/admin/painel',
     subirEBom: true,
   },
   {
@@ -197,7 +206,11 @@ export const METRICAS = [
      */
     exige: ['finance.view_profit'],
     dimensoes: ['nenhuma', 'servico'],
-    tela: '/admin/dre',
+    /**
+     * Estoque, e não o DRE: é lá que "O que sobra de cada serviço" está
+     * desenhado, pela mesma `margemPorServico` que responde esta pergunta.
+     */
+    tela: '/admin/estoque',
     subirEBom: true,
   },
 ] as const satisfies readonly DefinicaoDeMetrica[];

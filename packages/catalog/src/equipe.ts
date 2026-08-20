@@ -5,6 +5,7 @@ import {
   instantToLocal,
   MAXIMO_DE_ESPECIALIDADES,
   slugDoBarbeiro,
+  type TipoDeCadeira,
 } from '@barbearia/core';
 import { CatalogError, exigirServicosDoTenant } from './servicos.js';
 
@@ -121,7 +122,8 @@ export interface ProfessionalInput {
    * "profissionais" eram contas de balcão com jornada 08:00–23:00, e isso
    * destruía qualquer relatório de ocupação.
    */
-  readonly kind: 'professional' | 'station' | 'room';
+  /** Os quatro do enum `professional_kind`. `station`/`room` nunca existiram nele. */
+  readonly kind: TipoDeCadeira;
   readonly bookableOnline: boolean;
   readonly dailyLimit?: number | null;
   /** Serviços que executa. Vazio significa "faz tudo" e é gravado como tudo. */
