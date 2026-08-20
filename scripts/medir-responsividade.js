@@ -2946,6 +2946,35 @@ async function main() {
         ]
       : []),
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    {
+      /**
+       * A etapa 2 **preenchida** (bloco 111).
+       *
+       * `/admin/onboarding` sem parâmetro mostra a etapa 6 — a barbearia da
+       * medição está publicada —, então a tela que este bloco mudou não
+       * aparecia em largura nenhuma. É a regra da semente que produz o estado
+       * novo: sem ela, o print é da tela de antes e a medição diz "ok" sobre o
+       * que ninguém olhou.
+       *
+       * E é a tela real do caso: quem volta para corrigir o endereço chega
+       * exatamente aqui, com a casa já no ar.
+       */
+      nome: 'onboarding — empresa',
+      url: '/admin/onboarding?e=2',
+      cookie: { nome: 'gestor', valor: token, caminho: '/admin' },
+    },
+    {
+      /**
+       * A etapa que **não desenha formulário** depois de a casa abrir.
+       *
+       * O domínio recusa desde o bloco 111, e recusar sozinho não basta:
+       * oferecer o botão e depois negar é pior que não oferecer. O print é de
+       * onde a pessoa cai, com para onde ir em seguida.
+       */
+      nome: 'onboarding — já no ar',
+      url: '/admin/onboarding?e=3',
+      cookie: { nome: 'gestor', valor: token, caminho: '/admin' },
+    },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'privacidade (LGPD)', url: '/admin/lgpd', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

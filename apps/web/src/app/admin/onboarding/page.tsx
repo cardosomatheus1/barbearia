@@ -79,6 +79,32 @@ export default async function OnboardingPage({ searchParams }: Props) {
 
   const templates = passo === 3 ? await templatesDeServico(token) : null;
 
+  /**
+   * O cadastro que já existe, para a etapa 2 **vir preenchida** (bloco 111).
+   *
+   * Ela nasceu formulário de cadastro e continuou formulário de cadastro: só o
+   * nome vinha preenchido, e o fuso vinha fixo em São Paulo. Voltar para
+   * corrigir o telefone mandava tudo o mais em branco — e do outro lado o
+   * domínio gravava branco. Agora o domínio preserva o ausente, e a tela mostra
+   * o que a pessoa está prestes a mudar, que é o que uma tela de edição faz.
+   */
+  const empresa = estado.dados.empresa;
+
+  /**
+   * Depois de a casa abrir, as etapas 3 e 4 não desenham formulário.
+   *
+   * Elas **substituem** o catálogo e a equipe inteiros — certo para quem está
+   * montando, destruição a partir do dia seguinte. O domínio passou a recusar
+   * (`ja_publicada`), e recusar sozinho não bastava: a tela continuava
+   * oferecendo o botão, e o que a pessoa recebia era um erro depois de escolher
+   * oito serviços. Oferecer e recusar é pior que não oferecer.
+   *
+   * A etapa 2 continua aberta de propósito: ela é a **única** tela desse
+   * cadastro, e é para onde quem quer corrigir o endereço precisa chegar.
+   */
+  const noAr = estado.dados.publishedAt !== null;
+  const substitui = noAr && (passo === 3 || passo === 4);
+
   return (
     <main className="ui-container painel__conteudo" {...secao('onboarding')}>
       <header className="painel__topo">
@@ -128,28 +154,30 @@ export default async function OnboardingPage({ searchParams }: Props) {
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="street">Endereço</label>
             <input className="ui-field__input" id="street" name="street" maxLength={160}
-                   placeholder="Rua Ceará, 120" />
+                   defaultValue={empresa.street ?? ''} placeholder="Rua Ceará, 120" />
           </div>
           <div className="painel__dupla">
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="district">Bairro</label>
-              <input className="ui-field__input" id="district" name="district" maxLength={80} />
+              <input className="ui-field__input" id="district" name="district" maxLength={80}
+                     defaultValue={empresa.district ?? ''} />
             </div>
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="city">Cidade</label>
-              <input className="ui-field__input" id="city" name="city" maxLength={80} />
+              <input className="ui-field__input" id="city" name="city" maxLength={80}
+                     defaultValue={empresa.city ?? ''} />
             </div>
           </div>
           <div className="painel__dupla">
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="state">UF</label>
               <input className="ui-field__input" id="state" name="state" maxLength={2}
-                     placeholder="BA" />
+                     defaultValue={empresa.state ?? ''} placeholder="BA" />
             </div>
             <div className="ui-field">
               <label className="ui-field__label" htmlFor="timezone">Fuso horário</label>
               <select className="ui-field__input" id="timezone" name="timezone"
-                      defaultValue="America/Sao_Paulo">
+                      defaultValue={empresa.timezone}>
                 <option value="America/Sao_Paulo">Brasília (SP, RJ, MG…)</option>
                 <option value="America/Bahia">Bahia</option>
                 <option value="America/Fortaleza">Ceará, PI, RN, PB, PE, AL, SE</option>
@@ -182,6 +210,7 @@ export default async function OnboardingPage({ searchParams }: Props) {
                 Telefone <span className="ui-field__hint">(opcional)</span>
               </label>
               <input className="ui-field__input" id="phone" inputMode="tel" maxLength={24}
+                     defaultValue={empresa.phone ?? ''}
                      name="phone" placeholder="(71) 3333-4444" type="tel" />
               <p className="ui-field__hint">Aparece na página como botão de ligar. Fixo serve.</p>
             </div>
@@ -190,20 +219,44 @@ export default async function OnboardingPage({ searchParams }: Props) {
                 WhatsApp <span className="ui-field__hint">(opcional)</span>
               </label>
               <input className="ui-field__input" id="whatsapp" inputMode="tel" maxLength={24}
+                     defaultValue={empresa.whatsapp ?? ''}
                      name="whatsapp" placeholder="(71) 99999-0000" type="tel" />
             </div>
           </div>
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="instagram">Instagram</label>
             <input className="ui-field__input" id="instagram" name="instagram" maxLength={80}
-                   placeholder="@domaribarber" />
+                   defaultValue={empresa.instagram ?? ''} placeholder="@domaribarber" />
           </div>
+          {/*
+            O texto que a página pública mostra, e que não tinha por onde ser
+            escrito. `locations.about` existia, o perfil público o desenha e
+            **nenhuma tela o preenchia** — é o defeito de `blocks` de novo, e o
+            de `phone_e164` que este mesmo formulário já pagou uma vez.
+          */}
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="about">Sobre a barbearia</label>
+            <textarea className="ui-field__input" id="about" name="about" maxLength={600} rows={3}
+                      defaultValue={empresa.about ?? ''}
+                      placeholder="Barbearia de bairro na Pituba desde 2016. Corte clássico, navalha e barba." />
+            <p className="ui-field__hint">Aparece na sua página, abaixo do nome.</p>
+          </div>
+
           <fieldset className="painel__grupo">
             <legend className="ui-field__label">A barbearia tem</legend>
             <div className="painel__marcas">
               {COMODIDADES.map((valor) => (
                 <label className="marca" key={valor}>
-                  <input type="checkbox" name="amenities" value={valor} />
+                  {/*
+                    Marcada é obrigatório aqui, e não enfeite: `amenities` é o
+                    único campo que o domínio grava de forma absoluta — a tela
+                    manda a lista inteira das caixas, e desmarcar todas é uma
+                    decisão. Sem o `defaultChecked`, abrir a tela já era
+                    desmarcar tudo, e "Continuar" apagava as cinco comodidades
+                    que a página pública mostra.
+                  */}
+                  <input type="checkbox" name="amenities" value={valor}
+                         defaultChecked={empresa.amenities.includes(valor)} />
                   <span>{ROTULO_DA_COMODIDADE[valor]}</span>
                 </label>
               ))}
@@ -216,7 +269,36 @@ export default async function OnboardingPage({ searchParams }: Props) {
         </form>
       ) : null}
 
-      {passo === 3 && templates?.ok ? (
+      {substitui ? (
+        <section aria-labelledby="t">
+          <h1 className="painel__titulo" id="t">
+            {passo === 3 ? 'Seus serviços' : 'Sua equipe'}
+          </h1>
+          <div className="ui-alert ui-alert--warning painel__aviso" role="status">
+            Esta etapa monta o cadastro do primeiro dia — ela substitui{' '}
+            {passo === 3 ? 'o cardápio inteiro' : 'a equipe inteira'}, e sua barbearia já está no
+            ar. O que já foi vendido aponta para o cadastro atual.
+          </div>
+          <p className="painel__sub">
+            {passo === 3
+              ? 'Para mudar preço, duração ou acrescentar um serviço, use o Catálogo — lá a edição é por item e não desfaz nada.'
+              : 'Para acrescentar, editar ou desligar uma cadeira, use Profissionais — lá a edição é por pessoa e a agenda dela continua de pé.'}
+          </p>
+          <div className="painel__acoes">
+            <a
+              className="ui-button ui-button--primary"
+              href={passo === 3 ? '/admin/catalogo' : '/admin/profissionais'}
+            >
+              {passo === 3 ? 'Abrir o Catálogo' : 'Abrir Profissionais'}
+            </a>
+            <a className="ui-button ui-button--secondary" href="/admin/onboarding">
+              Voltar
+            </a>
+          </div>
+        </section>
+      ) : null}
+
+      {!substitui && passo === 3 && templates?.ok ? (
         <form action={acaoServicos} className="formulario" aria-labelledby="t">
           <h1 className="painel__titulo" id="t">O que você faz</h1>
           <p className="painel__sub">
@@ -261,7 +343,7 @@ export default async function OnboardingPage({ searchParams }: Props) {
         </form>
       ) : null}
 
-      {passo === 4 ? (
+      {!substitui && passo === 4 ? (
         <form action={acaoProfissionais} className="formulario" aria-labelledby="t">
           <h1 className="painel__titulo" id="t">Quem atende</h1>
           <p className="painel__sub">

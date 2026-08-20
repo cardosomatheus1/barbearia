@@ -31,6 +31,7 @@ export interface EnvioRegistrado {
 
 export async function lerPreferenciasDeAviso(
   tenantId: string,
+  locationId: string,
 ): Promise<PreferenciasDeAviso | null> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
@@ -44,7 +45,7 @@ export async function lerPreferenciasDeAviso(
     >`
       SELECT notify_confirmation, notify_reminder_24h, notify_reminder_2h,
              notify_comeback, comeback_after_days
-        FROM locations ORDER BY created_at LIMIT 1
+        FROM locations WHERE id = ${locationId}::uuid
     `;
     const unidade = linhas[0];
     if (!unidade) return null;
@@ -61,6 +62,7 @@ export async function lerPreferenciasDeAviso(
 
 export async function salvarPreferenciasDeAviso(
   tenantId: string,
+  locationId: string,
   input: PreferenciasDeAviso,
   agora: Date = new Date(),
 ): Promise<void> {
@@ -73,6 +75,7 @@ export async function salvarPreferenciasDeAviso(
         notify_comeback = ${input.retorno},
         comeback_after_days = ${input.diasParaRetorno},
         updated_at = now()
+      WHERE id = ${locationId}::uuid
     `;
 
     // Ligar a mensagem de retorno é o que **cria** a varredura. Sem isto o

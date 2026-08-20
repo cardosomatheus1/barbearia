@@ -110,7 +110,11 @@ export class ProController {
   @Get('goals')
   async metas(@Staff() staff: AuthenticatedStaff) {
     const hoje = await this.hoje(staff);
-    return { mes: `${hoje.slice(0, 7)}-01`, metas: await metasDoMes({ tenantId: staff.tenantId, mes: hoje }) };
+    const local = await unidadeDoBalcao(staff);
+    return {
+      mes: `${hoje.slice(0, 7)}-01`,
+      metas: await metasDoMes({ tenantId: staff.tenantId, locationId: local.id, mes: hoje }),
+    };
   }
 
   @Exige('settings.manage')
@@ -121,8 +125,10 @@ export class ProController {
     body: { professionalId: string; mes: string; metaCents: number | null },
   ) {
     try {
+      const local = await unidadeDoBalcao(staff);
       await salvarMeta({
         tenantId: staff.tenantId,
+        locationId: local.id,
         professionalId: body.professionalId,
         mes: body.mes,
         metaCents: body.metaCents,

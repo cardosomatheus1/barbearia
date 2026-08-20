@@ -190,8 +190,19 @@ export async function createProfessional(
   });
 }
 
+/**
+ * A cadeira é **da unidade**, e é o `location_id` que diz isso.
+ *
+ * A RLS separa barbearias e não separa lojas dentro de uma: com o filtro só por
+ * `id`, o gerente escopado a uma filial reescrevia a cadeira da matriz mandando
+ * o id alheio — e o id dela sai **anônimo** na página pública, em
+ * `professionalIds`. `definirPerfilPublico`, no mesmo arquivo, já fazia certo
+ * desde o bloco 73; as outras cinco funções que recebem `professionalId`
+ * ficaram para trás. É o mesmo do 58, do 68 e do 71.
+ */
 export async function updateProfessional(
   tenantId: string,
+  locationId: string,
   professionalId: string,
   input: ProfessionalInput,
 ): Promise<void> {
@@ -204,7 +215,7 @@ export async function updateProfessional(
         bookable_online = ${input.bookableOnline},
         daily_limit = ${input.dailyLimit ?? null},
         updated_at = now()
-      WHERE id = ${professionalId}::uuid
+      WHERE id = ${professionalId}::uuid AND location_id = ${locationId}::uuid
     `;
     if (afetadas === 0) {
       throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
@@ -317,15 +328,21 @@ export interface FaixaDoDia {
 
 export async function getSchedule(
   tenantId: string,
+  locationId: string,
   professionalId: string,
 ): Promise<readonly FaixaDoDia[]> {
   return withTenant(tenantId, async (tx) => {
+    // A jornada é de uma cadeira, e a cadeira é de uma loja: sem o `JOIN`, o
+    // gerente da filial lia a agenda inteira de um barbeiro da matriz.
     const linhas = await tx.$queryRaw<
       { weekday: number; start_minute: number; end_minute: number; breaks: unknown }[]
     >`
-      SELECT weekday, start_minute, end_minute, breaks
-      FROM work_schedules WHERE professional_id = ${professionalId}::uuid
-      ORDER BY weekday, start_minute
+      SELECT w.weekday, w.start_minute, w.end_minute, w.breaks
+      FROM work_schedules w
+      JOIN professionals p ON p.id = w.professional_id
+      WHERE w.professional_id = ${professionalId}::uuid
+        AND p.location_id = ${locationId}::uuid
+      ORDER BY w.weekday, w.start_minute
     `;
 
     return linhas.map((linha) => ({
@@ -362,6 +379,20 @@ export interface ForaDaJornada {
  */
 export async function conflitosDaJornada(params: {
   readonly tenantId: string;
+  /**
+   * A unidade da sessão, e ela é a **primeira** porta do handler.
+   *
+   * `conflitosDaJornada` roda antes de `saveSchedule` e devolve **nome de
+   * cliente** com hora marcada. Sem o recorte, o gerente escopado a uma filial
+   * mandava a jornada vazia para a cadeira de um barbeiro da matriz — id que
+   * sai anônimo na página pública — e recebia a agenda futura inteira dele,
+   * com nome de quem marcou. A gravação era recusada; o vazamento acontecia
+   * antes dela, e era o próprio objeto de retorno.
+   *
+   * Achado da `/security-review` deste bloco: seis funções foram escopadas e
+   * esta era a sétima, no mesmo `try` das outras duas.
+   */
+  readonly locationId: string;
   readonly professionalId: string;
   readonly faixas: readonly FaixaDoDia[];
   readonly now?: Date;
@@ -373,7 +404,10 @@ export async function conflitosDaJornada(params: {
       SELECT l.timezone FROM locations l
       JOIN professionals p ON p.location_id = l.id
       WHERE p.id = ${params.professionalId}::uuid
+        AND l.id = ${params.locationId}::uuid
     `;
+    // Vazio aqui é "não é sua cadeira" ou "não existe" — e `saveSchedule`, logo
+    // adiante, recusa com a mensagem de inexistente nos dois casos.
     const timezone = unidades[0]?.timezone;
     if (!timezone) return [];
 
@@ -443,12 +477,17 @@ export async function conflitosDaJornada(params: {
  */
 export async function saveSchedule(params: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly professionalId: string;
   readonly faixas: readonly FaixaDoDia[];
 }): Promise<void> {
   await withTenant(params.tenantId, async (tx) => {
+    // O `DELETE` abaixo apaga a jornada inteira da pessoa. Conferir a unidade
+    // aqui é o que impede que ele apague a de outra loja.
     const existe = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM professionals WHERE id = ${params.professionalId}::uuid
+      SELECT id FROM professionals
+       WHERE id = ${params.professionalId}::uuid
+         AND location_id = ${params.locationId}::uuid
     `;
     if (!existe[0]) {
       throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
@@ -488,6 +527,7 @@ export async function saveSchedule(params: {
  */
 export async function setProfessionalActive(params: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly professionalId: string;
   readonly active: boolean;
   readonly now?: Date;
@@ -497,7 +537,7 @@ export async function setProfessionalActive(params: {
   return withTenant(params.tenantId, async (tx) => {
     const afetadas = await tx.$executeRaw`
       UPDATE professionals SET active = ${params.active}, updated_at = now()
-      WHERE id = ${params.professionalId}::uuid
+      WHERE id = ${params.professionalId}::uuid AND location_id = ${params.locationId}::uuid
     `;
     if (afetadas === 0) {
       throw new CatalogError('professional_not_found', 'Profissional não encontrado.');

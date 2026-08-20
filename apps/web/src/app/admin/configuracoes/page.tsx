@@ -36,7 +36,41 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
    */
   const resposta = await politicasDaCasa(token);
   const vitrine = await vitrineDaCasa(token);
-  const politicas = resposta.ok ? resposta.dados : null;
+
+  /**
+   * Leitura que falhou **não** desenha o formulário (bloco 111).
+   *
+   * Sem isto, a tela caía nos padrões de fábrica sem avisar — teto de desconto
+   * 20%, sinal fixo R$ 20, escopo de fiado "empresa" — e `acaoJanela` submete
+   * **todos** os campos, inclusive os que a pessoa não tocou. Um soluço da API
+   * e um clique em Salvar para corrigir o prazo de cancelamento zeravam o teto
+   * de desconto da casa e desligavam a exigência de sinal, em silêncio.
+   *
+   * É o que `/admin/precos` já faz certo. Aqui a recusa por permissão e a falha
+   * de rede recebem o mesmo tratamento de propósito: as duas significam "não
+   * sei o que está configurado", e é isso que a tela não pode esconder.
+   */
+  if (!resposta.ok) {
+    const semPermissao = resposta.code === 'forbidden';
+    return (
+      <main className="ui-container painel__conteudo" {...secao('configuracoes')}>
+        <header className="painel__topo">
+          <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
+        </header>
+        <h1 className="painel__titulo">Configurações</h1>
+        <div className="ui-alert ui-alert--warning" role="alert">
+          {semPermissao
+            ? 'Você não tem permissão para ver esta tela. Fale com o dono.'
+            : 'Não deu para ler as configurações da barbearia, e por isso o formulário não abre — salvar agora gravaria valores de fábrica por cima dos seus.'}
+          <p className="painel__nota">
+            <a href="/admin/configuracoes">Tentar de novo</a>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  const politicas = resposta.dados;
 
   /**
    * As recusas só são buscadas quando a regra está ligada (bloco 60).
@@ -46,7 +80,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
    * ausente, e ele ocupa espaço prometendo uma resposta que não vem.
    */
   const recusas =
-    politicas?.onlineBlockScore !== null && politicas?.onlineBlockScore !== undefined
+    politicas.onlineBlockScore !== null
       ? await recusasOnlineNaApi(token)
       : null;
   const query = await searchParams;
@@ -154,7 +188,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           </label>
           <input className="ui-field__input tabular" id="rescheduleMinHours" name="rescheduleMinHours"
                  type="number" min={0} max={720}
-                 defaultValue={politicas?.rescheduleMinHours ?? 2} />
+                 defaultValue={politicas.rescheduleMinHours} />
           <p className="ui-field__hint">
             Costuma ser mais folgado que o cancelamento: remarcar preserva a sua receita.
           </p>
@@ -166,7 +200,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           </label>
           <input className="ui-field__input tabular" id="maxReschedules" name="maxReschedules"
                  type="number" min={0} max={50}
-                 defaultValue={politicas?.maxReschedules ?? 2} />
+                 defaultValue={politicas.maxReschedules} />
         </div>
 
         {/*
@@ -185,7 +219,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           </label>
           <input className="ui-field__input tabular" id="maxDiscountPercent"
                  name="maxDiscountPercent" type="number" min={0} max={100}
-                 defaultValue={Math.round((politicas?.maxDiscountBps ?? 2000) / 100)} />
+                 defaultValue={Math.round((politicas.maxDiscountBps) / 100)} />
           <p className="ui-field__hint">
             Em por cento do subtotal. Quem dá desconto precisa da permissão
             &ldquo;dar desconto&rdquo;; este número é o limite dela. Zero desliga o desconto.
@@ -209,7 +243,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           </label>
           <select
             className="ui-field__input"
-            defaultValue={politicas?.creditScope ?? 'empresa'}
+            defaultValue={politicas.creditScope}
             id="creditScope"
             name="creditScope"
           >
@@ -237,7 +271,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           <input
             className="ui-field__input tabular"
             defaultValue={
-              politicas?.onlineBlockScore === null || politicas?.onlineBlockScore === undefined
+              politicas.onlineBlockScore === null
                 ? ''
                 : faltasDoLimiar(politicas.onlineBlockScore)
             }
@@ -282,7 +316,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
 
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="depositMode">Como cobrar</label>
-            <select className="ui-field__input" defaultValue={politicas?.deposit.mode ?? 'nenhum'}
+            <select className="ui-field__input" defaultValue={politicas.deposit.mode}
                     id="depositMode" name="depositMode">
               <option value="nenhum">Não cobrar sinal</option>
               <option value="fixo">Valor fixo</option>
@@ -297,7 +331,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             </label>
             <input className="ui-field__input tabular" id="depositFixed" name="depositFixed"
                    type="number" min={0} max={10000} step={1}
-                   defaultValue={Math.round((politicas?.deposit.fixedCents ?? 2000) / 100)} />
+                   defaultValue={Math.round((politicas.deposit.fixedCents) / 100)} />
             <p className="ui-field__hint">Vale quando você escolhe &ldquo;valor fixo&rdquo;.</p>
           </div>
 
@@ -307,7 +341,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             </label>
             <input className="ui-field__input tabular" id="depositPercent" name="depositPercent"
                    type="number" min={0} max={100}
-                   defaultValue={Math.round((politicas?.deposit.percentBps ?? 3000) / 100)} />
+                   defaultValue={Math.round((politicas.deposit.percentBps) / 100)} />
             <p className="ui-field__hint">Vale quando você escolhe &ldquo;percentual&rdquo;.</p>
           </div>
 
@@ -317,7 +351,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             </label>
             <input className="ui-field__input tabular" id="depositThreshold" name="depositThreshold"
                    type="number" min={1} max={10}
-                   defaultValue={faltasDoLimiar(politicas?.deposit.scoreThreshold ?? 60)} />
+                   defaultValue={faltasDoLimiar(politicas.deposit.scoreThreshold)} />
             {/*
               O número na tela é falta em dez, não "score".
 
@@ -337,7 +371,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             </label>
             <input className="ui-field__input tabular" id="depositTicketOver"
                    name="depositTicketOver" type="number" min={0} max={100000}
-                   defaultValue={Math.round((politicas?.deposit.ticketOverCents ?? 0) / 100)} />
+                   defaultValue={Math.round((politicas.deposit.ticketOverCents ?? 0) / 100)} />
             <p className="ui-field__hint">
               Para a reserva grande — quatro serviços num sábado. Zero desliga. Aqui o risco
               não é a pessoa, é o tamanho da reserva.
@@ -350,7 +384,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             </label>
             <input className="ui-field__input tabular" id="depositRefundHours"
                    name="depositRefundHours" type="number" min={0} max={720}
-                   defaultValue={politicas?.deposit.refundHours ?? 24} />
+                   defaultValue={politicas.deposit.refundHours} />
             <p className="ui-field__hint">
               É diferente do prazo de cancelamento acima: um diz se dá para desmarcar, este diz
               se o dinheiro volta.
@@ -380,14 +414,14 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
 
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="dpoName">Nome</label>
-            <input className="ui-field__input" defaultValue={politicas?.dpoName ?? ''}
+            <input className="ui-field__input" defaultValue={politicas.dpoName ?? ''}
                    id="dpoName" maxLength={120} name="dpoName" type="text"
                    placeholder="Marcos Andrade" />
           </div>
 
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="dpoEmail">E-mail</label>
-            <input className="ui-field__input" defaultValue={politicas?.dpoEmail ?? ''}
+            <input className="ui-field__input" defaultValue={politicas.dpoEmail ?? ''}
                    id="dpoEmail" maxLength={160} name="dpoEmail" type="email"
                    placeholder="contato@suabarbearia.com.br" />
           </div>

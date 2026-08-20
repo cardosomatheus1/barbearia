@@ -253,6 +253,15 @@ export interface MetaDoMes {
 /** As metas do mês, com a sugestão do mês passado. */
 export async function metasDoMes(params: {
   readonly tenantId: string;
+  /**
+   * A unidade da sessão, pelo mesmo motivo de `salvarMeta`.
+   *
+   * A gravação foi escopada e a leitura ficou: o gerente da filial via o nome e
+   * a meta de faturamento de todo barbeiro da matriz, e a tela listava cadeiras
+   * cujo botão de salvar responde "profissional não encontrado" (§6, pergunta
+   * 6, dentro de uma tela só).
+   */
+  readonly locationId: string;
   readonly mes: string;
 }): Promise<readonly MetaDoMes[]> {
   const { primeiro } = limitesDoMes(params.mes);
@@ -275,6 +284,7 @@ export async function metasDoMes(params: {
                AS anterior_cents
         FROM professionals p
        WHERE p.active AND p.kind = 'professional'
+         AND p.location_id = ${params.locationId}::uuid
        ORDER BY p.name
     `;
 
@@ -301,6 +311,11 @@ export async function metasDoMes(params: {
  */
 export async function salvarMeta(params: {
   readonly tenantId: string;
+  /**
+   * A unidade da sessão. A RLS separa barbearias e não separa lojas: sem ela, o
+   * gerente da filial definia a meta do mês de um barbeiro da matriz.
+   */
+  readonly locationId: string;
   readonly professionalId: string;
   readonly mes: string;
   readonly metaCents: number | null;
@@ -310,7 +325,9 @@ export async function salvarMeta(params: {
 
   await withTenant(params.tenantId, async (tx) => {
     const existe = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM professionals WHERE id = ${params.professionalId}::uuid
+      SELECT id FROM professionals
+       WHERE id = ${params.professionalId}::uuid
+         AND location_id = ${params.locationId}::uuid
     `;
     if (!existe[0]) {
       throw new MetaError('profissional_nao_encontrado', 'Profissional não encontrado.');

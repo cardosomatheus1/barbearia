@@ -185,7 +185,8 @@ export class CatalogoController {
     @Body(new ZodValidationPipe(professionalSchema)) body: ProfessionalInput,
   ) {
     try {
-      await updateProfessional(staff.tenantId, id, body);
+      const local = await this.unidade(staff);
+      await updateProfessional(staff.tenantId, local.id, id, body);
       return { updated: true };
     } catch (error) {
       return toHttp(error);
@@ -229,8 +230,10 @@ export class CatalogoController {
     @Body(new ZodValidationPipe(activeSchema)) body: { active: boolean },
   ) {
     try {
+      const local = await this.unidade(staff);
       const resultado = await setProfessionalActive({
         tenantId: staff.tenantId,
+        locationId: local.id,
         professionalId: id,
         active: body.active,
       });
@@ -246,7 +249,8 @@ export class CatalogoController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(idSchema)) id: string,
   ) {
-    return { faixas: await getSchedule(staff.tenantId, id) };
+    const local = await this.unidade(staff);
+    return { faixas: await getSchedule(staff.tenantId, local.id, id) };
   }
 
   /**
@@ -271,8 +275,10 @@ export class CatalogoController {
     body: { faixas: FaixaDoDia[]; confirmarConflitos: boolean },
   ) {
     try {
+      const local = await this.unidade(staff);
       const conflitos = await conflitosDaJornada({
         tenantId: staff.tenantId,
+        locationId: local.id,
         professionalId: id,
         faixas: body.faixas,
       });
@@ -281,7 +287,12 @@ export class CatalogoController {
         return { saved: false, conflitos };
       }
 
-      await saveSchedule({ tenantId: staff.tenantId, professionalId: id, faixas: body.faixas });
+      await saveSchedule({
+        tenantId: staff.tenantId,
+        locationId: local.id,
+        professionalId: id,
+        faixas: body.faixas,
+      });
       return { saved: true, conflitos };
     } catch (error) {
       return toHttp(error);

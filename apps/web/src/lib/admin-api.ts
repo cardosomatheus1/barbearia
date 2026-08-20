@@ -80,6 +80,20 @@ export const sairDoGestor = (token: string) =>
 export interface EstadoOnboarding {
   tenantId: string;
   businessName: string;
+  /** O cadastro da unidade, para a etapa 2 vir preenchida (bloco 111). */
+  empresa: {
+    street: string | null;
+    district: string | null;
+    city: string | null;
+    state: string | null;
+    postalCode: string | null;
+    phone: string | null;
+    whatsapp: string | null;
+    instagram: string | null;
+    about: string | null;
+    timezone: string;
+    amenities: string[];
+  };
   slug: string;
   step: number;
   publishedAt: string | null;
@@ -526,6 +540,8 @@ export interface ServicoDoCatalogo {
   /** Este serviço sempre pede sinal, qualquer que seja o histórico (bloco 37). */
   alwaysRequireDeposit: boolean;
   componentIds: string[];
+  /** O ganho de fazer o combo na sequência, em minutos (bloco 111). */
+  comboToleranceMinutes: number;
   /** Quantos clientes já têm hora marcada com ele — o que se perde ao desativar. */
   futureAppointments: number;
   /** A ficha de consumo: produtoId → quantidade (bloco 44). */
@@ -543,6 +559,8 @@ export interface EntradaDeServico {
   bookableOnline: boolean;
   alwaysRequireDeposit?: boolean;
   componentIds?: string[];
+  /** O ganho de fazer o combo na sequência, em minutos (bloco 111). */
+  comboToleranceMinutes?: number;
 }
 
 export const catalogoDeServicos = (token: string) =>

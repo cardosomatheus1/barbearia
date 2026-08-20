@@ -18,13 +18,36 @@ const minutos = z.number().int().min(0).max(1440);
  * Vazio vira `undefined` em vez de erro — apagar o número é uma edição
  * legítima, e um campo em branco no formulário não é entrada inválida.
  */
+/**
+ * String de formulário: ausente é "não mexa", vazia é "apague".
+ *
+ * Uma função só porque a distinção precisa ser a mesma em todos os campos — a
+ * etapa 2 é a única tela desse cadastro, e um campo que se comportasse
+ * diferente dos vizinhos seria a pessoa aprendendo que "às vezes salva".
+ */
+const vazioApaga = (valor: string | undefined): string | null | undefined =>
+  valor === undefined ? undefined : valor === '' ? null : valor;
+
 const contatoDaBarbearia = z
   .string()
   .trim()
   .max(24)
   .optional()
   .transform((valor, ctx) => {
-    if (!valor) return undefined;
+    /**
+     * Campo **enviado vazio** é limpeza, e não omissão (bloco 111).
+     *
+     * Com `undefined`, o `COALESCE` do domínio preservava o valor antigo e não
+     * havia caminho no produto para tirar o número do ar — a pessoa apagava o
+     * campo, lia "salvo" e o celular pessoal continuava na página indexada. A
+     * distinção só passou a existir quando a etapa 2 passou a vir preenchida:
+     * antes, "vazio" era o estado normal de um formulário que não mostrava nada.
+     *
+     * `undefined` continua significando "não mandou" — é o que a chave ausente
+     * produz, e é o que outras rotas usam.
+     */
+    if (valor === '') return null;
+    if (valor === undefined) return undefined;
     const normalizado = tryNormalizeBusinessPhone(valor);
     if (!normalizado.ok) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `telefone inválido: ${normalizado.code}` });
@@ -49,11 +72,12 @@ export const loginSchema = z.object({
 
 export const businessSchema = z.object({
   name: z.string().trim().min(2).max(80),
-  street: z.string().trim().max(160).optional(),
-  district: z.string().trim().max(80).optional(),
-  city: z.string().trim().max(80).optional(),
-  state: z.string().trim().length(2).optional(),
-  postalCode: z.string().trim().max(12).optional(),
+  street: z.string().trim().max(160).optional().transform(vazioApaga),
+  district: z.string().trim().max(80).optional().transform(vazioApaga),
+  city: z.string().trim().max(80).optional().transform(vazioApaga),
+  state: z.string().trim().optional().transform(vazioApaga)
+    .refine((v) => v == null || v.length === 2, 'UF tem duas letras'),
+  postalCode: z.string().trim().max(12).optional().transform(vazioApaga),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   /**
@@ -70,8 +94,8 @@ export const businessSchema = z.object({
    */
   phone: contatoDaBarbearia,
   whatsapp: contatoDaBarbearia,
-  instagram: z.string().trim().max(80).optional(),
-  about: z.string().trim().max(600).optional(),
+  instagram: z.string().trim().max(80).optional().transform(vazioApaga),
+  about: z.string().trim().max(600).optional().transform(vazioApaga),
   // O fuso vem da unidade, nunca do dispositivo (CLAUDE.md §2). Aqui ele é
   // escolhido explicitamente pelo dono, e é a única vez que isso acontece.
   timezone: z.string().trim().max(64).optional(),

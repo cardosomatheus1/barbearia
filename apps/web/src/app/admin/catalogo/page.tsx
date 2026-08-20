@@ -220,6 +220,28 @@ function CamposDoServico({
           Marque as partes que ele junta. A duração precisa dar conta de todas — o sistema recusa
           um &ldquo;corte + barba&rdquo; de 40 minutos se corte e barba somam 55.
         </p>
+        {/*
+          O ganho da sequência, que o diagnóstico manda ajustar (bloco 111).
+
+          `service_combos.tolerance_minutes` existe desde a migração 0023, é lida
+          pelo validador em duas regras e **não tinha por onde ser escrita**: a
+          borda descartava o campo e a tela não o tinha. O diagnóstico dizia
+          "aumente a tolerância" sobre um controle que não existia, e o achado
+          ficava na lista para sempre — que é como uma lista de achados deixa de
+          ser lida.
+        */}
+        <div className="ui-field">
+          <label className="ui-field__label" htmlFor="comboToleranceMinutes">
+            Ganho ao fazer na sequência (min)
+          </label>
+          <input className="ui-field__input" id="comboToleranceMinutes" inputMode="numeric"
+                 max={60} min={0} name="comboToleranceMinutes" type="number"
+                 defaultValue={servico?.comboToleranceMinutes ?? 0} />
+          <p className="ui-field__hint">
+            Quanto o combo economiza por ser feito de uma vez. Corte e barba somam 70 e o combo
+            leva 60? Ponha 10 aqui, e o diagnóstico para de cobrar a diferença.
+          </p>
+        </div>
         <div className="marcas-lista">
           {outros.map((outro) => (
             <label className="marca" key={outro.id}>

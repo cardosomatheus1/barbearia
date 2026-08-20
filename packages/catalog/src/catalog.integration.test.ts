@@ -270,7 +270,7 @@ describeIfDb('CRUD do catálogo', () => {
       bookableOnline: true,
     });
 
-    await updateProfessional(TENANT, id, {
+    await updateProfessional(TENANT, LOCATION, id, {
       name: 'Gleidson Araújo',
       kind: 'professional',
       bookableOnline: false,
@@ -310,7 +310,7 @@ describeIfDb('CRUD do catálogo', () => {
     `);
 
     const { futuros } = await setProfessionalActive({
-      tenantId: TENANT, professionalId: RUAN, active: false,
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, active: false,
     });
 
     // Desativar não cancela: o cliente marcou com essa pessoa, e alguém tem que
@@ -330,19 +330,21 @@ describeIfDb('CRUD do catálogo', () => {
 
     await saveSchedule({
       tenantId: TENANT,
+      locationId: LOCATION,
       professionalId: RUAN,
       faixas: [{ weekday: 2, startMinute: 420, endMinute: 1080, breaks: [] }],
     });
     await saveSchedule({
       tenantId: TENANT,
+      locationId: LOCATION,
       professionalId: gleidson.id,
       faixas: [{ weekday: 3, startMinute: 600, endMinute: 1200, breaks: [{ start: 720, end: 780 }] }],
     });
 
-    const doRuan = await getSchedule(TENANT, RUAN);
+    const doRuan = await getSchedule(TENANT, LOCATION, RUAN);
     expect(doRuan).toEqual([{ weekday: 2, startMinute: 420, endMinute: 1080, breaks: [] }]);
 
-    const doGleidson = await getSchedule(TENANT, gleidson.id);
+    const doGleidson = await getSchedule(TENANT, LOCATION, gleidson.id);
     expect(doGleidson[0]?.weekday).toBe(3);
     expect(doGleidson[0]?.breaks).toEqual([{ start: 720, end: 780 }]);
   });
@@ -371,6 +373,7 @@ describeIfDb('CRUD do catálogo', () => {
 
     const fora = await conflitosDaJornada({
       tenantId: TENANT,
+      locationId: LOCATION,
       professionalId: RUAN,
       faixas: [{ weekday: 2, startMinute: 540, endMinute: 720, breaks: [] }],
     });
@@ -394,6 +397,7 @@ describeIfDb('CRUD do catálogo', () => {
 
     const fora = await conflitosDaJornada({
       tenantId: TENANT,
+      locationId: LOCATION,
       professionalId: RUAN,
       faixas: [{ weekday: 2, startMinute: 540, endMinute: 720, breaks: [] }],
     });
@@ -414,6 +418,7 @@ describeIfDb('CRUD do catálogo', () => {
     // 12:30 local cai dentro do almoço proposto.
     const fora = await conflitosDaJornada({
       tenantId: TENANT,
+      locationId: LOCATION,
       professionalId: RUAN,
       faixas: [
         { weekday: 2, startMinute: 540, endMinute: 1080, breaks: [{ start: 720, end: 840 }] },
@@ -436,6 +441,7 @@ describeIfDb('CRUD do catálogo', () => {
 
     const fora = await conflitosDaJornada({
       tenantId: TENANT,
+      locationId: LOCATION,
       professionalId: RUAN,
       faixas: [{ weekday: 2, startMinute: 540, endMinute: 600, breaks: [] }],
     });
@@ -446,6 +452,7 @@ describeIfDb('CRUD do catálogo', () => {
     await expect(
       saveSchedule({
         tenantId: TENANT,
+        locationId: LOCATION,
         professionalId: RUAN,
         faixas: [{ weekday: 2, startMinute: 1080, endMinute: 540, breaks: [] }],
       }),
@@ -547,7 +554,7 @@ describeIfDb('CRUD do catálogo', () => {
     ).rejects.toMatchObject({ code: 'service_not_found' });
 
     await expect(
-      setProfessionalActive({ tenantId: RIVAL, professionalId: RUAN, active: false }),
+      setProfessionalActive({ tenantId: RIVAL, locationId: LOCAL_RIVAL, professionalId: RUAN, active: false }),
     ).rejects.toMatchObject({ code: 'professional_not_found' });
 
     // E o preço do vizinho continua o que era.
@@ -580,7 +587,7 @@ describeIfDb('CRUD do catálogo', () => {
     ).rejects.toMatchObject({ code: 'service_not_found' });
 
     await expect(
-      updateProfessional(RIVAL, PRO_RIVAL, {
+      updateProfessional(RIVAL, LOCAL_RIVAL, PRO_RIVAL, {
         name: 'Barbeiro do rival',
         kind: 'professional',
         bookableOnline: true,

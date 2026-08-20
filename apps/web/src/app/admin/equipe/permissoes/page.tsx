@@ -262,12 +262,27 @@ export default async function PermissoesPage({ searchParams }: Props) {
   );
 
   if (!resposta.ok) {
+    /**
+     * Recusa por permissão **não** é falha transitória (bloco 111).
+     *
+     * A recepcionista clicava em "16 permissões" na tela de equipe, caía aqui e
+     * lia "Recarregue a página" — então recarregava, e de novo. As irmãs já
+     * acertam: `/admin/equipe` diz "Só o dono administra a equipe" e
+     * `/admin/precos` manda falar com o dono. O mapa `FALHA` já tinha a frase e
+     * ela só era usada no caminho da ação.
+     */
+    const semPermissao = resposta.code === 'forbidden';
     return (
       <main className="ui-container painel__conteudo" {...secao('equipe')}>
         {topo}
         <h1 className="painel__titulo">Permissões</h1>
-        <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar as permissões. Recarregue a página.
+        <div
+          className={`ui-alert ${semPermissao ? 'ui-alert--warning' : 'ui-alert--danger'}`}
+          role="alert"
+        >
+          {semPermissao
+            ? 'Você não tem permissão para ver quem pode o quê. Fale com o dono.'
+            : 'Não deu para carregar as permissões. Recarregue a página.'}
         </div>
       </main>
     );

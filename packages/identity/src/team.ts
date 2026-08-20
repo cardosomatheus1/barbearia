@@ -384,6 +384,12 @@ export async function createStaffUser(request: CreateStaffRequest): Promise<{
 export async function convidarProfissional(request: {
   readonly tenantId: string;
   readonly actor: { readonly id: string; readonly name: string };
+  /**
+   * A unidade da sessão. Convidar é dar acesso ao painel: sem o recorte, o
+   * gerente da filial disparava a credencial de primeiro acesso de uma cadeira
+   * da matriz, para um e-mail escolhido por ele.
+   */
+  readonly locationId: string;
   readonly professionalId: string;
   readonly email: string;
   readonly phone?: string;
@@ -401,7 +407,9 @@ export async function convidarProfissional(request: {
     >`
       SELECT p.name, p.kind::text AS kind, p.phone_e164,
              (SELECT s.id::text FROM staff_users s WHERE s.professional_id = p.id) AS convidado
-        FROM professionals p WHERE p.id = ${request.professionalId}::uuid
+        FROM professionals p
+       WHERE p.id = ${request.professionalId}::uuid
+         AND p.location_id = ${request.locationId}::uuid
     `;
     return linhas[0] ?? null;
   });

@@ -50,6 +50,18 @@ export const serviceSchema = z.object({
    * o defeito D4 descreve.
    */
   componentIds: z.array(idSchema).max(10).optional(),
+  /**
+   * O ganho de fazer o combo na sequência, em minutos (bloco 111).
+   *
+   * A coluna existe desde a migração 0023, o validador a lê em duas regras e o
+   * domínio a grava — e a borda **não a declarava**, então `z.object` a
+   * descartava em silêncio. O único caminho que escreve recebia sempre
+   * `undefined`, e o diagnóstico do catálogo mandava "aumente a tolerância"
+   * sobre um valor que nunca saía de zero.
+   *
+   * Opcional pela mesma razão de `alwaysRequireDeposit`: ausente é "não mexa".
+   */
+  comboToleranceMinutes: z.number().int().min(0).max(60).optional(),
 });
 
 export const activeSchema = z.object({ active: z.boolean() });

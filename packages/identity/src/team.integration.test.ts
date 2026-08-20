@@ -594,6 +594,16 @@ describeIfDb('equipe e permissões', () => {
   // -- o convite do barbeiro ---------------------------------------------------
 
   /** Cria uma cadeira no cadastro, como o onboarding faz. */
+  /** A unidade da cadeira, que `convidarProfissional` passou a exigir. */
+  async function unidadeDaCadeira(tenantId: string): Promise<string> {
+    const linhas = await admin.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM locations WHERE tenant_id = '${tenantId}' LIMIT 1`,
+    );
+    const id = linhas[0]?.id;
+    if (!id) throw new Error('não deu para achar a unidade');
+    return id;
+  }
+
   async function cadeira(tenantId: string, nome = 'Ruan', kind = 'professional'): Promise<string> {
     const linhas = await admin.$queryRawUnsafe<{ id: string; loc: string }[]>(`
       WITH unidade AS (SELECT id FROM locations WHERE tenant_id = '${tenantId}' LIMIT 1)
@@ -618,6 +628,7 @@ describeIfDb('equipe e permissões', () => {
     const convidado = await convidarProfissional({
       messaging,
       tenantId: dono.tenantId,
+      locationId: await unidadeDaCadeira(dono.tenantId),
       actor: ator(dono),
       professionalId: ruan,
       email: 'ruan@domari.com.br',
@@ -645,6 +656,7 @@ describeIfDb('equipe e permissões', () => {
     await convidarProfissional({
       messaging,
       tenantId: dono.tenantId,
+      locationId: await unidadeDaCadeira(dono.tenantId),
       actor: ator(dono),
       professionalId: ruan,
       email: 'ruan@domari.com.br',
@@ -663,10 +675,12 @@ describeIfDb('equipe e permissões', () => {
     const dono = await abrirBarbearia();
     const ruan = await cadeira(dono.tenantId);
 
+    const unidade = await unidadeDaCadeira(dono.tenantId);
     const convidar = (email: string) =>
       convidarProfissional({
         messaging,
         tenantId: dono.tenantId,
+        locationId: unidade,
         actor: ator(dono),
         professionalId: ruan,
         email,
@@ -691,6 +705,7 @@ describeIfDb('equipe e permissões', () => {
       convidarProfissional({
         messaging,
         tenantId: dono.tenantId,
+        locationId: await unidadeDaCadeira(dono.tenantId),
         actor: ator(dono),
         professionalId: balcao,
         email: 'cadeira2@domari.com.br',
@@ -719,6 +734,7 @@ describeIfDb('equipe e permissões', () => {
       convidarProfissional({
         messaging,
         tenantId: rival.session.tenantId,
+        locationId: await unidadeDaCadeira(rival.session.tenantId),
         actor: ator(rival.session),
         professionalId: ruan,
         email: 'espiao@rival.com.br',
@@ -733,6 +749,7 @@ describeIfDb('equipe e permissões', () => {
     const convidado = await convidarProfissional({
       messaging,
       tenantId: dono.tenantId,
+      locationId: await unidadeDaCadeira(dono.tenantId),
       actor: ator(dono),
       professionalId: ruan,
       email: 'ruan@domari.com.br',

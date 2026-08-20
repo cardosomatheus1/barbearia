@@ -6,6 +6,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
 import { preferenciasDeAvisoSchema } from './avisos.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * Avisos ao cliente: o que a barbearia manda, e o que de fato saiu.
@@ -25,7 +26,7 @@ export class AvisosController {
   @Exige('settings.manage')
   @Get()
   async ler(@Staff() staff: AuthenticatedStaff) {
-    const preferencias = await lerPreferenciasDeAviso(staff.tenantId);
+    const preferencias = await lerPreferenciasDeAviso(staff.tenantId, (await unidadeDoBalcao(staff)).id);
     if (!preferencias) throw notFound('location_not_found', 'Unidade não encontrada.');
 
     return { settings: preferencias, log: await listarEnvios(staff.tenantId, { limite: 50 }) };
@@ -36,9 +37,10 @@ export class AvisosController {
   async salvar(
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(preferenciasDeAvisoSchema))
-    body: Parameters<typeof salvarPreferenciasDeAviso>[1],
+    body: Parameters<typeof salvarPreferenciasDeAviso>[2],
   ) {
-    await salvarPreferenciasDeAviso(staff.tenantId, body);
+    const local = await unidadeDoBalcao(staff);
+    await salvarPreferenciasDeAviso(staff.tenantId, local.id, body);
     return { saved: true };
   }
 }

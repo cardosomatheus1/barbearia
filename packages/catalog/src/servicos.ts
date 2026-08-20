@@ -397,13 +397,32 @@ export async function createService(
       input.comboToleranceMinutes ?? 0,
     );
 
-    // Serviço novo nasce habilitado para quem já faz tudo. Sem isto ele some da
-    // grade e o dono descobre pela reclamação de que "o site não deixa marcar".
+    /**
+     * Serviço novo nasce habilitado para **quem já faz tudo** — de verdade.
+     *
+     * Sem nascer habilitado para ninguém, ele some da grade e o dono descobre
+     * pela reclamação de que "o site não deixa marcar". Habilitado para todo
+     * mundo, era o inverso do que a barbearia declarou: o barbeiro restrito a
+     * barba passava a ser oferecido para um platinado de três horas, sem
+     * ninguém ter decidido isso.
+     *
+     * Quem já faz tudo é quem tem, hoje, todos os serviços ativos da casa. Para
+     * ele, acrescentar mais um é o que ele esperaria; para o restrito, o
+     * silêncio é o que ele configurou.
+     */
     await tx.$executeRaw`
       INSERT INTO professional_services (professional_id, service_id, tenant_id)
       SELECT p.id, ${id}::uuid, p.tenant_id
       FROM professionals p
       WHERE p.active AND p.kind = 'professional'
+        AND NOT EXISTS (
+          SELECT 1 FROM services s
+           WHERE s.active AND s.id <> ${id}::uuid
+             AND NOT EXISTS (
+               SELECT 1 FROM professional_services ps
+                WHERE ps.professional_id = p.id AND ps.service_id = s.id
+             )
+        )
       ON CONFLICT DO NOTHING
     `;
 

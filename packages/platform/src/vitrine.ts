@@ -500,11 +500,20 @@ export async function cidadesNaVitrine(): Promise<
  */
 export async function definirVitrine(params: {
   readonly tenantId: string;
+  /**
+   * Qual loja entra ou sai da busca. Sem ela, o gerente escopado a uma filial
+   * tirava a rede inteira do marketplace com um clique no interruptor da tela
+   * dele — e o dono descobriria pelo telefone que parou de tocar.
+   */
+  readonly locationId: string;
   readonly ligado: boolean;
   readonly agora?: Date;
 }): Promise<{ readonly ligado: boolean; readonly unidades: number }> {
   await withTenant(params.tenantId, async (tx) => {
-    await tx.$executeRaw`UPDATE locations SET listed_in_marketplace = ${params.ligado}`;
+    await tx.$executeRaw`
+      UPDATE locations SET listed_in_marketplace = ${params.ligado}
+       WHERE id = ${params.locationId}::uuid
+    `;
   });
   const unidades = await atualizarVitrineDaCasa(params.tenantId, params.agora);
   return { ligado: params.ligado, unidades };

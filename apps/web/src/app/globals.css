@@ -3,6 +3,19 @@
    Direção em docs/03-direcao-visual.md. Mobile-first: só min-width.
    ========================================================================== */
 
+/*
+  A cor de link, uma vez (bloco 111).
+
+  Sem regra global, todo `<a>` sem classe herdava o azul-lilás do navegador —
+  quatro pontos do painel saíam assim, entre eles "Baixe a planilha modelo" e o
+  link de permissões da equipe. Cada tela que sofria ganhava a própria classe,
+  que é como uma cor passa a ter cinco definições e nenhuma dona.
+
+  `inherit` não serve: link precisa se distinguir do texto para ser clicável, e
+  a distinção não pode ser só o sublinhado.
+*/
+a { color: var(--color-accent); }
+
 .topo {
   border-bottom: 1px solid var(--color-border);
   padding: var(--space-4) 0;

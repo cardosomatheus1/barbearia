@@ -20,6 +20,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { MESSAGING_PROVIDER } from '../auth/messaging.token.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { unidadeDoBalcao } from './unidade.js';
 import {
   activeSchema,
   changePasswordSchema,
@@ -247,9 +248,11 @@ export class TeamController {
     @Req() request: Request,
   ) {
     try {
+      const local = await unidadeDoBalcao(staff);
       return await convidarProfissional({
         tenantId: staff.tenantId,
         actor: { id: staff.staffUserId, name: staff.name },
+        locationId: local.id,
         professionalId: body.professionalId,
         email: body.email,
         ...(body.phone ? { phone: body.phone } : {}),

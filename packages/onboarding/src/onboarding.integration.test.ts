@@ -75,9 +75,12 @@ describeIfDb('onboarding', () => {
   /** Percorre as seis etapas com o catálogo sugerido. */
   async function percorrer(): Promise<{ tenantId: string; slug: string }> {
     const conta = await cadastrar(CONTA);
+    const inicial = await getOnboardingState(conta.tenantId);
+    if (!inicial) throw new Error('estado não encontrado');
 
     await saveBusiness({
       tenantId: conta.tenantId,
+      locationId: inicial.locationId,
       name: 'Domari Barber Club',
       street: 'Rua Ceará, 120',
       district: 'Pituba',
@@ -110,7 +113,7 @@ describeIfDb('onboarding', () => {
       { name: 'Gleidson', schedule: JORNADA },
     ]);
 
-    await savePayments(conta.tenantId, ['pix', 'card', 'cash']);
+    await savePayments(conta.tenantId, estado.locationId, ['pix', 'card', 'cash']);
     await publish(conta.tenantId);
 
     return { tenantId: conta.tenantId, slug: conta.slug };
@@ -146,15 +149,31 @@ describeIfDb('onboarding', () => {
     const conta = await cadastrar(CONTA);
     expect((await getOnboardingState(conta.tenantId))?.step).toBe(1);
 
-    await saveBusiness({ tenantId: conta.tenantId, name: 'Domari', city: 'Salvador' });
+    const local = (await getOnboardingState(conta.tenantId))!.locationId;
+    await saveBusiness({
+      tenantId: conta.tenantId, locationId: local, name: 'Domari', city: 'Salvador',
+    });
     expect((await getOnboardingState(conta.tenantId))?.step).toBe(2);
 
-    await savePayments(conta.tenantId, ['pix']);
+    await savePayments(conta.tenantId, local, ['pix']);
     expect((await getOnboardingState(conta.tenantId))?.step).toBe(5);
 
     // Voltar para corrigir o endereço não pode reabrir o cadastro inteiro.
-    await saveBusiness({ tenantId: conta.tenantId, name: 'Domari Barber Club' });
+    await saveBusiness({
+      tenantId: conta.tenantId, locationId: local, name: 'Domari Barber Club',
+    });
     expect((await getOnboardingState(conta.tenantId))?.step).toBe(5);
+
+    /**
+     * E não pode apagar o que não foi mandado (bloco 111).
+     *
+     * O formulário só manda o que ele mostra, e a etapa 2 mostrava o nome. Um
+     * `?? null` do outro lado transformava "corrigir o nome" em apagar cidade,
+     * endereço, telefone, Instagram e as comodidades — no cadastro mais básico
+     * do produto, e sem nada ficar vermelho.
+     */
+    const cidade = await getOnboardingState(conta.tenantId);
+    expect(cidade?.empresa.city).toBe('Salvador');
   });
 
   it('o combo do onboarding nasce ligado às partes que substitui', async () => {
@@ -229,12 +248,95 @@ describeIfDb('onboarding', () => {
     expect(segundo.publishedAt).toBe(primeiro?.publishedAt);
   });
 
+  it('salvar a empresa mexe numa loja só, não na rede', async () => {
+    /**
+     * O `UPDATE locations` não tinha `WHERE` nenhum.
+     *
+     * A filial de Rio Branco existe com o próprio fuso justamente porque "hoje"
+     * lá é outro dia — e `orders.business_day` sai desse fuso. Um clique em
+     * "Continuar" na etapa 2 renomeava a filial, mudava o endereço dela e o fuso
+     * dela para os da matriz: o seletor do balcão ficava com duas linhas
+     * idênticas, e o dia da venda da filial passava a ser calculado errado.
+     */
+    const { tenantId } = await percorrer();
+    const filial = 'ffff0000-0000-0000-0000-00000000f111';
+    await admin.$executeRawUnsafe(`
+      INSERT INTO locations (id, tenant_id, name, timezone, city)
+      VALUES ('${filial}', '${tenantId}', 'Domari Rio Branco', 'America/Rio_Branco', 'Rio Branco')
+    `);
+
+    const matriz = (await getOnboardingState(tenantId))!.locationId;
+    await saveBusiness({
+      tenantId,
+      locationId: matriz,
+      name: 'Domari Barber Club',
+      city: 'Salvador',
+      timezone: 'America/Bahia',
+    });
+
+    const depois = await admin.$queryRawUnsafe<{ name: string; timezone: string; city: string }[]>(
+      `SELECT name, timezone, city FROM locations WHERE id = '${filial}'`,
+    );
+    expect(depois[0]).toMatchObject({
+      name: 'Domari Rio Branco',
+      timezone: 'America/Rio_Branco',
+      city: 'Rio Branco',
+    });
+  });
+
+  it('a unidade de outra barbearia não é editável nem com o id na mão', async () => {
+    // A RLS já barra, e o `WHERE id` é a segunda camada: o `UPDATE` alcança
+    // zero linhas e o domínio recusa em vez de responder "salvo".
+    const { tenantId } = await percorrer();
+    const outra = await cadastrar({ ...CONTA, email: 'vizinha@teste.com.br' });
+    const dela = (await getOnboardingState(outra.tenantId))!.locationId;
+
+    await expect(
+      saveBusiness({ tenantId, locationId: dela, name: 'Invadida' }),
+    ).rejects.toMatchObject({ code: 'location_not_found' });
+  });
+
+  it('depois de publicada, a etapa que substitui o catálogo recusa', async () => {
+    /**
+     * As etapas 3 e 4 trocam o cardápio e a equipe inteiros — certo para quem
+     * está montando, destruição a partir do dia seguinte: `appointment_services`
+     * aponta para `services.id`, e recriar o catálogo desfaz o vínculo com o que
+     * já foi vendido. `?e=3` continua sendo um endereço, e ele fica no
+     * autocompletar do navegador de quem fez o cadastro uma vez.
+     */
+    const { tenantId } = await percorrer();
+    const templates = templatesForOnboarding();
+
+    await expect(
+      saveServices(
+        tenantId,
+        templates.slice(0, 1).map((t) => ({
+          key: t.key, name: t.name, description: t.description, category: t.category,
+          durationMinutes: t.durationMinutes, bufferAfterMinutes: t.bufferAfterMinutes,
+          priceCents: t.priceCents,
+        })),
+      ),
+    ).rejects.toMatchObject({ code: 'ja_publicada' });
+
+    const local = (await getOnboardingState(tenantId))!.locationId;
+    await expect(
+      saveProfessionals(tenantId, local, [{ name: 'Substituto', schedule: JORNADA }]),
+    ).rejects.toMatchObject({ code: 'ja_publicada' });
+
+    // E o cardápio continua de pé: a recusa é antes do `UPDATE ... active = false`.
+    const vivos = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM services WHERE tenant_id = '${tenantId}' AND active`,
+    );
+    expect(Number(vivos[0]?.n)).toBe(templates.length);
+  });
+
   it('renomear a barbearia não quebra o link antigo', async () => {
     // O concorrente trocou Box Seis por Domari e o slug antigo continua
     // resolvendo. É a única coisa que ele acertou e que não se pode perder.
     const { tenantId, slug } = await percorrer();
 
-    await saveBusiness({ tenantId, name: 'Outro Nome Barbearia' });
+    const local = (await getOnboardingState(tenantId))!.locationId;
+    await saveBusiness({ tenantId, locationId: local, name: 'Outro Nome Barbearia' });
 
     const antigo = await getPublicProfile(tenantId, slug);
     expect(antigo?.name).toBe('Outro Nome Barbearia');
@@ -245,7 +347,7 @@ describeIfDb('onboarding', () => {
     // Era lacuna declarada do bloco 9.
     const { tenantId, slug } = await percorrer();
 
-    await saveChangeWindow(tenantId, {
+    await saveChangeWindow(tenantId, (await getOnboardingState(tenantId))!.locationId, {
       cancelMinHours: 4,
       rescheduleMinHours: 1,
       maxReschedules: 3,
@@ -258,9 +360,27 @@ describeIfDb('onboarding', () => {
   });
 
   it('regravar o cardápio desativa o antigo em vez de apagar', async () => {
-    // Agendamento antigo aponta para o serviço; apagar levaria junto o
-    // histórico que alimenta relatório e comissão.
-    const { tenantId } = await percorrer();
+    /**
+     * Agendamento antigo aponta para o serviço; apagar levaria junto o
+     * histórico que alimenta relatório e comissão.
+     *
+     * Sem publicar, de propósito: desde o bloco 111 a etapa recusa depois de a
+     * casa estar no ar, e é justamente porque ela **substitui** o conjunto —
+     * que é o que este teste descreve. Ela continua sendo o caminho de quem
+     * ainda está montando, e é esse caminho que se prova aqui.
+     */
+    const conta = await cadastrar(CONTA);
+    const tenantId = conta.tenantId;
+    const templates = templatesForOnboarding();
+    await saveServices(
+      tenantId,
+      templates.map((t) => ({
+        key: t.key, name: t.name, description: t.description, category: t.category,
+        durationMinutes: t.durationMinutes, bufferAfterMinutes: t.bufferAfterMinutes,
+        priceCents: t.priceCents,
+        ...(t.componentKeys ? { componentKeys: t.componentKeys } : {}),
+      })),
+    );
 
     await saveServices(tenantId, [
       { key: 'so-corte', name: 'Só corte', category: 'Cabelo', durationMinutes: 30, bufferAfterMinutes: 5, priceCents: 5000 },

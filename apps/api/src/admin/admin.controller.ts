@@ -35,6 +35,7 @@ import { TenantService } from '../tenant/tenant.service.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { contaBloqueada, Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
+import { selecaoDoBalcao, unidadeDoBalcao } from './unidade.js';
 import {
   businessSchema,
   vitrineSchema,
@@ -178,6 +179,19 @@ export class StaffAuthController {
 export class OnboardingController {
   constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
 
+  /**
+   * A unidade da sessão para quem **lê**, e nada quando não dá para resolver.
+   *
+   * `unidadeDoBalcao` lança, e é o certo em rota que grava. Numa rota de leitura
+   * que é o estado do painel inteiro, lançar trancaria a conta para fora de tudo
+   * por causa de um vínculo de unidade mal configurado — o `undefined` cai na
+   * unidade mais antiga, que é o comportamento anterior ao bloco 58.
+   */
+  private async unidadeOuNada(staff: AuthenticatedStaff): Promise<string | undefined> {
+    const selecao = await selecaoDoBalcao(staff);
+    return selecao.atual?.id;
+  }
+
   @Exige()
   @Post('logout')
   async logout(@Staff() staff: AuthenticatedStaff) {
@@ -188,7 +202,18 @@ export class OnboardingController {
   @Exige('appointments.view')
   @Get('state')
   async state(@Staff() staff: AuthenticatedStaff) {
-    const estado = await getOnboardingState(staff.tenantId);
+    /**
+     * O estado é o da **unidade da sessão**, desde o bloco 111.
+     *
+     * A etapa 2 do onboarding lê daqui para vir preenchida, e preencher com o
+     * cadastro da matriz na tela do gerente da filial seria oferecer a ele o
+     * botão que sobrescreve a loja errada. `unidadeDoBalcao` recusa quem não
+     * tem unidade legível, e esta rota não pode recusar — ela é o estado do
+     * painel inteiro —, então a falha cai no comportamento anterior: a mais
+     * antiga.
+     */
+    const local = await this.unidadeOuNada(staff);
+    const estado = await getOnboardingState(staff.tenantId, local);
     if (!estado) throw notFound('unknown_tenant', 'Barbearia não encontrada');
     // As permissões saem daqui, resolvidas do papel na mesma consulta da
     // sessão: a tela mostra o que a API aplica, nunca uma cópia da lista
@@ -246,9 +271,20 @@ export class OnboardingController {
     @Body(new ZodValidationPipe(businessSchema)) body: Record<string, unknown>,
   ) {
     try {
-      const salvo = await saveBusiness({ tenantId: staff.tenantId, ...body } as Parameters<
-        typeof saveBusiness
-      >[0]);
+      /**
+       * A unidade da sessão, obrigatória desde o bloco 111.
+       *
+       * Sem ela o `UPDATE` do domínio não tinha `WHERE` e reescrevia a rede
+       * inteira; e o gerente escopado a uma filial editaria a matriz. Aqui a
+       * recusa é legítima — esta rota **grava** —, então `unidadeDoBalcao` vale
+       * com a exceção que ela mesma lança.
+       */
+      const local = await unidadeDoBalcao(staff);
+      const salvo = await saveBusiness({
+        tenantId: staff.tenantId,
+        locationId: local.id,
+        ...body,
+      } as Parameters<typeof saveBusiness>[0]);
       // Endereço, coordenada, comodidade e a opção de sair da vitrine mudam
       // aqui: sem esta chamada, o card do marketplace ficaria com o endereço
       // antigo até a varredura da madrugada.
@@ -279,7 +315,7 @@ export class OnboardingController {
     @Body(new ZodValidationPipe(professionalsSchema))
     body: { professionals: Parameters<typeof saveProfessionals>[2] },
   ) {
-    const estado = await getOnboardingState(staff.tenantId);
+    const estado = await getOnboardingState(staff.tenantId, await this.unidadeOuNada(staff));
     if (!estado) throw notFound('unknown_tenant', 'Barbearia não encontrada');
 
     try {
@@ -293,9 +329,10 @@ export class OnboardingController {
   @Put('payments')
   async payments(
     @Staff() staff: AuthenticatedStaff,
-    @Body(new ZodValidationPipe(paymentsSchema)) body: { methods: Parameters<typeof savePayments>[1] },
+    @Body(new ZodValidationPipe(paymentsSchema)) body: { methods: Parameters<typeof savePayments>[2] },
   ) {
-    await savePayments(staff.tenantId, body.methods);
+    const local = await unidadeDoBalcao(staff);
+    await savePayments(staff.tenantId, local.id, body.methods);
     return { saved: true };
   }
 
@@ -319,7 +356,8 @@ export class OnboardingController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(vitrineSchema)) corpo: { ligado: boolean },
   ) {
-    return definirVitrine({ tenantId: staff.tenantId, ligado: corpo.ligado });
+    const local = await unidadeDoBalcao(staff);
+    return definirVitrine({ tenantId: staff.tenantId, locationId: local.id, ligado: corpo.ligado });
   }
 
   @Exige('settings.manage')
@@ -381,7 +419,8 @@ export class OnboardingController {
       services?: { id: string; photoUrl: string }[];
     },
   ) {
-    const resultado = await savePhotos(staff.tenantId, {
+    const local = await unidadeDoBalcao(staff);
+    const resultado = await savePhotos(staff.tenantId, local.id, {
       ...(body.coverUrl !== undefined ? { coverUrl: imagemPublica(body.coverUrl) } : {}),
       ...(body.logoUrl !== undefined ? { logoUrl: imagemPublica(body.logoUrl) } : {}),
       ...(body.professionals
@@ -427,9 +466,10 @@ export class OnboardingController {
   async changeWindow(
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(changeWindowSchema))
-    body: Parameters<typeof saveChangeWindow>[1],
+    body: Parameters<typeof saveChangeWindow>[2],
   ) {
-    await saveChangeWindow(staff.tenantId, body);
+    const local = await unidadeDoBalcao(staff);
+    await saveChangeWindow(staff.tenantId, local.id, body);
     return { saved: true };
   }
 

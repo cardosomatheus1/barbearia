@@ -1277,6 +1277,7 @@ describeIfDb('fila de trabalho', () => {
 
     await salvarPreferenciasDeAviso(
       TENANT,
+      LOCATION,
       {
         confirmacao: true,
         lembrete24h: true,
@@ -1291,7 +1292,7 @@ describeIfDb('fila de trabalho', () => {
       `SELECT idempotency_key FROM jobs WHERE kind = 'notificacao.retorno'`,
     );
     expect(linhas[0]?.idempotency_key).toBe(`retorno:${TENANT}:2026-09-10`);
-    expect(await lerPreferenciasDeAviso(TENANT)).toMatchObject({
+    expect(await lerPreferenciasDeAviso(TENANT, LOCATION)).toMatchObject({
       retorno: true,
       diasParaRetorno: 30,
     });

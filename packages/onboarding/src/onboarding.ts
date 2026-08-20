@@ -22,6 +22,17 @@ export type OnboardingFailure =
   | 'unknown_tenant'
   | 'invalid_catalog'
   | 'nothing_to_publish'
+  | 'location_not_found'
+  /**
+   * A etapa que **substitui** o conjunto, pedida depois de a casa estar no ar.
+   *
+   * As etapas 3 e 4 trocam o catálogo e a equipe inteiros — é o certo para quem
+   * está abrindo e o errado a partir do dia seguinte, e o `CLAUDE.md` já diz
+   * isso em letras sobre `catalog` × `onboarding`. O produto continuava
+   * oferecendo o caminho: `?e=3` é alcançável enquanto a trilha existir, e do
+   * outro lado havia um `UPDATE services SET active = false` sem `WHERE`.
+   */
+  | 'ja_publicada'
   | 'slug_taken';
 
 export class OnboardingError extends Error {
@@ -48,6 +59,29 @@ export interface OnboardingState {
   readonly step: number;
   readonly publishedAt: string | null;
   readonly locationId: string;
+  /**
+   * O cadastro da unidade, para a etapa 2 **vir preenchida**.
+   *
+   * Ela nasceu como formulário de cadastro e continuou como formulário de
+   * cadastro: só o nome vinha preenchido, e voltar para corrigir o telefone
+   * apagava endereço, bairro, cidade, UF, Instagram e as comodidades — porque o
+   * que a tela não mostra, ela não manda. Com o `COALESCE` do outro lado o
+   * estrago parou; com o formulário preenchido a pessoa passa a ver o que está
+   * prestes a mudar, que é o que uma tela de edição faz.
+   */
+  readonly empresa: {
+    readonly street: string | null;
+    readonly district: string | null;
+    readonly city: string | null;
+    readonly state: string | null;
+    readonly postalCode: string | null;
+    readonly phone: string | null;
+    readonly whatsapp: string | null;
+    readonly instagram: string | null;
+    readonly about: string | null;
+    readonly timezone: string;
+    readonly amenities: readonly string[];
+  };
   readonly counts: {
     readonly services: number;
     readonly professionals: number;
@@ -55,8 +89,19 @@ export interface OnboardingState {
   };
 }
 
-/** Onde o dono parou. É o que permite retomar do celular no dia seguinte. */
-export async function getOnboardingState(tenantId: string): Promise<OnboardingState | null> {
+/**
+ * Onde o dono parou. É o que permite retomar do celular no dia seguinte.
+ *
+ * `locationId` é **a unidade da sessão**, e a ausência dela cai na mais antiga —
+ * que é o comportamento de antes do bloco 58, e o certo para a barbearia de uma
+ * loja só. Com ele, a etapa 2 mostra e edita a loja em que a pessoa está: sem
+ * isso, o gerente da filial abriria o cadastro da matriz preenchido e o
+ * salvaria por cima do dele.
+ */
+export async function getOnboardingState(
+  tenantId: string,
+  locationId?: string,
+): Promise<OnboardingState | null> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
       {
@@ -65,13 +110,26 @@ export async function getOnboardingState(tenantId: string): Promise<OnboardingSt
         published_at: Date | null;
         slug: string;
         location_id: string;
+        street: string | null;
+        district: string | null;
+        city: string | null;
+        state: string | null;
+        postal_code: string | null;
+        phone_e164: string | null;
+        whatsapp_e164: string | null;
+        instagram: string | null;
+        about: string | null;
+        timezone: string;
+        amenities: string[];
         services: bigint;
         professionals: bigint;
         schedules: bigint;
       }[]
     >`
-      SELECT t.name, t.onboarding_step, t.published_at,
+      SELECT t.name, t.onboarding_step, t.published_at, t.instagram,
              s.slug, l.id AS location_id,
+             l.street, l.district, l.city, l.state, l.postal_code,
+             l.phone_e164, l.whatsapp_e164, l.about, l.timezone, l.amenities,
              (SELECT count(*) FROM services WHERE active) AS services,
              (SELECT count(*) FROM professionals WHERE active AND kind = 'professional')
                AS professionals,
@@ -79,6 +137,7 @@ export async function getOnboardingState(tenantId: string): Promise<OnboardingSt
       FROM tenants t
       JOIN tenant_slugs s ON s.tenant_id = t.id AND s.is_primary
       JOIN locations l ON l.tenant_id = t.id
+      WHERE ${locationId ?? null}::uuid IS NULL OR l.id = ${locationId ?? null}::uuid
       ORDER BY l.created_at
       LIMIT 1
     `;
@@ -93,6 +152,19 @@ export async function getOnboardingState(tenantId: string): Promise<OnboardingSt
       step: linha.onboarding_step,
       publishedAt: linha.published_at?.toISOString() ?? null,
       locationId: linha.location_id,
+      empresa: {
+        street: linha.street,
+        district: linha.district,
+        city: linha.city,
+        state: linha.state,
+        postalCode: linha.postal_code,
+        phone: linha.phone_e164,
+        whatsapp: linha.whatsapp_e164,
+        instagram: linha.instagram,
+        about: linha.about,
+        timezone: linha.timezone,
+        amenities: linha.amenities,
+      },
       counts: {
         services: Number(linha.services),
         professionals: Number(linha.professionals),
@@ -115,22 +187,65 @@ async function advance(tx: TransactionClient, step: number): Promise<void> {
   `;
 }
 
+/**
+ * A etapa que substitui o conjunto só vale enquanto a casa não abriu.
+ *
+ * `saveServices` desativa todos os serviços e recria; `saveProfessionals`
+ * desativa toda a equipe. Isso é o certo para quem está montando a barbearia e
+ * destrói o cadastro de quem já está operando: `appointment_services` aponta
+ * para `services.id`, e recriar o catálogo desfaz o vínculo com o que já foi
+ * vendido. O `CLAUDE.md` já explicava por que `catalog` e `onboarding` são
+ * pacotes separados; o que faltava era o produto **impedir** o segundo caminho
+ * depois do primeiro dia.
+ *
+ * Conferida no domínio e não na tela: `?e=3` continua sendo um endereço, e ele
+ * fica no autocompletar do navegador de quem fez o cadastro uma vez.
+ */
+async function recusarSeJaPublicada(tx: TransactionClient, onde: string): Promise<void> {
+  const linhas = await tx.$queryRaw<{ published_at: Date | null }[]>`
+    SELECT published_at FROM tenants LIMIT 1
+  `;
+  if (linhas[0]?.published_at) {
+    throw new OnboardingError(
+      'ja_publicada',
+      `Sua barbearia já está no ar. Para mudar isto, use ${onde} — o cadastro do primeiro dia substituiria tudo que já foi vendido.`,
+    );
+  }
+}
+
 // -- Etapa 2: empresa --------------------------------------------------------
 
 export interface BusinessInput {
   readonly tenantId: string;
+  /**
+   * Qual unidade este cadastro edita.
+   *
+   * Obrigatória, e não opcional com padrão: opcional, o primeiro chamador novo
+   * a esquecer voltaria ao `UPDATE` sem `WHERE` que reescrevia a rede inteira,
+   * e nada ficaria vermelho.
+   */
+  readonly locationId: string;
   readonly name: string;
-  readonly street?: string;
-  readonly district?: string;
-  readonly city?: string;
-  readonly state?: string;
-  readonly postalCode?: string;
-  readonly latitude?: number;
-  readonly longitude?: number;
-  readonly phone?: string;
-  readonly whatsapp?: string;
-  readonly instagram?: string;
-  readonly about?: string;
+  /**
+   * `undefined` é "não mandou"; `null` é "apague".
+   *
+   * A distinção existe porque a etapa 2 passou a vir preenchida: antes, todo
+   * campo chegava vazio e "vazio" não podia significar nada. Sem ela, não havia
+   * caminho no produto para tirar da página pública um telefone que a pessoa
+   * cadastrou por engano — ela apagava o campo, lia "salvo" e o número
+   * continuava lá.
+   */
+  readonly street?: string | null;
+  readonly district?: string | null;
+  readonly city?: string | null;
+  readonly state?: string | null;
+  readonly postalCode?: string | null;
+  readonly latitude?: number | null;
+  readonly longitude?: number | null;
+  readonly phone?: string | null;
+  readonly whatsapp?: string | null;
+  readonly instagram?: string | null;
+  readonly about?: string | null;
   readonly timezone?: string;
   readonly amenities?: readonly string[];
 }
@@ -145,27 +260,69 @@ export interface BusinessInput {
 export async function saveBusiness(input: BusinessInput): Promise<{ slug: string }> {
   return withTenant(input.tenantId, async (tx) => {
     await tx.$executeRaw`
-      UPDATE tenants SET name = ${input.name}, instagram = ${input.instagram ?? null},
+      UPDATE tenants SET name = ${input.name},
+                         instagram = CASE WHEN ${input.instagram === undefined}::boolean
+                                          THEN instagram ELSE ${input.instagram ?? null} END,
                          updated_at = now()
     `;
 
-    await tx.$executeRaw`
+    /**
+     * Uma unidade, e **ausente significa "não mexa"**.
+     *
+     * Duas coisas erradas de uma vez viviam aqui, e as duas apagavam cadastro:
+     *
+     * - **Sem `WHERE`**, o `UPDATE` alcançava a rede inteira. A filial de Rio
+     *   Branco, cadastrada com o próprio fuso justamente porque "hoje" lá é
+     *   outro dia, passava a se chamar como a matriz, no endereço da matriz e no
+     *   fuso da matriz — e o dia da venda dela passava a ser calculado errado. O
+     *   seletor do balcão ficava com duas linhas idênticas.
+     * - **`?? null`** transformava campo omitido em campo apagado. A borda já
+     *   omite o que a tela não manda (`acaoEmpresa`), então corrigir o telefone
+     *   levava junto endereço, bairro, cidade, UF, Instagram, o texto "sobre" e
+     *   as comodidades. É a convenção do bloco 37 quebrada no cadastro mais
+     *   básico do produto: campo opcional ausente é "não mexa", nunca "desligue".
+     *
+     * O `CASE` e não `COALESCE` porque as duas coisas precisam existir: ausente
+     * preserva, **vazio apaga**. Só com `COALESCE`, o número que a pessoa
+     * cadastrou por engano não teria como sair da página indexada — ela apagaria
+     * o campo, leria "salvo", e ele continuaria no ar.
+     *
+     * `amenities` é a exceção e por isso continua absoluto: a tela manda a lista
+     * inteira das caixas marcadas, e desmarcar todas é uma decisão. O que a
+     * torna segura é o formulário passar a vir preenchido — sem isso, abrir a
+     * tela já era desmarcar tudo.
+     */
+    const afetadas = await tx.$executeRaw`
       UPDATE locations SET
         name = ${input.name},
-        street = ${input.street ?? null},
-        district = ${input.district ?? null},
-        city = ${input.city ?? null},
-        state = ${input.state ?? null},
-        postal_code = ${input.postalCode ?? null},
-        latitude = ${input.latitude ?? null},
-        longitude = ${input.longitude ?? null},
-        phone_e164 = ${input.phone ?? null},
-        whatsapp_e164 = ${input.whatsapp ?? null},
-        about = ${input.about ?? null},
+        street = CASE WHEN ${input.street === undefined}::boolean
+                    THEN street ELSE ${input.street ?? null} END,
+        district = CASE WHEN ${input.district === undefined}::boolean
+                    THEN district ELSE ${input.district ?? null} END,
+        city = CASE WHEN ${input.city === undefined}::boolean
+                    THEN city ELSE ${input.city ?? null} END,
+        state = CASE WHEN ${input.state === undefined}::boolean
+                    THEN state ELSE ${input.state ?? null} END,
+        postal_code = CASE WHEN ${input.postalCode === undefined}::boolean
+                    THEN postal_code ELSE ${input.postalCode ?? null} END,
+        latitude = CASE WHEN ${input.latitude === undefined}::boolean
+                    THEN latitude ELSE ${input.latitude ?? null} END,
+        longitude = CASE WHEN ${input.longitude === undefined}::boolean
+                    THEN longitude ELSE ${input.longitude ?? null} END,
+        phone_e164 = CASE WHEN ${input.phone === undefined}::boolean
+                    THEN phone_e164 ELSE ${input.phone ?? null} END,
+        whatsapp_e164 = CASE WHEN ${input.whatsapp === undefined}::boolean
+                    THEN whatsapp_e164 ELSE ${input.whatsapp ?? null} END,
+        about = CASE WHEN ${input.about === undefined}::boolean
+                    THEN about ELSE ${input.about ?? null} END,
         timezone = COALESCE(${input.timezone ?? null}, timezone),
         amenities = ${[...(input.amenities ?? [])]},
         updated_at = now()
+      WHERE id = ${input.locationId}::uuid
     `;
+    if (afetadas === 0) {
+      throw new OnboardingError('location_not_found', 'Unidade não encontrada.');
+    }
 
     await advance(tx, 2);
 
@@ -224,6 +381,8 @@ export async function saveServices(
   }
 
   return withTenant(tenantId, async (tx) => {
+    await recusarSeJaPublicada(tx, 'a tela de Catálogo');
+
     // Desativa em vez de apagar: agendamento antigo aponta para o serviço, e
     // apagar levaria junto o histórico que alimenta relatório e comissão.
     await tx.$executeRaw`UPDATE services SET active = false, updated_at = now()`;
@@ -320,6 +479,8 @@ export async function saveProfessionals(
   professionals: readonly ProfessionalInput[],
 ): Promise<{ created: number }> {
   return withTenant(tenantId, async (tx) => {
+    await recusarSeJaPublicada(tx, 'a tela de Profissionais');
+
     const servicos = await tx.$queryRaw<{ id: string; name: string }[]>`
       SELECT id, name FROM services WHERE active
     `;
@@ -374,11 +535,13 @@ export async function saveProfessionals(
 
 export async function savePayments(
   tenantId: string,
+  locationId: string,
   methods: readonly PaymentMethod[],
 ): Promise<void> {
   await withTenant(tenantId, async (tx) => {
     await tx.$executeRaw`
       UPDATE locations SET payment_methods = ${[...methods]}, updated_at = now()
+       WHERE id = ${locationId}::uuid
     `;
     await advance(tx, 5);
   });
@@ -497,6 +660,7 @@ export interface DepositPolicyInput {
  */
 export async function saveChangeWindow(
   tenantId: string,
+  locationId: string,
   input: ChangeWindowInput,
 ): Promise<void> {
   await withTenant(tenantId, async (tx) => {
@@ -507,6 +671,7 @@ export async function saveChangeWindow(
         max_reschedules = ${input.maxReschedules},
         cancellation_policy = ${input.cancellationPolicy ?? null},
         updated_at = now()
+      WHERE id = ${locationId}::uuid
     `;
 
     /**
@@ -520,12 +685,14 @@ export async function saveChangeWindow(
     if (input.onlineBlockScore !== undefined) {
       await tx.$executeRaw`
         UPDATE locations SET online_block_score = ${input.onlineBlockScore}, updated_at = now()
+         WHERE id = ${locationId}::uuid
       `;
     }
     if (input.waitlistTrustedScore !== undefined) {
       await tx.$executeRaw`
         UPDATE locations SET waitlist_trusted_score = ${input.waitlistTrustedScore},
                              updated_at = now()
+         WHERE id = ${locationId}::uuid
       `;
     }
 
@@ -569,6 +736,7 @@ export async function saveChangeWindow(
           deposit_ticket_over_cents = ${d.ticketOverCents},
           deposit_refund_hours = ${d.refundHours},
           updated_at = now()
+        WHERE id = ${locationId}::uuid
       `;
     }
 
@@ -725,15 +893,19 @@ export async function getPhotoTargets(tenantId: string): Promise<PhotoTargets | 
  */
 export async function savePhotos(
   tenantId: string,
+  locationId: string,
   input: PhotoInput,
 ): Promise<{ readonly saved: number }> {
   return withTenant(tenantId, async (tx) => {
     let gravadas = 0;
 
     if (input.coverUrl !== undefined) {
+      // A capa é **da loja**, não da mais antiga: fixada em `ORDER BY
+      // created_at LIMIT 1`, a filial nunca tinha capa própria e a matriz
+      // trocava de foto quando alguém salvava a da filial.
       await tx.$executeRaw`
         UPDATE locations SET cover_url = ${input.coverUrl}, updated_at = now()
-        WHERE id = (SELECT id FROM locations ORDER BY created_at LIMIT 1)
+        WHERE id = ${locationId}::uuid
       `;
       if (input.coverUrl) gravadas += 1;
     }

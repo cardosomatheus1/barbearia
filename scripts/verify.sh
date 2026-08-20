@@ -181,6 +181,9 @@ lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
 lancar "crase em script inline" npx vitest run scripts/crase-em-script-inline.test.mjs
 lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
 lancar "recurso do menu × catálogo" npx vitest run scripts/recursos-da-navegacao.test.mjs
+# A RLS separa barbearias e não separa lojas: `UPDATE locations` sem WHERE
+# alcança a rede inteira, e sete estavam assim ao mesmo tempo no bloco 111.
+lancar "UPDATE de unidade com WHERE" npx vitest run scripts/update-de-unidade-com-where.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
 # nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.

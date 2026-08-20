@@ -316,18 +316,27 @@ export async function acaoSair(): Promise<void> {
 export async function acaoEmpresa(form: FormData): Promise<void> {
   const token = await exigirSessao();
 
+  /**
+   * Todos os campos, sempre — inclusive vazios (bloco 111).
+   *
+   * A tela omitia o que estava em branco, e do outro lado o domínio tratava
+   * ausente como "apague". Agora o formulário **vem preenchido**, então o que
+   * chega vazio é a pessoa tendo apagado: é isso que tira da página pública o
+   * celular que alguém cadastrou por engano. Omitir continuaria a impedir a
+   * limpeza — e não há segunda tela para esse cadastro.
+   */
   const resultado = await salvarEmpresa(token, {
     name: texto(form, 'name'),
-    ...(texto(form, 'street') ? { street: texto(form, 'street') } : {}),
-    ...(texto(form, 'district') ? { district: texto(form, 'district') } : {}),
-    ...(texto(form, 'city') ? { city: texto(form, 'city') } : {}),
-    ...(texto(form, 'state') ? { state: texto(form, 'state').toUpperCase() } : {}),
-    ...(texto(form, 'phone') ? { phone: texto(form, 'phone') } : {}),
-    ...(texto(form, 'whatsapp') ? { whatsapp: texto(form, 'whatsapp') } : {}),
-    ...(texto(form, 'instagram') ? { instagram: texto(form, 'instagram') } : {}),
-    ...(texto(form, 'about') ? { about: texto(form, 'about') } : {}),
+    street: texto(form, 'street'),
+    district: texto(form, 'district'),
+    city: texto(form, 'city'),
+    state: texto(form, 'state').toUpperCase(),
+    phone: texto(form, 'phone'),
+    whatsapp: texto(form, 'whatsapp'),
+    instagram: texto(form, 'instagram'),
+    about: texto(form, 'about'),
     // O fuso vem da unidade, nunca do aparelho de quem visita — é aqui, e só
-    // aqui, que ele é escolhido.
+    // aqui, que ele é escolhido. Vazio nunca: é um `select` com padrão.
     ...(texto(form, 'timezone') ? { timezone: texto(form, 'timezone') } : {}),
     amenities: form.getAll('amenities').map(String),
   });
@@ -695,7 +704,14 @@ function entradaDeServico(form: FormData): EntradaDeServico | null {
     // e "1"; desmarcada, chega só "0". `get` devolveria sempre o primeiro e a
     // caixa nunca ligaria.
     alwaysRequireDeposit: form.getAll('alwaysRequireDeposit').includes('1'),
-    ...(componentIds.length >= 2 ? { componentIds } : {}),
+    ...(componentIds.length >= 2
+      ? {
+          componentIds,
+          // Só junto do combo: fora dele o campo não é desenhado, e mandar zero
+          // seria a tela decidindo por um serviço avulso que ela nem mostrou.
+          comboToleranceMinutes: numero(form, 'comboToleranceMinutes', 0),
+        }
+      : {}),
   };
 }
 

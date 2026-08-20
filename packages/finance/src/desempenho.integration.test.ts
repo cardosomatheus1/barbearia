@@ -278,7 +278,7 @@ describeIfDb('os números do barbeiro', () => {
 
   it('a meta do mês compara com o realizado e com o ritmo', async () => {
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: HOJE,
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: HOJE,
       metaCents: 1_500_000, staffUserId: STAFF,
     });
     await vender({ precoCents: 600_000, dia: '2026-09-05' });
@@ -293,7 +293,7 @@ describeIfDb('os números do barbeiro', () => {
 
   it('a meta é do mês; a de agosto não vale para setembro', async () => {
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: '2026-08-01',
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: '2026-08-01',
       metaCents: 900_000, staffUserId: STAFF,
     });
 
@@ -303,7 +303,7 @@ describeIfDb('os números do barbeiro', () => {
   it('salvar duas vezes atualiza a meta, não duplica', async () => {
     const salvar = (cents: number) =>
       salvarMeta({
-        tenantId: TENANT, professionalId: RUAN, mes: HOJE,
+        tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: HOJE,
         metaCents: cents, staffUserId: STAFF,
       });
 
@@ -315,11 +315,11 @@ describeIfDb('os números do barbeiro', () => {
 
   it('meta nula apaga a linha — é o único jeito de dizer "sem meta"', async () => {
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: HOJE,
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: HOJE,
       metaCents: 1_000_000, staffUserId: STAFF,
     });
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: HOJE,
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: HOJE,
       metaCents: null, staffUserId: STAFF,
     });
 
@@ -334,11 +334,11 @@ describeIfDb('os números do barbeiro', () => {
     // Meta que se renova sozinha vira número que ninguém escolheu e que todo
     // mundo ignora. Sugerir é diferente de decidir.
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: '2026-08-01',
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: '2026-08-01',
       metaCents: 900_000, staffUserId: STAFF,
     });
 
-    const lista = await metasDoMes({ tenantId: TENANT, mes: HOJE });
+    const lista = await metasDoMes({ tenantId: TENANT, locationId: LOCATION, mes: HOJE });
     const ruan = lista.find((m) => m.professionalId === RUAN);
     expect(ruan?.metaCents).toBeNull();
     expect(ruan?.anteriorCents).toBe(900_000);
@@ -347,17 +347,17 @@ describeIfDb('os números do barbeiro', () => {
   it('a virada do ano acha o mês anterior', async () => {
     // Janeiro de 2027 tem dezembro de 2026 atrás dele, não o mês zero.
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: '2026-12-01',
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: '2026-12-01',
       metaCents: 800_000, staffUserId: STAFF,
     });
 
-    const lista = await metasDoMes({ tenantId: TENANT, mes: '2027-01-15' });
+    const lista = await metasDoMes({ tenantId: TENANT, locationId: LOCATION, mes: '2027-01-15' });
     expect(lista.find((m) => m.professionalId === RUAN)?.anteriorCents).toBe(800_000);
   });
 
   it('fevereiro bissexto tem 29 dias, e o ritmo usa o mês certo', async () => {
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: '2028-02-01',
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: '2028-02-01',
       metaCents: 2_900_000, staffUserId: STAFF,
     });
 
@@ -382,7 +382,9 @@ describeIfDb('os números do barbeiro', () => {
      */
     await expect(
       salvarMeta({
-        tenantId: RIVAL, professionalId: RUAN, mes: HOJE,
+        // A unidade e a cadeira são as **do vizinho**, e é isso que o teste
+        // manda: sob a RLS do rival, a consulta não acha nenhuma das duas.
+        tenantId: RIVAL, locationId: LOCATION, professionalId: RUAN, mes: HOJE,
         metaCents: 1, staffUserId: STAFF,
       }),
     ).rejects.toMatchObject({ code: 'profissional_nao_encontrado' });
@@ -396,7 +398,7 @@ describeIfDb('os números do barbeiro', () => {
   it('consulta sem filtro de tenant devolve zero metas para a rival', async () => {
     // Quem filtra é a política, não o `WHERE` do repositório.
     await salvarMeta({
-      tenantId: TENANT, professionalId: RUAN, mes: HOJE,
+      tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, mes: HOJE,
       metaCents: 1_000_000, staffUserId: STAFF,
     });
 

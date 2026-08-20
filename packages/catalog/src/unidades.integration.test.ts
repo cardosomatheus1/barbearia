@@ -2,7 +2,14 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { criarUnidade, definirUnidadeAtiva, unidadesDoCadastro } from './unidades.js';
-import { definirPerfilPublico } from './equipe.js';
+import {
+  conflitosDaJornada,
+  definirPerfilPublico,
+  getSchedule,
+  saveSchedule,
+  setProfessionalActive,
+  updateProfessional,
+} from './equipe.js';
 
 /**
  * Abrir e fechar uma loja, contra Postgres real (bloco 58).
@@ -90,6 +97,134 @@ describeIfDb('unidades da casa', () => {
       `SELECT public_profile AS publicado FROM professionals WHERE id = '${daMatriz}'`,
     );
     expect(depois[0]?.publicado).toBe(false);
+  });
+
+  it('o gerente de uma filial não mexe na cadeira da matriz por nenhuma das portas', async () => {
+    /**
+     * Cinco funções recebiam `professionalId` e filtravam **só por id** — as
+     * mesmas cinco que `definirPerfilPublico` já sabia recortar desde o 73. A
+     * pior é `saveSchedule`: ela abre com `DELETE FROM work_schedules WHERE
+     * professional_id = …`, então a agenda de um barbeiro da matriz sumia da
+     * grade sem ninguém ter cancelado nada.
+     *
+     * A leitura entra junto: `getSchedule` devolvia a jornada completa de quem
+     * a tela do gerente nem lista.
+     */
+    const filial = await criarUnidade({
+      tenantId: TENANT, nome: 'Filial', timezone: 'America/Bahia', cidade: 'Salvador', ator,
+    });
+    const daMatriz = 'b5858585-aaaa-0000-0000-000000000002';
+    await exec(`
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${daMatriz}', '${TENANT}', '${MATRIZ}', 'João da Matriz', 'professional');
+
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
+      VALUES ('${TENANT}', '${daMatriz}', 2, 540, 1080);
+
+      INSERT INTO appointments
+        (tenant_id, location_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at, status, price_cents)
+      VALUES ('${TENANT}', '${MATRIZ}', '${daMatriz}',
+              '2099-07-07T12:00:00Z', '2099-07-07T12:30:00Z',
+              '2099-07-07T12:00:00Z', '2099-07-07T12:30:00Z', 'confirmed', 4900)
+    `);
+
+    // A semente satisfaz **tudo menos** a regra sob teste: há agendamento
+    // futuro de verdade, então a lista vazia lá embaixo é o recorte agindo — e
+    // não a ausência de dado, que provaria a guarda sem exercitá-la.
+    expect(
+      await conflitosDaJornada({
+        tenantId: TENANT, locationId: MATRIZ, professionalId: daMatriz, faixas: [],
+      }),
+    ).toHaveLength(1);
+
+    // Ler a jornada alheia devolve vazio, e não a semana inteira dela.
+    expect(await getSchedule(TENANT, filial.id, daMatriz)).toEqual([]);
+
+    /**
+     * E a porta que roda **antes** de gravar, que era a pior das sete.
+     *
+     * `conflitosDaJornada` devolve nome de cliente com hora marcada, e o
+     * handler a chama antes de `saveSchedule`: mandando a jornada vazia — que o
+     * schema aceita, porque não há `.min()` — todo agendamento futuro vira
+     * conflito, e a resposta era a agenda inteira de um barbeiro de outra loja.
+     * A recusa da gravação vinha depois e não impedia nada.
+     */
+    expect(
+      await conflitosDaJornada({
+        tenantId: TENANT,
+        locationId: filial.id,
+        professionalId: daMatriz,
+        faixas: [],
+      }),
+    ).toEqual([]);
+
+    await expect(
+      updateProfessional(TENANT, filial.id, daMatriz, {
+        name: 'Renomeado pelo gerente',
+        kind: 'professional',
+        bookableOnline: true,
+        serviceIds: [],
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+
+    await expect(
+      saveSchedule({
+        tenantId: TENANT,
+        locationId: filial.id,
+        professionalId: daMatriz,
+        faixas: [{ weekday: 2, startMinute: 600, endMinute: 660, breaks: [] }],
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+
+    await expect(
+      setProfessionalActive({
+        tenantId: TENANT,
+        locationId: filial.id,
+        professionalId: daMatriz,
+        active: false,
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+
+    // Nada mudou: nem o nome, nem o estado, nem a jornada que o `DELETE` pegaria.
+    const depois = await admin.$queryRawUnsafe<
+      { name: string; active: boolean; faixas: bigint }[]
+    >(`
+      SELECT p.name, p.active,
+             (SELECT count(*) FROM work_schedules w WHERE w.professional_id = p.id) AS faixas
+        FROM professionals p WHERE p.id = '${daMatriz}'
+    `);
+    expect(depois[0]).toMatchObject({ name: 'João da Matriz', active: true });
+    expect(Number(depois[0]?.faixas)).toBe(1);
+  });
+
+  it('na própria loja, as mesmas portas continuam abertas', async () => {
+    // A guarda tem que recusar o alheio **e** deixar passar o próprio: sem este
+    // caso, um filtro que recusasse tudo passaria no teste de cima.
+    const daMatriz = 'b5858585-aaaa-0000-0000-000000000003';
+    await exec(`
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${daMatriz}', '${TENANT}', '${MATRIZ}', 'João da Matriz', 'professional')
+    `);
+
+    await saveSchedule({
+      tenantId: TENANT,
+      locationId: MATRIZ,
+      professionalId: daMatriz,
+      faixas: [{ weekday: 2, startMinute: 540, endMinute: 1080, breaks: [] }],
+    });
+    expect(await getSchedule(TENANT, MATRIZ, daMatriz)).toHaveLength(1);
+
+    await updateProfessional(TENANT, MATRIZ, daMatriz, {
+      name: 'João',
+      kind: 'professional',
+      bookableOnline: true,
+      serviceIds: [],
+    });
+    const depois = await admin.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM professionals WHERE id = '${daMatriz}'`,
+    );
+    expect(depois[0]?.name).toBe('João');
   });
 
   it('a segunda loja nasce aberta e com o próprio fuso', async () => {
