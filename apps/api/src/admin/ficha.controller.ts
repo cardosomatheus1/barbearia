@@ -53,7 +53,18 @@ function toHttp(error: unknown): never {
 @Controller('v1/admin/customers')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class FichaController {
-  @Exige('customers.view_notes')
+  /**
+   * `customers.view` junto: a ficha devolve nome e o final do telefone.
+   *
+   * Este arquivo tem a decisão escrita para a rota vizinha — a das fotos, que
+   * *"devolve só as fotos"* e por isso não declara `customers.view` — e para o
+   * campo que ficou de fora: o acumulado é `finance.view`. A mesma disciplina
+   * aplicada a dois campos e não ao terceiro.
+   *
+   * Anotação privada e identidade são decisões diferentes do dono, e a segunda
+   * não vem de graça com a primeira.
+   */
+  @Exige('customers.view_notes', 'customers.view')
   @Get(':id/ficha')
   async ler(
     @Staff() staff: AuthenticatedStaff,

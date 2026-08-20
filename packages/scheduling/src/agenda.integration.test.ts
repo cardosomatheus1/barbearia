@@ -41,7 +41,7 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
 }
 
 const agenda = (from = SEXTA, to = SEXTA) =>
-  getAgenda({ tenantId: TENANT, locationId: LOCATION, timezone: TZ, from, to });
+  getAgenda({ podeVerCliente: true, tenantId: TENANT, locationId: LOCATION, timezone: TZ, from, to });
 
 const grade = (date = SEXTA) =>
   getAvailabilityRange({
@@ -109,6 +109,7 @@ describeIfDb('agenda e exceções', () => {
 
   const bloquear = (extra: Record<string, unknown> = {}) =>
     createException({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       timezone: TZ,
@@ -224,6 +225,7 @@ describeIfDb('agenda e exceções', () => {
 
   it('folga do profissional fecha o dia dele e só o dele', async () => {
     await createException({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       timezone: TZ,
@@ -241,6 +243,7 @@ describeIfDb('agenda e exceções', () => {
 
   it('feriado da unidade fecha a barbearia inteira', async () => {
     await createException({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       timezone: TZ,
@@ -255,6 +258,7 @@ describeIfDb('agenda e exceções', () => {
 
   it('horário diferente num dia substitui a jornada daquele dia', async () => {
     await createException({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       timezone: TZ,
@@ -379,6 +383,7 @@ describeIfDb('agenda e exceções', () => {
     await marcar('11:00', GLEIDSON);
 
     const doRuan = await getAgenda({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       timezone: TZ,
@@ -464,6 +469,7 @@ describeIfDb('agenda e exceções', () => {
     if (!criado.saved) throw new Error('esperava ter gravado');
 
     const doRival = await getAgenda({
+      podeVerCliente: true,
       tenantId: RIVAL,
       locationId: LOCAL_RIVAL,
       timezone: TZ,
@@ -483,6 +489,7 @@ describeIfDb('agenda e exceções', () => {
 
     await expect(
       createException({
+        podeVerCliente: true,
         tenantId: RIVAL,
         locationId: LOCAL_RIVAL,
         timezone: TZ,

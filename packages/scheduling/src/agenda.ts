@@ -156,6 +156,18 @@ export async function getAgenda(params: {
   readonly to: string;
   /** Recorte de permissão: quem não vê a casa toda passa o próprio id. */
   readonly onlyProfessionalId?: string | null;
+  /**
+   * Quem pode ver identidade de cliente — obrigatório, como no painel do dia.
+   *
+   * A agenda traz `customerName` em toda linha e aceita janela de trinta dias:
+   * medido no banco de demonstração, um papel com `appointments.view` mais
+   * `appointments.view_all_professionals` colhia 577 dos 631 clientes por nome,
+   * enquanto a rota de busca de clientes respondia 403.
+   *
+   * Redigir e não recusar, pelo precedente de `applyAttendance` — `@Exige` é
+   * conjuntivo e trancaria quem só atende para fora da própria agenda.
+   */
+  readonly podeVerCliente: boolean;
 }): Promise<Agenda> {
   const dias = diasEntre(params.from, params.to);
   if (dias.length === 0 || dias.length > MAX_DIAS_DA_AGENDA) {
@@ -242,7 +254,7 @@ export async function getAgenda(params: {
         end: hhmm(params.timezone, linha.service_ends_at),
         occupiedStart: hhmm(params.timezone, linha.starts_at),
         occupiedEnd: hhmm(params.timezone, linha.ends_at),
-        customerName: linha.customer_name,
+        customerName: params.podeVerCliente ? linha.customer_name : null,
         services: linha.service_names ?? [],
         priceCents: linha.price_cents,
       });
@@ -302,6 +314,14 @@ function localMeiaNoite(timezone: string, data: string, somaDias = 0): Date {
 export interface ForaDaExcecao {
   readonly appointmentId: string;
   readonly start: string;
+  /**
+   * Nulo quando quem pergunta não tem `customers.view`.
+   *
+   * A rota que a devolve declara `settings.manage`, que é permissão de
+   * cadastro. Sem a redação, ela entregava a agenda futura com nome de quem
+   * marcou por uma permissão que não é de cliente — e a decisão de bloquear a
+   * faixa continua possível sabendo **quantos** e **quando**.
+   */
   readonly customerName: string | null;
   readonly professionalName: string;
 }
@@ -323,6 +343,7 @@ async function conflitosDaExcecao(
     readonly startMinute: number | null;
     readonly endMinute: number | null;
     readonly professionalId: string | null;
+    readonly podeVerCliente: boolean;
     /**
      * Recorte de permissão de quem pediu.
      *
@@ -372,7 +393,7 @@ async function conflitosDaExcecao(
     .map((linha) => ({
       appointmentId: linha.id,
       start: hhmm(params.timezone, linha.service_starts_at),
-      customerName: linha.customer_name,
+      customerName: params.podeVerCliente ? linha.customer_name : null,
       professionalName: linha.professional_name,
     }));
 }
@@ -392,6 +413,15 @@ export interface NovaExcecao {
   readonly confirmarConflitos?: boolean;
   /** Recorte de permissão de quem pediu. Ver `conflitosDaExcecao`. */
   readonly onlyProfessionalId?: string | null;
+  /**
+   * Quem pode ver identidade de cliente.
+   *
+   * A rota declara `settings.manage` — permissão de cadastro, não de cliente —
+   * e a primeira chamada devolve os conflitos **sem gravar**. Redigir e não
+   * recusar, como o painel do dia: sem a permissão a lista ainda diz quantos e
+   * quando, que é o que decide se o bloqueio pode entrar.
+   */
+  readonly podeVerCliente: boolean;
 }
 
 /**
@@ -469,6 +499,7 @@ export async function createException(
       endMinute: params.endMinute ?? null,
       professionalId: alvoProfissional,
       onlyProfessionalId: params.onlyProfessionalId ?? null,
+      podeVerCliente: params.podeVerCliente,
     });
 
     if (conflitos.length > 0 && !params.confirmarConflitos) {

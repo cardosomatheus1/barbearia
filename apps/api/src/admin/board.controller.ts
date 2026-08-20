@@ -109,6 +109,9 @@ export class BoardController {
       tenantId: staff.tenantId,
       locationId: unidade.id,
       date: query.date ?? unidade.today,
+      // Mesma decisão de `applyAttendance`, na rota que a antecede: quem não
+      // pode ver cliente recebe a linha sem nome, em vez de não receber linha.
+      podeVerCliente: pode(staff.permissions, 'customers.view'),
       onlyProfessionalId: this.recorte(staff),
     });
 
@@ -139,6 +142,30 @@ export class BoardController {
     @Body(new ZodValidationPipe(attendanceSchema)) body: { action: AttendanceAction },
   ) {
     const unidade = await unidadeDoBalcao(staff);
+
+    /**
+     * Cancelar exige `appointments.cancel` — a permissão que existia e nenhuma
+     * rota pedia.
+     *
+     * O catálogo a declara, a tela de permissões desenha a caixa "Cancelar
+     * horário", e o cabeçalho daquela tela usa **esta** permissão como exemplo
+     * do que ela veio resolver: *"tirar `appointments.cancel` da recepção era um
+     * `DELETE` no banco de produção"*. Desmarcá-la não fazia nada — cancelar
+     * passa por aqui, sob `appointments.attend`.
+     *
+     * A conferência é da ação **de fato exercida**, e não um segundo nome no
+     * `@Exige`: ele é conjuntivo, e somar a permissão trancaria quem só marca
+     * presença. É o desenho de `metrica.controller.ts`, que decide uma métrica
+     * de cada vez, e da própria `podeVerCliente` logo abaixo.
+     */
+    if (body.action === 'cancel' && !pode(staff.permissions, 'appointments.cancel')) {
+      throw new DomainError(
+        'forbidden',
+        403,
+        'Sua conta não pode cancelar horário. Fale com quem administra a barbearia.',
+      );
+    }
+
     try {
       return await applyAttendance({
         tenantId: staff.tenantId,

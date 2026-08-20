@@ -27,6 +27,19 @@ import { unidadeDoBalcao } from './unidade.js';
  *
  * `marketing.send` guarda as duas. A grade é ocupação — não é dinheiro, não
  * revela cadastro, e é o insumo de quem decide a campanha.
+ *
+ * ## A **listagem** é outra coisa, e declara `finance.view` junto
+ *
+ * `CampanhaNaTela` traz `receitaCents` — a receita atribuída, congelada na
+ * janela. `marketing.send` não tem prefixo `finance.`, então não está em
+ * `PERMISSOES_DE_DINHEIRO`, e o segundo fator que a `PermissaoGuard` deriva do
+ * prefixo não era cobrado: um papel "Marketing" lia a receita de cada campanha
+ * numa barbearia em que `GET /dashboard/revenue` respondia
+ * `mfa_setup_required`.
+ *
+ * É o defeito do bloco 62 — `reports.finance` na rota de crescimento — repetido
+ * num pacote que a varredura de receita não lia. Esta corrige a rota; a
+ * varredura ampliada é o que impede a terceira.
  */
 
 const STATUS: Record<string, number> = { nao_encontrada: 404, invalida: 400, ja_enviada: 409 };
@@ -45,7 +58,7 @@ export class CampanhaController {
     return unidadeDoBalcao(staff);
   }
 
-  @Exige('marketing.send')
+  @Exige('marketing.send', 'finance.view')
   @Get()
   async listar(@Staff() staff: AuthenticatedStaff) {
     const local = await this.unidade(staff);

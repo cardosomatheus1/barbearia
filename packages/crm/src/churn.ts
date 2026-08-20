@@ -65,6 +65,26 @@ const VISITAS_DO_TICKET = 3;
  * função do relógio, e ler `now()` no banco tornaria o resultado impossível de
  * testar sem esperar o tempo passar.
  */
+/**
+ * Quantos estão em risco — a **contagem**, sem nome nenhum.
+ *
+ * O assistente responde "quantos clientes estão em risco?" e precisa só do
+ * número; chamar `churnDaBase` e contar em cima trazia a lista de pessoas
+ * identificadas para dentro de uma rota que declara `appointments.view`.
+ *
+ * Não é preciosismo de varredura: é a mesma decisão do bloco 63 — *"contagem
+ * numa rota de leitura aberta é dinheiro quando multiplicada… rota separada
+ * para a versão contada"*. Aqui o que se separa não é dinheiro, é gente.
+ */
+export async function contagemEmRiscoDeChurn(
+  tenantId: string,
+  agora: Date = new Date(),
+  tx?: TransactionClient,
+): Promise<number> {
+  const todos = await churnDaBase(tenantId, agora, tx);
+  return todos.filter((c) => c.faixa !== 'baixo').length;
+}
+
 export async function churnDaBase(
   tenantId: string,
   agora: Date = new Date(),

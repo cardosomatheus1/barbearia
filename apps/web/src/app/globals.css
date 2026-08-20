@@ -6549,6 +6549,18 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
   padding: var(--space-1) var(--space-2);
 }
 
+/*
+ * O selo da permissao que ainda nao tem tela.
+ *
+ * Cor de aviso e nao de perigo: nao e erro nem risco, e a caixa que existe e
+ * ainda nao faz nada. A regra deste repositorio para gatilho que ainda nao
+ * funciona e aparecer marcado, nunca escondido.
+ */
+.permissao__selo--espera {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
 .permissao__salvar { margin-top: var(--space-4); }
 
 /* -- Consentimento do titular (bloco 31) ------------------------------------ */

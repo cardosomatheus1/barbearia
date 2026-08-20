@@ -21,6 +21,7 @@ import {
   type ServiceInput,
 } from '@barbearia/catalog';
 import type { AuthenticatedStaff } from '@barbearia/identity';
+import { pode } from '@barbearia/core';
 import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
@@ -232,6 +233,9 @@ export class CatalogoController {
     try {
       const local = await this.unidade(staff);
       const resultado = await setProfessionalActive({
+        // Redigir e nao recusar: `settings.manage` e permissao de cadastro, e
+        // quem nao tem `customers.view` le quantos e quando, nao os nomes.
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
         tenantId: staff.tenantId,
         locationId: local.id,
         professionalId: id,
@@ -277,6 +281,9 @@ export class CatalogoController {
     try {
       const local = await this.unidade(staff);
       const conflitos = await conflitosDaJornada({
+        // Redigir e nao recusar: `settings.manage` e permissao de cadastro, e
+        // quem nao tem `customers.view` le quantos e quando, nao os nomes.
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
         tenantId: staff.tenantId,
         locationId: local.id,
         professionalId: id,

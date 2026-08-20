@@ -186,7 +186,18 @@ export class FiscalController {
    * A repartição do Salão-Parceiro é outra coisa e tem outro dono: ela é a
    * comissão do profissional naquela venda, e sai só para `commission.view_all`.
    */
-  @Exige('fiscal.view', 'finance.view')
+  /**
+   * `customers.view` junto: a listagem devolve `clienteNome`.
+   *
+   * A rota irmã, por comanda, já declarava as duas — esta não. O nome do
+   * tomador é a cópia **congelada** na nota, e por isso escapou da guarda que
+   * nasceu do bloco 54: aquela olha a leitura do cadastro **vivo**
+   * (`tomadorDaVenda`) e é uma lista escrita com um nome só.
+   *
+   * O CPF continua fora de `NotaNaTela`, que é a outra metade daquele conserto
+   * e essa se manteve. Achado da varredura da rota que agrega.
+   */
+  @Exige('fiscal.view', 'finance.view', 'customers.view')
   @Get('notas')
   async notas(
     @Staff() staff: AuthenticatedStaff,

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import {
   PERMISSOES,
   PERMISSOES_DE_DINHEIRO,
+  PERMISSOES_SEM_ROTA,
   type Papel,
   type Permissao,
 } from '@barbearia/core';
@@ -227,6 +228,21 @@ const GRUPOS: readonly Grupo[] = [
 const DE_DINHEIRO: ReadonlySet<string> = new Set(PERMISSOES_DE_DINHEIRO);
 const exigeSegundoFator = (p: Permissao): boolean => DE_DINHEIRO.has(p);
 
+/**
+ * A que ainda não tem rota, dita na própria caixa.
+ *
+ * `finance.export` está no catálogo e nenhuma rota a exerce: a caixa aparece,
+ * com o selo de segundo fator ao lado, e marcá-la ou desmarcá-la não muda nada.
+ * Escondê-la faria o catálogo parecer completo; deixá-la sem aviso faz o dono
+ * configurar um controle que não existe — que é o pior dos três, porque ele
+ * acredita ter configurado.
+ *
+ * A lista vem de `core` e é cobrada nos dois sentidos por
+ * `scripts/permissao-com-rota.test.mjs`: a permissão que ganhar rota sai de lá,
+ * e a caixa perde o aviso sozinha.
+ */
+const SEM_ROTA: ReadonlySet<string> = new Set(PERMISSOES_SEM_ROTA);
+
 const FALHA: Record<string, string> = {
   owner_protected: 'O dono tem todas as permissões por definição, e isso não se edita.',
   invalid_role: 'Papel desconhecido.',
@@ -341,6 +357,11 @@ export default async function PermissoesPage({ searchParams }: Props) {
                             {TEXTO[permissao]}
                             {exigeSegundoFator(permissao) ? (
                               <span className="permissao__selo">2º fator</span>
+                            ) : null}
+                            {SEM_ROTA.has(permissao) ? (
+                              <span className="permissao__selo permissao__selo--espera">
+                                ainda sem tela
+                              </span>
                             ) : null}
                           </span>
                         </label>

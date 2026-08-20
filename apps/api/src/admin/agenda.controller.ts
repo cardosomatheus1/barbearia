@@ -154,6 +154,9 @@ export class AgendaController {
         timezone: local.timezone,
         from,
         to: query.to ?? from,
+        // Mesma decisão do painel do dia: quem não pode ver cliente recebe a
+        // linha sem nome, em vez de não receber a agenda.
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
         onlyProfessionalId: this.recorte(staff),
       });
 
@@ -262,6 +265,9 @@ export class AgendaController {
 
     try {
       return await createException({
+        // A conferencia devolve nome de quem esta marcado dentro do bloqueio, e
+        // esta rota declara `settings.manage`. Redigir, nao recusar.
+        podeVerCliente: pode(staff.permissions, 'customers.view'),
         tenantId: staff.tenantId,
         onlyProfessionalId: this.recorte(staff),
         locationId: local.id,

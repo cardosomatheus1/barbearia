@@ -239,7 +239,24 @@ export class CaixaController {
     }
   }
 
-  @Exige('cashier.open')
+  /**
+   * `customers.view` nas **cinco** rotas que devolvem a comanda, e não só na
+   * leitura.
+   *
+   * O comentário de `GET /orders/:id` diz por que ela precisa da permissão,
+   * nome por nome: a comanda carrega `customerName`, `conta.saldoCents` e
+   * `conta.limiteCents`. As cinco de escrita devolvem **o mesmo objeto** e
+   * declaravam só `cashier.open` — então os três campos que a porta da frente
+   * recusava saíam inteiros pela porta de trás, um cliente por vez, com os ids
+   * saindo de graça em `GET /day`.
+   *
+   * Os quatro papéis padrão já têm `customers.view`, então nada perde
+   * capacidade: o que muda é o papel de balcão a que o dono **negue** a
+   * permissão — a configuração que o comentário da leitura já antecipava.
+   *
+   * Achado da varredura da rota que agrega, nona reincidência da regra.
+   */
+  @Exige('cashier.open', 'customers.view')
   @Post('orders')
   async abrirComandaNova(
     @Staff() staff: AuthenticatedStaff,
@@ -268,7 +285,7 @@ export class CaixaController {
     }
   }
 
-  @Exige('cashier.open')
+  @Exige('cashier.open', 'customers.view')
   @Post('orders/:id/items')
   async item(
     @Staff() staff: AuthenticatedStaff,
@@ -303,7 +320,7 @@ export class CaixaController {
     }
   }
 
-  @Exige('cashier.open')
+  @Exige('cashier.open', 'customers.view')
   @Delete('orders/:id/items/:itemId')
   async removerDaComanda(
     @Staff() staff: AuthenticatedStaff,
@@ -342,7 +359,7 @@ export class CaixaController {
    * Permissão diz *quem*; `tenants.max_discount_bps` diz *quanto*. Sem o teto,
    * conceder desconto continuaria sendo conceder estorno com outro nome.
    */
-  @Exige('finance.discount')
+  @Exige('finance.discount', 'customers.view')
   @Patch('orders/:id')
   async ajustar(
     @Staff() staff: AuthenticatedStaff,
@@ -366,7 +383,7 @@ export class CaixaController {
     }
   }
 
-  @Exige('cashier.open')
+  @Exige('cashier.open', 'customers.view')
   @Post('orders/:id/close')
   async pagar(
     @Staff() staff: AuthenticatedStaff,

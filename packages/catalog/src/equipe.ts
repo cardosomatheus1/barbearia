@@ -382,6 +382,16 @@ export interface ForaDaJornada {
 export async function conflitosDaJornada(params: {
   readonly tenantId: string;
   /**
+   * Quem pode ver identidade de cliente.
+   *
+   * A conferência de dois tempos devolve **nome de cliente com hora marcada**,
+   * e a rota que a chama declara `settings.manage` — que é permissão de
+   * cadastro, não de cliente. Redigir e não recusar, como o painel do dia: sem
+   * a permissão a lista ainda diz *quantos* e *quando*, que é o que decide se a
+   * jornada nova pode entrar.
+   */
+  readonly podeVerCliente: boolean;
+  /**
    * A unidade da sessão, e ela é a **primeira** porta do handler.
    *
    * `conflitosDaJornada` roda antes de `saveSchedule` e devolve **nome de
@@ -459,7 +469,7 @@ export async function conflitosDaJornada(params: {
           startsAt: linha.service_starts_at.toISOString(),
           date: inicio.date,
           time: formatHHMM(inicio.minutes),
-          customerName: linha.customer_name,
+          customerName: params.podeVerCliente ? linha.customer_name : null,
         });
       }
     }
@@ -532,6 +542,14 @@ export async function setProfessionalActive(params: {
   readonly locationId: string;
   readonly professionalId: string;
   readonly active: boolean;
+  /**
+   * Quem pode ver identidade de cliente.
+   *
+   * Desativar a cadeira devolve os atendimentos futuros dela — com o nome de
+   * quem marcou —, para o balcão saber quem precisa ser avisado. Mesma decisão
+   * da jornada: sem a permissão, a lista diz quantos e quando.
+   */
+  readonly podeVerCliente: boolean;
   readonly now?: Date;
 }): Promise<{ readonly futuros: readonly ForaDaJornada[] }> {
   const now = params.now ?? new Date();
@@ -573,7 +591,7 @@ export async function setProfessionalActive(params: {
           startsAt: linha.service_starts_at.toISOString(),
           date: local.date,
           time: formatHHMM(local.minutes),
-          customerName: linha.customer_name,
+          customerName: params.podeVerCliente ? linha.customer_name : null,
         };
       }),
     };

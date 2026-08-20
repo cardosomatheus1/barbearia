@@ -49,7 +49,7 @@ async function exec(client: PrismaClient, sql: string): Promise<void> {
 }
 
 const fila = (now = AGORA) =>
-  getQueue({ tenantId: TENANT, locationId: LOCATION, timezone: TZ, now });
+  getQueue({ podeVerCliente: true, tenantId: TENANT, locationId: LOCATION, timezone: TZ, now });
 
 describeIfDb('fila presencial', () => {
   beforeAll(async () => {
@@ -643,6 +643,7 @@ describeIfDb('fila presencial', () => {
     const entrada = await entrar(CARLOS);
 
     const doRival = await getQueue({
+      podeVerCliente: true,
       tenantId: RIVAL,
       locationId: LOCATION,
       timezone: TZ,

@@ -203,6 +203,9 @@ lancar "capacidade com tipo de cadeira" npx vitest run scripts/cadeira-com-tipo.
 # location_id, dentro de funcao que ja recebia a loja. O pior fechava a comanda
 # da matriz com o dinheiro caindo na gaveta da filial.
 lancar "id conferido contra a unidade" npx vitest run scripts/id-com-unidade.test.mjs
+# Permissao no catalogo que nenhuma rota exige e controle de seguranca que o
+# dono acredita ter configurado: a caixa esta la, ele desmarca, e nada muda.
+lancar "permissao com rota" npx vitest run scripts/permissao-com-rota.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
 # nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.

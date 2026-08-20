@@ -183,6 +183,30 @@ export async function getDayBoard(params: {
    * escolhesse o que ele pode ver.
    */
   readonly onlyProfessionalId?: string | null;
+  /**
+   * Quem pode ver identidade de cliente — **obrigatório**, como em
+   * `applyAttendance`.
+   *
+   * O painel do dia traz `customerName`, `customerPhoneTail` e `customerId` de
+   * toda linha, sob `appointments.view` sozinha. Medido no banco de
+   * demonstração: um papel com `appointments.view` mais
+   * `appointments.view_all_professionals` — dois cliques na tela de permissões
+   * — colhia 536 clientes com id, nome e final do telefone varrendo oitenta
+   * dias, enquanto `GET /customers` respondia 403.
+   *
+   * O contraste é o que pesa: a rota de busca tem piso de três caracteres e
+   * teto de resultados porque *"não pode virar exportação da base uma página
+   * por vez"*, e esta fazia a exportação por outra permissão.
+   *
+   * Redigir e não recusar é o precedente escrito de `applyAttendance`: `@Exige`
+   * é conjuntivo, e somar `customers.view` à rota tiraria de quem só atende o
+   * direito de abrir o próprio dia. Quem não a tem recebe a linha sem nome;
+   * quem a tem, os nomes.
+   *
+   * Obrigatório no tipo porque opcional ele nasceria ausente na primeira rota
+   * nova — e aí o padrão seria "vê tudo", que é o lado errado.
+   */
+  readonly podeVerCliente: boolean;
   readonly now?: Date;
 }): Promise<DayBoard> {
   const now = params.now ?? new Date();
@@ -281,9 +305,9 @@ export async function getDayBoard(params: {
         startsAt: linha.service_starts_at.toISOString(),
         professionalId: linha.professional_id,
         professionalName: linha.professional_name,
-        customerName: linha.customer_name,
-        customerPhoneTail: tail(linha.customer_phone),
-        customerId: linha.customer_id,
+        customerName: params.podeVerCliente ? linha.customer_name : null,
+        customerPhoneTail: params.podeVerCliente ? tail(linha.customer_phone) : null,
+        customerId: params.podeVerCliente ? linha.customer_id : null,
         services: linha.services,
         priceCents: linha.price_cents,
         deposit: linha.deposit_required_cents > 0

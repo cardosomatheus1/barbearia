@@ -274,6 +274,20 @@ export async function getQueue(params: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly timezone: string;
+  /**
+   * Quem pode ver identidade de cliente — obrigatório, como no painel do dia.
+   *
+   * A fila traz `customerId`, `customerName` e `customerPhoneTail` de cada
+   * pessoa, sob `appointments.view` sozinha. Redigir e não recusar é o
+   * precedente de `applyAttendance`, e aqui ele já valia para a lista de espera
+   * que ela devolve: *"a lista vazia seria mentira — 'ninguém espera' quando
+   * alguém espera"*. A fila em si tinha ficado de fora.
+   *
+   * O nome vira string vazia e não nulo porque o tipo já é `string` e a tela
+   * desenha o lugar dele — quem não pode ver lê a posição e a duração, que é o
+   * que faz a fila andar.
+   */
+  readonly podeVerCliente: boolean;
   readonly now?: Date;
 }): Promise<Fila> {
   const now = params.now ?? new Date();
@@ -341,10 +355,12 @@ export async function getQueue(params: {
         id: linha.id,
         posicao: indice + 1,
         customerId: linha.customer_id,
-        customerName: linha.customer_name,
+        customerName: params.podeVerCliente ? linha.customer_name : '',
         // Nulo depois da anonimização (bloco 32): a coluna aceita nulo desde a
         // migração 0034, e o `.slice` quebrava a fila inteira.
-        customerPhoneTail: linha.customer_phone?.slice(-4) ?? null,
+        customerPhoneTail: params.podeVerCliente
+          ? (linha.customer_phone?.slice(-4) ?? null)
+          : null,
         status: linha.status,
         services: linha.service_names ?? [],
         duracaoMinutos: duracaoDe(linha.service_ids ?? []),
@@ -859,6 +875,9 @@ export async function queuePositionByToken(params: {
     tenantId: params.tenantId,
     locationId: achada.location_id,
     timezone: achada.timezone,
+    // O link do celular: quem o tem é o próprio cliente, e a resposta já é
+    // recortada para a entrada dele logo abaixo — nenhum nome de terceiro sai.
+    podeVerCliente: true,
     now,
   });
 

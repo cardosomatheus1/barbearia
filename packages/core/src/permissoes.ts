@@ -358,6 +358,28 @@ export function ehPermissao(valor: string): valor is Permissao {
  * fator para *ver* o faturamento e nenhum para *levar* a sangria, que é o
  * inverso do risco.
  */
+/**
+ * As permissões que **ainda não têm rota**, marcadas na tela.
+ *
+ * `finance.export` está no catálogo e nenhuma rota a exerce: a tela desenha a
+ * caixa "Exportar relatório financeiro", com o selo de segundo fator ao lado, e
+ * marcá-la ou desmarcá-la não muda nada. A regra deste repositório para gatilho
+ * que ainda não funciona é aparecer **marcado**, nunca escondido — escondê-lo
+ * faria o catálogo parecer completo, e mostrá-lo sem aviso faz a barbearia
+ * configurar um controle que não existe.
+ *
+ * É o desenho de `ESCOPOS_COM_ROTA` na tela de chaves, e a lista mora aqui pelo
+ * mesmo motivo: `packages/core` não lê o fonte da API. Quem impede a
+ * divergência é `scripts/permissao-com-rota.test.mjs`, que varre os
+ * decoradores e as conferências e cobra a igualdade nos dois sentidos — a
+ * permissão que ganhar rota sai daqui ou o portão fica vermelho.
+ *
+ * `appointments.cancel` esteve nesta situação e era pior: o cabeçalho da tela
+ * de permissões usa **ela** como exemplo do que a tela veio resolver, e
+ * desmarcá-la não impedia cancelamento nenhum. Ganhou conferência no bloco 118.
+ */
+export const PERMISSOES_SEM_ROTA: readonly Permissao[] = ['finance.export'];
+
 export const PERMISSOES_DE_DINHEIRO: readonly Permissao[] = PERMISSOES.filter(
   (p): p is Permissao =>
     p.startsWith('finance.') ||

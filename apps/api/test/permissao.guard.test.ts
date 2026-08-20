@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Reflector } from '@nestjs/core';
@@ -968,9 +968,22 @@ describe('as rotas do painel', () => {
  * sem `customers.*`, configuração natural desde que os papéis viraram
  * editáveis — colhia nome e CPF de todo cliente que já pediu nota.
  *
- * A lista de funções é escrita, e é o desenho certo aqui: o que se quer prender
- * é *"esta leitura devolve pessoa"*, que é uma decisão, não uma forma de tipo.
- * Ela cresce quando alguém acrescentar outra — e o comentário diz isso.
+ * ## A lista escrita ficou com um nome só, e foi por baixo dela que a nona passou
+ *
+ * O comentário dizia que ela *"cresce quando alguém acrescentar outra"*.
+ * Ninguém acrescentou — e a **listagem** fiscal por período voltou a devolver o
+ * nome do tomador, porque ela lê a cópia **congelada** na nota e não o cadastro
+ * vivo. A lista via `tomadorDaVenda` e mais nada.
+ *
+ * Quem prende a classe inteira agora é a varredura derivada de **pessoa** (a
+ * quinta, acima): ela pergunta pelo formato do tipo — campo que diz cliente e
+ * diz identidade, ou tipo que aponta uma pessoa e carrega identidade nua — e
+ * subsome este caso, porque `TomadorDaVenda` casa pelo primeiro anchor.
+ *
+ * Esta continua por um motivo só, e é barato: ela ancora no **nome da função**,
+ * então pega a leitura que devolve um tipo anônimo ou um `Pick<>`, que o
+ * formato não alcança. Duas redes com recortes diferentes sobre a mesma regra
+ * é o desenho certo quando nenhuma das duas cobre tudo.
  */
 const LEITURAS_DE_CADASTRO = ['tomadorDaVenda'];
 
@@ -994,5 +1007,171 @@ describe('rota que devolve cadastro de cliente', () => {
     }
 
     expect(faltando).toEqual([]);
+  });
+
+  /**
+   * Rota que devolve **uma pessoa identificada** declara `customers.view`.
+   *
+   * As três derivações acima perguntam por **assunto** — margem, receita,
+   * desempenho do colega. Nenhuma pergunta por **pessoa**, e a única guarda que
+   * o fazia era uma lista escrita com um nome só (`LEITURAS_DE_CADASTRO`), que
+   * o próprio comentário admitia que *"cresce quando alguém acrescentar outra"*
+   * — ninguém acrescentou, e a listagem fiscal passou por baixo dela devolvendo
+   * o nome do tomador congelado na nota.
+   *
+   * A regra da rota que agrega já foi quebrada oito vezes, e cinco delas eram
+   * esta mesma classe: a comanda, a agenda, o painel do dia, a fila e a ficha.
+   *
+   * ## O anchor: o nome do campo, não a menção
+   *
+   * (A) um campo cujo nome diz cliente **e** identidade — `customerName`,
+   *     `clienteNome`, `customerPhoneTail`, `clienteCpf`;
+   * (B) um tipo que aponta uma pessoa (`customerId`) **e** carrega identidade
+   *     nua (`nome`, `telefone`, `cpf`, `email`, `fotoUrl`) — é a `Ficha`.
+   *
+   * Propaga por herança **e** composição até o ponto fixo, como as três
+   * anteriores. A isenção é conquistada: quem redige em vez de recusar recebe
+   * `podeVerCliente` e sai do caminho — não há lista de arquivos isentos.
+   *
+   * ## Três correções mecânicas sobre o que as anteriores fazem
+   *
+   * Todos os pacotes (e não `core` + `finance`), corpo da interface por
+   * contagem de chaves (e não `[^}]*`, que para no primeiro objeto aninhado e
+   * escondia `DayBoard`), e fim da lista de parâmetros por contagem de
+   * parênteses (e não janela de N caracteres, que já foi esticada uma vez e
+   * ainda deixava `fecharComanda` de fora).
+   */
+  it('rota que devolve pessoa identificada declara customers.view', () => {
+    const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages');
+    const PASTAS = readdirSync(RAIZ)
+      .map((p) => join(RAIZ, p, 'src'))
+      .filter((p) => existsSync(p));
+
+    /** (A) o campo diz cliente e diz identidade. */
+    const CAMPO_DE_PESSOA =
+      /\b(customer|cliente)(Name|Nome|Phone\w*|Telefone\w*|TaxId|Cpf|Foto\w*|Email)\s*\??:/;
+    /** (B) aponta uma pessoa… */
+    const APONTA_PESSOA = /\b(customerId|clienteId)\s*\??:/;
+    /** …e carrega identidade nua. */
+    const IDENTIDADE_NUA = /\b(nome|name|telefone\w*|phone\w*|cpf|taxId|fotoUrl|email)\s*\??:/i;
+
+    /** O corpo de um bloco, por **contagem de chaves**. */
+    const corpoDe = (fonte: string, abre: number): string => {
+      let nivel = 0;
+      for (let i = abre; i < fonte.length; i += 1) {
+        if (fonte[i] === '{') nivel += 1;
+        else if (fonte[i] === '}') {
+          nivel -= 1;
+          if (nivel === 0) return fonte.slice(abre + 1, i);
+        }
+      }
+      return fonte.slice(abre);
+    };
+
+    const fontes = PASTAS.flatMap((pasta) =>
+      readdirSync(pasta)
+        .filter((n) => n.endsWith('.ts') && !n.includes('.test.'))
+        .map((n) => readFileSync(join(pasta, n), 'utf8')),
+    );
+
+    const tiposDePessoa = new Set<string>();
+    const corpoDaInterface = new Map<string, string>();
+    const paiDaInterface = new Map<string, string>();
+
+    for (const fonte of fontes) {
+      for (const m of fonte.matchAll(/export interface (\w+)[^{]*\{/g)) {
+        const nome = m[1] ?? '';
+        const corpo = corpoDe(fonte, (m.index ?? 0) + m[0].length - 1);
+        corpoDaInterface.set(nome, corpo);
+        if (CAMPO_DE_PESSOA.test(corpo)) tiposDePessoa.add(nome);
+        if (APONTA_PESSOA.test(corpo) && IDENTIDADE_NUA.test(corpo)) tiposDePessoa.add(nome);
+      }
+      for (const m of fonte.matchAll(/export interface (\w+) extends (\w+)/g)) {
+        paiDaInterface.set(m[1] ?? '', m[2] ?? '');
+      }
+    }
+
+    // Ponto fixo: herança e composição.
+    for (let mudou = true; mudou; ) {
+      mudou = false;
+      for (const [filho, pai] of paiDaInterface) {
+        if (tiposDePessoa.has(pai) && !tiposDePessoa.has(filho)) {
+          tiposDePessoa.add(filho);
+          mudou = true;
+        }
+      }
+      for (const [nome, corpo] of corpoDaInterface) {
+        if (tiposDePessoa.has(nome)) continue;
+        const compoe = [...tiposDePessoa].some((t) => new RegExp(`:\\s*readonly\\s+${t}\\b|:\\s*${t}\\b`).test(corpo));
+        if (compoe) {
+          tiposDePessoa.add(nome);
+          mudou = true;
+        }
+      }
+    }
+
+    /** A lista de parâmetros, por **contagem de parênteses**. */
+    const parametrosDe = (fonte: string, abre: number): string => {
+      let nivel = 0;
+      for (let i = abre; i < fonte.length; i += 1) {
+        if (fonte[i] === '(') nivel += 1;
+        else if (fonte[i] === ')') {
+          nivel -= 1;
+          if (nivel === 0) return fonte.slice(abre + 1, i);
+        }
+      }
+      return '';
+    };
+
+    const funcoesDePessoa = new Set<string>();
+    for (const fonte of fontes) {
+      for (const m of fonte.matchAll(/export async function (\w+)\(/g)) {
+        const abre = (m.index ?? 0) + m[0].length - 1;
+        const params = parametrosDe(fonte, abre);
+        const depois = fonte.slice(abre + params.length + 2, abre + params.length + 260);
+        const retorno = /Promise<([^>]+(?:<[^>]*>)?[^>]*)>/.exec(depois)?.[1] ?? '';
+        if (![...tiposDePessoa].some((t) => new RegExp(`\\b${t}\\b`).test(retorno))) continue;
+
+        /**
+         * A isenção conquistada: quem **redige** recebe `podeVerCliente`.
+         *
+         * Não há lista de arquivos isentos — a função que decide mostrar ou não
+         * o nome declara o parâmetro, e a varredura sai do caminho. Foi assim
+         * que `applyAttendance` saiu, e é assim que a próxima sai.
+         */
+        const redige =
+          /podeVerCliente\s*\??:/.test(params) ||
+          // …ou o parâmetro é um tipo nomeado que o declara: `createException`
+          // recebe `NovaExcecao`, e a isenção precisa seguir o tipo.
+          [...corpoDaInterface].some(
+            ([nome, corpo]) =>
+              /podeVerCliente\s*\??:/.test(corpo) && new RegExp(`\\b${nome}\\b`).test(params),
+          );
+        if (redige) continue;
+        funcoesDePessoa.add(m[1] ?? '');
+      }
+    }
+
+    expect(tiposDePessoa.size, 'a varredura precisa achar tipos para valer').toBeGreaterThan(0);
+    expect(funcoesDePessoa.size, 'e funções que os devolvam').toBeGreaterThan(0);
+
+    const faltando: string[] = [];
+    for (const { arquivo, corpo, guardada } of controllers()) {
+      if (!guardada) continue;
+      const handlers = [...corpo.matchAll(/@Exige\(([^)]*)\)([\s\S]*?)(?=@Exige\(|$)/g)];
+      for (const handler of handlers) {
+        const permissoes = handler[1] ?? '';
+        const codigo = handler[2] ?? '';
+        if (/customers\.(view|export)\b/.test(permissoes)) continue;
+        const chamada = [...funcoesDePessoa].find((f) => new RegExp(`\\b${f}\\s*\\(`).test(codigo));
+        if (chamada) faltando.push(`${arquivo} · @Exige(${permissoes.trim()}) · ${chamada}`);
+      }
+    }
+
+    expect(
+      faltando,
+      'esta rota devolve nome, telefone, CPF ou foto de cliente sem declarar customers.view — ' +
+        'declare a permissão, ou receba `podeVerCliente` e redija o campo',
+    ).toEqual([]);
   });
 });

@@ -310,6 +310,7 @@ describeIfDb('CRUD do catálogo', () => {
     `);
 
     const { futuros } = await setProfessionalActive({
+      podeVerCliente: true,
       tenantId: TENANT, locationId: LOCATION, professionalId: RUAN, active: false,
     });
 
@@ -372,6 +373,7 @@ describeIfDb('CRUD do catálogo', () => {
     `);
 
     const fora = await conflitosDaJornada({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -396,6 +398,7 @@ describeIfDb('CRUD do catálogo', () => {
     `);
 
     const fora = await conflitosDaJornada({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -417,6 +420,7 @@ describeIfDb('CRUD do catálogo', () => {
 
     // 12:30 local cai dentro do almoço proposto.
     const fora = await conflitosDaJornada({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -440,6 +444,7 @@ describeIfDb('CRUD do catálogo', () => {
     `);
 
     const fora = await conflitosDaJornada({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -554,7 +559,7 @@ describeIfDb('CRUD do catálogo', () => {
     ).rejects.toMatchObject({ code: 'service_not_found' });
 
     await expect(
-      setProfessionalActive({ tenantId: RIVAL, locationId: LOCAL_RIVAL, professionalId: RUAN, active: false }),
+      setProfessionalActive({ podeVerCliente: true, tenantId: RIVAL, locationId: LOCAL_RIVAL, professionalId: RUAN, active: false }),
     ).rejects.toMatchObject({ code: 'professional_not_found' });
 
     // E o preço do vizinho continua o que era.

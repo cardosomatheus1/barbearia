@@ -134,6 +134,7 @@ describeIfDb('unidades da casa', () => {
     // não a ausência de dado, que provaria a guarda sem exercitá-la.
     expect(
       await conflitosDaJornada({
+        podeVerCliente: true,
         tenantId: TENANT, locationId: MATRIZ, professionalId: daMatriz, faixas: [],
       }),
     ).toHaveLength(1);
@@ -152,6 +153,7 @@ describeIfDb('unidades da casa', () => {
      */
     expect(
       await conflitosDaJornada({
+        podeVerCliente: true,
         tenantId: TENANT,
         locationId: filial.id,
         professionalId: daMatriz,
@@ -179,6 +181,7 @@ describeIfDb('unidades da casa', () => {
 
     await expect(
       setProfessionalActive({
+        podeVerCliente: true,
         tenantId: TENANT,
         locationId: filial.id,
         professionalId: daMatriz,

@@ -13,7 +13,7 @@ import {
   type FalhaDaPergunta,
 } from '@barbearia/core';
 import { margemPorServico, medir, rentabilidadeDoClube } from '@barbearia/finance';
-import { churnDaBase } from '@barbearia/crm';
+import { contagemEmRiscoDeChurn } from '@barbearia/crm';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -276,8 +276,9 @@ async function responder(
   }
 
   if (pergunta.metrica === 'clientes_em_risco') {
-    const todos = await churnDaBase(tenantId);
-    return { total: todos.filter((c) => c.faixa !== 'baixo').length, fatias: [] };
+    // A versão contada, que não traz pessoa: esta rota declara o piso mais
+    // baixo do painel, e a lista de churn é nome com telefone.
+    return { total: await contagemEmRiscoDeChurn(tenantId), fatias: [] };
   }
 
   if (pergunta.metrica === 'margem_por_servico') {

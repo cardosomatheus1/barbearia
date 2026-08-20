@@ -86,7 +86,7 @@ describeIfDb('painel do dia', () => {
     });
 
   const painel = (now = AGORA) =>
-    getDayBoard({ tenantId: TENANT, locationId: LOCATION, date: TERCA, now });
+    getDayBoard({ podeVerCliente: true, tenantId: TENANT, locationId: LOCATION, date: TERCA, now });
 
   it('mostra o dia com quem está marcado', async () => {
     await marcar('09:00');
@@ -188,6 +188,7 @@ describeIfDb('painel do dia', () => {
     // E o contrário: ele não pode aparecer no dia 12, que é onde cairia se a
     // consulta usasse UTC cru.
     const seguinte = await getDayBoard({
+      podeVerCliente: true,
       tenantId: TENANT, locationId: LOCATION, date: '2026-08-12', now: AGORA,
     });
     expect(seguinte.entries).toEqual([]);
@@ -403,6 +404,7 @@ describeIfDb('painel do dia', () => {
     await exec(admin, `INSERT INTO tenants (id, name) VALUES ('${rival}', 'Rival')`);
 
     const board = await getDayBoard({
+      podeVerCliente: true,
       tenantId: rival, locationId: LOCATION, date: TERCA, now: AGORA,
     });
     // A RLS não enxerga nem a unidade: o painel volta vazio, não com o dia alheio.
@@ -483,6 +485,7 @@ describeIfDb('painel do dia — só a minha agenda', () => {
     await marcarCom(GLEIDSON, '10:00');
 
     const dele = await getDayBoard({
+      podeVerCliente: true,
       tenantId: TENANT,
       locationId: LOCATION,
       date: TERCA,
@@ -498,7 +501,7 @@ describeIfDb('painel do dia — só a minha agenda', () => {
   });
 
   const casaInteira = () =>
-    getDayBoard({ tenantId: TENANT, locationId: LOCATION, date: TERCA, now: AGORA });
+    getDayBoard({ podeVerCliente: true, tenantId: TENANT, locationId: LOCATION, date: TERCA, now: AGORA });
 
   it('sem recorte, a casa inteira aparece', async () => {
     await marcarCom(RUAN, '09:00');

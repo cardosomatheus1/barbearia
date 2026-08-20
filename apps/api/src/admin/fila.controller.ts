@@ -10,6 +10,7 @@ import {
 } from '@barbearia/scheduling';
 import { OtpError, resolveGuestCustomer, type AuthenticatedStaff } from '@barbearia/identity';
 import { findCustomer } from '@barbearia/scheduling';
+import { pode } from '@barbearia/core';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
@@ -73,6 +74,9 @@ export class FilaController {
       tenantId: staff.tenantId,
       locationId: local.id,
       timezone: local.timezone,
+      // Mesma decisão do painel do dia: quem não pode ver cliente lê a posição
+      // e a duração, que é o que faz a fila andar.
+      podeVerCliente: pode(staff.permissions, 'customers.view'),
     });
   }
 
