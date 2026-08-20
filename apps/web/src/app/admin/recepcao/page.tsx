@@ -11,6 +11,7 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoResolverLacuna, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * As perguntas que a recepção digital não soube responder (bloco 66, SPEC §4.17).
@@ -120,9 +121,7 @@ export default async function RecepcaoPage({ searchParams }: Props) {
         </div>
       ) : null}
       {erro ? (
-        <div className="ui-alert ui-alert--danger recepcao__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="recepcao__aviso" />
       ) : null}
 
       {!resposta.ok ? (

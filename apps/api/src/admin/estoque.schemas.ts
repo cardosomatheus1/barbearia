@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TIPOS_DE_MOVIMENTO_DE_ESTOQUE, TIPOS_DE_PRODUTO } from '@barbearia/core';
 import { diaISO } from '../common/data.js';
+import { UNIDADES_DE_MEDIDA } from '@barbearia/core';
 
 const MAX_CENTAVOS = 100_000_000;
 
@@ -26,7 +27,8 @@ export const produtoSchema = z.object({
    */
   precoCents: z.number().int().min(0).max(MAX_CENTAVOS).nullable(),
   minimo: z.number().int().min(0).max(100_000),
-  unidade: z.enum(['un', 'ml', 'g']),
+  // Do domínio, e agora com `CHECK` no banco por trás (0093).
+  unidade: z.enum(UNIDADES_DE_MEDIDA),
   venceEm: diaISO
     .nullable()
     .optional(),

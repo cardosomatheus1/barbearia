@@ -1,4 +1,28 @@
-import type { Conversa, EstadoDeCampanha, ServiceTemplate, TipoDeCadeira } from '@barbearia/core';
+import type {
+  AlertaDeEstoque,
+  BaseDeComissao,
+  Conversa,
+  DesfechoDaRecuperacao,
+  DirecaoDaConta,
+  EstadoDaAssinatura,
+  EstadoDaNota,
+  EstadoDeCampanha,
+  EstadoDoRecado,
+  FormaDePagamento,
+  ModoDeComissao,
+  ModoDeFidelidade,
+  MotivoDaContestacao,
+  Papel,
+  RegimeFiscal,
+  ServiceTemplate,
+  TipoDeCadeira,
+  TipoDeExcecao,
+  TipoDeMovimentoDeEstoque,
+  TipoDeProduto,
+  TipoDeRecado,
+  TratamentoDaTaxa,
+  TratamentoDoDesconto,
+} from '@barbearia/core';
 
 /**
  * Cliente da API do painel.
@@ -467,7 +491,7 @@ export const salvarFotos = (
 
 // -- Equipe -------------------------------------------------------------------
 
-export type Papel = 'owner' | 'manager' | 'receptionist' | 'professional';
+export type { Papel };
 
 export interface MembroDaEquipe {
   id: string;
@@ -879,8 +903,8 @@ export const aceitarConvite = (slug: string, token: string) =>
 
 // -- Recados do cliente (bloco 40) --------------------------------------------
 
-export type TipoDeRecado = 'sugestao' | 'reclamacao' | 'elogio';
-export type EstadoDoRecado = 'aberto' | 'em_analise' | 'respondido' | 'encerrado';
+export type { TipoDeRecado };
+export type { EstadoDoRecado };
 
 export interface RecadoNaTela {
   id: string;
@@ -1019,7 +1043,7 @@ export const resolverLacunaNaApi = (token: string, id: string) =>
 
 // -- Fidelidade (bloco 41) ----------------------------------------------------
 
-export type ModoDeFidelidade = 'nenhum' | 'pontos' | 'visitas' | 'cashback';
+export type { ModoDeFidelidade };
 
 export interface ProgramaDeFidelidade {
   modo: ModoDeFidelidade;
@@ -1083,7 +1107,7 @@ export const ajustarSaldoDeFidelidade = (
 
 // -- Agenda do admin -----------------------------------------------------------
 
-export type TipoDeExcecao = 'block' | 'day_off' | 'holiday' | 'vacation' | 'custom_hours';
+export type { TipoDeExcecao };
 
 export interface EntradaDaAgenda {
   id: string;
@@ -1188,9 +1212,15 @@ export const moverAgendamento = (
 
 // -- Comanda, caixa e fiado -----------------------------------------------------
 
-/** Espelha `FORMAS_DE_PAGAMENTO` do core, que é o que a borda da API aceita. */
-export type FormaDePagamento =
-  | 'cash' | 'pix' | 'debit' | 'credit' | 'link' | 'transfer' | 'fiado' | 'fidelidade';
+/**
+ * Reexportada do `core`, **nunca** reescrita.
+ *
+ * A versão anterior era uma união escrita à mão com o comentário *"espelha
+ * `FORMAS_DE_PAGAMENTO` do core"* logo acima — e não espelhava desde o bloco
+ * 42: faltavam `pacote` e `assinatura`. Um `export type` independente é uma
+ * segunda declaração, e acrescentar valor no domínio não quebra nada aqui.
+ */
+export type { FormaDePagamento };
 export type TipoDeItemDaComanda = 'service' | 'product' | 'consumable' | 'package';
 
 export interface ItemDaComandaNaTela {
@@ -1465,10 +1495,10 @@ export const verificarSegundoFatorAgora = (token: string, codigo: string) =>
 
 // -- Comissão -------------------------------------------------------------------
 
-export type ModoDeComissao = 'percent' | 'fixed' | 'tiers';
-export type BaseDeComissao = 'liquido' | 'bruto';
-export type TratamentoDoDesconto = 'reduz_base' | 'custo_da_casa';
-export type TratamentoDaTaxa = 'absorvida' | 'rateada';
+export type { ModoDeComissao };
+export type { BaseDeComissao };
+export type { TratamentoDoDesconto };
+export type { TratamentoDaTaxa };
 
 export interface FaixaDeComissao {
   ateCents: number | null;
@@ -2281,13 +2311,8 @@ export const receitaDePacotesNaApi = (token: string) =>
 
 // -- Avaliações (bloco 43) ----------------------------------------------------
 
-export type DesfechoDaRecuperacao = 'contato' | 'retrabalho' | 'credito' | 'sem_retorno';
-export type MotivoDaContestacao =
-  | 'spam'
-  | 'ofensa'
-  | 'profissional_errado'
-  | 'nunca_foi_cliente'
-  | 'duplicada';
+export type { DesfechoDaRecuperacao };
+export type { MotivoDaContestacao };
 
 export interface AvaliacaoNaTela {
   id: string;
@@ -2352,10 +2377,9 @@ export const contestarAvaliacaoNaApi = (
 
 // -- Estoque (bloco 44) -------------------------------------------------------
 
-export type TipoDeProduto = 'resale' | 'internal';
-export type TipoDeMovimentoDeEstoque =
-  | 'entrada' | 'saida' | 'venda' | 'consumo' | 'perda' | 'ajuste' | 'transferencia';
-export type AlertaDeEstoque = 'abaixo_do_minimo' | 'sem_estoque' | 'vencendo' | 'vencido';
+export type { TipoDeProduto };
+export type { TipoDeMovimentoDeEstoque };
+export type { AlertaDeEstoque };
 
 export interface ProdutoNaTela {
   id: string;
@@ -2465,7 +2489,7 @@ export const margemNaApi = (token: string) =>
 
 // -- Clube de assinatura (bloco 45) -------------------------------------------
 
-export type EstadoDaAssinatura = 'ativa' | 'pendente' | 'inadimplente' | 'suspensa' | 'cancelada';
+export type { EstadoDaAssinatura };
 
 export interface BeneficioNaTela {
   serviceId: string;
@@ -2809,7 +2833,7 @@ export const cadastrarRecebedorNaApi = (
 
 // -- Financeiro (bloco 51) ----------------------------------------------------
 
-export type DirecaoDaConta = 'pagar' | 'receber';
+export type { DirecaoDaConta };
 
 export interface ContaDoFinanceiro {
   id: string;
@@ -3091,13 +3115,22 @@ export const transferirPacoteNaApi = (
 
 // -- Fiscal (bloco 53) --------------------------------------------------------
 
-export type RegimeFiscal = 'simples' | 'mei' | 'salao_parceiro';
-export type EstadoDaNota =
-  | 'pendente'
-  | 'processando'
-  | 'autorizada'
-  | 'rejeitada'
-  | 'cancelada';
+/**
+ * Reexportadas do `core`, **nunca** reescritas.
+ *
+ * `EstadoDaNota` tinha cinco valores aqui e seis lá: faltava `cancelando`, o
+ * estado em voo que existe para o cancelamento não ser mandado duas vezes à
+ * prefeitura. Nada quebrava — `ROTULO_DA_NOTA` é total sobre a união do
+ * domínio, então indexá-lo com um subconjunto compila. O estrago era latente e
+ * pior por isso: a primeira tela a montar um `Record<EstadoDaNota, …>` a partir
+ * **deste** tipo deixaria `cancelando` de fora, e o `tsc` confirmaria que o
+ * mapa está completo — porque o tipo mentia dizendo que aquele estado não
+ * existe.
+ *
+ * `cancelando` já dividiu duas listas neste repositório antes. Esta era a
+ * terceira cópia.
+ */
+export type { EstadoDaNota, RegimeFiscal };
 
 export interface ConfiguracaoFiscalNaTela {
   cnpj: string;

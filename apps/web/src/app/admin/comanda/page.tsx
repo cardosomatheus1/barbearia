@@ -8,6 +8,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirComanda, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Por onde uma comanda começa.
@@ -97,9 +98,7 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
       <h1 className="painel__titulo">Cobrar</h1>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       <section className="cartao-balcao">

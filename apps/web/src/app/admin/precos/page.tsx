@@ -11,6 +11,7 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoApagarFaixa, acaoCriarFaixa, acaoLigarPrecoPorFaixa, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Preço por faixa de horário (bloco 68, SPEC §4.20).
@@ -128,9 +129,7 @@ export default async function PrecosPage({ searchParams }: Props) {
 
       {feito ? <div className="ui-alert ui-alert--success precos__aviso">Pronto.</div> : null}
       {erro ? (
-        <div className="ui-alert ui-alert--danger precos__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="precos__aviso" />
       ) : null}
 
       {!config ? (

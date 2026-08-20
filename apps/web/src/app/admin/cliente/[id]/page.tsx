@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
   CONVERSAS,
+  type Conversa,
   destaquesDaFicha,
   fichaEstaVazia,
   fraseDaConversa,
@@ -68,6 +69,7 @@ import {
   acaoSair,
 } from '../../acoes';
 import { secao } from '../../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * A ficha do cliente — SPEC §4.1 e §4.3.
@@ -126,7 +128,14 @@ const ROTULO_DA_VISITA: Record<string, string> = {
   cancelled_business: 'Cancelado pela casa',
 };
 
-const ROTULO_DA_CONVERSA: Record<string, string> = {
+/**
+ * Total sobre a união, e não `Record<string, string>`.
+ *
+ * A tela já deriva as opções de `CONVERSAS`; só o rótulo era escrito à mão, e
+ * sem `??` de rede: uma quarta preferência no domínio desenharia um rádio com o
+ * `<span>` **vazio** ao lado. Total, o compilador cobra a frase antes.
+ */
+const ROTULO_DA_CONVERSA: Readonly<Record<Conversa, string>> = {
   silencioso: 'Silêncio',
   indiferente: 'Tanto faz',
   conversa: 'Conversa',
@@ -1436,16 +1445,13 @@ export default async function FichaPage({ params, searchParams }: Props) {
         </span>
       </p>
 
-      {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-          {/* Quando a mensagem não saiu, o motivo é a informação inteira: as
-              quatro razões legítimas — revogou o marketing, já recebeu hoje,
-              teto do mês, janela de silêncio — não são erro, e sem a frase o
-              balcão aperta de novo achando que falhou. */}
-          {motivo ? <p className="whatsapp__motivo">{motivo}</p> : null}
-        </div>
-      ) : null}
+      <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso">
+        {/* Quando a mensagem não saiu, o motivo é a informação inteira: as
+            quatro razões legítimas — revogou o marketing, já recebeu hoje,
+            teto do mês, janela de silêncio — não são erro, e sem a frase o
+            balcão aperta de novo achando que falhou. */}
+        {motivo ? <p className="whatsapp__motivo">{motivo}</p> : null}
+      </AvisoDeRecusa>
 
       {first(query['feito']) === 'mensagem' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">

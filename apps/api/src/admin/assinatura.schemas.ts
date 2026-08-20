@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ESCOPOS } from '@barbearia/core';
+import { ESCOPOS, METODOS_DA_BAIXA, MODOS_DA_ASSINATURA } from '@barbearia/core';
 import { diaISO } from '../common/data.js';
 
 /**
@@ -73,7 +73,9 @@ export const dependenteSchema = z.object({
  * relatório do mês.
  */
 export const baixaDaFaturaSchema = z.object({
-  metodo: z.enum(['dinheiro', 'pix', 'cartao', 'transferencia']),
+  // Do domínio, nunca reescrito: escrito à mão, o método novo era recusado com
+  // 400 pela borda enquanto o banco e o domínio já o aceitavam.
+  metodo: z.enum(METODOS_DA_BAIXA),
 });
 
 /**
@@ -117,7 +119,8 @@ export const meuCancelamentoSchema = z.object({
  * escolheu — voltar do rateio para o híbrido não pode zerar o teto.
  */
 export const modeloDaAssinaturaSchema = z.object({
-  modo: z.enum(['por_uso', 'rateio', 'hibrido']),
+  // Do domínio: `MODOS_DA_ASSINATURA` não tinha um único consumidor na borda.
+  modo: z.enum(MODOS_DA_ASSINATURA),
   tetoBps: z.number().int().min(0).max(10000),
 });
 

@@ -225,6 +225,62 @@ export const FORMAS_DE_PAGAMENTO = [
 
 export type FormaDePagamento = (typeof FORMAS_DE_PAGAMENTO)[number];
 
+/**
+ * Como cada forma aparece na tela, para quem está no balcão.
+ *
+ * Mora aqui e não na comanda pelo motivo de sempre: a mesma coisa tem o mesmo
+ * nome em todo lugar (§6, pergunta 2). E é `Record<FormaDePagamento, string>`,
+ * total, e não `Record<string, string>` com `?? forma` no fim — foi o `??` que
+ * deixou a comanda paga mostrar `fidelidade` e `pacote` crus, minúsculos, ao
+ * lado de "Dinheiro" e "Débito". As duas foram remendadas à mão, uma de cada
+ * vez, e `assinatura` entrou logo depois e ficou faltando do mesmo jeito: um
+ * cliente do clube fechava a conta e via a palavra `assinatura` na linha de
+ * pagamento.
+ *
+ * Total, o compilador cobra a forma nova antes de ela chegar ao balcão.
+ */
+export const ROTULO_DA_FORMA: Readonly<Record<FormaDePagamento, string>> = {
+  cash: 'Dinheiro',
+  pix: 'Pix',
+  debit: 'Débito',
+  credit: 'Crédito',
+  link: 'Link de pagamento',
+  transfer: 'Transferência',
+  fiado: 'Fiado',
+  fidelidade: 'Saldo de fidelidade',
+  pacote: 'Pacote do cliente',
+  assinatura: 'Mensalidade do clube',
+};
+
+/**
+ * Como o balcão registra que a mensalidade do clube foi paga por fora.
+ *
+ * Separada de `FormaDePagamento` de propósito: aquela é como a **comanda** é
+ * quitada, com fiado, fidelidade e pacote dentro; esta é como o dinheiro de uma
+ * fatura do clube chegou, e nenhuma daquelas três faz sentido aqui.
+ *
+ * Mora no `core` e não em `finance` porque a **tela** precisa dela: `apps/web`
+ * depende só de `core`, e era por isso que os quatro valores estavam escritos à
+ * mão em três lugares — a constante do domínio não tinha um único consumidor, a
+ * borda repetia o `z.enum` e a tela repetia os rótulos em outra ordem.
+ */
+export const METODOS_DA_BAIXA = ['dinheiro', 'pix', 'cartao', 'transferencia'] as const;
+export type MetodoDaBaixa = (typeof METODOS_DA_BAIXA)[number];
+
+/**
+ * O rótulo de cada um, total no tipo.
+ *
+ * A tabela de faturas fechadas imprimia `f.metodo` cru — "(transferencia)", sem
+ * acento — logo abaixo de um seletor que dizia "Transferência": a mesma coisa
+ * com dois nomes na mesma tela (§6, pergunta 2).
+ */
+export const ROTULO_DO_METODO_DA_BAIXA: Readonly<Record<MetodoDaBaixa, string>> = {
+  dinheiro: 'Dinheiro',
+  pix: 'Pix',
+  cartao: 'Cartão',
+  transferencia: 'Transferência',
+};
+
 /** Só dinheiro entra na gaveta. O resto some no extrato do adquirente. */
 export const ENTRA_NA_GAVETA: readonly FormaDePagamento[] = ['cash'];
 

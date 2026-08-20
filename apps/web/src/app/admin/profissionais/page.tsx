@@ -32,6 +32,7 @@ import {
   acaoSalvarProfissional,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Profissionais e jornadas.
@@ -72,7 +73,10 @@ function falhaDaJornada(erro: string | undefined): string | null {
   const separador = erro.lastIndexOf('_');
   const code = erro.slice(0, separador);
   const dia = DIAS.find((d) => String(d.weekday) === erro.slice(separador + 1));
-  if (!dia) return FALHA[erro] ?? null;
+  // Não é erro de jornada: quem responde é o `AvisoDeRecusa`, que mostra a
+  // frase do domínio antes de cair no mapa. Traduzir aqui também faria esta
+  // função ser a segunda tradutora do mesmo código.
+  if (!dia) return null;
 
   if (code === 'horario_invalido') return `Confira os horários de ${dia.nome.toLowerCase()}.`;
   if (code === 'fim_antes_do_inicio') {
@@ -673,11 +677,16 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
         na segunda some da grade da segunda, e só dela.
       </p>
 
-      {erro ? (
+      {/* A frase da jornada vem antes de tudo: ela nomeia o **dia** que
+          recusou, e nem a recusa do domínio nem o mapa sabem disso — o erro
+          chega com o número do dia colado no código. */}
+      {falhaDaJornada(erro) ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {falhaDaJornada(erro) ?? FALHA[erro] ?? FALHA['request_failed']}
+          {falhaDaJornada(erro)}
         </div>
-      ) : null}
+      ) : (
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
+      )}
 
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">

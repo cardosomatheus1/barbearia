@@ -7,6 +7,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * O resultado do mês (bloco 52, SPEC §3.10).
@@ -149,9 +150,7 @@ export default async function DrePage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       <form className="dre__periodo" method="get">

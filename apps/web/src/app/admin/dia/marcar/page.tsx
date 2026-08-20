@@ -12,6 +12,7 @@ import { addDays, weekdayShort, dayNumber } from '@/lib/date';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoMarcarNoBalcao } from '../../acoes';
 import { secao } from '../../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Marcar alguém pelo balcão.
@@ -160,9 +161,7 @@ export default async function MarcarPage({ searchParams }: Props) {
       <h1 className="painel__titulo balcao__titulo">Marcar alguém</h1>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {/* Passo A — serviço */}

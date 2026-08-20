@@ -11,6 +11,7 @@ import {
   acaoServicos,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Onboarding em seis etapas.
@@ -153,12 +154,9 @@ export default async function OnboardingPage({ searchParams }: Props) {
         })}
       </ol>
 
-      {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? 'Não foi possível salvar. Tente de novo.'}
-          {quais.length > 0 ? <> Confira: {quais.join(', ')}.</> : null}
-        </div>
-      ) : null}
+      <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso">
+        {quais.length > 0 ? <> Confira: {quais.join(', ')}.</> : null}
+      </AvisoDeRecusa>
 
       {passo === 2 ? (
         <form action={acaoEmpresa} className="formulario" aria-labelledby="t">

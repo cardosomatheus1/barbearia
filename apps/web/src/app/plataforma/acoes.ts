@@ -27,13 +27,27 @@ import {
   gravarSessaoDaPlataforma,
   guardarSegredoDaPlataforma,
   lerSessaoDaPlataforma,
+  guardarRecusaDaPlataforma,
 } from '@/lib/sessao-plataforma';
 import { gravarSessaoGestor } from '@/lib/sessao-gestor';
 import { destinoDaPlataforma } from '@/lib/destino';
 
 const texto = (form: FormData, campo: string): string => String(form.get(campo) ?? '').trim();
 
-function falhar(destino: string, code: string): never {
+/**
+ * Recusa: o código na URL e a frase do domínio junto, num cookie.
+ *
+ * Mesma decisão do painel da barbearia, e pelo mesmo motivo medido: o mapa
+ * escrito à mão em cada tela cobria uma parte dos códigos e o resto virava
+ * "Tente de novo". Aqui a frase costuma ser a única informação — "esta conta
+ * já é operadora", "a fatura já foi paga" — e o código sozinho não a substitui.
+ */
+async function falhar(
+  destino: string,
+  erro: string | { readonly code: string; readonly message: string },
+): Promise<never> {
+  const code = typeof erro === 'string' ? erro : erro.code;
+  if (typeof erro !== 'string') await guardarRecusaDaPlataforma(erro.message);
   redirect(`${destino}?erro=${encodeURIComponent(code)}`);
 }
 
@@ -45,7 +59,8 @@ async function exigirSessao(): Promise<string> {
 
 export async function acaoEntrarNaPlataforma(form: FormData): Promise<void> {
   const resultado = await entrarNaPlataforma(texto(form, 'email'), String(form.get('senha') ?? ''));
-  if (!resultado.ok) falhar('/plataforma/entrar', resultado.code);
+  // O código, nunca a frase: a porta de entrada não conta quem existe.
+  if (!resultado.ok) return falhar('/plataforma/entrar', resultado.code);
 
   await gravarSessaoDaPlataforma(resultado.dados.token, resultado.dados.expiraEm);
   redirect('/plataforma');
@@ -63,7 +78,7 @@ export async function acaoSairDaPlataforma(): Promise<void> {
 export async function acaoTrocarPlano(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await trocarPlano(token, texto(form, 'tenantId'), texto(form, 'planoCode'));
-  if (!resultado.ok) falhar('/plataforma', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma', resultado);
   redirect('/plataforma?feito=plano');
 }
 
@@ -72,17 +87,17 @@ export async function acaoBloquear(form: FormData): Promise<void> {
   const motivo = texto(form, 'motivo');
   // Recusado aqui, no domínio e no `CHECK` do banco. A tela é a primeira das
   // três porque é a única que consegue dizer onde está o campo vazio.
-  if (motivo.length < 3) falhar('/plataforma', 'reason_required');
+  if (motivo.length < 3) return falhar('/plataforma', 'reason_required');
 
   const resultado = await bloquear(token, texto(form, 'tenantId'), motivo);
-  if (!resultado.ok) falhar('/plataforma', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma', resultado);
   redirect('/plataforma?feito=bloqueio');
 }
 
 export async function acaoDesbloquear(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await desbloquear(token, texto(form, 'tenantId'));
-  if (!resultado.ok) falhar('/plataforma', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma', resultado);
   redirect('/plataforma?feito=desbloqueio');
 }
 
@@ -91,7 +106,7 @@ export async function acaoDesbloquear(form: FormData): Promise<void> {
 export async function acaoCadastrarSegundoFator(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await cadastrarSegundoFator(token, texto(form, 'email'));
-  if (!resultado.ok) falhar('/plataforma/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/seguranca', resultado);
 
   // Segredo e códigos de recuperação viajam em cookie de vida curta, nunca na
   // URL: o segredo TOTP gera todos os códigos futuros, e a URL fica no
@@ -104,7 +119,7 @@ export async function acaoCadastrarSegundoFator(form: FormData): Promise<void> {
 export async function acaoConfirmarSegundoFator(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await confirmarSegundoFator(token, texto(form, 'codigo'));
-  if (!resultado.ok) falhar('/plataforma/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/seguranca', resultado);
   redirect('/plataforma/seguranca?feito=ligado');
 }
 
@@ -116,7 +131,7 @@ export async function acaoProvarSegundoFator(form: FormData): Promise<void> {
   // — o erro simétrico deste.
   const destino = destinoDaPlataforma(texto(form, 'destino'));
   const resultado = await provarSegundoFator(token, texto(form, 'codigo'));
-  if (!resultado.ok) falhar('/plataforma/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/seguranca', resultado);
   redirect(destino);
 }
 
@@ -130,7 +145,7 @@ export async function acaoDefinirRecurso(form: FormData): Promise<void> {
     texto(form, 'code'),
     texto(form, 'ligado') === '1',
   );
-  if (!resultado.ok) falhar('/plataforma', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma', resultado);
   redirect('/plataforma?feito=recurso');
 }
 
@@ -139,10 +154,10 @@ export async function acaoDefinirRecurso(form: FormData): Promise<void> {
 export async function acaoEntrarNaConta(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const motivo = texto(form, 'motivo');
-  if (motivo.length < 3) falhar('/plataforma', 'reason_required');
+  if (motivo.length < 3) return falhar('/plataforma', 'reason_required');
 
   const resultado = await entrarNaConta(token, texto(form, 'tenantId'), motivo);
-  if (!resultado.ok) falhar('/plataforma', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma', resultado);
 
   // O token de suporte é um token de gestor, então ele vai para o cookie de
   // gestor — o painel inteiro já sabe lê-lo, e nada precisa de um segundo
@@ -154,7 +169,7 @@ export async function acaoEntrarNaConta(form: FormData): Promise<void> {
 export async function acaoEncerrarSuporte(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await encerrarSuporte(token, texto(form, 'tenantId'));
-  if (!resultado.ok) falhar('/plataforma', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma', resultado);
   redirect('/plataforma?feito=suporte_encerrado');
 }
 
@@ -163,14 +178,14 @@ export async function acaoEncerrarSuporte(form: FormData): Promise<void> {
 export async function acaoRegistrarPagamento(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await registrarPagamento(token, texto(form, 'faturaId'), texto(form, 'metodo'));
-  if (!resultado.ok) falhar('/plataforma/faturas', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/faturas', resultado);
   redirect('/plataforma/faturas?pago=1');
 }
 
 export async function acaoAnularFatura(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await anularFatura(token, texto(form, 'faturaId'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar('/plataforma/faturas', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/faturas', resultado);
   redirect('/plataforma/faturas?anulada=1');
 }
 
@@ -191,7 +206,7 @@ export async function acaoVenderDestaque(form: FormData): Promise<void> {
     de: texto(form, 'de'),
     ate: texto(form, 'ate'),
   });
-  if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/destaques', resultado);
   redirect('/plataforma/destaques?vendido=1');
 }
 
@@ -202,7 +217,7 @@ export async function acaoCancelarDestaque(form: FormData): Promise<void> {
     texto(form, 'anuncioId'),
     texto(form, 'motivo'),
   );
-  if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/destaques', resultado);
   redirect('/plataforma/destaques?feito=1');
 }
 
@@ -220,7 +235,7 @@ export async function acaoReverterContestacao(form: FormData): Promise<void> {
     texto(form, 'atribuicaoId'),
     texto(form, 'motivo'),
   );
-  if (!resultado.ok) falhar('/plataforma/destaques', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/destaques', resultado);
   redirect('/plataforma/destaques?revertida=1');
 }
 
@@ -237,7 +252,7 @@ export async function acaoCriarFranquia(form: FormData): Promise<void> {
     nome: texto(form, 'nome'),
     tenantId: texto(form, 'tenantId'),
   });
-  if (!resultado.ok) falhar('/plataforma/franquias', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/franquias', resultado);
   redirect('/plataforma/franquias?criada=1');
 }
 
@@ -248,13 +263,13 @@ export async function acaoPorNaFranquia(form: FormData): Promise<void> {
     texto(form, 'franquiaId'),
     texto(form, 'tenantId'),
   );
-  if (!resultado.ok) falhar('/plataforma/franquias', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/franquias', resultado);
   redirect('/plataforma/franquias?entrou=1');
 }
 
 export async function acaoTirarDaFranquia(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await tirarDaFranquiaNaApi(token, texto(form, 'tenantId'));
-  if (!resultado.ok) falhar('/plataforma/franquias', resultado.code);
+  if (!resultado.ok) return falhar('/plataforma/franquias', resultado);
   redirect('/plataforma/franquias?saiu=1');
 }

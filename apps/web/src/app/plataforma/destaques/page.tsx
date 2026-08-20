@@ -5,6 +5,7 @@ import { contestacoesNaApi, destaquesNaApi, listarBarbearias } from '@/lib/plata
 import { lerSessaoDaPlataforma } from '@/lib/sessao-plataforma';
 import { acaoCancelarDestaque, acaoReverterContestacao, acaoVenderDestaque } from '../acoes';
 import { reais } from '@/lib/dinheiro';
+import { AvisoDeRecusa } from '@/app/plataforma/aviso-de-recusa';
 
 /**
  * Destaque vendido e contestação de comissão (bloco 75).
@@ -88,11 +89,7 @@ export default async function DestaquesPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container painel__conteudo">
-      {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
-      ) : null}
+              <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
 
       <h1 className="painel__titulo">Destaques e contestações</h1>
       <p className="painel__sub">

@@ -1,4 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import {
+  DIRECOES_DA_CONTA,
+  ROTULO_DA_CATEGORIA_FINANCEIRA,
+  ROTULO_DA_DIRECAO,
+  VERBO_DA_DIRECAO,
+} from '@barbearia/core';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
@@ -23,6 +29,7 @@ import {
   acaoTransferirEntreContas,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * O que a casa deve e o que tem a receber (bloco 51, SPEC §3.10).
@@ -132,7 +139,7 @@ function Linha({
           <>
             <details className="dobra">
               <summary className="dobra__titulo">
-                {conta.direcao === 'pagar' ? 'Pagar' : 'Receber'}
+                {VERBO_DA_DIRECAO[conta.direcao]}
               </summary>
               <form action={acaoQuitarContaDoFinanceiro} className="formulario">
                 <input name="contaId" type="hidden" value={conta.id} />
@@ -254,8 +261,11 @@ function NovaConta({
               Tipo
             </label>
             <select className="ui-field__input" defaultValue="pagar" id="nova-direcao" name="direcao">
-              <option value="pagar">A pagar</option>
-              <option value="receber">A receber</option>
+              {DIRECOES_DA_CONTA.map((d) => (
+                <option key={d} value={d}>
+                  {ROTULO_DA_DIRECAO[d]}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -298,7 +308,7 @@ function NovaConta({
               .filter((c) => c.ativa)
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nome} ({c.direcao === 'pagar' ? 'despesa' : 'receita'})
+                  {c.nome} ({ROTULO_DA_CATEGORIA_FINANCEIRA[c.direcao].toLowerCase()})
                 </option>
               ))}
           </select>
@@ -509,9 +519,7 @@ export default async function FinanceiroPage({ searchParams }: Props) {
       <p className="painel__sub">O que a casa deve e o que tem a receber, fora da comanda.</p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {salvo ? (
@@ -574,8 +582,11 @@ export default async function FinanceiroPage({ searchParams }: Props) {
                 Serve para
               </label>
               <select className="ui-field__input" defaultValue="pagar" id="cat-direcao" name="direcao">
-                <option value="pagar">Despesa</option>
-                <option value="receber">Receita</option>
+                {DIRECOES_DA_CONTA.map((d) => (
+                  <option key={d} value={d}>
+                    {ROTULO_DA_CATEGORIA_FINANCEIRA[d]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

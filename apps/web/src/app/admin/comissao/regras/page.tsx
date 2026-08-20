@@ -18,6 +18,17 @@ import {
   acaoSalvarRegraDeComissao,
 } from '../../acoes';
 import { secao } from '../../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import {
+  BASES_DE_COMISSAO,
+  MODOS_DE_COMISSAO,
+  ROTULO_DA_BASE_DE_COMISSAO,
+  ROTULO_DO_MODO_DE_COMISSAO,
+  ROTULO_DO_TRATAMENTO_DA_TAXA,
+  ROTULO_DO_TRATAMENTO_DO_DESCONTO,
+  TRATAMENTOS_DA_TAXA,
+  TRATAMENTOS_DO_DESCONTO,
+} from '@barbearia/core';
 
 /**
  * Regras de comissão.
@@ -164,9 +175,7 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {salvo ? (
@@ -183,8 +192,11 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
               A comissão incide sobre
             </label>
             <select className="ui-field__input" defaultValue={configuracao.base} id="base" name="base">
-              <option value="liquido">O valor líquido, depois do desconto</option>
-              <option value="bruto">O valor cheio, antes do desconto</option>
+              {BASES_DE_COMISSAO.map((b) => (
+                <option key={b} value={b}>
+                  {ROTULO_DA_BASE_DE_COMISSAO[b]}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -205,8 +217,11 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
                 **dentro** da opção — a dica abaixo teria que listar os dois de
                 uma vez, e vira parágrafo que ninguém lê.
               */}
-              <option value="reduz_base">Barbeiro divide o desconto</option>
-              <option value="custo_da_casa">Desconto é custo da casa</option>
+              {TRATAMENTOS_DO_DESCONTO.map((t) => (
+                <option key={t} value={t}>
+                  {ROTULO_DO_TRATAMENTO_DO_DESCONTO[t]}
+                </option>
+              ))}
             </select>
             <p className="ui-field__hint">
               O desconto costuma ser decisão do dono. Fazer o barbeiro pagar por uma cortesia que
@@ -224,8 +239,11 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
               id="tratamentoDaTaxa"
               name="tratamentoDaTaxa"
             >
-              <option value="absorvida">É custo da casa; a base não cai</option>
-              <option value="rateada">O barbeiro divide a taxa com a casa</option>
+              {TRATAMENTOS_DA_TAXA.map((t) => (
+                <option key={t} value={t}>
+                  {ROTULO_DO_TRATAMENTO_DA_TAXA[t]}
+                </option>
+              ))}
             </select>
             <p className="ui-field__hint">
               Diferente do desconto num ponto que importa: o desconto é decisão de alguém, a taxa
@@ -348,9 +366,11 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
               Como paga
             </label>
             <select className="ui-field__input" defaultValue="percent" id="modo" name="modo">
-              <option value="percent">Porcentagem do valor</option>
-              <option value="fixed">Valor fixo por item</option>
-              <option value="tiers">Faixas progressivas</option>
+              {MODOS_DE_COMISSAO.map((m) => (
+                <option key={m} value={m}>
+                  {ROTULO_DO_MODO_DE_COMISSAO[m]}
+                </option>
+              ))}
             </select>
           </div>
 

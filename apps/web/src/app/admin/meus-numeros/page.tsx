@@ -10,6 +10,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { ProNav } from '../pro-nav';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Os números do barbeiro — SPEC §4.21.
@@ -120,9 +121,7 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
       <p className="painel__sub">{nomeDoMes}, até hoje.</p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       <section className={`meta${meta.metaCents === 0 ? ' meta--sem' : ''}`}>

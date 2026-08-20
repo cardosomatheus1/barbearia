@@ -7,6 +7,7 @@ import {
   acaoConfirmarSegundoFator,
   acaoProvarSegundoFator,
 } from '../acoes';
+import { AvisoDeRecusa } from '@/app/plataforma/aviso-de-recusa';
 
 /**
  * O segundo fator da conta que enxerga todas as barbearias.
@@ -79,11 +80,7 @@ export default async function SegurancaDaPlataformaPage({ searchParams }: Props)
           Segundo fator ligado.
         </div>
       ) : null}
-      {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? 'Não deu para concluir. Tente de novo.'}
-        </div>
-      ) : null}
+      <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
 
       {segredo ? (
         <section className="painel__grupo">

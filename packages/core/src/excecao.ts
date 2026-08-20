@@ -29,6 +29,22 @@ export const TIPOS_DE_EXCECAO = [
 
 export type TipoDeExcecao = (typeof TIPOS_DE_EXCECAO)[number];
 
+/**
+ * Como cada tipo aparece no formulário da agenda.
+ *
+ * A frase entre parênteses é o significado que muda por opção, e num `<select>`
+ * ele mora **dentro** da opção: uma dica abaixo teria que listar os cinco de
+ * uma vez. Eram cinco `<option>` escritos à mão numa tela que já importava a
+ * constante — a lista estava derivada e os rótulos não.
+ */
+export const ROTULO_DO_TIPO_DE_EXCECAO: Readonly<Record<TipoDeExcecao, string>> = {
+  block: 'Bloqueio de algumas horas (dentista, almoço longo)',
+  day_off: 'Folga — fecha o dia de uma pessoa',
+  holiday: 'Feriado — fecha a barbearia toda',
+  vacation: 'Férias — fecha o dia de uma pessoa',
+  custom_hours: 'Horário diferente só neste dia',
+};
+
 /** Os que exigem faixa de horário. Os outros fecham o dia inteiro. */
 const COM_FAIXA: readonly TipoDeExcecao[] = ['block', 'custom_hours'];
 

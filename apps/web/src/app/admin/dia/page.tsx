@@ -28,6 +28,7 @@ import {
 import { reaisDoCampo } from '@/lib/dinheiro';
 import { secao } from '../secoes';
 import { QuemQueriaAVaga } from '../quem-queria-a-vaga';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * O balcão: o dia da barbearia.
@@ -564,9 +565,7 @@ export default async function DiaPage({ searchParams }: Props) {
       </div>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       <QuemQueriaAVaga />

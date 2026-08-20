@@ -13,7 +13,7 @@ import {
   type CobrancaDaComandaNaTela,
   type ItemDaComandaNaTela,
 } from '@/lib/admin-api';
-import { resgateSugerido, saldoPorExtenso, valorDoResgate } from '@barbearia/core';
+import { resgateSugerido, ROTULO_DA_FORMA, saldoPorExtenso, valorDoResgate } from '@barbearia/core';
 import { qrCodeSvg } from '@/lib/qrcode';
 import {
   ROTULO_DA_NOTA,
@@ -39,6 +39,7 @@ import {
   acaoSair,
 } from '../../acoes';
 import { secao } from '../../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * A comanda: do atendimento ao dinheiro.
@@ -105,19 +106,6 @@ const MEIOS = [
   { valor: 'link', rotulo: 'Link para mandar' },
 ] as const;
 
-const NOME_DA_FORMA: Record<string, string> = {
-  cash: 'Dinheiro',
-  pix: 'Pix',
-  debit: 'Débito',
-  credit: 'Crédito',
-  link: 'Link de pagamento',
-  transfer: 'Transferência',
-  fiado: 'Fiado',
-  // A mesma ação tem o mesmo nome em todo lugar (CLAUDE.md §6): sem estas duas
-  // linhas a comanda paga mostrava `fidelidade` e `pacote` crus.
-  fidelidade: 'Saldo de fidelidade',
-  pacote: 'Pacote do cliente',
-};
 
 /**
  * O Pix na tela, quando existe um em curso.
@@ -515,9 +503,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
       <h1 className="painel__titulo">{conta.customerName ?? 'Comanda avulsa'}</h1>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {salvo ? (
@@ -609,7 +595,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
           <ul className="pagamentos">
             {conta.pagamentos.map((pagamento, i) => (
               <li className="pagamentos__item" key={`${pagamento.forma}-${i}`}>
-                <span>{NOME_DA_FORMA[pagamento.forma] ?? pagamento.forma}</span>
+                <span>{ROTULO_DA_FORMA[pagamento.forma]}</span>
                 <span>{reais(pagamento.valorCents)}</span>
               </li>
             ))}

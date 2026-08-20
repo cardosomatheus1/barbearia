@@ -1,5 +1,9 @@
 import { redirect } from 'next/navigation';
-import { ROTULO_DO_ESTADO } from '@barbearia/core';
+import {
+  ROTULO_DO_ESTADO,
+  ROTULO_DO_TIPO_DE_EXCECAO,
+  TIPOS_DE_EXCECAO,
+} from '@barbearia/core';
 import type { Metadata } from 'next';
 import {
   agendaDoAdmin,
@@ -21,6 +25,7 @@ import {
   acaoSair,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * A agenda do admin.
@@ -440,9 +445,7 @@ export default async function AgendaPage({ searchParams }: Props) {
       </div>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {salvo ? (
@@ -595,15 +598,17 @@ export default async function AgendaPage({ searchParams }: Props) {
               O que é
             </label>
             <select className="ui-field__input" defaultValue="block" id="kind" name="kind">
-              <option value="block">Bloqueio de algumas horas (dentista, almoço longo)</option>
-              {podeExcecao ? (
-                <>
-                  <option value="day_off">Folga — fecha o dia de uma pessoa</option>
-                  <option value="vacation">Férias — fecha o dia de uma pessoa</option>
-                  <option value="holiday">Feriado — fecha a barbearia toda</option>
-                  <option value="custom_hours">Horário diferente só neste dia</option>
-                </>
-              ) : null}
+              {/* `block` sempre; os outros quatro só para quem pode — a tela
+                  esconde o que a guarda recusaria. A ordem e os rótulos são do
+                  domínio, e a separação é o único recorte da tela. */}
+              <option value="block">{ROTULO_DO_TIPO_DE_EXCECAO['block']}</option>
+              {podeExcecao
+                ? TIPOS_DE_EXCECAO.filter((t) => t !== 'block').map((t) => (
+                    <option key={t} value={t}>
+                      {ROTULO_DO_TIPO_DE_EXCECAO[t]}
+                    </option>
+                  ))
+                : null}
             </select>
             {podeExcecao ? null : (
               // A tela esconde o que a guarda recusaria: botão que só serve para

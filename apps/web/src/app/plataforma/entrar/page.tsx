@@ -37,6 +37,10 @@ export default async function EntrarNaPlataformaPage({ searchParams }: Props) {
 
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          {/* Aqui o mapa da tela é o único, e é decisão: a frase da API sobre
+              login vira oráculo numa porta de entrada. É o precedente do OTP,
+              que responde igual para telefone existente e inexistente — e a
+              conta desta porta enxerga todas as barbearias. */}
           {FALHA[erro] ?? 'Não foi possível entrar. Tente de novo.'}
         </div>
       ) : null}

@@ -10,6 +10,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoExigenciasDoServico, acaoSair, acaoSalvarRecursos } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Recursos: cadeira, lavatório, sala.
@@ -193,9 +194,7 @@ export default async function RecursosPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {salvo ? (

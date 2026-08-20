@@ -538,8 +538,13 @@ interface Ator {
   readonly name: string;
 }
 
-export const METODOS_DA_BAIXA = ['dinheiro', 'pix', 'cartao', 'transferencia'] as const;
-export type MetodoDaBaixa = (typeof METODOS_DA_BAIXA)[number];
+/**
+ * Reexportada do `core`, e **importada** também: a reexportação sozinha não põe
+ * o nome no escopo deste arquivo, e é o `build` que reclama — o `typecheck` da
+ * API lê o `dist`, que ainda tinha a versão antiga.
+ */
+export { METODOS_DA_BAIXA, type MetodoDaBaixa } from '@barbearia/core';
+import type { MetodoDaBaixa } from '@barbearia/core';
 
 /**
  * O balcão dá baixa numa mensalidade.

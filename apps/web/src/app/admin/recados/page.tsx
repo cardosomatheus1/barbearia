@@ -12,6 +12,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { redirect } from 'next/navigation';
 import { acaoAssumirRecado, acaoDevolverRecado, acaoEncerrarRecado, acaoResponderRecado, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * A fila de recados (bloco 40).
@@ -109,9 +110,7 @@ export default async function RecadosPage({ searchParams }: Props) {
         <div className="ui-alert ui-alert--success recados__aviso">{FEITO[feito] ?? 'Pronto.'}</div>
       ) : null}
       {erro ? (
-        <div className="ui-alert ui-alert--danger recados__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="recados__aviso" />
       ) : null}
 
       {!fila.ok ? (

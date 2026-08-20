@@ -218,7 +218,36 @@ const numero = (form: FormData, campo: string, padrao: number): number => {
   return Number.isFinite(valor) ? valor : padrao;
 };
 
-function falhar(rota: string, code: string): never {
+/**
+ * Recusa: o código na URL e **a frase do domínio** junto, num cookie.
+ *
+ * O código sozinho era o que a tela recebia, e cada tela traduzia o que ela
+ * conhecia num `Record<string, string>` com `?? 'Não deu para salvar. Tente de
+ * novo.'` no fim. Medido: os controllers mapeiam 239 códigos e os mapas das
+ * telas cobrem 142 — **97 recusas** chegavam à barbearia como a frase genérica.
+ *
+ * O custo não é cosmético. A recepcionista digita 30% numa casa com teto de
+ * 20%, e o domínio devolve *"O desconto máximo desta barbearia é R$ X"* — uma
+ * frase escrita de propósito, com o número dentro, porque o comentário da rota
+ * diz que *"recusado sem o número manda a recepção adivinhar"*. Ela viajava
+ * pela rede inteira e era descartada na última linha: o que aparecia era "Tente
+ * de novo", e a pessoa tentava de novo, para sempre.
+ *
+ * A frase vai por **cookie** e não pela URL, e isso é a regra do código de erro
+ * que vai para o endereço: o que fica no histórico do navegador, no
+ * autocompletar e no referrer não nomeia mecanismo nem carrega valor. O código
+ * continua na URL porque é ele que a tela usa para decidir **onde** desenhar a
+ * recusa; a frase é só o texto.
+ *
+ * `guardarRecusa` existe desde o bloco 98 e era escrita só por
+ * `guardarOQueFoiDigitado` — o mecanismo estava pronto e ligado num caminho só.
+ */
+async function falhar(
+  rota: string,
+  erro: string | { readonly code: string; readonly message: string },
+): Promise<never> {
+  const code = typeof erro === 'string' ? erro : erro.code;
+  if (typeof erro !== 'string') await guardarRecusa(erro.message);
   const separador = rota.includes('?') ? '&' : '?';
   redirect(`${rota}${separador}erro=${encodeURIComponent(code)}`);
 }
@@ -283,7 +312,15 @@ export async function acaoCriarConta(form: FormData): Promise<void> {
     businessName: texto(form, 'businessName'),
   });
 
-  if (!resultado.ok) falhar('/admin/criar-conta', resultado.code);
+  /**
+   * O **código**, nunca a frase — as duas portas de entrada são a exceção.
+   *
+   * `falhar` com o objeto guarda a mensagem do domínio num cookie para a tela
+   * mostrar, e isso é o certo em toda tela de dentro. Aqui não: a frase da API
+   * sobre login e cadastro é justamente o que a regra de não revelar existência
+   * de cadastro existe para não dizer. É o precedente do OTP.
+   */
+  if (!resultado.ok) return falhar('/admin/criar-conta', resultado.code);
 
   // Sem sessão automática: a API responde igual para e-mail novo e já
   // cadastrado, e entregar sessão só num dos casos desfaria isso na tela.
@@ -292,7 +329,8 @@ export async function acaoCriarConta(form: FormData): Promise<void> {
 
 export async function acaoEntrar(form: FormData): Promise<void> {
   const resultado = await entrarComoGestor(texto(form, 'email'), String(form.get('password') ?? ''));
-  if (!resultado.ok) falhar('/admin/entrar', resultado.code);
+  // O código, nunca a frase: a porta de entrada não conta quem existe.
+  if (!resultado.ok) return falhar('/admin/entrar', resultado.code);
 
   await gravarSessaoGestor(resultado.dados.token, resultado.dados.expiresAt);
 
@@ -342,7 +380,7 @@ export async function acaoEmpresa(form: FormData): Promise<void> {
     amenities: form.getAll('amenities').map(String),
   });
 
-  if (!resultado.ok) falhar('/admin/onboarding?e=2', resultado.code);
+  if (!resultado.ok) return falhar('/admin/onboarding?e=2', resultado);
   redirect('/admin/onboarding?e=3');
 }
 
@@ -381,7 +419,7 @@ export async function acaoServicos(form: FormData): Promise<void> {
       };
     });
 
-  if (services.length === 0) falhar('/admin/onboarding?e=3', 'nenhum_servico');
+  if (services.length === 0) return falhar('/admin/onboarding?e=3', 'nenhum_servico');
 
   const resultado = await salvarServicos(token, services);
   if (!resultado.ok) {
@@ -403,14 +441,14 @@ export async function acaoProfissionais(form: FormData): Promise<void> {
   const token = await exigirSessao();
 
   const nomes = form.getAll('profissional').map(String).filter(Boolean);
-  if (nomes.length === 0) falhar('/admin/onboarding?e=4', 'nenhum_profissional');
+  if (nomes.length === 0) return falhar('/admin/onboarding?e=4', 'nenhum_profissional');
 
   const dias = form.getAll('dia').map(Number);
   const abre = numero(form, 'abre', 540);
   const fecha = numero(form, 'fecha', 1080);
 
-  if (dias.length === 0) falhar('/admin/onboarding?e=4', 'nenhum_dia');
-  if (abre >= fecha) falhar('/admin/onboarding?e=4', 'jornada_invertida');
+  if (dias.length === 0) return falhar('/admin/onboarding?e=4', 'nenhum_dia');
+  if (abre >= fecha) return falhar('/admin/onboarding?e=4', 'jornada_invertida');
 
   // A jornada é a mesma para toda a equipe nesta etapa. Diferenciar por pessoa
   // é trabalho de cadastro, e o objetivo aqui é chegar ao link em dez minutos —
@@ -421,7 +459,7 @@ export async function acaoProfissionais(form: FormData): Promise<void> {
     token,
     nomes.map((name) => ({ name, schedule })),
   );
-  if (!resultado.ok) falhar('/admin/onboarding?e=4', resultado.code);
+  if (!resultado.ok) return falhar('/admin/onboarding?e=4', resultado);
 
   redirect('/admin/onboarding?e=5');
 }
@@ -431,7 +469,7 @@ export async function acaoProfissionais(form: FormData): Promise<void> {
 export async function acaoPagamentos(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await salvarPagamentos(token, form.getAll('metodo').map(String));
-  if (!resultado.ok) falhar('/admin/onboarding?e=5', resultado.code);
+  if (!resultado.ok) return falhar('/admin/onboarding?e=5', resultado);
   redirect('/admin/onboarding?e=6');
 }
 
@@ -440,7 +478,7 @@ export async function acaoPagamentos(form: FormData): Promise<void> {
 export async function acaoPublicar(): Promise<void> {
   const token = await exigirSessao();
   const resultado = await publicarBarbearia(token);
-  if (!resultado.ok) falhar('/admin/onboarding?e=6', resultado.code);
+  if (!resultado.ok) return falhar('/admin/onboarding?e=6', resultado);
   redirect(`/admin/onboarding?e=6&publicado=1`);
 }
 
@@ -505,7 +543,7 @@ export async function acaoJanela(form: FormData): Promise<void> {
       : {}),
   });
 
-  if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/configuracoes', resultado);
   redirect('/admin/configuracoes?salvo=1');
 }
 
@@ -603,7 +641,7 @@ export async function acaoFotos(form: FormData): Promise<void> {
     services: porPrefixo('srv_'),
   });
 
-  if (!resultado.ok) falhar('/admin/fotos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/fotos', resultado);
   redirect('/admin/fotos?salvo=1');
 }
 
@@ -628,7 +666,7 @@ export async function acaoCriarMembro(form: FormData): Promise<void> {
     ...(texto(form, 'phone') ? { phone: texto(form, 'phone') } : {}),
   });
 
-  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+  if (!resultado.ok) return falhar('/admin/equipe', resultado);
 
   await guardarSenhaDeUmaVez(resultado.dados.member.name, resultado.dados.senhaInicial);
   redirect('/admin/equipe');
@@ -637,21 +675,21 @@ export async function acaoCriarMembro(form: FormData): Promise<void> {
 export async function acaoTrocarPapel(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await trocarPapel(token, texto(form, 'id'), texto(form, 'role') as Papel);
-  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+  if (!resultado.ok) return falhar('/admin/equipe', resultado);
   redirect('/admin/equipe?salvo=1');
 }
 
 export async function acaoLigarMembro(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await ligarMembro(token, texto(form, 'id'), texto(form, 'active') === '1');
-  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+  if (!resultado.ok) return falhar('/admin/equipe', resultado);
   redirect('/admin/equipe?salvo=1');
 }
 
 export async function acaoReemitirSenha(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await reemitirSenha(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/equipe', resultado.code);
+  if (!resultado.ok) return falhar('/admin/equipe', resultado);
 
   await guardarSenhaDeUmaVez(texto(form, 'nome'), resultado.dados.senhaInicial);
   redirect('/admin/equipe');
@@ -668,7 +706,7 @@ export async function acaoTrocarMinhaSenha(form: FormData): Promise<void> {
 
   const nova = String(form.get('newPassword') ?? '');
   if (nova !== String(form.get('confirmPassword') ?? '')) {
-    falhar('/admin/trocar-senha', 'nao_confere');
+    return falhar('/admin/trocar-senha', 'nao_confere');
   }
 
   const resultado = await trocarMinhaSenha(
@@ -676,7 +714,7 @@ export async function acaoTrocarMinhaSenha(form: FormData): Promise<void> {
     String(form.get('currentPassword') ?? ''),
     nova,
   );
-  if (!resultado.ok) falhar('/admin/trocar-senha', resultado.code);
+  if (!resultado.ok) return falhar('/admin/trocar-senha', resultado);
 
   redirect('/admin/dia');
 }
@@ -719,14 +757,14 @@ function entradaDeServico(form: FormData): EntradaDeServico | null {
 export async function acaoSalvarServico(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const entrada = entradaDeServico(form);
-  if (!entrada) falhar('/admin/catalogo', 'preco_invalido');
+  if (!entrada) return falhar('/admin/catalogo', 'preco_invalido');
 
   const id = texto(form, 'id');
   const resultado = id
     ? await editarServico(token, id, entrada)
     : await criarServico(token, entrada);
 
-  if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
+  if (!resultado.ok) return falhar('/admin/catalogo', resultado);
   redirect('/admin/catalogo?salvo=1');
 }
 
@@ -756,7 +794,7 @@ export async function acaoRegistrarSinal(form: FormData): Promise<void> {
     texto(form, 'appointmentId'),
     numero(form, 'valorCents', 0),
   );
-  if (!resultado.ok) falhar(voltar, resultado.code);
+  if (!resultado.ok) return falhar(voltar, resultado);
   redirect(voltar);
 }
 
@@ -772,7 +810,7 @@ export async function acaoDevolverSinal(form: FormData): Promise<void> {
   const voltar = destinoDoBalcao(texto(form, 'voltar'));
 
   const resultado = await devolverSinalDoHorario(token, texto(form, 'appointmentId'));
-  if (!resultado.ok) falhar(voltar, resultado.code);
+  if (!resultado.ok) return falhar(voltar, resultado);
   redirect(voltar);
 }
 
@@ -792,14 +830,14 @@ export async function acaoConfiancaDoCliente(form: FormData): Promise<void> {
     score,
     motivo: texto(form, 'motivo'),
   });
-  if (!resultado.ok) falhar(destino, resultado.code);
+  if (!resultado.ok) return falhar(destino, resultado);
   redirect(`${destino}&ajuste=1`);
 }
 
 export async function acaoLigarServico(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await ligarServico(token, texto(form, 'id'), texto(form, 'active') === '1');
-  if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
+  if (!resultado.ok) return falhar('/admin/catalogo', resultado);
   redirect('/admin/catalogo?salvo=1');
 }
 
@@ -816,7 +854,7 @@ export async function acaoExigenciasDoServico(form: FormData): Promise<void> {
     .filter((exigencia) => Number.isFinite(exigencia.quantity) && exigencia.quantity > 0);
 
   const resultado = await exigenciasDoServico(token, texto(form, 'id'), requirements);
-  if (!resultado.ok) falhar('/admin/recursos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recursos', resultado);
   redirect('/admin/recursos?salvo=1');
 }
 
@@ -844,14 +882,14 @@ export async function acaoSalvarProfissional(form: FormData): Promise<void> {
     ? await editarProfissional(token, id, entrada)
     : await criarProfissional(token, entrada);
 
-  if (!resultado.ok) falhar('/admin/profissionais', resultado.code);
+  if (!resultado.ok) return falhar('/admin/profissionais', resultado);
   redirect('/admin/profissionais?salvo=1');
 }
 
 export async function acaoLigarProfissional(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await ligarProfissional(token, texto(form, 'id'), texto(form, 'active') === '1');
-  if (!resultado.ok) falhar('/admin/profissionais', resultado.code);
+  if (!resultado.ok) return falhar('/admin/profissionais', resultado);
 
   // Desativar não cancela nada. Quem fica sem dono vai para a tela, e alguém
   // decide o que fazer — silenciar isso é como o cliente descobre no dia.
@@ -882,11 +920,11 @@ export async function acaoSalvarJornada(form: FormData): Promise<void> {
     })),
   );
 
-  if (!lida.ok) falhar(destino, `${lida.code}_${lida.weekday}`);
+  if (!lida.ok) return falhar(destino, `${lida.code}_${lida.weekday}`);
 
   const confirmar = form.get('confirmarConflitos') === '1';
   const resultado = await salvarJornada(token, id, lida.faixas, confirmar);
-  if (!resultado.ok) falhar(destino, resultado.code);
+  if (!resultado.ok) return falhar(destino, resultado);
 
   if (!resultado.dados.saved) {
     // A proposta e os conflitos vão num cookie de vida curta, nunca na URL: um
@@ -915,7 +953,7 @@ export async function acaoSalvarRecursos(form: FormData): Promise<void> {
     .filter((pool) => pool.resourceType.length >= 2 && pool.capacity >= 1);
 
   const resultado = await salvarRecursos(token, pools);
-  if (!resultado.ok) falhar('/admin/recursos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recursos', resultado);
   redirect('/admin/recursos?salvo=1');
 }
 
@@ -933,7 +971,7 @@ export async function acaoEntrarNaFila(form: FormData): Promise<void> {
   const token = await exigirSessao();
 
   const serviceIds = form.getAll('serviceIds').map((v) => String(v)).filter(Boolean);
-  if (serviceIds.length === 0) falhar('/admin/fila', 'sem_servico');
+  if (serviceIds.length === 0) return falhar('/admin/fila', 'sem_servico');
 
   const preferido = texto(form, 'professionalId');
 
@@ -948,7 +986,7 @@ export async function acaoEntrarNaFila(form: FormData): Promise<void> {
     texto(form, 'idempotencyKey'),
   );
 
-  if (!resultado.ok) falhar('/admin/fila', resultado.code);
+  if (!resultado.ok) return falhar('/admin/fila', resultado);
 
   // O link viaja num cookie de vida curta, nunca na URL: ele é credencial ao
   // portador e a URL fica no histórico do balcão, que é máquina compartilhada.
@@ -969,14 +1007,14 @@ export async function acaoAjustarFidelidade(form: FormData): Promise<void> {
   const quantidade = Number(form.get('quantidade') ?? 0);
 
   if (!Number.isInteger(quantidade) || quantidade === 0) {
-    falhar(`/admin/cliente/${customerId}`, 'quantidade_invalida');
+    return falhar(`/admin/cliente/${customerId}`, 'quantidade_invalida');
   }
 
   const resultado = await ajustarSaldoDeFidelidade(token, customerId, {
     quantidade,
     motivo: texto(form, 'motivo'),
   });
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?salvo=fidelidade`);
 }
 
@@ -991,7 +1029,7 @@ export async function acaoSalvarFidelidade(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const modo = texto(form, 'modo');
   if (!['nenhum', 'pontos', 'visitas', 'cashback'].includes(modo)) {
-    falhar('/admin/fidelidade', 'invalid_request');
+    return falhar('/admin/fidelidade', 'invalid_request');
   }
 
   const validade = Number(form.get('validadeDias') ?? 0);
@@ -1008,7 +1046,7 @@ export async function acaoSalvarFidelidade(form: FormData): Promise<void> {
     // anterior (bloco 59).
     escopo: texto(form, 'escopo') === 'unidade' ? 'unidade' : 'empresa',
   });
-  if (!resultado.ok) falhar('/admin/fidelidade', resultado.code);
+  if (!resultado.ok) return falhar('/admin/fidelidade', resultado);
   redirect('/admin/fidelidade?salvo=1');
 }
 
@@ -1022,7 +1060,7 @@ export async function acaoSalvarFidelidade(form: FormData): Promise<void> {
 export async function acaoAssumirRecado(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await assumirRecadoNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recados', resultado);
   redirect('/admin/recados?feito=assumido');
 }
 
@@ -1030,7 +1068,7 @@ export async function acaoAssumirRecado(form: FormData): Promise<void> {
 export async function acaoDevolverRecado(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await devolverRecadoNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recados', resultado);
   redirect('/admin/recados?feito=devolvido');
 }
 
@@ -1049,7 +1087,7 @@ export async function acaoResponderRecado(form: FormData): Promise<void> {
     texto(form, 'id'),
     String(form.get('resposta') ?? ''),
   );
-  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recados', resultado);
   redirect('/admin/recados?feito=respondido');
 }
 
@@ -1063,7 +1101,7 @@ export async function acaoResponderRecado(form: FormData): Promise<void> {
 export async function acaoEncerrarRecado(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await encerrarRecadoNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/recados', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recados', resultado);
   redirect('/admin/recados?feito=encerrado');
 }
 
@@ -1084,7 +1122,7 @@ export async function acaoEncerrarRecado(form: FormData): Promise<void> {
 export async function acaoDefinirVitrine(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await definirVitrineNaApi(token, texto(form, 'ligado') === '1');
-  if (!resultado.ok) falhar('/admin/configuracoes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/configuracoes', resultado);
   redirect('/admin/configuracoes?salvo=1');
 }
 
@@ -1105,7 +1143,7 @@ export async function acaoRegistrarFoto(form: FormData): Promise<void> {
     ...(texto(form, 'professionalId') ? { professionalId: texto(form, 'professionalId') } : {}),
     noPortfolio: texto(form, 'noPortfolio') === '1',
   });
-  if (!resultado.ok) falhar(`/admin/cliente/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${id}`, resultado);
   redirect(`/admin/cliente/${id}?foto=1`);
 }
 
@@ -1117,7 +1155,7 @@ export async function acaoPublicarFoto(form: FormData): Promise<void> {
     texto(form, 'fotoId'),
     texto(form, 'publicar') === '1',
   );
-  if (!resultado.ok) falhar(`/admin/cliente/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${id}`, resultado);
   redirect(`/admin/cliente/${id}?foto=1`);
 }
 
@@ -1131,7 +1169,7 @@ export async function acaoApagarFoto(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'customerId');
   const resultado = await apagarFotoNaApi(token, texto(form, 'fotoId'));
-  if (!resultado.ok) falhar(`/admin/cliente/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${id}`, resultado);
   redirect(`/admin/cliente/${id}?foto=1`);
 }
 
@@ -1148,7 +1186,7 @@ export async function acaoPerfilPublico(form: FormData): Promise<void> {
     ligado: texto(form, 'ligado') === '1',
     especialidades: form.getAll('especialidades').map(String).filter(Boolean),
   });
-  if (!resultado.ok) falhar('/admin/profissionais', resultado.code);
+  if (!resultado.ok) return falhar('/admin/profissionais', resultado);
   redirect('/admin/profissionais?feito=1');
 }
 
@@ -1163,14 +1201,14 @@ export async function acaoContestarMarketplace(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const categoria = texto(form, 'categoria');
   if (!MOTIVOS_DA_CONTESTACAO_DE_COMISSAO.includes(categoria as never)) {
-    falhar('/admin/plano', 'invalid_request');
+    return falhar('/admin/plano', 'invalid_request');
   }
 
   const resultado = await contestarClienteDoMarketplace(token, texto(form, 'id'), {
     categoria,
     motivo: texto(form, 'motivo'),
   });
-  if (!resultado.ok) falhar('/admin/plano', resultado.code);
+  if (!resultado.ok) return falhar('/admin/plano', resultado);
   redirect('/admin/plano?contestado=1');
 }
 
@@ -1183,7 +1221,7 @@ export async function acaoContestarMarketplace(form: FormData): Promise<void> {
 export async function acaoLigarPrecoPorFaixa(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await ligarPrecoPorFaixaNaApi(token, texto(form, 'ligado') === '1');
-  if (!resultado.ok) falhar('/admin/precos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/precos', resultado);
   redirect('/admin/precos?feito=1');
 }
 
@@ -1201,21 +1239,21 @@ export async function acaoCriarFaixa(form: FormData): Promise<void> {
     fimMinuto: Number(texto(form, 'fimMinuto')),
     deltaBps: Number(texto(form, 'deltaBps')),
   });
-  if (!resultado.ok) falhar('/admin/precos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/precos', resultado);
   redirect('/admin/precos?feito=1');
 }
 
 export async function acaoApagarFaixa(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await apagarFaixaNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/precos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/precos', resultado);
   redirect('/admin/precos?feito=1');
 }
 
 export async function acaoResolverLacuna(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await resolverLacunaNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/recepcao', resultado.code);
+  if (!resultado.ok) return falhar('/admin/recepcao', resultado);
   redirect('/admin/recepcao?feito=resolvida');
 }
 
@@ -1223,11 +1261,11 @@ export async function acaoMoverNaFila(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const para = texto(form, 'para');
   if (!['waiting', 'called', 'done', 'gave_up'].includes(para)) {
-    falhar('/admin/fila', 'invalid_request');
+    return falhar('/admin/fila', 'invalid_request');
   }
 
   const resultado = await moverNaFila(token, texto(form, 'id'), para as StatusNaFila);
-  if (!resultado.ok) falhar('/admin/fila', resultado.code);
+  if (!resultado.ok) return falhar('/admin/fila', resultado);
   redirect('/admin/fila?salvo=1');
 }
 
@@ -1240,7 +1278,7 @@ export async function acaoMoverNaFila(form: FormData): Promise<void> {
 export async function acaoSentarDaFila(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await sentarDaFila(token, texto(form, 'id'), texto(form, 'professionalId'));
-  if (!resultado.ok) falhar('/admin/fila', resultado.code);
+  if (!resultado.ok) return falhar('/admin/fila', resultado);
   redirect('/admin/dia');
 }
 
@@ -1275,13 +1313,13 @@ export async function acaoCriarExcecao(form: FormData): Promise<void> {
 
   const kind = texto(form, 'kind') as TipoDeExcecao;
   if (!['block', 'day_off', 'holiday', 'vacation', 'custom_hours'].includes(kind)) {
-    falhar(destino, 'tipo_invalido');
+    return falhar(destino, 'tipo_invalido');
   }
 
   const comFaixa = kind === 'block' || kind === 'custom_hours';
   const inicio = minutosOuNulo(texto(form, 'inicio'));
   const fim = minutosOuNulo(texto(form, 'fim'));
-  if (comFaixa && (inicio === null || fim === null)) falhar(destino, 'faixa_ausente');
+  if (comFaixa && (inicio === null || fim === null)) return falhar(destino, 'faixa_ausente');
 
   const profissional = texto(form, 'professionalId');
 
@@ -1301,7 +1339,7 @@ export async function acaoCriarExcecao(form: FormData): Promise<void> {
   const resultado =
     kind === 'block' ? await criarBloqueio(token, dados) : await criarExcecao(token, dados);
 
-  if (!resultado.ok) falhar(destino, resultado.code);
+  if (!resultado.ok) return falhar(destino, resultado);
 
   if (!resultado.dados.saved) {
     await guardarConflitoDaAgenda({
@@ -1319,7 +1357,7 @@ export async function acaoRemoverExcecao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const destino = voltarParaAgenda(form);
   const resultado = await removerExcecao(token, texto(form, 'id'));
-  if (!resultado.ok) falhar(destino, resultado.code);
+  if (!resultado.ok) return falhar(destino, resultado);
 
   const separador = destino.includes('?') ? '&' : '?';
   redirect(`${destino}${separador}salvo=1`);
@@ -1343,7 +1381,7 @@ export async function acaoMoverAgendamento(form: FormData): Promise<void> {
     ...(profissional ? { professionalId: profissional } : {}),
   });
 
-  if (!resultado.ok) falhar(destino, resultado.code);
+  if (!resultado.ok) return falhar(destino, resultado);
 
   const separador = destino.includes('?') ? '&' : '?';
   redirect(`${destino}${separador}salvo=1`);
@@ -1362,39 +1400,43 @@ export async function acaoMoverAgendamento(form: FormData): Promise<void> {
  * "5o,00" (com a letra o) em corte de graça, e ninguém veria — nem o operador,
  * que digitou algo, nem o dono, que só veria a gaveta faltando no fechamento.
  */
-function centavos(form: FormData, campo: string, rota: string): number {
+async function centavos(form: FormData, campo: string, rota: string): Promise<number> {
   const valor = centavosDoCampo(texto(form, campo));
-  if (valor === null) falhar(rota, 'valor_invalido');
+  if (valor === null) return falhar(rota, 'valor_invalido');
   return valor;
 }
 
 /** Campo opcional: vazio é zero, mas escrito errado continua sendo erro. */
-function centavosOpcionais(form: FormData, campo: string, rota: string): number {
+async function centavosOpcionais(
+  form: FormData,
+  campo: string,
+  rota: string,
+): Promise<number> {
   return texto(form, campo) === '' ? 0 : centavos(form, campo, rota);
 }
 
 export async function acaoAbrirCaixa(form: FormData): Promise<void> {
   const token = await exigirSessao();
-  const resultado = await abrirOCaixa(token, centavos(form, 'openingCents', '/admin/caixa'));
-  if (!resultado.ok) falhar('/admin/caixa', resultado.code);
+  const resultado = await abrirOCaixa(token, await centavos(form, 'openingCents', '/admin/caixa'));
+  if (!resultado.ok) return falhar('/admin/caixa', resultado);
   redirect('/admin/caixa?salvo=1');
 }
 
 export async function acaoMovimentarCaixa(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const kind = texto(form, 'kind');
-  if (kind !== 'withdrawal' && kind !== 'supply') falhar('/admin/caixa', 'invalid_request');
+  if (kind !== 'withdrawal' && kind !== 'supply') return falhar('/admin/caixa', 'invalid_request');
 
   const resultado = await movimentarOCaixa(
     token,
     {
       kind,
-      amountCents: centavos(form, 'amountCents', '/admin/caixa'),
+      amountCents: await centavos(form, 'amountCents', '/admin/caixa'),
       reason: texto(form, 'reason'),
     },
     texto(form, 'idempotencyKey'),
   );
-  if (!resultado.ok) falhar('/admin/caixa', resultado.code);
+  if (!resultado.ok) return falhar('/admin/caixa', resultado);
   redirect('/admin/caixa?salvo=1');
 }
 
@@ -1407,8 +1449,8 @@ export async function acaoMovimentarCaixa(form: FormData): Promise<void> {
  */
 export async function acaoFecharCaixa(form: FormData): Promise<void> {
   const token = await exigirSessao();
-  const resultado = await fecharOCaixa(token, centavos(form, 'countedCents', '/admin/caixa'), texto(form, 'notes'));
-  if (!resultado.ok) falhar('/admin/caixa', resultado.code);
+  const resultado = await fecharOCaixa(token, await centavos(form, 'countedCents', '/admin/caixa'), texto(form, 'notes'));
+  if (!resultado.ok) return falhar('/admin/caixa', resultado);
   redirect(`/admin/caixa?divergencia=${resultado.dados.divergenciaCents}`);
 }
 
@@ -1425,7 +1467,7 @@ export async function acaoAbrirComanda(form: FormData): Promise<void> {
     },
     texto(form, 'idempotencyKey'),
   );
-  if (!resultado.ok) falhar('/admin/comanda', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comanda', resultado);
   redirect(`/admin/comanda/${resultado.dados.id}`);
 }
 
@@ -1434,7 +1476,7 @@ export async function acaoAdicionarItem(form: FormData): Promise<void> {
   const id = texto(form, 'orderId');
   const tipo = texto(form, 'tipo');
   if (tipo !== 'service' && tipo !== 'product' && tipo !== 'consumable' && tipo !== 'package') {
-    falhar(`/admin/comanda/${id}`, 'invalid_request');
+    return falhar(`/admin/comanda/${id}`, 'invalid_request');
   }
 
   const serviceId = texto(form, 'serviceId');
@@ -1447,12 +1489,12 @@ export async function acaoAdicionarItem(form: FormData): Promise<void> {
     quantidade: Math.max(1, numero(form, 'quantidade', 1)),
     // Num item de pacote este número é ignorado: o preço sai do catálogo, e é
     // isso que impede um item de R$ 1 congelar cinco unidades de R$ 50.
-    precoUnitarioCents: centavos(form, 'precoUnitarioCents', `/admin/comanda/${id}`),
+    precoUnitarioCents: await centavos(form, 'precoUnitarioCents', `/admin/comanda/${id}`),
     ...(serviceId ? { serviceId } : {}),
     ...(professionalId ? { professionalId } : {}),
     ...(packageId ? { packageId } : {}),
   });
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}`);
 }
 
@@ -1460,7 +1502,7 @@ export async function acaoRemoverItem(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'orderId');
   const resultado = await removerDaComanda(token, id, texto(form, 'itemId'));
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}`);
 }
 
@@ -1476,15 +1518,15 @@ export async function acaoAjustarComanda(form: FormData): Promise<void> {
       ? { tipo: 'percent' as const, valor: numero(form, 'descontoValor', 0), motivo: texto(form, 'motivo') }
       : {
           tipo: 'amount' as const,
-          valor: centavosOpcionais(form, 'descontoValor', `/admin/comanda/${id}`),
+          valor: await centavosOpcionais(form, 'descontoValor', `/admin/comanda/${id}`),
           motivo: texto(form, 'motivo'),
         };
 
   const resultado = await ajustarAComanda(token, id, {
     desconto: desconto.valor > 0 ? desconto : null,
-    gorjetaCents: centavosOpcionais(form, 'gorjetaCents', `/admin/comanda/${id}`),
+    gorjetaCents: await centavosOpcionais(form, 'gorjetaCents', `/admin/comanda/${id}`),
   });
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}?salvo=1`);
 }
 
@@ -1499,14 +1541,16 @@ export async function acaoFecharComanda(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'orderId');
 
-  const pagamentos = [0, 1, 2]
-    .map((i) => ({
-      forma: texto(form, `forma${i}`) as FormaDePagamento,
-      valorCents: centavosOpcionais(form, `valor${i}`, `/admin/comanda/${id}`),
-    }))
-    .filter((p) => p.valorCents > 0 && p.forma);
+  const pagamentos = (
+    await Promise.all(
+      [0, 1, 2].map(async (i) => ({
+        forma: texto(form, `forma${i}`) as FormaDePagamento,
+        valorCents: await centavosOpcionais(form, `valor${i}`, `/admin/comanda/${id}`),
+      })),
+    )
+  ).filter((p) => p.valorCents > 0 && p.forma);
 
-  if (pagamentos.length === 0) falhar(`/admin/comanda/${id}`, 'sem_pagamento');
+  if (pagamentos.length === 0) return falhar(`/admin/comanda/${id}`, 'sem_pagamento');
 
   /**
    * O resgate de fidelidade viaja separado do valor (bloco 41).
@@ -1538,7 +1582,7 @@ export async function acaoFecharComanda(form: FormData): Promise<void> {
     Number.isInteger(resgate) && resgate > 0 ? resgate : undefined,
     servicoDoPacote.length > 0 ? servicoDoPacote : undefined,
   );
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}?pago=1`);
 }
 
@@ -1557,7 +1601,7 @@ export async function acaoCobrarComanda(form: FormData): Promise<void> {
   const id = texto(form, 'orderId');
   const meio = texto(form, 'meio');
   if (meio !== 'pix' && meio !== 'cartao' && meio !== 'link') {
-    falhar(`/admin/comanda/${id}`, 'invalid_request');
+    return falhar(`/admin/comanda/${id}`, 'invalid_request');
   }
 
   const resultado = await cobrarComanda(
@@ -1566,7 +1610,7 @@ export async function acaoCobrarComanda(form: FormData): Promise<void> {
     meio as 'pix' | 'cartao' | 'link',
     texto(form, 'idempotencyKey'),
   );
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}?cobrando=1`);
 }
 
@@ -1576,7 +1620,7 @@ export async function acaoCancelarCobranca(form: FormData): Promise<void> {
   const id = texto(form, 'orderId');
 
   const resultado = await cancelarCobrancaDaComanda(token, id, texto(form, 'chargeId'));
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}?salvo=1`);
 }
 
@@ -1584,19 +1628,19 @@ export async function acaoReceberFiado(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const forma = texto(form, 'forma');
   if (!['cash', 'debit', 'credit', 'pix'].includes(forma)) {
-    falhar('/admin/fiado', 'invalid_request');
+    return falhar('/admin/fiado', 'invalid_request');
   }
 
   const resultado = await receberDoFiado(
     token,
     {
       customerId: texto(form, 'customerId'),
-      amountCents: centavos(form, 'amountCents', '/admin/fiado'),
+      amountCents: await centavos(form, 'amountCents', '/admin/fiado'),
       forma: forma as 'cash' | 'debit' | 'credit' | 'pix',
     },
     texto(form, 'idempotencyKey'),
   );
-  if (!resultado.ok) falhar('/admin/fiado', resultado.code);
+  if (!resultado.ok) return falhar('/admin/fiado', resultado);
   redirect('/admin/fiado?salvo=1');
 }
 
@@ -1622,14 +1666,14 @@ export async function acaoPoliticaDeSegundoFator(form: FormData): Promise<void> 
     exigir,
     codigo.length > 0 ? codigo : undefined,
   );
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
   redirect(`/admin/seguranca?politica=${exigir ? 'ligada' : 'desligada'}`);
 }
 
 export async function acaoComecarSegundoFator(): Promise<void> {
   const token = await exigirSessao();
   const resultado = await comecarSegundoFator(token);
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
 
   // Segredo em cookie de vida curta, nunca na URL: ele gera todos os códigos
   // futuros e a URL fica no histórico da máquina do balcão.
@@ -1640,7 +1684,7 @@ export async function acaoComecarSegundoFator(): Promise<void> {
 export async function acaoConfirmarSegundoFator(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await confirmarSegundoFator(token, texto(form, 'codigo'));
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
 
   await guardarCodigosDeRecuperacao(resultado.dados.codigosDeRecuperacao);
   redirect('/admin/seguranca?ativado=1');
@@ -1656,7 +1700,7 @@ export async function acaoConfirmarSegundoFator(form: FormData): Promise<void> {
 export async function acaoVerificarSegundoFator(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await verificarSegundoFatorAgora(token, texto(form, 'codigo'));
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
 
   const destinos: Record<string, string> = {
     caixa: '/admin/caixa',
@@ -1687,7 +1731,7 @@ export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const modo = texto(form, 'modo');
   if (modo !== 'percent' && modo !== 'fixed' && modo !== 'tiers') {
-    falhar('/admin/comissao/regras', 'invalid_request');
+    return falhar('/admin/comissao/regras', 'invalid_request');
   }
 
   let valor = 0;
@@ -1695,10 +1739,10 @@ export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
 
   if (modo === 'percent') {
     const pontos = pontosBaseDoCampo(texto(form, 'aliquota'));
-    if (pontos === null) falhar('/admin/comissao/regras', 'aliquota_invalida');
+    if (pontos === null) return falhar('/admin/comissao/regras', 'aliquota_invalida');
     valor = pontos;
   } else if (modo === 'fixed') {
-    valor = centavos(form, 'valorFixo', '/admin/comissao/regras');
+    valor = await centavos(form, 'valorFixo', '/admin/comissao/regras');
   } else {
     // Três faixas no formulário: duas com teto e a última aberta, que é o que
     // impede faturamento acima do último degrau ficar sem alíquota.
@@ -1706,15 +1750,15 @@ export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
       const aliquota = texto(form, `faixaPontos${i}`);
       if (!aliquota) continue;
       const pontos = pontosBaseDoCampo(aliquota);
-      if (pontos === null) falhar('/admin/comissao/regras', 'aliquota_invalida');
+      if (pontos === null) return falhar('/admin/comissao/regras', 'aliquota_invalida');
 
       const ate = texto(form, `faixaAte${i}`);
       faixas.push({
-        ateCents: ate ? centavos(form, `faixaAte${i}`, '/admin/comissao/regras') : null,
+        ateCents: ate ? await centavos(form, `faixaAte${i}`, '/admin/comissao/regras') : null,
         pontosBase: pontos,
       });
     }
-    if (faixas.length === 0) falhar('/admin/comissao/regras', 'faixas_ausentes');
+    if (faixas.length === 0) return falhar('/admin/comissao/regras', 'faixas_ausentes');
     // A última é sempre aberta: o formulário não oferece outra forma.
     const ultima = faixas[faixas.length - 1];
     if (ultima) faixas[faixas.length - 1] = { ...ultima, ateCents: null };
@@ -1730,14 +1774,14 @@ export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
     ...(professionalId ? { professionalId } : {}),
     ...(serviceId ? { serviceId } : {}),
   });
-  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao/regras', resultado);
   redirect('/admin/comissao/regras?salvo=1');
 }
 
 export async function acaoRemoverRegraDeComissao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await removerRegraDeComissao(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao/regras', resultado);
   redirect('/admin/comissao/regras?salvo=1');
 }
 
@@ -1745,14 +1789,14 @@ export async function acaoConfiguracaoDeComissao(form: FormData): Promise<void> 
   const token = await exigirSessao();
   const base = texto(form, 'base');
   const tratamento = texto(form, 'tratamentoDoDesconto');
-  if (base !== 'liquido' && base !== 'bruto') falhar('/admin/comissao/regras', 'invalid_request');
+  if (base !== 'liquido' && base !== 'bruto') return falhar('/admin/comissao/regras', 'invalid_request');
   if (tratamento !== 'reduz_base' && tratamento !== 'custo_da_casa') {
-    falhar('/admin/comissao/regras', 'invalid_request');
+    return falhar('/admin/comissao/regras', 'invalid_request');
   }
 
   const taxa = texto(form, 'tratamentoDaTaxa');
   if (taxa !== 'absorvida' && taxa !== 'rateada') {
-    falhar('/admin/comissao/regras', 'invalid_request');
+    return falhar('/admin/comissao/regras', 'invalid_request');
   }
 
   const resultado = await salvarConfiguracaoDeComissao(token, {
@@ -1760,7 +1804,7 @@ export async function acaoConfiguracaoDeComissao(form: FormData): Promise<void> 
     tratamentoDoDesconto: tratamento,
     tratamentoDaTaxa: taxa,
   });
-  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao/regras', resultado);
   redirect('/admin/comissao/regras?salvo=1');
 }
 
@@ -1778,14 +1822,14 @@ export async function acaoAliquotaDoAdquirente(form: FormData): Promise<void> {
 
   const porcento = bruto === '' ? 0 : Number(bruto);
   if (!Number.isFinite(porcento) || porcento < 0 || porcento > 30) {
-    falhar('/admin/comissao/regras', 'aliquota_invalida');
+    return falhar('/admin/comissao/regras', 'aliquota_invalida');
   }
 
   const resultado = await salvarAliquotaDoAdquirente(token, {
     forma,
     bps: Math.round(porcento * 100),
   });
-  if (!resultado.ok) falhar('/admin/comissao/regras', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao/regras', resultado);
   redirect('/admin/comissao/regras?salvo=1');
 }
 
@@ -1803,7 +1847,7 @@ export async function acaoFecharComissao(form: FormData): Promise<void> {
     ate: texto(form, 'ate'),
     ...(texto(form, 'notas') ? { notas: texto(form, 'notas') } : {}),
   });
-  if (!resultado.ok) falhar('/admin/comissao', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao', resultado);
   redirect('/admin/comissao?fechado=1');
 }
 
@@ -1828,7 +1872,7 @@ export async function acaoAvisos(form: FormData): Promise<void> {
     diasParaRetorno: numero(form, 'diasParaRetorno', 45),
   });
 
-  if (!resultado.ok) falhar('/admin/avisos', resultado.code);
+  if (!resultado.ok) return falhar('/admin/avisos', resultado);
   redirect('/admin/avisos?salvo=1');
 }
 
@@ -1854,7 +1898,7 @@ export async function acaoPreferencias(form: FormData): Promise<void> {
   const rota = `/admin/cliente/${customerId}?de=${de === '/admin/meu-dia' ? 'meu-dia' : 'dia'}`;
 
   const conversa = texto(form, 'conversa');
-  if (!ehConversa(conversa)) falhar(rota, 'preferencia_invalida');
+  if (!ehConversa(conversa)) return falhar(rota, 'preferencia_invalida');
 
   const resultado = await salvarPreferenciasDoCliente(token, customerId, {
     maquinaLaterais: texto(form, 'maquinaLaterais') || null,
@@ -1866,7 +1910,7 @@ export async function acaoPreferencias(form: FormData): Promise<void> {
     observacoes: texto(form, 'observacoes') || null,
   });
 
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}&salvo=1`);
 }
 
@@ -1895,7 +1939,7 @@ export async function acaoConvidar(form: FormData): Promise<void> {
     ...(telefone ? { phone: telefone } : {}),
   });
 
-  if (!resultado.ok) falhar(`/admin/profissionais?pessoa=${professionalId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/profissionais?pessoa=${professionalId}`, resultado);
 
   await guardarSenhaDeUmaVez(
     resultado.dados.member.name,
@@ -1928,7 +1972,7 @@ export async function acaoMeta(form: FormData): Promise<void> {
   const rota = `/admin/profissionais?pessoa=${professionalId}`;
 
   const metaCents = bruto ? centavosDoCampo(bruto) : null;
-  if (bruto && metaCents === null) falhar(rota, 'meta_invalida');
+  if (bruto && metaCents === null) return falhar(rota, 'meta_invalida');
 
   const resultado = await salvarMetaDoProfissional(token, {
     professionalId,
@@ -1936,7 +1980,7 @@ export async function acaoMeta(form: FormData): Promise<void> {
     metaCents,
   });
 
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}&salvo=1`);
 }
 
@@ -1957,10 +2001,10 @@ export async function acaoAnalisarImportacao(form: FormData): Promise<void> {
   const token = await exigirSessao();
 
   const arquivo = form.get('arquivo');
-  if (!(arquivo instanceof File) || arquivo.size === 0) falhar('/admin/importar', 'sem_arquivo');
+  if (!(arquivo instanceof File) || arquivo.size === 0) return falhar('/admin/importar', 'sem_arquivo');
 
   const enviado = arquivo as File;
-  if (enviado.size > TETO_DO_ARQUIVO) falhar('/admin/importar', 'arquivo_grande');
+  if (enviado.size > TETO_DO_ARQUIVO) return falhar('/admin/importar', 'arquivo_grande');
 
   const conteudo = await enviado.text();
   const separador = texto(form, 'separador');
@@ -1971,7 +2015,7 @@ export async function acaoAnalisarImportacao(form: FormData): Promise<void> {
     ...(separador ? { separador } : {}),
   });
 
-  if (!resultado.ok) falhar('/admin/importar', resultado.code);
+  if (!resultado.ok) return falhar('/admin/importar', resultado);
   redirect(`/admin/importar?i=${resultado.dados.id}`);
 }
 
@@ -1980,7 +2024,7 @@ export async function acaoAplicarImportacao(form: FormData): Promise<void> {
   const id = texto(form, 'id');
 
   const resultado = await aplicarImportacao(token, id);
-  if (!resultado.ok) falhar(`/admin/importar?i=${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/importar?i=${id}`, resultado);
 
   redirect(`/admin/importar?feito=${resultado.dados.criados}&atualizados=${resultado.dados.atualizados}`);
 }
@@ -1990,7 +2034,7 @@ export async function acaoReverterImportacao(form: FormData): Promise<void> {
   const id = texto(form, 'id');
 
   const resultado = await reverterImportacao(token, id);
-  if (!resultado.ok) falhar('/admin/importar', resultado.code);
+  if (!resultado.ok) return falhar('/admin/importar', resultado);
 
   redirect(`/admin/importar?desfeito=${resultado.dados.apagados}`);
 }
@@ -2000,7 +2044,7 @@ export async function acaoAdicionarSlug(form: FormData): Promise<void> {
   const token = await exigirSessao();
 
   const resultado = await adicionarSlug(token, texto(form, 'slug'));
-  if (!resultado.ok) falhar('/admin/importar', resultado.code);
+  if (!resultado.ok) return falhar('/admin/importar', resultado);
 
   redirect('/admin/importar?slug=1');
 }
@@ -2023,7 +2067,7 @@ export async function acaoTrocarDePlano(form: FormData): Promise<void> {
     texto(form, 'idempotencyKey'),
   );
 
-  if (!resultado.ok) falhar('/admin/plano', resultado.code);
+  if (!resultado.ok) return falhar('/admin/plano', resultado);
   redirect('/admin/plano?trocado=1');
 }
 
@@ -2042,7 +2086,7 @@ export async function acaoPermissoesDoPapel(form: FormData): Promise<void> {
   const permissoes = form.getAll('permissoes').map((v) => String(v)).filter(Boolean);
 
   const resultado = await salvarPermissoesDoPapel(token, papel, permissoes);
-  if (!resultado.ok) falhar('/admin/equipe/permissoes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/equipe/permissoes', resultado);
   redirect('/admin/equipe/permissoes?salvo=1');
 }
 
@@ -2067,7 +2111,7 @@ export async function acaoConsentimentoNoBalcao(form: FormData): Promise<void> {
 
   const finalidade = texto(form, 'finalidade');
   const versao = versaoDoConsentimento(finalidade);
-  if (versao === null) falhar(rota, 'finalidade_invalida');
+  if (versao === null) return falhar(rota, 'finalidade_invalida');
 
   const resultado = await registrarConsentimentoNoBalcao(token, customerId, {
     finalidade,
@@ -2075,7 +2119,7 @@ export async function acaoConsentimentoNoBalcao(form: FormData): Promise<void> {
     versaoDoTexto: versao,
   });
 
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}&salvo=1`);
 }
 
@@ -2094,10 +2138,10 @@ export async function acaoAbrirPedidoDeDados(form: FormData): Promise<void> {
   const rota = `/admin/cliente/${customerId}?de=${de === '/admin/meu-dia' ? 'meu-dia' : 'dia'}`;
 
   const tipo = texto(form, 'tipo');
-  if (tipo !== 'export' && tipo !== 'deletion') falhar(rota, 'pedido_invalido');
+  if (tipo !== 'export' && tipo !== 'deletion') return falhar(rota, 'pedido_invalido');
 
   const resultado = await abrirPedidoDeDados(token, customerId, tipo);
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}&pedido=1`);
 }
 
@@ -2110,7 +2154,7 @@ export async function acaoEncerrarPedidoDeDados(form: FormData): Promise<void> {
     ...(nota ? { nota } : {}),
   });
 
-  if (!resultado.ok) falhar('/admin/lgpd', resultado.code);
+  if (!resultado.ok) return falhar('/admin/lgpd', resultado);
   redirect('/admin/lgpd?salvo=1');
 }
 
@@ -2137,11 +2181,11 @@ export async function acaoAnonimizarCliente(form: FormData): Promise<void> {
    * reflexo. A conferência mora no servidor porque a do navegador é sugestão.
    */
   if (texto(form, 'confirmacao').toUpperCase() !== 'APAGAR') {
-    falhar(rota, 'confirmacao_invalida');
+    return falhar(rota, 'confirmacao_invalida');
   }
 
   const resultado = await anonimizarClienteNaApi(token, customerId, texto(form, 'motivo'));
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
 
   // Volta para a lista, não para a ficha: a ficha que ele estava vendo não
   // existe mais como cadastro de pessoa, e mostrá-la vazia parece defeito.
@@ -2153,7 +2197,7 @@ export async function acaoAnonimizarCliente(form: FormData): Promise<void> {
 export async function acaoEncerrarSessao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await encerrarSessaoDoAparelho(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
   redirect('/admin/seguranca?encerrada=1');
 }
 
@@ -2167,7 +2211,7 @@ export async function acaoEncerrarSessao(form: FormData): Promise<void> {
 export async function acaoExpulsarSuporte(): Promise<void> {
   const token = await exigirSessao();
   const resultado = await expulsarSuporte(token);
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
   redirect('/admin/seguranca?suporte=fora');
 }
 
@@ -2182,7 +2226,7 @@ export async function acaoPreferenciasDeAlerta(form: FormData): Promise<void> {
     enviarRetencao: form.get('enviarRetencao') !== null,
   });
 
-  if (!resultado.ok) falhar('/admin/seguranca', resultado.code);
+  if (!resultado.ok) return falhar('/admin/seguranca', resultado);
   redirect('/admin/seguranca?salvo=1');
 }
 
@@ -2214,7 +2258,7 @@ export async function acaoSalvarPacote(form: FormData): Promise<void> {
     },
     id.length > 0 ? id : undefined,
   );
-  if (!resultado.ok) falhar('/admin/pacotes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/pacotes', resultado);
   redirect('/admin/pacotes?salvo=1');
 }
 
@@ -2228,7 +2272,7 @@ export async function acaoReembolsarPacote(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const customerId = texto(form, 'customerId');
   const resultado = await reembolsarPacoteNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=reembolsado`);
 }
 
@@ -2252,7 +2296,7 @@ export async function acaoVenderPacote(form: FormData): Promise<void> {
     precoUnitarioCents: 0,
     packageId: texto(form, 'packageId'),
   });
-  if (!resultado.ok) falhar(`/admin/comanda/${id}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}`);
 }
 
@@ -2269,14 +2313,14 @@ export async function acaoTratarAvaliacao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const desfecho = texto(form, 'desfecho');
   if (!['contato', 'retrabalho', 'credito', 'sem_retorno'].includes(desfecho)) {
-    falhar('/admin/avaliacoes', 'invalid_request');
+    return falhar('/admin/avaliacoes', 'invalid_request');
   }
 
   const resultado = await tratarAvaliacaoNaApi(token, texto(form, 'id'), {
     desfecho: desfecho as 'contato' | 'retrabalho' | 'credito' | 'sem_retorno',
     nota: texto(form, 'nota'),
   });
-  if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/avaliacoes', resultado);
   redirect('/admin/avaliacoes?tratada=1');
 }
 
@@ -2291,14 +2335,14 @@ export async function acaoContestarAvaliacao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const motivo = texto(form, 'motivo');
   if (!MOTIVOS_DA_CONTESTACAO.includes(motivo as MotivoDaContestacao)) {
-    falhar('/admin/avaliacoes', 'invalid_request');
+    return falhar('/admin/avaliacoes', 'invalid_request');
   }
 
   const resultado = await contestarAvaliacaoNaApi(token, texto(form, 'id'), {
     motivo: motivo as MotivoDaContestacao,
     nota: texto(form, 'nota'),
   });
-  if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/avaliacoes', resultado);
   redirect('/admin/avaliacoes?contestada=1');
 }
 
@@ -2308,7 +2352,7 @@ export async function acaoContestarAvaliacao(form: FormData): Promise<void> {
 export async function acaoRetirarContestacao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await retirarContestacaoNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar('/admin/avaliacoes', resultado.code);
+  if (!resultado.ok) return falhar('/admin/avaliacoes', resultado);
   redirect('/admin/avaliacoes?retirada=1');
 }
 
@@ -2318,7 +2362,7 @@ export async function acaoSalvarProduto(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'id');
   const tipo = texto(form, 'tipo');
-  if (tipo !== 'resale' && tipo !== 'internal') falhar('/admin/estoque', 'invalid_request');
+  if (tipo !== 'resale' && tipo !== 'internal') return falhar('/admin/estoque', 'invalid_request');
 
   const preco = Number(form.get('precoReais') ?? 0);
   const custo = Number(form.get('custoReais') ?? 0);
@@ -2344,7 +2388,7 @@ export async function acaoSalvarProduto(form: FormData): Promise<void> {
     },
     id.length > 0 ? id : undefined,
   );
-  if (!resultado.ok) falhar('/admin/estoque', resultado.code);
+  if (!resultado.ok) return falhar('/admin/estoque', resultado);
   redirect('/admin/estoque?salvo=1');
 }
 
@@ -2365,7 +2409,7 @@ export async function acaoMoverEstoque(form: FormData): Promise<void> {
     quantidade: Number(form.get('quantidade') ?? 0),
     ...(motivo.length > 0 ? { motivo } : {}),
   });
-  if (!resultado.ok) falhar('/admin/estoque', resultado.code);
+  if (!resultado.ok) return falhar('/admin/estoque', resultado);
   redirect('/admin/estoque?movido=1');
 }
 
@@ -2393,7 +2437,7 @@ export async function acaoSalvarFicha(form: FormData): Promise<void> {
     .filter((i) => Number.isInteger(i.quantidade) && i.quantidade > 0);
 
   const resultado = await salvarFichaNaApi(token, serviceId, itens);
-  if (!resultado.ok) falhar('/admin/catalogo', resultado.code);
+  if (!resultado.ok) return falhar('/admin/catalogo', resultado);
   redirect('/admin/catalogo?ficha=1');
 }
 
@@ -2466,7 +2510,7 @@ export async function acaoSalvarPlano(form: FormData): Promise<void> {
     },
     id.length > 0 ? id : undefined,
   );
-  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  if (!resultado.ok) return falhar('/admin/clube', resultado);
   redirect('/admin/clube?salvo=1');
 }
 
@@ -2474,7 +2518,7 @@ export async function acaoAssinar(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const customerId = texto(form, 'customerId');
   const resultado = await assinarNaApi(token, customerId, texto(form, 'planId'));
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=assinou`);
 }
 
@@ -2482,7 +2526,7 @@ export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const customerId = texto(form, 'customerId');
   const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=cancelou`);
 }
 
@@ -2501,7 +2545,7 @@ export async function acaoCadastrarRecebedor(form: FormData): Promise<void> {
     agencia: texto(form, 'agencia'),
     conta: texto(form, 'conta'),
   });
-  if (!resultado.ok) falhar('/admin/comissao', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao', resultado);
   redirect('/admin/comissao?feito=recebedor');
 }
 
@@ -2516,7 +2560,7 @@ export async function acaoCadastrarRecebedor(form: FormData): Promise<void> {
 export async function acaoSalvarSplit(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await salvarSplitNaApi(token, form.get('ligado') === 'on');
-  if (!resultado.ok) falhar('/admin/comissao', resultado.code);
+  if (!resultado.ok) return falhar('/admin/comissao', resultado);
   redirect('/admin/comissao?feito=split');
 }
 
@@ -2535,7 +2579,7 @@ export async function acaoSalvarModeloDaAssinatura(form: FormData): Promise<void
     texto(form, 'modo'),
     Math.round(teto * 100),
   );
-  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  if (!resultado.ok) return falhar('/admin/clube', resultado);
   redirect('/admin/clube?feito=modelo');
 }
 
@@ -2551,7 +2595,7 @@ export async function acaoSalvarModeloDaAssinatura(form: FormData): Promise<void
 export async function acaoPagarFatura(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await pagarFaturaNaApi(token, texto(form, 'id'), texto(form, 'metodo'));
-  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  if (!resultado.ok) return falhar('/admin/clube', resultado);
   redirect('/admin/clube?feito=pagou');
 }
 
@@ -2559,7 +2603,7 @@ export async function acaoPagarFatura(form: FormData): Promise<void> {
 export async function acaoCancelarFatura(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await cancelarFaturaNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar('/admin/clube', resultado.code);
+  if (!resultado.ok) return falhar('/admin/clube', resultado);
   redirect('/admin/clube?feito=cancelou_fatura');
 }
 
@@ -2573,7 +2617,7 @@ export async function acaoAgendarCancelamento(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const customerId = texto(form, 'customerId');
   const resultado = await agendarCancelamentoNaApi(token, texto(form, 'id'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=agendou_saida`);
 }
 
@@ -2582,7 +2626,7 @@ export async function acaoDesfazerCancelamento(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const customerId = texto(form, 'customerId');
   const resultado = await desfazerCancelamentoNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=manteve`);
 }
 
@@ -2604,7 +2648,7 @@ export async function acaoIncluirDependente(form: FormData): Promise<void> {
     texto(form, 'subscriptionId'),
     texto(form, 'dependenteId'),
   );
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=dependente`);
 }
 
@@ -2616,7 +2660,7 @@ export async function acaoRemoverDependente(form: FormData): Promise<void> {
     texto(form, 'subscriptionId'),
     texto(form, 'dependenteId'),
   );
-  if (!resultado.ok) falhar(`/admin/cliente/${customerId}`, resultado.code);
+  if (!resultado.ok) return falhar(`/admin/cliente/${customerId}`, resultado);
   redirect(`/admin/cliente/${customerId}?feito=dependente`);
 }
 
@@ -2628,39 +2672,39 @@ const ROTA_FINANCEIRO = '/admin/financeiro';
  * A direção chega de um campo escondido, que é entrada externa como qualquer
  * outra. A API valida de novo — esta guarda existe para o erro ser o da tela.
  */
-function direcaoDaConta(form: FormData, rota: string): 'pagar' | 'receber' {
+async function direcaoDaConta(form: FormData, rota: string): Promise<'pagar' | 'receber'> {
   const valor = texto(form, 'direcao');
-  if (valor !== 'pagar' && valor !== 'receber') falhar(rota, 'invalid_request');
+  if (valor !== 'pagar' && valor !== 'receber') return falhar(rota, 'invalid_request');
   return valor;
 }
 
 export async function acaoCriarContaDoFinanceiro(form: FormData): Promise<void> {
   const token = await exigirSessao();
-  const direcao = direcaoDaConta(form, ROTA_FINANCEIRO);
+  const direcao = await direcaoDaConta(form, ROTA_FINANCEIRO);
   const categoriaId = texto(form, 'categoriaId');
   const contaId = texto(form, 'contaId');
 
   const resultado = await criarContaDoFinanceiroApi(token, {
     direcao,
     descricao: texto(form, 'descricao'),
-    valorCents: centavos(form, 'valorCents', ROTA_FINANCEIRO),
+    valorCents: await centavos(form, 'valorCents', ROTA_FINANCEIRO),
     vencimentoEm: texto(form, 'vencimentoEm'),
     categoriaId: categoriaId || null,
     contaId: contaId || null,
     observacao: texto(form, 'observacao') || null,
   });
-  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FINANCEIRO, resultado);
   redirect(`${ROTA_FINANCEIRO}?salvo=criada`);
 }
 
 export async function acaoQuitarContaDoFinanceiro(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await quitarContaDoFinanceiroApi(token, texto(form, 'contaId'), {
-    valorPagoCents: centavos(form, 'valorPagoCents', ROTA_FINANCEIRO),
+    valorPagoCents: await centavos(form, 'valorPagoCents', ROTA_FINANCEIRO),
     pagaEm: texto(form, 'pagaEm'),
     pelaGaveta: texto(form, 'pelaGaveta') === '1',
   });
-  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FINANCEIRO, resultado);
   redirect(`${ROTA_FINANCEIRO}?salvo=quitada`);
 }
 
@@ -2671,7 +2715,7 @@ export async function acaoCancelarContaDoFinanceiro(form: FormData): Promise<voi
     texto(form, 'contaId'),
     texto(form, 'motivo'),
   );
-  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FINANCEIRO, resultado);
   redirect(`${ROTA_FINANCEIRO}?salvo=cancelada`);
 }
 
@@ -2679,16 +2723,16 @@ export async function acaoCriarCategoriaDoFinanceiro(form: FormData): Promise<vo
   const token = await exigirSessao();
   const resultado = await criarCategoriaDoFinanceiroApi(token, {
     nome: texto(form, 'nome'),
-    direcao: direcaoDaConta(form, ROTA_FINANCEIRO),
+    direcao: await direcaoDaConta(form, ROTA_FINANCEIRO),
   });
-  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FINANCEIRO, resultado);
   redirect(`${ROTA_FINANCEIRO}?salvo=categoria`);
 }
 
 export async function acaoCriarContaBancaria(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await criarContaBancariaApi(token, { nome: texto(form, 'nome') });
-  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FINANCEIRO, resultado);
   redirect(`${ROTA_FINANCEIRO}?salvo=conta`);
 }
 
@@ -2707,13 +2751,13 @@ export async function acaoTransferirEntreContas(form: FormData): Promise<void> {
     {
       deContaId: texto(form, 'deContaId'),
       paraContaId: texto(form, 'paraContaId'),
-      valorCents: centavos(form, 'valorCents', ROTA_FINANCEIRO),
+      valorCents: await centavos(form, 'valorCents', ROTA_FINANCEIRO),
       quandoEm: texto(form, 'quandoEm'),
       observacao: texto(form, 'observacao') || null,
     },
     texto(form, 'chave') || undefined,
   );
-  if (!resultado.ok) falhar(ROTA_FINANCEIRO, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FINANCEIRO, resultado);
   redirect(`${ROTA_FINANCEIRO}?salvo=transferida`);
 }
 
@@ -2730,9 +2774,9 @@ export async function acaoDefinirLimiteDeFiado(form: FormData): Promise<void> {
   const resultado = await definirLimiteDeFiadoApi(
     token,
     customerId,
-    centavosOpcionais(form, 'limiteCents', rota),
+    await centavosOpcionais(form, 'limiteCents', rota),
   );
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?salvo=limite`);
 }
 
@@ -2741,10 +2785,10 @@ export async function acaoLancarSaldoInicialDeFiado(form: FormData): Promise<voi
   const customerId = texto(form, 'customerId');
   const rota = `/admin/cliente/${customerId}`;
   const resultado = await lancarSaldoInicialDeFiadoApi(token, customerId, {
-    deveCents: centavos(form, 'deveCents', rota),
+    deveCents: await centavos(form, 'deveCents', rota),
     motivo: texto(form, 'motivo'),
   });
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?salvo=saldo-inicial`);
 }
 
@@ -2757,7 +2801,7 @@ export async function acaoAdiantarVale(form: FormData): Promise<void> {
     token,
     {
       professionalId: texto(form, 'professionalId'),
-      valorCents: centavos(form, 'valorCents', rota),
+      valorCents: await centavos(form, 'valorCents', rota),
       de: texto(form, 'de'),
       ate: texto(form, 'ate'),
       motivo: texto(form, 'motivo') || null,
@@ -2767,7 +2811,7 @@ export async function acaoAdiantarVale(form: FormData): Promise<void> {
     // mesma, e a API devolve o vale já lançado em vez de lançar o segundo.
     texto(form, 'chave') || undefined,
   );
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?feito=vale`);
 }
 
@@ -2775,7 +2819,7 @@ export async function acaoCancelarVale(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const rota = '/admin/comissao';
   const resultado = await cancelarValeNaApi(token, texto(form, 'valeId'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?feito=vale-cancelado`);
 }
 
@@ -2791,7 +2835,7 @@ export async function acaoEstornarVenda(form: FormData): Promise<void> {
   const orderId = texto(form, 'orderId');
   const rota = `/admin/comanda/${orderId}`;
   const resultado = await estornarVendaNaApi(token, orderId, texto(form, 'motivo'));
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?feito=estornada`);
 }
 
@@ -2803,7 +2847,7 @@ export async function acaoTransferirPacote(form: FormData): Promise<void> {
     paraCustomerId: texto(form, 'paraCustomerId'),
     motivo: texto(form, 'motivo'),
   });
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?salvo=pacote-transferido`);
 }
 
@@ -2815,7 +2859,7 @@ export async function acaoSalvarFiscal(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const regime = texto(form, 'regime');
   if (regime !== 'simples' && regime !== 'mei' && regime !== 'salao_parceiro') {
-    falhar(ROTA_FISCAL, 'invalid_request');
+    return falhar(ROTA_FISCAL, 'invalid_request');
   }
 
   /**
@@ -2827,7 +2871,7 @@ export async function acaoSalvarFiscal(form: FormData): Promise<void> {
    */
   const iss = texto(form, 'issPercent').replace(',', '.');
   const issBps = Math.round(Number(iss || '0') * 100);
-  if (!Number.isFinite(issBps)) falhar(ROTA_FISCAL, 'aliquota_invalida');
+  if (!Number.isFinite(issBps)) return falhar(ROTA_FISCAL, 'aliquota_invalida');
 
   const resultado = await salvarFiscalNaApi(token, {
     cnpj: texto(form, 'cnpj'),
@@ -2838,7 +2882,7 @@ export async function acaoSalvarFiscal(form: FormData): Promise<void> {
     inscricaoMunicipal: texto(form, 'inscricaoMunicipal') || null,
     emitirAutomaticamente: texto(form, 'emitirAutomaticamente') === '1',
   });
-  if (!resultado.ok) falhar(ROTA_FISCAL, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FISCAL, resultado);
   redirect(`${ROTA_FISCAL}?salvo=1`);
 }
 
@@ -2847,7 +2891,7 @@ export async function acaoEmitirNota(form: FormData): Promise<void> {
   const orderId = texto(form, 'orderId');
   const rota = texto(form, 'de') === 'fiscal' ? ROTA_FISCAL : `/admin/comanda/${orderId}`;
   const resultado = await emitirNotaNaApi(token, orderId);
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?feito=nota`);
 }
 
@@ -2866,7 +2910,7 @@ export async function acaoSalvarDocumentoDoTomador(form: FormData): Promise<void
     texto(form, 'customerId'),
     texto(form, 'documento') || null,
   );
-  if (!resultado.ok) falhar(rota, resultado.code);
+  if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}?feito=documento`);
 }
 
@@ -2938,7 +2982,7 @@ export async function acaoCriarCampanha(form: FormData): Promise<void> {
   });
   if (!resultado.ok) {
     await guardarOQueFoiDigitado(form, CAMPOS_DA_CAMPANHA, resultado.message);
-    falhar(ROTA_CAMPANHAS, resultado.code);
+    return falhar(ROTA_CAMPANHAS, resultado);
   }
   redirect(`${ROTA_CAMPANHAS}?feito=criada&publico=${resultado.dados.publico}`);
 }
@@ -2954,7 +2998,7 @@ export async function acaoCriarCampanha(form: FormData): Promise<void> {
 export async function acaoEnviarCampanha(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await enviarCampanhaNaApi(token, texto(form, 'id'));
-  if (!resultado.ok) falhar(ROTA_CAMPANHAS, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_CAMPANHAS, resultado);
   redirect(`${ROTA_CAMPANHAS}?feito=enviando`);
 }
 
@@ -3022,7 +3066,7 @@ export async function acaoSalvarAutomacao(form: FormData): Promise<void> {
      * que não funciona, passava a ficar repartido entre as duas — e a decisão
      * de desligar deixava de ser possível de tomar.
      */
-    falhar(id ? `${ROTA_AUTOMACOES}?editar=${encodeURIComponent(id)}` : ROTA_AUTOMACOES, resultado.code);
+    return falhar(id ? `${ROTA_AUTOMACOES}?editar=${encodeURIComponent(id)}` : ROTA_AUTOMACOES, resultado);
   }
   redirect(`${ROTA_AUTOMACOES}?feito=salva`);
 }
@@ -3047,7 +3091,7 @@ export async function acaoLigarAutomacao(form: FormData): Promise<void> {
     texto(form, 'id'),
     texto(form, 'ativa') === 'sim',
   );
-  if (!resultado.ok) falhar(ROTA_AUTOMACOES, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_AUTOMACOES, resultado);
   redirect(`${ROTA_AUTOMACOES}?feito=${resultado.dados.ativa ? 'ligada' : 'desligada'}`);
 }
 
@@ -3061,7 +3105,7 @@ export async function acaoSalvarCadastroDoWhatsApp(form: FormData): Promise<void
     // Campo vazio é "não mexa": mandar string vazia apagaria o token salvo.
     ...(novo ? { token: novo } : {}),
   });
-  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_WHATSAPP, resultado);
   redirect(`${ROTA_WHATSAPP}?feito=cadastro`);
 }
 
@@ -3095,7 +3139,7 @@ export async function acaoIrParaMeta(): Promise<void> {
     state,
   });
   if (!resposta.ok || !resposta.dados.signup?.endereco) {
-    falhar(ROTA_WHATSAPP, resposta.ok ? 'sem_app' : resposta.code);
+    return falhar(ROTA_WHATSAPP, resposta.ok ? 'sem_app' : resposta.code);
   }
 
   // `redirect` para fora do domínio é o próprio fluxo: a Meta traz de volta.
@@ -3112,7 +3156,7 @@ export async function acaoConectarWhatsApp(form: FormData): Promise<void> {
   });
   if (!resultado.ok) {
     await guardarMotivoDaMeta(resultado.message);
-    falhar(ROTA_WHATSAPP, resultado.code);
+    return falhar(ROTA_WHATSAPP, resultado);
   }
   redirect(`${ROTA_WHATSAPP}?feito=conectado`);
 }
@@ -3146,11 +3190,11 @@ export async function acaoMandarMensagem(form: FormData): Promise<void> {
   const rota = `/admin/cliente/${customerId}`;
   if (!resultado.ok) {
     await guardarMotivoDaMeta(resultado.message);
-    falhar(rota, resultado.code);
+    return falhar(rota, resultado);
   }
   if (!resultado.dados.enviado) {
     await guardarMotivoDaMeta(resultado.dados.motivo ?? 'Não deu para mandar.');
-    falhar(rota, 'nao_saiu');
+    return falhar(rota, 'nao_saiu');
   }
   redirect(`${rota}?feito=mensagem`);
 }
@@ -3158,7 +3202,7 @@ export async function acaoMandarMensagem(form: FormData): Promise<void> {
 export async function acaoConciliarWhatsApp(): Promise<void> {
   const token = await exigirSessao();
   const resultado = await conciliarWhatsAppNaApi(token);
-  if (!resultado.ok) falhar(ROTA_WHATSAPP, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_WHATSAPP, resultado);
   redirect(`${ROTA_WHATSAPP}?feito=conciliado`);
 }
 
@@ -3186,7 +3230,7 @@ export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
     // A frase de quem recusou vai junto. "Tente de novo" sobre um texto que a
     // Meta reprovou é a tela pedindo que se repita o que já não funcionou.
     await guardarMotivoDaMeta(resultado.message);
-    falhar(ROTA_WHATSAPP, resultado.code);
+    return falhar(ROTA_WHATSAPP, resultado);
   }
   redirect(`${ROTA_WHATSAPP}?feito=template`);
 }
@@ -3194,7 +3238,7 @@ export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
 export async function acaoCancelarNota(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await cancelarNotaNaApi(token, texto(form, 'notaId'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar(ROTA_FISCAL, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_FISCAL, resultado);
   redirect(`${ROTA_FISCAL}?feito=nota-cancelada`);
 }
 
@@ -3213,7 +3257,7 @@ export async function acaoEscolherUnidade(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const volta = texto(form, 'de') || ROTA_UNIDADES;
   const resultado = await escolherUnidadeNaApi(token, texto(form, 'unidadeId'));
-  if (!resultado.ok) falhar(volta, resultado.code);
+  if (!resultado.ok) return falhar(volta, resultado);
   redirect(`${volta}?feito=unidade`);
 }
 
@@ -3228,7 +3272,7 @@ export async function acaoDefinirUnidadesDaConta(form: FormData): Promise<void> 
    */
   const unidades = form.getAll('unidade').map(String).filter(Boolean);
   const resultado = await definirUnidadesNaApi(token, texto(form, 'staffUserId'), unidades);
-  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_UNIDADES, resultado);
   redirect(`${ROTA_UNIDADES}?feito=equipe`);
 }
 
@@ -3242,7 +3286,7 @@ export async function acaoTransferirEstoque(form: FormData): Promise<void> {
     quantidade: Number(form.get('quantidade') ?? 0),
     ...(nota ? { nota } : {}),
   });
-  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_UNIDADES, resultado);
   redirect(`${ROTA_UNIDADES}?feito=transferencia`);
 }
 
@@ -3254,7 +3298,7 @@ export async function acaoAbrirUnidade(form: FormData): Promise<void> {
     timezone: texto(form, 'timezone'),
     ...(cidade ? { cidade } : {}),
   });
-  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_UNIDADES, resultado);
   redirect(`${ROTA_UNIDADES}?feito=aberta`);
 }
 
@@ -3272,7 +3316,7 @@ export async function acaoDefinirUnidadeAtiva(form: FormData): Promise<void> {
     texto(form, 'unidadeId'),
     texto(form, 'ativa') === 'sim',
   );
-  if (!resultado.ok) falhar(ROTA_UNIDADES, resultado.code);
+  if (!resultado.ok) return falhar(ROTA_UNIDADES, resultado);
   redirect(`${ROTA_UNIDADES}?feito=${texto(form, 'ativa') === 'sim' ? 'reaberta' : 'fechada'}`);
 }
 
@@ -3301,26 +3345,26 @@ export async function acaoPublicarNoPadrao(form: FormData): Promise<void> {
     ...(id ? { id } : {}),
     nome: texto(form, 'nome'),
     descricao: texto(form, 'descricao') || null,
-    referenciaCents: centavos(form, 'referencia', '/admin/franquia'),
+    referenciaCents: await centavos(form, 'referencia', '/admin/franquia'),
     duracaoMinutos: Number(texto(form, 'duracao')) || 0,
     categoria: texto(form, 'categoria') || null,
     posicao: Number(texto(form, 'posicao')) || 0,
   });
-  if (!resultado.ok) falhar('/admin/franquia', resultado.code);
+  if (!resultado.ok) return falhar('/admin/franquia', resultado);
   redirect('/admin/franquia?publicado=1');
 }
 
 export async function acaoDespublicarDoPadrao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await despublicarDoPadrao(token, texto(form, 'itemId'));
-  if (!resultado.ok) falhar('/admin/franquia', resultado.code);
+  if (!resultado.ok) return falhar('/admin/franquia', resultado);
   redirect('/admin/franquia?despublicado=1');
 }
 
 export async function acaoAdotarDoPadrao(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await adotarDoPadrao(token, texto(form, 'itemId'));
-  if (!resultado.ok) falhar('/admin/franquia', resultado.code);
+  if (!resultado.ok) return falhar('/admin/franquia', resultado);
   redirect(`/admin/franquia?adotado=${resultado.dados.novo ? 'novo' : 'atualizado'}`);
 }
 
@@ -3335,9 +3379,9 @@ export async function acaoSalvarMetaDaRede(form: FormData): Promise<void> {
   const resultado = await salvarMetaDaRedeNaApi(token, {
     franqueadaId: texto(form, 'franqueadaId'),
     mes: texto(form, 'mes'),
-    metaCents: centavos(form, 'meta', '/admin/rede'),
+    metaCents: await centavos(form, 'meta', '/admin/rede'),
   });
-  if (!resultado.ok) falhar('/admin/rede', resultado.code);
+  if (!resultado.ok) return falhar('/admin/rede', resultado);
   redirect('/admin/rede?meta=1');
 }
 
@@ -3353,7 +3397,7 @@ export async function acaoCriarChave(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const escopos = form.getAll('escopos').map((v) => String(v));
   const resultado = await criarChaveNaApi(token, { nome: texto(form, 'nome'), escopos });
-  if (!resultado.ok) falhar('/admin/chaves', resultado.code);
+  if (!resultado.ok) return falhar('/admin/chaves', resultado);
   await guardarSenhaDeUmaVez(texto(form, 'nome'), resultado.dados.chave, 'chaves');
   redirect('/admin/chaves?criada=1');
 }
@@ -3361,7 +3405,7 @@ export async function acaoCriarChave(form: FormData): Promise<void> {
 export async function acaoRevogarChave(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await revogarChaveNaApi(token, texto(form, 'chaveId'), texto(form, 'motivo'));
-  if (!resultado.ok) falhar('/admin/chaves', resultado.code);
+  if (!resultado.ok) return falhar('/admin/chaves', resultado);
   redirect('/admin/chaves?revogada=1');
 }
 
@@ -3374,7 +3418,7 @@ export async function acaoCadastrarWebhook(form: FormData): Promise<void> {
     url: texto(form, 'url'),
     eventos,
   });
-  if (!resultado.ok) falhar('/admin/webhooks', resultado.code);
+  if (!resultado.ok) return falhar('/admin/webhooks', resultado);
   await guardarSenhaDeUmaVez(texto(form, 'nome'), resultado.dados.segredo, 'webhooks');
   redirect('/admin/webhooks?criado=1');
 }
@@ -3382,6 +3426,6 @@ export async function acaoCadastrarWebhook(form: FormData): Promise<void> {
 export async function acaoDesligarWebhook(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await desligarWebhookNaApi(token, texto(form, 'endpointId'));
-  if (!resultado.ok) falhar('/admin/webhooks', resultado.code);
+  if (!resultado.ok) return falhar('/admin/webhooks', resultado);
   redirect('/admin/webhooks?desligado=1');
 }

@@ -3,9 +3,11 @@ import type { Metadata } from 'next';
 import {
   EXPLICACAO_DO_MODO_DA_ASSINATURA,
   MODOS_DA_ASSINATURA,
+  ROTULO_DO_METODO_DA_BAIXA,
   ROTULO_DO_MODO_DA_ASSINATURA,
   fraseDaSimulacao,
   fraseDoBloqueio,
+  type MetodoDaBaixa,
 } from '@barbearia/core';
 import {
   catalogoDeServicos,
@@ -32,6 +34,7 @@ import {
   acaoSalvarPlano,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * O clube de assinatura (bloco 45, SPEC §4.6).
@@ -417,12 +420,12 @@ function Plano({
 const dia = (iso: string) =>
   new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
 
-const METODOS = [
-  ['pix', 'Pix'],
-  ['dinheiro', 'Dinheiro'],
-  ['cartao', 'Cartão'],
-  ['transferencia', 'Transferência'],
-] as const;
+/**
+ * A ordem é da tela — Pix primeiro, porque é como a barbearia recebe — e os
+ * **valores e rótulos** são do domínio. Escritos aqui, eram a terceira cópia
+ * dos mesmos quatro.
+ */
+const METODOS = ['pix', 'dinheiro', 'cartao', 'transferencia'] as const satisfies readonly MetodoDaBaixa[];
 
 /**
  * Uma mensalidade em aberto.
@@ -479,9 +482,9 @@ function Fatura({
                 Recebeu como
               </label>
               <select className="ui-field__input" id={`m-${fatura.id}`} name="metodo">
-                {METODOS.map(([valor, nome]) => (
+                {METODOS.map((valor) => (
                   <option key={valor} value={valor}>
-                    {nome}
+                    {ROTULO_DO_METODO_DA_BAIXA[valor]}
                   </option>
                 ))}
               </select>
@@ -617,9 +620,7 @@ export default async function ClubePage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">

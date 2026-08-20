@@ -88,3 +88,33 @@ export async function lerSegredoDaPlataforma(): Promise<SegredoDaPlataforma | nu
   }
   return null;
 }
+
+/**
+ * A frase que a API escreveu quando recusou, do servidor para a tela seguinte.
+ *
+ * Espelha `guardarRecusa` do painel da barbearia, com nome e caminho próprios
+ * pelo mesmo motivo que separa as duas sessões: quem administra a plataforma
+ * quase sempre tem também uma conta de gestor no mesmo navegador, e um cookie
+ * compartilhado faria a recusa de um painel aparecer no outro.
+ *
+ * Vai por cookie e não pela URL porque o endereço fica no histórico, no
+ * autocompletar e no referrer — e aqui a frase pode nomear a barbearia, o plano
+ * e o motivo de um bloqueio.
+ */
+const RECUSA = 'plataforma-recusa';
+
+export async function guardarRecusaDaPlataforma(mensagem: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(RECUSA, mensagem.slice(0, 300), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: CAMINHO,
+    maxAge: SEGUNDOS_NA_TELA,
+  });
+}
+
+/** Lê sem apagar, como a do painel: quem limpa é o tempo curto. */
+export async function lerRecusaDaPlataforma(): Promise<string | null> {
+  return (await cookies()).get(RECUSA)?.value ?? null;
+}

@@ -73,6 +73,40 @@ export const TRATAMENTOS_DA_TAXA = ['absorvida', 'rateada'] as const;
 export type TratamentoDaTaxa = (typeof TRATAMENTOS_DA_TAXA)[number];
 
 /**
+ * Como cada escolha aparece na tela de regras de comissão.
+ *
+ * Os quatro mapas moram aqui, ao lado das quatro constantes, e não na tela: os
+ * onze `<option>` estavam escritos à mão num arquivo que **não importava nada**
+ * do domínio. Total no tipo, então a modalidade nova não chega ao formulário
+ * sem alguém escrever a frase que a barbearia vai ler.
+ *
+ * As frases são longas de propósito. Elas são o significado que muda por opção
+ * — e num `<select>` a explicação tem que morar **dentro** da opção, porque uma
+ * dica abaixo teria que listar todos os significados de uma vez e vira o
+ * parágrafo que ninguém lê.
+ */
+export const ROTULO_DO_MODO_DE_COMISSAO: Readonly<Record<ModoDeComissao, string>> = {
+  percent: 'Porcentagem do valor',
+  fixed: 'Valor fixo por item',
+  tiers: 'Faixas progressivas',
+};
+
+export const ROTULO_DA_BASE_DE_COMISSAO: Readonly<Record<BaseDeComissao, string>> = {
+  liquido: 'O valor líquido, depois do desconto',
+  bruto: 'O valor cheio, antes do desconto',
+};
+
+export const ROTULO_DO_TRATAMENTO_DO_DESCONTO: Readonly<Record<TratamentoDoDesconto, string>> = {
+  reduz_base: 'Barbeiro divide o desconto',
+  custo_da_casa: 'Desconto é custo da casa',
+};
+
+export const ROTULO_DO_TRATAMENTO_DA_TAXA: Readonly<Record<TratamentoDaTaxa, string>> = {
+  absorvida: 'É custo da casa; a base não cai',
+  rateada: 'O barbeiro divide a taxa com a casa',
+};
+
+/**
  * A taxa de uma venda, em centavos, a partir da alíquota de cada meio.
  *
  * Pontos-base inteiros como toda alíquota do produto (319 = 3,19%), e

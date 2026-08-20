@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { LIMITE_MAXIMO_DE_FIADO_CENTS } from '@barbearia/core';
 import { diaISO } from '../common/data.js';
+import { DIRECOES_DA_CONTA } from '@barbearia/core';
 
 /**
  * A borda do financeiro (bloco 51).
@@ -10,7 +11,9 @@ import { diaISO } from '../common/data.js';
  * devolveria erro de constraint em vez de "confira o valor".
  */
 
-const direcao = z.enum(['pagar', 'receber']);
+// Do domínio: `DIRECOES_DA_CONTA` estava escrita aqui e na tela, e não
+// tinha nenhum consumidor.
+const direcao = z.enum(DIRECOES_DA_CONTA);
 
 /** Cem mil reais numa conta de barbearia é um zero a mais. */
 const valor = z.number().int().positive().max(100_000_000);

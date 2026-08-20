@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  ROTULO_DA_UNIDADE_DE_MEDIDA,
   ROTULO_DO_ALERTA,
   ROTULO_DO_TIPO_DE_PRODUTO,
+  UNIDADES_DE_MEDIDA,
   frasePorcentagem,
 } from '@barbearia/core';
 import {
@@ -16,6 +18,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoMoverEstoque, acaoSair, acaoSalvarProduto } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Estoque, ficha de consumo e margem (bloco 44, SPEC §3.7 e §3.8).
@@ -170,9 +173,11 @@ function CamposDoProduto({
             id={`${prefixo}-unidade`}
             name="unidade"
           >
-            <option value="un">unidade</option>
-            <option value="ml">mililitro</option>
-            <option value="g">grama</option>
+            {UNIDADES_DE_MEDIDA.map((u) => (
+              <option key={u} value={u}>
+                {ROTULO_DA_UNIDADE_DE_MEDIDA[u]}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -471,9 +476,7 @@ export default async function EstoquePage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">

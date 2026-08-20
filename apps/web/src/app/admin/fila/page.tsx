@@ -11,6 +11,7 @@ import { exigirRecurso, painelOuDesvio } from '@/lib/painel';
 import { lerLinkDaFila, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoEntrarNaFila, acaoMoverNaFila, acaoSair, acaoSentarDaFila } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * A fila da porta.
@@ -229,9 +230,7 @@ export default async function FilaPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {recemEntrou ? (

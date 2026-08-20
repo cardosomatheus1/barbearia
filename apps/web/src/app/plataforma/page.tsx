@@ -19,6 +19,7 @@ import {
   acaoEntrarNaConta,
   acaoTrocarPlano,
 } from './acoes';
+import { AvisoDeRecusa } from '@/app/plataforma/aviso-de-recusa';
 
 /**
  * As barbearias da plataforma.
@@ -374,11 +375,7 @@ export default async function BarbeariasPage({ searchParams }: Props) {
           {FEITO[feito] ?? 'Pronto.'}
         </div>
       ) : null}
-      {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? 'Não deu para concluir. Tente de novo.'}
-        </div>
-      ) : null}
+      <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
 
       {barbearias.length === 0 ? (
         <div className="vazio">

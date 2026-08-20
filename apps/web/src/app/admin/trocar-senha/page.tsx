@@ -4,6 +4,7 @@ import { quemSouEu } from '@/lib/admin-api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoTrocarMinhaSenha } from '../acoes';
 import { Marca } from '../marca';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Trocar a própria senha.
@@ -61,9 +62,7 @@ export default async function TrocarSenhaPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       <form action={acaoTrocarMinhaSenha} className="formulario">

@@ -39,6 +39,15 @@ export default async function CriarContaPage({ searchParams }: Props) {
 
       {erro ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          {/* Aqui o mapa da tela é o único, e é decisão: a frase do domínio
+              não entra numa porta de entrada.
+
+              `AvisoDeRecusa` mostra o que a API escreveu, e é o certo em toda
+              tela de dentro. Numa tela de login isso vira oráculo — "e-mail já
+              cadastrado" e "conta bloqueada" contam a quem está tentando
+              adivinhar exatamente o que a regra de não revelar existência de
+              cadastro existe para não contar. É o precedente do OTP, que
+              responde igual para telefone existente e inexistente. */}
           {FALHA[erro] ?? 'Não foi possível criar a conta. Tente de novo.'}
         </div>
       ) : null}

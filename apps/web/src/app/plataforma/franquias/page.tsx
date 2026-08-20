@@ -8,6 +8,7 @@ import {
 } from '@/lib/plataforma-api';
 import { lerSessaoDaPlataforma } from '@/lib/sessao-plataforma';
 import { acaoCriarFranquia, acaoPorNaFranquia, acaoTirarDaFranquia } from '../acoes';
+import { AvisoDeRecusa } from '@/app/plataforma/aviso-de-recusa';
 
 /**
  * Montar uma franquia (bloco 76).
@@ -122,11 +123,7 @@ export default async function FranquiasPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container painel__conteudo">
-      {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
-      ) : null}
+              <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
 
       <h1 className="painel__titulo">Franquias</h1>
       <p className="painel__sub">

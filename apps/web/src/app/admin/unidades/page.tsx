@@ -20,6 +20,7 @@ import {
   acaoTransferirEstoque,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Unidades (bloco 58, SPEC §1.1 e §1.3).
@@ -186,9 +187,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
       {feito ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">

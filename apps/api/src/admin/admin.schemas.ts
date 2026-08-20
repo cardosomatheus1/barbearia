@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MODALIDADES_DE_SINAL, tryNormalizeBusinessPhone } from '@barbearia/core';
+import { ESCOPOS, MODALIDADES_DE_SINAL, tryNormalizeBusinessPhone } from '@barbearia/core';
 import { AMENITIES, PAYMENT_METHODS } from '@barbearia/onboarding';
 
 /**
@@ -167,7 +167,9 @@ export const changeWindowSchema = z.object({
   // schema acompanha a CHECK do banco.
   maxDiscountBps: z.number().int().min(0).max(10_000).optional(),
   /** Onde o fiado vale (bloco 59). Ausente é "não mexa". */
-  creditScope: z.enum(['empresa', 'unidade'] as const).optional(),
+  // Do domínio: `fidelidade.schemas.ts` e `assinatura.schemas.ts` já derivam
+  // de `ESCOPOS`, e este mesmo arquivo o reescrevia à mão.
+  creditScope: z.enum(ESCOPOS).optional(),
   /**
    * Abaixo deste score não marca online em hora de pico (bloco 60).
    *

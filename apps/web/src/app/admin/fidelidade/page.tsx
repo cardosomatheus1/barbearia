@@ -6,6 +6,7 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSair, acaoSalvarFidelidade } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * O programa de fidelidade (bloco 41, SPEC §4.8).
@@ -98,9 +99,7 @@ export default async function FidelidadePage({ searchParams }: Props) {
         <div className="ui-alert ui-alert--success fidelidade__aviso">Programa salvo.</div>
       ) : null}
       {erro ? (
-        <div className="ui-alert ui-alert--danger fidelidade__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="fidelidade__aviso" />
       ) : null}
 
       <form action={acaoSalvarFidelidade} className="fidelidade__form">

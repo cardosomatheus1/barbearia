@@ -17,6 +17,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoCancelarNota, acaoSair, acaoSalvarFiscal } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Nota fiscal (bloco 53, SPEC §3.11).
@@ -239,9 +240,7 @@ export default async function FiscalPage({ searchParams }: Props) {
       {emissorDisponivel ? null : semEmissor}
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {salvo ? (

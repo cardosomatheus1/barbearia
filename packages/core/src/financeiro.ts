@@ -21,9 +21,38 @@
 export const DIRECOES_DA_CONTA = ['pagar', 'receber'] as const;
 export type DirecaoDaConta = (typeof DIRECOES_DA_CONTA)[number];
 
+/** A conta em si: como ela aparece numa lista. */
 export const ROTULO_DA_DIRECAO: Readonly<Record<DirecaoDaConta, string>> = {
   pagar: 'A pagar',
   receber: 'A receber',
+};
+
+/**
+ * O **verbo**, para o botão que quita.
+ *
+ * Três rótulos e não um, e é decisão: a conta se chama "A pagar", o botão diz
+ * "Pagar" e a categoria serve para "Despesa". São ângulos diferentes da mesma
+ * direção, como a ficha do cliente que diz "Cancelou" onde o painel diz
+ * "Cancelado pelo cliente". O que não pode é cada tela inventar o seu — eram
+ * seis `<option>` escritos à mão em dois formulários vizinhos, com estes três
+ * mapas aqui sem nenhum consumidor.
+ */
+export const VERBO_DA_DIRECAO: Readonly<Record<DirecaoDaConta, string>> = {
+  pagar: 'Pagar',
+  receber: 'Receber',
+};
+
+/**
+ * Para que serve a categoria: é o vocabulário do DRE, não o da conta.
+ *
+ * `_FINANCEIRA` no nome porque `ROTULO_DA_CATEGORIA` já existe neste barril, e
+ * é a da avaliação — atendimento, qualidade, pontualidade, ambiente. Duas
+ * coisas diferentes com o mesmo nome é como uma passa a ser lida como a outra,
+ * e aqui só o `tsc` reclamou: o `vitest` roda por esbuild e não veria.
+ */
+export const ROTULO_DA_CATEGORIA_FINANCEIRA: Readonly<Record<DirecaoDaConta, string>> = {
+  pagar: 'Despesa',
+  receber: 'Receita',
 };
 
 export const ESTADOS_DA_CONTA = ['aberta', 'paga', 'cancelada'] as const;

@@ -23,6 +23,7 @@ import {
   acaoTratarAvaliacao,
 } from '../acoes';
 import { secao } from '../secoes';
+import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 
 /**
  * Avaliações e recuperação de nota baixa (bloco 43, SPEC §4.10).
@@ -392,9 +393,7 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
       </p>
 
       {erro ? (
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          {FALHA[erro] ?? FALHA['request_failed']}
-        </div>
+        <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
       {tratada ? (

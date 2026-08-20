@@ -37,6 +37,24 @@ export const ROTULO_DO_TIPO_DE_PRODUTO: Readonly<Record<TipoDeProduto, string>> 
 };
 
 /** A lista da SPEC §3.7, e nada além dela. */
+/**
+ * A unidade em que a ficha técnica conta.
+ *
+ * Era a única lista do produto que não tinha nem constante nem `CHECK`: os três
+ * valores estavam num **comentário** da migração 0047, num `z.enum` da borda e
+ * em três `<option>` da tela. O banco aceitava qualquer texto, e a ficha técnica
+ * consome `unit` para ratear insumo por serviço — uma unidade desconhecida
+ * viraria um rateio que ninguém confere. A `CHECK` entrou na 0093.
+ */
+export const UNIDADES_DE_MEDIDA = ['un', 'ml', 'g'] as const;
+export type UnidadeDeMedida = (typeof UNIDADES_DE_MEDIDA)[number];
+
+export const ROTULO_DA_UNIDADE_DE_MEDIDA: Readonly<Record<UnidadeDeMedida, string>> = {
+  un: 'unidade',
+  ml: 'mililitro',
+  g: 'grama',
+};
+
 export const TIPOS_DE_MOVIMENTO_DE_ESTOQUE = [
   'entrada',
   'saida',
