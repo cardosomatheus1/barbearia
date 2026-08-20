@@ -8,6 +8,7 @@ import {
   validarEscopos,
   type Permissao,
 } from '@barbearia/core';
+import type { ApiKeyFailure } from '@barbearia/core';
 import { audit } from './audit.js';
 
 /**
@@ -32,15 +33,8 @@ import { audit } from './audit.js';
  * caminho normal: `withTenant`, RLS, permissão declarada na rota.
  */
 
-export type ApiKeyFailure =
-  | 'pepper_ausente'
-  | 'escopo_vazio'
-  | 'escopo_desconhecido'
-  | 'escopo_de_dinheiro'
-  | 'escopo_irreversivel'
-  | 'escopo_alem_do_ator'
-  | 'chave_nao_encontrada'
-  | 'motivo_obrigatorio';
+// A união mora em `packages/core` porque a tela precisa dela.
+export type { ApiKeyFailure };
 
 export class ApiKeyError extends Error {
   constructor(

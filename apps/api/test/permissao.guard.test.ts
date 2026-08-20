@@ -4,9 +4,19 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PERMISSOES, PERMISSOES_DE_DINHEIRO, ehPermissao } from '@barbearia/core';
 import { VALIDADE_DO_SEGUNDO_FATOR_MINUTOS } from '@barbearia/identity';
+/**
+ * O recurso ligado, respondido sem banco.
+ *
+ * `recursoLigado` consulta `feature_flags`, e nenhum teste de unidade deveria
+ * abrir conexão. O que se prova aqui é a **ordem** das duas conferências, não o
+ * conteúdo da tabela — então a resposta fixa "desligado" é exatamente o cenário
+ * do defeito.
+ */
+vi.mock('@barbearia/platform', () => ({ recursoLigado: async () => false }));
+
 import { PERMISSAO_EXIGIDA, PermissaoGuard } from '../src/admin/permissao.guard.js';
 
 /**
@@ -129,6 +139,32 @@ describe('guarda de permissão', () => {
     await expect(
       guardaCom(['team.manage']).canActivate(contexto(recepcao)),
     ).rejects.toThrowError(/não está disponível/i);
+  });
+
+  it('recurso desligado responde 404 mesmo para quem não tem a permissão', async () => {
+    /**
+     * A conferência do recurso rodava **depois** da de permissão (bloco 112).
+     *
+     * Quem tinha a permissão recebia o 404 pretendido; quem não tinha recebia
+     * 403 — sobre uma rota que, para aquela conta, não existe. A recepção lia
+     * "não está disponível para o seu acesso", ia ao dono pedir `fiscal.view`,
+     * o dono concedia, e a resposta virava 404: dois gastaram a manhã numa
+     * permissão que nunca foi o problema.
+     *
+     * O comentário do 404 já dizia por que isso não podia acontecer — ele
+     * estava quatro linhas abaixo de onde precisava estar.
+     */
+    const semFiscal = { permissions: ['appointments.view'], mustChangePassword: false };
+
+    await expect(
+      guardaCom(['fiscal.view'], 'fiscal').canActivate(contexto(semFiscal)),
+    ).rejects.toMatchObject({ code: 'feature_off' });
+
+    // E continua 404 para quem tem a permissão: a ordem muda quem recebe qual
+    // resposta, não a resposta de quem já a recebia.
+    await expect(
+      guardaCom(['fiscal.view'], 'fiscal').canActivate(contexto(DONO)),
+    ).rejects.toMatchObject({ code: 'feature_off' });
   });
 
   it('exigir duas significa as duas', async () => {

@@ -199,7 +199,7 @@ describeIfDb('fiscal', () => {
     await cadastrar();
     const orderId = await venderCorte();
 
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     expect(nota?.estado).toBe('pendente');
     expect(nota?.servicoCents).toBe(5000);
 
@@ -217,7 +217,7 @@ describeIfDb('fiscal', () => {
      * barbearia descobrindo no balcão que não consegue cobrar.
      */
     const orderId = await venderCorte();
-    expect(await notaDaVenda(TENANT, orderId)).toBeNull();
+    expect(await notaDaVenda(TENANT, LOCATION, orderId)).toBeNull();
 
     const venda = await admin.$queryRawUnsafe<{ status: string }[]>(
       `SELECT status::text AS status FROM orders WHERE id = '${orderId}'`,
@@ -228,7 +228,7 @@ describeIfDb('fiscal', () => {
   it('com a emissão automática desligada, nada sai sozinho', async () => {
     await cadastrar({ emitirAutomaticamente: false });
     const orderId = await venderCorte();
-    expect(await notaDaVenda(TENANT, orderId)).toBeNull();
+    expect(await notaDaVenda(TENANT, LOCATION, orderId)).toBeNull();
 
     // Mas à mão sai: é o caminho da barbearia que emite só quando o cliente pede.
     const criada = await withTenant(TENANT, (tx) =>
@@ -251,7 +251,7 @@ describeIfDb('fiscal', () => {
      */
     await cadastrar();
     const orderId = await venderCorte(true);
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     expect(nota?.servicoCents).toBe(5000);
   });
 
@@ -260,7 +260,7 @@ describeIfDb('fiscal', () => {
     const orderId = await venderCorte();
     // Mesma função, outro tenant: a RLS é quem filtra, e nenhuma consulta deste
     // arquivo repete `tenant_id` no `WHERE`.
-    expect(await notaDaVenda(RIVAL, orderId)).toBeNull();
+    expect(await notaDaVenda(RIVAL, LOCATION, orderId)).toBeNull();
   });
 
   // -------------------------------------------------------------------------
@@ -282,9 +282,9 @@ describeIfDb('fiscal', () => {
     emissor.proximoEstado = 'rejeitada';
     emissor.proximaRecusa = 'Código de serviço não habilitado';
 
-    const primeira = await notaDaVenda(TENANT, orderId);
+    const primeira = await notaDaVenda(TENANT, LOCATION, orderId);
     await enviarNota({ tenantId: TENANT, invoiceId: primeira!.id, provider: emissor });
-    expect((await notaDaVenda(TENANT, orderId))?.estado).toBe('rejeitada');
+    expect((await notaDaVenda(TENANT, LOCATION, orderId))?.estado).toBe('rejeitada');
 
     // A barbearia corrige o cadastro e emite de novo.
     await cadastrar({ codigoDeServico: '14.02' });
@@ -317,16 +317,16 @@ describeIfDb('fiscal', () => {
     await cadastrar();
     const orderId = await venderCorte();
     const emissor = new FakeFiscalProvider();
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
 
     await enviarNota({ tenantId: TENANT, invoiceId: nota!.id, provider: emissor });
-    expect((await notaDaVenda(TENANT, orderId))?.estado).toBe('processando');
+    expect((await notaDaVenda(TENANT, LOCATION, orderId))?.estado).toBe('processando');
 
     emissor.proximoEstado = 'autorizada';
     const depois = await enviarNota({ tenantId: TENANT, invoiceId: nota!.id, provider: emissor });
     expect(depois).toBe('autorizada');
 
-    const autorizada = await notaDaVenda(TENANT, orderId);
+    const autorizada = await notaDaVenda(TENANT, LOCATION, orderId);
     expect(autorizada?.numero).not.toBeNull();
     expect(autorizada?.linkPdf).toContain('.pdf');
     // Uma submissão só: a segunda volta **consultou**, não reenviou.
@@ -338,7 +338,7 @@ describeIfDb('fiscal', () => {
   // -------------------------------------------------------------------------
 
   async function autorizar(orderId: string, emissor: FakeFiscalProvider): Promise<string> {
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     emissor.proximoEstado = 'autorizada';
     await enviarNota({ tenantId: TENANT, invoiceId: nota!.id, provider: emissor });
     return nota!.id;
@@ -352,6 +352,7 @@ describeIfDb('fiscal', () => {
 
     await cancelarNota({
       tenantId: TENANT,
+      locationId: LOCATION,
       invoiceId,
       motivo: 'Valor lançado errado',
       provider: emissor,
@@ -384,6 +385,7 @@ describeIfDb('fiscal', () => {
     const cancelar = () =>
       cancelarNota({
         tenantId: TENANT,
+        locationId: LOCATION,
         invoiceId,
         motivo: 'Valor lançado errado',
         provider: emissor,
@@ -398,10 +400,11 @@ describeIfDb('fiscal', () => {
   it('nota pendente não se cancela — não há o que cancelar na prefeitura', async () => {
     await cadastrar();
     const orderId = await venderCorte();
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     await expect(
       cancelarNota({
         tenantId: TENANT,
+        locationId: LOCATION,
         invoiceId: nota!.id,
         motivo: 'Desisti',
         provider: new FakeFiscalProvider(),
@@ -450,7 +453,7 @@ describeIfDb('fiscal', () => {
     // levaria a um erro.
     await cadastrar();
     const orderId = await venderCorte();
-    const primeira = await notaDaVenda(TENANT, orderId);
+    const primeira = await notaDaVenda(TENANT, LOCATION, orderId);
     await exec(
       `UPDATE fiscal_invoices SET status = 'rejeitada',
               rejection_reason = 'Código de serviço não habilitado'
@@ -485,7 +488,7 @@ describeIfDb('fiscal', () => {
     await cadastrar();
     const orderId = await venderCorte();
 
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     const gravado = await admin.$queryRawUnsafe<{ customer_document: string | null }[]>(
       `SELECT customer_document FROM fiscal_invoices WHERE id = '${nota!.id}'`,
     );
@@ -642,7 +645,7 @@ describeIfDb('fiscal', () => {
   it('nota autorizada sem PDF não vira mensagem com link vazio', async () => {
     await cadastrar();
     const orderId = await venderCorte();
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     // O emissor confirma o número antes de o documento ficar disponível.
     await exec(
       `UPDATE fiscal_invoices
@@ -699,7 +702,7 @@ describeIfDb('fiscal', () => {
     });
     expect(segunda.enviadas).toBe(0);
 
-    const nota = await notaDaVenda(TENANT, orderId);
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
     const carimbo = await admin.$queryRawUnsafe<{ customer_notified_at: Date | null }[]>(
       `SELECT customer_notified_at FROM fiscal_invoices WHERE id = '${nota!.id}'`,
     );

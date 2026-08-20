@@ -32,6 +32,24 @@ export const EVENTOS_DE_WEBHOOK = [
 
 export type EventoDeWebhook = (typeof EVENTOS_DE_WEBHOOK)[number];
 
+/**
+ * Por que um cadastro de webhook foi recusado.
+ *
+ * Mora aqui, e não em `packages/identity`, porque **a tela precisa dela**: sem
+ * a união do lado do web, o mapa de mensagens teria chave `string`, o código
+ * novo cairia em `undefined` e a caixa de erro nasceria em branco no balcão.
+ * `apps/web` não depende de `identity` — os dois falam HTTP —, e core é onde o
+ * vocabulário de webhook já vive, junto de `EVENTOS_DE_WEBHOOK`.
+ */
+export type WebhookFailure =
+  | 'chave_ausente'
+  | 'url_invalida'
+  | 'destino_interno'
+  | 'evento_desconhecido'
+  | 'sem_evento'
+  | 'nome_curto'
+  | 'endpoint_nao_encontrado';
+
 const CONJUNTO: ReadonlySet<string> = new Set(EVENTOS_DE_WEBHOOK);
 
 export function ehEventoDeWebhook(valor: string): valor is EventoDeWebhook {

@@ -17,6 +17,7 @@ import {
   type EscopoMultiunidade,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import { registrarEventoDeWebhook } from '@barbearia/jobs';
 import { lancarComissaoDaComanda } from './comissao.js';
 import { conferirResgate, creditarDaVenda, programaDaCasa, registrarResgate } from './fidelidade.js';
 import { consumirPacote, consumoDisponivel, venderPacote } from './pacote.js';
@@ -1045,6 +1046,27 @@ export async function fecharComanda(params: {
     if (fechadas === 0) {
       throw new ComandaError('comanda_fechada', 'Esta comanda já foi fechada.');
     }
+
+    /**
+     * O webhook da venda paga (bloco 112).
+     *
+     * `order.paid` estava no catálogo, na tela e no banco, e nenhum ponto do
+     * produto o emitia: o contador marcava a caixa, salvava, e o ERP dele nunca
+     * recebia um aviso — sem erro, sem entrega falhada, sem linha no histórico.
+     *
+     * Aqui e não depois do commit, como todo trabalho fora de requisição neste
+     * produto. E **nunca** com exceção: `fecharComanda` roda na transação do
+     * webhook do Pix, e uma exceção aqui voltaria atrás com o dinheiro sem
+     * registro nenhum. `registrarEventoDeWebhook` não lança — sem endpoint
+     * inscrito ela não faz nada e não custa nada além da própria consulta.
+     */
+    await registrarEventoDeWebhook(tx, {
+      tenantId: params.tenantId,
+      evento: 'order.paid',
+      objetoId: params.orderId,
+      locationId: params.locationId,
+      quando: params.agora ?? new Date(),
+    });
 
     for (const pagamento of params.pagamentos) {
       await tx.$executeRaw`

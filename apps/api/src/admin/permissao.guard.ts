@@ -100,6 +100,29 @@ export class PermissaoGuard implements CanActivate {
       );
     }
 
+    /**
+     * O recurso vem **antes** da permissão, e a ordem é a informação.
+     *
+     * Invertida, quem tinha a permissão recebia o 404 pretendido e quem não
+     * tinha recebia 403 — sobre uma rota que não existe para aquela conta. A
+     * recepção lia "não está disponível para o seu acesso", ia ao dono pedir
+     * `fiscal.view`, o dono concedia, e a resposta virava 404: dois gastaram a
+     * manhã numa permissão que nunca foi o problema.
+     *
+     * O comentário do 404 já dizia por que isso não podia acontecer — ele
+     * simplesmente estava quatro linhas abaixo de onde precisava estar.
+     */
+    const recurso = this.reflector.getAllAndOverride<CodigoDeRecurso | undefined>(
+      RECURSO_EXIGIDO,
+      [context.getHandler(), context.getClass()],
+    );
+    if (recurso && !(await recursoLigado(staff.tenantId, recurso))) {
+      // 404 e não 403: para quem está do outro lado, um recurso desligado não
+      // existe. "Sem permissão" mandaria a recepção procurar o dono para
+      // liberar algo que o dono também não tem.
+      throw new DomainError('feature_off', 404, 'Este recurso não está disponível.');
+    }
+
     if (!podeTudo(staff.permissions, exigidas)) {
       // 403 e não 404: quem está do outro lado está autenticado e a rota
       // existe. Esconder isso não protege nada e transforma "sem permissão" em
@@ -120,17 +143,6 @@ export class PermissaoGuard implements CanActivate {
      */
     exigirLimiteDoSuporte(staff, exigidas);
     exigirSegundoFator(staff, exigidas);
-
-    const recurso = this.reflector.getAllAndOverride<CodigoDeRecurso | undefined>(
-      RECURSO_EXIGIDO,
-      [context.getHandler(), context.getClass()],
-    );
-    if (recurso && !(await recursoLigado(staff.tenantId, recurso))) {
-      // 404 e não 403: para quem está do outro lado, um recurso desligado não
-      // existe. "Sem permissão" mandaria a recepção procurar o dono para
-      // liberar algo que o dono também não tem.
-      throw new DomainError('feature_off', 404, 'Este recurso não está disponível.');
-    }
 
     return true;
   }

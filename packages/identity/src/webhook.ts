@@ -9,6 +9,7 @@ import {
   proximaTentativaEmSegundos,
   type EventoDeWebhook,
 } from '@barbearia/core';
+import type { WebhookFailure } from '@barbearia/core';
 import { audit } from './audit.js';
 
 /**
@@ -29,14 +30,9 @@ import { audit } from './audit.js';
  * webhook da Stripe sabe conferir o nosso, e a documentação cabe num parágrafo.
  */
 
-export type WebhookFailure =
-  | 'chave_ausente'
-  | 'url_invalida'
-  | 'destino_interno'
-  | 'evento_desconhecido'
-  | 'sem_evento'
-  | 'nome_curto'
-  | 'endpoint_nao_encontrado';
+// A união mora em `packages/core` porque a tela precisa dela para o mapa de
+// mensagens ter chave estreita. Reexportada aqui para quem já a importava.
+export type { WebhookFailure };
 
 export class WebhookError extends Error {
   constructor(
@@ -330,11 +326,31 @@ export async function entregarWebhook(
 
   const corpo = JSON.stringify(pendente.payload);
   const instante = Math.floor(agora.getTime() / 1000);
-  const assinatura = assinarEntrega({
-    corpo,
-    segredo: decifrar(pendente.segredo),
-    instante,
-  });
+
+  /**
+   * Segredo ilegível é **desfecho gravado**, não exceção.
+   *
+   * `decifrar` lança quando o AES-GCM não autentica, e girar
+   * `WEBHOOK_SECRET_KEY` é operação normal de segurança — `deploy/segredos.sh`
+   * a prevê. Do lado de fora do `try`, a exceção escapava de `entregarWebhook`
+   * e a tarefa morria sem gravar tentativa, motivo nem próxima tentativa: toda
+   * entrega pendente ficava em "na fila" para sempre, com a coluna Resposta em
+   * `—` e nenhuma explicação em lugar nenhum.
+   *
+   * É a convenção de recusa dentro de tarefa de fila, e o indicador que nunca
+   * preenche — os dois ao mesmo tempo.
+   */
+  let assinatura: string;
+  try {
+    assinatura = assinarEntrega({ corpo, segredo: decifrar(pendente.segredo), instante });
+  } catch {
+    await gravar(entregaId, {
+      status: 'desistiu',
+      attempts: pendente.attempts + 1,
+      erro: 'segredo ilegível — a chave de cifragem mudou',
+    });
+    return 'desistiu';
+  }
 
   let status: number | null = null;
   let erro: string | null = null;

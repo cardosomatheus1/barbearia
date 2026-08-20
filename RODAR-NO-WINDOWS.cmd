@@ -32,8 +32,8 @@ if not exist ".env" (
   powershell -NoProfile -Command ^
     "$b=[byte[]]::new(16); $r=[Security.Cryptography.RandomNumberGenerator]::Create();" ^
     "$hex={param($n) $x=[byte[]]::new($n); $r.GetBytes($x); ($x|%%{$_.ToString('x2')}) -join ''};" ^
-    "$k=[byte[]]::new(32); $r.GetBytes($k);" ^
-    "$linhas=@('# Gerado por RODAR-NO-WINDOWS.cmd. Fora do Git.', ('POSTGRES_PASSWORD=' + (&$hex 16)), ('APP_DB_PASSWORD=' + (&$hex 16)), ('STAFF_EMAIL_PEPPER=' + (&$hex 32)), ('MFA_SECRET_KEY=' + [Convert]::ToBase64String($k)));" ^
+    "$b64={$x=[byte[]]::new(32); $r.GetBytes($x); [Convert]::ToBase64String($x)};" ^
+    "$linhas=@('# Gerado por RODAR-NO-WINDOWS.cmd. Fora do Git.', ('POSTGRES_PASSWORD=' + (&$hex 16)), ('APP_DB_PASSWORD=' + (&$hex 16)), ('STAFF_EMAIL_PEPPER=' + (&$hex 32)), ('MARKETPLACE_ORIGIN_SECRET=' + (&$hex 32)), ('API_KEY_PEPPER=' + (&$hex 32)), ('MFA_SECRET_KEY=' + (&$b64)), ('WEBHOOK_SECRET_KEY=' + (&$b64)), ('WHATSAPP_TOKEN_KEY=' + (&$b64)));" ^
     "Set-Content -Path '.env' -Value $linhas -Encoding ascii"
   if errorlevel 1 goto sem_env
   if not exist ".env" goto sem_env
@@ -84,7 +84,11 @@ echo.
 echo       POSTGRES_PASSWORD=troque-por-algo-aleatorio
 echo       APP_DB_PASSWORD=troque-por-algo-aleatorio
 echo       STAFF_EMAIL_PEPPER=troque-por-algo-aleatorio
+echo       MARKETPLACE_ORIGIN_SECRET=troque-por-algo-aleatorio
+echo       API_KEY_PEPPER=troque-por-algo-aleatorio
 echo       MFA_SECRET_KEY=base64-de-32-bytes
+echo       WEBHOOK_SECRET_KEY=base64-de-32-bytes
+echo       WHATSAPP_TOKEN_KEY=base64-de-32-bytes
 echo.
 pause
 

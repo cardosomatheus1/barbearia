@@ -308,6 +308,44 @@ describeIfDb('webhook para terceiros', () => {
     expect(linha?.erro).toMatch(/desligado/i);
   });
 
+  it('segredo ilegível vira desfecho gravado, não exceção', async () => {
+    /**
+     * Girar `WEBHOOK_SECRET_KEY` é operação normal de segurança, prevista em
+     * `deploy/segredos.sh`. Com o `decifrar` fora do `try`, a exceção escapava
+     * de `entregarWebhook`: a tarefa morria sem gravar tentativa, motivo nem
+     * próxima tentativa, e toda entrega pendente ficava em "na fila" para
+     * sempre — com a coluna Resposta em `—` e nenhuma explicação em lugar
+     * nenhum. Recusa dentro de tarefa de fila é desfecho, não exceção.
+     */
+    const { id } = await cadastrar();
+    const entregaId = await pendencia(id);
+
+    // O criptograma continua na linha; o que muda é a chave que o leria.
+    const anterior = process.env['WEBHOOK_SECRET_KEY'];
+    process.env['WEBHOOK_SECRET_KEY'] = Buffer.from('outra-chave-de-32-bytes---------!').toString(
+      'base64',
+    );
+
+    let chamou = false;
+    vi.stubGlobal('fetch', async () => {
+      chamou = true;
+      return new Response('', { status: 200 });
+    });
+
+    try {
+      expect(await entregarWebhook(entregaId, AGORA)).toBe('desistiu');
+    } finally {
+      if (anterior === undefined) delete process.env['WEBHOOK_SECRET_KEY'];
+      else process.env['WEBHOOK_SECRET_KEY'] = anterior;
+    }
+
+    // Não bate no endereço com assinatura que o outro lado não conseguiria
+    // conferir, e a linha explica por que parou.
+    expect(chamou).toBe(false);
+    const [linha] = await entregasDaCasa(CASA);
+    expect(linha?.erro).toMatch(/segredo ileg/i);
+  });
+
   it('o endereço da vizinha não é visto nem desligado', async () => {
     await exec(`
       INSERT INTO webhook_endpoints (tenant_id, name, url, secret_cipher, events)

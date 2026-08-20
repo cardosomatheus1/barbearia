@@ -1222,7 +1222,11 @@ function integracoes(url, { tenant, local, balcao }) {
     ['id', 'tenant_id', 'name', 'prefix', 'secret_hmac', 'scopes', 'created_by', 'created_at', 'last_used_at'],
     [{
       id: id(), tenant_id: tenant, name: 'ERP do contador',
-      prefix: 'bk_demo0001', secret_hmac: 'semente-sem-valor-de-autenticacao',
+      // Doze hexadecimais, que é o que `partirChave` exige: com `bk_demo0001`
+      // — onze caracteres e um `k` — a chave da demonstração era recusada antes
+      // de qualquer ida ao banco, e nunca autenticava. Semente que não produz o
+      // estado que ela diz produzir mostra a tela no estado errado.
+      prefix: 'a1b2c3d4e5f6', secret_hmac: 'semente-sem-valor-de-autenticacao',
       scopes: '{appointments.view,customers.view}', created_by: balcao.id,
       created_at: new Date(Date.now() - 40 * 86_400_000),
       last_used_at: new Date(Date.now() - 2 * 3600_000),
@@ -1250,8 +1254,16 @@ function integracoes(url, { tenant, local, balcao }) {
         },
         {
           id: id(), tenant_id: tenant, endpoint_id: endpointId, event: 'appointment.created',
-          payload: '{"tipo":"appointment.created","id":"demo"}', status: 'falhou', attempts: 6,
-          response_status: 500, last_error: 'HTTP 500',
+          // `desistiu` e não `falhou`: o enum tem os quatro, e o produto só
+          // escreve três — semear o quarto é mostrar na tela um estado que
+          // nenhum caminho do código produz.
+          //
+          // E o motivo diz o que o número não diz: `last_error: 'HTTP 500'` ao
+          // lado de `response_status: 500` rendia "HTTP 500 · HTTP 500" na
+          // tela, a mesma frase duas vezes — e quem lê passa a pular a coluna
+          // que existe justamente para explicar.
+          payload: '{"tipo":"appointment.created","id":"demo"}', status: 'desistiu', attempts: 6,
+          response_status: 500, last_error: 'o servidor do ERP respondeu erro seis vezes',
           delivered_at: null, created_at: new Date(Date.now() - 7200_000),
         },
       ]),

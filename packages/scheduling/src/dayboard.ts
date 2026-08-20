@@ -15,7 +15,7 @@ import {
   type MotivoDoSinal,
   type Punctuality,
 } from '@barbearia/core';
-import { agendarOfertaDaVaga } from '@barbearia/jobs';
+import { agendarOfertaDaVaga, registrarEventoDeWebhook } from '@barbearia/jobs';
 import { contencaoDeHorario } from './booking.js';
 import { quemQuerAVagaLiberada, type CandidatoDaVaga } from './espera.js';
 
@@ -516,6 +516,36 @@ export async function applyAttendance(params: {
          WHERE appointment_id = ${params.appointmentId}::uuid
            AND status = 'in_service'
       `;
+    }
+
+    /**
+     * O webhook do desfecho, **dentro da transação** (bloco 112).
+     *
+     * Quatro dos cinco eventos do catálogo estavam na tela, na borda e no banco
+     * e nenhum ponto do produto os emitia: o contador marcava "Horário
+     * cancelado", via o endereço na lista com o rótulo certo, e o ERP dele
+     * nunca recebia nada — sem erro, sem entrega falhada, sem linha no
+     * histórico. É o defeito de `blocks`, na superfície que a barbearia mostra
+     * para terceiros.
+     *
+     * Aqui, porque é aqui que o balcão conclui e cancela. Na mesma transação,
+     * como manda a convenção do trabalho fora de requisição — depois do commit
+     * abre a janela em que o fato aconteceu e ninguém foi avisado.
+     */
+    const eventoDoDesfecho =
+      destino === 'completed'
+        ? 'appointment.completed'
+        : destino === 'cancelled_business' || destino === 'cancelled_customer'
+          ? 'appointment.cancelled'
+          : null;
+    if (eventoDoDesfecho) {
+      await registrarEventoDeWebhook(tx, {
+        tenantId: params.tenantId,
+        evento: eventoDoDesfecho,
+        objetoId: params.appointmentId,
+        locationId: params.locationId,
+        quando: now,
+      });
     }
 
     /**

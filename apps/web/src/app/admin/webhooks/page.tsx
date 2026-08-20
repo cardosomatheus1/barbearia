@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { EVENTOS_DE_WEBHOOK, ROTULO_DO_EVENTO, ehEventoDeWebhook } from '@barbearia/core';
+import {
+  EVENTOS_DE_WEBHOOK,
+  ROTULO_DO_EVENTO,
+  ehEventoDeWebhook,
+  type WebhookFailure,
+} from '@barbearia/core';
 import { webhooksNaApi, type EndpointNaApi, type EntregaNaApi } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSenhaDeUmaVez, lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -28,6 +33,27 @@ import { secao } from '../secoes';
 export const metadata: Metadata = {
   title: 'Webhooks',
   robots: { index: false, follow: false },
+};
+
+/**
+ * O que cada recusa quer dizer, na língua de quem opera.
+ *
+ * Sai da união de `WebhookFailure` mais os códigos que a borda e a tela
+ * produzem — `invalid_request` do zod e `request_failed` de rede.
+ */
+const FALHA_DO_WEBHOOK: Record<WebhookFailure | 'invalid_request' | 'erro_inesperado', string> = {
+  chave_ausente:
+    'A chave que cifra os segredos de webhook não está configurada no servidor ' +
+    '(WEBHOOK_SECRET_KEY). Sem ela nenhum endereço pode ser salvo — fale com quem instalou.',
+  url_invalida: 'O endereço precisa começar com https:// e ser um endereço válido.',
+  destino_interno:
+    'Esse endereço aponta para a rede interna do servidor. Só endereços públicos são aceitos.',
+  evento_desconhecido: 'Um dos eventos enviados não existe.',
+  sem_evento: 'Escolha ao menos um evento — sem isso o endereço nunca receberia nada.',
+  nome_curto: 'Dê um nome com pelo menos dois caracteres, para reconhecê-lo na lista.',
+  endpoint_nao_encontrado: 'Esse endereço não existe mais.',
+  invalid_request: 'Confira os campos: algo veio fora do formato esperado.',
+  erro_inesperado: 'Não deu para salvar. Tente de novo.',
 };
 
 interface Props {
@@ -107,6 +133,7 @@ export default async function WebhooksPage({ searchParams }: Props) {
   const resposta = await webhooksNaApi(token);
   const query = await searchParams;
   const desligado = first(query['desligado']) === '1';
+  const erro = first(query['erro']);
   const novo = await lerSenhaDeUmaVez();
 
   const topo = (
@@ -154,6 +181,26 @@ export default async function WebhooksPage({ searchParams }: Props) {
             que o outro lado confere a assinatura de cada aviso.
           </p>
           <code className="chave-nova__valor">{novo.senha}</code>
+        </div>
+      ) : null}
+
+      {/*
+        O motivo da recusa, que a tela engolia (bloco 112).
+
+        `falhar()` redireciona com `?erro=<code>` e esta tela nunca leu o
+        parâmetro: recusar `https://169.254.169.254/` — que a guarda de SSRF faz
+        certo — voltava para o formulário vazio, sem uma palavra. Quem opera
+        conclui que o botão está quebrado, e a guarda que funcionou passa a
+        parecer defeito.
+
+        `Record<WebhookFailure, …>` e não `Record<string, …>`: com a chave larga,
+        o código novo devolveria `undefined` e a caixa de erro nasceria em
+        branco. Com a união, o compilador cobra a frase no dia em que a falha
+        nova existir.
+      */}
+      {erro ? (
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          {FALHA_DO_WEBHOOK[erro as WebhookFailure] ?? FALHA_DO_WEBHOOK['erro_inesperado']}
         </div>
       ) : null}
 

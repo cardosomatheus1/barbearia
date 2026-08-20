@@ -398,6 +398,58 @@ describeIfDb('reserva', () => {
     expect(await slotsFor(RUAN)).toContain('09:00');
   });
 
+  it('cancelar e remarcar avisam quem assinou o webhook', async () => {
+    /**
+     * Quatro dos cinco eventos do catálogo estavam na tela, na borda e no banco
+     * e **nenhum ponto do produto os disparava**. O contador marcava "Horário
+     * cancelado", via o endereço na lista com o rótulo certo, e o ERP dele
+     * nunca recebia nada — sem erro, sem entrega falhada, sem linha no
+     * histórico. Um ERP que sincroniza agenda mostrava para sempre como ativo o
+     * horário que o cliente cancelou.
+     *
+     * O endpoint precisa existir: sem inscrito, `registrarEventoDeWebhook` não
+     * grava nada de propósito, e o teste passaria por ausência de dado.
+     */
+    await exec(admin, `
+      INSERT INTO webhook_endpoints (tenant_id, name, url, secret_cipher, events)
+      VALUES ('${TENANT}', 'ERP', 'https://erp.exemplo.com.br/hook', 'x',
+              ARRAY['appointment.created','appointment.cancelled','appointment.rescheduled']::webhook_event[])
+    `);
+
+    const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
+    const remarcado = await rescheduleAppointment({
+      tenantId: TENANT, appointmentId: doCarlos.id, date: TERCA, start: '14:00',
+      customerId: CARLOS, now: AGORA,
+    });
+
+    // Cancelar é **outro** fato: remarcar move o mesmo compromisso e o antigo
+    // fica em `rescheduled`, não em cancelado — é a mesma distinção que a
+    // contagem de histórico faz. Então o cancelamento tem o próprio caso.
+    await cancelAppointment({
+      tenantId: TENANT, appointmentId: remarcado.id, by: 'customer',
+      customerId: CARLOS, now: AGORA,
+    });
+
+    const entregas = await admin.$queryRawUnsafe<{ event: string; payload: unknown }[]>(
+      `SELECT event, payload FROM webhook_deliveries WHERE tenant_id = '${TENANT}'
+        ORDER BY created_at, event`,
+    );
+    const eventos = entregas.map((e) => e.event);
+
+    expect(eventos).toContain('appointment.created');
+    expect(eventos).toContain('appointment.cancelled');
+    expect(eventos).toContain('appointment.rescheduled');
+
+    // O da remarcação carrega o id **novo**: é o compromisso que vale a partir
+    // de agora, e é por ele que a API pública responde.
+    const daRemarcacao = entregas.find((e) => e.event === 'appointment.rescheduled');
+    expect(JSON.stringify(daRemarcacao?.payload)).toContain(remarcado.id);
+
+    // E nada de dado pessoal no corpo: fato e id, como manda a convenção.
+    const corpos = JSON.stringify(entregas.map((e) => e.payload));
+    expect(corpos).not.toMatch(/telefone|phone|@|nome"/i);
+  });
+
   it('cliente não reagenda agendamento de outro cliente', async () => {
     const doCarlos = await createAppointment({ ...base, customerId: CARLOS });
 

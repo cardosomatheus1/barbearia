@@ -976,6 +976,26 @@ export async function cancelAppointment(
     const esperando = await quemQuerAVagaLiberada(tx, request.appointmentId, agora);
 
     /**
+     * O webhook do cancelamento (bloco 112).
+     *
+     * A unidade vem do próprio agendamento e não do pedido: cancelar não a
+     * recebe, e o corpo carrega `location_id` para o ERP saber de qual loja é o
+     * fato. Um `SELECT` a mais dentro de uma transação que já lê a linha três
+     * vezes, e só quando existe endpoint inscrito — sem inscrição,
+     * `registrarEventoDeWebhook` não grava nada.
+     */
+    const daLinha = await tx.$queryRaw<{ location_id: string }[]>`
+      SELECT location_id FROM appointments WHERE id = ${request.appointmentId}::uuid
+    `;
+    await registrarEventoDeWebhook(tx, {
+      tenantId: request.tenantId,
+      evento: 'appointment.cancelled',
+      objetoId: request.appointmentId,
+      locationId: daLinha[0]?.location_id ?? null,
+      quando: agora,
+    });
+
+    /**
      * A vaga vai à fila por prioridade (bloco 39).
      *
      * A **tarefa** entra na transação; a oferta sai fora dela. Oferecer manda
@@ -1290,6 +1310,22 @@ export async function rescheduleAppointment(
              deposit_paid_cents = ${appointment.deposit_paid_cents}
        WHERE id = ${id}::uuid
     `;
+
+    /**
+     * O webhook da remarcação carrega o id **novo** (bloco 112).
+     *
+     * Remarcar cria uma linha e encerra a antiga; o ERP que sincroniza agenda
+     * precisa do compromisso que vale a partir de agora, e é por ele que a API
+     * pública responde. O antigo já saiu no `appointment.cancelled` do próprio
+     * `cancelAppointment`, que a remarcação chama.
+     */
+    await registrarEventoDeWebhook(tx, {
+      tenantId: request.tenantId,
+      evento: 'appointment.rescheduled',
+      objetoId: id,
+      locationId: appointment.location_id,
+      quando: request.now ?? new Date(),
+    });
 
     return {
       id,

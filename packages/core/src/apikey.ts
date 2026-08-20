@@ -58,6 +58,46 @@ export const ESCOPOS_DISPONIVEIS: readonly Permissao[] = PERMISSOES.filter(
   (p) => !FORA_DA_API.includes(p) && !IRREVERSIVEIS.includes(p),
 );
 
+/**
+ * Os escopos que **alguma rota da API pública honra hoje**.
+ *
+ * O catálogo derivado de `PERMISSOES` continua certo: ele é o que impede a
+ * sexta lista paralela, e faz a permissão do bloco 90 nascer disponível para a
+ * API sem ninguém lembrar dela. O que estava errado era a tela apresentar o
+ * resultado sob o título "O que ela pode fazer" — trinta e uma caixas, das
+ * quais duas existem.
+ *
+ * Duas consequências, e a segunda é a que preocupa: o dono emitia a chave do
+ * ERP marcando `fiscal.issue` e `customers.view` porque o integrador pediu, e
+ * nada respondia; e uma chave emitida hoje com `team.manage` ganharia o poder
+ * **no dia** em que um bloco futuro declarasse `@Escopo` com esse nome, sem
+ * ninguém reemitir nada nem decidir nada.
+ *
+ * A lista é curta e mora aqui porque `packages/core` não lê o fonte da API.
+ * Quem impede a divergência é `scripts/escopo-com-rota.test.mjs`, que varre os
+ * decoradores e cobra a igualdade: a rota nova aparece aqui ou o portão fica
+ * vermelho. E o que **não** está nesta lista continua concedível — marcado na
+ * tela como ainda sem rota, que é a regra deste repositório para gatilho que
+ * ainda não funciona. Escondê-lo faria a lista parecer completa.
+ */
+export const ESCOPOS_COM_ROTA: readonly Permissao[] = ['appointments.view', 'appointments.create'];
+
+/**
+ * Por que a emissão ou a revogação de uma chave foi recusada.
+ *
+ * Mesma razão de `WebhookFailure`: a tela precisa da união para o mapa de
+ * mensagens ter chave estreita, e `apps/web` não depende de `identity`.
+ */
+export type ApiKeyFailure =
+  | 'pepper_ausente'
+  | 'escopo_vazio'
+  | 'escopo_desconhecido'
+  | 'escopo_de_dinheiro'
+  | 'escopo_irreversivel'
+  | 'escopo_alem_do_ator'
+  | 'chave_nao_encontrada'
+  | 'motivo_obrigatorio';
+
 export type FalhaDeEscopo =
   | 'escopo_vazio'
   | 'escopo_desconhecido'

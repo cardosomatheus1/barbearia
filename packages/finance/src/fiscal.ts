@@ -398,17 +398,21 @@ export async function notasDoPeriodo(params: {
 
 export async function notaDaVenda(
   tenantId: string,
+  locationId: string,
   orderId: string,
   tx?: TransactionClient,
 ): Promise<NotaNaTela | null> {
   const dentro = async (t: TransactionClient) => {
+    // A RLS separa barbearias e não separa lojas: `notasDoPeriodo` e `pedirNota`
+    // já recortavam por unidade, e as três funções por id ficaram para trás.
     const linhas = await t.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
       `SELECT ${COLUNAS}
          FROM fiscal_invoices
-        WHERE order_id = $1::uuid
+        WHERE order_id = $1::uuid AND location_id = $2::uuid
         ORDER BY requested_at DESC
         LIMIT 1`,
       orderId,
+      locationId,
     );
     const linha = linhas[0];
     return linha ? paraTela(linha) : null;
@@ -788,6 +792,12 @@ export async function notasEmCurso(
 
 export async function cancelarNota(params: {
   readonly tenantId: string;
+  /**
+   * A unidade da sessão. Cancelar é uma viagem à prefeitura sobre um documento
+   * emitido: sem o recorte, o gerente da filial cancelava a nota da matriz
+   * mandando o id, que `staff_locations` vazio deixa todo gerente enxergar.
+   */
+  readonly locationId: string;
   readonly invoiceId: string;
   readonly motivo: string;
   readonly provider: FiscalProvider;
@@ -814,6 +824,7 @@ export async function cancelarNota(params: {
       SELECT status::text AS status, provider_invoice_id, number
         FROM fiscal_invoices
        WHERE id = ${params.invoiceId}::uuid
+         AND location_id = ${params.locationId}::uuid
        FOR UPDATE
     `;
     const nota = linhas[0];
@@ -1112,9 +1123,12 @@ export interface TomadorDaVenda {
  */
 export async function tomadorDaVenda(
   tenantId: string,
+  locationId: string,
   orderId: string,
 ): Promise<TomadorDaVenda | null> {
   return withTenant(tenantId, async (tx) => {
+    // Devolve **nome e CPF** do cliente: sem o recorte de unidade, o gerente da
+    // filial os colhia mandando o id de uma comanda da matriz.
     const linhas = await tx.$queryRaw<
       { customer_id: string | null; name: string | null; tax_id: string | null }[]
     >`
@@ -1122,6 +1136,7 @@ export async function tomadorDaVenda(
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
        WHERE o.id = ${orderId}::uuid
+         AND o.location_id = ${locationId}::uuid
     `;
     const linha = linhas[0];
     if (!linha) return null;

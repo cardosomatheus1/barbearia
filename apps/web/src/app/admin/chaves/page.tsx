@@ -1,6 +1,12 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { PREFIXO_DA_CHAVE, TETO_POR_MINUTO } from '@barbearia/core';
+import {
+  ESCOPOS_COM_ROTA,
+  PREFIXO_DA_CHAVE,
+  TETO_POR_MINUTO,
+  type ApiKeyFailure,
+  type Permissao,
+} from '@barbearia/core';
 import { chavesNaApi, type ChaveNaApi } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSenhaDeUmaVez, lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -29,6 +35,33 @@ import { secao } from '../secoes';
 export const metadata: Metadata = {
   title: 'Chaves de API',
   robots: { index: false, follow: false },
+};
+
+/**
+ * O que cada recusa quer dizer, na língua de quem opera (bloco 112).
+ *
+ * A tela nunca leu `?erro=`: emitir uma chave com o servidor sem
+ * `API_KEY_PEPPER` recarregava a página vazia, e o dono clicava de novo. Chave
+ * estreita de propósito — com `Record<string, …>` o código novo cairia em
+ * `undefined` e a caixa nasceria em branco.
+ */
+const FALHA_DA_CHAVE: Record<ApiKeyFailure | 'invalid_request' | 'erro_inesperado', string> = {
+  pepper_ausente:
+    'A chave que protege as credenciais da API não está configurada no servidor ' +
+    '(API_KEY_PEPPER). Sem ela nenhuma chave pode ser emitida — fale com quem instalou.',
+  escopo_vazio: 'Marque ao menos uma permissão: uma chave sem escopo não faz nada.',
+  escopo_desconhecido: 'Uma das permissões enviadas não existe.',
+  escopo_de_dinheiro:
+    'Chave de API não move dinheiro. Essas operações exigem o segundo fator, que se prova por ' +
+    'sessão — e máquina não digita código de seis dígitos.',
+  escopo_irreversivel:
+    'Exportar e anonimizar cadastro não saem por chave: são atos de LGPD, e uma pessoa responde ' +
+    'por eles.',
+  escopo_alem_do_ator: 'Você só concede o que você mesmo tem. Peça ao dono primeiro.',
+  chave_nao_encontrada: 'Essa chave não existe mais.',
+  motivo_obrigatorio: 'Escreva o motivo da revogação — é o que explica a decisão depois.',
+  invalid_request: 'Confira os campos: algo veio fora do formato esperado.',
+  erro_inesperado: 'Não deu para emitir a chave. Tente de novo.',
 };
 
 interface Props {
@@ -96,6 +129,7 @@ export default async function ChavesPage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
   const resposta = await chavesNaApi(token);
   const query = await searchParams;
+  const erro = first(query['erro']);
   const revogada = first(query['revogada']) === '1';
   const nova = await lerSenhaDeUmaVez();
 
@@ -124,6 +158,10 @@ export default async function ChavesPage({ searchParams }: Props) {
   }
 
   const { chaves, disponiveis } = resposta.dados;
+  // A separação vem do domínio, não de uma lista escrita ao lado: `core` é quem
+  // sabe qual escopo tem rota, e uma varredura do portão cobra a verdade dele.
+  const comRota = disponiveis.filter((escopo) => ESCOPOS_COM_ROTA.includes(escopo as Permissao));
+  const semRota = disponiveis.filter((escopo) => !ESCOPOS_COM_ROTA.includes(escopo as Permissao));
   const vivas = chaves.filter((c) => c.revogadaEm === null);
 
   return (
@@ -136,6 +174,12 @@ export default async function ChavesPage({ searchParams }: Props) {
         faz até {TETO_POR_MINUTO} chamadas por minuto — o teto é da chave, não do computador que a
         usa.
       </p>
+
+      {erro ? (
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          {FALHA_DA_CHAVE[erro as ApiKeyFailure] ?? FALHA_DA_CHAVE['erro_inesperado']}
+        </div>
+      ) : null}
 
       {nova ? (
         /**
@@ -187,15 +231,48 @@ export default async function ChavesPage({ searchParams }: Props) {
               />
             </div>
 
+            {/*
+              O que a API honra **hoje**, separado do resto (bloco 112).
+
+              A lista inteira sob "O que ela pode fazer" prometia trinta e uma
+              coisas e duas respondiam: o dono marcava `fiscal.issue` porque o
+              integrador pediu, e nada acontecia — não havia nem o que recusar.
+
+              Os demais continuam concedíveis e aparecem **marcados**, que é a
+              regra deste repositório para gatilho que ainda não funciona:
+              escondê-los faria a lista parecer completa, e a chave que os tem
+              passa a valer no dia em que a rota existir — o que é decisão de
+              quem emite, e por isso precisa estar escrito na hora de emitir.
+            */}
             <fieldset className="chave-escopos">
-              <legend className="ui-field__label">O que ela pode fazer</legend>
-              {disponiveis.map((escopo) => (
+              <legend className="ui-field__label">O que a API responde hoje</legend>
+              {comRota.map((escopo) => (
                 <label className="ui-field__label chave-escopo" key={escopo}>
                   <input name="escopos" type="checkbox" value={escopo} />
                   <code>{escopo}</code>
                 </label>
               ))}
             </fieldset>
+
+            {semRota.length > 0 ? (
+              <details className="dobra chave-futuros">
+                <summary className="dobra__titulo">
+                  Ainda sem rota na API ({semRota.length})
+                </summary>
+                <p className="dobra__ajuda">
+                  Estes existem no painel e a API pública ainda não os atende. Conceder agora é
+                  legítimo — a chave passa a valer quando a rota existir —, e nada responde até lá.
+                </p>
+                <div className="chave-escopos">
+                  {semRota.map((escopo) => (
+                    <label className="ui-field__label chave-escopo" key={escopo}>
+                      <input name="escopos" type="checkbox" value={escopo} />
+                      <code>{escopo}</code>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            ) : null}
 
             <button className="ui-button ui-button--primary chave-form__acao" type="submit">
               Emitir

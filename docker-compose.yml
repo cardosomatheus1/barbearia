@@ -21,6 +21,18 @@ x-ambiente: &ambiente
   APP_DB_PASSWORD: ${APP_DB_PASSWORD:?rode RODAR-NO-WINDOWS.cmd (Windows) ou scripts/docker.sh (Linux/macOS) para gerar o .env}
   STAFF_EMAIL_PEPPER: ${STAFF_EMAIL_PEPPER:?falta no .env}
   MFA_SECRET_KEY: ${MFA_SECRET_KEY:?falta no .env}
+  # As quatro que faltavam, e cada uma matava uma integração inteira (bloco 112).
+  #
+  # O `deploy/compose.yml` já as repassava; este aqui — que é o caminho
+  # documentado como "o produto inteiro, com um comando" — parou nas duas
+  # primeiras. O código falha alto como manda a regra, e é justamente por isso
+  # que o estrago era silencioso na tela: emitir chave de API, cadastrar webhook
+  # e salvar o cadastro do WhatsApp voltavam para a mesma página, vazias, sem
+  # uma palavra. E a API pública respondia 500 para toda chave bem-formada.
+  API_KEY_PEPPER: ${API_KEY_PEPPER:?falta no .env}
+  WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?falta no .env}
+  WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
+  MARKETPLACE_ORIGIN_SECRET: ${MARKETPLACE_ORIGIN_SECRET:?falta no .env}
   DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
   ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?falta no .env}@db:5432/postgres
   API_URL: http://api:3000

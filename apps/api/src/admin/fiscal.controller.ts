@@ -240,9 +240,10 @@ export class FiscalController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    const local = await this.unidade(staff);
     return {
-      nota: await notaDaVenda(staff.tenantId, id),
-      tomador: await tomadorDaVenda(staff.tenantId, id),
+      nota: await notaDaVenda(staff.tenantId, local.id, id),
+      tomador: await tomadorDaVenda(staff.tenantId, local.id, id),
     };
   }
 
@@ -318,8 +319,10 @@ export class FiscalController {
     @Body(new ZodValidationPipe(cancelamentoDeNotaSchema)) body: { motivo: string },
   ) {
     try {
+      const local = await this.unidade(staff);
       await cancelarNota({
         tenantId: staff.tenantId,
+        locationId: local.id,
         invoiceId: id,
         motivo: body.motivo,
         provider: exigirEmissor(),

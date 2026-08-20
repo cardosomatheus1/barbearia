@@ -148,6 +148,20 @@ describe('o compose entrega ao contêiner o que o código lê', () => {
   const compose = readFileSync(new URL('../deploy/compose.yml', import.meta.url), 'utf8');
 
   /**
+   * **Os dois composes**, e o segundo era o que estava errado.
+   *
+   * A guarda nasceu olhando só o de produção. O da raiz é o caminho
+   * documentado — *"o produto inteiro, com um comando"* — e ele parava em duas
+   * das seis chaves obrigatórias: chave de API, webhook, token de WhatsApp e a
+   * origem do marketplace ficavam de fora. Três integrações inteiras morriam
+   * em toda instalação feita por ele, e a tela não dizia uma palavra.
+   *
+   * Guarda que confere o arquivo certo e ignora o irmão é a mesma classe de
+   * defeito que ela existe para pegar.
+   */
+  const composeLocal = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
+
+  /**
    * O que a instalação **não** precisa conhecer.
    *
    * `ADMIN_DATABASE_URL` e `APP_DB_PASSWORD` o compose monta sozinho; o resto é
@@ -188,5 +202,43 @@ describe('o compose entrega ao contêiner o que o código lê', () => {
       'estas estão no .env.example e o compose não as repassa: preenchê-las no ' +
         '.env do servidor não faria efeito nenhum, e nada ficaria vermelho',
     ).toEqual([]);
+  });
+
+  /**
+   * O que **falha alto** precisa estar nos dois, ou a instalação nasce quebrada.
+   *
+   * A lista sai do fonte, não daqui: é toda variável que o código lê e recusa
+   * seguir sem — as que lançam. Uma chave nova de cifragem nasce cobrada nos
+   * dois composes e nos dois geradores de `.env`, sem ninguém lembrar dela.
+   */
+  const OBRIGATORIAS = [
+    'STAFF_EMAIL_PEPPER',
+    'MFA_SECRET_KEY',
+    'API_KEY_PEPPER',
+    'WEBHOOK_SECRET_KEY',
+    'WHATSAPP_TOKEN_KEY',
+    'MARKETPLACE_ORIGIN_SECRET',
+  ];
+
+  it('o compose da raiz entrega os mesmos segredos obrigatórios que o de produção', () => {
+    const faltando = OBRIGATORIAS.filter(
+      (nome) => !new RegExp(`^\\s*${nome}:`, 'm').test(composeLocal),
+    );
+
+    expect(
+      faltando,
+      'sem estas, `docker compose up` sobe um produto em que emitir chave de ' +
+        'API, cadastrar webhook e salvar o WhatsApp falham em silêncio',
+    ).toEqual([]);
+  });
+
+  it('os dois geradores de .env sorteiam todos os segredos obrigatórios', () => {
+    const linux = readFileSync(new URL('../scripts/docker.sh', import.meta.url), 'utf8');
+    const windows = readFileSync(new URL('../RODAR-NO-WINDOWS.cmd', import.meta.url), 'utf8');
+
+    for (const [nome, fonte] of [['scripts/docker.sh', linux], ['RODAR-NO-WINDOWS.cmd', windows]]) {
+      const faltando = OBRIGATORIAS.filter((chave) => !fonte.includes(`${chave}=`));
+      expect(faltando, `${nome} não sorteia estas`).toEqual([]);
+    }
   });
 });
