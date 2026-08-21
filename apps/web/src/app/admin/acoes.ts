@@ -1515,15 +1515,43 @@ export async function acaoTirarDaEspera(form: FormData): Promise<void> {
   redirect('/admin/agenda?feito=espera_removida');
 }
 
+/**
+ * O que o seletor do balcão manda: `s:<id>`, `p:<id>` ou `livre`.
+ *
+ * Um seletor só, com serviços e produtos, e o prefixo diz qual é qual. Dois
+ * seletores exigiriam a tela saber qual esconder, e não há componente de
+ * cliente neste produto — o `<select>` decide sozinho e o servidor lê a escolha.
+ */
+function itemEscolhido(valor: string): { tipo: string; serviceId?: string; productId?: string } {
+  if (valor.startsWith('s:')) return { tipo: 'service', serviceId: valor.slice(2) };
+  if (valor.startsWith('p:')) return { tipo: 'product', productId: valor.slice(2) };
+  return { tipo: 'service' };
+}
+
 export async function acaoAdicionarItem(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'orderId');
-  const tipo = texto(form, 'tipo');
+
+  /**
+   * O item vem do **catálogo**, e o id viaja junto.
+   *
+   * O campo era texto livre com um `datalist` de nomes: digitar exatamente
+   * "Corte masculino" gravava a linha com `service_id` **nulo**, e a partir dali
+   * a ficha técnica não baixava insumo, o pacote não cobria, o plano do clube
+   * não cobria e a margem por serviço perdia a linha — tudo sem erro. É a
+   * convenção de casar por id e não por nome, invertida: o nome era gravado e
+   * descartado.
+   *
+   * `livre` continua existindo porque o balcão vende o que não está no catálogo
+   * — e aí a linha nasce sem id de propósito, o que é diferente de nascer sem
+   * id por acidente.
+   */
+  const escolha = itemEscolhido(texto(form, 'item'));
+  const tipo = escolha.tipo;
   if (tipo !== 'service' && tipo !== 'product' && tipo !== 'consumable' && tipo !== 'package') {
     return falhar(`/admin/comanda/${id}`, 'invalid_request');
   }
 
-  const serviceId = texto(form, 'serviceId');
   const professionalId = texto(form, 'professionalId');
   const packageId = texto(form, 'packageId');
 
@@ -1531,10 +1559,12 @@ export async function acaoAdicionarItem(form: FormData): Promise<void> {
     tipo,
     descricao: texto(form, 'descricao'),
     quantidade: Math.max(1, numero(form, 'quantidade', 1)),
-    // Num item de pacote este número é ignorado: o preço sai do catálogo, e é
-    // isso que impede um item de R$ 1 congelar cinco unidades de R$ 50.
+    // Num item de pacote ou de produto este número é ignorado: o preço sai do
+    // catálogo, e é isso que impede um item de R$ 1 congelar cinco unidades de
+    // R$ 50.
     precoUnitarioCents: await centavos(form, 'precoUnitarioCents', `/admin/comanda/${id}`),
-    ...(serviceId ? { serviceId } : {}),
+    ...(escolha.serviceId ? { serviceId: escolha.serviceId } : {}),
+    ...(escolha.productId ? { productId: escolha.productId } : {}),
     ...(professionalId ? { professionalId } : {}),
     ...(packageId ? { packageId } : {}),
   });

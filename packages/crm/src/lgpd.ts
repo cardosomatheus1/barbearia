@@ -336,6 +336,34 @@ export async function exportarDadosDoTitular(
     `;
 
     /**
+     * As notas fiscais em que a pessoa é o tomador (bloco 123).
+     *
+     * `fiscal_invoices` guarda `customer_name` e `customer_document` — o CPF
+     * congelado no momento da emissão —, e **não tem `customer_id`**. As duas
+     * varreduras de LGPD deste repositório perguntam ao catálogo por tabelas com
+     * aquela coluna, então nenhuma das duas a via: `anonimizar_cliente` a
+     * alcança porque alguém escreveu a linha à mão, e a exportação simplesmente
+     * não a alcançava.
+     *
+     * O silêncio é o defeito: o arquivo que a pessoa leva embora afirmava, por
+     * omissão, que a barbearia não tinha mandado o CPF dela à prefeitura. É o
+     * mesmo que o bloco 119 corrigiu em `birth_date` e `tax_id`.
+     *
+     * Pelo **id da venda**, que é como a nota se liga ao titular: a cópia dentro
+     * da nota é congelada e não muda quando o cadastro muda.
+     */
+    const notas = await tx.$queryRaw<Record<string, unknown>[]>`
+      SELECT f.status::text AS status, f.number AS numero, f.requested_at AS pedida_em,
+             f.authorized_at AS autorizada_em, f.cancelled_at AS cancelada_em,
+             f.customer_name AS nome_na_nota, f.customer_document AS documento_na_nota,
+             f.service_cents AS valor_cents
+        FROM fiscal_invoices f
+        JOIN orders o ON o.id = f.order_id
+       WHERE o.customer_id = ${customerId}::uuid
+       ORDER BY f.requested_at
+    `;
+
+    /**
      * Os recados (bloco 40).
      *
      * "Eu reclamei da espera e vocês nunca me responderam" é exatamente o que a
@@ -555,6 +583,7 @@ export async function exportarDadosDoTitular(
       filas,
       fotos,
       esperas,
+      notas,
       recados,
       fidelidade,
       pacotes,

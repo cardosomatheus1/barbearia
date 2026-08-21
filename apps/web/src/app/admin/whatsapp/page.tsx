@@ -562,7 +562,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
       */}
       {podeMexer && signup ? (
         <details className="dobra">
-          <summary>Cadastrar os identificadores à mão</summary>
+          {/* `dobra__titulo` como os outros quarenta e sete `summary` do
+              produto: sem classe, o padrão do navegador dá 24px de alvo, abaixo
+              do piso de 44 que vale em qualquer largura. A medição não pegava
+              porque este bloco só existe com o Embedded Signup configurado, e a
+              semente não configura. */}
+          <summary className="dobra__titulo">Cadastrar os identificadores à mão</summary>
           <p className="cartao-balcao__texto">
             Só é preciso se você já tem a conta na Meta montada e prefere copiar os dois
             identificadores do painel dela. Pelo botão acima, eles vêm sozinhos.

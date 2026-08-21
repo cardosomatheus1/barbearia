@@ -3,11 +3,13 @@ import {
   abrirCaixa,
   abrirComanda,
   cancelarComanda,
+  produtosVendaveis,
   comandasAbertas,
   adicionarItem,
   ajustarComanda,
   caixaAberto,
   CaixaError,
+  FidelidadeError,
   cancelarCobranca as cancelarCobrancaDaComanda,
   CobrancaError,
   cobrancasDaComanda,
@@ -74,13 +76,41 @@ const STATUS: Record<string, number> = {
   cobranca_encerrada: 409,
   cobranca_nao_encontrada: 404,
   comanda_sem_valor: 409,
+  /**
+   * As recusas de resgate são 409, não 400.
+   *
+   * A entrada é válida; o que a recusa é o **estado** — o saldo mudou entre a
+   * renderização e o clique, ou a conta não usa tudo aquilo. É a mesma leitura
+   * de `desconto_acima_do_teto`, e a frase que sobe carrega o motivo.
+   */
+  saldo_insuficiente: 409,
+  resgate_acima_do_teto: 409,
+  premio_incompleto: 409,
+  nada_a_pagar: 409,
+  quantidade_invalida: 400,
+  sem_programa: 409,
 };
 
 function toHttp(error: unknown): never {
   if (
     error instanceof CaixaError ||
     error instanceof ComandaError ||
-    error instanceof CobrancaError
+    error instanceof CobrancaError ||
+    /**
+     * `FidelidadeError` junto, e faltava.
+     *
+     * `fecharComanda` chama `conferirResgate`, e as seis recusas de
+     * `RecusaDeResgate` têm frase escrita para o balcão — "O saldo não cobre
+     * este resgate", "Esta conta não usa tudo isso". Fora desta lista elas
+     * subiam como exceção não tratada e o balcão lia **"Erro interno"**, num
+     * 500, com o cliente na frente.
+     *
+     * E o caminho não exige má-fé: `resgateQuantidade` é calculado na
+     * renderização, então duas abas da mesma comanda — ou a varredura de
+     * vencimento passando entre a tela e o clique — bastam para o número ficar
+     * velho. Entrada legítima recusada com 500 é defeito de borda, sempre.
+     */
+    error instanceof FidelidadeError
   ) {
     throw new DomainError(error.code, STATUS[error.code] ?? 400, error.message);
   }
@@ -217,6 +247,27 @@ export class CaixaController {
   }
 
   // -- Comanda ----------------------------------------------------------------
+
+  /**
+   * O que o balcão pode vender — nome e preço, e nada mais.
+   *
+   * Sob `cashier.open` sozinho, e é decisão: quem vende a pomada é a recepção,
+   * e exigir `inventory.view` para isso trancaria o balcão para fora da venda
+   * de produto — a permissão que serve a tela de estoque é a de **ler o
+   * estoque**, com saldo, custo e fornecedor. Aqui sai a lista de preços: id,
+   * nome e quanto custa, que é o que uma venda precisa saber.
+   *
+   * Só `resale` e ativo, como `adicionarItem` cobra do outro lado. Consumo
+   * interno não se vende, e produto sem preço não é vendável.
+   *
+   * **Antes de `orders/:id`**, pela mesma razão de `orders/abertas`: o Nest casa
+   * na ordem de declaração.
+   */
+  @Exige('cashier.open')
+  @Get('orders/vendaveis')
+  async vendaveis(@Staff() staff: AuthenticatedStaff) {
+    return { produtos: await produtosVendaveis(staff.tenantId) };
+  }
 
   /**
    * As comandas abertas desta unidade.
@@ -366,6 +417,7 @@ export class CaixaController {
       precoUnitarioCents: number;
       professionalId?: string;
       packageId?: string;
+      productId?: string;
     },
   ) {
     const local = await this.unidade(staff);
@@ -382,6 +434,7 @@ export class CaixaController {
         precoUnitarioCents: body.precoUnitarioCents,
         professionalId: body.professionalId ?? null,
         packageId: body.packageId ?? null,
+        productId: body.productId ?? null,
         }),
         podeVerCliente: pode(staff.permissions, 'customers.view'),
       });

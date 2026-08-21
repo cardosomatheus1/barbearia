@@ -64,6 +64,23 @@ export const itemSchema = z.object({
    * o da tela faria um item de R$ 1 congelar cinco unidades de R$ 50.
    */
   packageId: uuidSchema.optional(),
+  /**
+   * O produto do catálogo que este item vende (bloco 44) — e a borda o
+   * **descartava**.
+   *
+   * `adicionarItem` aceita `productId` desde aquele bloco: é ele que faz a
+   * venda e a baixa de estoque serem o mesmo dado, e é dele que sai o preço,
+   * lido do catálogo dentro da transação. Sem o campo aqui, o corpo chegava
+   * limpo ao domínio e não existia caminho no produto para vender um produto:
+   * a recepção digitava "Pomada · R$ 79,00" no campo livre, que é sempre
+   * `service`. A pomada pagava comissão na regra de serviço, entrava no DRE
+   * como receita de serviço e o estoque não se mexia.
+   *
+   * É o defeito de `blocks` — motor que aceita e ninguém preenche —, com oito
+   * blocos de idade, sobre a distinção revenda × consumo interno que a SPEC
+   * §3.7 chama de obrigatória.
+   */
+  productId: uuidSchema.optional(),
 });
 
 export const ajusteSchema = z.object({

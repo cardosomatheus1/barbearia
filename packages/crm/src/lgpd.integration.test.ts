@@ -216,6 +216,10 @@ describeIfDb('direitos do titular', () => {
   it('toda tabela com dado do cliente está na exportação ou na exceção escrita', async () => {
     const NA_EXPORTACAO = new Set([
       'customers',
+      // A nota fiscal em que a pessoa é o tomador (bloco 123). Ela guarda o
+      // nome e o CPF congelados na emissão, e não tem `customer_id` — por isso
+      // esteve fora da varredura e fora do arquivo.
+      'fiscal_invoices',
       'customer_consents',
       'customer_preferences',
       'appointments',
@@ -306,8 +310,36 @@ describeIfDb('direitos do titular', () => {
        * exportação.
        */
       ['marketplace_attributions', 'termo comercial entre plataforma e barbearia; o canal sai por customers.acquired_via'],
+      /**
+       * As quatro que a varredura ampliada passou a enxergar por `phone_e164`
+       * e que **não** são do titular.
+       *
+       * Três guardam o telefone de quem trabalha na casa ou da própria loja —
+       * dado da barbearia, não do cliente que pede o arquivo dele. A quarta é o
+       * desafio de OTP: credencial viva, com cinco minutos de validade, e é a
+       * mesma razão pela qual `customer_sessions` fica de fora desde o bloco 31.
+       */
+      ['locations', 'telefone da loja, não do cliente'],
+      ['professionals', 'telefone de quem trabalha na casa'],
+      ['staff_users', 'telefone de quem trabalha na casa'],
+      ['otp_challenges', 'credencial viva de 5 minutos, como customer_sessions — e apagada por anonimizar_cliente'],
     ]);
 
+    /**
+     * As tabelas com `customer_id` **e** as que guardam dado pessoal por outro
+     * nome de coluna.
+     *
+     * Só `customer_id` era o recorte, e ele tem um furo: `fiscal_invoices`
+     * guarda `customer_name` e `customer_document` — o CPF congelado no momento
+     * da emissão — e **não** tem a coluna que a varredura procura. Ficou fora do
+     * arquivo do titular, e `anonimizar_cliente` só a alcança porque alguém
+     * escreveu a linha à mão.
+     *
+     * As colunas desta segunda lista são as que carregam pessoa: nome,
+     * documento e telefone. Uma tabela nova que guarde qualquer uma delas passa
+     * a ser cobrada aqui mesmo sem `customer_id` — que é o caso que a próxima
+     * vez pode não ter quem lembre.
+     */
     const tabelas = await withTenant(TENANT, (tx) =>
       tx.$queryRaw<{ table_name: string }[]>`
         SELECT DISTINCT c.table_name
@@ -315,8 +347,12 @@ describeIfDb('direitos do titular', () => {
           JOIN information_schema.tables t
             ON t.table_name = c.table_name AND t.table_schema = c.table_schema
          WHERE c.table_schema = 'public'
-           AND c.column_name = 'customer_id'
            AND t.table_type = 'BASE TABLE'
+           AND c.column_name IN (
+             'customer_id',
+             'customer_name', 'customer_document', 'customer_phone',
+             'phone_e164', 'pending_name'
+           )
       `,
     );
 

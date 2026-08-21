@@ -208,6 +208,7 @@ lancar "id conferido contra a unidade" npx vitest run scripts/id-com-unidade.tes
 lancar "permissao com rota" npx vitest run scripts/permissao-com-rota.test.mjs
 lancar "recusa com frase" npx vitest run scripts/recusa-com-frase.test.mjs
 lancar "uniao do dominio" npx vitest run scripts/uniao-do-dominio.test.mjs
+lancar "summary com classe" npx vitest run scripts/summary-com-classe.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
 # nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.

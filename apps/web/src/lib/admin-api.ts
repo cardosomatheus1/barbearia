@@ -1340,6 +1340,21 @@ export interface ComandaAbertaNaTela {
   totalCents: number;
 }
 
+export interface ProdutoVendavelNaTela {
+  id: string;
+  nome: string;
+  precoCents: number;
+}
+
+/** A lista de preços do balcão: o que dá para vender numa comanda. */
+export const produtosVendaveisNaApi = (token: string) =>
+  chamar<{ produtos: ProdutoVendavelNaTela[] }>(
+    'GET',
+    '/v1/admin/orders/vendaveis',
+    undefined,
+    token,
+  );
+
 /** As comandas que ficaram abertas — a listagem que a tela de cobrar não tinha. */
 export const comandasAbertasDaCasa = (token: string) =>
   chamar<{ comandas: ComandaAbertaNaTela[] }>('GET', '/v1/admin/orders/abertas', undefined, token);
@@ -1372,6 +1387,8 @@ export const adicionarNaComanda = (
     professionalId?: string;
     /** O pacote do catálogo que este item vende. Com ele o preço sai do catálogo. */
     packageId?: string;
+    /** O produto do catálogo. Com ele o preço sai do catálogo e o estoque baixa. */
+    productId?: string;
   },
 ) => chamar<Comanda>('POST', `/v1/admin/orders/${id}/items`, dados, token);
 

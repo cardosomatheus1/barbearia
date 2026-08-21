@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
   catalogoDoBalcao,
+  produtosVendaveisNaApi,
   comandaAberta,
   cobrancasDaComanda,
   programaDeFidelidade,
@@ -297,10 +298,11 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   const { id } = await params;
   const query = await searchParams;
 
-  const [comanda, catalogo, cobrancas] = await Promise.all([
+  const [comanda, catalogo, cobrancas, vendaveis] = await Promise.all([
     comandaAberta(token, id),
     catalogoDoBalcao(token),
     cobrancasDaComanda(token, id),
+    produtosVendaveisNaApi(token),
   ]);
 
   const erro = first(query['erro']);
@@ -494,6 +496,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
     ? cobrancas.dados.cobrancas.find((c) => c.estado === 'aguardando' || c.estado === 'pago')
     : undefined;
   const servicos = catalogo.ok ? catalogo.dados.services : [];
+  const produtos = vendaveis.ok ? vendaveis.dados.produtos : [];
   const profissionais = catalogo.ok ? catalogo.dados.professionals : [];
 
   return (
@@ -622,26 +625,60 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             <summary className="dobra__titulo">Acrescentar item</summary>
             <form action={acaoAdicionarItem} className="formulario">
               <input name="orderId" type="hidden" value={conta.id} />
-              <input name="tipo" type="hidden" value="service" />
+              {/* O catálogo num seletor, e o id viaja junto.
+
+                  Era um campo de texto com `datalist` de **nomes**: digitar
+                  exatamente "Corte masculino" gravava a linha com `service_id`
+                  nulo, e a partir dali a ficha técnica não baixava insumo, o
+                  pacote não cobria, o plano do clube não cobria e a margem por
+                  serviço perdia a linha — tudo sem erro nenhum.
+
+                  Um seletor só, com os dois grupos: dois seletores exigiriam a
+                  tela saber qual esconder, e este painel não manda JavaScript. */}
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="item">
+                  O que foi feito ou vendido
+                </label>
+                <select className="ui-field__input" id="item" name="item">
+                  <optgroup label="Serviço">
+                    {servicos.map((servico) => (
+                      <option key={servico.id} value={`s:${servico.id}`}>
+                        {servico.name} · {reais(servico.priceCents)}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {produtos.length > 0 ? (
+                    <optgroup label="Produto">
+                      {produtos.map((produto) => (
+                        <option key={produto.id} value={`p:${produto.id}`}>
+                          {produto.nome} · {reais(produto.precoCents)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  <option value="livre">Outro — descrever abaixo</option>
+                </select>
+                <p className="ui-field__hint">
+                  No produto, o preço sai do catálogo e o estoque baixa sozinho.
+                </p>
+              </div>
 
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="descricao">
-                  O que foi feito
+                  Descrição
                 </label>
                 <input
                   className="ui-field__input"
                   id="descricao"
-                  list="servicos-do-catalogo"
                   maxLength={120}
                   name="descricao"
                   placeholder="Barba"
                   required
                 />
-                <datalist id="servicos-do-catalogo">
-                  {servicos.map((servico) => (
-                    <option key={servico.id} value={servico.name} />
-                  ))}
-                </datalist>
+                <p className="ui-field__hint">
+                  É o que sai na comanda do cliente. Para “Outro”, é o único nome que a linha
+                  vai ter.
+                </p>
               </div>
 
               <div className="ui-field">
@@ -656,6 +693,10 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                   placeholder="35,00"
                   required
                 />
+                <p className="ui-field__hint">
+                  Vale para serviço e para “Outro”. No produto ele é ignorado — quem manda é o
+                  catálogo.
+                </p>
               </div>
 
               <div className="ui-field">

@@ -1016,4 +1016,126 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     const folha = await com(entrou.body.token)(http().get('/v1/admin/commission')).expect(200);
     expect(folha.body.linhas).toEqual([]);
   });
+
+  describe('a recusa de resgate e a venda de produto', () => {
+    it('resgate acima do saldo é 409 com a frase, nunca 500 "Erro interno"', async () => {
+      /**
+       * `conferirResgate` lança `FidelidadeError`, e `toHttp` do balcão não a
+       * traduzia: as seis recusas de `RecusaDeResgate` subiam como exceção não
+       * tratada e o balcão lia **"Erro interno"** com o cliente na frente.
+       *
+       * E o caminho não exige má-fé: `resgateQuantidade` é calculado na
+       * renderização, então duas abas da mesma comanda — ou a varredura de
+       * vencimento passando entre a tela e o clique — bastam para o número ficar
+       * velho. Entrada legítima recusada com 500 é defeito de borda, sempre.
+       */
+      const token = await abrirBarbearia();
+      await comSegundoFator(token);
+      await abrirCaixa(token).expect(201);
+
+      /**
+       * Programa ligado e saldo zero, direto no banco.
+       *
+       * Assim a recusa é a do **domínio** — `saldo_insuficiente` — e não a da
+       * comanda dizendo que fidelidade não é forma de pagamento nesta casa. Pelo
+       * banco porque a tela de fidelidade é recurso de plano e responde 404 numa
+       * barbearia recém-aberta, e cadastrar o programa não é o que este caso
+       * prova.
+       */
+      await admin.$executeRawUnsafe(
+        `INSERT INTO loyalty_programs (tenant_id, mode, points_per_real,
+                                       point_value_cents, visits_goal, cashback_bps)
+         SELECT id, 'pontos', 1, 1, 10, 0 FROM tenants ORDER BY created_at DESC LIMIT 1
+         ON CONFLICT (tenant_id) DO UPDATE SET mode = 'pontos'`,
+      );
+
+      /**
+       * A comanda **com cliente**: sem ele a recusa é outra, e vem antes —
+       * "identifique o cliente antes de usar o saldo", que é `ComandaError` e já
+       * era traduzida. O caso que este teste prende é a recusa do saldo.
+       */
+      const [pessoa] = await admin.$queryRawUnsafe<{ id: string }[]>(
+        `INSERT INTO customers (tenant_id, name, phone_e164)
+         SELECT id, 'Carlos Souza', '+5571966660001' FROM tenants
+          ORDER BY created_at DESC LIMIT 1
+         RETURNING id`,
+      );
+      const aberta = await com(token)(
+        http().post('/v1/admin/orders').send({ customerId: pessoa!.id }),
+      ).expect(201);
+      const id: string = aberta.body.id;
+      await com(token)(
+        http().post(`/v1/admin/orders/${id}/items`).send({
+          tipo: 'service', descricao: 'Corte de cabelo', quantidade: 1, precoUnitarioCents: 5000,
+        }),
+      ).expect(201);
+
+      const recusa = await com(token)(
+        http()
+          .post(`/v1/admin/orders/${id}/close`)
+          .send({
+            // O pagamento **fecha** a conta: R$ 40 em dinheiro e R$ 10 de
+            // saldo. Sem fechar, quem recusa é `conferirPagamento`, antes — e a
+            // recusa que este caso prende é a do saldo.
+            pagamentos: [
+              { forma: 'cash', valorCents: 4000 },
+              { forma: 'fidelidade', valorCents: 1000 },
+            ],
+            // Acima de qualquer saldo, e dentro do que a borda aceita: o que se
+            // prova é a recusa do **domínio**, não a do Zod.
+            resgateQuantidade: 5_000,
+          }),
+      );
+
+      expect(recusa.status).toBe(409);
+      expect(recusa.body.error.code).not.toBe('internal_error');
+      // A frase é do domínio e serve ao balcão: ela diz o que fazer.
+      expect(String(recusa.body.error.message)).not.toBe('Erro interno');
+    });
+
+    it('a borda deixa o produto do catálogo chegar ao domínio', async () => {
+      /**
+       * `itemSchema` não tinha `productId`, e o campo era descartado antes de
+       * chegar a `adicionarItem` — que o aceita desde o bloco 44. Sem ele não
+       * existia caminho no produto para vender um produto: a recepção digitava
+       * "Pomada · R$ 79,00" no campo livre, que é sempre `service`, e a pomada
+       * pagava comissão na regra de serviço, entrava no DRE como receita de
+       * serviço e o estoque não se mexia.
+       *
+       * O preço sai do **catálogo**: o R$ 1,00 do corpo é ignorado, como no
+       * pacote.
+       */
+      const token = await abrirBarbearia();
+      await comSegundoFator(token);
+      await abrirCaixa(token).expect(201);
+
+      /** O produto direto no banco: o cadastro dele não é o que este caso prova. */
+      const [produto] = await admin.$queryRawUnsafe<{ id: string }[]>(
+        `INSERT INTO products (tenant_id, name, kind, cost_cents, price_cents, min_stock, unit)
+         SELECT id, 'Pomada modeladora', 'resale', 1800, 3900, 0, 'un'
+           FROM tenants ORDER BY created_at DESC LIMIT 1
+         RETURNING id`,
+      );
+
+      const vendaveis = await com(token)(http().get('/v1/admin/orders/vendaveis')).expect(200);
+      expect(vendaveis.body.produtos.map((p: { id: string }) => p.id)).toContain(produto!.id);
+
+      const aberta = await com(token)(http().post('/v1/admin/orders').send({})).expect(201);
+      const comanda = await com(token)(
+        http().post(`/v1/admin/orders/${aberta.body.id}/items`).send({
+          tipo: 'product',
+          productId: produto!.id,
+          descricao: 'Pomada modeladora',
+          quantidade: 2,
+          precoUnitarioCents: 100,
+        }),
+      ).expect(201);
+
+      const item = comanda.body.itens[0];
+      expect(item.tipo).toBe('product');
+      // Do catálogo, não do corpo: 2 × R$ 39,00.
+      expect(comanda.body.subtotalCents).toBe(7800);
+    });
+  });
+
 });

@@ -148,12 +148,32 @@ async function fatosDoPeriodo(
 
   const comissoesCents = await comissaoDoIntervalo(tx, params);
 
+  /**
+   * O custo da venda **estornada** sai daqui, e não saía.
+   *
+   * O rodapé da tela diz em letras *"venda estornada sai de todas as linhas"* —
+   * saía de sete e não saía desta. `devolverProdutos` põe o produto de volta na
+   * prateleira com `kind = 'entrada'`, que não está no filtro, e a devolução é
+   * carimbada no dia do estorno: o custo continuava no mês da venda para
+   * sempre, com a receita já removida. Num estorno medido, o resultado caiu
+   * R$ 154,00 (a receita inteira) onde deveria cair R$ 120,00 — e a unidade
+   * estava de volta no estoque, pronta para ser vendida de novo.
+   *
+   * O consumo interno fica: o insumo foi usado no atendimento, e estornar a
+   * venda não faz o shampoo voltar ao frasco. É a mesma razão pela qual o
+   * estorno não devolve unidade de pacote.
+   *
+   * Pelo `order_id` e não por data, porque a devolução tem `business_day` de
+   * outro mês: quem casa é a venda.
+   */
   const cmv = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(abs(m.quantity) * m.unit_cost_cents)::int AS total
       FROM stock_movements m
+      LEFT JOIN orders o ON o.id = m.order_id
      WHERE m.kind IN ('venda', 'consumo')
        AND m.location_id = ${params.locationId}::uuid
        AND m.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
+       AND (m.kind = 'consumo' OR o.id IS NULL OR o.status <> 'refunded')
   `;
 
   /**

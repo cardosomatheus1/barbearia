@@ -167,6 +167,43 @@ function paraTela(linha: LinhaDoProduto, agora: Date): ProdutoNaTela {
   };
 }
 
+export interface ProdutoVendavel {
+  readonly id: string;
+  readonly nome: string;
+  readonly precoCents: number;
+}
+
+/**
+ * A lista de preços do balcão — o que dá para vender numa comanda.
+ *
+ * Separada de `produtos` de propósito: aquela devolve saldo, custo, fornecedor
+ * e alerta, e é a tela de estoque, sob `inventory.view`. Vender uma pomada é
+ * outra coisa, e quem vende é a recepção — que não tem aquela permissão por
+ * padrão. Aqui saem três campos, e nenhum deles diz quanto a casa pagou nem
+ * quanto tem na prateleira.
+ *
+ * `resale` e ativo, com preço: as mesmas três condições que `adicionarItem`
+ * cobra do outro lado, para a tela não oferecer o que a gravação recusa.
+ *
+ * Sem recorte por unidade porque `products` não tem `location_id`: o catálogo
+ * de produto é da barbearia, e é o **saldo** que é por loja (`stock_movements`).
+ */
+export async function produtosVendaveis(
+  tenantId: string,
+): Promise<readonly ProdutoVendavel[]> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ id: string; name: string; price_cents: number }[]>`
+      SELECT p.id, p.name, p.price_cents
+        FROM products p
+       WHERE p.active
+         AND p.kind = 'resale'
+         AND p.price_cents IS NOT NULL
+       ORDER BY p.name
+    `;
+    return linhas.map((l) => ({ id: l.id, nome: l.name, precoCents: l.price_cents }));
+  });
+}
+
 export async function produtos(
   tenantId: string,
   incluirInativos = false,

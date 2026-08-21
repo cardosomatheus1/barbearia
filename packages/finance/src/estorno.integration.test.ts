@@ -692,6 +692,66 @@ describeIfDb('vale, estorno e DRE', () => {
     expect(depois.atual.comissoesCents).toBe(2000);
   });
 
+  it('o custo do produto estornado sai do CMV — o rodapé diz "todas as linhas"', async () => {
+    /**
+     * A consulta de CMV soma `stock_movements` com `kind IN ('venda','consumo')`
+     * por `business_day` e **sem olhar o estado da venda**. `devolverProdutos`
+     * põe o produto de volta com `kind = 'entrada'`, que não está no filtro, e
+     * carimbado no dia do estorno: o custo ficava no mês da venda para sempre,
+     * com a receita já removida.
+     *
+     * Num estorno medido no produto, o resultado caiu R$ 154,00 — a receita
+     * inteira — onde deveria cair R$ 120,00, e a unidade estava de volta na
+     * prateleira, pronta para ser vendida de novo. A margem do mês ficava
+     * subestimada de forma permanente, no relatório cuja pergunta é *"por que
+     * caiu?"*.
+     *
+     * O rodapé da tela diz em letras: *"venda estornada sai de todas as
+     * linhas"*. Saía de sete.
+     */
+    const produto = await salvarProduto({
+      tenantId: TENANT,
+      nome: 'Pomada do CMV',
+      tipo: 'resale',
+      custoCents: 1000,
+      precoCents: 3000,
+      minimo: 0,
+      unidade: 'un',
+      ativo: true,
+      ator,
+    });
+    await exec(`
+      INSERT INTO stock_movements (tenant_id, product_id, location_id, kind, quantity,
+                                   unit_cost_cents, business_day, reason)
+      VALUES ('${TENANT}', '${produto.id}', '${LOCATION}', 'entrada', 10, 1000,
+              '${HOJE}', 'compra');
+    `);
+
+    const aberta = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      tipo: 'product', descricao: 'Pomada do CMV', productId: produto.id,
+      professionalId: RUAN, quantidade: 1, precoUnitarioCents: 3000, ...operador,
+    });
+    await fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      pagamentos: [{ forma: 'cash', valorCents: 3000 }], ...fecha,
+    });
+
+    const janela = { tenantId: TENANT, locationId: LOCATION, de: '2026-11-01', ate: '2026-11-30' };
+    expect((await dreDoPeriodo(janela)).atual.cmvCents).toBe(1000);
+
+    await estornarVenda({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      motivo: 'Cliente devolveu a pomada lacrada', hoje: HOJE, ...operador,
+    });
+
+    // O custo sai junto com a receita: o produto voltou para a prateleira.
+    expect((await dreDoPeriodo(janela)).atual.cmvCents).toBe(0);
+  });
+
   it('o desconto concedido aparece no DRE, e a receita continua bruta', async () => {
     /**
      * Era o defeito: a comanda fecha pelo valor com desconto, o caixa bate, a
