@@ -6,6 +6,7 @@ import {
   METRICAS,
   PERGUNTAS_SUGERIDAS,
   interpretadorLocal,
+  linkDaMetrica,
   periodoDaInterpretacao,
   SEM_ROTULO,
   validarPergunta,
@@ -215,7 +216,9 @@ export class MetricaController {
       dimensao: pergunta.dimensao,
       unidade: definicao.unidade,
       subirEBom: definicao.subirEBom,
-      tela: definicao.tela,
+      // Com a janela junto: sem ela o link leva ao mês-calendário e o número
+      // que o dono foi conferir não está lá.
+      tela: linkDaMetrica(definicao.tela, pergunta.de, pergunta.ate),
       total: resposta.total,
       totalFormatado: formatarMetrica(resposta.total, definicao.unidade),
       fatias: resposta.fatias.map((f) => ({

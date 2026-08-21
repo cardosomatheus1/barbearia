@@ -35,7 +35,33 @@ export interface Comparado {
   readonly variacao: number | null;
 }
 
-export type PeriodoPainel = 'dia' | '7d' | 'mes';
+/**
+ * O período do painel: os três nomeados do seletor, ou uma janela em dias.
+ *
+ * A janela em dias existe porque o **assistente** responde sobre sete janelas —
+ * 1, 2, 7, 15, 30, 90 e 365 dias corridos — e cada resposta traz um link para a
+ * tela onde o número se confere. O painel só tinha Hoje / 7 dias / mês-calendário,
+ * então "faturei R$ 33.297 nos últimos 30 dias" levava a uma tela que dizia
+ * R$ 22.947: o dono clicava para confiar e saía desconfiando dos dois.
+ *
+ * Os três nomeados continuam existindo e não viraram `{ dias }`: "mês" é o
+ * mês-calendário, que é uma janela de tamanho variável e a pergunta que o dono
+ * faz no fechamento. Traduzi-lo para trinta dias mudaria o número do painel para
+ * resolver o do assistente.
+ */
+export type PeriodoPainel = 'dia' | '7d' | 'mes' | JanelaEmDias;
+
+/** Uma janela de N dias corridos terminando hoje — a do assistente. */
+export interface JanelaEmDias {
+  readonly dias: number;
+}
+
+/** O teto da janela em dias, e ele é o do assistente: um ano. */
+export const DIAS_MAXIMOS_DO_PAINEL = 365;
+
+export function ehJanelaEmDias(periodo: PeriodoPainel): periodo is JanelaEmDias {
+  return typeof periodo === 'object';
+}
 
 export interface OcupacaoProfissional {
   readonly professionalId: string;
@@ -348,6 +374,21 @@ function mesAnteriorAte(dia: string): { inicio: string; fim: string } {
 }
 
 function janelaPainel(dia: string, periodo: PeriodoPainel): JanelaPainel {
+  /**
+   * A janela em dias, e o anterior é a janela **do mesmo tamanho** antes dela.
+   *
+   * É a regra que já vale para os três nomeados: comparar contra uma janela de
+   * outro tamanho faria a queda mostrada ser só a diferença de duração.
+   */
+  if (ehJanelaEmDias(periodo)) {
+    const n = Math.max(1, Math.min(DIAS_MAXIMOS_DO_PAINEL, Math.trunc(periodo.dias)));
+    return {
+      inicio: somarDias(dia, -(n - 1)),
+      fim: dia,
+      inicioAnterior: somarDias(dia, -(2 * n - 1)),
+      fimAnterior: somarDias(dia, -n),
+    };
+  }
   if (periodo === 'dia') {
     const anterior = semanaPassada(dia);
     return { inicio: dia, fim: dia, inicioAnterior: anterior, fimAnterior: anterior };

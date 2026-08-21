@@ -50,15 +50,24 @@ async function exec(sql: string): Promise<void> {
   }
 }
 
-/** Um corte fechado pelo plano, como o balcão faz. */
-async function cortePeloPlano(): Promise<void> {
+/**
+ * Um corte fechado pelo plano, como o balcão faz.
+ *
+ * `comQuem` existe para o terceiro estado da simulação: sem profissional no
+ * item não há a quem lançar comissão, e é o caso que se parece com "não houve
+ * atendimento" sem ser. É o caminho do produto — a recepção pode fechar uma
+ * comanda sem dizer quem atendeu —, não um `DELETE` na tabela, que é append-only.
+ */
+async function cortePeloPlano(comQuem: string | null = RUAN): Promise<void> {
   const aberta = await abrirComanda({
     tenantId: TENANT, locationId: LOCAL, customerId: CARLOS, staffId: DONO,
   });
   await adicionarItem({
     tenantId: TENANT, locationId: LOCAL, orderId: aberta.id, tipo: 'service',
     serviceId: CORTE, descricao: 'Corte', quantidade: 1,
-    precoUnitarioCents: PRECO_DO_CORTE, professionalId: RUAN, ...operador,
+    precoUnitarioCents: PRECO_DO_CORTE,
+    ...(comQuem ? { professionalId: comQuem } : {}),
+    ...operador,
   });
   await fecharComanda({
     tenantId: TENANT, locationId: LOCAL, orderId: aberta.id,
@@ -301,6 +310,48 @@ describeIfDb('comissão sobre assinatura', () => {
     const simulacao = await simulacaoDaAssinatura(periodo);
     expect(simulacao.receitaCents).toBe(0);
     expect(simulacao.atendimentos).toBe(0);
+    // E diz que o período foi vazio de verdade — é o que separa este caso do
+    // de baixo, que a tela vinha tratando como se fosse o mesmo.
+    expect(simulacao.usosNoPeriodo).toBe(0);
+  });
+
+  it('sem regra de comissão, a simulação diz que houve atendimento — não que não houve', async () => {
+    /**
+     * O defeito que o bloco 127 fechou.
+     *
+     * `commission_entries` só ganha linha com profissional no item **e** regra
+     * que case. A barbearia sem regra cadastrada via *"a comparação aparece
+     * quando um assinante for atendido"* ao lado da tabela de rentabilidade que
+     * listava os assinantes atendidos no mesmo período — duas metades do mesmo
+     * painel discordando sobre o mesmo fato, e a que mentia era a que o dono lê
+     * antes de escolher o modelo.
+     *
+     * A regra é apagada **depois** da semente: ela nasce no `beforeEach` de
+     * propósito, e a barbearia real é a que nunca a cadastrou.
+     */
+    await withTenant(TENANT, (tx) => tx.$executeRaw`DELETE FROM commission_rules`);
+    for (let i = 0; i < 3; i += 1) await cortePeloPlano();
+
+    const simulacao = await simulacaoDaAssinatura(periodo);
+
+    expect(simulacao.atendimentos, 'sem regra não há lançamento a comparar').toBe(0);
+    expect(simulacao.usosNoPeriodo, 'e os atendimentos aconteceram').toBe(3);
+    expect(simulacao.temRegraDeComissao).toBe(false);
+
+    // E a rentabilidade, que é a outra metade da tela, concorda com o fato.
+    const conta = await rentabilidadeDoClube(periodo);
+    expect(conta.assinantes[0]?.usos).toBe(3);
+  });
+
+  it('com regra e sem profissional no item, a simulação separa o caso', async () => {
+    // Terceiro estado: há regra, houve atendimento, e mesmo assim não há
+    // lançamento — porque a comissão é de quem atendeu e o item não diz quem.
+    for (let i = 0; i < 2; i += 1) await cortePeloPlano(null);
+
+    const simulacao = await simulacaoDaAssinatura(periodo);
+    expect(simulacao.atendimentos).toBe(0);
+    expect(simulacao.usosNoPeriodo).toBe(2);
+    expect(simulacao.temRegraDeComissao, 'a regra da semente continua lá').toBe(true);
   });
 
   it('teto fora de 0 a 100% é recusado antes do banco', async () => {

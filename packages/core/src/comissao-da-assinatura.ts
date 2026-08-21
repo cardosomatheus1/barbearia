@@ -246,10 +246,31 @@ export interface ResultadoDoModelo {
 export interface SimulacaoDaAssinatura {
   /** A mensalidade somada das assinaturas que tiveram atendimento no período. */
   readonly receitaCents: number;
+  /** Atendimentos que **geraram lançamento** de comissão — o que dá para comparar. */
   readonly atendimentos: number;
   readonly modelos: readonly ResultadoDoModelo[];
   /** O modelo em uso hoje. */
   readonly emUso: ModoDaAssinatura;
+  /**
+   * Atendimentos de assinante no período, do fato — `club_uses`.
+   *
+   * Ele existe para a tela saber **por que** não há o que comparar, e a
+   * distância entre ele e `atendimentos` é a informação: dezesseis usos com
+   * zero lançamentos não é "o clube não teve movimento", é "nenhuma regra de
+   * comissão alcança esses atendimentos".
+   *
+   * A tela dizia a primeira frase ao lado da tabela que provava a segunda —
+   * duas telas discordando sobre o mesmo fato (§6, pergunta 6).
+   */
+  readonly usosNoPeriodo: number;
+  /**
+   * Existe alguma regra de comissão cadastrada?
+   *
+   * Sem regra, `lancarComissoes` não grava linha nenhuma — e aí a resposta certa
+   * não é um número, é onde cadastrar. Com regra e ainda assim sem lançamento, o
+   * que falta é profissional no item, que é outro conserto e outra tela.
+   */
+  readonly temRegraDeComissao: boolean;
 }
 
 /**
@@ -270,6 +291,16 @@ export function simularModelosDaAssinatura(params: {
   readonly lancamentos: readonly LancamentoNoPeriodo[];
   readonly tetoBps: number;
   readonly emUso: ModoDaAssinatura;
+  /**
+   * Os dois obrigatórios, nunca opcionais com padrão.
+   *
+   * Opcional, `usosNoPeriodo` nasceria zero por omissão na primeira rota nova e
+   * a tela voltaria a dizer "não houve movimento" sobre uma barbearia que teve —
+   * que é o defeito de `blocks` e o do quarto termo do sinal, os dois já
+   * cometidos aqui.
+   */
+  readonly usosNoPeriodo: number;
+  readonly temRegraDeComissao: boolean;
 }): SimulacaoDaAssinatura {
   const deAssinatura = params.lancamentos.filter(daAssinatura);
 
@@ -293,6 +324,8 @@ export function simularModelosDaAssinatura(params: {
     atendimentos: deAssinatura.filter((l) => l.sinal === 1).length,
     modelos,
     emUso: params.emUso,
+    usosNoPeriodo: params.usosNoPeriodo,
+    temRegraDeComissao: params.temRegraDeComissao,
   };
 }
 

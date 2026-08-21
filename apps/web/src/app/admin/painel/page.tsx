@@ -10,6 +10,7 @@ import {
   type InsightNaTela,
   type PainelDeDinheiro,
   type PeriodoPainel,
+  type PeriodoPedido,
 } from '@/lib/admin-api';
 import type { DestinoDoInsight } from '@barbearia/core';
 import { casaDoPapel, painelOuDesvio, podeNaTela } from '@/lib/painel';
@@ -47,6 +48,20 @@ const ROTULO_PERIODO: Readonly<Record<PeriodoPainel, string>> = {
 
 function periodoSeguro(valor: string | undefined): PeriodoPainel {
   return valor === 'dia' || valor === '7d' || valor === 'mes' ? valor : 'mes';
+}
+
+/**
+ * A janela em dias que veio do link do assistente (bloco 128).
+ *
+ * O piso e o teto são os mesmos da borda da API — um dia e um ano. Fora disso,
+ * ou sem `dias`, a tela cai no seletor de sempre: o link malformado não pode
+ * deixar o painel em branco, e "trinta dias" pedido como `dias=abc` é entrada
+ * inválida, não uma janela nova.
+ */
+function diasPedidos(valor: string | undefined): number | null {
+  if (!valor) return null;
+  const n = Number(valor);
+  return Number.isInteger(n) && n >= 1 && n <= 365 ? n : null;
 }
 
 function comparacao(dado: Comparado, melhorQuandoCai = false): { texto: string; classe: string } {
@@ -186,6 +201,15 @@ export default async function PainelPage({ searchParams }: Props) {
   const podeCadastro = podeNaTela(estado, 'settings.manage');
   const query = await searchParams;
   const periodo = periodoSeguro(primeiro(query['periodo']));
+  const dias = diasPedidos(primeiro(query['dias']));
+  /**
+   * O que vai à API: a janela em dias vence o nome do seletor.
+   *
+   * Quem manda `dias` é o link do assistente, que sabe exatamente quantos dias a
+   * resposta cobriu — e é esse link que existe para o dono clicar, ver o mesmo
+   * número e passar a confiar nos dois.
+   */
+  const pedido: PeriodoPedido = dias === null ? periodo : { dias };
 
   /**
    * Os insights entram sob a mesma condição do faturamento (bloco 67).
@@ -195,9 +219,9 @@ export default async function PainelPage({ searchParams }: Props) {
    * "O que fazer primeiro" apareceria vazio para quem nunca poderá vê-lo.
    */
   const [operacao, hoje, dinheiro, diagnostico, insights] = await Promise.all([
-    painelOperacional(token, undefined, periodo),
+    painelOperacional(token, undefined, pedido),
     periodo === 'dia' ? Promise.resolve(null) : painelOperacional(token, undefined, 'dia'),
-    podeVerDinheiro ? painelDeDinheiro(token, undefined, periodo) : Promise.resolve(null),
+    podeVerDinheiro ? painelDeDinheiro(token, undefined, pedido) : Promise.resolve(null),
     podeCadastro ? diagnosticoDoCatalogo(token) : Promise.resolve(null),
     podeVerDinheiro ? insightsDoPainel(token) : Promise.resolve(null),
   ]);
@@ -348,14 +372,31 @@ export default async function PainelPage({ searchParams }: Props) {
       <nav aria-label="Período do painel" className="balcao__regua painel-periodos">
         {(Object.keys(ROTULO_PERIODO) as PeriodoPainel[]).map((item) => (
           <a
-            aria-current={periodo === item ? 'page' : undefined}
-            className={periodo === item ? 'filtro filtro--ativo' : 'filtro'}
+            aria-current={dias === null && periodo === item ? 'page' : undefined}
+            className={dias === null && periodo === item ? 'filtro filtro--ativo' : 'filtro'}
             href={`/admin/painel?periodo=${item}`}
             key={item}
           >
             {ROTULO_PERIODO[item]}
           </a>
         ))}
+        {/*
+          A janela do assistente entra como um quarto item, e só quando ela veio.
+
+          Sem ele a tela mostraria trinta dias com "Mês" aceso — o trilho dizendo
+          uma coisa e o número sendo de outra (§6, pergunta 6), que é a mesma
+          família do defeito que este bloco veio consertar. Com ele, a pessoa vê
+          o que está olhando e tem como sair: os três de sempre continuam ao lado.
+        */}
+        {dias !== null ? (
+          <a
+            aria-current="page"
+            className="filtro filtro--ativo"
+            href={`/admin/painel?dias=${dias}`}
+          >
+            {dias === 1 ? 'Últimas 24 horas' : `Últimos ${dias} dias`}
+          </a>
+        ) : null}
       </nav>
 
       <section className="painel-resumo" aria-label="Resultado principal">

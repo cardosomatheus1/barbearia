@@ -15,6 +15,8 @@ export type Resposta<T> =
   | { ok: true; dados: T }
   | { ok: false; code: string; message: string };
 
+import type { EstadoDaAssinaturaDaPlataforma } from '@barbearia/core';
+
 async function chamar<T>(
   metodo: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
@@ -405,3 +407,109 @@ export const porNaFranquiaNaApi = (token: string, franquiaId: string, tenantId: 
 
 export const tirarDaFranquiaNaApi = (token: string, tenantId: string) =>
   chamar<{ ok: true }>('DELETE', `/v1/plataforma/franquias/casas/${tenantId}`, undefined, token);
+
+// -- assinatura da barbearia (bloco 128) --------------------------------------
+
+/**
+ * O contrato entre a plataforma e a barbearia, na tela.
+ *
+ * As rotas existiam inteiras desde o bloco 27 — cancelar, reativar, trocar o
+ * cartão, estornar crédito — com guarda, `@AgeNaConta` e trilha, e **nenhuma
+ * tinha cliente aqui**. Do outro lado, `/admin/plano` dizia ao dono em letras
+ * *"para trocar o cartão, fale com o suporte"*, e o suporte não tinha essa
+ * tela: era `curl` ou `UPDATE` à mão. A metade irmã funciona (a fatura tem
+ * "Registrar pagamento" e "Anular"), o que tornava a ausência fácil de não
+ * notar.
+ */
+export interface AssinaturaNaPlataforma {
+  tenantId: string;
+  planoCode: string;
+  planoNome: string;
+  /** O público-alvo **do plano** (`plans.audience`), nunca o nome da barbearia. */
+  publico: string;
+  estado: EstadoDaAssinaturaDaPlataforma;
+  precoCents: number;
+  tetoDeCadeiras: number | null;
+  cadeirasEmUso: number;
+  testeAte: string | null;
+  periodoAte: string;
+  canceladaEm: string | null;
+}
+
+export interface MeioDeCobrancaNaTela {
+  meio: {
+    bandeira: string | null;
+    final: string | null;
+    validadeMes: number | null;
+    validadeAno: number | null;
+    cadastrado: boolean;
+  } | null;
+  estornos: {
+    id: string;
+    valorCents: number;
+    motivo: string;
+    estado: string;
+    criadoEm: string;
+  }[];
+}
+
+export const assinaturasNaApi = (token: string) =>
+  chamar<{ assinaturas: AssinaturaNaPlataforma[] }>(
+    'GET',
+    '/v1/plataforma/assinaturas',
+    undefined,
+    token,
+  );
+
+export const cobrancaNaApi = (token: string, tenantId: string) =>
+  chamar<MeioDeCobrancaNaTela>(
+    'GET',
+    `/v1/plataforma/barbearias/${tenantId}/cobranca`,
+    undefined,
+    token,
+  );
+
+export const cancelarAssinaturaNaApi = (token: string, tenantId: string, motivo: string) =>
+  chamar<{ ok: boolean }>(
+    'POST',
+    `/v1/plataforma/barbearias/${tenantId}/cancelamento`,
+    { motivo },
+    token,
+  );
+
+export const reativarAssinaturaNaApi = (token: string, tenantId: string) =>
+  chamar<{ ok: boolean }>(
+    'DELETE',
+    `/v1/plataforma/barbearias/${tenantId}/cancelamento`,
+    undefined,
+    token,
+  );
+
+export const salvarCobrancaNaApi = (
+  token: string,
+  tenantId: string,
+  /**
+   * O que a tela manda, e o que ela **não** manda.
+   *
+   * `pspCustomerId` é obrigatório na borda e é o identificador da conta no
+   * adquirente — quem o tem é quem falou com ele. `pspMethodId` é o token do
+   * cartão, e é a única coisa deste lado que representa o cartão: não existe
+   * coluna para PAN nem para CVV, e há invariante que reprova quem criar uma.
+   * Bandeira, final e validade são o que o balcão lê para conferir com o dono
+   * ao telefone.
+   */
+  corpo: {
+    pspCustomerId: string;
+    pspMethodId: string;
+    bandeira: string;
+    final: string;
+    validadeMes: number;
+    validadeAno: number;
+  },
+) =>
+  chamar<{ ok: boolean }>(
+    'PUT',
+    `/v1/plataforma/barbearias/${tenantId}/cobranca`,
+    corpo,
+    token,
+  );

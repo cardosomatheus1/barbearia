@@ -1876,6 +1876,18 @@ export interface Comparado {
 
 export type PeriodoPainel = 'dia' | '7d' | 'mes';
 
+/**
+ * O período que a tela do painel está mostrando.
+ *
+ * Ou um dos três nomeados do seletor, ou a janela em dias que veio no link do
+ * assistente (bloco 128) — que é a única forma de "conferir na tela" mostrar o
+ * mesmo número que a resposta.
+ */
+export type PeriodoPedido = PeriodoPainel | { readonly dias: number };
+
+export const ehJanelaEmDias = (p: PeriodoPedido): p is { readonly dias: number } =>
+  typeof p === 'object';
+
 export interface PainelOperacional {
   dia: string;
   periodo?: PeriodoPainel;
@@ -1904,10 +1916,13 @@ export interface PainelDeDinheiro {
   serie?: { dia: string; faturamentoCents: number }[];
 }
 
-export const painelOperacional = (token: string, dia?: string, periodo?: PeriodoPainel) => {
+export const painelOperacional = (token: string, dia?: string, periodo?: PeriodoPedido) => {
   const busca = new URLSearchParams();
   if (dia) busca.set('dia', dia);
-  if (periodo) busca.set('periodo', periodo);
+  if (periodo) {
+    if (ehJanelaEmDias(periodo)) busca.set('dias', String(periodo.dias));
+    else busca.set('periodo', periodo);
+  }
   const query = busca.toString();
   return chamar<PainelOperacional>(
     'GET',
@@ -1917,10 +1932,13 @@ export const painelOperacional = (token: string, dia?: string, periodo?: Periodo
   );
 };
 
-export const painelDeDinheiro = (token: string, dia?: string, periodo?: PeriodoPainel) => {
+export const painelDeDinheiro = (token: string, dia?: string, periodo?: PeriodoPedido) => {
   const busca = new URLSearchParams();
   if (dia) busca.set('dia', dia);
-  if (periodo) busca.set('periodo', periodo);
+  if (periodo) {
+    if (ehJanelaEmDias(periodo)) busca.set('dias', String(periodo.dias));
+    else busca.set('periodo', periodo);
+  }
   const query = busca.toString();
   return chamar<PainelDeDinheiro>(
     'GET',
@@ -2733,17 +2751,18 @@ export const desfazerCancelamentoNaApi = (token: string, id: string) =>
  * `finance.view` sozinho: são três totais e nenhum nome. A rentabilidade, que
  * traz nome de gente, é outra rota e exige `customers.view` junto.
  */
-export interface SimulacaoDaAssinaturaNaTela {
-  receitaCents: number;
-  atendimentos: number;
-  emUso: 'por_uso' | 'rateio' | 'hibrido';
-  modelos: {
-    modo: 'por_uso' | 'rateio' | 'hibrido';
-    comissaoCents: number;
-    sobraCents: number;
-    pesoBps: number;
-  }[];
-}
+/**
+ * Uma declaração só, do domínio.
+ *
+ * Era uma cópia à mão, e o bloco 127 mostrou o preço: a rota passou a devolver
+ * `usosNoPeriodo` e `temRegraDeComissao` e a tela não os enxergava — o mesmo
+ * defeito que o bloco 120 achou em vinte uniões deste arquivo. O sintoma aqui
+ * seria o pior possível, porque os dois campos existem justamente para a tela
+ * parar de dizer que não houve movimento sobre uma barbearia que teve.
+ */
+import type { SimulacaoDaAssinatura } from '@barbearia/core';
+
+export type SimulacaoDaAssinaturaNaTela = SimulacaoDaAssinatura;
 
 export interface RentabilidadeDoClubeNaTela {
   de: string;

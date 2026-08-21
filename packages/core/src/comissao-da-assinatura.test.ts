@@ -189,7 +189,7 @@ describe('os três modelos de comissão sobre assinatura', () => {
 describe('a simulação dos três modelos', () => {
   it('mostra os três lado a lado sobre os mesmos dados', () => {
     const simulacao = simularModelosDaAssinatura({
-      lancamentos: quatroCortes, tetoBps: 6000, emUso: 'por_uso',
+      lancamentos: quatroCortes, tetoBps: 6000, emUso: 'por_uso', usosNoPeriodo: 1, temRegraDeComissao: true,
     });
 
     expect(simulacao.receitaCents).toBe(MENSALIDADE);
@@ -205,14 +205,14 @@ describe('a simulação dos três modelos', () => {
      */
     const duasAssinaturas = [uso(1), uso(2, { assinaturaId: 's-2', mensalidadeCents: 8900 })];
     const simulacao = simularModelosDaAssinatura({
-      lancamentos: duasAssinaturas, tetoBps: 6000, emUso: 'por_uso',
+      lancamentos: duasAssinaturas, tetoBps: 6000, emUso: 'por_uso', usosNoPeriodo: 1, temRegraDeComissao: true,
     });
     expect(simulacao.receitaCents).toBe(MENSALIDADE + 8900);
   });
 
   it('a frase diz quanto o modelo em uso custou a mais', () => {
     const simulacao = simularModelosDaAssinatura({
-      lancamentos: quatroCortes, tetoBps: 6000, emUso: 'por_uso',
+      lancamentos: quatroCortes, tetoBps: 6000, emUso: 'por_uso', usosNoPeriodo: 1, temRegraDeComissao: true,
     });
     // R$ 96 − R$ 59,60 = R$ 36,40.
     expect(fraseDaSimulacao(simulacao)).toContain('36,40');
@@ -220,7 +220,7 @@ describe('a simulação dos três modelos', () => {
 
   it('sem atendimento pago por plano, a frase não inventa comparação', () => {
     const simulacao = simularModelosDaAssinatura({
-      lancamentos: [], tetoBps: 6000, emUso: 'por_uso',
+      lancamentos: [], tetoBps: 6000, emUso: 'por_uso', usosNoPeriodo: 1, temRegraDeComissao: true,
     });
     expect(simulacao.receitaCents).toBe(0);
     expect(fraseDaSimulacao(simulacao)).toContain('não há o que comparar');
@@ -228,7 +228,7 @@ describe('a simulação dos três modelos', () => {
 
   it('quando o modelo em uso já é o mais barato, a frase diz isso', () => {
     const simulacao = simularModelosDaAssinatura({
-      lancamentos: quatroCortes, tetoBps: 6000, emUso: 'rateio',
+      lancamentos: quatroCortes, tetoBps: 6000, emUso: 'rateio', usosNoPeriodo: 1, temRegraDeComissao: true,
     });
     expect(fraseDaSimulacao(simulacao)).toContain('menos custou');
   });

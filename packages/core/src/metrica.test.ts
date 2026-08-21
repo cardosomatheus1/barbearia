@@ -9,6 +9,7 @@ import {
   METRICAS,
   PERGUNTAS_SUGERIDAS,
   SEM_ROTULO,
+  linkDaMetrica,
   validarPergunta,
 } from './metrica.js';
 
@@ -200,5 +201,37 @@ describe('toda resposta pode se explicar', () => {
     expect(definicaoDaMetrica('perda_por_falta').subirEBom).toBe(false);
     expect(definicaoDaMetrica('clientes_em_risco').subirEBom).toBe(false);
     expect(definicaoDaMetrica('faturamento').subirEBom).toBe(true);
+  });
+});
+
+describe('o link de conferir na tela leva o período junto', () => {
+  /**
+   * O defeito do bloco 128: o assistente responde 30 dias corridos e o painel
+   * só tinha mês-calendário, então "faturei R$ 33.297" levava a uma tela que
+   * dizia R$ 22.947. O link existe justamente para o dono clicar, ver o mesmo
+   * número e passar a confiar nos dois.
+   */
+  it('a janela sai de `de` e `ate`, que é o que a resposta imprime', () => {
+    expect(linkDaMetrica('/admin/painel', '2026-08-01', '2026-08-30')).toBe(
+      '/admin/painel?dias=30',
+    );
+    // Semiaberto não: o período do assistente inclui as duas pontas.
+    expect(linkDaMetrica('/admin/painel', '2026-08-21', '2026-08-21')).toBe('/admin/painel?dias=1');
+  });
+
+  it('tela que não sabe ler a janela recebe o endereço limpo', () => {
+    // Agenda e Estoque mostram o estado de agora, não um recorte de período —
+    // um `?dias=` ali seria parâmetro que ninguém lê, na URL do dono.
+    expect(linkDaMetrica('/admin/agenda', '2026-08-01', '2026-08-30')).toBe('/admin/agenda');
+  });
+
+  it('data malformada devolve a tela, nunca um link quebrado', () => {
+    expect(linkDaMetrica('/admin/painel', 'ontem', '2026-08-30')).toBe('/admin/painel');
+    // Invertida também: o Postgres devolveria zero linhas em silêncio.
+    expect(linkDaMetrica('/admin/painel', '2026-08-30', '2026-08-01')).toBe('/admin/painel');
+  });
+
+  it('acima de um ano cai no seletor, como o teto da borda', () => {
+    expect(linkDaMetrica('/admin/painel', '2020-01-01', '2026-08-30')).toBe('/admin/painel');
   });
 });

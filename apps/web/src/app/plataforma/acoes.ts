@@ -21,6 +21,9 @@ import {
   criarFranquiaNaApi,
   porNaFranquiaNaApi,
   tirarDaFranquiaNaApi,
+  cancelarAssinaturaNaApi,
+  reativarAssinaturaNaApi,
+  salvarCobrancaNaApi,
 } from '@/lib/plataforma-api';
 import {
   apagarSessaoDaPlataforma,
@@ -272,4 +275,63 @@ export async function acaoTirarDaFranquia(form: FormData): Promise<void> {
   const resultado = await tirarDaFranquiaNaApi(token, texto(form, 'tenantId'));
   if (!resultado.ok) return falhar('/plataforma/franquias', resultado);
   redirect('/plataforma/franquias?saiu=1');
+}
+
+// -- assinatura da barbearia (bloco 128) --------------------------------------
+
+/**
+ * Cancelar a assinatura de uma barbearia.
+ *
+ * Motivo escrito obrigatório, como no bloqueio: a tela é a primeira das três
+ * conferências — borda, domínio e `CHECK` — porque é a única que consegue dizer
+ * **onde** está o campo vazio.
+ */
+export async function acaoCancelarAssinatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const motivo = texto(form, 'motivoDoCancelamento');
+  if (motivo.length < 3) return falhar('/plataforma/assinaturas', 'reason_required');
+
+  const resultado = await cancelarAssinaturaNaApi(token, texto(form, 'tenantId'), motivo);
+  if (!resultado.ok) return falhar('/plataforma/assinaturas', resultado);
+  redirect('/plataforma/assinaturas?feito=cancelamento');
+}
+
+/**
+ * Reativar, e ela é a saída que faltava.
+ *
+ * Sem ela, cancelar por engano deixava a barbearia sem plano para sempre — o
+ * estado sem saída que a §6 pergunta 3 descreve, com o mecanismo pronto desde o
+ * bloco 27 e nenhum botão.
+ */
+export async function acaoReativarAssinatura(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const resultado = await reativarAssinaturaNaApi(token, texto(form, 'tenantId'));
+  if (!resultado.ok) return falhar('/plataforma/assinaturas', resultado);
+  redirect('/plataforma/assinaturas?feito=reativacao');
+}
+
+/**
+ * Trocar o cartão da barbearia.
+ *
+ * O que entra é o **token do adquirente** e os quatro últimos — nunca o número
+ * do cartão, que não tem coluna neste schema e tem invariante que reprova quem
+ * criar uma. É o suporte digitando o que o adquirente devolveu, que é
+ * exatamente o que `/admin/plano` manda o dono pedir: *"para trocar o cartão,
+ * fale com o suporte"*.
+ */
+export async function acaoSalvarCobranca(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const final = texto(form, 'final');
+  if (!/^[0-9]{4}$/.test(final)) return falhar('/plataforma/assinaturas', 'invalid_request');
+
+  const resultado = await salvarCobrancaNaApi(token, texto(form, 'tenantId'), {
+    pspCustomerId: texto(form, 'pspCustomerId'),
+    pspMethodId: texto(form, 'pspMethodId'),
+    bandeira: texto(form, 'bandeira'),
+    final,
+    validadeMes: Number(texto(form, 'validadeMes')),
+    validadeAno: Number(texto(form, 'validadeAno')),
+  });
+  if (!resultado.ok) return falhar('/plataforma/assinaturas', resultado);
+  redirect('/plataforma/assinaturas?feito=cobranca');
 }

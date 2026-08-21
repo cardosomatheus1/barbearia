@@ -18,7 +18,15 @@ import { emitirRateio } from './cobranca.js';
  * e responder em que pé a conta está.
  */
 
-export type EstadoDaAssinatura = 'trialing' | 'active' | 'past_due' | 'canceled';
+/**
+ * Uma declaração só, do domínio (bloco 128).
+ *
+ * A união mora em `packages/core` porque a tela da plataforma precisa dela e
+ * `apps/web` não depende deste pacote. Aqui fica o nome de sempre, reexportado.
+ */
+import type { EstadoDaAssinaturaDaPlataforma } from '@barbearia/core';
+
+export type EstadoDaAssinatura = EstadoDaAssinaturaDaPlataforma;
 
 export interface Assinatura {
   readonly tenantId: string;

@@ -14,6 +14,16 @@ import { diaISO } from '../common/data.js';
  */
 export const diaSchema = z.object({
   periodo: z.enum(['dia', '7d', 'mes']).optional(),
+  /**
+   * A janela em dias corridos, que é a do assistente (bloco 128).
+   *
+   * Ela existe para o link de "conferir na tela" levar ao **mesmo número**: o
+   * assistente responde sobre 1, 2, 7, 15, 30, 90 ou 365 dias, e o painel só
+   * tinha Hoje / 7 dias / mês-calendário. O teto é o mesmo do assistente — um
+   * ano —, e o piso é um dia: um `?dias=0` viraria janela vazia, e um negativo,
+   * janela invertida que o Postgres devolve como zero linhas em silêncio.
+   */
+  dias: z.coerce.number().int().min(1).max(365).optional(),
   dia: diaISO
     .refine((valor) => {
       const [ano, mes, dia] = valor.split('-').map(Number);

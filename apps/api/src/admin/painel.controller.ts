@@ -21,6 +21,21 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { diaSchema, trilhaSchema } from './painel.schemas.js';
+
+/**
+ * O período pedido, com `dias` vencendo o nome.
+ *
+ * Os dois chegam pela mesma consulta e não se contradizem por acidente: quem
+ * manda `dias` é o link do assistente, que sabe exatamente quantos dias a
+ * resposta cobriu. O nome é o do seletor da tela.
+ */
+function periodoPedido(query: {
+  readonly periodo?: 'dia' | '7d' | 'mes';
+  readonly dias?: number;
+}): PeriodoPainel | undefined {
+  if (query.dias !== undefined) return { dias: query.dias };
+  return query.periodo;
+}
 import { unidadeDoBalcao } from './unidade.js';
 
 /**
@@ -78,11 +93,13 @@ export class PainelController {
   @Get('dashboard')
   async operacional(
     @Staff() staff: AuthenticatedStaff,
-    @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string; periodo?: PeriodoPainel },
+    @Query(new ZodValidationPipe(diaSchema))
+    query: { dia?: string; periodo?: 'dia' | '7d' | 'mes'; dias?: number },
   ) {
     const { dia, locationId } = await this.diaDaCasa(staff, query.dia);
-    return query.periodo
-      ? painelOperacionalDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo: query.periodo })
+    const periodo = periodoPedido(query);
+    return periodo
+      ? painelOperacionalDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo })
       : painelOperacional({ tenantId: staff.tenantId, locationId, dia });
   }
 
@@ -91,11 +108,13 @@ export class PainelController {
   @Get('dashboard/revenue')
   async dinheiro(
     @Staff() staff: AuthenticatedStaff,
-    @Query(new ZodValidationPipe(diaSchema)) query: { dia?: string; periodo?: PeriodoPainel },
+    @Query(new ZodValidationPipe(diaSchema))
+    query: { dia?: string; periodo?: 'dia' | '7d' | 'mes'; dias?: number },
   ) {
     const { dia, locationId } = await this.diaDaCasa(staff, query.dia);
-    return query.periodo
-      ? painelDeDinheiroDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo: query.periodo })
+    const periodo = periodoPedido(query);
+    return periodo
+      ? painelDeDinheiroDoPeriodo({ tenantId: staff.tenantId, locationId, dia, periodo })
       : painelDeDinheiro({ tenantId: staff.tenantId, locationId, dia });
   }
 

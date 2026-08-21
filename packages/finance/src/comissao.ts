@@ -1175,10 +1175,38 @@ export async function simulacaoDaAssinatura(params: {
        ORDER BY e.earned_on, e.id
     `;
 
+    /**
+     * O fato, ao lado do lançamento — e é a diferença entre os dois que a tela
+     * precisa dizer.
+     *
+     * `commission_entries` só ganha linha quando o item tem profissional **e**
+     * uma regra casa. A barbearia sem regra cadastrada via "ainda não há o que
+     * comparar" ao lado da tabela de rentabilidade que listava dezesseis
+     * assinantes atendidos no mesmo período: duas telas do mesmo painel
+     * discordando sobre o mesmo fato.
+     *
+     * Duas agregações na mesma transação, sem laço com ida ao banco dentro.
+     */
+    const [usos] = await tx.$queryRaw<{ quantos: bigint }[]>`
+      -- O business_day do proprio uso, e nao o da venda: o uso pode vir de um
+      -- agendamento sem comanda, e juntar com orders descartaria justamente o
+      -- atendimento que ainda nao foi cobrado.
+      SELECT count(*) AS quantos
+        FROM club_uses
+       WHERE business_day >= ${params.de}::date
+         AND business_day <= ${params.ate}::date
+    `;
+
+    const [regras] = await tx.$queryRaw<{ quantas: bigint }[]>`
+      SELECT count(*) AS quantas FROM commission_rules
+    `;
+
     return simularModelosDaAssinatura({
       lancamentos: linhas.map(paraLancamento),
       tetoBps: modelo.tetoBps,
       emUso: modelo.modo,
+      usosNoPeriodo: Number(usos?.quantos ?? 0),
+      temRegraDeComissao: Number(regras?.quantas ?? 0) > 0,
     });
   });
 }

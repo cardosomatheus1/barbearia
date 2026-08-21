@@ -31,6 +31,11 @@ const JOAO = 'cccccccc-0000-0000-0000-000000000002';
 const STAFF = 'ffffffff-0000-0000-0000-000000000001';
 
 let admin: PrismaClient;
+
+/** Um dia ISO N dias antes de outro, para as asserções de janela. */
+function diasAntes(dia: string, quantos: number): string {
+  return new Date(Date.parse(`${dia}T00:00:00Z`) - quantos * 86_400_000).toISOString().slice(0, 10);
+}
 const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 
 const operador = { staffId: STAFF, staffName: 'Matheus Dono' };
@@ -399,5 +404,44 @@ describeIfDb('painel do proprietário', () => {
       tenantId: RIVAL, locationId: LOCATION, dia: SABADO,
     });
     expect(cruzado.agendamentos.valor).toBe(0);
+  });
+
+  it('a janela em dias é a do assistente, e o anterior tem o mesmo tamanho', async () => {
+    /**
+     * O defeito do bloco 128.
+     *
+     * O assistente responde sobre 1, 2, 7, 15, 30, 90 ou 365 dias corridos, e o
+     * painel só tinha Hoje / 7 dias / mês-calendário — então "faturei X nos
+     * últimos 30 dias" levava a uma tela que dizia outro número, e o dono
+     * clicava para confiar e saía desconfiando dos dois.
+     *
+     * O que se prova aqui é a **janela**: trinta dias terminando no dia pedido,
+     * e o período anterior com o mesmo tamanho — comparar contra janela de outro
+     * tamanho faria a variação ser só a diferença de duração.
+     */
+    const trinta = await painelDeDinheiroDoPeriodo({
+      tenantId: TENANT, locationId: LOCATION, dia: SABADO, periodo: { dias: 30 },
+    });
+
+    expect(trinta.fim).toBe(SABADO);
+    expect(trinta.inicio).toBe(diasAntes(SABADO, 29));
+    // `comparadoCom` é o **início** da janela anterior, e ela tem o mesmo
+    // tamanho: começa 59 dias antes e termina 30 dias antes.
+    expect(trinta.comparadoCom).toBe(diasAntes(SABADO, 59));
+
+    // Um dia é a janela mínima, e ela é o próprio dia — não o dia anterior.
+    const umDia = await painelDeDinheiroDoPeriodo({
+      tenantId: TENANT, locationId: LOCATION, dia: SABADO, periodo: { dias: 1 },
+    });
+    expect(umDia.inicio).toBe(SABADO);
+    expect(umDia.fim).toBe(SABADO);
+
+    // E a operação enxerga a mesma janela: as duas metades do painel não podem
+    // discordar sobre o período que estão mostrando.
+    const operacao = await painelOperacionalDoPeriodo({
+      tenantId: TENANT, locationId: LOCATION, dia: SABADO, periodo: { dias: 30 },
+    });
+    expect(operacao.inicio).toBe(trinta.inicio);
+    expect(operacao.fim).toBe(trinta.fim);
   });
 });

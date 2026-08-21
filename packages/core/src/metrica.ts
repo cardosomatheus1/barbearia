@@ -371,3 +371,37 @@ export function formatarMetrica(valor: number | null, unidade: UnidadeDaMetrica)
       return String(Math.round(valor));
   }
 }
+
+/**
+ * As telas que sabem receber a janela do assistente em `?dias=`.
+ *
+ * Uma só hoje, e é o Painel — as outras (`/admin/agenda`, `/admin/estoque`,
+ * `/admin/clube`) mostram o estado de agora, não um recorte de período. Escrever
+ * a lista **aqui**, ao lado de `tela`, é o que impede a segunda: quem ensinar
+ * outra tela a ler `dias` acrescenta uma linha neste arquivo, e não descobre a
+ * regra dentro de um componente.
+ */
+const TELAS_COM_JANELA: readonly string[] = ['/admin/painel'];
+
+/**
+ * Para onde vai o "Conferir na tela", **com o período junto**.
+ *
+ * O assistente responde sobre sete janelas — 1, 2, 7, 15, 30, 90 e 365 dias — e
+ * o painel só tinha Hoje / 7 dias / mês-calendário. "Faturei R$ 33.297" levava
+ * a uma tela que dizia R$ 22.947, e o comentário do próprio catálogo explica por
+ * que isso é grave: o link existe para que *"o dono clica, vê o mesmo número na
+ * tela de verdade, e passa a confiar"*.
+ *
+ * A janela é calculada de `de` e `ate` porque são eles que a resposta imprime —
+ * derivar do que foi dito é o que garante que o link e a frase falem do mesmo
+ * período. Data malformada devolve a tela sem parâmetro: um link quebrado é pior
+ * que um link sem recorte.
+ */
+export function linkDaMetrica(tela: string, de: string, ate: string): string {
+  if (!TELAS_COM_JANELA.includes(tela)) return tela;
+  const inicio = Date.parse(`${de}T00:00:00Z`);
+  const fim = Date.parse(`${ate}T00:00:00Z`);
+  if (!Number.isFinite(inicio) || !Number.isFinite(fim) || fim < inicio) return tela;
+  const dias = Math.round((fim - inicio) / 86_400_000) + 1;
+  return dias >= 1 && dias <= 365 ? `${tela}?dias=${dias}` : tela;
+}

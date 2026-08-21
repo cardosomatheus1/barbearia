@@ -663,12 +663,9 @@ export default async function ClubePage({ searchParams }: Props) {
         <section className="painel__grupo">
           <h2 className="rotulo">Quanto o clube rende</h2>
           <p className="painel__sub">
-            {fraseDaSimulacao({
-              receitaCents: simulacao.receitaCents,
-              atendimentos: simulacao.atendimentos,
-              emUso: simulacao.emUso,
-              modelos: simulacao.modelos,
-            })}
+            {/* O objeto inteiro, e não campo a campo: a cópia à mão era o que
+                deixava um campo novo do domínio para trás sem nada reclamar. */}
+            {fraseDaSimulacao(simulacao)}
           </p>
 
           {/*
@@ -679,12 +676,64 @@ export default async function ClubePage({ searchParams }: Props) {
           */}
           {simulacao.atendimentos === 0 ? (
             <div className="ui-card vazio">
-              <p className="vazio__titulo">Ainda não há o que comparar</p>
-              <p className="vazio__saida">
-                A comparação aparece quando um assinante for atendido e a comanda fechar com o
-                plano como forma de pagamento. Até lá, a comissão do clube segue o modelo em uso:{' '}
-                {ROTULO_DO_MODO_DA_ASSINATURA[simulacao.emUso].toLowerCase()}.
-              </p>
+              {/*
+                Três estados, e não um.
+
+                A versão anterior dizia sempre "a comparação aparece quando um
+                assinante for atendido" — e a tabela de rentabilidade, na mesma
+                tela, listava dezesseis assinantes atendidos no mesmo período.
+                Duas metades do mesmo painel discordando sobre o mesmo fato
+                (§6, pergunta 6), e a que mentia era a que o dono lê **antes de
+                escolher o modelo**, que é a decisão que a SPEC §3.4 quer
+                informada.
+
+                O que separa os casos é a distância entre o uso (o fato, em
+                `club_uses`) e o lançamento (que só existe com profissional no
+                item e regra que case).
+              */}
+              {simulacao.usosNoPeriodo === 0 ? (
+                <>
+                  <p className="vazio__titulo">Nenhum assinante foi atendido no período</p>
+                  <p className="vazio__saida">
+                    A comparação aparece quando um assinante for atendido e a comanda fechar com o
+                    plano como forma de pagamento. Até lá, a comissão do clube segue o modelo em
+                    uso: {ROTULO_DO_MODO_DA_ASSINATURA[simulacao.emUso].toLowerCase()}.
+                  </p>
+                </>
+              ) : !simulacao.temRegraDeComissao ? (
+                <>
+                  <p className="vazio__titulo">
+                    {simulacao.usosNoPeriodo}{' '}
+                    {simulacao.usosNoPeriodo === 1 ? 'atendimento' : 'atendimentos'} de assinante,
+                    e nenhuma regra de comissão
+                  </p>
+                  <p className="vazio__saida">
+                    Os três modelos repartem a mensalidade entre quem atendeu — e sem regra
+                    cadastrada não há comissão nenhuma a repartir, então os três dariam zero.{' '}
+                    <a className="lacuna__link" href="/admin/comissao/regras">
+                      Cadastre a regra em Comissões
+                    </a>{' '}
+                    e a comparação aparece aqui.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="vazio__titulo">
+                    {simulacao.usosNoPeriodo}{' '}
+                    {simulacao.usosNoPeriodo === 1 ? 'atendimento' : 'atendimentos'} de assinante
+                    sem comissão lançada
+                  </p>
+                  <p className="vazio__saida">
+                    Há regra cadastrada, então o que falta é o profissional no item da comanda: a
+                    comissão é de quem atendeu, e sem esse vínculo não há a quem lançar. Confira as
+                    comandas do período em{' '}
+                    <a className="lacuna__link" href="/admin/comissao">
+                      Comissões
+                    </a>
+                    .
+                  </p>
+                </>
+              )}
             </div>
           ) : null}
 

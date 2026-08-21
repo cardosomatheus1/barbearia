@@ -3016,6 +3016,7 @@ async function main() {
           { nome: 'plataforma — trilha', url: '/plataforma/trilha', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — segurança', url: '/plataforma/seguranca', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
           { nome: 'plataforma — cobrança', url: '/plataforma/faturas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
+          { nome: 'plataforma — assinaturas', url: '/plataforma/assinaturas', cookie: { nome: 'plataforma', valor: tokenPlataforma, caminho: '/plataforma' } },
         ]
       : []),
     { nome: 'onboarding', url: '/admin/onboarding', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
