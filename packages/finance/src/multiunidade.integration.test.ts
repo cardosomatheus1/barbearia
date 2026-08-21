@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
+import { TODAS_AS_UNIDADES } from '@barbearia/core';
 import { assinar } from './assinatura.js';
 import { lancarMovimento, produtos, salvarProduto } from './estoque.js';
 import { dreDoPeriodo } from './dre.js';
@@ -42,6 +43,27 @@ async function exec(sql: string): Promise<void> {
     await admin.$executeRawUnsafe(parte);
   }
 }
+
+/**
+ * Uma venda de serviço já paga, numa loja — pelo SQL, como o clube acima.
+ *
+ * Abrir caixa, comanda e fechar pelo domínio exercitaria o balcão, que já tem
+ * suíte própria; aqui o que se prova é o **recorte por unidade** do relatório,
+ * e a semente direta é a que deixa o teste sobre isso e não sobre o caminho.
+ */
+const venderNaLoja = (locationId: string, valorCents: number) =>
+  exec(`
+    WITH nova AS (
+      INSERT INTO orders (tenant_id, location_id, status, subtotal_cents, total_cents,
+                          business_day, closed_at)
+      VALUES ('${TENANT}', '${locationId}', 'paid', ${valorCents}, ${valorCents},
+              '${HOJE}', '${HOJE}T14:00:00Z')
+      RETURNING id
+    )
+    INSERT INTO order_items (tenant_id, order_id, kind, description, quantity,
+                             unit_price_cents, position)
+    SELECT '${TENANT}', id, 'service', 'Corte', 1, ${valorCents}, 0 FROM nova
+  `);
 
 const novoProduto = () =>
   salvarProduto({
@@ -380,14 +402,49 @@ describeIfDb('transferência de estoque entre unidades', () => {
     `);
 
     const daFilial = await dreDoPeriodo({
-      tenantId: TENANT, locationId: FILIAL, de: '2026-11-01', ate: '2026-11-30',
+      tenantId: TENANT, unidade: FILIAL, de: '2026-11-01', ate: '2026-11-30',
     });
     const daMatriz = await dreDoPeriodo({
-      tenantId: TENANT, locationId: MATRIZ, de: '2026-11-01', ate: '2026-11-30',
+      tenantId: TENANT, unidade: MATRIZ, de: '2026-11-01', ate: '2026-11-30',
     });
 
     expect(daFilial.atual.receitaAssinaturasCents).toBe(9900);
     expect(daMatriz.atual.receitaAssinaturasCents).toBe(0);
+
+    /**
+     * E o consolidado soma as duas (bloco 129).
+     *
+     * `TODAS_AS_UNIDADES` existia em `packages/core` desde o bloco 58, com teste
+     * próprio e o cabeçalho prometendo *"o relatório é o oposto: o dono quer as
+     * duas juntas"* — e **nenhuma tela o chamava**. O dono de uma rede trocava
+     * de loja para ver cada uma e somava de cabeça.
+     */
+    const daRede = await dreDoPeriodo({
+      tenantId: TENANT, unidade: TODAS_AS_UNIDADES, de: '2026-11-01', ate: '2026-11-30',
+    });
+    expect(daRede.atual.receitaAssinaturasCents).toBe(9900);
+  });
+
+  it('o consolidado soma a receita de serviço das duas lojas', async () => {
+    /**
+     * Sobre venda, que é a linha que o dono olha primeiro — e o teste é de soma,
+     * não de pertinência: uma consulta que esquecesse de tirar o filtro de uma
+     * das dez linhas passaria por um teste que só conferisse "maior que a de uma
+     * loja".
+     */
+    await venderNaLoja(MATRIZ, 5000);
+    await venderNaLoja(FILIAL, 3000);
+
+    const janela = { tenantId: TENANT, de: '2026-11-01', ate: '2026-11-30' };
+    const matriz = await dreDoPeriodo({ ...janela, unidade: MATRIZ });
+    const filial = await dreDoPeriodo({ ...janela, unidade: FILIAL });
+    const rede = await dreDoPeriodo({ ...janela, unidade: TODAS_AS_UNIDADES });
+
+    expect(matriz.atual.receitaServicosCents).toBe(5000);
+    expect(filial.atual.receitaServicosCents).toBe(3000);
+    expect(rede.atual.receitaServicosCents).toBe(
+      matriz.atual.receitaServicosCents + filial.atual.receitaServicosCents,
+    );
   });
 
   it('a trilha registra a transferência dentro da transação que a criou', async () => {

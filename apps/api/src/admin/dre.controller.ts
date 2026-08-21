@@ -26,7 +26,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
-import { unidadeDoBalcao } from './unidade.js';
+import { unidadeDoBalcao, unidadeDoRelatorio } from './unidade.js';
 import {
   cancelamentoDeValeSchema,
   estornoSchema,
@@ -102,13 +102,17 @@ export class DreController {
   @Get('dre')
   async dre(
     @Staff() staff: AuthenticatedStaff,
-    @Query(new ZodValidationPipe(periodoDoDreSchema)) query: { de?: string; ate?: string },
+    @Query(new ZodValidationPipe(periodoDoDreSchema))
+    query: { de?: string; ate?: string; unidade?: string },
   ) {
+    // O dia padrão continua saindo da loja **de operação**: "este mês" é o mês
+    // da unidade em que a pessoa está, e no consolidado de uma rede que cruza
+    // fusos alguma delas tem que decidir — a do balcão é a que ela reconhece.
     const local = await this.unidade(staff);
     const padrao = mesDaUnidade(local.today);
     return dreDoPeriodo({
       tenantId: staff.tenantId,
-      locationId: local.id,
+      unidade: await unidadeDoRelatorio(staff, query.unidade),
       de: query.de ?? padrao.de,
       ate: query.ate ?? padrao.ate,
     });

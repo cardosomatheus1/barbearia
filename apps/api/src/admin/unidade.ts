@@ -1,6 +1,11 @@
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { unidadeDaSessao, type UnidadeAtual } from '@barbearia/scheduling';
-import { EXPLICACAO_DA_SELECAO, type UnidadeNaSelecao } from '@barbearia/core';
+import {
+  EXPLICACAO_DA_SELECAO,
+  TODAS_AS_UNIDADES,
+  type EscolhaDeUnidade,
+  type UnidadeNaSelecao,
+} from '@barbearia/core';
 import { DomainError } from '../common/errors.js';
 
 /**
@@ -69,4 +74,55 @@ export async function selecaoDoBalcao(staff: AuthenticatedStaff): Promise<{
     };
   }
   return { atual: resolvida.unidade, disponiveis: minhas, falha: null };
+}
+
+/**
+ * A unidade que o **relatório** vai ler: uma loja, ou a rede inteira.
+ *
+ * ## Por que o consolidado passa por aqui, e não pelo seletor do casco
+ *
+ * O casco carrega a unidade de **operação** — caixa, comanda e agenda são de
+ * uma loja, e somá-las faria a recepção fechar o caixa da loja errada. É o que
+ * o cabeçalho de `multiunidade.ts` diz desde o bloco 58: `TODAS` é valor
+ * legítimo da seleção *de leitura*, e nunca da de operação. Um terceiro estado
+ * no seletor do casco valeria para as vinte telas do painel de uma vez, e a
+ * primeira a somar duas gavetas seria um defeito de dinheiro.
+ *
+ * ## Quem pode pedir a rede
+ *
+ * Só quem enxerga **todas** as lojas. `staff_locations` vazio significa todas —
+ * é a decisão do bloco 58, e negar por omissão trancaria a equipe no dia da
+ * migração —, então o gerente escopado a uma filial pede o consolidado e recebe
+ * a filial dele. Não é erro: ele está vendo tudo o que pode ver, e recusar
+ * mandaria alguém procurar uma tela que ele não tem como abrir.
+ */
+export async function unidadeDoRelatorio(
+  staff: AuthenticatedStaff,
+  pedida: string | undefined,
+): Promise<EscolhaDeUnidade> {
+  if (pedida !== TODAS_AS_UNIDADES) {
+    // Sem pedido, ou com o id de uma loja: é a resolução de sempre, com a mesma
+    // conferência de autorização — o id vem da consulta e é entrada externa.
+    const atual = await unidadeDaSessao({
+      tenantId: staff.tenantId,
+      escolhida: pedida ?? staff.unidadeEscolhidaId,
+      autorizadas: staff.unidadesAutorizadas,
+    });
+    if ('falha' in atual) throw semUnidade(atual.falha);
+    return atual.unidade.id;
+  }
+
+  if (staff.unidadesAutorizadas.length === 0) return TODAS_AS_UNIDADES;
+
+  const todas = await unidadeDaSessao({
+    tenantId: staff.tenantId,
+    escolhida: null,
+    autorizadas: [],
+  });
+  const abertas = todas.disponiveis.filter((u) => u.ativa).map((u) => u.id);
+  const veTodas = abertas.every((id) => staff.unidadesAutorizadas.includes(id));
+  if (veTodas) return TODAS_AS_UNIDADES;
+
+  // Escopado: o consolidado dele é a loja dele. Cai na resolução de sempre.
+  return unidadeDoBalcao(staff).then((u) => u.id);
 }

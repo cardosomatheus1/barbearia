@@ -143,12 +143,29 @@ export class SessionController {
    * para todo mundo, para sempre. Campo que o motor aceita e ninguém preenche,
    * e o sintoma era silêncio.
    */
+  /**
+   * As decisões opcionais do titular, todas (bloco 129).
+   *
+   * Devolvia só `marketing`, e por isso a tela de autoatendimento só sabia
+   * mexer nela: quem quisesse tirar a própria foto do Instagram da barbearia
+   * dependia de pedir ao balcão, que depende de alguém lembrar. Meia tela de
+   * consentimento é pior que nenhuma — ela ensina que ali só dá para revogar
+   * uma coisa.
+   *
+   * `service` fica de fora do que se lê **e** do que se escreve, pela mesma
+   * razão: não é consentimento.
+   */
   @Get('consentimento')
   async ler(@TenantId() tenantId: string, @Customer() customer: AuthenticatedCustomer) {
     const { atuais } = await consentimentosDoCliente(tenantId, customer.customerId);
+    const decisao = (f: 'marketing' | 'photos' | 'photos_public') => ({
+      concedido: atuais[f]?.concedido ?? false,
+      decididoEm: atuais[f]?.decididoEm?.toISOString() ?? null,
+    });
     return {
-      marketing: atuais.marketing?.concedido ?? false,
-      decididoEm: atuais.marketing?.decididoEm?.toISOString() ?? null,
+      marketing: decisao('marketing'),
+      photos: decisao('photos'),
+      photos_public: decisao('photos_public'),
     };
   }
 
@@ -157,20 +174,24 @@ export class SessionController {
     @TenantId() tenantId: string,
     @Customer() customer: AuthenticatedCustomer,
     @Body(new ZodValidationPipe(consentimentoDoTitularSchema))
-    corpo: { marketing: boolean; versaoDoTexto: string },
+    corpo: { finalidade: 'marketing' | 'photos' | 'photos_public'; concedido: boolean; versaoDoTexto: string },
     @Req() requisicao: Request,
   ) {
     const decisao = await registrarConsentimento({
       tenantId,
       customerId: customer.customerId,
-      finalidade: 'marketing',
-      concedido: corpo.marketing,
+      finalidade: corpo.finalidade,
+      concedido: corpo.concedido,
       versaoDoTexto: corpo.versaoDoTexto,
       // Sem `registradoPor`: foi o próprio titular. A distinção fica gravada e
       // é o que responde "quem clicou?" numa contestação.
       ip: requisicao.ip ?? null,
     });
-    return { marketing: decisao.concedido, decididoEm: decisao.decididoEm.toISOString() };
+    return {
+      finalidade: decisao.finalidade,
+      concedido: decisao.concedido,
+      decididoEm: decisao.decididoEm.toISOString(),
+    };
   }
 
   /**

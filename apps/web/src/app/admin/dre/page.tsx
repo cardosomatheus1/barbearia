@@ -1,7 +1,13 @@
 import { componentesDo } from '@barbearia/core';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { dreNaApi, type LinhaDoDre, type VariacaoDaLinha } from '@/lib/admin-api';
+import {
+  dreNaApi,
+  unidadesNaApi,
+  type LinhaDoDre,
+  type VariacaoDaLinha,
+} from '@/lib/admin-api';
+import { TODAS_AS_UNIDADES } from '@barbearia/core';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
@@ -115,8 +121,30 @@ export default async function DrePage({ searchParams }: Props) {
    */
   const de = first(query['de']);
   const ate = first(query['ate']);
+  /**
+   * A loja do relatório, que **não** é a do balcão (bloco 129).
+   *
+   * O casco carrega a unidade de operação — caixa, comanda e agenda são de uma
+   * loja. O relatório é o oposto, e é o que `multiunidade.ts` diz desde o bloco
+   * 58: *"o dono quer as duas juntas"*. `TODAS_AS_UNIDADES` existia lá, com
+   * teste próprio, e **nenhuma tela o chamava**: o dono de uma rede trocava de
+   * loja para ver cada uma e somava de cabeça.
+   *
+   * A escolha vive na tela e não no casco de propósito: um terceiro estado no
+   * seletor global valeria para as vinte telas do painel de uma vez, e a
+   * primeira a somar duas gavetas seria um defeito de dinheiro.
+   */
+  const unidadePedida = first(query['unidade']);
 
-  const dre = await dreNaApi(token, de, ate);
+  const [dre, lojas] = await Promise.all([
+    dreNaApi(token, de, ate, unidadePedida),
+    unidadesNaApi(token),
+  ]);
+  const disponiveis = lojas.ok ? lojas.dados.disponiveis : [];
+  // A escolha só aparece numa rede: numa barbearia de uma loja só ela seria um
+  // seletor de uma opção, que é uma frase com cara de decisão.
+  const ehRede = disponiveis.length > 1;
+  const escolhida = unidadePedida ?? (lojas.ok ? (lojas.dados.atual?.id ?? '') : '');
   const erro = first(query['erro']);
 
   const topo = (
@@ -197,6 +225,29 @@ export default async function DrePage({ searchParams }: Props) {
             type="date"
           />
         </div>
+        {ehRede ? (
+          <div className="ui-field">
+            <label className="ui-field__label" htmlFor="unidade">
+              Loja
+            </label>
+            <select
+              className="ui-field__input"
+              defaultValue={escolhida}
+              id="unidade"
+              name="unidade"
+            >
+              {/* O consolidado primeiro: numa rede, "quanto a empresa deu" é a
+                  pergunta que se faz antes de "e cada loja?". */}
+              <option value={TODAS_AS_UNIDADES}>Todas as lojas</option>
+              {disponiveis.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
         <button className="ui-button ui-button--secondary" type="submit">
           Ver período
         </button>

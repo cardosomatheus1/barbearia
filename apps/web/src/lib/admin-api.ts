@@ -3138,13 +3138,18 @@ export interface DreNaTela {
   resultado: VariacaoDaLinha;
 }
 
-export const dreNaApi = (token: string, de?: string, ate?: string) =>
-  chamar<DreNaTela>(
-    'GET',
-    de && ate ? `/v1/admin/dre?de=${de}&ate=${ate}` : '/v1/admin/dre',
-    undefined,
-    token,
-  );
+export const dreNaApi = (token: string, de?: string, ate?: string, unidade?: string) => {
+  const busca = new URLSearchParams();
+  if (de && ate) {
+    busca.set('de', de);
+    busca.set('ate', ate);
+  }
+  // `todas` é o consolidado da rede (bloco 129). Quem confere se esta conta pode
+  // pedi-lo é o servidor, contra as unidades que ela enxerga — a tela só pede.
+  if (unidade) busca.set('unidade', unidade);
+  const query = busca.toString();
+  return chamar<DreNaTela>('GET', `/v1/admin/dre${query ? `?${query}` : ''}`, undefined, token);
+};
 
 export interface ValeNaTela {
   id: string;

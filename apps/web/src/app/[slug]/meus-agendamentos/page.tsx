@@ -15,14 +15,15 @@ import {
 import { ROTULO_DO_ESCOPO, saldoPorExtenso } from '@barbearia/core';
 import { humanInstant } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
-import { TEXTO_DO_CONSENTIMENTO } from '@/lib/politica';
+import { CONSENTIMENTOS_OPCIONAIS } from '@/lib/politica';
+import type { ConsentimentoDoTitular } from '@/lib/api';
 import {
   aceitarVaga,
   avaliar,
   cancelar,
   cancelarPlano,
   manterPlano,
-  decidirMarketing,
+  decidirConsentimentoDoTitular,
   pedirDados,
   sair,
   sairDaEspera,
@@ -129,30 +130,62 @@ function diaCurto(iso: string): string {
  * com botão de salvar é onde a pessoa marca e vai embora achando que salvou. O
  * botão diz o que vai acontecer e acontece no clique.
  */
-function Promocao({
+function Consentimentos({
   slug,
-  aceita,
+  decisoes,
 }: {
   readonly slug: string;
-  readonly aceita: boolean;
+  readonly decisoes: ConsentimentoDoTitular;
 }) {
   return (
     <section className="meus__consentimento">
-      <h2 className="meus__secao">Promoções</h2>
-      <p className="meus__consentimento-texto">{TEXTO_DO_CONSENTIMENTO}</p>
+      <h2 className="meus__secao">O que você autoriza</h2>
+      {/*
+        As três, e não só a de promoção (bloco 129).
+
+        A tela mexia em `marketing` e nada mais: quem quisesse tirar a própria
+        foto do Instagram da barbearia dependia de pedir ao balcão, que depende
+        de alguém lembrar. Meia tela de consentimento é pior que nenhuma — ela
+        ensina que ali só dá para revogar uma coisa, e o titular para de
+        procurar. As três são separadas porque a LGPD as separa: quem autoriza
+        a foto na ficha não autorizou a foto no Instagram.
+      */}
       <p className="meus__consentimento-estado">
-        {aceita ? 'Você aceita receber.' : 'Você não recebe promoção desta barbearia.'}{' '}
-        {/* A frase existe porque a dúvida é real e faz gente recusar por medo de
-            perder o lembrete do próprio corte. */}
-        O aviso do seu horário chega de qualquer jeito — ele é parte do serviço.
+        Cada uma é uma decisão sua, e dá para mudar quando quiser. O aviso do seu
+        horário chega de qualquer jeito — ele é parte do serviço, não é promoção.
       </p>
-      <form action={decidirMarketing}>
-        <input name="slug" type="hidden" value={slug} />
-        <input name="marketing" type="hidden" value={aceita ? '0' : '1'} />
-        <button className="ui-button ui-button--ghost meus__consentimento-botao" type="submit">
-          {aceita ? 'Parar de receber promoções' : 'Quero receber promoções'}
-        </button>
-      </form>
+
+      {CONSENTIMENTOS_OPCIONAIS.map((item) => {
+        const aceita = decisoes[item.finalidade].concedido;
+        return (
+          <div className="meus__consentimento-item" key={item.finalidade}>
+            <h3 className="meus__consentimento-titulo">{item.titulo}</h3>
+            <p className="meus__consentimento-texto">{item.texto}</p>
+            <p className="meus__consentimento-estado">
+              {aceita ? 'Você autorizou.' : 'Você não autorizou.'}
+            </p>
+            {/*
+              Botão que faz, e não caixa que precisa de "Salvar" ao lado: um
+              formulário de um campo com botão de salvar é onde a pessoa marca e
+              vai embora achando que salvou.
+            */}
+            <form action={decidirConsentimentoDoTitular}>
+              <input name="slug" type="hidden" value={slug} />
+              <input name="finalidade" type="hidden" value={item.finalidade} />
+              <input name="concedido" type="hidden" value={aceita ? '0' : '1'} />
+              <button
+                className="ui-button ui-button--ghost meus__consentimento-botao"
+                type="submit"
+              >
+                {/* Sem `toLowerCase()`: ele transformava "Promoções por
+                    WhatsApp" em "promoções por whatsapp", e nome de marca em
+                    caixa baixa lê como erro de digitação na tela do cliente. */}
+                {aceita ? `Não quero mais: ${item.titulo}` : `Autorizar: ${item.titulo}`}
+              </button>
+            </form>
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -632,7 +665,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
         </p>
       </section>
 
-      {consentimento ? <Promocao aceita={consentimento.marketing} slug={slug} /> : null}
+      {consentimento ? <Consentimentos decisoes={consentimento} slug={slug} /> : null}
       <MeusDados encarregado={profile.encarregado} nome={profile.name} slug={slug} />
     </main>
   );

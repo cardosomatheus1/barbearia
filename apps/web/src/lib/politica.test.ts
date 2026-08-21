@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONSENTIMENTOS_DO_BALCAO,
+  CONSENTIMENTOS_OPCIONAIS,
   TEXTO_DO_CONSENTIMENTO,
   VERSAO_DO_CONSENTIMENTO,
   versaoDoConsentimento,
@@ -17,7 +17,7 @@ import {
 
 describe('a versão do texto de consentimento', () => {
   it('é diferente para cada finalidade, porque o texto é diferente', () => {
-    const versoes = CONSENTIMENTOS_DO_BALCAO.map((c) => c.versao);
+    const versoes = CONSENTIMENTOS_OPCIONAIS.map((c) => c.versao);
     expect(new Set(versoes).size).toBe(versoes.length);
   });
 
@@ -41,10 +41,10 @@ describe('a versão do texto de consentimento', () => {
   });
 
   it('mantém texto e versão juntos: nenhum aceite fica sem texto à vista', () => {
-    for (const item of CONSENTIMENTOS_DO_BALCAO) {
+    for (const item of CONSENTIMENTOS_OPCIONAIS) {
       expect(item.texto.length).toBeGreaterThan(20);
       expect(item.versao.length).toBeGreaterThan(0);
     }
-    expect(CONSENTIMENTOS_DO_BALCAO[0]?.texto).toBe(TEXTO_DO_CONSENTIMENTO);
+    expect(CONSENTIMENTOS_OPCIONAIS[0]?.texto).toBe(TEXTO_DO_CONSENTIMENTO);
   });
 });

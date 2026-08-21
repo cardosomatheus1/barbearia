@@ -14,7 +14,7 @@ import {
   cancelarMeuPlano,
   manterMeuPlano,
 } from '@/lib/api';
-import { VERSAO_DO_CONSENTIMENTO } from '@/lib/politica';
+import { ehFinalidadeOpcional, versaoDoConsentimento } from '@/lib/politica';
 import { apagarSessao, lerSessao } from '@/lib/sessao';
 
 /**
@@ -91,15 +91,29 @@ export async function sair(form: FormData): Promise<void> {
  * cliente que editasse o campo escondido gravaria um consentimento com a versão
  * que ele quisesse, e a prova viraria o que o navegador dele digitou.
  */
-export async function decidirMarketing(form: FormData): Promise<void> {
+export async function decidirConsentimentoDoTitular(form: FormData): Promise<void> {
   const slug = String(form.get('slug') ?? '');
   const token = await lerSessao(slug);
   if (!token) redirect(`/${slug}/entrar`);
 
-  const marketing = String(form.get('marketing') ?? '') === '1';
-  await decidirConsentimento(slug, token, marketing, VERSAO_DO_CONSENTIMENTO);
+  /**
+   * A finalidade vem do formulário e é **conferida contra o catálogo**.
+   *
+   * O modelo é o mesmo da versão do texto: o que chega do navegador é palpite,
+   * e o que decide é a lista. Uma finalidade fora dela — `service`, por exemplo
+   * — não tem versão, e gravar sem versão é gravar um aceite que não diz o que
+   * a pessoa leu.
+   */
+  const finalidade = String(form.get('finalidade') ?? '');
+  if (!ehFinalidadeOpcional(finalidade)) redirect(`/${slug}/meus-agendamentos?erro=finalidade`);
 
-  redirect(`/${slug}/meus-agendamentos?feito=${marketing ? 'aceitou' : 'recusou'}`);
+  const versao = versaoDoConsentimento(finalidade);
+  if (!versao) redirect(`/${slug}/meus-agendamentos?erro=finalidade`);
+
+  const concedido = String(form.get('concedido') ?? '') === '1';
+  await decidirConsentimento(slug, token, finalidade, concedido, versao);
+
+  redirect(`/${slug}/meus-agendamentos?feito=${concedido ? 'aceitou' : 'recusou'}`);
 }
 
 /**

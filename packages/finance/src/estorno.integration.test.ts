@@ -666,7 +666,7 @@ describeIfDb('vale, estorno e DRE', () => {
 
     const antes = await dreDoPeriodo({
       tenantId: TENANT,
-      locationId: LOCATION,
+      unidade: LOCATION,
       de: '2026-11-01',
       ate: '2026-11-30',
     });
@@ -683,7 +683,7 @@ describeIfDb('vale, estorno e DRE', () => {
 
     const depois = await dreDoPeriodo({
       tenantId: TENANT,
-      locationId: LOCATION,
+      unidade: LOCATION,
       de: '2026-11-01',
       ate: '2026-11-30',
     });
@@ -740,7 +740,7 @@ describeIfDb('vale, estorno e DRE', () => {
       pagamentos: [{ forma: 'cash', valorCents: 3000 }], ...fecha,
     });
 
-    const janela = { tenantId: TENANT, locationId: LOCATION, de: '2026-11-01', ate: '2026-11-30' };
+    const janela = { tenantId: TENANT, unidade: LOCATION, de: '2026-11-01', ate: '2026-11-30' };
     expect((await dreDoPeriodo(janela)).atual.cmvCents).toBe(1000);
 
     await estornarVenda({
@@ -801,7 +801,7 @@ describeIfDb('vale, estorno e DRE', () => {
 
     const dre = await dreDoPeriodo({
       tenantId: TENANT,
-      locationId: LOCATION,
+      unidade: LOCATION,
       de: '2026-11-01',
       ate: '2026-11-30',
     });
@@ -824,7 +824,7 @@ describeIfDb('vale, estorno e DRE', () => {
 
     const dre = await dreDoPeriodo({
       tenantId: TENANT,
-      locationId: LOCATION,
+      unidade: LOCATION,
       de: '2026-11-01',
       ate: '2026-11-30',
     });
@@ -836,7 +836,7 @@ describeIfDb('vale, estorno e DRE', () => {
     await venderCorte();
     const dre = await dreDoPeriodo({
       tenantId: TENANT,
-      locationId: LOCATION,
+      unidade: LOCATION,
       de: '2026-11-01',
       ate: '2026-11-30',
     });
@@ -857,7 +857,7 @@ describeIfDb('vale, estorno e DRE', () => {
 
     const dre = await dreDoPeriodo({
       tenantId: TENANT,
-      locationId: 'a2525252-0000-0000-0000-000000000009',
+      unidade: 'a2525252-0000-0000-0000-000000000009',
       de: '2026-11-01',
       ate: '2026-11-30',
     });

@@ -6613,6 +6613,22 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
      encosta na borda do cartão; um domínio maior transbordaria. */
   overflow-wrap: anywhere;
 }
+/* As três finalidades, separadas por uma linha (bloco 129).
+
+   Separador e não cartão dentro de cartão: a seção já é um cartão, e aninhar
+   outro em 360px come a largura útil duas vezes. O primeiro item não leva
+   borda de cima — ela ficaria colada na frase que abre a seção. */
+.meus__consentimento-item + .meus__consentimento-item {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+.meus__consentimento-titulo {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
 /* Contorno pelo mesmo motivo dos blocos 28 e 30: o `ghost` do design system é
    transparente, e sem borda a única ação da seção lê como legenda. */
 .meus__consentimento-botao {

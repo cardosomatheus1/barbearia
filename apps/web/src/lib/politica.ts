@@ -29,7 +29,14 @@ export const TEXTO_DO_CONSENTIMENTO =
   'Quero receber promoções e novidades desta barbearia por WhatsApp.';
 
 /**
- * Os aceites que o balcão registra pelo cliente, cada um com o seu texto.
+ * Os aceites **opcionais**, cada um com o seu texto — e agora nas duas telas.
+ *
+ * O nome era `CONSENTIMENTOS_DO_BALCAO` enquanto só a ficha os registrava. Desde
+ * o bloco 129 o titular decide sozinho em `/{slug}/meus-agendamentos`, e a mesma
+ * lista serve as duas: um segundo arranjo com os mesmos três textos seria a
+ * lista paralela de sempre, e a divergência apareceria como o cliente aceitando
+ * um texto e o balcão registrando outro — com a versão gravada mentindo sobre o
+ * que ele leu.
  *
  * Três e não um, porque a SPEC §1.8 os separa e a LGPD também: quem autoriza
  * uma foto na ficha não autorizou a foto no Instagram, e quem quer receber
@@ -41,7 +48,7 @@ export const TEXTO_DO_CONSENTIMENTO =
  * contrato. Pedir aceite para ele confundiria o cliente sobre o que é
  * opcional — e é justamente a distinção que o resto desta lista preserva.
  */
-export const CONSENTIMENTOS_DO_BALCAO = [
+export const CONSENTIMENTOS_OPCIONAIS = [
   {
     finalidade: 'marketing',
     titulo: 'Promoções por WhatsApp',
@@ -71,5 +78,12 @@ export const CONSENTIMENTOS_DO_BALCAO = [
  * formulário, que é entrada externa.
  */
 export function versaoDoConsentimento(finalidade: string): string | null {
-  return CONSENTIMENTOS_DO_BALCAO.find((c) => c.finalidade === finalidade)?.versao ?? null;
+  return CONSENTIMENTOS_OPCIONAIS.find((c) => c.finalidade === finalidade)?.versao ?? null;
+}
+
+/** As finalidades que o titular decide sozinho — as três opcionais. */
+export type FinalidadeOpcional = (typeof CONSENTIMENTOS_OPCIONAIS)[number]['finalidade'];
+
+export function ehFinalidadeOpcional(valor: string): valor is FinalidadeOpcional {
+  return CONSENTIMENTOS_OPCIONAIS.some((c) => c.finalidade === valor);
 }

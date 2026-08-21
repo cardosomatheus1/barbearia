@@ -44,7 +44,7 @@ import {
 import { painelOuDesvio } from '@/lib/painel';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { lerMotivoDaMeta, lerSessaoGestor } from '@/lib/sessao-gestor';
-import { CONSENTIMENTOS_DO_BALCAO } from '@/lib/politica';
+import { CONSENTIMENTOS_OPCIONAIS } from '@/lib/politica';
 import {
   acaoAbrirPedidoDeDados,
   acaoAnonimizarCliente,
@@ -430,7 +430,7 @@ function Consentimentos({
       <summary className="anotar__abrir">O que este cliente autorizou</summary>
 
       <ul className="consentimentos">
-        {CONSENTIMENTOS_DO_BALCAO.map((item) => {
+        {CONSENTIMENTOS_OPCIONAIS.map((item) => {
           const atual = consentimentos.atuais[item.finalidade];
           const aceita = atual?.concedido ?? false;
 

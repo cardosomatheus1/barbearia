@@ -14,7 +14,19 @@ import { diaISO } from '../common/data.js';
  * dias da lista de espera teve no bloco 38.
  */
 export const periodoDoDreSchema = z
-  .object({ de: diaISO.optional(), ate: diaISO.optional() })
+  .object({
+    de: diaISO.optional(),
+    ate: diaISO.optional(),
+    /**
+     * A loja do relatório: um id, ou `todas` para o consolidado (bloco 129).
+     *
+     * Texto livre e não `uuid()` porque `todas` é um valor legítimo — quem
+     * confere o id é `unidadeDoRelatorio`, sob RLS e contra as unidades que esta
+     * conta enxerga. O teto de tamanho é o que impede a consulta de carregar
+     * lixo até o banco.
+     */
+    unidade: z.string().trim().min(1).max(64).optional(),
+  })
   .refine((p) => (p.de === undefined) === (p.ate === undefined), {
     message: 'Informe o período inteiro ou nenhum.',
   })

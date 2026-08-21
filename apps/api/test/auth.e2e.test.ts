@@ -862,31 +862,92 @@ describeIfDb('fluxo do cliente', () => {
       .get('/v1/b/domari/auth/consentimento')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(antes.body.marketing).toBe(false);
+    expect(antes.body.marketing.concedido).toBe(false);
 
     await http()
       .put('/v1/b/domari/auth/consentimento')
       .set('Authorization', `Bearer ${token}`)
-      .send({ marketing: true, versaoDoTexto: 'marketing-2026-08' })
+      .send({ finalidade: 'marketing', concedido: true, versaoDoTexto: 'marketing-2026-08' })
       .expect(200);
 
     const depois = await http()
       .get('/v1/b/domari/auth/consentimento')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(depois.body.marketing).toBe(true);
+    expect(depois.body.marketing.concedido).toBe(true);
 
     // Sem versão do texto não passa: "ele aceitou" sem dizer o que ele leu não
     // responde nada numa contestação.
     await http()
       .put('/v1/b/domari/auth/consentimento')
       .set('Authorization', `Bearer ${token}`)
-      .send({ marketing: false })
+      .send({ finalidade: 'marketing', concedido: false })
       .expect(400);
 
     // E o consentimento é da pessoa que está logada, não de quem o corpo disser:
     // não há campo de cliente na rota.
-    await http().put('/v1/b/domari/auth/consentimento').send({ marketing: true }).expect(401);
+    await http()
+      .put('/v1/b/domari/auth/consentimento')
+      .send({ finalidade: 'marketing', concedido: true })
+      .expect(401);
+  });
+
+  it('o titular revoga a própria foto sem passar pelo balcão', async () => {
+    /**
+     * A lacuna que o bloco 129 fecha.
+     *
+     * A rota era fixa em `marketing`: quem quisesse tirar a própria foto do
+     * Instagram da barbearia dependia de pedir ao balcão, que depende de alguém
+     * lembrar. E a leitura devolvia só `marketing`, então a tela nem sabia que
+     * havia outra coisa ali — meia tela de consentimento ensina que só dá para
+     * revogar uma coisa, e o titular para de procurar.
+     */
+    const token = await login(CARLOS);
+    const auth = { Authorization: `Bearer ${token}` };
+
+    for (const finalidade of ['photos', 'photos_public'] as const) {
+      await http()
+        .put('/v1/b/domari/auth/consentimento')
+        .set(auth)
+        .send({ finalidade, concedido: true, versaoDoTexto: `${finalidade}-2026-08` })
+        .expect(200);
+    }
+
+    const concedidos = await http()
+      .get('/v1/b/domari/auth/consentimento')
+      .set(auth)
+      .expect(200);
+    expect(concedidos.body.photos.concedido).toBe(true);
+    expect(concedidos.body.photos_public.concedido).toBe(true);
+
+    // Revogar é inserir a revogação, nunca apagar a concessão — e a leitura
+    // devolve a decisão **mais recente**.
+    await http()
+      .put('/v1/b/domari/auth/consentimento')
+      .set(auth)
+      .send({ finalidade: 'photos_public', concedido: false, versaoDoTexto: 'fotos-publicas-2026-08' })
+      .expect(200);
+
+    const depois = await http()
+      .get('/v1/b/domari/auth/consentimento')
+      .set(auth)
+      .expect(200);
+    expect(depois.body.photos_public.concedido).toBe(false);
+    // A da ficha não foi junto: são decisões separadas, e é isso que a LGPD
+    // separa — quem autoriza a foto na ficha não autorizou a do Instagram.
+    expect(depois.body.photos.concedido).toBe(true);
+  });
+
+  it('o titular não decide sobre `service`: ele não depende de consentimento', async () => {
+    // Recusado na borda. `service` é o tratamento necessário para executar o
+    // serviço contratado; oferecê-lo aqui faria o cliente "revogar" algo que a
+    // revogação não desliga, e o que ele quer nesse caso é a exclusão.
+    const token = await login(CARLOS);
+    await http()
+      .put('/v1/b/domari/auth/consentimento')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ finalidade: 'service', concedido: false, versaoDoTexto: 'servico-2026-08' })
+      .expect(400);
   });
 
   it('pedir os próprios dados duas vezes não reinicia o prazo', async () => {

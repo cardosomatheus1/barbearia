@@ -1,11 +1,13 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   aplicarModeloDaAssinatura,
+  ehConsolidado,
   comissaoDoPeriodo,
   compararDre,
   montarDre,
   periodoAnterior,
   type DreComparado,
+  type EscolhaDeUnidade,
   type FatosDoDre,
 } from '@barbearia/core';
 import { lerModeloDaAssinatura, paraLancamento } from './comissao.js';
@@ -60,16 +62,30 @@ export interface DreDoPeriodo extends DreComparado {
 
 export async function dreDoPeriodo(params: {
   readonly tenantId: string;
-  readonly locationId: string;
+  /**
+   * A loja do relatório, ou `TODAS_AS_UNIDADES` para o consolidado (bloco 129).
+   *
+   * **Não** é `string | null`, e a diferença é a que o bloco 117 cobrou: nulo
+   * seria indistinguível de "o chamador esqueceu", que é como oito leituras
+   * passaram a somar a rede sem ninguém ter decidido isso. `'todas'` é uma
+   * palavra que só se escreve de propósito, e o tipo obrigatório faz o
+   * compilador cobrar a decisão de quem escrever a próxima rota.
+   *
+   * O consolidado é de **leitura**, nunca de operação: caixa, comanda e agenda
+   * continuam sendo de uma loja, e somá-las faria a recepção fechar o caixa da
+   * loja errada. É o que o cabeçalho de `multiunidade.ts` já dizia.
+   */
+  readonly unidade: EscolhaDeUnidade;
   readonly de: string;
   readonly ate: string;
 }): Promise<DreDoPeriodo> {
   const anterior = periodoAnterior(params.de, params.ate);
+  const locationId = ehConsolidado(params.unidade) ? null : params.unidade;
 
   return withTenant(params.tenantId, async (tx) => {
     const [atual, passado] = await Promise.all([
-      fatosDoPeriodo(tx, { locationId: params.locationId, de: params.de, ate: params.ate }),
-      fatosDoPeriodo(tx, { locationId: params.locationId, ...anterior }),
+      fatosDoPeriodo(tx, { locationId, de: params.de, ate: params.ate }),
+      fatosDoPeriodo(tx, { locationId, ...anterior }),
     ]);
 
     return {
@@ -91,7 +107,7 @@ export async function dreDoPeriodo(params: {
  */
 async function fatosDoPeriodo(
   tx: TransactionClient,
-  params: { readonly locationId: string; readonly de: string; readonly ate: string },
+  params: { readonly locationId: string | null; readonly de: string; readonly ate: string },
 ): Promise<FatosDoDre> {
   const receitas = await tx.$queryRaw<
     { tipo: string | null; total: number | null }[]
@@ -101,7 +117,7 @@ async function fatosDoPeriodo(
     SELECT i.kind::text AS tipo, sum(i.quantity * i.unit_price_cents)::int AS total
       FROM order_items i
       JOIN orders o ON o.id = i.order_id
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
        AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
      GROUP BY i.kind
@@ -120,7 +136,7 @@ async function fatosDoPeriodo(
     SELECT sum(u.value_cents)::int AS total
       FROM package_uses u
       JOIN orders o ON o.id = u.order_id
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND u.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
 
@@ -143,7 +159,7 @@ async function fatosDoPeriodo(
        -- Assinatura anterior ao bloco 58 não tem unidade, e o dinheiro é da
        -- barbearia: ela entra em toda leitura em vez de sumir de todas. Um
        -- rateio retroativo seria inventar de qual loja veio.
-       AND (s.location_id IS NULL OR s.location_id = ${params.locationId}::uuid)
+       AND (${params.locationId}::uuid IS NULL OR s.location_id IS NULL OR s.location_id = ${params.locationId}::uuid)
   `;
 
   const comissoesCents = await comissaoDoIntervalo(tx, params);
@@ -171,7 +187,7 @@ async function fatosDoPeriodo(
       FROM stock_movements m
       LEFT JOIN orders o ON o.id = m.order_id
      WHERE m.kind IN ('venda', 'consumo')
-       AND m.location_id = ${params.locationId}::uuid
+       AND (${params.locationId}::uuid IS NULL OR m.location_id = ${params.locationId}::uuid)
        AND m.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
        AND (m.kind = 'consumo' OR o.id IS NULL OR o.status <> 'refunded')
   `;
@@ -191,7 +207,7 @@ async function fatosDoPeriodo(
   const descontos = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(o.discount_cents)::int AS total
       FROM orders o
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
        AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
@@ -199,7 +215,7 @@ async function fatosDoPeriodo(
   const taxas = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(o.fee_cents)::int AS total
       FROM orders o
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
        AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
@@ -216,7 +232,7 @@ async function fatosDoPeriodo(
     SELECT sum(p.amount_cents)::int AS total
       FROM order_payments p
       JOIN orders o ON o.id = p.order_id
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
        AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
        AND p.method = 'fidelidade'
@@ -232,7 +248,7 @@ async function fatosDoPeriodo(
   const despesas = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(b.paid_cents)::int AS total
       FROM bills b
-     WHERE b.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR b.location_id = ${params.locationId}::uuid)
        AND b.direction = 'pagar'
        AND b.status = 'paga'
        AND b.paid_on BETWEEN ${params.de}::date AND ${params.ate}::date
@@ -248,7 +264,7 @@ async function fatosDoPeriodo(
   const emAberto = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(b.amount_cents)::int AS total
       FROM bills b
-     WHERE b.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR b.location_id = ${params.locationId}::uuid)
        AND b.direction = 'pagar'
        AND b.status = 'aberta'
        AND b.due_on BETWEEN ${params.de}::date AND ${params.ate}::date
@@ -262,7 +278,7 @@ async function fatosDoPeriodo(
   const gorjetas = await tx.$queryRaw<{ total: number | null }[]>`
     SELECT sum(o.tip_cents)::int AS total
       FROM orders o
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
        AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
@@ -299,7 +315,7 @@ function somaDe(
  */
 async function comissaoDoIntervalo(
   tx: TransactionClient,
-  params: { readonly locationId: string; readonly de: string; readonly ate: string },
+  params: { readonly locationId: string | null; readonly de: string; readonly ate: string },
 ): Promise<number> {
   const linhas = await tx.$queryRaw<
     {
@@ -327,7 +343,7 @@ async function comissaoDoIntervalo(
       -- aplicacao nao apaga comanda —, e um LEFT JOIN somaria orfao em toda
       -- unidade, contando o mesmo dinheiro duas vezes na rede.
       JOIN orders o ON o.id = e.order_id
-     WHERE o.location_id = ${params.locationId}::uuid
+     WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND e.earned_on BETWEEN ${params.de}::date AND ${params.ate}::date
      ORDER BY e.earned_on, e.id
   `;

@@ -585,9 +585,16 @@ export const conferirCodigo = (slug: string, phone: string, code: string) =>
  * A versão do texto viaja com a decisão porque é ela que se mostra numa
  * contestação — sem dizer o que a pessoa leu, "ela aceitou" não responde nada.
  */
-export interface ConsentimentoDoTitular {
-  marketing: boolean;
+export interface DecisaoDoTitular {
+  concedido: boolean;
   decididoEm: string | null;
+}
+
+/** As três opcionais, e nunca `service` — que não depende de consentimento. */
+export interface ConsentimentoDoTitular {
+  marketing: DecisaoDoTitular;
+  photos: DecisaoDoTitular;
+  photos_public: DecisaoDoTitular;
 }
 
 /**
@@ -613,12 +620,13 @@ export async function lerConsentimento(
 export const decidirConsentimento = (
   slug: string,
   token: string,
-  marketing: boolean,
+  finalidade: string,
+  concedido: boolean,
   versaoDoTexto: string,
 ) =>
-  post<ConsentimentoDoTitular>(
+  post<{ finalidade: string; concedido: boolean; decididoEm: string }>(
     `/v1/b/${slug}/auth/consentimento`,
-    { marketing, versaoDoTexto },
+    { finalidade, concedido, versaoDoTexto },
     token,
     'PUT',
   );

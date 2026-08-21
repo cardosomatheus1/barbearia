@@ -83,8 +83,21 @@ export const cancelSchema = z.object({
  * contestação — "ele aceitou" sem dizer o que ele leu não responde nada. O
  * domínio recusa vazio de novo, e a duplicação é deliberada.
  */
+/**
+ * A decisão do titular sobre **uma** finalidade opcional (bloco 129).
+ *
+ * `service` não entra: é o tratamento necessário para executar o serviço
+ * contratado, que não depende de consentimento e sim do próprio contrato.
+ * Aceitá-lo aqui deixaria o cliente "revogar" algo que a revogação não desliga
+ * — e o que ele quer nesse caso é o pedido de exclusão, que tem rota própria.
+ *
+ * Uma finalidade por chamada, e não as três de uma vez: cada decisão grava a
+ * **versão do texto daquela finalidade**, e um corpo com as três juntas
+ * gravaria três linhas sob um clique só, sem dizer qual texto a pessoa leu.
+ */
 export const consentimentoDoTitularSchema = z.object({
-  marketing: z.boolean(),
+  finalidade: z.enum(['marketing', 'photos', 'photos_public']),
+  concedido: z.boolean(),
   versaoDoTexto: z.string().trim().min(1).max(80),
 });
 
