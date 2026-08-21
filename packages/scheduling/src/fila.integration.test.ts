@@ -346,6 +346,78 @@ describeIfDb('fila presencial', () => {
     expect(linhas[0]?.checked_in_at?.toISOString()).toBe(AGORA.toISOString());
   });
 
+  it('o atendimento concluído antes da hora libera a cadeira para quem espera', async () => {
+    /**
+     * Um corte marcado das 18:15 às 19:35, concluído às 18:36 porque o cliente
+     * saiu mais cedo, continuava ocupando a agenda por mais uma hora: o painel
+     * dizia "livre agora" e "Sentou" respondia *"este profissional tem cliente
+     * marcado nesse horário"*. Duas telas discordando sobre o mesmo fato, na
+     * transição mais frequente do balcão — e o conserto que a frase sugeria era
+     * impossível, porque remarcar recusa `completed`.
+     *
+     * Acontece toda vez que um corte termina antes da hora, que é o caso comum.
+     */
+    const inicio = new Date(AGORA.getTime() - 30 * 60_000);
+    const fim = new Date(AGORA.getTime() + 60 * 60_000);
+    await exec(admin, `
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at,
+         price_cents, status, completed_at)
+      VALUES ('dddddddd-0000-0000-0000-0000000000f1', '${TENANT}', '${LOCATION}',
+              '${JOAO}', '${RUAN}',
+              '${inicio.toISOString()}', '${fim.toISOString()}',
+              '${inicio.toISOString()}', '${fim.toISOString()}',
+              5000, 'completed', '${AGORA.toISOString()}')
+    `);
+
+    // A cadeira está livre: o atendimento terminou, mesmo com a reserva indo
+    // até daqui a uma hora.
+    const entrada = await entrar(CARLOS, RUAN);
+    const sentado = await seatQueueEntry({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      queueEntryId: entrada.id,
+      professionalId: RUAN,
+      now: AGORA,
+    });
+
+    expect(sentado.appointmentId).toBeTruthy();
+  });
+
+  it('o atendimento em curso continua segurando a cadeira', async () => {
+    /**
+     * O outro lado da mesma regra: encolher a janela é só para quem **terminou**.
+     * Sem este caso, remover `completed_at` da conta deixaria a constraint
+     * aceitar dois clientes na mesma cadeira ao mesmo tempo — e o teste acima
+     * continuaria verde.
+     */
+    const inicio = new Date(AGORA.getTime() - 30 * 60_000);
+    const fim = new Date(AGORA.getTime() + 60 * 60_000);
+    await exec(admin, `
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at,
+         price_cents, status)
+      VALUES ('dddddddd-0000-0000-0000-0000000000f2', '${TENANT}', '${LOCATION}',
+              '${JOAO}', '${RUAN}',
+              '${inicio.toISOString()}', '${fim.toISOString()}',
+              '${inicio.toISOString()}', '${fim.toISOString()}',
+              5000, 'in_progress')
+    `);
+
+    const entrada = await entrar(CARLOS, RUAN);
+    await expect(
+      seatQueueEntry({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        queueEntryId: entrada.id,
+        professionalId: RUAN,
+        now: AGORA,
+      }),
+    ).rejects.toThrow();
+  });
+
   it('encerrar o atendimento fecha a entrada da fila', async () => {
     /**
      * As duas já nasciam ligadas — `seatQueueEntry` grava

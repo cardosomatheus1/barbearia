@@ -447,12 +447,28 @@ export async function loadRangeContext(
   }
 
   // ---- Ocupação: agendamentos ativos + reservas temporárias ---------------
+  /**
+   * A janela **ocupada**, que não é sempre a janela reservada.
+   *
+   * `janela_ocupada` é a mesma função que a constraint de exclusão usa
+   * (migração 0097): o atendimento concluído antes da hora para de segurar a
+   * cadeira até o fim da reserva. Escrita em dois lugares, a expressão
+   * divergiria no primeiro ajuste — e a divergência aqui é a grade oferecendo o
+   * que a gravação recusa, ou a gravação recusando o que a grade ofereceu.
+   *
+   * `isempty` fora: o atendimento concluído no mesmo instante em que começou
+   * ocupa zero, e um intervalo de zero minuto no mapa de ocupação não bloqueia
+   * nada — mas também não deve entrar, para não virar linha inútil no cálculo.
+   */
   const appointmentRows = await tx.$queryRaw<OccupiedRow[]>`
-    SELECT professional_id, starts_at, ends_at
+    SELECT professional_id,
+           lower(janela_ocupada(starts_at, ends_at, completed_at)) AS starts_at,
+           upper(janela_ocupada(starts_at, ends_at, completed_at)) AS ends_at
     FROM appointments
     WHERE professional_id = ANY(${professionalIds}::uuid[])
       AND starts_at < ${rangeEnd}
-      AND ends_at > ${rangeStart}
+      AND upper(janela_ocupada(starts_at, ends_at, completed_at)) > ${rangeStart}
+      AND NOT isempty(janela_ocupada(starts_at, ends_at, completed_at))
       AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
       AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
            OR id <> ${params.ignoreAppointmentId ?? null}::uuid)
