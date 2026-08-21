@@ -46,13 +46,34 @@ export const ROTULO_DO_TIPO_DE_PRODUTO: Readonly<Record<TipoDeProduto, string>> 
  * consome `unit` para ratear insumo por serviço — uma unidade desconhecida
  * viraria um rateio que ninguém confere. A `CHECK` entrou na 0093.
  */
-export const UNIDADES_DE_MEDIDA = ['un', 'ml', 'g'] as const;
+export const UNIDADES_DE_MEDIDA = ['un', 'ml', 'g', 'dose', 'aplicacao'] as const;
 export type UnidadeDeMedida = (typeof UNIDADES_DE_MEDIDA)[number];
 
+/**
+ * `dose` e `aplicacao` entraram no bloco 122, e a razão é o que a base de
+ * demonstração já dizia.
+ *
+ * A lista nasceu com três valores no bloco 120, copiados de um **comentário** da
+ * migração 0047 — nunca foi decisão de produto. A semente de demonstração,
+ * escrita por quem estava pensando numa barbearia de verdade, usava dois que não
+ * estavam lá: o shampoo de lavatório sai por dose e o talco por aplicação, que é
+ * como o insumo é contado quando ninguém pesa nada. A `CHECK` do bloco 120
+ * passou a recusar as duas, e `semear-demo` parou de rodar.
+ *
+ * Fechar a lista continua certo — é ela que impede a importação de base de
+ * inventar unidade que a ficha técnica não sabe ratear. O que estava errado era
+ * o **conteúdo**, e a evidência de que estava estava no próprio repositório.
+ *
+ * Sem acento no valor guardado, com acento no rótulo: `un`, `ml` e `g` já eram
+ * assim, e uma lista em que um dos cinco carrega cedilha é a que diverge no
+ * primeiro `WHERE` escrito à mão.
+ */
 export const ROTULO_DA_UNIDADE_DE_MEDIDA: Readonly<Record<UnidadeDeMedida, string>> = {
   un: 'unidade',
   ml: 'mililitro',
   g: 'grama',
+  dose: 'dose',
+  aplicacao: 'aplicação',
 };
 
 export const TIPOS_DE_MOVIMENTO_DE_ESTOQUE = [

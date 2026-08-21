@@ -125,7 +125,7 @@ const PRODUTOS = [
   { nome: 'Shampoo de lavatório (dose)', cat: 'Insumo', tipo: 'internal', custo: 220, preco: null, min: 80, un: 'dose' },
   { nome: 'Toalha descartável', cat: 'Insumo', tipo: 'internal', custo: 25, preco: null, min: 200, un: 'un' },
   { nome: 'Lâmina de barbear descartável', cat: 'Insumo', tipo: 'internal', custo: 90, preco: null, min: 100, un: 'un' },
-  { nome: 'Talco antisséptico (aplicação)', cat: 'Insumo', tipo: 'internal', custo: 25, preco: null, min: 60, un: 'aplicação' },
+  { nome: 'Talco antisséptico (aplicação)', cat: 'Insumo', tipo: 'internal', custo: 25, preco: null, min: 60, un: 'aplicacao' },
   { nome: 'Tinta para pigmentação de barba', cat: 'Insumo', tipo: 'internal', custo: 4200, preco: null, min: 2, un: 'un' },
   { nome: 'Pó descolorante 300g', cat: 'Insumo', tipo: 'internal', custo: 3800, preco: null, min: 2, un: 'un' },
 ];
