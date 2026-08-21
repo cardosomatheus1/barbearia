@@ -8,6 +8,7 @@ import { salvarRegraDeComissao } from './comissao.js';
 import { salvarProduto } from './estoque.js';
 import {
   cancelarNota,
+  conciliarNotas,
   configuracaoFiscal,
   enviarNota,
   notaDaVenda,
@@ -809,4 +810,65 @@ describeIfDb('fiscal', () => {
     });
     expect(paraQuemVeComissao[0]).toMatchObject({ parceiroCents: 2000, casaCents: 3000 });
   });
+
+  it('a conciliação tira a nota presa em cancelando', async () => {
+    /**
+     * O processo cai entre gravar `cancelando` e a resposta da prefeitura. A
+     * nota fica ali para sempre: `fiscal.emitir` acompanha só a emissão e já
+     * morreu, e `ESTADOS_QUE_OCUPAM_A_VENDA` inclui `cancelando` — então a
+     * comanda **nunca mais aceita nota nova**.
+     *
+     * A primeira versão da varredura colhia o estado e não fazia nada com ele:
+     * `consultarNota` só perguntava por `processando`, e `gravarResposta`
+     * escrevia com a lista curta, alcançando zero linhas em silêncio. O
+     * contador subia mesmo assim. Achado da revisão de segurança do bloco 121.
+     */
+    await cadastrar();
+    const orderId = await venderCorte();
+    const emissor = new FakeFiscalProvider();
+    const invoiceId = await autorizar(orderId, emissor);
+
+    /**
+     * O estado em voo sem o desfecho, que é o que o processo caído deixa.
+     *
+     * `cancelled_at` e `cancel_reason` preenchidos porque `cancelarNota` os
+     * grava **antes** da viagem à prefeitura, e a `CHECK` da migração 0056 os
+     * exige na linha cancelada: sem eles a gravação do desfecho estouraria a
+     * constraint, o `catch` da conciliação engoliria, e o teste ficaria vermelho
+     * pelo motivo errado — a semente precisa satisfazer tudo menos a regra sob
+     * teste.
+     */
+    await admin.$executeRawUnsafe(
+      `UPDATE fiscal_invoices
+          SET status = 'cancelando', cancelled_at = now(),
+              cancel_reason = 'Valor lançado errado'
+        WHERE id = '${invoiceId}'`,
+    );
+
+    emissor.proximoEstado = 'cancelada';
+    const conciliadas = await conciliarNotas({ tenantId: TENANT, provider: emissor });
+
+    const [depois] = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status::text AS status FROM fiscal_invoices WHERE id = '${invoiceId}'`,
+    );
+    expect(depois?.status).toBe('cancelada');
+    // Conta o que **mudou**, não o que foi visitado.
+    expect(conciliadas).toBe(1);
+  });
+
+  it('a conciliação não conta a nota que continua onde estava', async () => {
+    await cadastrar();
+    const orderId = await venderCorte();
+    const emissor = new FakeFiscalProvider();
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
+
+    // Sem id no emissor: a nota nunca chegou lá, e não há o que perguntar.
+    await admin.$executeRawUnsafe(
+      `UPDATE fiscal_invoices SET status = 'cancelando', provider_invoice_id = NULL
+        WHERE id = '${nota!.id}'`,
+    );
+
+    expect(await conciliarNotas({ tenantId: TENANT, provider: emissor })).toBe(0);
+  });
+
 });

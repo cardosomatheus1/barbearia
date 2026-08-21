@@ -172,6 +172,14 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
           Sem esta seção ela existia só na URL do redirecionamento. Só desenha
           quando há alguma: no dia normal a lista fica vazia, e uma seção vazia
           permanente ensina a não olhar. */}
+      {!abertas.ok ? (
+        /* A recusa em letras, nunca a seção sumindo. Aviso silencioso é pior
+           que erro visível: o erro visível alguém investiga. */
+        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
+          Não deu para carregar as comandas abertas. Recarregue a página.
+        </div>
+      ) : null}
+
       {abertas.ok && abertas.dados.comandas.length > 0 ? (
         <section className="cartao-balcao">
           <h2 className="cartao-balcao__titulo">Comandas abertas</h2>

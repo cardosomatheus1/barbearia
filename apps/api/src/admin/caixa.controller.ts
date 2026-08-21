@@ -227,14 +227,23 @@ export class CaixaController {
    * validação de uuid — 400 sobre uma rota que o código tem. O sintoma foi a
    * seção nova não aparecer na medição, com a suíte inteira verde.
    *
-   * `customers.view` junto porque a listagem devolve o nome de quem está na
-   * comanda: rota que agrega declara **todas** as permissões do que devolve.
+   * **Redige o nome, não recusa a lista.** Somar `customers.view` ao `@Exige`
+   * — que é conjuntivo — faria o papel de balcão a quem o dono tirou essa
+   * permissão levar 403 na listagem inteira, e a comanda avulsa voltaria a ser
+   * invisível justamente para ele. É o precedente do bloco 119: *"somar
+   * `customers.view` ao `@Exige` era o conserto óbvio e estava errado"*.
    */
-  @Exige('cashier.open', 'customers.view')
+  @Exige('cashier.open')
   @Get('orders/abertas')
   async abertas(@Staff() staff: AuthenticatedStaff) {
     const local = await this.unidade(staff);
-    return { comandas: await comandasAbertas(staff.tenantId, local.id) };
+    return {
+      comandas: await comandasAbertas(
+        staff.tenantId,
+        local.id,
+        pode(staff.permissions, 'customers.view'),
+      ),
+    };
   }
 
   /**

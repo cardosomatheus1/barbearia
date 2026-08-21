@@ -626,7 +626,10 @@ export async function marcarParaEnvio(params: {
 }): Promise<boolean> {
   return withTenant(params.tenantId, async (tx) => {
     const afetadas = await tx.$executeRaw`
-      UPDATE campaigns SET status = 'enviando'
+      -- sent_at aqui é quando foi mandado para a fila, e o despacho o mantém
+      -- por COALESCE. É ele que impede o botão de retomar de aparecer sobre um
+      -- envio que acabou de ser pedido.
+      UPDATE campaigns SET status = 'enviando', sent_at = now()
        WHERE id = ${params.campanhaId}::uuid AND status = 'rascunho'
     `;
     if (afetadas !== 1) return false;
@@ -870,19 +873,47 @@ export async function retomarCampanha(params: {
   readonly agora: Date;
 }): Promise<boolean> {
   return withTenant(params.tenantId, async (tx) => {
-    const [linha] = await tx.$queryRaw<
-      { status: EstadoDeCampanha; ultimo_movimento: Date }[]
-    >`
-      SELECT c.status::text AS status,
-             COALESCE(max(t.sent_at), c.created_at) AS ultimo_movimento
+    /**
+     * A trava primeiro, a agregação depois — **duas consultas, e é obrigatório**.
+     *
+     * O Postgres recusa `FOR UPDATE` sobre consulta com `GROUP BY`
+     * (*"FOR UPDATE is not allowed with GROUP BY clause"*), e o erro só aparece
+     * quando a consulta roda: a primeira versão desta função respondia 500 em
+     * **toda** chamada, com o botão "Retomar o envio" desenhado na tela e a
+     * suíte inteira verde — os testes novos eram unitários de `campanhaParada`,
+     * que não toca o banco. É a regra do `CLAUDE.md` §1 em letras: *"SQL cru não
+     * é conferido por ninguém até rodar"*.
+     */
+    const [travada] = await tx.$queryRaw<{ status: EstadoDeCampanha }[]>`
+      SELECT status::text AS status FROM campaigns
+       WHERE id = ${params.campanhaId}::uuid
+       FOR UPDATE
+    `;
+    if (!travada) return false;
+
+    /**
+     * O último movimento inclui **o pedido de despacho**, não só o primeiro
+     * alvo enviado.
+     *
+     * Sem `c.sent_at` no meio, uma campanha criada na segunda e disparada na
+     * quarta era dada como parada no instante seguinte ao clique em "Enviar" —
+     * o "último movimento" seria a criação, de dois dias antes. O botão de
+     * retomar aparecia sobre um envio que a fila ainda nem tinha começado, e a
+     * tela dizia "Na fila" e "Retomar" ao mesmo tempo.
+     *
+     * `marcarParaEnvio` passou a carimbar `sent_at` na entrada de `enviando`, e
+     * `despacharCampanha` continua reescrevendo-o no fim por `COALESCE` — quem
+     * chega primeiro fica, que é o que se quer nos dois casos.
+     */
+    const [linha] = await tx.$queryRaw<{ ultimo_movimento: Date }[]>`
+      SELECT COALESCE(max(t.sent_at), c.sent_at, c.created_at) AS ultimo_movimento
         FROM campaigns c
         LEFT JOIN campaign_targets t ON t.campaign_id = c.id
        WHERE c.id = ${params.campanhaId}::uuid
        GROUP BY c.id
-       FOR UPDATE OF c
     `;
     if (!linha) return false;
-    if (!campanhaParada(linha.status, linha.ultimo_movimento, params.agora)) return false;
+    if (!campanhaParada(travada.status, linha.ultimo_movimento, params.agora)) return false;
 
     await audit(tx, {
       actorId: params.staffId,

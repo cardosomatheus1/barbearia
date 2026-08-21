@@ -5,7 +5,6 @@ import {
   comissaoDoPeriodo,
   decisaoDaEntregaDaNota,
   ESTADOS_EM_VOO,
-  ESTADOS_NAO_TERMINAIS,
   ESTADOS_QUE_OCUPAM_A_VENDA,
   motivoParaNaoEmitir,
   documentoDoTomadorValido,
@@ -747,7 +746,17 @@ async function consultarNota(params: {
   if (!nota) return 'cancelada';
   // Sem id no emissor a nota nunca chegou lá: nada a consultar, e a próxima
   // volta da fila a reenvia.
-  if (nota.status !== 'processando' || !nota.provider_invoice_id) return nota.status;
+  if (!nota.provider_invoice_id) return nota.status;
+  /**
+   * `cancelando` também pergunta, e é o conserto da revisão do bloco 121.
+   *
+   * A varredura passou a **colher** o estado em voo do cancelamento e o caminho
+   * continuava descartando-o aqui: a nota era encontrada, nada era perguntado à
+   * prefeitura, e o contador de conciliadas subia mesmo assim. A linha ficava
+   * presa para sempre com a venda sem aceitar nota nova, que é exatamente o que
+   * o bloco existia para fechar.
+   */
+  if (nota.status !== 'processando' && nota.status !== 'cancelando') return nota.status;
 
   const resposta = await params.provider.consultar(nota.provider_invoice_id);
   await gravarResposta({
@@ -782,12 +791,22 @@ export async function gravarResposta(params: {
       UPDATE fiscal_invoices
          SET status = ${params.resposta.estado}::fiscal_invoice_status,
              provider_invoice_id = ${params.resposta.notaId},
-             number = ${params.resposta.numero},
-             pdf_url = ${params.resposta.linkPdf},
+             -- COALESCE, e é o que faz o desfecho do cancelamento caber aqui.
+             --
+             -- A resposta de um cancelamento não traz número nem PDF: escrever
+             -- nulo sobre uma nota autorizada bate no gatilho que congela o
+             -- número (migração 0056), e a exceção subia dentro da varredura,
+             -- que a engolia. A nota ficava em cancelando para sempre, com a
+             -- venda sem aceitar nota nova — e o contador dizia que tinha sido
+             -- reperguntada.
+             number = COALESCE(${params.resposta.numero}, number),
+             pdf_url = COALESCE(${params.resposta.linkPdf}, pdf_url),
              rejection_reason = ${params.resposta.motivoDaRecusa},
              authorized_at = CASE WHEN ${autorizada} THEN now() ELSE authorized_at END
        WHERE id = ${params.invoiceId}::uuid
-         AND status::text = ANY(${[...ESTADOS_NAO_TERMINAIS]}::text[])
+         -- Em voo, e não só a emissão: com a lista curta o desfecho de um
+         -- cancelamento alcançava zero linhas em silêncio.
+         AND status::text = ANY(${[...ESTADOS_EM_VOO]}::text[])
     `;
   });
 }
@@ -802,15 +821,27 @@ export async function gravarResposta(params: {
 export async function notasEmCurso(
   tenantId: string,
   limite = 50,
-): Promise<readonly { readonly id: string; readonly providerInvoiceId: string | null }[]> {
+): Promise<
+  readonly {
+    readonly id: string;
+    readonly estado: EstadoDaNota;
+    readonly providerInvoiceId: string | null;
+  }[]
+> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<{ id: string; provider_invoice_id: string | null }[]>`
-      SELECT id, provider_invoice_id FROM fiscal_invoices
+    const linhas = await tx.$queryRaw<
+      { id: string; status: EstadoDaNota; provider_invoice_id: string | null }[]
+    >`
+      SELECT id, status, provider_invoice_id FROM fiscal_invoices
        WHERE status::text = ANY(${[...ESTADOS_EM_VOO]}::text[])
        ORDER BY requested_at
        LIMIT ${limite}
     `;
-    return linhas.map((l) => ({ id: l.id, providerInvoiceId: l.provider_invoice_id }));
+    return linhas.map((l) => ({
+      id: l.id,
+      estado: l.status,
+      providerInvoiceId: l.provider_invoice_id,
+    }));
   });
 }
 
@@ -846,14 +877,20 @@ export async function conciliarNotas(params: {
   let conciliadas = 0;
   for (const nota of paradas) {
     try {
-      await enviarNota({
+      const depois = await enviarNota({
         tenantId: params.tenantId,
         invoiceId: nota.id,
         provider: params.provider,
       });
-      conciliadas += 1;
+      // Conta o que **mudou de estado**, não o que foi visitado. A primeira
+      // versão somava toda linha colhida, e o log dizia "notas reperguntadas: 3"
+      // sobre três notas que continuavam exatamente onde estavam — indicador que
+      // não corresponde ao trabalho feito é o defeito da §6, pergunta 5.
+      if (depois !== nota.estado) conciliadas += 1;
     } catch {
-      // Segue para a próxima: o desfecho desta volta na hora seguinte.
+      // Segue para a próxima: o desfecho desta volta na hora seguinte. A
+      // prefeitura fora do ar é o caso normal desta integração, e uma exceção
+      // aqui pararia o laço no meio, deixando as seguintes sem explicação.
     }
   }
   return conciliadas;

@@ -263,6 +263,17 @@ export interface ComandaAberta {
 export async function comandasAbertas(
   tenantId: string,
   locationId: string,
+  /**
+   * Quem chama pode ver identidade de cliente (`customers.view`).
+   *
+   * Obrigatório no tipo, e **redigir e não recusar** é a decisão: somar
+   * `customers.view` ao `@Exige` da rota faria o papel de balcão a quem o dono
+   * tirou essa permissão levar 403 na listagem inteira — e a comanda avulsa
+   * voltaria a ser invisível justamente para ele, que é o defeito que esta
+   * listagem existe para fechar. É o precedente do bloco 119, e o mesmo que
+   * `comandaVisivel` já documenta neste arquivo.
+   */
+  podeVerCliente: boolean,
 ): Promise<readonly ComandaAberta[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
@@ -288,7 +299,7 @@ export async function comandasAbertas(
     return linhas.map((l) => ({
       id: l.id,
       abertaEm: l.opened_at.toISOString(),
-      customerName: l.customer_name,
+      customerName: podeVerCliente ? l.customer_name : null,
       appointmentId: l.appointment_id,
       itens: Number(l.itens),
       totalCents: l.total_cents,

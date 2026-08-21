@@ -933,7 +933,15 @@ describeIfDb('a cobrança online da comanda', () => {
         ...operador,
       });
 
-      const abertas = await comandasAbertas(TENANT, LOCATION);
+      const abertas = await comandasAbertas(TENANT, LOCATION, true);
+
+      // Sem `customers.view` o nome sai redigido e a **lista continua**: somar a
+      // permissão ao `@Exige` faria o papel de balcão sem ela levar 403 na
+      // listagem inteira, e a comanda avulsa voltaria a ser invisível para
+      // exatamente quem este bloco existe para atender.
+      const semNome = await comandasAbertas(TENANT, LOCATION, false);
+      expect(semNome.map((c) => c.id)).toContain(comanda.id);
+      expect(semNome.every((c) => c.customerName === null)).toBe(true);
       expect(abertas.map((c) => c.id)).toContain(comanda.id);
       // Sem atendimento e sem cliente: é a venda avulsa, e a tela precisa
       // distinguir para não escrever o nome de ninguém.
@@ -951,7 +959,7 @@ describeIfDb('a cobrança online da comanda', () => {
       });
 
       expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('cancelled');
-      expect((await comandasAbertas(TENANT, LOCATION)).map((c) => c.id)).not.toContain(orderId);
+      expect((await comandasAbertas(TENANT, LOCATION, true)).map((c) => c.id)).not.toContain(orderId);
 
       // Quem recusa aqui é `exigirAberta`, que já leu `cancelled`. O `WHERE
       // status = 'open'` do `UPDATE` é a segunda camada, para duas transações

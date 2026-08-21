@@ -327,8 +327,9 @@ export default async function SegurancaPage({ searchParams }: Props) {
             <form action={acaoDesligarSegundoFator} className="formulario">
               <p className="ui-field__hint">
                 Faz sentido ao trocar de celular: desligue aqui e ligue de novo no aparelho
-                novo. Enquanto estiver desligado, esta conta não passa pelas telas de dinheiro
-                se a barbearia exigir o segundo fator.
+                novo. <strong>Contas com acesso ao financeiro não desligam</strong> quando a
+                barbearia exige o segundo fator no dinheiro — para essas, quem tira a
+                exigência é o dono, em Segurança.
               </p>
               <div className="ui-field">
                 <label className="ui-field__label" htmlFor="codigo-desligar">

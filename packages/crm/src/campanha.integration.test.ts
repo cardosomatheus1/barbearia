@@ -8,6 +8,7 @@ import {
   despacharCampanha,
   puladosDaCampanha,
   marcarParaEnvio,
+  retomarCampanha,
 } from './campanha.js';
 
 /**
@@ -865,4 +866,65 @@ describeIfDb('campanhas', () => {
       admin.$executeRawUnsafe(`UPDATE campaign_targets SET goal_met_at = now()`),
     ).rejects.toThrow();
   });
+
+  describe('retomar a campanha travada em enviando', () => {
+    /**
+     * Testes que **executam a consulta**, e não só a decisão.
+     *
+     * A primeira versão de `retomarCampanha` trazia `FOR UPDATE` sobre uma
+     * consulta com `GROUP BY`, que o Postgres recusa — a rota respondia 500 em
+     * toda chamada, com o botão desenhado na tela e a suíte verde, porque os
+     * únicos testes novos eram unitários de `campanhaParada`. É a regra em
+     * letras: SQL cru não é conferido por ninguém até rodar.
+     */
+    it('não retoma um envio que acabou de ser pedido', async () => {
+      const criada = await campanha();
+      await marcarParaEnvio({ tenantId: TENANT, campanhaId: criada.id, ...operador });
+
+      // O relógio logo depois do clique: nada se mexeu, mas nada está parado.
+      const agora = new Date(Date.now() + 60_000);
+      expect(
+        await retomarCampanha({ tenantId: TENANT, campanhaId: criada.id, agora, ...operador }),
+      ).toBe(false);
+    });
+
+    it('retoma depois de uma hora sem nada se mexer, e enfileira de novo', async () => {
+      const criada = await campanha();
+      await marcarParaEnvio({ tenantId: TENANT, campanhaId: criada.id, ...operador });
+
+      const daquiADuasHoras = new Date(Date.now() + 2 * 60 * 60_000);
+      expect(
+        await retomarCampanha({
+          tenantId: TENANT,
+          campanhaId: criada.id,
+          agora: daquiADuasHoras,
+          ...operador,
+        }),
+      ).toBe(true);
+
+      // Duas tarefas: a do envio e a da retomada. A chave da segunda carrega o
+      // instante — com a chave do envio, o ON CONFLICT a descartaria em
+      // silêncio, que é o defeito que o índice parcial já cobrou aqui.
+      const tarefas = await admin.$queryRawUnsafe<{ kind: string }[]>(
+        `SELECT kind FROM jobs WHERE tenant_id = '${TENANT}'::uuid AND kind = 'campanha.enviar'`,
+      );
+      expect(tarefas).toHaveLength(2);
+    });
+
+    it('campanha de outra barbearia não é retomada', async () => {
+      const criada = await campanha();
+      await marcarParaEnvio({ tenantId: TENANT, campanhaId: criada.id, ...operador });
+
+      const daquiADuasHoras = new Date(Date.now() + 2 * 60 * 60_000);
+      expect(
+        await retomarCampanha({
+          tenantId: VIZINHO,
+          campanhaId: criada.id,
+          agora: daquiADuasHoras,
+          ...operador,
+        }),
+      ).toBe(false);
+    });
+  });
+
 });
