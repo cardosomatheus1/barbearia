@@ -314,7 +314,15 @@ export default async function PainelPage({ searchParams }: Props) {
        * afirmando o contrário sobre o mesmo fato é a §6 pergunta 6, e o texto
        * era a metade errada: quem fala de agenda vazia agora é o cartão de cima.
        */
-      texto: 'Faltas e cadastro não apresentam um desvio que peça ação imediata.',
+      /* O período no texto, como no título do alerta ativo.
+         O bloco 114 pôs o período no título de quem dispara e deixou o "tudo
+         certo" mudo: com `periodo=mes`, a seção "Sinais de hoje" dizia
+         "Operação sem alerta crítico agora" ao lado do bloco Hoje mostrando 33%
+         de faltas. As duas estavam certas sobre janelas diferentes, e nenhuma
+         dizia qual. */
+      texto: `Faltas e cadastro ${
+        periodo === 'dia' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : 'no mês, até hoje'
+      } não apresentam um desvio que peça ação imediata.`,
       href: '/admin/dia',
       acao: 'Ver o dia',
       tom: 'ok',

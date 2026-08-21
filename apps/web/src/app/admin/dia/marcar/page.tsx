@@ -151,6 +151,17 @@ export default async function MarcarPage({ searchParams }: Props) {
       : null;
 
   const doDia = grade?.ok ? grade.dados.days[0] : undefined;
+  /**
+   * O preço do horário que o operador escolheu, vindo do motor.
+   *
+   * Casado por hora **e** profissional: com `collapse` a grade traz uma linha
+   * por horário, mas quando o balcão escolhe a cadeira antes o mesmo horário
+   * pode aparecer com preços diferentes por profissional.
+   */
+  const precoDoHorario =
+    doDia?.slots.find(
+      (s) => s.start === hora && (!profissional || s.professionalId === profissional),
+    )?.price ?? null;
 
   return (
     <main className="ui-container balcao balcao--marcar" {...secao('dia')}>
@@ -248,6 +259,22 @@ export default async function MarcarPage({ searchParams }: Props) {
                 <li key={`${slot.professionalId}-${slot.start}`}>
                   <a className="hora" href={link({ h: slot.start, p: slot.professionalId, e: 'd' })}>
                     <span className="hora__valor tabular">{slot.start}</span>
+                    {/* O preço daquele horário, como na tela do cliente.
+
+                        A grade do balcão vem do **mesmo** motor, com a faixa por
+                        horário já aplicada — e esta tela somava o catálogo e
+                        mostrava o preço de tabela. A recepção lia R$ 45,00 ao
+                        telefone e a comanda saía R$ 49,50, porque quem congela é
+                        `resolveSlot` e ele não pergunta quem está marcando. */}
+                    {slot.price !== null && slot.price !== total ? (
+                      <span
+                        className={`hora__preco tabular ${
+                          slot.price > total ? 'hora__preco--acima' : 'hora__preco--abaixo'
+                        }`}
+                      >
+                        R$ {dinheiro(slot.price)}
+                      </span>
+                    ) : null}
                   </a>
                 </li>
               ))}
@@ -273,8 +300,23 @@ export default async function MarcarPage({ searchParams }: Props) {
             {escolhidos.map((id) => porId.get(id)?.name).join(' + ')} ·{' '}
             <strong className="tabular">{hora}</strong> ·{' '}
             <span className="tabular">{data.split('-').reverse().join('/')}</span>{' '}
+            <strong className="tabular">R$ {dinheiro(precoDoHorario ?? total)}</strong>{' '}
             <a href={link({ e: 'c' })}>trocar</a>
           </p>
+
+          {/* A diferença é dita, nunca só embutida no número — a mesma frase da
+              tela do cliente. Quem atende o telefone precisa poder responder
+              "por que R$ 49,50?" sem abrir a tela de preços. */}
+          {precoDoHorario !== null && precoDoHorario !== total ? (
+            <p className="confere__ajuste">
+              {precoDoHorario > total ? 'Este horário custa ' : 'Este horário sai '}
+              <strong className="tabular">
+                R$ {dinheiro(Math.abs(precoDoHorario - total))}{' '}
+                {precoDoHorario > total ? 'a mais' : 'a menos'}
+              </strong>{' '}
+              que o preço de tabela (R$ {dinheiro(total)}).
+            </p>
+          ) : null}
 
           {/* Busca: GET próprio, para o formulário de gravação não ser enviado
               sem querer ao apertar Enter no campo de procura. */}

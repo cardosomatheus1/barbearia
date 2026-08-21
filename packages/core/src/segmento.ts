@@ -55,7 +55,21 @@ export const ROTULO_DO_SEGMENTO: Readonly<Record<Segmento, string>> = {
   ativo: 'Ativo',
   frequente: 'Frequente',
   vip: 'VIP',
-  em_risco: 'Em risco',
+  /**
+   * "Passou do ritmo", e não "Em risco" — a mesma palavra do filtro que nomeia
+   * este mesmo conjunto (`ROTULO_DO_FILTRO`, mais abaixo).
+   *
+   * "Em risco" ficou com a Retenção, que é outra população: ela sai do score de
+   * sete sinais e listava 51 pessoas enquanto o contador de Campanhas dizia 34,
+   * as duas telas usando a mesma palavra. O bloco 108 consertou o **botão**
+   * criando `risco_de_abandono` e deixou os dois rótulos — então a ficha do Davi
+   * dizia "Frequente" e a Retenção dizia "Risco médio · 33" sobre ele, sem que
+   * nada em nenhuma das duas explicasse que são medidas diferentes.
+   *
+   * Este rótulo diz o **fato**: a pessoa passou do próprio ciclo e não voltou.
+   * O da Retenção diz o **julgamento**, que soma sete sinais.
+   */
+  em_risco: 'Passou do ritmo',
   perdido: 'Perdido',
   assinante: 'Assinante',
 };

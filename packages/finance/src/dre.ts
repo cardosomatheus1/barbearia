@@ -218,6 +218,22 @@ async function fatosDoPeriodo(
        AND b.paid_on BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
 
+  /**
+   * O que venceu no período e continua em aberto.
+   *
+   * Pelo **vencimento**, e não pelo pagamento: a pergunta é o que deveria ter
+   * saído e não saiu. Não entra em conta nenhuma — é a ressalva que a tela
+   * escreve ao lado da linha de despesa.
+   */
+  const emAberto = await tx.$queryRaw<{ total: number | null }[]>`
+    SELECT sum(b.amount_cents)::int AS total
+      FROM bills b
+     WHERE b.location_id = ${params.locationId}::uuid
+       AND b.direction = 'pagar'
+       AND b.status = 'aberta'
+       AND b.due_on BETWEEN ${params.de}::date AND ${params.ate}::date
+  `;
+
   return {
     receitaServicosCents: servicoCents + (pacotesReconhecidos[0]?.total ?? 0),
     receitaProdutosCents: produtoCents,
@@ -228,6 +244,7 @@ async function fatosDoPeriodo(
     taxasCents: taxas[0]?.total ?? 0,
     fidelidadeCents: fidelidade[0]?.total ?? 0,
     despesasCents: despesas[0]?.total ?? 0,
+    despesasEmAbertoCents: emAberto[0]?.total ?? 0,
   };
 }
 

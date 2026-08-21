@@ -309,6 +309,17 @@ export interface PainelDeAvaliacoes {
   readonly total: number;
   /** A média que a página pública mostra — só o publicado, e só a partir do mínimo. */
   readonly mediaPublica: number | null;
+  /**
+   * Quantas estão **no ar** — o par de `mediaPublica`.
+   *
+   * A tela já separava as duas médias e explicava que *"é a distância entre os
+   * dois números que diz o tamanho do que você suspendeu"*, e mostrava **uma**
+   * contagem: 682 no painel contra 680 na página do cliente e no card do
+   * marketplace. Quem contestou uma nota não tinha como saber quantas ficaram
+   * públicas — e a diferença também inclui a que ainda está na janela de 48h,
+   * que é justamente a que o gestor abriu a tela para tratar.
+   */
+  readonly totalPublico: number;
   readonly aRecuperar: readonly AvaliacaoNaTela[];
   readonly ultimas: readonly AvaliacaoNaTela[];
 }
@@ -389,6 +400,7 @@ export async function painelDeAvaliacoes(
       media: media(todas.map((t) => t.rating)),
       total: todas.length,
       mediaPublica: resumoPublico(publicadas).media,
+      totalPublico: publicadas.length,
       aRecuperar: naTela.filter((a) => a.precisaDeAtitude),
       ultimas: naTela,
     };

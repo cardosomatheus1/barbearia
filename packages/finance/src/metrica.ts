@@ -57,21 +57,52 @@ export async function medir(params: {
      * fechamento de caixa que o balcão conferiu e assinou.
      */
     if (metrica === 'faturamento' || metrica === 'ticket_medio') {
+      /**
+       * Por profissional a conta é **item a item**, e é a mesma de
+       * `desempenho.ts` — a tela que o barbeiro abre.
+       *
+       * Duas consultas literais e não um `CASE`, porque a diferença não é o
+       * rótulo: é de onde o número sai. Atribuir a **comanda inteira** ao
+       * profissional do agendamento — que era o que este arquivo fazia — põe na
+       * conta dele a pomada que a recepção vendeu junto e o desconto que a casa
+       * deu, e produzia R$ 673,00 de diferença sobre o mesmo barbeiro no mesmo
+       * mês: o dono lia um número no assistente e o barbeiro lia outro na tela
+       * dele. Sobre o dinheiro que ele recebe.
+       *
+       * O cabeçalho deste arquivo diz que *"onde já existe a definição, este
+       * arquivo não a reescreve"* — e reescrevia, na dimensão.
+       *
+       * O total sem dimensão continua saindo de `orders`: ali a pergunta é
+       * quanto a **casa** faturou, e a pomada é dela.
+       */
+      if (dimensao === 'profissional') {
+        const linhas = await tx.$queryRaw<
+          { rotulo: string | null; total: bigint; comandas: bigint }[]
+        >`
+          SELECT pr.name AS rotulo,
+                 sum(oi.unit_price_cents * oi.quantity)::bigint AS total,
+                 count(DISTINCT o.id)::bigint AS comandas
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            JOIN professionals pr ON pr.id = oi.professional_id
+           WHERE o.status = 'paid'
+             AND o.business_day BETWEEN ${de}::date AND ${ate}::date
+             AND (${unidade}::uuid IS NULL OR o.location_id = ${unidade}::uuid)
+           GROUP BY 1
+           ORDER BY 2 DESC
+        `;
+        return dobrar(linhas, metrica === 'faturamento' ? 'soma' : 'media', dimensao);
+      }
+
       const linhas = await tx.$queryRaw<{ rotulo: string | null; total: bigint; comandas: bigint }[]>`
         SELECT
-          CASE
-            WHEN ${dimensao} = 'profissional' THEN pr.name
-            WHEN ${dimensao} = 'unidade' THEN lo.name
-            ELSE NULL
-          END AS rotulo,
+          CASE WHEN ${dimensao} = 'unidade' THEN lo.name ELSE NULL END AS rotulo,
           -- Sem a gorjeta, como o painel e o DRE: e a mesma pergunta feita em
           -- portugues, e tres respostas diferentes para "quanto faturei" e a
           -- pior coisa que um assistente pode devolver.
           sum(o.total_cents - o.tip_cents)::bigint AS total,
           count(*)::bigint AS comandas
           FROM orders o
-          LEFT JOIN appointments a ON a.id = o.appointment_id
-          LEFT JOIN professionals pr ON pr.id = a.professional_id
           LEFT JOIN locations lo ON lo.id = o.location_id
          WHERE o.status = 'paid'
            AND o.business_day BETWEEN ${de}::date AND ${ate}::date

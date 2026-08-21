@@ -2706,6 +2706,10 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--color-border);
 }
+
+/* O troco é a linha que fecha a conta, não um pagamento: cor secundária para
+   ele não ser lido como mais uma forma. */
+.pagamentos__item--troco { color: var(--color-text-muted); }
 .movimento__quem { display: grid; min-width: 0; }
 .movimento__tipo { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 .movimento__detalhe { font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
@@ -7816,6 +7820,15 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
 }
 .dre__variacao--melhorou { color: var(--color-success); }
 .dre__variacao--piorou { color: var(--color-danger); }
+
+/* A ressalva ocupa o lugar da seta: uma queda que ela explica não é desempenho,
+   e a seta verde diria o contrário do que aconteceu. */
+.dre__ressalva {
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
 @container (min-width: 34rem) {
   .dre__linha {
     grid-template-columns: 1fr 8rem 9rem 7rem;

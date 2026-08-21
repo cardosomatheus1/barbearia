@@ -26,6 +26,7 @@ const MES: FatosDoDre = {
   taxasCents: 138_000,
   fidelidadeCents: 42_000,
   despesasCents: 890_000,
+  despesasEmAbertoCents: 0,
 };
 
 describe('o DRE soma o que a SPEC lista, e nada mais', () => {
@@ -61,6 +62,7 @@ describe('o DRE soma o que a SPEC lista, e nada mais', () => {
       taxasCents: 0,
       fidelidadeCents: 0,
       despesasCents: 120_000,
+      despesasEmAbertoCents: 0,
     });
     expect(vazio.margemBps).toBeNull();
     expect(vazio.resultadoCents).toBe(-120_000);

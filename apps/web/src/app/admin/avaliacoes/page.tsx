@@ -379,7 +379,7 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
     );
   }
 
-  const { media, total, mediaPublica, aRecuperar, ultimas } = resposta.dados;
+  const { media, total, totalPublico, mediaPublica, aRecuperar, ultimas } = resposta.dados;
   const tratadas = ultimas.filter((a) => !a.precisaDeAtitude);
 
   return (
@@ -436,7 +436,19 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
           <div className="pacotes__numero">
             <dt>Avaliações</dt>
             <dd className="tabular">{total}</dd>
-            <p className="pacotes__nota">Uma por atendimento concluído.</p>
+            {/* As duas contagens, como as duas médias: o painel mostrava 682 e a
+                página do cliente 680, sem nada explicar a diferença — que é a
+                contestada mais a que ainda está na janela de 48 horas. */}
+            <p className="pacotes__nota">
+              Uma por atendimento concluído.
+              {totalPublico !== total ? (
+                <>
+                  {' '}
+                  <strong>{totalPublico}</strong> no seu perfil — as outras estão suspensas ou
+                  ainda na janela de 48h.
+                </>
+              ) : null}
+            </p>
           </div>
         </dl>
       </section>

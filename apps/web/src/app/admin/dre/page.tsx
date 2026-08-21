@@ -65,7 +65,22 @@ function Variacao({ linha }: { readonly linha: VariacaoDaLinha }) {
   );
 }
 
-function Linha({ linha }: { readonly linha: LinhaDoDre }) {
+function Linha({
+  linha,
+  ressalva,
+}: {
+  readonly linha: LinhaDoDre;
+  /**
+   * O que o número **não** conta, dito ao lado dele.
+   *
+   * Hoje só a despesa tem uma: o DRE é de caixa e soma a conta paga, então um
+   * mês em que nada foi pago mostra despesa zero — com a seta verde de queda de
+   * 100%, que é a tela afirmando uma melhora sobre o dono não ter pago o
+   * aluguel. Ela também apaga a seta: uma variação que a ressalva explica não é
+   * desempenho.
+   */
+  readonly ressalva?: string | undefined;
+}) {
   return (
     <li className={`dre__linha dre__linha--${linha.natureza}`}>
       <span className="dre__rotulo">{linha.rotulo}</span>
@@ -77,7 +92,7 @@ function Linha({ linha }: { readonly linha: LinhaDoDre }) {
         <span className="dre__antes-rotulo">antes </span>
         {reais(linha.anteriorCents)}
       </span>
-      <Variacao linha={linha} />
+      {ressalva ? <span className="dre__ressalva">{ressalva}</span> : <Variacao linha={linha} />}
     </li>
   );
 }
@@ -137,6 +152,9 @@ export default async function DrePage({ searchParams }: Props) {
   const { atual, linhas, receitaBruta, resultado } = dre.dados;
   const receitas = linhas.filter((l) => l.natureza === 'receita');
   const custos = linhas.filter((l) => l.natureza === 'custo');
+  // A conta que venceu no período e não foi paga. Não entra em soma nenhuma —
+  // o DRE é de caixa —, mas é o que explica uma despesa que "caiu".
+  const emAbertoCents = atual.despesasEmAbertoCents;
   const semMovimento = atual.receitaBrutaCents === 0 && atual.custoTotalCents === 0;
 
   return (
@@ -239,7 +257,15 @@ export default async function DrePage({ searchParams }: Props) {
             <h2 className="rotulo">O que saiu</h2>
             <ul className="dre">
               {custos.map((linha) => (
-                <Linha key={linha.campo} linha={linha} />
+                <Linha
+                  key={linha.campo}
+                  linha={linha}
+                  ressalva={
+                    linha.campo === 'despesasCents' && emAbertoCents > 0
+                      ? `${reais(emAbertoCents)} venceu e não foi pago`
+                      : undefined
+                  }
+                />
               ))}
             </ul>
           </section>

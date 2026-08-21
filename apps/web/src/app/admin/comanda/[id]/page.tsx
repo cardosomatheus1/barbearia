@@ -599,6 +599,18 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                 <span>{reais(pagamento.valorCents)}</span>
               </li>
             ))}
+            {/* O troco na mesma lista, e é o que reconcilia a conta.
+                Sem ele a tela dizia "Total R$ 65,00" e "Dinheiro R$ 100,00" —
+                como se tivessem entrado R$ 35,00 a mais. E é justamente a tela
+                que alguém abre quando a gaveta não bate ou o cliente questiona
+                o valor. O caixa já lia o troco (`recebido = bruto − troco`);
+                esta não lia. */}
+            {conta.trocoCents > 0 ? (
+              <li className="pagamentos__item pagamentos__item--troco">
+                <span>Troco devolvido</span>
+                <span>− {reais(conta.trocoCents)}</span>
+              </li>
+            ) : null}
           </ul>
           <a className="ui-button ui-button--primary ui-button--block" href="/admin/dia">
             Voltar ao dia

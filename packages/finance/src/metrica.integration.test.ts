@@ -54,11 +54,29 @@ async function atender(opcoes: {
             '${inicio}', '${inicio}'::timestamptz + interval '${minutos} minutes')
   `);
   if (pago && status === 'completed') {
+    /**
+     * A comanda **com o item**, e o item com o profissional.
+     *
+     * A semente criava `orders` sem nenhuma linha em `order_items`, o que não
+     * acontece no produto: a comanda que nasce de um atendimento vem
+     * pré-preenchida com os serviços marcados, no preço da reserva. Sem o item
+     * o teste media a única conta possível — a comanda inteira atribuída ao
+     * profissional do agendamento —, que é justamente a que produzia R$ 673,00
+     * de diferença entre o que o dono lê e o que o barbeiro lê.
+     */
+    const ordem = `d6363636-1111-0000-0000-${String(sequencia).padStart(12, '0')}`;
     await exec(`
-      INSERT INTO orders (tenant_id, location_id, customer_id, appointment_id, status,
+      INSERT INTO orders (id, tenant_id, location_id, customer_id, appointment_id, status,
                           business_day, subtotal_cents, total_cents, closed_at)
-      VALUES ('${TENANT}', '${LOCAL}', '${CLIENTE}', '${id}', 'paid',
+      VALUES ('${ordem}', '${TENANT}', '${LOCAL}', '${CLIENTE}', '${id}', 'paid',
               '${dia}', ${cents}, ${cents}, '${inicio}')
+    `);
+    await exec(`
+      INSERT INTO order_items
+        (tenant_id, order_id, kind, description, quantity, unit_price_cents,
+         professional_id, position)
+      VALUES ('${TENANT}', '${ordem}', 'service', 'Corte', 1, ${cents},
+              '${profissional}', 1)
     `);
   }
 }
@@ -119,6 +137,40 @@ describeIfDb('o executor do schema semântico', () => {
       { rotulo: 'João', valor: 8000 },
       { rotulo: 'Ruan', valor: 7000 },
     ]);
+  });
+
+  it('o faturamento por profissional é o mesmo que a tela do barbeiro mostra', async () => {
+    /**
+     * Duas contas para "quanto o Ruan faturou" é ter duas verdades sobre o
+     * dinheiro dele — e era o que havia: o assistente atribuía a **comanda
+     * inteira** ao profissional do agendamento, e `desempenho.ts`, que é a tela
+     * que o barbeiro abre, atribui **item a item**. R$ 673,00 de diferença sobre
+     * o mesmo barbeiro no mesmo mês, com o dono lendo um número e ele outro.
+     *
+     * O corte deste caso é o item **sem profissional** na comanda de um
+     * atendimento: a pomada que a recepção vendeu junto. Ela é receita da casa e
+     * não é de cadeira nenhuma. Pela conta antiga entrava na do Ruan.
+     */
+    await atender({ profissional: RUAN, dia: '2026-03-03', cents: 5000 });
+
+    const [ordem] = await admin.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM orders WHERE tenant_id = '${TENANT}'::uuid ORDER BY closed_at DESC LIMIT 1`,
+    );
+    await exec(`
+      INSERT INTO order_items
+        (tenant_id, order_id, kind, description, quantity, unit_price_cents, position)
+      VALUES ('${TENANT}', '${ordem!.id}', 'product', 'Pomada', 1, 4000, 2)
+    `);
+    await exec(`
+      UPDATE orders SET subtotal_cents = 9000, total_cents = 9000 WHERE id = '${ordem!.id}'
+    `);
+
+    // A casa faturou os dois itens.
+    expect((await pedir('faturamento')).total).toBe(9000);
+
+    // O Ruan, só o corte — que é o que a tela dele mostra.
+    const porBarbeiro = await pedir('faturamento', 'profissional');
+    expect(porBarbeiro.fatias).toEqual([{ rotulo: 'Ruan', valor: 5000 }]);
   });
 
   it('o ticket médio é a soma sobre a contagem, não a média das médias', async () => {

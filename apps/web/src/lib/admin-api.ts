@@ -419,7 +419,26 @@ export const catalogoDoBalcao = (token: string) =>
 export interface DiaDaGrade {
   date: string;
   unavailableReason: string | null;
-  slots: { start: string; end: string; professionalId: string }[];
+  slots: {
+    start: string;
+    end: string;
+    professionalId: string;
+    /**
+     * O preço **daquele horário**, já com a faixa por horário aplicada.
+     *
+     * A rota sempre devolveu — é o mesmo `getAvailabilityRange` da página
+     * pública, com `atCounter: true` — e este tipo o **apagava**. A tela do
+     * balcão somava o catálogo e mostrava R$ 45,00 sobre um horário que
+     * `resolveSlot` congela por R$ 49,50, porque o motor aplica a faixa
+     * independentemente de quem está marcando.
+     *
+     * É exatamente o defeito que o bloco 105 consertou na página do cliente —
+     * *"a tela dizia R$ 45,00 sobre um horário que `createAppointment`
+     * congelava por R$ 54,00"* — e que ficou de pé na tela de quem atende o
+     * telefone. `null` é grade sem faixa cadastrada.
+     */
+    price: number | null;
+  }[];
 }
 
 export const gradeDoBalcao = (
@@ -2375,6 +2394,8 @@ export interface PainelDeAvaliacoes {
   media: number | null;
   total: number;
   mediaPublica: number | null;
+  /** Quantas estão no ar — o par de `mediaPublica`. */
+  totalPublico: number;
   aRecuperar: AvaliacaoNaTela[];
   ultimas: AvaliacaoNaTela[];
 }
@@ -3064,6 +3085,8 @@ export interface DreNaTela {
     custoTotalCents: number;
     resultadoCents: number;
     margemBps: number | null;
+    /** O que venceu no período e não foi pago — a ressalva da linha de despesa. */
+    despesasEmAbertoCents: number;
   };
   anterior: { resultadoCents: number; margemBps: number | null };
   linhas: LinhaDoDre[];

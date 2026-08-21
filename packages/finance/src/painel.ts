@@ -536,6 +536,42 @@ async function serieDeFaturamento(
   return linhas.map((linha) => ({ dia: linha.dia, faturamentoCents: Number(linha.faturamento_cents) }));
 }
 
+/**
+ * O que a **equipe** vendeu no período — o numerador que a barra de meta pede.
+ *
+ * `metaDaCasa` soma as metas individuais dos profissionais, então o numerador
+ * também tem que ser de cadeira. Ele era `orders.total_cents - tip_cents`, que
+ * inclui a pomada vendida no balcão e desconta o desconto que a casa deu: a
+ * barra do painel dizia **67%** enquanto os três barbeiros, somados, viam 61%
+ * nas telas deles — seis pontos de diferença que ninguém consegue reconciliar,
+ * porque a diferença é venda de produto.
+ *
+ * A conta é a mesma de `desempenho.ts` e da comissão: item a item, pelo
+ * profissional do item.
+ *
+ * O faturamento do cartão continua sendo o da casa, e é outra pergunta: quanto
+ * entrou. Duas contas com **nomes diferentes** é o certo aqui; o errado era
+ * dividir uma pela outra.
+ */
+async function vendidoPelaEquipe(
+  tx: TransactionClient,
+  locationId: string,
+  inicio: string,
+  fim: string,
+): Promise<number> {
+  const linhas = await tx.$queryRaw<{ total: bigint }[]>`
+    SELECT coalesce(sum(oi.unit_price_cents * oi.quantity), 0)::bigint AS total
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+     WHERE o.location_id = ${locationId}::uuid
+       AND o.status = 'paid'
+       AND oi.professional_id IS NOT NULL
+       AND o.business_day >= ${inicio}::date
+       AND o.business_day <= ${fim}::date
+  `;
+  return Number(linhas[0]?.total ?? 0);
+}
+
 async function metaDaCasa(tx: TransactionClient, locationId: string, dia: string): Promise<number> {
   const mes = primeiroDoMes(dia);
   const linhas = await tx.$queryRaw<{ total: bigint }[]>`
@@ -557,11 +593,12 @@ export async function painelDeDinheiroDoPeriodo(params: {
 }): Promise<PainelDeDinheiro> {
   const janela = janelaPainel(params.dia, params.periodo);
   return withTenant(params.tenantId, async (tx) => {
-    const [atual, anterior, serie, metaCents] = await Promise.all([
+    const [atual, anterior, serie, metaCents, daEquipe] = await Promise.all([
       dinheiroDoPeriodo(tx, params.locationId, janela.inicio, janela.fim),
       dinheiroDoPeriodo(tx, params.locationId, janela.inicioAnterior, janela.fimAnterior),
       serieDeFaturamento(tx, params.locationId, janela.inicio, janela.fim),
       metaDaCasa(tx, params.locationId, params.dia),
+      vendidoPelaEquipe(tx, params.locationId, janela.inicio, janela.fim),
     ]);
     const faturamento = Number(atual.faturamento_cents);
     const faturamentoAnterior = Number(anterior.faturamento_cents);
@@ -582,7 +619,9 @@ export async function painelDeDinheiroDoPeriodo(params: {
       faturamentoCents: comparar(faturamento, faturamentoAnterior),
       ticketMedioCents: comparar(ticketAtual, ticketAnterior),
       metaCents,
-      percentualMeta: metaCents > 0 ? Math.round((faturamento / metaCents) * 100) : 0,
+      // Numerador e denominador da mesma coisa: o que a equipe vendeu sobre o
+      // que foi combinado com ela.
+      percentualMeta: metaCents > 0 ? Math.round((daEquipe / metaCents) * 100) : 0,
       projecaoCents,
       serie,
     };

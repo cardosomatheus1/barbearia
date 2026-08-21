@@ -266,6 +266,57 @@ describeIfDb('painel do proprietário', () => {
     expect(painel.faturamentoCents.valor).toBe(5000);
   });
 
+  it('a barra de meta mede o que a equipe vendeu, não o que a casa faturou', async () => {
+    /**
+     * `metaDaCasa` soma as metas **individuais** dos profissionais, e o
+     * numerador era `orders.total_cents - tip_cents`: a pomada vendida no
+     * balcão entrava na conta, o desconto da casa saía dela, e a barra dizia
+     * 67% enquanto os três barbeiros somados viam 61% nas telas deles — seis
+     * pontos que ninguém consegue reconciliar, porque a diferença é produto.
+     *
+     * O corte que este caso faz: um serviço de R$ 500,00 com profissional e um
+     * produto de R$ 500,00 **sem** profissional, contra uma meta de R$ 1.000,00.
+     * Pela conta antiga a barra bate 100%; pela certa, 50%.
+     */
+    await admin.$executeRawUnsafe(`
+      INSERT INTO professional_goals (tenant_id, professional_id, month, revenue_cents)
+      VALUES ('${TENANT}', '${RUAN}', date_trunc('month', '${SABADO}'::date), 100000)
+      ON CONFLICT (professional_id, month) DO UPDATE SET revenue_cents = 100000
+    `);
+
+    await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 0, ...operador })
+      .catch(() => undefined);
+    const aberta = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      tipo: 'service', serviceId: CABELO, descricao: 'Corte',
+      quantidade: 1, precoUnitarioCents: 50000, professionalId: RUAN,
+    });
+    // Produto vendido no balcão: é receita da casa e **não** é de cadeira
+    // nenhuma. Sem profissional, como a venda avulsa de pomada.
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      tipo: 'product', descricao: 'Pomada',
+      quantidade: 1, precoUnitarioCents: 50000, professionalId: null,
+    });
+    await fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      pagamentos: [{ forma: 'cash', valorCents: 100000 }],
+      hojeNaUnidade: SABADO, ...operador,
+    });
+
+    const painel = await painelDeDinheiroDoPeriodo({
+      tenantId: TENANT, locationId: LOCATION, dia: SABADO, periodo: 'mes',
+    });
+
+    // O faturamento continua sendo o da casa: os dois itens.
+    expect(painel.faturamentoCents.valor).toBe(100000);
+    // A barra, não: metade da meta, porque metade não é de cadeira.
+    expect(painel.percentualMeta).toBe(50);
+  });
+
   it('o ticket médio divide pelo número de comandas', async () => {
     await vendeu(10000, SABADO);
     await vendeu(6000, SABADO);

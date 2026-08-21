@@ -156,9 +156,17 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
             */}
             {automacao.textoTitulo === null && !temTextoDoTipo ? (
               <p className="item-cadastro__linha item-cadastro__risco">
-                {automacao.enviadas > 0
-                  ? 'Parou de sair: '
-                  : 'Nada vai sair: '}
+                {/* A regra desligada não "parou de sair" por falta de texto: ela
+                    parou porque alguém a desligou, e a linha acima já diz isso.
+                    Sem `ativa` na conta, o mesmo cartão explicava o mesmo fato
+                    com duas causas diferentes e oferecia um conserto que não faz
+                    a mensagem voltar — e o vizinho, também desligado, dizia a
+                    outra frase. */}
+                {!automacao.ativa
+                  ? 'Quando você ligar, nada vai sair: '
+                  : automacao.enviadas > 0
+                    ? 'Parou de sair: '
+                    : 'Nada vai sair: '}
                 não há texto aprovado de {nomeDoAviso(automacao.tipo)}.{' '}
                 <a href="/admin/whatsapp">Mandar um para aprovação</a>.
               </p>

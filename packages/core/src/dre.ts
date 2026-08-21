@@ -66,6 +66,21 @@ export interface FatosDoDre {
   readonly taxasCents: number;
   readonly fidelidadeCents: number;
   readonly despesasCents: number;
+  /**
+   * O que **venceu no período e não foi pago** — a ressalva da linha de despesa.
+   *
+   * Não entra em conta nenhuma: o DRE é de caixa, e a regra de que a despesa é
+   * a conta **paga** continua valendo inteira. Ele existe para a tela poder
+   * dizer o que o número não diz.
+   *
+   * Sem isso o relatório fazia o oposto do que a barbearia viveu: agosto com
+   * seis contas vencidas e nenhuma paga mostrava *"Despesas operacionais −R$
+   * 0,00 · ↓ -100,0%"* **em verde**, e "margem de 57,0%" no rodapé. O dono lia
+   * uma melhora onde o que houve foi ele não ter pago o aluguel — e é a
+   * convenção do número de relatório que ignora parte do dado, com a seta
+   * verde por cima.
+   */
+  readonly despesasEmAbertoCents: number;
 }
 
 export interface Dre extends FatosDoDre {
