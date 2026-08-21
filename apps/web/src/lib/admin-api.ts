@@ -1268,6 +1268,8 @@ export interface Comanda {
   descontoCents: number;
   totalCents: number;
   trocoCents: number;
+  /** De quem é a gorjeta. Nulo é rateada entre quem atendeu. */
+  gorjetaProfessionalId: string | null;
   pagamentos: { forma: FormaDePagamento; valorCents: number }[];
   /** Saldo e limite de quem vai pagar. Nulo quando a comanda é de avulso. */
   conta: { saldoCents: number; limiteCents: number } | null;
@@ -1401,6 +1403,8 @@ export const ajustarAComanda = (
   dados: {
     desconto?: { tipo: 'amount' | 'percent'; valor: number; motivo?: string } | null;
     gorjetaCents?: number;
+    /** `null` é "rateada entre quem atendeu"; ausente é "não mexa". */
+    gorjetaProfessionalId?: string | null;
   },
 ) => chamar<Comanda>('PATCH', `/v1/admin/orders/${id}`, dados, token);
 
@@ -1812,6 +1816,8 @@ export interface NumerosDoMes {
   ticketMedioCents: number;
   taxaDeRetorno: number;
   produtosVendidos: number;
+  /** A gorjeta que ficou com esta cadeira — repasse, nunca receita da casa. */
+  gorjetaCents: number;
 }
 
 export interface MeusNumeros {
@@ -3104,6 +3110,8 @@ export interface DreNaTela {
     margemBps: number | null;
     /** O que venceu no período e não foi pago — a ressalva da linha de despesa. */
     despesasEmAbertoCents: number;
+    /** A gorjeta do período: repasse, fora das duas somas. */
+    gorjetasCents: number;
   };
   anterior: { resultadoCents: number; margemBps: number | null };
   linhas: LinhaDoDre[];

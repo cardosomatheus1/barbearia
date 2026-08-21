@@ -48,7 +48,8 @@ export type ComandaFailure =
   | 'caixa_fechado'
   | 'cliente_nao_encontrado'
   | 'cobranca_em_curso'
-  | 'servico_desconhecido';
+  | 'servico_desconhecido'
+  | 'profissional_desconhecido';
 
 export class ComandaError extends Error {
   constructor(
@@ -104,6 +105,8 @@ export interface Comanda {
   readonly itens: readonly (ItemDaComanda & { readonly professionalName: string | null })[];
   readonly desconto: DescontoDaComanda | null;
   readonly gorjetaCents: number;
+  /** De quem é a gorjeta (SPEC §3.6). Nulo é rateada entre quem atendeu. */
+  readonly gorjetaProfessionalId: string | null;
   readonly subtotalCents: number;
   readonly descontoCents: number;
   readonly totalCents: number;
@@ -139,13 +142,15 @@ async function carregar(
       discount_cents: number;
       discount_reason: string | null;
       tip_cents: number;
+      tip_professional_id: string | null;
       change_cents: number;
     }[]
   >`
     SELECT o.id, o.status, o.customer_id, c.name AS customer_name,
            c.balance_cents, c.credit_limit_cents,
            o.appointment_id, o.opened_at, o.closed_at,
-           o.discount_cents, o.discount_reason, o.tip_cents, o.change_cents
+           o.discount_cents, o.discount_reason, o.tip_cents, o.tip_professional_id,
+           o.change_cents
       FROM orders o
       LEFT JOIN customers c ON c.id = o.customer_id
      WHERE o.id = ${orderId}::uuid
@@ -210,6 +215,7 @@ async function carregar(
     itens,
     desconto,
     gorjetaCents: totais.gorjetaCents,
+    gorjetaProfessionalId: cabeca.tip_professional_id,
     subtotalCents: totais.subtotalCents,
     descontoCents: totais.descontoCents,
     totalCents: totais.totalCents,
@@ -990,6 +996,14 @@ export async function ajustarComanda(params: {
   readonly orderId: string;
   readonly desconto?: DescontoDaComanda | null;
   readonly gorjetaCents?: number;
+  /**
+   * De quem é a gorjeta (SPEC §3.6, bloco 124).
+   *
+   * `undefined` é "não mexa", como todo campo opcional desta borda. `null` é a
+   * escolha explícita de **ratear entre quem atendeu**, que é o padrão e o caso
+   * comum; um id é o cliente tendo dito a quem.
+   */
+  readonly gorjetaProfessionalId?: string | null;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<Comanda> {
@@ -1000,6 +1014,34 @@ export async function ajustarComanda(params: {
     if (params.desconto) {
       const falha = validarDesconto(params.desconto);
       if (falha) throw new ComandaError('desconto_invalido', 'Desconto inválido.', falha);
+    }
+
+    /**
+     * O dono da gorjeta é conferido **sob RLS antes de gravar**.
+     *
+     * A checagem de integridade referencial do Postgres roda com os direitos do
+     * dono da tabela e ignora row security: a chave estrangeira aceitaria o id
+     * de um profissional de outra barbearia sem reclamar, e o repasse ficaria
+     * pendurado em quem não trabalha aqui.
+     *
+     * Pela **loja** e não só pelo tenant: a RLS separa barbearias e não separa
+     * lojas dentro de uma, então sem este filtro o gerente da filial repassaria
+     * a gorjeta a um barbeiro da matriz. Foi a guarda `id-com-unidade` do bloco
+     * 117 que cobrou, na primeira versão desta consulta.
+     */
+    if (params.gorjetaProfessionalId) {
+      const encontrados = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM professionals
+         WHERE id = ${params.gorjetaProfessionalId}::uuid
+           AND location_id = ${params.locationId}::uuid
+           AND active
+      `;
+      if (!encontrados[0]) {
+        throw new ComandaError(
+          'profissional_desconhecido',
+          'Este profissional não existe mais nesta barbearia.',
+        );
+      }
     }
 
     const totais = somarComanda({
@@ -1035,6 +1077,12 @@ export async function ajustarComanda(params: {
         discount_cents = ${totais.descontoCents},
         discount_reason = ${params.desconto?.motivo ?? null},
         tip_cents = ${totais.gorjetaCents},
+        -- Campo ausente significa "nao mexa", nunca "desligue": escrever o
+        -- padrao por omissao faria corrigir um desconto apagar em silencio a
+        -- escolha de quem recebe a gorjeta.
+        tip_professional_id = CASE WHEN ${params.gorjetaProfessionalId !== undefined}
+                                   THEN ${params.gorjetaProfessionalId ?? null}::uuid
+                                   ELSE tip_professional_id END,
         subtotal_cents = ${totais.subtotalCents},
         total_cents = ${totais.totalCents}
       WHERE id = ${params.orderId}::uuid

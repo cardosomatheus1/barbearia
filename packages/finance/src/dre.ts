@@ -254,6 +254,19 @@ async function fatosDoPeriodo(
        AND b.due_on BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
 
+  /**
+   * A gorjeta do período: repasse, e por isso fora das duas somas.
+   *
+   * Pelo `business_day` da venda, como todo o resto deste relatório.
+   */
+  const gorjetas = await tx.$queryRaw<{ total: number | null }[]>`
+    SELECT sum(o.tip_cents)::int AS total
+      FROM orders o
+     WHERE o.location_id = ${params.locationId}::uuid
+       AND o.status = 'paid'
+       AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
+  `;
+
   return {
     receitaServicosCents: servicoCents + (pacotesReconhecidos[0]?.total ?? 0),
     receitaProdutosCents: produtoCents,
@@ -265,6 +278,7 @@ async function fatosDoPeriodo(
     fidelidadeCents: fidelidade[0]?.total ?? 0,
     despesasCents: despesas[0]?.total ?? 0,
     despesasEmAbertoCents: emAberto[0]?.total ?? 0,
+    gorjetasCents: gorjetas[0]?.total ?? 0,
   };
 }
 

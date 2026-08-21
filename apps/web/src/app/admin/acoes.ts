@@ -1596,9 +1596,15 @@ export async function acaoAjustarComanda(form: FormData): Promise<void> {
           motivo: texto(form, 'motivo'),
         };
 
+  // String vazia é a opção "rateada entre quem atendeu", que é `null` no banco
+  // — e não "não mexa". O formulário sempre manda o campo, então o `undefined`
+  // aqui não acontece; ele existe para quem chamar a função sem a tela.
+  const gorjetaProfessionalId = texto(form, 'gorjetaProfessionalId');
+
   const resultado = await ajustarAComanda(token, id, {
     desconto: desconto.valor > 0 ? desconto : null,
     gorjetaCents: await centavosOpcionais(form, 'gorjetaCents', `/admin/comanda/${id}`),
+    gorjetaProfessionalId: gorjetaProfessionalId === '' ? null : gorjetaProfessionalId,
   });
   if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}?salvo=1`);

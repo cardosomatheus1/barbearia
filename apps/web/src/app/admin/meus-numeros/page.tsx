@@ -176,6 +176,20 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
         />
         <Numero rotulo="Produtos vendidos" valor={String(mesAtual.produtosVendidos)} />
         {/*
+          A gorjeta (SPEC §3.6, bloco 124).
+
+          Ela era gravada, subtraída do faturamento em toda tela e nunca
+          atribuída: o único lugar em que aparecia positiva era o total do dia no
+          caixa, sem nome. Repasse e não receita — não entra na base de comissão
+          nem no faturamento —, e por isso vem com a frase ao lado: sem ela, um
+          número de dinheiro no meio dos outros lê como se somasse.
+        */}
+        <Numero
+          rotulo="Gorjetas"
+          valor={reais(mesAtual.gorjetaCents)}
+          nota="100% suas — fora da comissão"
+        />
+        {/*
           A sua nota (bloco 43, SPEC §4.21: comparada com o **seu** passado,
           nunca com a do colega). Sem avaliação nenhuma o número é `—`, e a nota
           diz por quê — um indicador que fica em `—` sem explicação é o que

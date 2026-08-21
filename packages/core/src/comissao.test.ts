@@ -13,6 +13,7 @@ import {
   taxaDaVenda,
   ratearTaxa,
   taxaSobreOsItens,
+  ratearGorjeta,
 } from './comissao.js';
 
 /**
@@ -706,5 +707,78 @@ describe('a taxa não cobra o que não é receita', () => {
   it('venda que é só gorjeta não desce nada da base', () => {
     // Caso de borda real: cortesia com gorjeta. Sem receita não há o que ratear.
     expect(taxaSobreOsItens({ taxaCents: 60, receitaCents: 0, cobradoCents: 2_000 })).toBe(0);
+  });
+});
+
+describe('a gorjeta tem dono', () => {
+  const item = (id: string, professionalId: string | null, totalCents: number) => ({
+    id,
+    professionalId,
+    serviceId: null,
+    categoryId: null,
+    totalCents,
+  });
+
+  it('o dono declarado leva tudo', () => {
+    // "Os dez são do João": o cliente disse, e não há o que ratear.
+    const rateio = ratearGorjeta({
+      itens: [item('a', 'joao', 5000), item('b', 'ruan', 5000)],
+      gorjetaCents: 1000,
+      professionalId: 'joao',
+    });
+    expect(rateio.get('joao')).toBe(1000);
+    expect(rateio.get('ruan')).toBeUndefined();
+  });
+
+  it('sem dono declarado, segue o peso da receita', () => {
+    /**
+     * Corte de R$ 60 com o João e barba de R$ 40 com o Ruan: a gorjeta de R$ 10
+     * sai 6 e 4. Atribuir ao primeiro item faria o corte carregar a gorjeta da
+     * barba — é a mesma razão do rateio da taxa e do insumo.
+     */
+    const rateio = ratearGorjeta({
+      itens: [item('a', 'joao', 6000), item('b', 'ruan', 4000)],
+      gorjetaCents: 1000,
+    });
+    expect(rateio.get('joao')).toBe(600);
+    expect(rateio.get('ruan')).toBe(400);
+  });
+
+  it('a mesma pessoa em dois itens recebe a soma, não duas linhas', () => {
+    const rateio = ratearGorjeta({
+      itens: [item('a', 'joao', 5000), item('b', 'joao', 5000)],
+      gorjetaCents: 1000,
+    });
+    expect([...rateio.entries()]).toEqual([['joao', 1000]]);
+  });
+
+  it('o produto vendido no balcão não conta no peso', () => {
+    /**
+     * A pomada não atendeu ninguém. Contando-a, a gorjeta de quem cortou
+     * encolheria porque o cliente levou um produto junto.
+     */
+    const rateio = ratearGorjeta({
+      itens: [item('corte', 'joao', 5000), item('pomada', null, 5000)],
+      gorjetaCents: 1000,
+    });
+    expect(rateio.get('joao')).toBe(1000);
+  });
+
+  it('comanda só de produto não tem a quem repassar', () => {
+    const rateio = ratearGorjeta({
+      itens: [item('pomada', null, 5000)],
+      gorjetaCents: 1000,
+    });
+    expect(rateio.size).toBe(0);
+  });
+
+  it('a soma das partes é a gorjeta, ao centavo', () => {
+    // Três pessoas e R$ 10,00: 333 + 333 + 334. A sobra vai no último, como em
+    // todo rateio deste produto.
+    const rateio = ratearGorjeta({
+      itens: [item('a', 'x', 100), item('b', 'y', 100), item('c', 'z', 100)],
+      gorjetaCents: 1000,
+    });
+    expect([...rateio.values()].reduce((s, v) => s + v, 0)).toBe(1000);
   });
 });

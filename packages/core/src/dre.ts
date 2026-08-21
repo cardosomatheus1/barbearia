@@ -81,6 +81,20 @@ export interface FatosDoDre {
    * verde por cima.
    */
   readonly despesasEmAbertoCents: number;
+  /**
+   * A gorjeta do período — **repasse**, e por isso fora das duas somas.
+   *
+   * SPEC §3.6: *"nunca entra na base de comissão nem no faturamento da casa (é
+   * repasse)"* e *"aparece separada no DRE"*. Ela não é receita (o dinheiro é do
+   * barbeiro) nem custo (a casa não abriu mão de nada): é dinheiro que passou
+   * pela conta. Somá-la em qualquer um dos dois lados mudaria o resultado por um
+   * valor que nunca foi da barbearia.
+   *
+   * Aparece porque o dono precisa saber quanto passou — são R$ 2.628,33 em 447
+   * comandas na base de demonstração —, e porque o extrato de cada barbeiro
+   * mostra a parte dele: sem o total aqui, os dois lados não têm como conferir.
+   */
+  readonly gorjetasCents: number;
 }
 
 export interface Dre extends FatosDoDre {

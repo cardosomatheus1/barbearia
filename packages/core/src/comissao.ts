@@ -276,6 +276,76 @@ export function ratearTaxa(params: {
   return ratearDesconto({ itens: params.itens, descontoCents: params.taxaCents });
 }
 
+/**
+ * A gorjeta, repartida entre quem atendeu.
+ *
+ * SPEC §3.6: *"vinculada ao profissional que executou"*. Quando o cliente diz a
+ * quem — "os dez são do João" —, ela é dele inteira; quando não diz, que é o
+ * caso comum, ela segue **o peso da receita** de cada um na comanda. É a mesma
+ * regra da taxa do adquirente e do custo de insumo, e pelo mesmo motivo:
+ * atribuir ao primeiro item faria o corte carregar a gorjeta da barba.
+ *
+ * Devolve por **profissional**, não por item: a gorjeta é de uma pessoa, e uma
+ * pessoa pode ter feito dois itens da mesma comanda.
+ *
+ * Item sem profissional não recebe gorjeta e **não conta no peso**: uma pomada
+ * vendida no balcão não atendeu ninguém. Se não sobrar nenhum item com
+ * profissional, o mapa volta vazio — a casa fica com o valor e não há a quem
+ * repassar, que é o que já acontece hoje em toda comanda.
+ */
+export function ratearGorjeta(params: {
+  readonly itens: readonly ItemComissionavel[];
+  readonly gorjetaCents: number;
+  /** O dono declarado. Nulo é "rateia entre quem atendeu". */
+  readonly professionalId?: string | null;
+}): ReadonlyMap<string, number> {
+  const rateio = new Map<string, number>();
+  if (params.gorjetaCents <= 0) return rateio;
+
+  if (params.professionalId) {
+    rateio.set(params.professionalId, params.gorjetaCents);
+    return rateio;
+  }
+
+  const comDono = params.itens.filter((item) => item.professionalId !== null);
+  const total = comDono.reduce((soma, item) => soma + item.totalCents, 0);
+  if (comDono.length === 0 || total <= 0) return rateio;
+
+  /**
+   * O rateio é próprio, e **não** reaproveita `ratearDesconto`.
+   *
+   * Aquele apara o valor no total dos itens (`Math.min`), e tem que aparar: um
+   * desconto maior que a conta zeraria a base e não há o que repartir além
+   * dela. A gorjeta é o contrário — R$ 10 numa conta de R$ 3 é caso legítimo, e
+   * com o teto ela sairia repassando R$ 3. O teste pegou isto na primeira
+   * versão.
+   *
+   * A distribuição de resto é a mesma: piso para todos e a sobra para quem tem
+   * o maior resto, de modo que a soma das partes seja a gorjeta ao centavo.
+   */
+  const restos: { id: string; resto: number }[] = [];
+  let distribuido = 0;
+
+  for (const item of comDono) {
+    const exato = (item.totalCents * params.gorjetaCents) / total;
+    const piso = Math.floor(exato);
+    const dono = item.professionalId as string;
+    rateio.set(dono, (rateio.get(dono) ?? 0) + piso);
+    distribuido += piso;
+    restos.push({ id: dono, resto: exato - piso });
+  }
+
+  restos.sort((a, b) => b.resto - a.resto);
+  let sobra = params.gorjetaCents - distribuido;
+  for (const { id } of restos) {
+    if (sobra <= 0) break;
+    rateio.set(id, (rateio.get(id) ?? 0) + 1);
+    sobra -= 1;
+  }
+
+  return rateio;
+}
+
 export function ratearDesconto(params: {
   readonly itens: readonly ItemComissionavel[];
   readonly descontoCents: number;

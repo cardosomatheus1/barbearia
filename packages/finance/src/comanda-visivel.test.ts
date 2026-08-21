@@ -20,6 +20,7 @@ const COMANDA: Comanda = {
   itens: [],
   desconto: null,
   gorjetaCents: 0,
+  gorjetaProfessionalId: null,
   subtotalCents: 4900,
   descontoCents: 0,
   totalCents: 4900,

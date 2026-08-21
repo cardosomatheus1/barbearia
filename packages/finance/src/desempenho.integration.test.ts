@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa } from './caixa.js';
-import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
+import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda } from './comanda.js';
 import { desempenhoDoProfissional, metasDoMes, salvarMeta } from './desempenho.js';
 
 /**
@@ -451,4 +451,124 @@ describeIfDb('os números do barbeiro', () => {
     );
     expect(Number(daRival[0]?.n)).toBe(0);
   });
+
+  describe('a gorjeta tem dono', () => {
+    /**
+     * SPEC §3.6: *"vinculada ao profissional que executou"*, *"nunca entra na
+     * base de comissão nem no faturamento da casa (é repasse)"*, *"aparece
+     * separada no DRE e no extrato do barbeiro"*.
+     *
+     * `orders.tip_cents` era gravada e sempre subtraída — do faturamento, do
+     * painel, do DRE, da base de comissão — e **nunca atribuída**. Na base de
+     * demonstração eram R$ 2.628,33 em 447 comandas: dinheiro de terceiro
+     * entrando na conta da casa sem registro de quem é.
+     */
+    async function comandaComGorjeta(params: {
+      readonly gorjetaCents: number;
+      readonly dono?: string | null;
+      readonly itens: readonly { readonly professionalId: string; readonly precoCents: number }[];
+    }): Promise<void> {
+      await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 0, ...operador })
+        .catch(() => undefined);
+      const aberta = await abrirComanda({
+        tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+      });
+      for (const item of params.itens) {
+        await adicionarItem({
+          tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+          tipo: 'service', serviceId: CABELO, descricao: 'Corte', quantidade: 1,
+          precoUnitarioCents: item.precoCents, professionalId: item.professionalId,
+        });
+      }
+      await ajustarComanda({
+        tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+        desconto: null, gorjetaCents: params.gorjetaCents,
+        ...(params.dono === undefined ? {} : { gorjetaProfessionalId: params.dono }),
+        staffId: STAFF, staffName: 'Maria',
+      });
+      const total = params.itens.reduce((s, i) => s + i.precoCents, 0) + params.gorjetaCents;
+      await fecharComanda({
+        tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+        pagamentos: [{ forma: 'cash', valorCents: total }],
+        hojeNaUnidade: HOJE, ...operador,
+      });
+    }
+
+    const gorjetaDe = async (quem: string): Promise<number> =>
+      (
+        await desempenhoDoProfissional({
+          tenantId: TENANT, professionalId: quem, hoje: HOJE,
+        })
+      ).mesAtual.gorjetaCents;
+
+    it('sem dono declarado, segue o peso da receita de cada um', async () => {
+      // Corte de R$ 60 com o Ruan e de R$ 40 com o João: R$ 10 saem 6 e 4.
+      await comandaComGorjeta({
+        gorjetaCents: 1000,
+        itens: [
+          { professionalId: RUAN, precoCents: 6000 },
+          { professionalId: GLEIDSON, precoCents: 4000 },
+        ],
+      });
+
+      expect(await gorjetaDe(RUAN)).toBe(600);
+      expect(await gorjetaDe(GLEIDSON)).toBe(400);
+    });
+
+    it('o dono declarado leva tudo, e o colega fica sem', async () => {
+      await comandaComGorjeta({
+        gorjetaCents: 1000,
+        dono: GLEIDSON,
+        itens: [
+          { professionalId: RUAN, precoCents: 6000 },
+          { professionalId: GLEIDSON, precoCents: 4000 },
+        ],
+      });
+
+      expect(await gorjetaDe(GLEIDSON)).toBe(1000);
+      expect(await gorjetaDe(RUAN)).toBe(0);
+    });
+
+    it('a gorjeta não entra no faturamento nem na base de comissão', async () => {
+      /**
+       * É repasse: o dinheiro é do barbeiro e só passou pela conta da casa.
+       * Contá-lo no faturamento faria a meta ser batida com dinheiro de outra
+       * pessoa, e na base de comissão faria a casa pagar comissão sobre gorjeta.
+       */
+      await comandaComGorjeta({
+        gorjetaCents: 5000,
+        dono: RUAN,
+        itens: [{ professionalId: RUAN, precoCents: 10_000 }],
+      });
+
+      const desempenho = await desempenhoDoProfissional({
+        tenantId: TENANT, professionalId: RUAN, hoje: HOJE,
+      });
+      expect(desempenho.mesAtual.faturamentoCents).toBe(10_000);
+      expect(desempenho.mesAtual.gorjetaCents).toBe(5000);
+    });
+
+    it('o profissional de outra barbearia não recebe a gorjeta', async () => {
+      /**
+       * A checagem de integridade referencial do Postgres ignora row security:
+       * a chave estrangeira aceitaria o id da vizinha sem reclamar, e o repasse
+       * ficaria pendurado em quem não trabalha aqui.
+       */
+      await abrirCaixa({ tenantId: TENANT, locationId: LOCATION, openingCents: 0, ...operador })
+        .catch(() => undefined);
+      const aberta = await abrirComanda({
+        tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+      });
+
+      await expect(
+        ajustarComanda({
+          tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+          desconto: null, gorjetaCents: 1000,
+          gorjetaProfessionalId: 'dddddddd-0000-0000-0000-000000000099',
+          staffId: STAFF, staffName: 'Maria',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
 });

@@ -270,10 +270,34 @@ export default async function DrePage({ searchParams }: Props) {
             </ul>
           </section>
 
+          {/* A gorjeta, separada das duas somas (SPEC §3.6).
+
+              Repasse: não é receita (o dinheiro é do barbeiro) nem custo (a casa
+              não abriu mão de nada). Somá-la em qualquer um dos lados mudaria o
+              resultado por um valor que nunca foi da barbearia. Aparece porque o
+              dono precisa saber quanto passou, e porque o extrato de cada
+              barbeiro mostra a parte dele — sem o total aqui, os dois lados não
+              têm como conferir. */}
+          {atual.gorjetasCents > 0 ? (
+            <section className="painel__grupo">
+              <h2 className="rotulo">O que passou</h2>
+              <ul className="dre">
+                <li className="dre__linha">
+                  <span className="dre__rotulo">Gorjetas</span>
+                  <span className="dre__valor tabular">{reais(atual.gorjetasCents)}</span>
+                  <span className="dre__ressalva">
+                    dos barbeiros — fora do resultado
+                  </span>
+                </li>
+              </ul>
+            </section>
+          ) : null}
+
           <p className="painel__nota">
             A venda de pacote não entra como receita no dia em que foi vendida: ela é reconhecida a
             cada unidade consumida. Venda estornada sai de todas as linhas. A despesa é a conta
-            paga no período, pela data do pagamento — é quando o dinheiro saiu.
+            paga no período, pela data do pagamento — é quando o dinheiro saiu. A gorjeta não entra
+            nem como receita nem como custo: ela é dos barbeiros e só passou pela conta.
           </p>
         </>
       )}

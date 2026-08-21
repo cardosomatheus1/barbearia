@@ -834,6 +834,37 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                 </p>
               </div>
 
+              {/* De quem é (SPEC §3.6, bloco 124).
+
+                  "Rateada entre quem atendeu" é o padrão e o caso comum: ela
+                  segue o peso da receita de cada um na comanda, que é a mesma
+                  regra da taxa do adquirente. Nomear alguém é o cliente tendo
+                  dito a quem — "os dez são do João" —, e aí ela é dele inteira.
+
+                  Antes deste campo a gorjeta não tinha dono nenhum: entrava na
+                  conta da casa e nenhuma tela dizia de quem era. */}
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor="gorjetaProfessionalId">
+                  Gorjeta para
+                </label>
+                <select
+                  className="ui-field__input"
+                  defaultValue={conta.gorjetaProfessionalId ?? ''}
+                  id="gorjetaProfessionalId"
+                  name="gorjetaProfessionalId"
+                >
+                  <option value="">Quem atendeu — rateada pelo que cada um fez</option>
+                  {profissionais.map((pro) => (
+                    <option key={pro.id} value={pro.id}>
+                      {pro.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="ui-field__hint">
+                  O barbeiro vê o total dela em “Meus números”, fora da comissão.
+                </p>
+              </div>
+
               <button className="ui-button ui-button--ghost ui-button--block" type="submit">
                 Salvar
               </button>

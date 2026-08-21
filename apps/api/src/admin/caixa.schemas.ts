@@ -93,6 +93,13 @@ export const ajusteSchema = z.object({
     .nullable()
     .optional(),
   gorjetaCents: centavos.optional(),
+  /**
+   * De quem é a gorjeta (SPEC §3.6, bloco 124).
+   *
+   * `null` é a escolha explícita de **ratear entre quem atendeu**, que é o
+   * padrão; ausente é "não mexa", como todo campo opcional desta borda.
+   */
+  gorjetaProfessionalId: uuidSchema.nullable().optional(),
 });
 
 export const fecharComandaSchema = z.object({

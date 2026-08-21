@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   abrirCaixa,
@@ -61,6 +62,7 @@ const STATUS: Record<string, number> = {
   cliente_nao_encontrado: 404,
   sessao_nao_encontrada: 404,
   servico_desconhecido: 404,
+  profissional_desconhecido: 404,
   // 409 e não 403: quem pede tem permissão; o que mudou foi o estado da gaveta.
   ja_aberto: 409,
   nenhum_aberto: 409,
@@ -491,7 +493,14 @@ export class CaixaController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(ajusteSchema))
-    body: { desconto?: DescontoDaComanda | null; gorjetaCents?: number },
+    /**
+     * Tipado a partir do schema, e não à mão.
+     *
+     * A lista escrita aqui é a que fica para trás: `gorjetaProfessionalId`
+     * entrou no schema e o corpo continuaria com dois campos. `z.infer` faz o
+     * campo novo aparecer em vez de sumir — é a mesma decisão do bloco 59.
+     */
+    body: z.infer<typeof ajusteSchema>,
   ) {
     try {
       const local = await this.unidade(staff);
@@ -500,8 +509,15 @@ export class CaixaController {
         tenantId: staff.tenantId,
         locationId: local.id,
         orderId: id,
-        desconto: body.desconto ?? null,
+        // `motivo` opcional no schema e `string | null` no domínio: o `??` faz a
+        // ponte sem `as`, que é o compilador desligado.
+        desconto: body.desconto
+          ? { ...body.desconto, motivo: body.desconto.motivo ?? null }
+          : null,
         ...(body.gorjetaCents === undefined ? {} : { gorjetaCents: body.gorjetaCents }),
+        ...(body.gorjetaProfessionalId === undefined
+          ? {}
+          : { gorjetaProfessionalId: body.gorjetaProfessionalId }),
         staffId: staff.staffUserId,
         staffName: staff.name,
         }),

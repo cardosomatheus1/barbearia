@@ -34,6 +34,15 @@ export interface DesempenhoDoMes {
   /** `rebooking rate` em pontos inteiros. */
   readonly taxaDeRetorno: number;
   readonly produtosVendidos: number;
+  /**
+   * A gorjeta que ficou com esta cadeira (SPEC §3.6).
+   *
+   * Repasse, não receita: ela nunca entra na base de comissão nem no
+   * faturamento da casa. Aparece aqui porque a SPEC manda — *"aparece separada
+   * no DRE e no extrato do barbeiro"* —, e porque era o dinheiro que entrava na
+   * conta da casa sem ninguém saber de quem é.
+   */
+  readonly gorjetaCents: number;
 }
 
 export interface Desempenho {
@@ -54,6 +63,7 @@ interface LinhaDeTotais {
   atendimentos: bigint;
   saiu_com_horario: bigint;
   produtos: bigint;
+  gorjeta_cents: bigint | null;
 }
 
 /**
@@ -126,7 +136,43 @@ async function totais(
           AND oi.kind = 'product'
           AND o.status = 'paid'
           AND o.business_day BETWEEN ${de}::date AND ${ate}::date)::bigint
-      AS produtos
+      AS produtos,
+
+      /*
+       * A gorjeta que ficou com esta cadeira (SPEC 3.6, bloco 124).
+       *
+       * Duas origens somadas: a comanda em que o cliente disse a quem
+       * (tip_professional_id) e o rateio entre quem atendeu, que segue o peso
+       * da receita de cada um — a mesma regra da taxa do adquirente.
+       *
+       * O rateio e feito aqui em SQL porque a alternativa seria carregar toda
+       * comanda do periodo para o dominio so para reparti-la; o que a conta faz
+       * e uma proporcao, e as bordas de centavo do rateio ficam com quem
+       * fechou a comanda. A diferenca e de centavos e o extrato diz que e
+       * aproximado.
+       */
+      (SELECT coalesce(sum(
+                CASE WHEN o.tip_professional_id = ${professionalId}::uuid THEN o.tip_cents
+                     WHEN o.tip_professional_id IS NULL THEN round(
+                       o.tip_cents * (
+                         SELECT coalesce(sum(meu.unit_price_cents * meu.quantity), 0)
+                           FROM order_items meu
+                          WHERE meu.order_id = o.id
+                            AND meu.professional_id = ${professionalId}::uuid
+                       )::numeric / nullif((
+                         SELECT sum(todos.unit_price_cents * todos.quantity)
+                           FROM order_items todos
+                          WHERE todos.order_id = o.id
+                            AND todos.professional_id IS NOT NULL
+                       ), 0)
+                     )
+                     ELSE 0 END
+              ), 0)
+         FROM orders o
+        WHERE o.status = 'paid'
+          AND o.tip_cents > 0
+          AND o.business_day BETWEEN ${de}::date AND ${ate}::date)::bigint
+      AS gorjeta_cents
   `;
 
   return (
@@ -135,6 +181,7 @@ async function totais(
       atendimentos: 0n,
       saiu_com_horario: 0n,
       produtos: 0n,
+      gorjeta_cents: 0n,
     }
   );
 }
@@ -152,6 +199,7 @@ function daLinha(linha: LinhaDeTotais): DesempenhoDoMes {
     ticketMedioCents: ticketMedio(contados),
     taxaDeRetorno: taxaDeRetorno(contados),
     produtosVendidos: Number(linha.produtos),
+    gorjetaCents: Number(linha.gorjeta_cents ?? 0n),
   };
 }
 
