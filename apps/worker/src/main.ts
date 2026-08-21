@@ -12,6 +12,7 @@ import {
   provedorDoWhatsApp,
   respostaParaEnviar,
   varrerAutomacoes,
+  varrerPreviewsVencidos,
   varrerRetencao,
   expirarTextoDaRecepcao,
 } from '@barbearia/crm';
@@ -708,6 +709,20 @@ async function main(): Promise<void> {
           // Só a contagem: o texto que está sendo apagado por ser possivelmente
           // pessoal não pode sair no log ao ser apagado.
           console.log('[lgpd] texto da recepção expirado', { tenantId, linhas: expirados });
+        }
+
+        /**
+         * E o preview de importação abandonado, pela mesma pergunta.
+         *
+         * O `payload` é a cópia crua do CSV — nome, telefone e aniversário da
+         * base legada inteira, de gente que talvez nunca vire cliente. Ele some
+         * ao aplicar, e a análise seguinte limpa o vencido; o que faltava era
+         * quem **nunca mais abre a tela**, que é o caso mais provável: a
+         * barbearia sobe o arquivo, olha a conferência, desiste e some.
+         */
+        const previews = await varrerPreviewsVencidos(tenantId, agora);
+        if (previews > 0) {
+          console.log('[lgpd] preview de importação expirado', { tenantId, linhas: previews });
         }
 
         const resultado = await varrerRetencao({ tenantId, agora });

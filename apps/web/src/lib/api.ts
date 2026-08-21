@@ -33,7 +33,7 @@ export interface PublicProfile {
     latitude: number | null; longitude: number | null;
     phone: string | null; whatsapp: string | null;
     coverUrl: string | null; about: string | null;
-    amenities: string[]; cancellationPolicy: string | null;
+    amenities: string[]; meiosAceitos: string[]; cancellationPolicy: string | null;
     /** Horas de antecedência que a API realmente aplica ao cancelamento. */
     cancelMinHours: number;
   };

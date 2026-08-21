@@ -181,6 +181,8 @@ export async function analisarImportacao(params: {
   readonly conteudo: string;
   readonly anoLimite: number;
   readonly separador?: string | undefined;
+  /** O relógio por parâmetro: o prazo do preview é regra, não `now()` do banco. */
+  readonly agora: Date;
 }): Promise<Preview> {
   let csv;
   try {
@@ -204,24 +206,19 @@ export async function analisarImportacao(params: {
     /**
      * Preview abandonado não guarda dado pessoal para sempre.
      *
-     * `payload` some ao aplicar, e o banco cobra isso. O que faltava era o caso
-     * de quem confere e desiste: aquela cópia — nome, telefone e aniversário de
-     * gente que talvez nunca vire cliente — ficava sem prazo nenhum.
+     * A limpeza pega carona aqui **e** roda na varredura diária de retenção
+     * (`expirarPreviews`, abaixo). As duas, e não uma: aqui é a mais barata e
+     * cobre quem volta; a varredura é a única que alcança **quem nunca mais
+     * abriu a tela**, que é o caso mais provável e o único que nunca era limpo.
      *
-     * A limpeza pega carona aqui em vez de virar tarefa na fila porque `imports`
-     * tem RLS: uma varredura de plataforma não enxergaria linha nenhuma sem
-     * tenant no contexto, e agendar uma tarefa por barbearia para apagar o que
-     * ela mesma abandonou seria maquinaria demais para o problema. Quem importa
-     * de novo limpa o que deixou para trás; a conferência que virou nada expira
-     * na próxima visita à tela.
+     * O comentário anterior dizia que a tarefa por barbearia seria "maquinaria
+     * demais para o problema", e o argumento tinha um furo: a barbearia que sobe
+     * o CSV, olha a conferência e some deixava nome, telefone e aniversário da
+     * base legada inteira — de gente que talvez nunca vire cliente — sem prazo
+     * nenhum. É a mesma razão de a varredura de webhook existir mesmo com a
+     * tarefa se reprogramando: o que se perde no caminho precisa de rede.
      */
-    await tx.$executeRaw`
-      UPDATE imports
-         SET payload = NULL
-       WHERE status = 'previewed'
-         AND payload IS NOT NULL
-         AND created_at < now() - interval '7 days'
-    `;
+    await expirarPreviews(tx, params.agora);
 
     // Idempotência (SPEC §5.8): o mesmo arquivo não vira duas importações. O
     // banco também recusa pelo índice único — isto é o caminho amável, que
@@ -550,4 +547,51 @@ export async function listarImportacoes(params: {
     `;
     return linhas.map(paraResumo);
   });
+}
+
+/**
+ * Quantos dias um preview abandonado guarda dado pessoal.
+ *
+ * Sete, e o número é da mesma família do prazo de `reception_gaps`: é o
+ * horizonte em que a cópia ainda **serve** — o dono subiu o arquivo, foi
+ * conferir com alguém e volta na semana —, nunca o do cadastro. Guardar além
+ * disso é risco sem contrapartida, e a convenção do repositório já diz que
+ * cópia de dado pessoal fora de `customers` tem prazo escrito.
+ */
+export const DIAS_DO_PREVIEW = 7;
+
+/**
+ * Apaga o `payload` de todo preview vencido **desta** barbearia.
+ *
+ * Recebe a transação e não o tenant: os dois chamadores já estão dentro de uma
+ * — a análise, que limpa o que a própria barbearia deixou, e a varredura diária
+ * de retenção, que é a única que alcança quem nunca mais abriu a tela.
+ *
+ * Não apaga a **linha**: `imports` é o que torna a importação reversível por
+ * `import_id`, e sem ela a base importada ficaria sem como voltar atrás. O que
+ * vence é a cópia do arquivo, não o registro de que ele entrou — é a mesma
+ * decisão da anonimização, que tira a pessoa de dentro do cadastro e deixa a
+ * linha.
+ */
+export async function expirarPreviews(tx: TransactionClient, agora: Date): Promise<number> {
+  return tx.$executeRaw`
+    UPDATE imports
+       SET payload = NULL
+     WHERE status = 'previewed'
+       AND payload IS NOT NULL
+       AND created_at < ${agora}::timestamptz - make_interval(days => ${DIAS_DO_PREVIEW}::int)
+  `;
+}
+
+/**
+ * A mesma limpeza, abrindo o tenant — a porta que a varredura diária usa.
+ *
+ * `imports` tem RLS, então isto **não** pode ser uma varredura de plataforma:
+ * sem tenant no contexto a consulta devolve zero linhas, em silêncio. É uma
+ * tarefa por barbearia, como a retenção e a conciliação da nota, e ela pega
+ * carona no `lgpd.retencao` que já roda todo dia com o tenant aberto — a
+ * retenção do preview é retenção de dado pessoal, não um assunto novo.
+ */
+export async function varrerPreviewsVencidos(tenantId: string, agora: Date): Promise<number> {
+  return withTenant(tenantId, (tx) => expirarPreviews(tx, agora));
 }

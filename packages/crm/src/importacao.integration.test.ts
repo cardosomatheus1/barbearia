@@ -8,6 +8,7 @@ import {
   lerImportacao,
   listarImportacoes,
   reverterImportacao,
+  varrerPreviewsVencidos,
 } from './importacao.js';
 
 /**
@@ -73,13 +74,19 @@ describeIfDb('importação de base', () => {
     `);
   });
 
-  const analisar = (conteudo = ARQUIVO, tenantId = TENANT, fileName = 'clientes.csv') =>
+  const analisar = (
+    conteudo = ARQUIVO,
+    tenantId = TENANT,
+    fileName = 'clientes.csv',
+    agora = AGORA,
+  ) =>
     analisarImportacao({
       tenantId,
       staffId: GESTOR,
       fileName,
       conteudo,
       anoLimite: ANO,
+      agora,
     });
 
   const aplicar = (importId: string, tenantId = TENANT) =>
@@ -513,5 +520,79 @@ describeIfDb('importação de base', () => {
     const dela = await analisar(ARQUIVO, RIVAL);
     expect(dela.resumo.novo).toBe(3);
     expect(dela.repetida).toBe(false);
+  });
+
+  describe('o preview abandonado vence', () => {
+    /**
+     * O caso que nenhuma das duas metades pegava sozinha.
+     *
+     * A limpeza pegava carona no início da **próxima** análise, então só
+     * alcançava quem volta. A barbearia que sobe o CSV, olha a conferência e
+     * some — que é o caso mais provável — deixava nome, telefone e aniversário
+     * da base legada inteira guardados para sempre, de gente que talvez nunca
+     * vire cliente.
+     */
+    it('a varredura diária apaga o payload de quem nunca mais voltou', async () => {
+      const preview = await analisar();
+
+      const guardado = () =>
+        withTenant(TENANT, (tx) =>
+          tx.$queryRaw<{ tem: boolean; status: string; criado: Date }[]>`
+            SELECT payload IS NOT NULL AS tem, status, created_at AS criado
+              FROM imports WHERE id = ${preview.id}::uuid
+          `,
+        );
+
+      const linha = (await guardado())[0];
+      expect(linha?.tem, 'o preview nasce com o arquivo guardado').toBe(true);
+
+      /**
+       * O relógio da varredura é ancorado no **`created_at` da linha**, não no
+       * `AGORA` do teste.
+       *
+       * `created_at` é escrito pelo `DEFAULT` do banco, com o relógio do
+       * processo — e `AGORA` é uma data fixa duas semanas no passado. Somar oito
+       * dias a ela dá um instante **anterior** ao da linha, e a varredura não
+       * pegaria nada: o teste mediria zero achando que mede a expiração.
+       */
+      const nasceu = linha!.criado.getTime();
+
+      // Seis dias depois ainda serve: o dono foi conferir com alguém e volta.
+      await varrerPreviewsVencidos(TENANT, new Date(nasceu + 6 * 86400000));
+      expect((await guardado())[0]?.tem, 'seis dias estão dentro do prazo').toBe(true);
+
+      const linhas = await varrerPreviewsVencidos(TENANT, new Date(nasceu + 8 * 86400000));
+      expect(linhas).toBe(1);
+
+      const depois = (await guardado())[0];
+      expect(depois?.tem).toBe(false);
+      // A linha fica: é ela que torna a importação reversível por `import_id`.
+      expect(depois?.status).toBe('previewed');
+    });
+
+    it('não alcança a barbearia vizinha', async () => {
+      // `imports` tem RLS, e é por isso que isto é tarefa por barbearia e não
+      // varredura de plataforma. O teste é o de sempre: mandar o id da vizinha.
+      const preview = await analisar();
+      const nasceu = (
+        await withTenant(TENANT, (tx) =>
+          tx.$queryRaw<{ criado: Date }[]>`
+            SELECT created_at AS criado FROM imports WHERE id = ${preview.id}::uuid
+          `,
+        )
+      )[0]!.criado.getTime();
+
+      // Vencido de sobra: o zero abaixo só pode ser a RLS. Com o relógio errado
+      // ele seria zero pelo prazo, e o teste passaria pelo motivo errado.
+      const linhas = await varrerPreviewsVencidos(RIVAL, new Date(nasceu + 8 * 86400000));
+      expect(linhas).toBe(0);
+
+      const ainda = await withTenant(TENANT, (tx) =>
+        tx.$queryRaw<{ tem: boolean }[]>`
+          SELECT payload IS NOT NULL AS tem FROM imports WHERE id = ${preview.id}::uuid
+        `,
+      );
+      expect(ainda[0]?.tem).toBe(true);
+    });
   });
 });

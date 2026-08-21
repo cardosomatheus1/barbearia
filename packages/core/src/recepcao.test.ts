@@ -26,6 +26,7 @@ const CASA: DadosDaCasa = {
     { diaDaSemana: 2, abre: '09:00', fecha: '19:00' },
     { diaDaSemana: 5, abre: '09:00', fecha: '21:00' },
   ],
+  meiosAceitos: ['pix', 'card'],
   profissionais: [
     { nome: 'João', diasDaSemana: [2, 5] },
     { nome: 'Ruan', diasDaSemana: [5] },
@@ -104,13 +105,16 @@ describe('exclusivamente do que a casa cadastrou', () => {
     expect(resposta).not.toContain('Corte');
   });
 
-  it('formas de pagamento não têm cadastro, e por isso viram lacuna', () => {
+  it('formas de pagamento passaram a ter cadastro (bloco 127)', () => {
     /**
-     * O assunto existe na lista de propósito: é assim que ele aparece no
-     * registro em vez de sumir. É a regra do gatilho que ainda não funciona — ele
-     * aparece marcado, nunca escondido.
+     * Este teste afirmava o contrário até o bloco 127, e o comentário dele
+     * dizia "o assunto existe na lista de propósito, é assim que ele aparece no
+     * registro em vez de sumir". Estava certo enquanto não havia cadastro — e o
+     * cadastro existia desde a migração 0013, gravado pelo onboarding e lido
+     * por ninguém. Era a coluna que existe e ninguém lê, no assunto mais
+     * perguntado da recepção.
      */
-    expect(perguntar('vocês aceitam pix?')).toBeNull();
+    expect(perguntar('vocês aceitam pix?')?.texto).toBe('Sim, aceitamos Pix.');
   });
 });
 
@@ -232,5 +236,30 @@ describe('a pergunta que não é sobre jornada', () => {
      */
     expect(assuntoDaPergunta('qual o preço da barba?')).toBe('preco');
     expect(assuntoDaPergunta('quanto fica o corte?')).toBe('preco');
+  });
+});
+
+describe('formas de pagamento', () => {
+  it('pergunta fechada tem resposta fechada', () => {
+    expect(responderRecepcao('vcs aceitam pix?', CASA)?.texto).toBe('Sim, aceitamos Pix.');
+  });
+
+  it('o meio que a casa não aceita é negado, com o que ela aceita ao lado', () => {
+    // Negar sem dizer o que serve manda a pessoa perguntar de novo, uma por vez.
+    expect(responderRecepcao('aceita dinheiro?', CASA)?.texto).toBe(
+      'Não aceitamos Dinheiro. Aceitamos Pix e Cartão.',
+    );
+  });
+
+  it('sem meio nomeado, a lista', () => {
+    expect(responderRecepcao('quais as formas de pagamento?', CASA)?.texto).toBe(
+      'Aceitamos Pix e Cartão.',
+    );
+  });
+
+  it('barbearia que não cadastrou nada continua sem resposta', () => {
+    // É a regra da SPEC §4.17: o que não tem cadastro vira lacuna contada, e
+    // nunca uma política inventada que alguém vai ter que honrar no balcão.
+    expect(responderRecepcao('aceitam pix?', { ...CASA, meiosAceitos: [] })).toBeNull();
   });
 });

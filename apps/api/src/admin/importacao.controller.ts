@@ -118,6 +118,9 @@ export class ImportacaoController {
         fileName: body.fileName,
         conteudo: body.conteudo,
         anoLimite: await this.anoDaCasa(staff),
+        // O prazo do preview é regra do domínio, e o relógio entra por
+        // parâmetro como em todo o resto — nunca `now()` dentro da consulta.
+        agora: new Date(),
         ...(body.separador ? { separador: body.separador } : {}),
       });
     } catch (error) {

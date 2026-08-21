@@ -93,6 +93,15 @@ export interface PublicProfile {
     readonly coverUrl: string | null;
     readonly about: string | null;
     readonly amenities: readonly string[];
+    /**
+     * Os meios que a casa aceita (bloco 127).
+     *
+     * Sai no perfil **público** porque é a única fonte que a recepção
+     * automática consulta — a regra dela é responder exclusivamente o que a
+     * página já diria, e uma segunda consulta abriria a segunda noção de "o que
+     * esta casa aceita".
+     */
+    readonly meiosAceitos: readonly string[];
     readonly cancellationPolicy: string | null;
     /**
      * As horas que a página deve escrever, vindas da coluna que a API aplica.
@@ -216,13 +225,13 @@ export async function getPublicProfile(
         latitude: string | null; longitude: string | null;
         phone_e164: string | null; whatsapp_e164: string | null;
         cover_url: string | null; about: string | null;
-        amenities: string[]; cancellation_policy: string | null;
+        amenities: string[]; payment_methods: string[]; cancellation_policy: string | null;
         cancel_min_hours: number;
       }[]
     >`
       SELECT id, name, timezone, street, district, city, state, postal_code,
              latitude, longitude, phone_e164, whatsapp_e164, cover_url, about,
-             amenities, cancellation_policy, cancel_min_hours
+             amenities, payment_methods, cancellation_policy, cancel_min_hours
       FROM locations ORDER BY created_at LIMIT 1
     `;
     const location = locations[0];
@@ -353,6 +362,7 @@ export async function getPublicProfile(
         coverUrl: location.cover_url,
         about: location.about,
         amenities: location.amenities,
+        meiosAceitos: location.payment_methods,
         cancellationPolicy: location.cancellation_policy,
         cancelMinHours: location.cancel_min_hours,
       },

@@ -5,6 +5,7 @@ import {
   interpretarPedido,
   oQueFalta,
   PERGUNTA_DO_AGENTE,
+  ehMeioAceito,
   responderRecepcao,
   type DadosDaCasa,
   type PedidoDoCliente,
@@ -391,6 +392,9 @@ function dadosDaCasa(perfil: Awaited<ReturnType<typeof getPublicProfile>>): Dado
     profissionais: casa.professionals.map((p) => ({ nome: p.name, diasDaSemana: p.weekdays })),
     endereco: casa.location.street,
     politicaDeCancelamento: casa.location.cancellationPolicy,
+    // O `filter` não é defesa contra o banco — o `CHECK` da 0098 já garante —,
+    // é o que estreita `string[]` para a união sem `as`.
+    meiosAceitos: casa.location.meiosAceitos.filter(ehMeioAceito),
   };
 }
 

@@ -12,6 +12,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { MEIOS_ACEITOS, ROTULO_DO_MEIO_ACEITO } from '@barbearia/core';
 
 /**
  * Onboarding em seis etapas.
@@ -47,13 +48,6 @@ const DIAS = [
   { valor: 5, nome: 'Sex' },
   { valor: 6, nome: 'Sáb' },
   { valor: 0, nome: 'Dom' },
-];
-
-const PAGAMENTOS = [
-  { valor: 'pix', nome: 'Pix' },
-  { valor: 'card', nome: 'Cartão' },
-  { valor: 'cash', nome: 'Dinheiro' },
-  { valor: 'online', nome: 'Pagamento online' },
 ];
 
 const money = (cents: number): string => (cents / 100).toFixed(2);
@@ -459,11 +453,15 @@ export default async function OnboardingPage({ searchParams }: Props) {
           <p className="painel__sub">Aparece na página, para ninguém chegar sem saber.</p>
 
           <div className="painel__marcas">
-            {PAGAMENTOS.map((item) => (
-              <label className="marca" key={item.valor}>
-                <input type="checkbox" name="metodo" value={item.valor}
-                       defaultChecked={item.valor !== 'online'} />
-                <span>{item.nome}</span>
+            {/* Do domínio, nunca de uma lista aqui: os mesmos quatro valores e
+                os mesmos quatro rótulos estavam escritos nesta tela e agora
+                também na de Configurações — a sexta lista paralela deste
+                código, e as cinco anteriores todas divergiram. */}
+            {MEIOS_ACEITOS.map((meio) => (
+              <label className="marca" key={meio}>
+                <input type="checkbox" name="metodo" value={meio}
+                       defaultChecked={meio !== 'online'} />
+                <span>{ROTULO_DO_MEIO_ACEITO[meio]}</span>
               </label>
             ))}
           </div>

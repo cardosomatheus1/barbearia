@@ -65,7 +65,8 @@ const FALHA: Record<string, string> = {
  * `Record` sobre a **união**, e não sobre `string`: assunto novo em `core` faz o
  * compilador cobrar a linha aqui, em vez de a tela mostrar uma lacuna sem
  * caminho. `null` é o assunto que ainda não tem onde cadastrar — e ele aparece
- * marcado, nunca escondido.
+ * marcado, nunca escondido. Desde o bloco 127 nenhum é `null`: formas de
+ * pagamento era o último, e a coluna dele existia desde a migração 0013.
  */
 const ONDE_SE_RESOLVE: Readonly<
   Record<AssuntoDaRecepcao, { readonly href: string; readonly tela: string } | null>
@@ -75,7 +76,7 @@ const ONDE_SE_RESOLVE: Readonly<
   jornada_do_profissional: { href: '/admin/profissionais', tela: 'Profissionais' },
   endereco: { href: '/admin/configuracoes', tela: 'Configurações' },
   politica_de_cancelamento: { href: '/admin/configuracoes', tela: 'Configurações' },
-  formas_de_pagamento: null,
+  formas_de_pagamento: { href: '/admin/configuracoes', tela: 'Configurações' },
 };
 
 export default async function RecepcaoPage({ searchParams }: Props) {

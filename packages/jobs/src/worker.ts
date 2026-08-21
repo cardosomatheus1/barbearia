@@ -618,6 +618,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'lgpd.retencao': async (tarefa, contexto) => {
     await contexto.varrerRetencao(tarefa.tenantId, contexto.relogio.agora());
 
+
     /**
      * A vitrine do marketplace é refeita na mesma volta (bloco 70).
      *

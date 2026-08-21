@@ -171,6 +171,7 @@ import {
   ehConversa,
   TIPO_PADRAO_DE_CAMPANHA,
   type MotivoDaContestacao,
+  ehMeioAceito,
 } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
@@ -487,6 +488,27 @@ export async function acaoPublicar(): Promise<void> {
 }
 
 // -- Configuração ------------------------------------------------------------
+
+/**
+ * Os meios que a casa aceita (bloco 127).
+ *
+ * Ação própria e não um campo dentro de `acaoJanela` porque a rota é outra
+ * (`PUT /v1/admin/payments`, do onboarding) e porque a semântica de ausência é
+ * diferente: aqui o formulário **sempre** manda a decisão inteira, e nenhuma
+ * caixa marcada quer dizer "não anuncio nenhum meio", não "não mexa". É a
+ * mesma decisão de `amenities`, que já é absoluta pelo mesmo motivo — uma lista
+ * de caixas não tem como dizer "deixe como estava".
+ */
+export async function acaoMeiosAceitos(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  // O mesmo `metodo` do onboarding, que grava na mesma coluna pela mesma rota.
+  // Dois nomes de campo para o mesmo dado é a divergência do bloco seguinte.
+  const escolhidos = form.getAll('metodo').map(String).filter(ehMeioAceito);
+
+  const resultado = await salvarPagamentos(token, [...escolhidos]);
+  if (!resultado.ok) return falhar('/admin/configuracoes', resultado);
+  redirect('/admin/configuracoes?salvo=1');
+}
 
 export async function acaoJanela(form: FormData): Promise<void> {
   const token = await exigirSessao();

@@ -1,8 +1,10 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
+  MEIOS_ACEITOS,
   resolverCoordenada,
   SERVICE_TEMPLATES,
   validateCombos,
+  type MeioAceito,
   type ServiceTemplate,
 } from '@barbearia/core';
 
@@ -47,9 +49,16 @@ export class OnboardingError extends Error {
   }
 }
 
-/** Lista fechada: texto livre viraria vocabulário divergente entre barbearias. */
-export const PAYMENT_METHODS = ['pix', 'card', 'cash', 'online'] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/**
+ * Lista fechada: texto livre viraria vocabulário divergente entre barbearias.
+ *
+ * Mora em `packages/core` desde o bloco 127, porque a recepção automática
+ * precisa dela para responder "aceitam Pix?" e `core` não depende de ninguém.
+ * Aqui fica o nome de sempre, reexportado — dois arranjos com os mesmos quatro
+ * valores é a lista paralela que este repositório já pagou cinco vezes.
+ */
+export const PAYMENT_METHODS = MEIOS_ACEITOS;
+export type PaymentMethod = MeioAceito;
 
 export const AMENITIES = ['wifi', 'card', 'pix', 'cash', 'parking', 'accessible'] as const;
 

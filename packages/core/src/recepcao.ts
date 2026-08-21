@@ -1,3 +1,5 @@
+import { MEIOS_ACEITOS, ROTULO_DO_MEIO_ACEITO, type MeioAceito } from './meio-de-pagamento.js';
+
 /**
  * A recepção digital (bloco 66, SPEC §4.17).
  *
@@ -46,6 +48,15 @@ export interface DadosDaCasa {
   }[];
   readonly endereco: string | null;
   readonly politicaDeCancelamento: string | null;
+  /**
+   * Os meios que a casa aceita, do cadastro — nunca inventados.
+   *
+   * Arranjo vazio é resposta legítima e vira silêncio: a barbearia que não
+   * cadastrou não tem o que a recepção possa dizer, e responder "aceitamos
+   * dinheiro" por padrão seria o produto criando uma política que alguém vai
+   * ter que honrar no balcão.
+   */
+  readonly meiosAceitos: readonly MeioAceito[];
 }
 
 export interface RespostaDaRecepcao {
@@ -334,17 +345,42 @@ export function responderRecepcao(
         : null;
 
     /**
-     * Formas de pagamento não têm cadastro ainda.
+     * E agora com cadastro (bloco 127).
      *
-     * O assunto existe na lista porque ele **é** uma das perguntas que chegam —
-     * e é assim que ele aparece no registro de lacunas em vez de sumir. É a
-     * regra do gatilho que ainda não funciona: ele aparece marcado, nunca
-     * escondido.
+     * A coluna `locations.payment_methods` existia desde a 0013, gravada pelo
+     * onboarding e lida por ninguém: era o assunto mais perguntado da recepção
+     * automática caindo em "não sei" com a resposta a um `SELECT` de distância.
+     *
+     * Quem perguntou por **um** meio recebe sim ou não sobre aquele meio —
+     * "aceitam pix?" é pergunta fechada, e devolver a lista inteira obriga a
+     * pessoa a procurar a resposta dentro dela. Sem meio nomeado, a lista.
      */
-    case 'formas_de_pagamento':
-      return null;
+    case 'formas_de_pagamento': {
+      if (dados.meiosAceitos.length === 0) return null;
+      const nomeado = MEIOS_ACEITOS.find((m) => t.includes(normalizar(ROTULO_DO_MEIO_ACEITO[m])));
+      if (nomeado) {
+        const aceita = dados.meiosAceitos.includes(nomeado);
+        return {
+          assunto: 'formas_de_pagamento',
+          texto: aceita
+            ? `Sim, aceitamos ${ROTULO_DO_MEIO_ACEITO[nomeado]}.`
+            : `Não aceitamos ${ROTULO_DO_MEIO_ACEITO[nomeado]}. Aceitamos ${lista(dados.meiosAceitos)}.`,
+        };
+      }
+      return {
+        assunto: 'formas_de_pagamento',
+        texto: `Aceitamos ${lista(dados.meiosAceitos)}.`,
+      };
+    }
   }
 }
+
+/** "Pix, cartão e dinheiro" — com o "e" antes do último, como se fala. */
+const lista = (meios: readonly MeioAceito[]): string => {
+  const nomes = meios.map((m) => ROTULO_DO_MEIO_ACEITO[m]);
+  if (nomes.length === 1) return nomes[0]!;
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+};
 
 const reais = (centavos: number): string =>
   (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });

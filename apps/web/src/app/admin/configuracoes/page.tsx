@@ -3,10 +3,12 @@ import { painelOuDesvio } from '@/lib/painel';
 import { getProfile } from '@/lib/api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { politicasDaCasa, recusasOnlineNaApi, vitrineDaCasa } from '@/lib/admin-api';
-import { acaoDefinirVitrine, acaoJanela, acaoSair } from '../acoes';
+import { acaoDefinirVitrine, acaoJanela,
+  acaoMeiosAceitos, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { faltasDoLimiar } from '@/lib/sinal';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { MEIOS_ACEITOS, ROTULO_DO_MEIO_ACEITO } from '@barbearia/core';
 
 /**
  * Janela de cancelamento e remarcação.
@@ -27,6 +29,13 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
 
   const perfil = await getProfile(estado.slug);
+  /**
+   * Os meios aceitos saem do perfil **público** — a mesma fonte que a página do
+   * cliente lê e que a recepção automática responde. Uma segunda consulta abriria
+   * a segunda noção de "o que esta casa aceita", e a tela mostraria uma coisa
+   * enquanto o cliente lê outra.
+   */
+  const aceitos: readonly string[] = perfil?.location.meiosAceitos ?? [];
   /**
    * As políticas preenchidas, do painel e não do perfil público.
    *
@@ -169,6 +178,45 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           ) : null}
         </div>
       </section>
+
+      {/*
+        Os meios que a casa aceita (bloco 127).
+
+        A coluna existe desde a migração 0013, gravada no passo 5 do onboarding
+        e depois disso inalcançável: quem trocou de maquininha em março não
+        tinha por onde dizer. E é o assunto mais perguntado da recepção
+        automática, que respondia "não sei" com a resposta a um `SELECT` de
+        distância.
+      */}
+      <h2 className="painel__titulo configuracoes__secao">Formas de pagamento</h2>
+      <p className="painel__sub">
+        O que a página pública anuncia e o que a recepção automática responde quando o cliente
+        pergunta &quot;aceitam Pix?&quot;. Sem nenhum marcado, ela não responde — em vez de
+        inventar uma política que você teria que honrar no balcão.
+      </p>
+
+      <form action={acaoMeiosAceitos} className="formulario">
+        {/* `painel__marcas` e `marca` são as classes do passo 5 do onboarding,
+            que já desenha exatamente estas quatro caixas. Nome de classe novo
+            para o mesmo desenho é a briga de regras que `.escolha` já custou. */}
+        <div className="painel__marcas">
+          {MEIOS_ACEITOS.map((meio) => (
+            <label className="marca" key={meio}>
+              <input
+                defaultChecked={aceitos.includes(meio)}
+                name="metodo"
+                type="checkbox"
+                value={meio}
+              />
+              <span>{ROTULO_DO_MEIO_ACEITO[meio]}</span>
+            </label>
+          ))}
+        </div>
+
+        <button className="ui-button ui-button--primary" type="submit">
+          Salvar formas de pagamento
+        </button>
+      </form>
 
       <h2 className="painel__titulo configuracoes__secao">Cancelamento e remarcação</h2>
       <p className="painel__sub">

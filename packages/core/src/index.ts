@@ -73,3 +73,4 @@ export * from './compartilhado.js';
 export * from './multiunidade.js';
 export * from './slug.js';
 export * from './geo.js';
+export * from './meio-de-pagamento.js';
