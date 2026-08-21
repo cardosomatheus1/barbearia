@@ -7,6 +7,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoAvisos, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Avisos ao cliente.
@@ -91,7 +92,7 @@ export default async function AvisosPage({ searchParams }: Props) {
       <main className="ui-container painel__conteudo" {...secao('avisos')}>
         {topo}
         <h1 className="painel__titulo">Avisos</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {FALHA[resposta.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>

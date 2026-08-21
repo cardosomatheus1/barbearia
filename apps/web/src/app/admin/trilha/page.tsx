@@ -6,6 +6,7 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * A trilha de auditoria — lacuna aberta no bloco 12.
@@ -157,7 +158,7 @@ export default async function TrilhaPage({ searchParams }: Props) {
       <main className="ui-container painel__conteudo" {...secao('trilha')}>
         {topo}
         <h1 className="painel__titulo">Auditoria</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {resposta.code === 'forbidden'
             ? 'Sua conta não lê a trilha da barbearia.'
             : resposta.code === 'mfa_required' || resposta.code === 'mfa_setup_required'

@@ -17,6 +17,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 export const metadata: Metadata = {
   title: 'Painel',
@@ -229,7 +230,7 @@ export default async function PainelPage({ searchParams }: Props) {
       <main className="ui-container painel__conteudo" {...secao('painel')}>
         {topo}
         <h1 className="painel__titulo">Painel</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(operacao.code)}>
           {semPermissao ? (
             <>
               Sua conta não vê os números do negócio — eles são de quem acompanha o resultado da

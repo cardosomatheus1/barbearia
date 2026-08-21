@@ -48,6 +48,7 @@ import {
 } from '../acoes';
 import { FilaParada } from '../fila-parada';
 import { secao } from '../secoes';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * Campanhas, com o heatmap em cima (bloco 57, SPEC §4.13 e §5.9).
@@ -580,6 +581,34 @@ export default async function CampanhasPage({ searchParams }: Props) {
     // A fila anda? A campanha dizia "entrou na fila" sobre uma fila parada.
     podeMexer ? filaNaApi(token) : Promise.resolve(null),
   ]);
+  /**
+   * Sem `marketing.send` não há campanha para ver nem para criar.
+   *
+   * A tela nem **chegava** a perguntar: `podeMexer` já pulava a chamada e o
+   * `null` virava lista vazia em toda parte, então quem não tem a permissão via
+   * o formulário inteiro e só descobria no botão. A parede é sobre a permissão
+   * que a tela já conhece, e não sobre a resposta que ela não pediu.
+   *
+   * Some do menu desde o bloco 126; quem chega pelo endereço lê a frase.
+   */
+  if (!podeMexer) {
+    return (
+      <main className="ui-container painel__conteudo" {...secao('campanhas')}>
+      <header className="painel__topo">
+        <a className="painel__marca" href="/admin/dia">
+          ← {estado.businessName}
+        </a>
+        <form action={acaoSair}>
+          <button className="ui-button ui-button--ghost painel__sair" type="submit">
+            Sair
+          </button>
+        </form>
+      </header>
+        <FalhaDaLeitura code="forbidden" href="/admin/campanhas" oque="as campanhas" />
+      </main>
+    );
+  }
+
   const fila = saudeDaFila?.ok ? saudeDaFila.dados : null;
   const pulados = listaDePulados?.ok ? listaDePulados.dados.pulados : null;
   const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;

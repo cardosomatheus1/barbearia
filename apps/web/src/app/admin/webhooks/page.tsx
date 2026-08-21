@@ -11,6 +11,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSenhaDeUmaVez, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoCadastrarWebhook, acaoDesligarWebhook, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * Webhooks para terceiros (bloco 79).
@@ -153,9 +154,7 @@ export default async function WebhooksPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('webhooks')}>
         {topo}
-        <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar os webhooks. <a href="/admin/webhooks">Tentar de novo</a>
-        </div>
+        <FalhaDaLeitura code={resposta.code} href="/admin/webhooks" oque="os webhooks" />
       </main>
     );
   }

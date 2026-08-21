@@ -65,6 +65,7 @@ export function Casco({
   barbearia,
   unidade,
   recursos,
+  permissoes,
 }: {
   readonly children: ReactNode;
   readonly nome: string;
@@ -73,8 +74,15 @@ export function Casco({
   /** A loja da sessão, quando a barbearia tem mais de uma. */
   readonly unidade: string | null;
   readonly recursos: readonly string[];
+  /**
+   * O que esta conta pode, pela mesma lista que a `PermissaoGuard` aplica.
+   *
+   * Vem da sessão (`/v1/admin/state`) e não é recalculada aqui: permissão
+   * exibida na tela sai da mesma função que a API aplica.
+   */
+  readonly permissoes: readonly string[];
 }) {
-  const modulos = modulosVisiveis(recursos);
+  const modulos = modulosVisiveis(recursos, permissoes);
 
   const iniciais = nome
     .split(/\s+/)

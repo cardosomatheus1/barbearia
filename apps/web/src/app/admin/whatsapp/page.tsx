@@ -38,6 +38,7 @@ import {
   acaoSair,
 } from '../acoes';
 import { secao } from '../secoes';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * O WhatsApp da casa (bloco 55, SPEC §4.12).
@@ -438,6 +439,32 @@ export default async function WhatsAppPage({ searchParams }: Props) {
     // porque cookie não se grava durante a renderização.
     signupDoWhatsAppNaApi(token),
   ]);
+
+  /**
+   * Sem `whatsapp.manage` a tela não é uma versão reduzida — ela é nada.
+   *
+   * A tela lia com `resposta.ok ? ... : []` em toda parte, então o 403 virava
+   * lista vazia: quem não tem a permissão via o formulário inteiro e só
+   * descobria no botão. Some do menu desde o bloco 126; quem chega pelo
+   * endereço lê a frase.
+   */
+  if (!cadastroResposta.ok && cadastroResposta.code === 'forbidden') {
+    return (
+      <main className="ui-container painel__conteudo" {...secao('whatsapp')}>
+      <header className="painel__topo">
+        <a className="painel__marca" href="/admin/dia">
+          ← {estado.businessName}
+        </a>
+        <form action={acaoSair}>
+          <button className="ui-button ui-button--ghost painel__sair" type="submit">
+            Sair
+          </button>
+        </form>
+      </header>
+        <FalhaDaLeitura code="forbidden" href="/admin/whatsapp" oque="o WhatsApp da barbearia" />
+      </main>
+    );
+  }
 
   const cadastro = cadastroResposta.ok ? cadastroResposta.dados.cadastro : null;
   const templates = templatesResposta.ok ? templatesResposta.dados.templates : [];

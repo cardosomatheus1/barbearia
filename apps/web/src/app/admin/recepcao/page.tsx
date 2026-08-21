@@ -12,6 +12,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoResolverLacuna, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * As perguntas que a recepção digital não soube responder (bloco 66, SPEC §4.17).
@@ -125,8 +126,13 @@ export default async function RecepcaoPage({ searchParams }: Props) {
       ) : null}
 
       {!resposta.ok ? (
-        <div className="vazio">
-          <p className="vazio__titulo">Não deu para carregar as perguntas</p>
+        <div className="vazio" {...marcaDaRecusa(resposta.code)}>
+          {/* O título muda com o motivo: "não deu para carregar" sobre um 403 é
+              a recusa vestida de falha passageira, e manda recarregar para
+              sempre uma tela que nunca vai abrir. */}
+          <p className="vazio__titulo">
+            {resposta.code === 'forbidden' ? 'Esta tela não é da sua conta' : 'Não deu para carregar as perguntas'}
+          </p>
           <p className="vazio__saida">
             {resposta.code === 'forbidden'
               ? 'Você não tem permissão para ver esta lista. Fale com o dono.'

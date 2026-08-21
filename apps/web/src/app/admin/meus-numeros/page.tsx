@@ -11,6 +11,7 @@ import { acaoSair } from '../acoes';
 import { ProNav } from '../pro-nav';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Os números do barbeiro — SPEC §4.21.
@@ -97,7 +98,7 @@ export default async function MeusNumerosPage({ searchParams }: Props) {
         {topo}
         <ProNav atual="/admin/meus-numeros" />
         <h1 className="painel__titulo">Meus números</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(numeros.code)}>
           {FALHA[numeros.code] ?? FALHA['request_failed']}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/meu-dia">
             Voltar para o meu dia

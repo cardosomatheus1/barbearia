@@ -12,6 +12,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { reais } from '@/lib/dinheiro';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * O cardápio padrão da franquia (bloco 76).
@@ -137,10 +138,7 @@ export default async function FranquiaPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('franquia')}>
         {topo}
-        <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar o padrão da franquia.{' '}
-          <a href="/admin/franquia">Tentar de novo</a>
-        </div>
+        <FalhaDaLeitura code={resposta.code} href="/admin/franquia" oque="o padrão da franquia" />
       </main>
     );
   }

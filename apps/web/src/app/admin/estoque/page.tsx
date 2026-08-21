@@ -19,6 +19,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoMoverEstoque, acaoSair, acaoSalvarProduto } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Estoque, ficha de consumo e margem (bloco 44, SPEC §3.7 e §3.8).
@@ -451,7 +452,7 @@ export default async function EstoquePage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('estoque')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {FALHA[resposta.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
             Voltar ao dia

@@ -35,6 +35,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * O clube de assinatura (bloco 45, SPEC §4.6).
@@ -589,7 +590,7 @@ export default async function ClubePage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('clube')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {FALHA[resposta.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
             Voltar ao dia

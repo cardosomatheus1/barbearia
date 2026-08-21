@@ -70,6 +70,7 @@ import {
 } from '../../acoes';
 import { secao } from '../../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../../falha-da-leitura';
 
 /**
  * A ficha do cliente — SPEC §4.1 e §4.3.
@@ -1395,7 +1396,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
       <main className="ui-container painel__conteudo" {...secao('cliente')}>
         {topo}
         <h1 className="painel__titulo">Ficha</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(ficha.code)}>
           {FALHA[ficha.code] ?? FALHA['request_failed']}
           <a className="ui-button ui-button--secondary painel__saida" href={voltar}>
             Voltar

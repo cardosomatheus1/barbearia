@@ -30,6 +30,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * O que a casa deve e o que tem a receber (bloco 51, SPEC §3.10).
@@ -494,7 +495,7 @@ export default async function FinanceiroPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('financeiro')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(agenda.code)}>
           {FALHA[agenda.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
             Voltar ao dia

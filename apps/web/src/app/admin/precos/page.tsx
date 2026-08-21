@@ -12,6 +12,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoApagarFaixa, acaoCriarFaixa, acaoLigarPrecoPorFaixa, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Preço por faixa de horário (bloco 68, SPEC §4.20).
@@ -133,8 +134,13 @@ export default async function PrecosPage({ searchParams }: Props) {
       ) : null}
 
       {!config ? (
-        <div className="vazio">
-          <p className="vazio__titulo">Não deu para carregar os preços</p>
+        <div className="vazio" {...marcaDaRecusa(dados.ok ? '' : dados.code)}>
+          {/* O título muda com o motivo: "não deu para carregar" sobre um 403 é
+              a recusa vestida de falha passageira, e manda recarregar para
+              sempre uma tela que nunca vai abrir. */}
+          <p className="vazio__titulo">
+            {!dados.ok && dados.code === 'forbidden' ? 'Esta tela não é da sua conta' : 'Não deu para carregar os preços'}
+          </p>
           <p className="vazio__saida">
             {dados.ok === false && dados.code === 'forbidden'
               ? 'Você não tem permissão para ver esta tela. Fale com o dono.'

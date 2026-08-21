@@ -13,6 +13,7 @@ import { redirect } from 'next/navigation';
 import { acaoAssumirRecado, acaoDevolverRecado, acaoEncerrarRecado, acaoResponderRecado, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * A fila de recados (bloco 40).
@@ -114,8 +115,13 @@ export default async function RecadosPage({ searchParams }: Props) {
       ) : null}
 
       {!fila.ok ? (
-        <div className="vazio">
-          <p className="vazio__titulo">Não deu para carregar os recados</p>
+        <div className="vazio" {...marcaDaRecusa(fila.code)}>
+          {/* O título muda com o motivo: "não deu para carregar" sobre um 403 é
+              a recusa vestida de falha passageira, e manda recarregar para
+              sempre uma tela que nunca vai abrir. */}
+          <p className="vazio__titulo">
+            {fila.code === 'forbidden' ? 'Esta tela não é da sua conta' : 'Não deu para carregar os recados'}
+          </p>
           <p className="vazio__saida">
             {fila.code === 'forbidden'
               ? 'Você não tem permissão para ver esta fila. Fale com o dono.'

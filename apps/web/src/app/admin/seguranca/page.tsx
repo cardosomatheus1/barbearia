@@ -27,6 +27,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Segundo fator: a porta do dinheiro.
@@ -121,7 +122,7 @@ export default async function SegurancaPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('seguranca')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(mfa.code)}>
           {FALHA[mfa.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

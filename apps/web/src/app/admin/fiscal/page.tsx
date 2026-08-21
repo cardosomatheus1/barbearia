@@ -18,6 +18,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoCancelarNota, acaoSair, acaoSalvarFiscal } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Nota fiscal (bloco 53, SPEC §3.11).
@@ -421,7 +422,7 @@ export default async function FiscalPage({ searchParams }: Props) {
       ) : null}
 
       {!podeCadastrar && !veLista ? (
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa('forbidden')}>
           {FALHA['forbidden']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
             Voltar ao dia

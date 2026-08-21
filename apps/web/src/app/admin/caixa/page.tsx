@@ -9,6 +9,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirCaixa, acaoFecharCaixa, acaoMovimentarCaixa, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * O caixa: a gaveta com dono.
@@ -156,7 +157,7 @@ export default async function CaixaPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('caixa')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(caixa.code)}>
           {FALHA[caixa.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

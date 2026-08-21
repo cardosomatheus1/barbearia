@@ -11,6 +11,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoExigenciasDoServico, acaoSair, acaoSalvarRecursos } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Recursos: cadeira, lavatório, sala.
@@ -163,7 +164,7 @@ export default async function RecursosPage({ searchParams }: Props) {
             ← {estado.businessName}
           </a>
         </header>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(code)}>
           {FALHA[code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

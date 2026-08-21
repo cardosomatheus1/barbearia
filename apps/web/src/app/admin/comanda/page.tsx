@@ -14,6 +14,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoAbrirComanda, acaoCancelarComanda, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * Por onde uma comanda começa.
@@ -175,9 +176,13 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
       {!abertas.ok ? (
         /* A recusa em letras, nunca a seção sumindo. Aviso silencioso é pior
            que erro visível: o erro visível alguém investiga. */
-        <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
-          Não deu para carregar as comandas abertas. Recarregue a página.
-        </div>
+        <FalhaDaLeitura
+          className="painel__aviso"
+          code={abertas.code}
+          href="/admin/comanda"
+          oque="a lista de comandas abertas"
+          parcial
+        />
       ) : null}
 
       {abertas.ok && abertas.dados.comandas.length > 0 ? (

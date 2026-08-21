@@ -12,6 +12,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSenhaDeUmaVez, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoCriarChave, acaoRevogarChave, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * Chaves da API pública (bloco 78).
@@ -150,9 +151,7 @@ export default async function ChavesPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('chaves')}>
         {topo}
-        <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar as chaves. <a href="/admin/chaves">Tentar de novo</a>
-        </div>
+        <FalhaDaLeitura code={resposta.code} href="/admin/chaves" oque="as chaves" />
       </main>
     );
   }

@@ -19,6 +19,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoContestarMarketplace, acaoSair, acaoTrocarDePlano } from '../acoes';
 import { secao } from '../secoes';
 import { reais } from '@/lib/dinheiro';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * O plano, para quem paga por ele.
@@ -199,9 +200,7 @@ export default async function PlanoPage({
       <main className="ui-container painel__conteudo" {...secao('plano')}>
         {topo}
         <h1 className="painel__titulo">Plano</h1>
-        <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar o plano. Recarregue a página.
-        </div>
+        <FalhaDaLeitura code={resposta.code} href="/admin/plano" oque="o plano" />
       </main>
     );
   }

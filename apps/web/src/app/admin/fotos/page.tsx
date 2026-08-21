@@ -5,6 +5,7 @@ import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoFotos, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
  * Fotos da barbearia.
@@ -86,9 +87,7 @@ export default async function FotosPage({ searchParams }: Props) {
   if (!resposta.ok) {
     return (
       <main className="ui-container painel__conteudo" {...secao('fotos')}>
-        <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para carregar as fotos. <a href="/admin/fotos">Tentar de novo</a>
-        </div>
+        <FalhaDaLeitura code={resposta.code} href="/admin/fotos" oque="as fotos" />
       </main>
     );
   }

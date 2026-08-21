@@ -27,6 +27,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * A agenda do admin.
@@ -347,7 +348,7 @@ export default async function AgendaPage({ searchParams }: Props) {
             ← {estado.businessName}
           </a>
         </header>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {FALHA[resposta.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

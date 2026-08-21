@@ -3,6 +3,8 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { PERMISSOES } from '@barbearia/core';
+
 import {
   DESTINOS_GATEADOS,
   MODULOS,
@@ -12,6 +14,9 @@ import {
   secao,
   type Secao,
 } from './secoes';
+
+/** O dono, que tem tudo: aqui o corte sob teste é o do recurso, não o da permissão. */
+const TODAS_AS_PERMISSOES: readonly string[] = PERMISSOES;
 
 /**
  * O casco é padrão, e padrão sem guarda é convenção — dura até a próxima tela.
@@ -122,7 +127,7 @@ describe('os subgrupos do menu', () => {
    * Passando tudo ligado de propósito: um recurso desligado esconderia telas e
    * as guardas de agrupamento deixariam de ver o registro completo.
    */
-  const TODOS = modulosVisiveis(DESTINOS_GATEADOS.map((d) => d.recurso));
+  const TODOS = modulosVisiveis(DESTINOS_GATEADOS.map((d) => d.recurso), TODAS_AS_PERMISSOES);
 
   it('nenhum grupo tem o nome de uma tela do próprio módulo', () => {
     /**
@@ -372,10 +377,10 @@ describe('tela ligada pela plataforma', () => {
       const codigo = tela.recurso;
       const outros = gateadas.map((t) => t.recurso).filter((c) => c !== codigo);
 
-      const sem = modulosVisiveis(outros).flatMap((m) => m.telas.map((t) => t.href));
+      const sem = modulosVisiveis(outros, TODAS_AS_PERMISSOES).flatMap((m) => m.telas.map((t) => t.href));
       expect(sem, `${tela.href} continua no menu com ${codigo} desligado`).not.toContain(tela.href);
 
-      const com = modulosVisiveis([...outros, codigo]).flatMap((m) => m.telas.map((t) => t.href));
+      const com = modulosVisiveis([...outros, codigo], TODAS_AS_PERMISSOES).flatMap((m) => m.telas.map((t) => t.href));
       expect(com, `${tela.href} sumiu com ${codigo} ligado`).toContain(tela.href);
     }
   });
@@ -383,7 +388,7 @@ describe('tela ligada pela plataforma', () => {
   it('o que não depende de recurso aparece com a lista vazia', () => {
     // Uma barbearia sem recurso nenhum ligado é o caso comum — é o padrão do
     // catálogo. Se o filtro errasse a polaridade, o painel inteiro sumiria.
-    const semNada = modulosVisiveis([]).flatMap((m) => m.telas);
+    const semNada = modulosVisiveis([], TODAS_AS_PERMISSOES).flatMap((m) => m.telas);
     const todas = MODULOS.reduce((n, m) => n + m.telas.length, 0);
     expect(semNada.length).toBe(todas - gateadas.length);
     expect(semNada.every((t) => !t.recurso)).toBe(true);
@@ -409,5 +414,43 @@ describe('tela ligada pela plataforma', () => {
       'esconder o link do menu não fecha a tela: o endereço continua digitável, e quem o tem ' +
         'salvo chega a uma página que pede à API algo que ela responde 404.',
     ).toEqual([]);
+  });
+});
+
+describe('o menu esconde o que a conta não abre', () => {
+  /**
+   * Quem prova a **verdade** de cada `permissao` é o percurso de navegador
+   * (`scripts/percorrer.mjs`), que entra com cada papel padrão e abre tudo.
+   * O que fica aqui é a mecânica do filtro, que não precisa de servidor: sem
+   * ela, um erro no `some` deixaria o percurso vermelho sem dizer onde.
+   */
+  const RECURSOS = DESTINOS_GATEADOS.map((d) => d.recurso);
+  const telasDe = (permissoes: readonly string[]) =>
+    modulosVisiveis(RECURSOS, permissoes).flatMap((m) => m.telas);
+
+  it('sem nenhuma permissão sobram só os destinos que não têm porta', () => {
+    const visiveis = telasDe([]);
+    expect(visiveis.every((t) => t.permissao === undefined)).toBe(true);
+    expect(visiveis.length).toBeGreaterThan(0);
+  });
+
+  it('basta uma das permissões declaradas para o destino aparecer', () => {
+    // Comissões é o caso, e existe um: `view_own` e `view_all` abrem a mesma
+    // tela para gente diferente. Se um dia não houver nenhum, o teste diz.
+    const comDuas = telasDe(PERMISSOES).find((t) => (t.permissao?.length ?? 0) > 1);
+    expect(comDuas, 'nenhum destino declara duas portas').toBeDefined();
+    for (const permissao of comDuas?.permissao ?? []) {
+      const hrefs = telasDe([permissao]).map((t) => t.href);
+      expect(hrefs, permissao).toContain(comDuas?.href);
+    }
+  });
+
+  it('módulo que fica sem tela não desenha ícone no trilho', () => {
+    expect(modulosVisiveis(RECURSOS, []).map((m) => m.id)).not.toContain('integracoes');
+  });
+
+  it('o dono vê tudo que os recursos ligados permitem', () => {
+    expect(telasDe(TODAS_AS_PERMISSOES).length).toBe(telasDe(PERMISSOES).length);
+    expect(telasDe([]).length).toBeLessThan(telasDe(TODAS_AS_PERMISSOES).length);
   });
 });

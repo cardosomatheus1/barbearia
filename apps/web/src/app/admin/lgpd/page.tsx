@@ -12,6 +12,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { faltamDias } from '@/lib/prazo';
 import { acaoEncerrarPedidoDeDados, acaoSair } from '../acoes';
 import { secao } from '../secoes';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Os pedidos dos clientes sobre os dados deles (bloco 31, SPEC §1.8.4).
@@ -209,7 +210,7 @@ export default async function LgpdPage({ searchParams }: Props) {
       <main className="ui-container painel__conteudo" {...secao('lgpd')}>
         {topo}
         <h1 className="painel__titulo">Privacidade</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {frase(resposta.code)}
         </div>
       </main>

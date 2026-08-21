@@ -41,6 +41,7 @@ import {
 } from '../../acoes';
 import { secao } from '../../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../../falha-da-leitura';
 
 /**
  * A comanda: do atendimento ao dinheiro.
@@ -329,7 +330,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('comanda')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(comanda.code)}>
           {FALHA[comanda.code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

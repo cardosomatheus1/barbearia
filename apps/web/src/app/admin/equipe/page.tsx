@@ -17,6 +17,7 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Equipe.
@@ -184,7 +185,7 @@ export default async function EquipePage({ searchParams }: Props) {
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         </header>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {FALHA[resposta.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>

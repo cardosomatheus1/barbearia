@@ -6,6 +6,7 @@ import { politicasDaCasa, recusasOnlineNaApi, vitrineDaCasa } from '@/lib/admin-
 import { acaoDefinirVitrine, acaoJanela, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { faltasDoLimiar } from '@/lib/sinal';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Janela de cancelamento e remarcação.
@@ -58,7 +59,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
           <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
         </header>
         <h1 className="painel__titulo">Configurações</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {semPermissao
             ? 'Você não tem permissão para ver esta tela. Fale com o dono.'
             : 'Não deu para ler as configurações da barbearia, e por isso o formulário não abre — salvar agora gravaria valores de fábrica por cima dos seus.'}

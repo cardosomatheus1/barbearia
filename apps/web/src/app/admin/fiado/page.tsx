@@ -8,6 +8,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoReceberFiado, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Quem está devendo.
@@ -141,7 +142,7 @@ export default async function FiadoPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('fiado')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(devedores.code)}>
           {FALHA[devedores.code] ?? FALHA['request_failed']} <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

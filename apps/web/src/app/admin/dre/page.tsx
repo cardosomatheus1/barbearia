@@ -8,6 +8,7 @@ import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * O resultado do mês (bloco 52, SPEC §3.10).
@@ -139,7 +140,7 @@ export default async function DrePage({ searchParams }: Props) {
       <main className="ui-container painel__conteudo" {...secao('dre')}>
         {topo}
         <h1 className="painel__titulo">Resultado</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(dre.code)}>
           {FALHA[dre.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
             Voltar ao dia

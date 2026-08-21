@@ -965,6 +965,143 @@ await percurso('cabeçalhos de segurança saem do servidor', async (page) => {
 });
 
 // ---------------------------------------------------------------------------
+// o menu não oferece o que a conta não abre — nos dois sentidos
+// ---------------------------------------------------------------------------
+
+/**
+ * A guarda do bloco 126, e ela é **empírica de propósito**.
+ *
+ * `secoes.ts` passou a declarar, por destino, a permissão que abre a porta — e
+ * a objeção escrita na lacuna era boa: uma coluna à mão em quarenta linhas é
+ * mais uma lista paralela, e errar uma linha **esconde uma tela de quem deveria
+ * vê-la**, que é pior que o defeito original.
+ *
+ * Quem responde por isso é esta função, e ela mede os dois lados:
+ *
+ * - todo destino que o menu **ofereceu** tem que abrir sem recusa;
+ * - todo destino que o menu **escondeu** tem que recusar quando aberto pelo
+ *   endereço.
+ *
+ * Uma permissão escrita a mais fica vermelha no primeiro sentido; a menos, no
+ * segundo. E o segundo pega o que nenhuma leitura de `@Exige` pegaria: a tela
+ * que engole o 403 e desenha o formulário inteiro, que só vai recusar no botão
+ * — era o caso de WhatsApp, Campanhas e Automações.
+ *
+ * ## O universo sai do produto, não de um arquivo
+ *
+ * O conjunto de destinos é o **menu do dono**, lido da tela. Ele tem todas as
+ * permissões, então o menu dele é o registro inteiro já filtrado pelos recursos
+ * que a plataforma ligou para esta barbearia — que é exatamente o universo
+ * certo. Nada aqui analisa `secoes.ts`.
+ *
+ * ## O que ela não alcança, escrito aqui dentro
+ *
+ * Ela percorre os **papéis padrão**. Papel é editável desde o bloco 30, e uma
+ * combinação que ninguém montou por padrão — ter `reviews.view` sem
+ * `customers.view`, por exemplo — não passa por aqui. O que sobra desse caso é
+ * o comportamento de antes do bloco: a tela abre e explica. Guarda em que se
+ * confia mais do que ela alcança é pior que guarda nenhuma.
+ */
+await percurso('o menu não oferece o que a conta não abre', async (page) => {
+  /** Os destinos que o menu está oferecendo agora, lidos do trilho e do contexto. */
+  const doMenu = () =>
+    page.$$eval('nav a[href^="/admin/"], .contexto a[href^="/admin/"]', (as) => [
+      ...new Set(as.map((a) => a.getAttribute('href')).filter((h) => h && !h.includes('?'))),
+    ]);
+
+  await entrarNoPainel(page, DONO, SENHA_DO_DONO);
+  await page.goto(`${WEB}/admin/dia`, { waitUntil: 'networkidle' });
+  const universo = await doMenu();
+  if (universo.length < 30) {
+    throw new Error(`o menu do dono trouxe ${universo.length} destinos — a leitura do menu quebrou`);
+  }
+  for (const href of universo) {
+    await page.goto(WEB + href, { waitUntil: 'domcontentloaded' });
+    if ((await page.locator('[data-recusa]').count()) > 0) {
+      throw new Error(`o dono, que tem tudo, foi recusado em ${href}`);
+    }
+  }
+  await submeter(page, 'o dono sair', botao(page, 'Sair'));
+
+  const problemas = [];
+
+  for (const papel of ['manager', 'receptionist', 'professional']) {
+    /**
+     * A conta é criada **imediatamente antes** de ser usada.
+     *
+     * A senha de primeiro acesso vive dois minutos, e percorrer o menu de um
+     * papel leva mais que isso. Criar as três de uma vez deixava a segunda
+     * expirar, e o sintoma era "E-mail ou senha incorretos" sobre uma conta que
+     * tinha acabado de nascer.
+     */
+    await entrarNoPainel(page, DONO, SENHA_DO_DONO);
+    await page.goto(`${WEB}/admin/equipe`, { waitUntil: 'networkidle' });
+    const email = `${papel}-${Date.now()}@percurso.teste`;
+    const criar = page
+      .locator('form')
+      .filter({ has: page.getByRole('button', { name: 'Criar conta' }) })
+      .first();
+    await criar.locator('input[name="name"]').fill(`Conta de ${papel}`);
+    await criar.locator('input[name="email"]').fill(email);
+    await criar.locator(`input[name="role"][value="${papel}"]`).check();
+
+    /**
+     * Aqui é clique e espera pelo **elemento**, não `submeter`.
+     *
+     * Criar conta não navega: a tela recarrega no mesmo endereço com a senha em
+     * cima. `submeter` espera a URL mudar e acusaria o produto por um caminho
+     * que funcionou — e é o segundo formulário da página que ele encontra
+     * incompleto enquanto espera.
+     */
+    await botao(criar, 'Criar conta').click();
+    /**
+     * E a espera é pelo bloco **desta** conta, pelo nome.
+     *
+     * A senha de primeiro acesso vem por cookie de dois minutos, então ao criar
+     * a segunda conta o bloco da primeira ainda está na tela: esperar por
+     * `.senha-nova__valor` resolvia na hora, sobre o valor antigo, e o percurso
+     * tentava entrar na conta nova com a senha da anterior. O sintoma era
+     * "E-mail ou senha incorretos" sobre uma conta criada oito segundos antes.
+     */
+    const bloco = page.locator('.senha-nova').filter({ hasText: `Conta de ${papel}` }).first();
+    await bloco.waitFor({ state: 'visible', timeout: 15000 });
+    const senha = (await bloco.locator('.senha-nova__valor').textContent())?.trim();
+    if (!senha) throw new Error(`a senha de primeiro acesso de ${papel} não apareceu na tela`);
+    await submeter(page, 'o dono sair', botao(page, 'Sair'));
+
+    await page.goto(`${WEB}/admin/entrar`, { waitUntil: 'networkidle' });
+    await page.fill('input[name="email"]', email);
+    await page.fill('input[name="password"]', senha);
+    await submeter(page, `${papel} entrar pela primeira vez`);
+    await page.fill('input[name="currentPassword"]', senha);
+    await page.fill('input[name="newPassword"]', `${senha}-nova`);
+    await page.fill('input[name="confirmPassword"]', `${senha}-nova`);
+    await submeter(page, `${papel} trocar a senha de primeiro acesso`);
+
+    const visiveis = await doMenu();
+    const escondidos = universo.filter((h) => !visiveis.includes(h));
+
+    for (const href of visiveis) {
+      await page.goto(WEB + href, { waitUntil: 'domcontentloaded' });
+      if ((await page.locator('[data-recusa]').count()) > 0) {
+        problemas.push(`${papel}: o menu ofereceu ${href} e a tela recusou`);
+      }
+    }
+    for (const href of escondidos) {
+      await page.goto(WEB + href, { waitUntil: 'domcontentloaded' });
+      if ((await page.locator('[data-recusa]').count()) === 0) {
+        problemas.push(`${papel}: o menu escondeu ${href} e a tela abriu`);
+      }
+    }
+
+    console.log(`      ${papel}: ${visiveis.length} no menu, ${escondidos.length} escondidos`);
+    await submeter(page, `${papel} sair`, botao(page, 'Sair'));
+  }
+
+  if (problemas.length > 0) throw new Error(problemas.join('\n          '));
+});
+
+// ---------------------------------------------------------------------------
 
 console.log('');
 if (falhas.length > 0) {

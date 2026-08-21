@@ -29,6 +29,7 @@ import {
   TRATAMENTOS_DA_TAXA,
   TRATAMENTOS_DO_DESCONTO,
 } from '@barbearia/core';
+import { marcaDaRecusa } from '../../falha-da-leitura';
 
 /**
  * Regras de comissão.
@@ -150,7 +151,7 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('comissao')}>
         {topo}
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(dados.code)}>
           {FALHA[dados.code] ?? FALHA['request_failed']} <a href="/admin/dia">Voltar ao dia</a>
         </div>
       </main>

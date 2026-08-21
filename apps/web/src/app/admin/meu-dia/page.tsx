@@ -15,6 +15,7 @@ import { ProNav } from '../pro-nav';
 import { secao } from '../secoes';
 import { QuemQueriaAVaga } from '../quem-queria-a-vaga';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * O dia do barbeiro.
@@ -160,7 +161,7 @@ export default async function MeuDiaPage({ searchParams }: Props) {
         {topo}
         <ProNav atual="/admin/meu-dia" />
         <h1 className="painel__titulo">Meu dia</h1>
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(painel.code)}>
           {FALHA[painel.code] ?? FALHA['request_failed']}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/meu-dia">
             Tentar de novo

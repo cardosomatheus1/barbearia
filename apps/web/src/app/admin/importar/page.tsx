@@ -19,6 +19,7 @@ import {
   acaoSair,
 } from '../acoes';
 import { secao } from '../secoes';
+import { marcaDaRecusa } from '../falha-da-leitura';
 
 /**
  * Trazer a base do sistema antigo — SPEC §5.8.
@@ -240,7 +241,7 @@ export default async function ImportarPage({ searchParams }: Props) {
       <h1 className="painel__titulo">Importar dados</h1>
 
       {!podeImportar ? (
-        <div className="ui-alert ui-alert--warning" role="alert">
+        <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa('forbidden')}>
           Sua conta não mexe na base de clientes da barbearia.
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
             Voltar ao dia
