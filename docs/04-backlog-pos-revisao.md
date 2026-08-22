@@ -33,10 +33,44 @@ cartões, o acabamento sobe e a facilidade de uso não sai do lugar** — e esse
 exatamente o risco, porque mexer em CSS é a parte agradável e a parte que não
 resolve.
 
-Este programa vem antes de qualquer módulo novo. É o maior retorno disponível
-agora, e é a única coisa aqui que não é opinião: as três medições que a revisão
-pontuou mais baixo — facilidade de uso, acabamento e simplicidade — apontam
-todas para navegação, nenhuma para funcionalidade faltando.
+Este programa vem antes de qualquer módulo novo, e é o maior retorno disponível
+agora. **Não porque haja medição dizendo isso** — não há, e a revisão não rodou o
+produto —, mas porque é o sinal qualitativo mais forte que ela produziu: as três
+avaliações mais baixas — facilidade de uso, acabamento e simplicidade — apontam
+todas para navegação, e nenhuma para funcionalidade faltando. Sinal forte não é
+número; o número é o que o R12 vai buscar.
+
+---
+
+## A ordem de execução
+
+A fila abaixo **não** é "Parte I inteira, depois Parte II". As duas se
+intercalam, e a razão de cada posição está escrita.
+
+| Ordem | Item | Por que aqui |
+|---|---|---|
+| **0** | **Cronometrar o estado de hoje** (R12, primeira passada) | **O "antes" só existe uma vez.** Se V1 entrar antes da medição, a linha de base some para sempre e o programa inteiro vira opinião defendida com opinião |
+| 1 | **R7** · matriz de prontidão | Estabelece a verdade sobre o produto antes de qualquer trabalho: "bloco pronto" ≠ "dá para vender" |
+| 2 | **V0** · vocabulário do menu | Renomear é barato e muda o que a pessoa lê antes de tudo. E define onde `Clientes` vai morar |
+| 3 | **V1** · a porta dos clientes | O buraco estrutural |
+| 4 | **V3** · migalha e abas | Saber onde se está |
+| 5 | **V4** · operar × configurar | Reduz densidade sem tirar nada |
+| 6 | **V5** · Hoje como centro operacional | Cria a casa de quem opera |
+| 7 | **V10** · agenda em linha do tempo | Melhora a rotina principal, e buraco de agenda é o produto |
+| 8 | **R5** · a primeira ilha de cliente | Destrava V11 e as quatro lacunas declaradas |
+| 9 | **V11** · busca global e ação no contexto | Depende do R5 |
+| 10 | **V2** · a ficha do cliente | Fecha o fluxo que o V1 abriu |
+| 11 | **V6** · painel do dono | Gestão, depois de a operação estar resolvida |
+| 12 | **V7 · V8 · V9** | Consolidam o sistema visual sobre telas que já estão no lugar certo |
+| 13 | **R9** · armazenamento de objeto | Antes da primeira demonstração comercial séria |
+| contínuo | **R10 · R11** | Refatorar a área que se está tocando, nunca como bloco separado |
+| contínuo | **R12** | Recronometrar depois do 6 e depois do 9 |
+
+**V10 e V11 subiram** em relação ao primeiro rascunho, e o motivo é o mesmo dos
+dois: agenda visual e busca global atacam diretamente a sensação de *"fico
+confuso e não sei onde estou"*. Busca global não é conveniência — num sistema
+grande ela é **a válvula de escape da arquitetura de navegação**: quem pensa
+"onde diabos fica comissão?" digita `Ctrl+K` e para de explorar menu.
 
 ---
 
@@ -48,7 +82,7 @@ seria o pior desperdício deste backlog, então ficam com a prova de onde estão
 
 | Proposta da revisão | Situação | Onde está |
 |---|---|---|
-| "Sair de ~40 opções para 6–7 áreas mentais" | **feito, e com sub-agrupamento** | `secoes.ts` tem sete módulos — Visão geral · Atendimento · Financeiro · Marketing · Cadastros · Integrações · Administração —, cada tela com `grupo` (*O dia*, *Voz do cliente*, *Balcão*, *Fechamento*, *Envios*, *Retorno*, *Catálogo*, *Estrutura*, *Marca*, *A conta*, *Preferências*, *Obrigações*) e uma `nota` de uma linha dizendo o que é |
+| "Sair de ~40 opções para 6–7 áreas mentais" | **a estrutura existe; o vocabulário, não** | `secoes.ts` tem sete módulos com sub-`grupo` e `nota` de uma linha em cada tela. Mas os nomes são *Visão geral · Atendimento · Financeiro · Marketing · Cadastros · Integrações · Administração* — que é como um arquiteto organiza funcionalidade, não como a recepção pensa. Eu tinha dado isto como feito; a estrutura está, o vocabulário está errado, e o vocabulário é a metade que o funcionário novo lê. Vira **V0** |
 | "Cada perfil vê só o necessário" | **feito no bloco 126** | `modulosVisiveis(recursos, permissoes)` filtra por permissão **e** por recurso do plano. A recepcionista nunca viu quarenta destinos. O barbeiro tem telas próprias: `/admin/meu-dia` e `/admin/meus-numeros` |
 | "Status consistente — não *Concluído* aqui e *Finalizado* ali" | **feito, com guarda** | `packages/core/src/vocabulario.ts`, `ROTULO_DO_ESTADO`. A tela não escreve texto de transição à mão, e há teste que reprova quem escrever |
 | "Próxima melhor ação: três coisas precisam da sua atenção, com o botão ao lado" | **feito** | `insightsDoPainel` — no máximo três, ordenados pelo mais caro, cada um com o valor em reais e o destino que resolve |
@@ -94,9 +128,57 @@ clientes de *"o seu ativo"*. É o único ativo do produto sem porta de entrada.
 
 ## O programa
 
-Onze itens. A ordem é por dependência, e ela importa: **V1 a V3 são porta,
-orientação e separação.** Sem eles, V6 a V9 consertam a decoração de um lugar
-onde as pessoas continuam se perdendo.
+Doze itens. Estão numerados por assunto, **não** por ordem de execução — a ordem
+está na tabela lá em cima, e ela intercala Parte I e Parte II. O que a numeração
+guarda é a dependência conceitual: **V0 a V4 são vocabulário, porta, orientação e
+separação.** Sem eles, V7 a V9 consertam a decoração de um lugar onde as pessoas
+continuam se perdendo.
+
+---
+
+### V0 · O vocabulário do menu
+
+**O defeito:** os sete módulos existem e estão nomeados pela arquitetura do
+software, não pelo trabalho de quem abre. *Cadastros* é uma categoria de banco de
+dados. *Integrações* é uma palavra de quem escreve API. *Marketing* é
+departamento de empresa grande — numa barbearia de duas cadeiras quem manda o
+WhatsApp é a mesma pessoa que varre o chão.
+
+**O que entra** — a lista passa a ser dita na língua de quem trabalha:
+
+```
+Hoje · Agenda · Clientes · Atendimento · Financeiro · Crescimento · Gestão
+─────────────
+Configurações
+```
+
+O de-para, sem perder destino nenhum:
+
+| Novo | De onde vem |
+|---|---|
+| **Hoje** | `/admin/dia`, promovido de dentro de *Atendimento* |
+| **Agenda** | `/admin/agenda`, idem |
+| **Clientes** | **novo** (V1) |
+| **Atendimento** | fila · recados · recepção · avaliações · cobrar |
+| **Financeiro** | caixa · fiado · contas · comissões · resultado |
+| **Crescimento** | WhatsApp · campanhas · automações · avisos · retenção · fidelidade · clube |
+| **Gestão** | serviços · preços · pacotes · profissionais · recursos · estoque · fotos · franquia · unidades · nota fiscal |
+| **Configurações** *(abaixo do separador)* | usuários · segurança · chaves · webhooks · privacidade · auditoria · importar · plano · preferências |
+
+**Duas decisões em aberto, e a minha recomendação:**
+
+- **O painel do dono não tem lugar óbvio nessa lista de sete.** Recomendo que
+  `Hoje` seja a casa de quem opera e o painel seja a **primeira tela dentro de
+  Gestão** — e a casa de quem tem papel de dono. São dois produtos mentais
+  diferentes (V5 e V6), e cada um merece a própria porta, não uma disputa.
+- **O assistente sai do menu.** Ele não é um lugar: é um jeito de perguntar.
+  Recomendo que ele passe a viver ao lado da busca global (V11), na barra do
+  topo. Um destino de menu chamado "Assistente" obriga a pessoa a ir até ele;
+  no topo, ele está onde ela já está.
+
+**Pronto quando:** o de-para não perde nenhum dos 41 destinos atuais; a guarda de
+navegação do bloco 126 continua verde; e os nomes saem do mesmo `secoes.ts`, que
+já é fonte única — renomear não pode virar a segunda lista.
 
 ---
 
@@ -115,11 +197,23 @@ onde as pessoas continuam se perdendo.
 - Cada linha traz o **segmento derivado** ao lado do nome. Os segmentos já
   existem em `core`, calculados na leitura e nunca em coluna; hoje só aparecem
   dentro da ficha, uma pessoa de cada vez.
-- Filtros que a operação usa de verdade: em risco · VIP · assinante · com fiado
-  em aberto · sem retornar há N dias.
-- E o que a lista mostra por padrão quando ninguém filtrou nada: **quem tem
-  horário nos próximos dias**, não a base inteira em ordem alfabética. Lista de
-  mil e duzentos nomes ordenada por A é uma lista sobre a qual não se age.
+- Filtros como fichas no topo: **Todos · Recentes · Hoje · Em risco · VIP ·
+  Assinantes · Fiado**.
+- **O padrão é *Todos*, ordenado por atividade recente — nunca por ordem
+  alfabética, e nunca recortado.** Esta é a correção de uma versão anterior deste
+  documento, que propunha abrir mostrando só quem tem horário nos próximos dias.
+  A intenção era certa (mil e duzentos nomes em ordem de A é lista sobre a qual
+  não se age), o efeito seria péssimo: *"entrei em Clientes e não estou vendo
+  meus clientes"* — a tela negaria a própria promessa do nome dela. Quem resolve
+  a densidade é a **ordem**, não o recorte: a base continua inteira, e quem esteve
+  aqui esta semana aparece primeiro.
+- Cada linha diz o que a operação precisa saber antes de clicar:
+
+```
+João Silva          última visita ontem · próxima 29 ago
+Pedro Souza         última visita há 4 dias
+Carlos Lima         próxima visita hoje 16:30
+```
 
 **Pronto quando:** a recepção acha o João digitando "joão" num campo, sem saber
 em qual lista ele está; e o percurso de navegador do bloco 126 cobre a porta nova
@@ -336,9 +430,19 @@ por tela, e não por molde.
 | **C · Gestão** | resultado, comissões, retenção, desempenho, plano | título · período · número principal · indicadores secundários · gráfico · detalhamento |
 | **D · Configuração** | equipe, unidades, integrações, fiscal, segurança | seções de formulário, uma decisão por bloco |
 
-**Pronto quando:** toda tela declara seu molde em `secoes.ts` e há guarda que
-reprova tela sem molde — pela mesma razão que rota sem `@Exige` é recusada e não
-liberada.
+**E a regra não é "nenhuma tela fora deles".** A primeira versão dizia isso, e
+estava errada: um design system diz *"este é o padrão"*, não *"é proibido existir
+outra coisa"*. Vai aparecer mapa de ocupação, editor visual, onboarding, quadro
+de colunas — coisas que legitimamente não cabem em A/B/C/D, e uma regra absoluta
+faria a saída ser espremer a tela nova num molde errado, ou desligar a guarda.
+
+A regra é: **toda tela usa um dos quatro moldes ou declara uma exceção com o
+motivo escrito.** É o mesmo desenho das lacunas — a exceção existe, tem nome e
+tem justificativa, e por isso alguém pode discordar dela depois.
+
+**Pronto quando:** toda tela declara molde ou exceção justificada em `secoes.ts`,
+e a guarda reprova apenas a tela que não declara **nada** — pela mesma razão que
+rota sem `@Exige` é recusada e não liberada.
 
 ---
 
@@ -366,10 +470,17 @@ antes                              depois
                                    +14% sobre a sexta passada
 ```
 
-**Pronto quando:** nenhuma tela tem cartão dentro de cartão; e o contraste medido
-de cada um dos três níveis continua passando em AA nos dois temas — hierarquia
-por tamanho e peso **antes** de cor é regra escrita aqui, e cor é o que menos
-funciona para quem tem baixa visão.
+**O que se proíbe é a causa, não o sintoma.** "Nenhum cartão dentro de cartão"
+era a primeira redação, e ela mira no lugar errado: às vezes um recipiente dentro
+de outro é semanticamente correto, e a regra literal faria contornar o teste sem
+consertar a tela. O defeito real é **usar borda e fundo para criar a hierarquia
+que deveria vir de espaço, tipografia e alinhamento** — e é isso que a revisão
+tem que perguntar, em leitura, não em `grep`.
+
+**Pronto quando:** cada tela consegue dizer qual dos três níveis cada elemento
+ocupa; e o contraste medido dos três continua passando em AA nos dois temas —
+hierarquia por tamanho e peso **antes** de cor é regra escrita aqui, e cor é o
+que menos funciona para quem tem baixa visão.
 
 ---
 
@@ -432,8 +543,16 @@ tocar no menu, com o resultado **já recortado pela permissão de quem digita** 
 oferecer o que a pessoa não pode abrir é dizer a ela que existe um número que ela
 não vê, e isso é informação por si.
 
+**E isto entra no design system como princípio, não como lista de botões:**
+
+> O usuário não deve navegar para executar uma ação quando o objeto da ação já
+> está diante dele.
+
+Escrito assim, a tela nova nasce cobrada. Como lista de casos, ela ficaria
+desatualizada no primeiro objeto que alguém acrescentar.
+
 **Dependência:** busca com estado por tecla é um **componente de cliente**, e cai
-no bloqueio do R4 na Parte II.
+no bloqueio do R5.
 
 ---
 ---
@@ -520,8 +639,40 @@ O que muda é a **posição na fila**, não a existência do item.
 | R8 | Revisar o material de venda contra a matriz | Nenhuma frase comercial afirma o que a matriz marca ❌; o assistente é *"assistente de gestão"*, nunca *"IA que entende o negócio"* — ele é interpretador de catálogo fechado, e isso é convenção escrita, não limitação envergonhada |
 | R9 | Armazenamento de objeto: envio, recorte, compressão, servido do nosso domínio | Foto entra por arquivo; a página pública não depende de host de terceiro; foto de cliente continua atrás do consentimento do bloco 74 |
 | R10 | Partir `globals.css` por superfície | Testes de CSS continuam verdes lendo os arquivos partidos; nenhuma regra duplicada sobrevive à partição |
-| R11 | Partir `admin-api.ts` e `acoes.ts` por domínio | Nenhum arquivo de aplicação acima de ~1.200 linhas, com guarda que reprova o crescimento de volta |
-| R12 | Operação assistida em 3–5 barbearias de verdade | Recepcionista num sábado às 11h, barbeiro fechando atendimento, dono conferindo dinheiro às 20h — com o que quebrou escrito. **É o único juiz de V1–V11** |
+| R11 | Partir `admin-api.ts` e `acoes.ts` **por domínio** — `admin-api/clientes.ts`, `/financeiro.ts`, `/agenda.ts` | Cada módulo tem **uma responsabilidade dizível numa frase**. Contagem de linha fica como **alarme, nunca como definição**: 1.250 linhas coesas são melhores que 450 incoerentes, e um teto numérico faz alguém partir um arquivo no lugar errado para passar no portão |
+| R12 | **Cronometragem contínua** com gente que nunca usou, mais operação assistida em 3–5 barbearias | Ver o protocolo abaixo. **Não é o item final: é o item zero, repetido.** Ele é o único juiz de V0–V11, e um juiz que só chega no fim não julga nada |
+
+### O protocolo do R12
+
+Cinco tarefas, cronometradas com alguém que nunca abriu o sistema, sem ajuda e
+sem explicação prévia:
+
+1. Encontre o cadastro do João Silva.
+2. Agende o João para amanhã.
+3. Veja quanto o João está devendo.
+4. Veja quem é o próximo cliente a ser atendido.
+5. Veja quanto a casa faturou hoje.
+
+Medido **três vezes**: agora (linha de base), depois do V5, e depois do V11.
+O resultado é uma tabela que nenhuma nota de 0 a 10 substitui:
+
+```
+Encontrar um cliente        antes 47s → depois 6s
+Criar um agendamento        antes 38s → depois 12s
+Saber o próximo atendimento antes 24s → depois 3s
+```
+
+**A primeira passada é a única que não dá para refazer.** Depois que o V1
+existir, ninguém consegue mais medir quanto tempo se levava para achar um cliente
+sem porta — e aí o programa inteiro passa a ser defendido com opinião, que é
+exatamente o que este documento diz não aceitar sobre as notas da revisão.
+
+E a operação assistida — recepcionista num sábado às 11h, barbeiro fechando
+atendimento, dono conferindo dinheiro às 20h — roda **em paralelo** ao programa,
+não depois dele. Esperar V0–V11 terminarem para colocar em barbearia é descobrir
+no fim o que se descobriria na segunda semana.
+
+---
 
 **Sem posição na fila:** split e fiscal não entram enquanto não houver conta
 contratada. Não é prioridade baixa — é dependência externa, e escrever código
@@ -544,7 +695,7 @@ refazer a única parte que funciona.
 o bloco 126 — `/admin/meu-dia`, `/admin/meus-numeros`, e o resto some por
 permissão. O que falta ao barbeiro é o mesmo que falta a todo mundo: V1.
 
-**"Design 9,0–9,5 como alvo."** É consequência de V1–V11, não trabalho separado.
+**"Design 9,0–9,5 como alvo."** É consequência de V0–V11, não trabalho separado.
 Entrando como redesenho isolado, sobe o acabamento e a simplicidade fica onde
 está — que é exatamente o risco que a própria revisão nomeia na primeira linha.
 
@@ -557,7 +708,8 @@ existe, dá para cronometrar, e é melhor que qualquer nota de 0 a 10.
 
 ## O que este backlog deliberadamente não tem
 
-Funcionalidade nova. Nenhum dos vinte e três itens acrescenta módulo: onze
-consertam navegação e forma do que já existe, oito consertam a leitura do próprio
-repositório e as integrações que serão vendidas, três partem monólitos, e um
+Funcionalidade nova. São **vinte itens** — doze na Parte I (V0–V11) e oito na
+Parte II (R5–R12) —, e nenhum acrescenta módulo: doze consertam navegação e forma
+do que já existe, quatro consertam a leitura do repositório e as integrações que
+serão vendidas, dois partem monólitos, um resolve o armazenamento de foto, e um
 troca engenharia por informação sobre o mundo real.
