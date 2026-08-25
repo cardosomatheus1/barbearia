@@ -15,6 +15,7 @@ const arquivos = [
   'packages/crm/src/whatsapp-templates.ts',
   'packages/crm/src/whatsapp-meta.ts',
   'packages/crm/src/whatsapp-cadastro.ts',
+  'packages/crm/src/whatsapp-waba.ts',
   'packages/crm/src/whatsapp-roteamento.ts',
   'packages/crm/src/whatsapp-lifecycle.ts',
   'packages/crm/src/whatsapp-template-submissao.ts',
@@ -81,7 +82,7 @@ test('detecta suspensão sem caminho de reativação', () =>
 test('detecta WABA sem owner único', () =>
   mutacao('packages/db/migrations/0113_crm_whatsapp_concorrencia.sql', 'waba_id    text PRIMARY KEY', 'waba_id    text NOT NULL'));
 test('detecta cadastro que não reivindica owner da WABA', () =>
-  mutacao('packages/crm/src/whatsapp-cadastro.ts', 'INSERT INTO whatsapp_waba_owners', 'INSERT INTO owner_removido'));
+  mutacao('packages/crm/src/whatsapp-waba.ts', 'INSERT INTO whatsapp_waba_owners', 'INSERT INTO owner_removido'));
 test('detecta telefone visível introduzido no roteamento público', () =>
   mutacao('packages/db/migrations/0113_crm_whatsapp_concorrencia.sql',
     'location_id  uuid NOT NULL REFERENCES locations(id) ON DELETE RESTRICT,',

@@ -12,6 +12,9 @@ const mensagens = ler('packages/crm/src/whatsapp-mensagens.ts');
 const templates = ler('packages/crm/src/whatsapp-templates.ts');
 const meta = ler('packages/crm/src/whatsapp-meta.ts');
 const cadastro = ler('packages/crm/src/whatsapp-cadastro.ts');
+// A reivindicacao da WABA saiu para modulo proprio quando o cadastro bateu no
+// teto de linhas. A guarda segue o fato, nao o arquivo em que ele morava.
+const waba = ler('packages/crm/src/whatsapp-waba.ts');
 const roteamento = ler('packages/crm/src/whatsapp-roteamento.ts');
 const lifecycle = ler('packages/crm/src/whatsapp-lifecycle.ts');
 const submissao = ler('packages/crm/src/whatsapp-template-submissao.ts');
@@ -110,8 +113,9 @@ exigir(migracao.includes('CREATE TABLE IF NOT EXISTS whatsapp_waba_owners')
   && migracao.includes('waba_id    text PRIMARY KEY')
   && migracao.includes('FOREIGN KEY (waba_id, tenant_id)'),
   'WABA não tem ownership único por tenant no banco');
-exigir(cadastro.includes('INSERT INTO whatsapp_waba_owners')
-  && cadastro.includes('if (donaDaWaba === 0)'),
+exigir(waba.includes('INSERT INTO whatsapp_waba_owners')
+  && /return\s+criada === 0 \? 'de_outra'/.test(waba)
+  && cadastro.includes("reivindicarWaba(tx, params.wabaId)) === 'de_outra'"),
   'cadastro não recusa WABA já pertencente a outro tenant');
 const blocoRoteamento = migracao.slice(migracao.indexOf('CREATE TABLE IF NOT EXISTS whatsapp_waba_owners'), migracao.indexOf('-- A antiga unicidade da automação'));
 exigir(!/display_phone|access_token|phone_e164|from_phone|body/i.test(blocoRoteamento),
