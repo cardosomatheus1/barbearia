@@ -276,7 +276,23 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
-.migalha a { color: var(--color-text-muted); text-decoration: none; }
+/* Link de navegacao sozinho, e nao link dentro de frase: leva os 44px como todo
+   alvo autonomo, em qualquer largura. Sem isto ele media 48x21px e reprovava a
+   medicao em todas as telas do painel de uma vez, porque a migalha esta em
+   todas. A altura vem por padding para o texto continuar alinhado a nota. */
+.migalha a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  /* As duas medidas: "Hoje" e um modulo de nome curto e saia com 38px de
+     largura, e a regra e sobre o alvo, nao sobre uma das dimensoes dele. */
+  min-inline-size: 44px;
+  justify-content: center;
+  padding-inline: var(--space-1);
+  margin-inline-start: calc(var(--space-1) * -1);
+}
 .migalha a:hover { color: var(--color-accent); }
 .migalha [aria-current='page'] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .migalha__separador { color: var(--color-text-muted); }

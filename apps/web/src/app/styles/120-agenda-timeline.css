@@ -208,7 +208,11 @@ a.agenda-livre:focus-visible {
   position: absolute;
   inset-inline: var(--space-2);
   z-index: 6;
-  min-height: 44px;
+  /* Altura minima proporcional a duracao, e nao altura fixa: o cartao cresce
+     quando o conteudo nao cabe. Fixa, um atendimento de 30 minutos escondia o
+     nome do cliente atras de um overflow — e esconder conteudo e o que a regra
+     proibe. A proporcao continua informando acima do piso, que e onde ela vale. */
+  block-size: auto;
   padding: 4px 3rem 4px 8px;
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-border);
@@ -221,7 +225,14 @@ a.agenda-livre:focus-visible {
 .agenda-evento--in_progress { border-left-color: var(--color-accent); }
 .agenda-evento--checked_in,
 .agenda-evento--waiting { border-left-color: var(--color-warning); }
+/* Uma linha para nome e servico, sempre.
+   Os dois sao <p> em display:inline e formam uma linha so — que em 360px
+   quebrava em duas ou tres com nome composto e servico longo, estourando o
+   cartao proporcional a duracao. Conteudo cortado e conteudo escondido, e o
+   piso do cartao sobe junto para caber hora, nome e estado sem cortar nada. */
 .agenda-evento__resumo { min-width: 0; overflow: hidden; }
+.agenda-evento__hora,
+.agenda-evento__estado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agenda-evento__hora {
   margin: 0;
   color: var(--color-text-muted);
@@ -231,17 +242,23 @@ a.agenda-livre:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Bloco, e nao `display: inline`.
+   Inline com `nowrap` nao aceita reticencias: o texto simplesmente passava da
+   borda do cartao e ficava escondido pelo `overflow` do resumo — ate 79px de
+   nome de cliente cortado em 360px. Cada um na propria linha, truncando com
+   reticencia, e o piso do cartao ja cabe as quatro linhas. */
 .agenda-evento__nome,
 .agenda-evento__servico {
-  display: inline;
+  display: block;
   margin: 0;
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .agenda-evento__nome { font-weight: var(--font-weight-semibold); }
 .agenda-evento__servico { color: var(--color-text-muted); }
-.agenda-evento__servico::before { content: ' · '; }
 .agenda-evento__estado {
   margin: 1px 0 0;
   color: var(--color-text-muted);
@@ -439,6 +456,14 @@ a.agenda-livre:focus-visible {
 
 /* V6 · painel do dono em narrativa: resultado → capacidade → equipe → atenção → ação. */
 .painel-v6 { max-inline-size: 73.75rem; }
+/* "Abrir agenda" e "Ver equipe" sao links de navegacao autonomos, e nao texto
+   corrido: 44px em qualquer largura, como todo alvo deste produto. Mediam
+   113x24px e reprovavam a medicao nas quatro larguras. */
+.painel-v6 a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 .painel-v6__cabeca {
   display: flex;
   align-items: flex-end;

@@ -389,24 +389,36 @@ async function prepararCliente(slug) {
   if (!slot) throw new Error('sem horário livre amanhã para preparar o cliente');
 
   const telefone = '(71) 98888-7777';
-  await fetch(`${API}/v1/b/${slug}/appointments`, {
+  // Semente que dispara e segue prepara o estado que ela **acha** que preparou:
+  // sem conferir a resposta, um 400 aqui virava um cookie `undefined` trinta
+  // telas depois, e a medição do painel inteiro parava sem dizer por quê.
+  const marcado = await fetch(`${API}/v1/b/${slug}/appointments`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'idempotency-key': `medicao-cliente-${amanha}` },
     body: JSON.stringify({
       name: 'Carlos Souza', phone: telefone, locationId: local,
       professionalId: slot.professionalId, serviceIds: [servico], date: amanha, start: slot.start,
     }),
   });
+  if (!marcado.ok) {
+    throw new Error(`semente do cliente: POST /appointments devolveu ${marcado.status} — ${await marcado.text()}`);
+  }
 
   // O provedor de mensagem nunca escreve o código em log — é regra do projeto.
   // Para medir a tela, o código entra pelo banco.
-  const { createHash } = require('node:crypto');
+  // HMAC com `OTP_PEPPER`, e não sha256 puro: o hash do código passou a levar
+  // pimenta, para um dump do banco não permitir força bruta em seis dígitos. A
+  // semente precisa derivar do mesmo jeito que a API confere, senão ela escreve
+  // um hash que nunca casa — e o sintoma aparece trinta telas depois.
+  const { createHmac } = require('node:crypto');
+  const pepper = process.env['OTP_PEPPER'];
+  if (!pepper) throw new Error('semente do cliente: OTP_PEPPER é obrigatória para derivar o código');
   psql('DELETE FROM otp_challenges');
   await fetch(`${API}/v1/b/${slug}/auth/otp`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ phone: telefone }),
   });
-  psql(`UPDATE otp_challenges SET code_hash = '${createHash('sha256').update('123456').digest('hex')}', attempts = 0`);
+  psql(`UPDATE otp_challenges SET code_hash = '${createHmac('sha256', pepper).update('123456').digest('hex')}', attempts = 0`);
 
   const sessao = await (
     await fetch(`${API}/v1/b/${slug}/auth/verify`, {
@@ -415,6 +427,9 @@ async function prepararCliente(slug) {
     })
   ).json();
 
+  if (!sessao.token) {
+    throw new Error(`semente do cliente: /auth/verify não devolveu token — ${JSON.stringify(sessao)}`);
+  }
   return sessao.token;
 }
 
@@ -3533,6 +3548,21 @@ async function main() {
               const rotulo = el.closest('label');
               const caixa = rotulo?.getBoundingClientRect();
               if (caixa && caixa.height >= 44 && caixa.width >= 44) continue;
+            }
+            /**
+             * O controle escondido atras do proprio rotulo — mesmo argumento.
+             *
+             * `input[type=file]` estilizavel nao existe: o padrao acessivel e
+             * esconder o campo e transformar o `<label for>` no botao. Quem
+             * recebe o toque e o rotulo, e e ele que a WCAG 2.5.8 mede. Medir o
+             * campo de 1x1 reprovava o padrao correto — e a associacao aqui e
+             * por `for`, nao por aninhamento, que e o caso que a regra acima
+             * nao alcanca.
+             */
+            if (el.tagName === 'INPUT' && el.id) {
+              const porFor = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+              const caixaDoFor = porFor?.getBoundingClientRect();
+              if (caixaDoFor && caixaDoFor.height >= 44 && caixaDoFor.width >= 44) continue;
             }
             const dentroDeTexto = el.tagName === 'A' && el.parentElement
               && ['P', 'SPAN', 'LI', 'TD'].includes(el.parentElement.tagName)

@@ -273,6 +273,15 @@ function FechamentoDoDia({ motivo }: { readonly motivo: string | null }) {
   return <p className="agenda-linha__fechado">{ROTULO[motivo] ?? 'Sem atendimento'}</p>;
 }
 
+/**
+ * O piso do cartao: hora, nome+servico e estado, sem cortar nada.
+ *
+ * 44px era o alvo de toque, nao a altura do conteudo — e um atendimento de 30
+ * minutos saia com tres linhas dentro de uma caixa de uma. A proporcao da linha
+ * do tempo continua valendo acima disto, que e onde ela informa.
+ */
+const ALTURA_MINIMA_DO_CARTAO = 60;
+
 function EventoNaLinha({
   entrada,
   data,
@@ -293,7 +302,7 @@ function EventoNaLinha({
   return (
     <article
       className={`agenda-evento agenda-evento--${entrada.status}`}
-      style={{ top: `${(inicio - inicioDaLinha) * 1.5}px`, height: `${Math.max(44, alturaPx(inicio, fim))}px` }}
+      style={{ top: `${(inicio - inicioDaLinha) * 1.5}px`, minHeight: `${Math.max(ALTURA_MINIMA_DO_CARTAO, alturaPx(inicio, fim))}px` }}
       aria-label={`${entrada.start}, ${entrada.customerName ?? 'cliente oculto'}, ${entrada.services.join(' + ')}`}
     >
       <div className="agenda-evento__resumo">
