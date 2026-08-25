@@ -54,6 +54,7 @@ const SO_DE_FORA = {
   SUPER_ADMIN_PASSWORD: 'script de criação da conta de plataforma, uma vez',
   RATE_LIMIT_SHORT: 'comentada no arquivo, com o padrão de produção',
   RATE_LIMIT_LONG: 'idem',
+  HOSTNAME: 'o runtime do contêiner define; não é configuração de quem instala',
 };
 
 /** `NEXT_*` e `__NEXT_*` são internos do framework, não configuração nossa. */

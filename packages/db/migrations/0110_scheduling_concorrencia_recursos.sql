@@ -12,7 +12,7 @@ ALTER TABLE appointments
 COMMENT ON COLUMN appointments.idempotency_fingerprint IS
   'SHA-256 da intenção associada à Idempotency-Key; impede reuso da chave com outro horário/serviço.';
 
-CREATE TABLE slot_hold_resources (
+CREATE TABLE IF NOT EXISTS slot_hold_resources (
   hold_id        uuid NOT NULL REFERENCES slot_holds(id) ON DELETE CASCADE,
   tenant_id      uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   resource_type  text NOT NULL,
@@ -21,11 +21,12 @@ CREATE TABLE slot_hold_resources (
   CONSTRAINT slot_hold_resources_quantity_positive CHECK (quantity > 0)
 );
 
-CREATE INDEX slot_hold_resources_type_idx
+CREATE INDEX IF NOT EXISTS slot_hold_resources_type_idx
   ON slot_hold_resources (tenant_id, resource_type);
 
 ALTER TABLE slot_hold_resources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE slot_hold_resources FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON slot_hold_resources;
 CREATE POLICY tenant_isolation ON slot_hold_resources
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);

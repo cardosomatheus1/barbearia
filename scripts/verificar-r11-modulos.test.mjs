@@ -5,10 +5,21 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const RAIZ = process.cwd();
+/**
+ * O que **não** se copia: artefato de build e dependência.
+ *
+ * Sem o filtro, cada um dos quatro casos arrastava `.next` e `node_modules`
+ * junto — a guarda levava 9,3s e estourava o gancho padrão de 5s do vitest,
+ * ficando vermelha sem ter nada a dizer sobre a partição que ela existe para
+ * conferir. Guarda que reprova por lentidão é guarda que alguém desliga.
+ */
+const COPIAVEL = (origem) =>
+  !/[\\/](node_modules|\.next|dist|coverage|\.turbo)([\\/]|$)/.test(origem);
+
 const roda = (mutacao) => {
   const dir = mkdtempSync(join(tmpdir(), 'barber-r11-'));
-  cpSync(join(RAIZ, 'apps'), join(dir, 'apps'), { recursive: true });
-  cpSync(join(RAIZ, 'scripts'), join(dir, 'scripts'), { recursive: true });
+  cpSync(join(RAIZ, 'apps'), join(dir, 'apps'), { recursive: true, filter: COPIAVEL });
+  cpSync(join(RAIZ, 'scripts'), join(dir, 'scripts'), { recursive: true, filter: COPIAVEL });
   mutacao?.(dir);
   try {
     execFileSync('node', ['scripts/verificar-r11-modulos.mjs'], { cwd: dir, stdio: 'pipe' });

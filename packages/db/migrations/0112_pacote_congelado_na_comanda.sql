@@ -9,10 +9,10 @@
 -- ============================================================================
 
 ALTER TABLE order_items
-  ADD COLUMN package_snapshot_service_id uuid REFERENCES services(id) ON DELETE RESTRICT,
-  ADD COLUMN package_snapshot_quantity smallint,
-  ADD COLUMN package_snapshot_validity_days integer,
-  ADD COLUMN package_snapshot_transferable boolean;
+  ADD COLUMN IF NOT EXISTS package_snapshot_service_id uuid REFERENCES services(id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS package_snapshot_quantity smallint,
+  ADD COLUMN IF NOT EXISTS package_snapshot_validity_days integer,
+  ADD COLUMN IF NOT EXISTS package_snapshot_transferable boolean;
 
 -- Compatibilidade com comandas abertas no momento do deploy. Para vendas já
 -- fechadas estes campos são históricos apenas; para abertas, esta é a melhor
@@ -27,14 +27,37 @@ UPDATE order_items oi
  WHERE oi.package_id = p.id
    AND oi.package_snapshot_service_id IS NULL;
 
-ALTER TABLE order_items
-  ADD CONSTRAINT order_items_pacote_snapshot_quantidade CHECK (
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'order_items_pacote_snapshot_quantidade'
+  ) THEN
+    ALTER TABLE order_items
+      ADD CONSTRAINT order_items_pacote_snapshot_quantidade CHECK (
     package_snapshot_quantity IS NULL OR package_snapshot_quantity BETWEEN 2 AND 100
-  ),
-  ADD CONSTRAINT order_items_pacote_snapshot_validade CHECK (
+  );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'order_items_pacote_snapshot_validade'
+  ) THEN
+    ALTER TABLE order_items
+      ADD CONSTRAINT order_items_pacote_snapshot_validade CHECK (
     package_snapshot_validity_days IS NULL OR package_snapshot_validity_days BETWEEN 7 AND 3650
-  ),
-  ADD CONSTRAINT order_items_pacote_snapshot_coerente CHECK (
+  );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'order_items_pacote_snapshot_coerente'
+  ) THEN
+    ALTER TABLE order_items
+      ADD CONSTRAINT order_items_pacote_snapshot_coerente CHECK (
     (
       package_id IS NULL
       AND package_snapshot_service_id IS NULL
@@ -49,10 +72,19 @@ ALTER TABLE order_items
       AND package_snapshot_transferable IS NOT NULL
     )
   );
+  END IF;
+END $$;
 
 -- O catálogo de um pacote vendido deve ser desativado, não apagado. `SET NULL`
 -- fazia o item perder a referência que prova qual produto gerou o benefício.
-ALTER TABLE order_items DROP CONSTRAINT order_items_package_id_fkey;
-ALTER TABLE order_items
-  ADD CONSTRAINT order_items_package_id_fkey
+ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_package_id_fkey;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'order_items_package_id_fkey'
+  ) THEN
+    ALTER TABLE order_items
+      ADD CONSTRAINT order_items_package_id_fkey
   FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE RESTRICT;
+  END IF;
+END $$;

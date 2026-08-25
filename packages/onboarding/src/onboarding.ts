@@ -361,8 +361,10 @@ export async function saveBusiness(input: BusinessInput): Promise<{ slug: string
 
     const afetadas = await tx.$executeRaw`
       UPDATE locations SET
-        -- Em rede, o nome da unidade é cadastro próprio; o nome da empresa não
-        -- pode transformar "Shopping" em "Barbearia X" ao editar endereço.
+        -- Em rede, o nome da unidade é cadastro próprio, e o nome da empresa
+        -- não pode transformar "Shopping" em "Barbearia X" ao editar endereço.
+        -- Sem ponto e vírgula aqui: a guarda corta a instrução no primeiro, e
+        -- deixaria de enxergar o WHERE lá embaixo.
         name = CASE WHEN (SELECT count(*) FROM locations) = 1
                     THEN ${input.name} ELSE name END,
         street = CASE WHEN ${input.street === undefined}::boolean

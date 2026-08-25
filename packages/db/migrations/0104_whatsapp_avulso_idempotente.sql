@@ -8,7 +8,7 @@
 -- at-most-once: diante de ambiguidade, não mandar duas vezes é mais seguro do que
 -- assumir que a primeira falhou.
 
-CREATE TABLE whatsapp_manual_send_intents (
+CREATE TABLE IF NOT EXISTS whatsapp_manual_send_intents (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   location_id       uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
@@ -29,16 +29,17 @@ CREATE TABLE whatsapp_manual_send_intents (
 
 ALTER TABLE whatsapp_manual_send_intents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_manual_send_intents FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON whatsapp_manual_send_intents;
 CREATE POLICY tenant_isolation ON whatsapp_manual_send_intents
   USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
   WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 
-CREATE UNIQUE INDEX whatsapp_manual_send_intents_idempotency_key
+CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_manual_send_intents_idempotency_key
   ON whatsapp_manual_send_intents (tenant_id, location_id, idempotency_key);
 
 -- Mesmo com refresh da ficha, uma chave nova não contorna um envio cujo
 -- desfecho ainda é desconhecido.
-CREATE UNIQUE INDEX whatsapp_manual_send_intents_um_em_voo
+CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_manual_send_intents_um_em_voo
   ON whatsapp_manual_send_intents (tenant_id, location_id, intent_fingerprint)
   WHERE status IN ('enviando', 'incerto');
 

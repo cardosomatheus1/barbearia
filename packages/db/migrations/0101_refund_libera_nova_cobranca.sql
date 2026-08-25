@@ -7,6 +7,6 @@
 -- saiu do adquirente; só então a nova emissão fica liberada.
 
 DROP INDEX order_charges_uma_viva_por_comanda;
-CREATE UNIQUE INDEX order_charges_uma_viva_por_comanda
+CREATE UNIQUE INDEX IF NOT EXISTS order_charges_uma_viva_por_comanda
   ON order_charges (order_id)
   WHERE status IN ('aguardando', 'pago') AND refunded_at IS NULL;

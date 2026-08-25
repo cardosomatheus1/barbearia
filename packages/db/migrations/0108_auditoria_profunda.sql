@@ -52,7 +52,7 @@ UPDATE queue_entries q
  WHERE q.request_fingerprint IS NULL;
 
 DROP INDEX IF EXISTS queue_entries_idempotency_idx;
-CREATE UNIQUE INDEX queue_entries_idempotency_idx
+CREATE UNIQUE INDEX IF NOT EXISTS queue_entries_idempotency_idx
   ON queue_entries (tenant_id, location_id, customer_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 
@@ -80,13 +80,13 @@ UPDATE waitlist_entries e
  WHERE e.request_fingerprint IS NULL;
 
 DROP INDEX IF EXISTS waitlist_idempotencia_idx;
-CREATE UNIQUE INDEX waitlist_idempotencia_idx
+CREATE UNIQUE INDEX IF NOT EXISTS waitlist_idempotencia_idx
   ON waitlist_entries (tenant_id, location_id, customer_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 
 -- O pedido repetido também é por unidade e pela composição completa do pedido.
 DROP INDEX IF EXISTS waitlist_sem_repetido_idx;
-CREATE UNIQUE INDEX waitlist_sem_repetido_idx
+CREATE UNIQUE INDEX IF NOT EXISTS waitlist_sem_repetido_idx
   ON waitlist_entries (
     location_id, customer_id, wanted_from, wanted_to,
     window_start_minute, window_end_minute,
@@ -175,11 +175,13 @@ CREATE TABLE IF NOT EXISTS subscription_change_intents (
 
 ALTER TABLE subscription_change_intents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscription_change_intents FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS subscription_change_intents_leitura ON subscription_change_intents;
 CREATE POLICY subscription_change_intents_leitura ON subscription_change_intents
   FOR SELECT USING (
     NULLIF(current_setting('app.tenant_id', true), '') IS NULL
     OR tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
   );
+DROP POLICY IF EXISTS subscription_change_intents_escrita ON subscription_change_intents;
 CREATE POLICY subscription_change_intents_escrita ON subscription_change_intents
   FOR ALL
   USING (NULLIF(current_setting('app.tenant_id', true), '') IS NULL)

@@ -111,7 +111,11 @@ describeIfDb('equipe e permissões', () => {
   it('a sessão do dono carrega todas as permissões', async () => {
     const sessao = await abrirBarbearia();
     const resolvida = await resolveStaffSession(sessao.token);
-    expect([...resolvida.permissions].sort()).toEqual([...PERMISSOES].sort());
+    // `PERMISSOES` deixou de ser o conjunto do dono: `franchise.manage` é
+    // entitlement que a plataforma concede quando o tenant vira franqueadora,
+    // e não nasce com ninguém. A regra sob teste não mudou — o dono continua
+    // tendo tudo o que é dele —, mudou o que "tudo" quer dizer.
+    expect([...resolvida.permissions].sort()).toEqual([...permissoesPadrao('owner')].sort());
   });
 
   it('a recepcionista não recebe team.manage nem finance', async () => {
@@ -833,7 +837,11 @@ describeIfDb('equipe e permissões', () => {
     ).rejects.toMatchObject({ code: 'owner_protected' });
 
     const mapa = await permissionsByRole(dono.tenantId);
-    expect([...(mapa['owner'] ?? [])].sort()).toEqual([...PERMISSOES].sort());
+    // `PERMISSOES` deixou de ser o conjunto do dono: `franchise.manage` é
+    // entitlement que a plataforma concede quando o tenant vira franqueadora,
+    // e não nasce com ninguém. A regra sob teste não mudou — o dono continua
+    // tendo tudo o que é dele —, mudou o que "tudo" quer dizer.
+    expect([...(mapa['owner'] ?? [])].sort()).toEqual([...permissoesPadrao('owner')].sort());
   });
 
   it('permissão fora do catálogo é recusada antes de chegar ao banco', async () => {
@@ -1100,14 +1108,16 @@ describeIfDb('equipe e permissões', () => {
 
   it('o dono continua concedendo tudo, porque tudo é o que ele tem', async () => {
     const dono = await abrirBarbearia();
+    // O dono concede o que ele tem — e o que ele tem exclui `franchise.manage`,
+    // que a plataforma concede à parte quando o tenant vira franqueadora.
     await definirPermissoesDoPapel({
       tenantId: dono.tenantId,
       papel: 'manager',
-      permissoes: [...PERMISSOES],
+      permissoes: [...permissoesPadrao('owner')],
       actor: ator(dono),
     });
     const mapa = await permissionsByRole(dono.tenantId);
-    expect([...(mapa['manager'] ?? [])].sort()).toEqual([...PERMISSOES].sort());
+    expect([...(mapa['manager'] ?? [])].sort()).toEqual([...permissoesPadrao('owner')].sort());
   });
 
   // -- unidades da equipe (bloco 58) -----------------------------------------

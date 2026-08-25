@@ -7,12 +7,12 @@
 --    sair para a rede antes de `psp_refund_id` existir.
 
 ALTER TABLE orders
-  ADD COLUMN close_idempotency_fingerprint text;
+  ADD COLUMN IF NOT EXISTS close_idempotency_fingerprint text;
 
 ALTER TABLE order_charges
-  ADD COLUMN refund_pending_at timestamptz;
+  ADD COLUMN IF NOT EXISTS refund_pending_at timestamptz;
 
 
-CREATE INDEX order_charges_refund_pendente_idx
+CREATE INDEX IF NOT EXISTS order_charges_refund_pendente_idx
   ON order_charges (refund_pending_at)
   WHERE refund_pending_at IS NOT NULL;

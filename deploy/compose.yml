@@ -49,6 +49,17 @@ x-ambiente: &ambiente
   WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
   KYC_INTENT_HMAC_SECRET: ${KYC_INTENT_HMAC_SECRET:?falta no .env}
   MARKETPLACE_ORIGIN_SECRET: ${MARKETPLACE_ORIGIN_SECRET:?falta no .env}
+  # Backup cifrado: chave própria, porque restaurar não pode depender de a
+  # chave do segundo fator continuar a mesma.
+  BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?falta no .env}
+  # OTP e credencial de primeiro acesso por WhatsApp. `console` é o padrão e
+  # não exige nada; `meta` exige os quatro abaixo.
+  IDENTITY_MESSAGING_MODO: ${IDENTITY_MESSAGING_MODO:-console}
+  IDENTITY_WHATSAPP_PHONE_NUMBER_ID: ${IDENTITY_WHATSAPP_PHONE_NUMBER_ID:-}
+  IDENTITY_WHATSAPP_ACCESS_TOKEN: ${IDENTITY_WHATSAPP_ACCESS_TOKEN:-}
+  IDENTITY_WHATSAPP_OTP_TEMPLATE: ${IDENTITY_WHATSAPP_OTP_TEMPLATE:-}
+  IDENTITY_WHATSAPP_STAFF_TEMPLATE: ${IDENTITY_WHATSAPP_STAFF_TEMPLATE:-}
+  IDENTITY_WHATSAPP_LANGUAGE: ${IDENTITY_WHATSAPP_LANGUAGE:-pt_BR}
   DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
   ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
   # De servidor para servidor, dentro da rede do compose.

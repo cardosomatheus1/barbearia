@@ -784,6 +784,9 @@
   display: grid;
   gap: var(--space-5);
   min-width: 0;
+  /* Piso é o celular: a chamada fecha com o texto embaixo, sobre a foto. */
+  min-height: 26rem;
+  align-content: end;
 }
 .lp-chamada::after {
   content: '';
@@ -793,13 +796,13 @@
   background:
     linear-gradient(
       135deg,
-      color-mix(in srgb, var(--color-bg) 96%, transparent) 0%,
-      color-mix(in srgb, var(--color-bg) 92%, transparent) 24%,
-      color-mix(in srgb, var(--color-bg) 78%, transparent) 48%,
-      color-mix(in srgb, var(--color-bg) 48%, transparent) 68%,
-      color-mix(in srgb, var(--color-bg) 14%, transparent) 100%
+      color-mix(in srgb, var(--color-surface) 96%, transparent) 0%,
+      color-mix(in srgb, var(--color-surface) 92%, transparent) 24%,
+      color-mix(in srgb, var(--color-surface) 78%, transparent) 48%,
+      color-mix(in srgb, var(--color-surface) 48%, transparent) 68%,
+      color-mix(in srgb, var(--color-surface) 96%, transparent) 100%
     ),
-    radial-gradient(36rem 16rem at 24% 12%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 64%);
+    radial-gradient(28rem 14rem at 20% 16%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 66%);
 }
 .lp-chamada > * { position: relative; z-index: 1; }
 .lp-chamada__visual {
@@ -812,7 +815,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 72% center;
+  object-position: 68% center;
 }
 .lp-chamada__conteudo {
   display: grid;
@@ -842,14 +845,24 @@
   max-width: 38rem;
 }
 .lp-chamada__acoes { display: grid; gap: var(--space-3); }
-@media (max-width: 767.98px) {
-  .lp-chamada { min-height: 26rem; align-content: end; }
+/* Invertida para mobile-first: `max-width` significa "desfazer o que fiz para
+   tela grande", e é o que deixa o celular como caso excepcional. Do 768 para
+   cima a chamada ganha altura e a foto respira para o lado. */
+@media (min-width: 768px) {
+  .lp-chamada { min-height: 0; align-content: stretch; }
   .lp-chamada::after {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 8%, transparent) 0%, color-mix(in srgb, var(--color-bg) 48%, transparent) 34%, color-mix(in srgb, var(--color-bg) 90%, transparent) 72%, color-mix(in srgb, var(--color-bg) 96%, transparent) 100%),
-      radial-gradient(28rem 14rem at 20% 16%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 66%);
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--color-surface) 96%, transparent) 0%,
+        color-mix(in srgb, var(--color-surface) 92%, transparent) 24%,
+        color-mix(in srgb, var(--color-surface) 78%, transparent) 48%,
+        color-mix(in srgb, var(--color-surface) 48%, transparent) 68%,
+        color-mix(in srgb, var(--color-surface) 14%, transparent) 100%
+      ),
+      radial-gradient(36rem 16rem at 24% 12%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 64%);
   }
-  .lp-chamada__imagem { object-position: 68% center; }
+  .lp-chamada__imagem { object-position: 72% center; }
 }
 
 /* -- rodapé ----------------------------------------------------------------- */

@@ -8,8 +8,15 @@
 -- ---------------------------------------------------------------------------
 -- Webhook de saída: tenant da entrega = tenant do endpoint.
 -- ---------------------------------------------------------------------------
-ALTER TABLE webhook_endpoints
-  ADD CONSTRAINT webhook_endpoints_tenant_id_id_key UNIQUE (tenant_id, id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'webhook_endpoints_tenant_id_id_key'
+  ) THEN
+    ALTER TABLE webhook_endpoints
+      ADD CONSTRAINT webhook_endpoints_tenant_id_id_key UNIQUE (tenant_id, id);
+  END IF;
+END $$;
 
 DO $$
 BEGIN
@@ -23,11 +30,18 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE webhook_deliveries
-  ADD CONSTRAINT webhook_deliveries_endpoint_do_tenant_fk
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'webhook_deliveries_endpoint_do_tenant_fk'
+  ) THEN
+    ALTER TABLE webhook_deliveries
+      ADD CONSTRAINT webhook_deliveries_endpoint_do_tenant_fk
   FOREIGN KEY (tenant_id, endpoint_id)
   REFERENCES webhook_endpoints (tenant_id, id)
   ON DELETE RESTRICT;
+  END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Fila: saneia o estado impossível que a versão antiga do reaper podia deixar.
@@ -45,6 +59,13 @@ UPDATE jobs
 -- ---------------------------------------------------------------------------
 -- PSP: o outcome é uma máquina de estados pequena, não texto livre.
 -- ---------------------------------------------------------------------------
-ALTER TABLE psp_events
-  ADD CONSTRAINT psp_events_outcome_valido
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'psp_events_outcome_valido'
+  ) THEN
+    ALTER TABLE psp_events
+      ADD CONSTRAINT psp_events_outcome_valido
   CHECK (outcome IS NULL OR outcome IN ('paid', 'failed', 'ignored'));
+  END IF;
+END $$;

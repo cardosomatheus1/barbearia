@@ -6,8 +6,8 @@
  * debita o crédito outra vez e usa outro `estornoId` na Stripe — ou seja, a
  * retentativa vira uma segunda devolução legítima para o adquirente.
  */
-ALTER TABLE refunds ADD COLUMN idempotency_key text;
+ALTER TABLE refunds ADD COLUMN IF NOT EXISTS idempotency_key text;
 
-CREATE UNIQUE INDEX refunds_idempotencia_idx
+CREATE UNIQUE INDEX IF NOT EXISTS refunds_idempotencia_idx
   ON refunds (tenant_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
