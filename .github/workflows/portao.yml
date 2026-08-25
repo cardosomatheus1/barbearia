@@ -57,7 +57,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # O secret scan precisa enxergar commits antigos, não só o snapshot.
           fetch-depth: 0
@@ -131,7 +131,7 @@ jobs:
       RATE_LIMIT_LONG: '1000000'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
