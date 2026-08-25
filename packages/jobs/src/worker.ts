@@ -26,6 +26,13 @@ import {
   cobrancaDoClubePendente,
 } from './clube.js';
 import { alertasDaBarbearia } from './alertas.js';
+// REPARO DA VALIDAÇÃO: o ZIP criou observabilidade.ts e usou os três
+// símbolos no worker sem importá-los — cinco erros de compilação.
+import {
+  identificarErroDaTarefa,
+  resumoPersistivelDoErro,
+  type EventoDaTarefa,
+} from './observabilidade.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
   executarAvisoDeAgendamento,
@@ -915,7 +922,10 @@ export async function rodarWorker(
   // todas as outras filas. Falha global entra em backoff curto e o processo
   // continua; o marcador de periodicidade só avança depois do sucesso.
   const tentarDepoisDe = new Map<string, number>();
-  const executarGlobal = async (operacao: string, executar: () => Promise<void>): Promise<boolean> => {
+  // REPARO DA VALIDAÇÃO: o retorno é descartado (`await executar()`), e cinco
+  // chamadores devolvem a contagem do que enfileiraram. `Promise<void>`
+  // recusava todos eles.
+  const executarGlobal = async (operacao: string, executar: () => Promise<unknown>): Promise<boolean> => {
     const agora = contexto.relogio.agora().getTime();
     if ((tentarDepoisDe.get(operacao) ?? 0) > agora) return false;
     try {
@@ -1080,7 +1090,9 @@ export async function rodarWorker(
 
     let resultado: ResultadoDaRodada = { tomadas: 0, concluidas: 0, falhadas: 0, reagendadas: 0 };
     const rodadaOk = await executarGlobal('fila.rodada', async () => {
-      resultado = await rodada(contexto, { aoEvento: opcoes.aoEvento });
+      // REPARO DA VALIDAÇÃO: com `exactOptionalPropertyTypes`, a chave presente
+      // valendo `undefined` não é o mesmo que a chave ausente.
+      resultado = await rodada(contexto, opcoes.aoEvento ? { aoEvento: opcoes.aoEvento } : {});
     });
     if (rodadaOk) opcoes.aoRodar?.(resultado);
 

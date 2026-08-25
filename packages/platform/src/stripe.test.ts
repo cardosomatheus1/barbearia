@@ -30,7 +30,9 @@ interface Chamada {
   metodo: string;
   cabecalhos: Record<string, string>;
   corpo: string | null;
-  redirect?: RequestRedirect;
+  // REPARO DA VALIDAÇÃO: `RequestRedirect` é tipo de `lib.dom`, que este
+  // pacote não carrega. A união literal é a mesma coisa e não depende da lib.
+  redirect: 'follow' | 'error' | 'manual' | undefined;
   signal?: AbortSignal | null;
 }
 

@@ -137,7 +137,10 @@ export class StaffAuthController {
   ) {
     try {
       const humano = await verificarTurnstile({
-        token: body.turnstileToken,
+        // REPARO DA VALIDAÇÃO: mesma regra do `ip` logo abaixo — com
+        // `exactOptionalPropertyTypes`, a chave presente valendo `undefined`
+        // não é a chave ausente.
+        ...(body.turnstileToken ? { token: body.turnstileToken } : {}),
         ...(request.ip ? { ip: request.ip } : {}),
         action: 'signup',
       });

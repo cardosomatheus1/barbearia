@@ -893,8 +893,11 @@ export async function saveChangeWindow(
     // e salvar metade deixaria o e-mail do antecessor apontando para o nome do
     // sucessor. Vazio vira nulo — a CHECK do banco recusa `''` como e-mail.
     if (input.dpoName !== undefined || input.dpoEmail !== undefined) {
-      const nome = input.dpoName === undefined ? undefined : input.dpoName.trim();
-      const email = input.dpoEmail === undefined ? undefined : input.dpoEmail.trim();
+      // REPARO DA VALIDAÇÃO: o campo é `string | null`, e o guarda só excluía
+      // `undefined` — nulo chegava ao `.trim()`. Nulo aqui significa **apagar**
+      // o encarregado, que é decisão diferente de "não mexa".
+      const nome = input.dpoName == null ? input.dpoName ?? undefined : input.dpoName.trim();
+      const email = input.dpoEmail == null ? input.dpoEmail ?? undefined : input.dpoEmail.trim();
       await tx.$executeRaw`
         UPDATE tenants SET
           dpo_name = CASE WHEN ${nome === undefined}::boolean THEN dpo_name
