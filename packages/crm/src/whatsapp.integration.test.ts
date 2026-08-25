@@ -326,14 +326,15 @@ describeIfDb('WhatsApp oficial', () => {
     expect((await estadoNoBanco())?.status).toBe('aguardando_verificacao');
   });
 
-  it('a conciliação não ressuscita um número que a Meta suspendeu', async () => {
+  it('a conciliação é a única que tira um número da suspensão', async () => {
     /**
-     * Só sobe, nunca desce.
+     * Quem suspende é a Meta, e quem desfaz é quem fala com ela.
      *
-     * Sem o `AND status = 'aguardando_verificacao'`, uma resposta verificada
-     * chegando depois da suspensão devolveria a barbearia para "ativo" e
-     * apagaria o motivo — que é a única frase que explica por que as mensagens
-     * pararam de sair.
+     * Salvar o cadastro **não** ressuscita — isso é o caso logo abaixo. A
+     * conciliação sim, porque ela acabou de perguntar: um `ACCOUNT_RECONNECTED`
+     * depois de um offboarding chega por aqui, e recusá-lo tornaria a suspensão
+     * permanente sem que ninguém tivesse decidido isso. O motivo sai junto,
+     * porque ele só explica enquanto vale.
      */
     await cadastrar();
     await exec(
@@ -350,8 +351,8 @@ describeIfDb('WhatsApp oficial', () => {
       agora: new Date('2026-09-01T12:00:00Z'),
     });
 
-    expect(r).toEqual({ verificado: true, promovido: false });
-    expect((await estadoNoBanco())?.status).toBe('suspenso');
+    expect(r).toEqual({ verificado: true, promovido: true });
+    expect((await estadoNoBanco())?.status).toBe('ativo');
   });
 
   // -- salvar não rebaixa o que já foi provado (bloco 91) ---------------------

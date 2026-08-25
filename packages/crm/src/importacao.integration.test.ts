@@ -161,10 +161,13 @@ describeIfDb('importação de base', () => {
       ].join('\n'),
     );
 
+    // Conflito primeiro, e não na ordem do arquivo: é o único problema com ação
+    // na própria tela, e cinquenta linhas inválidas que só se corrigem no CSV
+    // esconderiam o 51º conflito resolvível para sempre.
     expect(preview.problemas.map((p) => p.veredito)).toEqual([
+      'conflito',
       'telefone_invalido',
       'sem_nome',
-      'conflito',
     ]);
   });
 

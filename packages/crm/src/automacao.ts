@@ -825,10 +825,18 @@ export async function marcarDisparoEnviado(params: {
 }): Promise<boolean> {
   const contexto = await withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ timezone: string }[]>`
+      -- A automação é da barbearia e não de uma loja: nem automations nem
+      -- automation_sends tem location_id, e juntar por ele recusava a consulta
+      -- inteira com "column a.location_id does not exist". O fuso sai da
+      -- unidade mais antiga, que e o mesmo recorte de notificacoes.ts quando o
+      -- fato nao aponta para uma loja. A RLS ja limita locations.
+      -- Sem crase aqui: ela fecharia o template e o erro sairia como sintaxe.
       SELECT l.timezone
         FROM automation_sends s
         JOIN automations a ON a.id = s.automation_id
-        JOIN locations l ON l.id = a.location_id
+        CROSS JOIN LATERAL (
+          SELECT timezone FROM locations ORDER BY created_at LIMIT 1
+        ) l
        WHERE s.id = ${params.disparoId}::uuid
     `;
     return linhas[0] ?? null;

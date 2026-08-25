@@ -336,10 +336,15 @@ export async function painelDeAvaliacoes(
     const todas = await tx.$queryRaw<
       { rating: number; created_at: Date; contested_at: Date | null }[]
     >`
+      -- LEFT JOIN: apagar o agendamento solta reviews.appointment_id para nulo,
+      -- e com o join interno a avaliacao sumia do painel inteiro. Apagar
+      -- avaliacao nao existe neste produto, e sumir por caminho lateral e a
+      -- mesma coisa com outro nome.
       SELECT r.rating, r.created_at, r.contested_at
         FROM reviews r
-        JOIN appointments a ON a.id = r.appointment_id
-       WHERE (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid)
+        LEFT JOIN appointments a ON a.id = r.appointment_id
+       WHERE (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+              OR a.location_id IS NULL)
     `;
 
     /**
@@ -362,13 +367,15 @@ export async function painelDeAvaliacoes(
     const linhas = await tx.$queryRaw<LinhaDaAvaliacao[]>(sql`
       SELECT * FROM (
         ${SELECT_DA_AVALIACAO}
-         WHERE (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid)
+         WHERE (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+                OR a.location_id IS NULL)
          ORDER BY r.created_at DESC LIMIT ${limite}
       ) recentes
       UNION
       ${SELECT_DA_AVALIACAO}
        WHERE r.contested_at IS NOT NULL
-         AND (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid)
+         AND (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+              OR a.location_id IS NULL)
     `);
     linhas.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
     const naTela = linhas.map((l) => paraTela(l, agora));
@@ -484,7 +491,8 @@ export async function avaliacoesDoCliente(
     const linhas = await tx.$queryRaw<LinhaDaAvaliacao[]>(sql`
       ${SELECT_DA_AVALIACAO}
        WHERE r.customer_id = ${customerId}::uuid
-         AND (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid)
+         AND (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+              OR a.location_id IS NULL)
        ORDER BY r.created_at DESC LIMIT 20
     `);
     return linhas.map((l) => paraTela(l, agora));

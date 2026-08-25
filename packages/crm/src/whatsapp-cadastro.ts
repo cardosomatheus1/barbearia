@@ -406,6 +406,10 @@ export async function conciliarNumero(params: {
              -- O número como a Meta o escreve vence o que foi digitado à mão,
              -- e ausente é "não mexa", como em todo campo opcional daqui.
              display_phone = COALESCE(${estado.numeroVisivel}, display_phone),
+             -- Sai junto: um numero de volta ao ar com "qualidade baixa" ainda
+             -- escrito ao lado sao dois campos discordando sobre o mesmo fato,
+             -- e o motivo so explica alguma coisa enquanto ele vale.
+             status_reason = NULL,
              updated_at = now()
        WHERE location_id = ${params.locationId}::uuid
          AND status IN ('aguardando_verificacao', 'suspenso')
