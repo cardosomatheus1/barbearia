@@ -19,5 +19,10 @@ const mutacoes=[
  ['upload plaintext',{backup:fontes.backup.replace('rclone copy "$arquivo_enc"','rclone copy "$arquivo"')}],
  ['cleanup',{backup:fontes.backup.replace('trap limpar_temporarios EXIT','true # sem trap')}],
  ['preflight',{preflight:fontes.preflight.replace("backup criptografado exige BACKUP_ENCRYPTION_KEY","backup sem chave permitido")}],
+ ['ferramenta de cifra',{backup:fontes.backup.replaceAll('backup-crypto.mjs','backup-plaintext.mjs')}],
+ ['cifra do dump',{backup:fontes.backup.replace('cripto "encrypt" "$arquivo" "$arquivo_enc"','cp "$arquivo" "$arquivo_enc"')}],
+ ['validação do dump',{backup:fontes.backup.replace('cripto "check" "$arquivo_enc"','true # sem check')}],
+ ['cifra da mídia',{backup:fontes.backup.replace('cripto "encrypt" "$midia" "$midia_enc"','cp "$midia" "$midia_enc"')}],
+ ['validação da mídia',{backup:fontes.backup.replace('cripto "check" "$midia_enc"','true # sem check')}],
 ];
 for(const [nome,mudanca] of mutacoes)test(`detecta regressão: ${nome}`,()=>assert.ok(falhasDaCriptografiaDeBackup({...fontes,...mudanca}).length>0));
