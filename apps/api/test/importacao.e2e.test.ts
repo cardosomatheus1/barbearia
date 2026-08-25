@@ -265,6 +265,7 @@ describeIfDb('importação de base pela HTTP', () => {
     await com(dono)(
       http()
         .post(`/v1/admin/imports/${preview.body.id}/conflicts`)
+        .set('Idempotency-Key', 'importacao-e2e-267')
         .send({ linha: 3, escolha: 'linha' }),
     ).expect(201);
 
@@ -289,13 +290,17 @@ describeIfDb('importação de base pela HTTP', () => {
     await com(dono)(
       http()
         .post(`/v1/admin/imports/${preview.body.id}/conflicts`)
+        .set('Idempotency-Key', 'importacao-e2e-291')
         .send({ linha: 1, escolha: 'qualquer' }),
     ).expect(400);
   });
 
   it('outra barbearia não resolve o conflito do vizinho', async () => {
     const dono = await abrirBarbearia();
-    const rival = await abrirBarbearia();
+    // A vizinha precisa ser **outra** conta: com a mesma, as duas "barbearias"
+    // são a mesma e o segundo cadastro colide consigo mesmo em `slug_taken` —
+    // o teste morria antes de chegar à regra que ele existe para provar.
+    const rival = await abrirBarbearia(RIVAL);
     const preview = await enviar(
       dono,
       ['Nome;Celular', 'José;71988887777', 'João;71988887777'].join('\n'),
@@ -305,6 +310,7 @@ describeIfDb('importação de base pela HTTP', () => {
     await com(rival)(
       http()
         .post(`/v1/admin/imports/${preview.body.id}/conflicts`)
+        .set('Idempotency-Key', 'importacao-e2e-307')
         .send({ linha: 3, escolha: 'linha' }),
     ).expect(404);
   });
