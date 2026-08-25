@@ -85,15 +85,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS waitlist_idempotencia_idx
   WHERE idempotency_key IS NOT NULL;
 
 -- O pedido repetido também é por unidade e pela composição completa do pedido.
+--
+-- `COALESCE` no fingerprint, e não `IS NOT NULL` no filtro: exigir fingerprint
+-- para o índice valer deixa a linha sem ele fora da unicidade, e a mesma espera
+-- entra duas vezes por qualquer caminho que não o preencha. A garantia antiga
+-- — mesma faixa, mesma pessoa, mesma unidade — precisa continuar valendo
+-- sozinha, e a composição de serviços só a torna mais fina.
 DROP INDEX IF EXISTS waitlist_sem_repetido_idx;
 CREATE UNIQUE INDEX IF NOT EXISTS waitlist_sem_repetido_idx
   ON waitlist_entries (
     location_id, customer_id, wanted_from, wanted_to,
     window_start_minute, window_end_minute,
     COALESCE(professional_id, '00000000-0000-0000-0000-000000000000'::uuid),
-    request_fingerprint
+    COALESCE(request_fingerprint, '')
   )
-  WHERE status = 'waiting' AND request_fingerprint IS NOT NULL;
+  WHERE status = 'waiting';
 
 -- ---------------------------------------------------------------------------
 -- KYC: a intenção em voo guarda fingerprint HMAC dos dados enviados, nunca PII.

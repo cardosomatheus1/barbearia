@@ -11,7 +11,10 @@
 CREATE TABLE IF NOT EXISTS whatsapp_manual_send_intents (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id         uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  location_id       uuid NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  -- RESTRICT, nunca CASCADE: ação referencial roda com os direitos do dono da
+  -- tabela e não passa pelo REVOKE, então apagar a unidade levaria junto o
+  -- registro de idempotência e liberaria reenviar o que já saiu.
+  location_id       uuid NOT NULL REFERENCES locations(id) ON DELETE RESTRICT,
   customer_id       uuid NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   template_id       uuid REFERENCES whatsapp_templates(id) ON DELETE RESTRICT,
   kind              notification_kind NOT NULL,

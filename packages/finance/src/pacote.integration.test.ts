@@ -351,7 +351,9 @@ describeIfDb('pacotes', () => {
     const { id } = await noCatalogo({ validadeDias: 30 });
     await comprar(id);
     await withTenant(TENANT, (tx) =>
-      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-11-02T12:00:00Z'`,
+      // Anterior a AGORA (01/11): a semente satisfaz tudo menos a regra sob
+      // teste, e vencimento no dia 02 é um pacote **válido**.
+      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-10-01T12:00:00Z'`,
     );
 
     expect(

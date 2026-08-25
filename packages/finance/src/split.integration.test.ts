@@ -427,7 +427,17 @@ describeIfDb('split de pagamento', () => {
     }
     const ultima = await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
     expect(ultima.desistidos).toBe(1);
-    expect(provider.repasses).toHaveLength(3);
+    /**
+     * **Uma** no adquirente, três do nosso lado.
+     *
+     * A chave do repasse é estável por fatia (`repasse:tenant:fatia`), e é isso
+     * que impede pagar o barbeiro duas vezes numa retentativa ambígua. O fake
+     * passou a honrar a idempotência como a conta real honra, então três voltas
+     * da escada são uma transferência lá fora — e é a contagem de
+     * `split_transfers`, logo abaixo, que prova que as três ficaram registradas
+     * aqui. Esperar três chamadas era esperar o defeito.
+     */
+    expect(provider.repasses).toHaveLength(1);
 
     const tentativas = await withTenant(TENANT, (tx) =>
       tx.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM split_transfers`,

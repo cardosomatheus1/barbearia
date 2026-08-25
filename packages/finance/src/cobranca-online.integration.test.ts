@@ -351,11 +351,16 @@ describeIfDb('a cobrança online da comanda', () => {
     expect(tarefas).toHaveLength(1);
   });
 
-  it('a cobrança órfã, sem id do adquirente, é encerrada pela varredura', async () => {
+  it('a cobrança órfã, sem id do adquirente, é recuperada pela varredura', async () => {
     /**
      * Ela nasceu e o processo caiu antes de a resposta chegar. Sem tratamento
      * ela travaria a comanda para sempre, porque só uma cobrança viva é
      * permitida por vez — e ela nunca sairia de `aguardando` sozinha.
+     *
+     * A saída **não** é encerrá-la: a chave que foi ao adquirente é o id desta
+     * linha, então repetir a criação reencontra a mesma cobrança em vez de abrir
+     * a segunda. Encerrar seria aceitar um pagamento órfão que não conseguimos
+     * nem consultar nem cancelar — e o cliente pode já estar com o código na mão.
      */
     const orderId = await comandaDe4900();
     const quebrado = new FakePaymentProvider();
@@ -376,9 +381,12 @@ describeIfDb('a cobrança online da comanda', () => {
       agora: AGORA,
     });
 
-    // Nada a consultar — não há id para perguntar por.
-    expect(varredura).toMatchObject({ consultadas: 0, encerradas: 1 });
-    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('expirado');
+    // Nada a consultar — não há id para perguntar por; o que há é o que
+    // recuperar, e a linha volta a ter id do adquirente sem virar uma segunda.
+    expect(varredura).toMatchObject({ consultadas: 0, encerradas: 0, pendentes: 1 });
+    const depois = (await cobrancasDaComanda(TENANT, orderId, LOCATION))[0];
+    expect(depois?.estado).toBe('aguardando');
+    expect(depois?.pagamentoId).toBeTruthy();
   });
 
   // -- confirmação -----------------------------------------------------------

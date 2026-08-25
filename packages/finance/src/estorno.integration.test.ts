@@ -499,9 +499,12 @@ describeIfDb('vale, estorno e DRE', () => {
     // Sem descontar o que já foi pego, dois adiantamentos de R$ 20 num mês de
     // R$ 20 de comissão passariam os dois, cada um olhando o teto sozinho.
     await venderCorte();
+    // Chave por valor, e não uma fixa para as duas: são dois adiantamentos
+    // diferentes, e com a mesma chave o segundo é recusado como repetição —
+    // nunca chegando à conferência do teto, que é a regra sob teste.
     const pedir = (valorCents: number) =>
       conceberVale({
-        idempotencyKey: 'audit-test-conceberVale-2',
+        idempotencyKey: `audit-test-conceberVale-2-${valorCents}`,
         tenantId: TENANT,
         locationId: LOCATION,
         professionalId: RUAN,

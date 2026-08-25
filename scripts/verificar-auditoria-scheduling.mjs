@@ -42,7 +42,8 @@ exigir(idempotencia.includes("'idempotencia_conflitante'")
 exigir(contratos.includes("| 'idempotencia_conflitante'"),
   'contrato de falhas não expõe conflito de idempotência');
 
-exigir(migracao.includes('CREATE TABLE slot_hold_resources') && migracao.includes('FORCE ROW LEVEL SECURITY'),
+// Mesma razão da guarda ofensiva: `IF NOT EXISTS` é obrigatório aqui.
+exigir(/CREATE TABLE (IF NOT EXISTS )?slot_hold_resources/.test(migracao) && migracao.includes('FORCE ROW LEVEL SECURITY'),
   'holds não persistem recursos com RLS');
 exigir(prismaSchema.includes('idempotency_fingerprint String?') && prismaSchema.includes('model slot_hold_resources'),
   'schema Prisma não acompanha a migração 0110');

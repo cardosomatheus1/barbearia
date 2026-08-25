@@ -146,7 +146,10 @@ exigir(
   'estorno de crédito pendente deve guardar a cobrança de origem e ser retomável pela mesma chave',
 );
 exigir(
-  migracaoEstornoPlataforma.includes('ALTER TABLE refunds ADD COLUMN psp_charge_id text') &&
+  // Tolera `IF NOT EXISTS`: migração depois da baseline **precisa** ser
+  // reaplicável, e uma guarda que afirma sobre a formatação proíbe o que o
+  // repositório exige. O que importa é a coluna nascer nesta migração.
+  /ALTER TABLE refunds\s+ADD COLUMN (IF NOT EXISTS )?psp_charge_id text/.test(migracaoEstornoPlataforma) &&
     migracaoEstornoPlataforma.includes("WHERE status = 'pending' AND psp_charge_id IS NOT NULL"),
   'banco deve persistir a origem dos estornos pendentes recuperáveis',
 );
