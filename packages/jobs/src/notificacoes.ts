@@ -713,7 +713,11 @@ async function registrar(
       ${params.tipo}::notification_kind,
       ${estado?.customer_id ?? null}::uuid,
       ${params.appointmentId}::uuid,
-      ${enviado ? 'sent' : 'skipped'}::notification_status,
+      -- entrega_incerta grava failed, como os caminhos de sua_vez e de retorno
+      -- ja fazem: a mensagem pode ter saido e nao vamos repetir, e skipped diria
+      -- que a casa decidiu nao mandar, que e outra coisa e a que a recepcao le
+      -- como "entao mando eu". Sem crase: ela fecharia o template.
+      ${enviado ? 'sent' : motivo === 'entrega_incerta' ? 'failed' : 'skipped'}::notification_status,
       ${motivo},
       ${estado?.phone ? maskPhone(estado.phone) : null}
     )

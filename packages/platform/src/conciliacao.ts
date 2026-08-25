@@ -339,15 +339,19 @@ export async function estornarCredito(entrada: {
   let lancamento: { id: string; tenant_id: string; amount_cents: number; reason: string; created_at: Date };
   try {
     lancamento = await semTenant(async (tx) => {
-      const debitadas = await tx.$executeRaw`
-        UPDATE subscriptions
-           SET credit_cents = credit_cents - ${entrada.valorCents}, updated_at = now()
-         WHERE tenant_id = ${entrada.tenantId}::uuid AND credit_cents >= ${entrada.valorCents}
-      `;
-      if (debitadas === 0) {
-        throw new PlataformaError('insufficient_credit', 'O crédito disponível é menor que o pedido');
-      }
-
+      /**
+       * A linha nasce **antes** do débito, e a ordem é a regra.
+       *
+       * Com o débito primeiro, o perdedor da corrida morria em
+       * `insufficient_credit` sem nunca chegar ao INSERT: o vencedor já tinha
+       * reduzido o saldo, o `WHERE credit_cents >= valor` recusava, e o
+       * `catch` de violação de unicidade — que existe justamente para reler o
+       * lançamento vencedor — nunca era alcançado. Duas requisições com a mesma
+       * chave devolviam um erro de dinheiro em vez do mesmo estorno.
+       *
+       * Inserindo primeiro, quem decide é o índice único. A transação perdedora
+       * é revertida inteira pelo Postgres, e o crédito nem chega a ser tocado.
+       */
       const criados = await tx.$queryRaw<
         { id: string; tenant_id: string; amount_cents: number; reason: string; created_at: Date }[]
       >`
@@ -361,6 +365,15 @@ export async function estornarCredito(entrada: {
       `;
       const criado = criados[0];
       if (!criado) throw new PlataformaError('refund_failed', 'Não foi possível registrar o estorno');
+
+      const debitadas = await tx.$executeRaw`
+        UPDATE subscriptions
+           SET credit_cents = credit_cents - ${entrada.valorCents}, updated_at = now()
+         WHERE tenant_id = ${entrada.tenantId}::uuid AND credit_cents >= ${entrada.valorCents}
+      `;
+      if (debitadas === 0) {
+        throw new PlataformaError('insufficient_credit', 'O crédito disponível é menor que o pedido');
+      }
 
       await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'credit.refunded', {
         estornoId: criado.id,
