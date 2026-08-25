@@ -35,6 +35,11 @@ export const importacaoSchema = z.object({
 
 export const importIdSchema = z.string().uuid();
 
+export const resolverConflitoSchema = z.object({
+  linha: z.number().int().min(2).max(20_001),
+  escolha: z.enum(['anterior', 'linha']),
+});
+
 /**
  * O slug legado.
  *

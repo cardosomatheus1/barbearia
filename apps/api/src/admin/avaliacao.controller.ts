@@ -14,6 +14,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import { contestacaoSchema, recuperacaoSchema } from './avaliacao.schemas.js';
 
 /**
@@ -85,7 +86,8 @@ export class AvaliacaoController {
   @Exige('reviews.view', 'customers.view')
   @Get()
   async painel(@Staff() staff: AuthenticatedStaff) {
-    return painelDeAvaliacoes(staff.tenantId);
+    const local = await unidadeDoBalcao(staff);
+    return painelDeAvaliacoes(staff.tenantId, new Date(), 30, local.id);
   }
 
   @Exige('reviews.view', 'customers.view')
@@ -94,7 +96,8 @@ export class AvaliacaoController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    return { avaliacoes: await avaliacoesDoCliente(staff.tenantId, id) };
+    const local = await unidadeDoBalcao(staff);
+    return { avaliacoes: await avaliacoesDoCliente(staff.tenantId, id, new Date(), local.id) };
   }
 
   /**
@@ -112,9 +115,11 @@ export class AvaliacaoController {
     @Body(new ZodValidationPipe(recuperacaoSchema))
     body: { desfecho: 'contato' | 'retrabalho' | 'credito' | 'sem_retorno'; nota: string },
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       return await registrarRecuperacao({
         tenantId: staff.tenantId,
+        locationId: local.id,
         avaliacaoId: id,
         desfecho: body.desfecho,
         nota: body.nota,
@@ -141,9 +146,11 @@ export class AvaliacaoController {
     @Body(new ZodValidationPipe(contestacaoSchema))
     body: { motivo: string; nota: string },
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       const feito = await contestarAvaliacao({
         tenantId: staff.tenantId,
+        locationId: local.id,
         avaliacaoId: id,
         motivo: body.motivo,
         nota: body.nota,
@@ -174,9 +181,11 @@ export class AvaliacaoController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       const feito = await retirarContestacao({
         tenantId: staff.tenantId,
+        locationId: local.id,
         avaliacaoId: id,
         ator: { id: staff.staffUserId, name: staff.name },
       });

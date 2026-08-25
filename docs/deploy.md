@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/cardosomatheus1/barbearia/claude/ba
 > lista paralela de sempre, e quebraria no dia em que alguém renomeasse.
 
 Ele instala o Docker se faltar, clona o repositório em `/opt/barbearia`, **gera
-os oito segredos**, aplica as 83 migrações, sobe os cinco serviços, espera o
+os segredos obrigatórios**, aplica as 117 migrações, sobe os cinco serviços, espera o
 site responder e agenda o backup diário.
 
 Roda de novo sem estragar nada: os segredos já gerados são preservados. Não é
@@ -174,6 +174,38 @@ apt install rclone && rclone config          # um bucket, um Drive, o que for
 echo 'BACKUP_REMOTO="meubucket:barbearia"' >> /opt/barbearia/.env
 ```
 
+Com `MEDIA_STORAGE=local`, o backup diário sai em **duas partes inseparáveis e criptografadas**:
+`barbearia-*.dump.enc` (PostgreSQL) e `barbearia-*-media.tar.gz.enc` (imagens do volume
+`/data/media`). O dump/tar em claro existe apenas durante geração e validação local; depois é
+cifrado com AES-256-GCM usando `BACKUP_ENCRYPTION_KEY`, autenticado e removido antes de qualquer
+upload/rotação.
+
+Com `MEDIA_STORAGE=s3`, as imagens não moram no VPS e o script **não** cria um tar
+vazio fingindo ter copiado o bucket. Configure versionamento/retention no S3/R2/
+MinIO e mantenha o dump PostgreSQL em destino remoto.
+
+Para restaurar, primeiro decifre **localmente** com a mesma chave do `.env`:
+
+```bash
+set -a; . /opt/barbearia/.env; set +a
+node /opt/barbearia/scripts/backup-crypto.mjs decrypt \
+  /var/backups/barbearia/barbearia-CARIMBO.dump.enc /tmp/barbearia.dump
+node /opt/barbearia/scripts/backup-crypto.mjs decrypt \
+  /var/backups/barbearia/barbearia-CARIMBO-media.tar.gz.enc /tmp/barbearia-media.tar.gz
+```
+
+Depois restaure o banco com `pg_restore` e, no modo local, a mídia:
+
+```bash
+cat /tmp/barbearia-media.tar.gz \
+  | docker compose -f /opt/barbearia/deploy/compose.yml --env-file /opt/barbearia/.env \
+      exec -T api tar -C /data/media -xzf -
+rm -f /tmp/barbearia.dump /tmp/barbearia-media.tar.gz
+```
+
+A `BACKUP_ENCRYPTION_KEY` é parte do próprio backup: perder essa chave torna os artefatos
+irrecuperáveis. Guarde uma cópia dela fora do VPS, em cofre de segredos.
+
 E, uma vez, ensaie a volta **neste servidor** — não aqui, não na máquina de
 desenvolvimento. É o item que continua aberto no go/no-go, e o único jeito de
 saber que o backup presta é restaurá-lo.
@@ -188,6 +220,26 @@ saber que o backup presta é restaurá-lo.
 
 O webhook da Stripe aponta para `https://SEU_DOMINIO/api/v1/webhooks/psp` — o
 segredo dele é **próprio**, porque a Stripe gera um por endereço.
+
+## 7.1 Mídia em object storage
+
+O modo local funciona sem serviço externo. Para usar object storage privado S3
+compatível — AWS S3, Cloudflare R2 ou MinIO — configure com:
+
+```bash
+cd /opt/barbearia
+deploy/configurar-midia-s3.sh \
+  'https://SEU-ENDPOINT-S3' \
+  'barberdock-media' \
+  'ACCESS_KEY' \
+  'SECRET_KEY' \
+  'auto'
+```
+
+A URL vista pelo cliente **não muda**: continua `https://SEU_DOMINIO/media/...`.
+O bucket pode e deve permanecer privado; a API assina as chamadas internamente.
+Depois de configurar, habilite versionamento/retention no provedor e envie uma
+foto de teste em **Fotos e marca**.
 
 ## 8. O primeiro tenant
 

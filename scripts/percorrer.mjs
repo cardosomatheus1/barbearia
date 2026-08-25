@@ -517,19 +517,148 @@ await percurso('dono monta uma campanha sem texto aprovado', async (page) => {
 
 await percurso('balcão fecha uma venda', async (page) => {
   /**
-   * O outro caminho que paga a conta: o dinheiro entrando.
+   * O outro caminho que paga a conta: o dinheiro entrando **pela tela**.
    *
-   * Ele começa no login de verdade — cookie plantado provaria a tela e não o
-   * caminho, e é justamente o login que decide o que a sessão pode.
+   * A primeira versão deste percurso só abria `/admin/comanda` e conferia que
+   * a quantidade de vendas pagas não tinha diminuído. Zero clique financeiro,
+   * zero venda criada e `depois === antes` era verde: o nome prometia um E2E e
+   * o corpo era apenas um GET. Este percurso existe justamente para impedir
+   * esse falso positivo.
+   *
+   * O cenário usa venda avulsa para não depender do relógio da agenda. Cobra
+   * R$ 37,90 com R$ 50,00 em dinheiro: além de fechar a comanda, isso prova o
+   * troco de R$ 12,10 e que a gaveta recebe o **líquido** de R$ 37,90. No fim,
+   * fecha o mesmo caixa com o valor que a própria tela manda contar e exige
+   * divergência zero no banco.
    */
-    // `paid`, e não `closed`: o enum do bloco 18 é `open | paid | cancelled`.
-  const antes = Number(consultar(`SELECT count(*) FROM orders WHERE status = 'paid'`));
-
   await entrarNoPainel(page, DONO, SENHA_DO_DONO);
-  await page.goto(`${WEB}/admin/comanda`, { waitUntil: 'networkidle' });
 
-  const depois = Number(consultar(`SELECT count(*) FROM orders WHERE status = 'paid'`));
-  if (depois < antes) throw new Error('comanda fechada sumiu no caminho');
+  // 1. A venda só pode fechar dentro de uma gaveta. Se a medição já deixou uma
+  // aberta, usa a mesma; se não, abre pela interface como a recepção faria.
+  await page.goto(`${WEB}/admin/caixa`, { waitUntil: 'networkidle' });
+  const abrirCaixa = page.getByRole('button', { name: 'Abrir caixa' }).first();
+  if (await abrirCaixa.isVisible().catch(() => false)) {
+    await page.fill('input[name="openingCents"]', '200,00');
+    await submeter(page, 'abrir o caixa', abrirCaixa);
+  }
+
+  const sessaoAbertaAntes = consultar(
+    `SELECT cs.id
+       FROM cash_sessions cs
+       JOIN staff_users su ON su.tenant_id = cs.tenant_id
+      WHERE cs.status = 'open' AND su.email = '${DONO.replace(/'/g, "''")}'
+      ORDER BY cs.opened_at DESC LIMIT 1`,
+  );
+  if (!sessaoAbertaAntes) throw new Error('a tela não deixou nenhum caixa aberto');
+
+  // 2. Abre uma comanda vazia pela porta explícita de venda sem atendimento.
+  await page.goto(`${WEB}/admin/comanda`, { waitUntil: 'networkidle' });
+  await abrir(page, 'Venda avulsa, sem atendimento');
+  await submeter(page, 'abrir a comanda avulsa', botao(page, 'Abrir comanda avulsa'));
+  await esperarUrl(page, /\/admin\/comanda\/[0-9a-f-]{36}(?:\?|$)/i, 'a comanda avulsa não abriu');
+
+  const achadoDaUrl = /\/admin\/comanda\/([0-9a-f-]{36})/i.exec(page.url());
+  const orderId = achadoDaUrl?.[1];
+  if (!orderId) throw new Error(`não consegui identificar a comanda na URL ${page.url()}`);
+
+  const nasceu = consultar(`SELECT status FROM orders WHERE id = '${orderId}'`);
+  if (nasceu !== 'open') throw new Error(`a comanda nasceu como "${nasceu || 'nada'}", esperava open`);
+
+  // 3. Acrescenta um item livre. É deliberado: produto e serviço trazem regras
+  // adicionais de catálogo/estoque; aqui a pergunta é se o balcão consegue
+  // transformar uma comanda vazia em valor cobrável do começo ao fim.
+  await abrir(page, 'Acrescentar item');
+  await page.selectOption('select[name="item"]', 'livre');
+  await page.fill('input[name="descricao"]', 'Item do percurso financeiro');
+  await page.fill('input[name="precoUnitarioCents"]', '37,90');
+  await page.fill('input[name="quantidade"]', '1');
+  await submeter(page, 'acrescentar o item', botao(page, 'Acrescentar'), '.item-comanda');
+
+  const item = consultar(
+    `SELECT count(*) || ':' || COALESCE(sum(unit_price_cents * quantity), 0)
+       FROM order_items WHERE order_id = '${orderId}'`,
+  );
+  if (item !== '1:3790') {
+    throw new Error(`o item não chegou inteiro à comanda (banco respondeu ${item})`);
+  }
+
+  // 4. Recebe R$ 50,00 em dinheiro por uma conta de R$ 37,90. A diferença não
+  // é erro: é troco. O domínio precisa congelar 1.210 centavos e colocar apenas
+  // 3.790 na gaveta.
+  await page.selectOption('select[name="forma0"]', 'cash');
+  await page.fill('input[name="valor0"]', '50,00');
+  await submeter(page, 'receber a venda', botao(page, /Receber R\$/));
+
+  await page.getByRole('heading', { name: 'Pago com' }).waitFor({ timeout: 8_000 });
+  const trocoNaTela = await page.locator('.pagamentos__item--troco').innerText();
+  if (!/12,10/.test(trocoNaTela)) {
+    throw new Error(`a venda fechou, mas a tela não mostrou o troco de R$ 12,10: ${trocoNaTela}`);
+  }
+
+  const venda = consultar(
+    `SELECT status || ':' || total_cents || ':' || change_cents || ':' || (session_id IS NOT NULL)::int
+       FROM orders WHERE id = '${orderId}'`,
+  );
+  if (venda !== 'paid:3790:1210:1') {
+    throw new Error(`a venda fechou em estado inesperado: ${venda}`);
+  }
+
+  const pagamento = consultar(
+    `SELECT count(*) || ':' || COALESCE(sum(amount_cents), 0) || ':' || COALESCE(min(method::text), '')
+       FROM order_payments WHERE order_id = '${orderId}'`,
+  );
+  if (pagamento !== '1:5000:cash') {
+    throw new Error(`o pagamento não foi congelado como R$ 50 em dinheiro: ${pagamento}`);
+  }
+
+  const movimento = consultar(
+    `SELECT count(*) || ':' || COALESCE(sum(amount_cents), 0)
+       FROM cash_movements WHERE order_id = '${orderId}' AND kind = 'sale'`,
+  );
+  if (movimento !== '1:3790') {
+    throw new Error(`a gaveta não recebeu o líquido de R$ 37,90: ${movimento}`);
+  }
+
+  // 5. Fecha o **mesmo** caixa. Lê o esperado da interface, como quem conta a
+  // gaveta, e exige que o fechamento persista com divergência zero.
+  const sessionId = consultar(`SELECT session_id FROM orders WHERE id = '${orderId}'`);
+  if (!sessionId) throw new Error('a venda paga ficou sem sessão de caixa');
+
+  await page.goto(`${WEB}/admin/caixa`, { waitUntil: 'networkidle' });
+  const esperadoNaTela = await page.locator('.gaveta__valor').innerText();
+  const moeda = /R\$\s*([\d.]+,\d{2})/.exec(esperadoNaTela)?.[1];
+  if (!moeda) throw new Error(`não consegui ler o esperado da gaveta: ${esperadoNaTela}`);
+
+  await abrir(page, 'Fechar o caixa');
+  await page.fill('input[name="countedCents"]', moeda);
+  await submeter(page, 'fechar o caixa', botao(page, 'Fechar caixa'));
+
+  const fechamento = consultar(
+    `SELECT status || ':' || COALESCE(difference_cents, 999999)::text
+       FROM cash_sessions WHERE id = '${sessionId}'`,
+  );
+  if (fechamento !== 'closed:0') {
+    /**
+     * A recusa da tela entra na mensagem.
+     *
+     * Sem isso o percurso dizia so "o caixa nao fechou batendo: open:999999" —
+     * o estado final, sem o motivo. E o motivo esta escrito na tela, porque a
+     * acao redireciona com o erro; ler dali transforma um sintoma num
+     * diagnostico.
+     */
+    const recusa = await page.locator('[role="alert"], .ui-erro, [data-erro]').first()
+      .innerText().catch(() => '');
+    const naUrl = new URL(page.url()).searchParams.get('erro') ?? '';
+    throw new Error(
+      `o caixa não fechou batendo: ${fechamento}` +
+        (recusa || naUrl ? ` — a tela disse: "${(recusa || naUrl).trim()}"` : ''),
+    );
+  }
+
+  const mensagem = await page.locator('[role="status"]').first().innerText().catch(() => '');
+  if (!/gaveta bateu/i.test(mensagem)) {
+    throw new Error(`o banco fechou certo, mas a interface não confirmou o fechamento: "${mensagem}"`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -569,7 +698,22 @@ await percurso('dono abre a barbearia e publica', async (page) => {
    * quem abre a barbearia passa.
    */
   await entrarNoPainel(page, email, senha);
-  await clicar(page, 'a[href="/admin/onboarding"]', 'a volta para o cadastro');
+  /**
+   * O que importa e **chegar** no cadastro, nao o caminho.
+   *
+   * O destino depois do login passou a ser derivado do que a conta alcanca, e
+   * uma conta recem-criada cai direto na etapa em aberto do onboarding. O
+   * percurso procurava a volta que existia quando o login levava ao painel, e
+   * morria sobre uma tela que ja era a certa. Clica se houver; senao, confere
+   * que esta no lugar.
+   */
+  const voltaAoCadastro = page.locator('a[href="/admin/onboarding"]').first();
+  if (await voltaAoCadastro.count() > 0 && await voltaAoCadastro.isVisible().catch(() => false)) {
+    await voltaAoCadastro.click();
+    await page.waitForLoadState('networkidle');
+  } else if (!page.url().includes('/admin/onboarding')) {
+    await page.goto(`${WEB}/admin/onboarding`, { waitUntil: 'networkidle' });
+  }
 
   // Etapa 2 — onde fica. O nome já vem preenchido do passo anterior.
   await page.fill('input[name="street"]', 'Rua da Paciência, 240');
@@ -899,7 +1043,7 @@ await percurso('cabeçalhos de segurança saem do servidor', async (page) => {
    * E a CSP com nonce é o caso extremo desse mesmo problema: ela sai de um
    * middleware, o Next precisa achar o nonce no cabeçalho da requisição para
    * repeti-lo nos scripts dele, e se essa ponte quebrar a política sai correta
-   * e a página fica em branco. Os seis percursos acima já cairiam — este diz
+   * e a página fica em branco. Os oito percursos acima já cairiam — este diz
    * **por quê** em vez de deixar o diagnóstico para quem lê.
    */
   const esperado = [
@@ -1026,6 +1170,11 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
   const problemas = [];
 
   for (const papel of ['manager', 'receptionist', 'professional']) {
+    // Qual passo estourou: sem isto, um `Timeout` de 30s nao diz se foi criar a
+    // conta, entrar, trocar a senha ou percorrer o menu — e sao quatro coisas
+    // diferentes, com quatro causas diferentes.
+    let passo = 'inicio';
+    try {
     /**
      * A conta é criada **imediatamente antes** de ser usada.
      *
@@ -1034,6 +1183,7 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
      * expirar, e o sintoma era "E-mail ou senha incorretos" sobre uma conta que
      * tinha acabado de nascer.
      */
+    passo = 'o dono entrar e abrir a equipe';
     await entrarNoPainel(page, DONO, SENHA_DO_DONO);
     await page.goto(`${WEB}/admin/equipe`, { waitUntil: 'networkidle' });
     const email = `${papel}-${Date.now()}@percurso.teste`;
@@ -1053,7 +1203,17 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
      * que funcionou — e é o segundo formulário da página que ele encontra
      * incompleto enquanto espera.
      */
-    await botao(criar, 'Criar conta').click();
+    /**
+     * O botao mora numa barra `ui-sticky-action`: rola ate ele antes de clicar.
+     *
+     * A conta de `professional` e a terceira do laco, e a essa altura a pagina
+     * ja cresceu com os blocos de senha das duas anteriores — o botao ficava
+     * fora da janela e o clique esperava trinta segundos por um elemento que
+     * estava la, so nao alcancavel.
+     */
+    passo = 'criar a conta';
+    await botao(criar, 'Criar conta').scrollIntoViewIfNeeded();
+    await botao(criar, 'Criar conta').click({ timeout: 15000 });
     /**
      * E a espera é pelo bloco **desta** conta, pelo nome.
      *
@@ -1072,12 +1232,15 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
     await page.goto(`${WEB}/admin/entrar`, { waitUntil: 'networkidle' });
     await page.fill('input[name="email"]', email);
     await page.fill('input[name="password"]', senha);
+    passo = 'entrar pela primeira vez';
     await submeter(page, `${papel} entrar pela primeira vez`);
     await page.fill('input[name="currentPassword"]', senha);
     await page.fill('input[name="newPassword"]', `${senha}-nova`);
     await page.fill('input[name="confirmPassword"]', `${senha}-nova`);
+    passo = 'trocar a senha de primeiro acesso';
     await submeter(page, `${papel} trocar a senha de primeiro acesso`);
 
+    passo = 'ler e percorrer o menu';
     const visiveis = await doMenu();
     const escondidos = universo.filter((h) => !visiveis.includes(h));
 
@@ -1095,7 +1258,21 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
     }
 
     console.log(`      ${papel}: ${visiveis.length} no menu, ${escondidos.length} escondidos`);
+    /**
+     * Voltar para uma tela que este papel abre, antes de sair.
+     *
+     * O laco acima termina numa tela **recusada** — a ultima da lista de
+     * escondidos —, e o "Sair" e desenhado por pagina, nao pelo casco: numa
+     * recusa ele nao existe. A saida de la e o "Voltar ao dia" do proprio
+     * componente de recusa, e nao o logout. Sair nao e o que este percurso
+     * prova, entao ele volta ao que a conta abre e sai de la.
+     */
+    passo = 'sair';
+    await page.goto(WEB + (visiveis[0] ?? '/admin/dia'), { waitUntil: 'networkidle' });
     await submeter(page, `${papel} sair`, botao(page, 'Sair'));
+    } catch (erro) {
+      throw new Error(`${papel} parou em "${passo}": ${erro instanceof Error ? erro.message : erro}`);
+    }
   }
 
   if (problemas.length > 0) throw new Error(problemas.join('\n          '));

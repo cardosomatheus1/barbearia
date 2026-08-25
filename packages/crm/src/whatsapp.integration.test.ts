@@ -326,14 +326,15 @@ describeIfDb('WhatsApp oficial', () => {
     expect((await estadoNoBanco())?.status).toBe('aguardando_verificacao');
   });
 
-  it('a conciliação não ressuscita um número que a Meta suspendeu', async () => {
+  it('a conciliação é a única que tira um número da suspensão', async () => {
     /**
-     * Só sobe, nunca desce.
+     * Quem suspende é a Meta, e quem desfaz é quem fala com ela.
      *
-     * Sem o `AND status = 'aguardando_verificacao'`, uma resposta verificada
-     * chegando depois da suspensão devolveria a barbearia para "ativo" e
-     * apagaria o motivo — que é a única frase que explica por que as mensagens
-     * pararam de sair.
+     * Salvar o cadastro **não** ressuscita — isso é o caso logo abaixo. A
+     * conciliação sim, porque ela acabou de perguntar: um `ACCOUNT_RECONNECTED`
+     * depois de um offboarding chega por aqui, e recusá-lo tornaria a suspensão
+     * permanente sem que ninguém tivesse decidido isso. O motivo sai junto,
+     * porque ele só explica enquanto vale.
      */
     await cadastrar();
     await exec(
@@ -350,8 +351,8 @@ describeIfDb('WhatsApp oficial', () => {
       agora: new Date('2026-09-01T12:00:00Z'),
     });
 
-    expect(r).toEqual({ verificado: true, promovido: false });
-    expect((await estadoNoBanco())?.status).toBe('suspenso');
+    expect(r).toEqual({ verificado: true, promovido: true });
+    expect((await estadoNoBanco())?.status).toBe('ativo');
   });
 
   // -- salvar não rebaixa o que já foi provado (bloco 91) ---------------------
@@ -716,6 +717,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       customerId: CARLOS,
       tipo: 'retorno',
+      idempotencyKey: 'avulsa-optout',
       agora: new Date('2026-09-20T15:00:00Z'),
       timeZone: 'America/Bahia',
       ...operador,
@@ -742,6 +744,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       customerId: CARLOS,
       tipo: 'retorno',
+      idempotencyKey: 'avulsa-conta',
       agora: new Date('2026-09-20T15:00:00Z'),
       timeZone: 'America/Bahia',
       ...operador,
@@ -786,6 +789,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       customerId: CARLOS,
       templateId: segundo.id,
+      idempotencyKey: 'avulsa-escolhido',
       agora: new Date('2026-09-20T15:00:00Z'),
       timeZone: 'America/Bahia',
       ...operador,
@@ -829,6 +833,7 @@ describeIfDb('WhatsApp oficial', () => {
         locationId: LOCAL,
         customerId: CARLOS,
         templateId: 'b5555555-0000-4000-8000-0000000000ff',
+        idempotencyKey: 'avulsa-rival',
         agora: new Date('2026-09-20T15:00:00Z'),
         timeZone: 'America/Bahia',
         ...operador,
@@ -868,6 +873,7 @@ describeIfDb('WhatsApp oficial', () => {
         locationId: LOCAL,
         customerId: CARLOS,
         templateId: 'b5555555-0000-4000-8000-0000000000fe',
+        idempotencyKey: 'avulsa-filial',
         // Recusado antes de qualquer envio: se a conferência sumir, esta
         // chamada acontece e o caso fica vermelho por não ter lançado.
         agora: new Date('2026-09-20T15:00:00Z'),
@@ -886,6 +892,7 @@ describeIfDb('WhatsApp oficial', () => {
         locationId: LOCAL,
         customerId: CARLOS,
         tipo: 'lembrete_24h',
+        idempotencyKey: 'avulsa-tipo-invalido',
         agora: new Date('2026-09-20T15:00:00Z'),
         timeZone: 'America/Bahia',
         ...operador,
@@ -1042,6 +1049,13 @@ describeIfDb('WhatsApp oficial', () => {
     expect(await registrarEstadoDaMensagem({ tenantId: TENANT, wamid: enviada!.wamid, estado: 'entregue' })).toBe(
       false,
     );
+
+    // Nem um `failed` atrasado/contraditório: depois de lida existe prova
+    // positiva de entrega, então a falha só pode ser aceita enquanto estava
+    // apenas em `enviada`.
+    expect(
+      await registrarEstadoDaMensagem({ tenantId: TENANT, wamid: enviada!.wamid, estado: 'falhou' }),
+    ).toBe(false);
 
     const linha = await admin.$queryRawUnsafe<{ status: string }[]>(
       `SELECT status::text AS status FROM whatsapp_messages WHERE wamid = '${enviada!.wamid}'`,

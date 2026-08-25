@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import {
   ROTULO_DO_ESTADO,
+  TOM_SEMANTICO_DO_ESTADO,
+  instantToLocal,
   ROTULO_DO_TIPO_DE_EXCECAO,
   TIPOS_DE_EXCECAO,
 } from '@barbearia/core';
@@ -28,6 +30,16 @@ import {
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import {
+  alvosLivres,
+  alturaPx,
+  hhmm,
+  limitesDoDia,
+  livresDoProfissional,
+  marcacoesDoEixo,
+  minutos,
+  topPx,
+} from '@/lib/agenda-timeline';
 
 /**
  * A agenda do admin.
@@ -42,8 +54,9 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  * O que ela pede e **não** está: arrastar. A decisão e o motivo estão na tabela
  * de lacunas do `ROADMAP.md` — em resumo, mover é o caminho principal porque a
  * WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste, e arrastar
- * seria o primeiro componente de cliente do produto, decisão grande demais para
- * entrar de carona.
+ * exige interação de cliente própria e alternativa acessível; o R5 abriu a
+ * arquitetura para ilhas, mas arrastar continua uma decisão separada e não entra
+ * de carona.
  */
 
 export const metadata: Metadata = {
@@ -160,7 +173,7 @@ function Cartao({
       <div className="compromisso__quem">
         <p className="compromisso__nome">{entrada.customerName ?? 'sem cliente'}</p>
         <p className="compromisso__servico">{entrada.services.join(' + ')}</p>
-        <p className="compromisso__estado">
+        <p className={`compromisso__estado selo selo--${TOM_SEMANTICO_DO_ESTADO[entrada.status]}`}>
           {ESTADO[entrada.status] ?? entrada.status}
           {/**
            * Saída para onde se **age**.
@@ -248,59 +261,313 @@ function Cartao({
   );
 }
 
-function Coluna({
+function FechamentoDoDia({ motivo }: { readonly motivo: string | null }) {
+  const ROTULO: Record<string, string> = {
+    no_weekly_plan: 'Sem jornada cadastrada',
+    day_off: 'Folga',
+    holiday: 'Feriado',
+    vacation: 'Férias',
+    custom_hours: 'Fora do horário especial',
+  };
+  if (!motivo) return null;
+  return <p className="agenda-linha__fechado">{ROTULO[motivo] ?? 'Sem atendimento'}</p>;
+}
+
+/**
+ * O piso do cartao: hora, nome+servico e estado, sem cortar nada.
+ *
+ * 44px era o alvo de toque, nao a altura do conteudo — e um atendimento de 30
+ * minutos saia com tres linhas dentro de uma caixa de uma. A proporcao da linha
+ * do tempo continua valendo acima disto, que e onde ela informa.
+ */
+const ALTURA_MINIMA_DO_CARTAO = 60;
+
+function EventoNaLinha({
+  entrada,
+  data,
+  vista,
+  profissionais,
+  inicioDaLinha,
+}: {
+  readonly entrada: EntradaDaAgenda;
+  readonly data: string;
+  readonly vista: Vista;
+  readonly profissionais: readonly { id: string; name: string }[];
+  readonly inicioDaLinha: number;
+}) {
+  const inicio = minutos(entrada.occupiedStart);
+  const fim = minutos(entrada.occupiedEnd);
+  const comBuffer = entrada.occupiedStart !== entrada.start || entrada.occupiedEnd !== entrada.end;
+
+  return (
+    <article
+      className={`agenda-evento agenda-evento--${entrada.status}`}
+      style={{ top: `${(inicio - inicioDaLinha) * 1.5}px`, minHeight: `${Math.max(ALTURA_MINIMA_DO_CARTAO, alturaPx(inicio, fim))}px` }}
+      aria-label={`${entrada.start}, ${entrada.customerName ?? 'cliente oculto'}, ${entrada.services.join(' + ')}`}
+    >
+      <div className="agenda-evento__resumo">
+        <p className="agenda-evento__hora tabular">
+          {entrada.start}–{entrada.end}
+          {comBuffer ? <span> · ocupa {entrada.occupiedStart}–{entrada.occupiedEnd}</span> : null}
+        </p>
+        <p className="agenda-evento__nome">{entrada.customerName ?? 'Cliente'}</p>
+        <p className="agenda-evento__servico">{entrada.services.join(' + ')}</p>
+        <p className={`agenda-evento__estado selo selo--${TOM_SEMANTICO_DO_ESTADO[entrada.status]}`}>{ESTADO[entrada.status] ?? entrada.status}</p>
+      </div>
+
+      <details className="agenda-evento__acoes">
+        <summary aria-label={`Ações de ${entrada.customerName ?? 'cliente'}`}>•••</summary>
+        <div className="agenda-evento__menu">
+          <a className="compromisso__ir" href={`/admin/dia?d=${data}`}>Ver no dia</a>
+          <form action={acaoMoverAgendamento} className="formulario">
+            <input name="id" type="hidden" value={entrada.id} />
+            <input name="de" type="hidden" value={data} />
+            <input name="v" type="hidden" value={vista} />
+            <div className="campos-lado">
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor={`linha-data-${entrada.id}`}>Para o dia</label>
+                <input className="ui-field__input" defaultValue={data} id={`linha-data-${entrada.id}`} name="date" required type="date" />
+              </div>
+              <div className="ui-field">
+                <label className="ui-field__label" htmlFor={`linha-hora-${entrada.id}`}>Às</label>
+                <input className="ui-field__input" defaultValue={entrada.start} id={`linha-hora-${entrada.id}`} name="start" required type="time" />
+              </div>
+            </div>
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor={`linha-pro-${entrada.id}`}>Com quem</label>
+              <select className="ui-field__input" defaultValue={entrada.professionalId} id={`linha-pro-${entrada.id}`} name="professionalId">
+                {profissionais.map((pro) => <option key={pro.id} value={pro.id}>{pro.name}</option>)}
+              </select>
+            </div>
+            <button className="ui-button ui-button--primary ui-button--block" type="submit">Mover este horário</button>
+          </form>
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function BloqueioNaLinha({
+  excecao,
+  data,
+  vista,
+  inicioDaLinha,
+}: {
+  readonly excecao: ExcecaoDaAgenda;
+  readonly data: string;
+  readonly vista: Vista;
+  readonly inicioDaLinha: number;
+}) {
+  if (!excecao.start || !excecao.end || excecao.kind !== 'block') return null;
+  const inicio = minutos(excecao.start);
+  const fim = minutos(excecao.end);
+  const altura = Math.max(30, alturaPx(inicio, fim));
+  const cabeAcao = altura >= 44;
+  return (
+    <div
+      className="agenda-bloqueio"
+      style={{ top: `${(inicio - inicioDaLinha) * 1.5}px`, height: `${altura}px` }}
+    >
+      <span className="agenda-bloqueio__texto">
+        {excecao.start}–{excecao.end} · bloqueado{excecao.reason ? ` · ${excecao.reason}` : ''}
+      </span>
+      {cabeAcao ? (
+        <form action={acaoRemoverExcecao}>
+          <input name="id" type="hidden" value={excecao.id} />
+          <input name="de" type="hidden" value={data} />
+          <input name="v" type="hidden" value={vista} />
+          <button className="agenda-bloqueio__remover" type="submit">Remover</button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function LinhaDoProfissional({
   profissional,
   dia,
   vista,
   profissionais,
+  limites,
+  podeMarcar,
+  hoje,
+  minutoAtual,
 }: {
   readonly profissional: { id: string; name: string };
   readonly dia: DiaDaAgenda;
   readonly vista: Vista;
   readonly profissionais: readonly { id: string; name: string }[];
+  readonly limites: { start: number; end: number };
+  readonly podeMarcar: boolean;
+  readonly hoje: string;
+  readonly minutoAtual: number;
 }) {
-  const entries = dia.entries.filter((e) => e.professionalId === profissional.id);
+  const jornada = dia.workingDays.find((item) => item.professionalId === profissional.id);
+  const entradas = dia.entries.filter((item) => item.professionalId === profissional.id);
   const excecoes = dia.exceptions.filter(
-    (e) => e.professionalId === profissional.id || e.professionalId === null,
+    (item) => item.professionalId === profissional.id || item.professionalId === null,
   );
+  const livres = alvosLivres(livresDoProfissional(dia, profissional.id));
+  const podeClicar = (inicio: number) =>
+    podeMarcar && (dia.date > hoje || (dia.date === hoje && inicio >= minutoAtual));
 
   return (
-    <section className="coluna" aria-labelledby={`col-${profissional.id}-${dia.date}`}>
-      <h3 className="coluna__nome" id={`col-${profissional.id}-${dia.date}`}>
-        {profissional.name}
-        <span className="coluna__contagem tabular">{entries.length}</span>
-      </h3>
+    <section
+      className="agenda-linha__coluna"
+      id={`agenda-${dia.date}-${profissional.id}`}
+      aria-labelledby={`agenda-nome-${dia.date}-${profissional.id}`}
+    >
+      <header className="agenda-linha__cabecalho">
+        <h3 id={`agenda-nome-${dia.date}-${profissional.id}`}>{profissional.name}</h3>
+        <span className="tabular">{entradas.length} {entradas.length === 1 ? 'horário' : 'horários'}</span>
+      </header>
+      <div className="agenda-linha__corpo" style={{ height: `${alturaPx(limites.start, limites.end)}px` }}>
+        {jornada?.working.map((faixa) => {
+          const inicio = minutos(faixa.start);
+          const fim = minutos(faixa.end);
+          return <div key={`${faixa.start}-${faixa.end}`} className="agenda-jornada" style={{ top: `${topPx(inicio, limites)}px`, height: `${alturaPx(inicio, fim)}px` }} aria-hidden="true" />;
+        })}
 
-      {excecoes.length > 0 ? (
-        <ul className="bloqueios">
-          {excecoes.map((excecao) => (
-            <Excecao
-              data={dia.date}
-              excecao={excecao}
-              key={excecao.id}
-              nomes={new Map(profissionais.map((p) => [p.id, p.name]))}
-              vista={vista}
-            />
-          ))}
-        </ul>
-      ) : null}
+        {jornada?.breaks.map((pausa) => {
+          const inicio = minutos(pausa.start);
+          const fim = minutos(pausa.end);
+          return <div key={`pausa-${pausa.start}`} className="agenda-pausa" style={{ top: `${topPx(inicio, limites)}px`, height: `${alturaPx(inicio, fim)}px` }}><span>Pausa · {pausa.start}–{pausa.end}</span></div>;
+        })}
 
-      {entries.length === 0 ? (
-        <p className="coluna__vazia">Nada marcado.</p>
-      ) : (
-        <ul className="compromissos">
-          {entries.map((entrada) => (
-            <Cartao
-              data={dia.date}
-              entrada={entrada}
-              key={entrada.id}
-              profissionais={profissionais}
-              vista={vista}
-            />
-          ))}
-        </ul>
-      )}
+        {livres.map((livre) => {
+          const inicio = livre.start;
+          const fim = livre.end;
+          const duracao = fim - inicio;
+          const texto = `${hhmm(inicio)}–${hhmm(fim)} livre`;
+          const alvoCabeNaEscala = alturaPx(inicio, fim) >= 44;
+          const classe = `agenda-livre${alvoCabeNaEscala ? '' : ' agenda-livre--curto'}`;
+          // A grade nunca distorce o tempo para fabricar um alvo de 44 px: um intervalo
+          // raro menor que ~30 min continua proporcional e fica informativo, sem ação.
+          // O fluxo completo de marcação continua disponível e o motor de disponibilidade
+          // decide se algum serviço específico cabe nele.
+          const style = { top: `${topPx(inicio, limites)}px`, height: `${alturaPx(inicio, fim)}px` };
+          return podeClicar(inicio) && alvoCabeNaEscala ? (
+            <a
+              className={classe}
+              href={`/admin/dia/marcar?d=${dia.date}&p=${profissional.id}&ah=${hhmm(inicio)}`}
+              key={`livre-${inicio}`}
+              style={style}
+              title={`Agendar com ${profissional.name} a partir de ${hhmm(inicio)}`}
+            >
+              <span className="tabular">{hhmm(inicio)}</span><span className="agenda-livre__acao">+ agendar</span>
+            </a>
+          ) : (
+            <span className={`${classe} agenda-livre--sem-acao`} key={`livre-${inicio}`} style={style} aria-label={texto} title={duracao < 30 ? `${duracao} min livres` : undefined}>
+              <span className="tabular">{hhmm(inicio)}</span><span className="agenda-livre__acao">{duracao < 30 ? `${duracao} min` : 'livre'}</span>
+            </span>
+          );
+        })}
+
+        {excecoes.map((excecao) => (
+          <BloqueioNaLinha excecao={excecao} data={dia.date} inicioDaLinha={limites.start} key={excecao.id} vista={vista} />
+        ))}
+
+        {entradas.map((entrada) => (
+          <EventoNaLinha
+            data={dia.date}
+            entrada={entrada}
+            inicioDaLinha={limites.start}
+            key={entrada.id}
+            profissionais={profissionais}
+            vista={vista}
+          />
+        ))}
+
+        {jornada?.working.length ? null : <FechamentoDoDia motivo={jornada?.closedBy ?? null} />}
+      </div>
     </section>
+  );
+}
+
+function LinhaDoTempo({
+  dia,
+  vista,
+  profissionais,
+  todosProfissionais,
+  profissionalEscolhido,
+  hrefProfissional,
+  podeMarcar,
+  hoje,
+  minutoAtual,
+}: {
+  readonly dia: DiaDaAgenda;
+  readonly vista: Vista;
+  readonly profissionais: readonly { id: string; name: string }[];
+  readonly todosProfissionais: readonly { id: string; name: string }[];
+  readonly profissionalEscolhido: string | undefined;
+  readonly hrefProfissional: (id?: string) => string;
+  readonly podeMarcar: boolean;
+  readonly hoje: string;
+  readonly minutoAtual: number;
+}) {
+  const ids = new Set(profissionais.map((item) => item.id));
+  const diaVisivel: DiaDaAgenda = {
+    ...dia,
+    entries: dia.entries.filter((item) => ids.has(item.professionalId)),
+    workingDays: dia.workingDays.filter((item) => ids.has(item.professionalId)),
+    exceptions: dia.exceptions.filter((item) => item.professionalId === null || ids.has(item.professionalId)),
+  };
+  const limites = limitesDoDia(diaVisivel);
+  if (!limites) {
+    return (
+      <div className="vazio agenda-linha__vazia">
+        <p className="vazio__titulo">Dia sem jornada e sem compromissos</p>
+        <p className="vazio__saida">Cadastre a jornada da equipe ou escolha outro dia.</p>
+      </div>
+    );
+  }
+  const marcacoes = marcacoesDoEixo(limites);
+  const altura = alturaPx(limites.start, limites.end);
+
+  return (
+    <>
+      {todosProfissionais.length > 1 ? (
+        <nav className="agenda-profissionais ui-scroll-x" aria-label="Filtrar profissional">
+          <a className={profissionalEscolhido ? '' : 'agenda-profissionais__atual'} href={hrefProfissional()}>Equipe</a>
+          {todosProfissionais.map((profissional) => (
+            <a
+              className={profissionalEscolhido === profissional.id ? 'agenda-profissionais__atual' : ''}
+              key={profissional.id}
+              href={hrefProfissional(profissional.id)}
+            >
+              {profissional.name}
+            </a>
+          ))}
+        </nav>
+      ) : null}
+      <div className="agenda-linha__scroll ui-scroll-x" data-agenda-timeline>
+        <div className={`agenda-linha ${vista === 'semana' ? 'agenda-linha--semana' : ''}`}>
+          <div className="agenda-eixo" aria-hidden="true">
+            <div className="agenda-eixo__cabecalho">hora</div>
+            <div className="agenda-eixo__corpo" style={{ height: `${altura}px` }}>
+              {marcacoes.map((marca) => (
+                <span className="agenda-eixo__marca tabular" key={marca} style={{ top: `${topPx(marca, limites)}px` }}>{hhmm(marca)}</span>
+              ))}
+            </div>
+          </div>
+          <div className="agenda-linha__colunas">
+            {profissionais.map((profissional) => (
+              <LinhaDoProfissional
+                dia={diaVisivel}
+                hoje={hoje}
+                key={profissional.id}
+                limites={limites}
+                minutoAtual={minutoAtual}
+                podeMarcar={podeMarcar}
+                profissional={profissional}
+                profissionais={profissionais}
+                vista={vista}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -319,10 +586,13 @@ export default async function AgendaPage({ searchParams }: Props) {
   // do dispositivo, que é o defeito D2. Uma consulta, não duas.
   const pedido = first(query['de']);
   const deQuery = pedido && /^\d{4}-\d{2}-\d{2}$/.test(pedido) ? pedido : null;
+  const profissionalEscolhido = first(query['p']);
 
+  // V10 mantém a equipe no payload: no mobile o filtro troca uma cadeira por
+  // outra sem perder a lista de opções. O recorte de permissão continua no
+  // controller; `p` é só filtro de apresentação, nunca guarda de segurança.
   const resposta = await agendaDoAdmin(token, {
     ...(deQuery ? { from: deQuery, to: vista === 'dia' ? deQuery : addDays(deQuery, 6) } : {}),
-    ...(first(query['p']) ? { professionalId: first(query['p']) as string } : {}),
   });
 
   const conflito = await lerConflitoDaAgenda();
@@ -359,15 +629,31 @@ export default async function AgendaPage({ searchParams }: Props) {
   const hoje = agenda.today;
   const de = agenda.from;
   const nomes = new Map(agenda.professionals.map((p) => [p.id, p.name]));
+  const profissionalAtivo = profissionalEscolhido && agenda.professionals.some((item) => item.id === profissionalEscolhido)
+    ? profissionalEscolhido
+    : undefined;
   const podeExcecao = podeNaTela(estado, 'settings.manage');
+  const podeMarcar = podeNaTela(estado, 'appointments.create');
+  const agoraLocal = instantToLocal(agenda.timezone, new Date());
+  const minutoAtual = agoraLocal.date === hoje ? agoraLocal.minutes : 0;
 
-  const link = (params: Record<string, string>) => {
-    const busca = new URLSearchParams({ v: vista, de, ...params });
+  const link = (params: Record<string, string | undefined>) => {
+    const busca = new URLSearchParams({ v: vista, de });
+    if (profissionalAtivo) busca.set('p', profissionalAtivo);
+    for (const [chave, valor] of Object.entries(params)) {
+      if (valor) busca.set(chave, valor);
+      else busca.delete(chave);
+    }
     return `/admin/agenda?${busca.toString()}`;
   };
+  const profissionaisDaTela = profissionalAtivo
+    ? agenda.professionals.filter((item) => item.id === profissionalAtivo)
+    : agenda.professionals;
 
   const todosOsCompromissos = agenda.days
-    .flatMap((dia) => dia.entries.map((entrada) => ({ dia, entrada })))
+    .flatMap((dia) => dia.entries
+      .filter((entrada) => !profissionalAtivo || entrada.professionalId === profissionalAtivo)
+      .map((entrada) => ({ dia, entrada })))
     .sort((a, b) =>
       a.dia.date === b.dia.date
         ? a.entrada.start.localeCompare(b.entrada.start)
@@ -376,7 +662,9 @@ export default async function AgendaPage({ searchParams }: Props) {
 
   /** As entradas de um dia, ordenadas — a lista agrupa por dia desde o 109. */
   const compromissosDoDia = (dia: (typeof agenda.days)[number]) =>
-    [...dia.entries].sort((a, b) => a.start.localeCompare(b.start));
+    dia.entries
+      .filter((entrada) => !profissionalAtivo || entrada.professionalId === profissionalAtivo)
+      .sort((a, b) => a.start.localeCompare(b.start));
 
   return (
     <main className="ui-container balcao" {...secao('agenda')}>
@@ -571,17 +859,17 @@ export default async function AgendaPage({ searchParams }: Props) {
                 </h2>
               )}
 
-              <div className="colunas ui-scroll-x">
-                {agenda.professionals.map((profissional) => (
-                  <Coluna
-                    dia={dia}
-                    key={profissional.id}
-                    profissional={profissional}
-                    profissionais={agenda.professionals}
-                    vista={vista}
-                  />
-                ))}
-              </div>
+              <LinhaDoTempo
+                dia={dia}
+                hoje={hoje}
+                hrefProfissional={(id) => link({ p: id })}
+                minutoAtual={minutoAtual}
+                podeMarcar={podeMarcar}
+                profissionalEscolhido={profissionalAtivo}
+                profissionais={profissionaisDaTela}
+                todosProfissionais={agenda.professionals}
+                vista={vista}
+              />
             </section>
           ))}
         </div>

@@ -18,6 +18,7 @@ import {
 import { agendarOfertaDaVaga, registrarEventoDeWebhook } from '@barbearia/jobs';
 import { contencaoDeHorario } from './booking.js';
 import { quemQuerAVagaLiberada, type CandidatoNaTela } from './espera.js';
+import { travarConfiguracaoDeRecursos, travarDiaDaAgenda } from './concorrencia.js';
 
 /**
  * O dia da barbearia, do ponto de vista de quem está no balcão.
@@ -409,6 +410,47 @@ const CARIMBO: Partial<Record<AttendanceAction, 'checked_in_at' | 'started_at' |
  * antecedência que vale para o cliente não vale aqui: a recepção precisa
  * cancelar em cima da hora quando o barbeiro adoece.
  */
+async function recursosAindaCabemAoDesfazerFalta(
+  tx: TransactionClient,
+  appointmentId: string,
+  locationId: string,
+): Promise<boolean> {
+  const linhas = await tx.$queryRaw<
+    { resource_type: string; necessarias: number; capacity: number | null; usadas: bigint }[]
+  >`
+    SELECT ar.resource_type, ar.quantity AS necessarias, rp.capacity,
+           (COALESCE((
+              SELECT sum(outro.quantity)
+                FROM appointment_resources outro
+                JOIN appointments a2 ON a2.id = outro.appointment_id
+               WHERE outro.resource_type = ar.resource_type
+                 AND a2.location_id = ${locationId}::uuid
+                 AND a2.id <> alvo.id
+                 AND a2.starts_at < alvo.ends_at
+                 AND upper(janela_ocupada(a2.starts_at, a2.ends_at, a2.completed_at)) > alvo.starts_at
+                 AND NOT isempty(janela_ocupada(a2.starts_at, a2.ends_at, a2.completed_at))
+                 AND a2.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+            ), 0)
+            + COALESCE((
+              SELECT sum(shr.quantity)
+                FROM slot_hold_resources shr
+                JOIN slot_holds h ON h.id = shr.hold_id
+                JOIN professionals p ON p.id = h.professional_id
+               WHERE shr.resource_type = ar.resource_type
+                 AND p.location_id = ${locationId}::uuid
+                 AND h.starts_at < alvo.ends_at
+                 AND h.ends_at > alvo.starts_at
+                 AND h.expires_at > now()
+            ), 0))::bigint AS usadas
+      FROM appointment_resources ar
+      JOIN appointments alvo ON alvo.id = ar.appointment_id
+      LEFT JOIN resource_pools rp
+        ON rp.location_id = ${locationId}::uuid AND rp.resource_type = ar.resource_type
+     WHERE ar.appointment_id = ${appointmentId}::uuid
+  `;
+  return linhas.every((r) => r.capacity !== null && Number(r.usadas) + r.necessarias <= r.capacity);
+}
+
 export async function applyAttendance(params: {
   readonly tenantId: string;
   readonly appointmentId: string;
@@ -458,6 +500,23 @@ export async function applyAttendance(params: {
   const now = params.now ?? new Date();
 
   return withTenant(params.tenantId, async (tx) => {
+    // Reativar uma falta devolve capacidade à agenda. Descobrir o dia antes de
+    // travar a linha mantém a ordem global de locks: dia -> compromisso.
+    if (params.action === 'undo_no_show') {
+      const dia = await tx.$queryRaw<{ local_date: string }[]>`
+        SELECT to_char(a.service_starts_at AT TIME ZONE l.timezone, 'YYYY-MM-DD') AS local_date
+          FROM appointments a
+          JOIN locations l ON l.id = a.location_id
+         WHERE a.id = ${params.appointmentId}::uuid
+           AND a.location_id = ${params.locationId}::uuid
+           AND (${params.onlyProfessionalId ?? null}::uuid IS NULL
+                OR a.professional_id = ${params.onlyProfessionalId ?? null}::uuid)
+      `;
+      if (!dia[0]) throw new BoardError('appointment_not_found', 'Agendamento não encontrado');
+      await travarDiaDaAgenda(tx, params.locationId, dia[0].local_date);
+      await travarConfiguracaoDeRecursos(tx);
+    }
+
     const linhas = await tx.$queryRaw<{ status: AppointmentStatus }[]>`
       SELECT status FROM appointments
       WHERE id = ${params.appointmentId}::uuid
@@ -475,6 +534,14 @@ export async function applyAttendance(params: {
       throw new BoardError(
         'transition_not_allowed',
         'Este atendimento já mudou de estado. Atualize a tela.',
+      );
+    }
+
+    if (params.action === 'undo_no_show'
+        && !(await recursosAindaCabemAoDesfazerFalta(tx, params.appointmentId, params.locationId))) {
+      throw new BoardError(
+        'slot_taken',
+        'Um recurso deste horário já foi ocupado por outro atendimento. Marque um novo.',
       );
     }
 
@@ -564,7 +631,6 @@ export async function applyAttendance(params: {
           : null;
     if (eventoDoDesfecho) {
       await registrarEventoDeWebhook(tx, {
-        tenantId: params.tenantId,
         evento: eventoDoDesfecho,
         objetoId: params.appointmentId,
         locationId: params.locationId,

@@ -256,6 +256,51 @@ describeIfDb('painel do dia', () => {
     ).rejects.toMatchObject({ code: 'slot_taken' });
   });
 
+  it('desfazer falta disputa recurso compartilhado com outra cadeira', async () => {
+    const gleidson = 'bbbbbbbb-0000-0000-0000-000000000002';
+    await exec(admin, `
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+      VALUES ('${gleidson}', '${TENANT}', '${LOCATION}', 'Gleidson', 'professional');
+      INSERT INTO professional_services (professional_id, service_id, tenant_id)
+      VALUES ('${gleidson}', '${CABELO}', '${TENANT}');
+      INSERT INTO work_schedules (tenant_id, professional_id, weekday, start_minute, end_minute)
+      SELECT '${TENANT}', '${gleidson}', d.weekday, 480, 1439
+        FROM (VALUES (0), (1), (2), (3), (4), (5), (6)) AS d(weekday);
+      INSERT INTO resource_pools (tenant_id, location_id, resource_type, capacity)
+      VALUES ('${TENANT}', '${LOCATION}', 'maca-dia', 1);
+      INSERT INTO service_resource_requirements (tenant_id, service_id, resource_type, quantity)
+      VALUES ('${TENANT}', '${CABELO}', 'maca-dia', 1);
+    `);
+
+    const criado = await marcar('09:00');
+    await applyAttendance({
+      tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id,
+      action: 'no_show', podeVerCliente: true,
+    });
+
+    const resultados = await Promise.allSettled([
+      createAppointment({
+        tenantId: TENANT, locationId: LOCATION, professionalId: gleidson,
+        serviceIds: [CABELO], date: TERCA, start: '09:00', now: AGORA,
+      }),
+      applyAttendance({
+        tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id,
+        action: 'undo_no_show', podeVerCliente: true,
+      }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+
+    const consumo = await admin.$queryRawUnsafe<{ total: bigint }[]>(
+      `SELECT COALESCE(sum(ar.quantity), 0)::bigint AS total
+         FROM appointment_resources ar
+         JOIN appointments a ON a.id = ar.appointment_id
+        WHERE ar.resource_type = 'maca-dia'
+          AND a.status NOT IN ('cancelled_customer','cancelled_business','no_show','rescheduled')`,
+    );
+    expect(Number(consumo[0]?.total)).toBe(1);
+  });
+
   it('desfazer a falta funciona quando a vaga continua livre', async () => {
     const criado = await marcar('09:00');
     await applyAttendance({ tenantId: TENANT, locationId: LOCATION, appointmentId: criado.id, action: 'no_show', podeVerCliente: true });

@@ -1,0 +1,115 @@
+TAP version 13
+# R12 cronômetro: resumo/mediana ok
+# Subtest: scripts/r12-usabilidade.test.mjs
+ok 1 - scripts/r12-usabilidade.test.mjs
+  ---
+  duration_ms: 58.755953
+  type: 'test'
+  ...
+# Subtest: aceita a matriz coerente com evidência real
+ok 2 - aceita a matriz coerente com evidência real
+  ---
+  duration_ms: 32.363918
+  type: 'test'
+  ...
+# Subtest: recusa produção verde sobre integração ausente
+ok 3 - recusa produção verde sobre integração ausente
+  ---
+  duration_ms: 34.097238
+  type: 'test'
+  ...
+# Subtest: recusa produção verde quando o E2E é explicitamente ausente
+ok 4 - recusa produção verde quando o E2E é explicitamente ausente
+  ---
+  duration_ms: 37.917321
+  type: 'test'
+  ...
+# Subtest: recusa evidência cujo trecho sumiu do código
+ok 5 - recusa evidência cujo trecho sumiu do código
+  ---
+  duration_ms: 28.950048
+  type: 'test'
+  ...
+# Subtest: recusa evidência cujo arquivo sumiu
+ok 6 - recusa evidência cujo arquivo sumiu
+  ---
+  duration_ms: 29.095516
+  type: 'test'
+  ...
+# Subtest: recusa promessa explícita de split pronto quando a matriz diz ❌
+ok 7 - recusa promessa explícita de split pronto quando a matriz diz ❌
+  ---
+  duration_ms: 32.327368
+  type: 'test'
+  ...
+# Subtest: recusa promessa explícita de NFS-e pronta quando não há emissor real
+ok 8 - recusa promessa explícita de NFS-e pronta quando não há emissor real
+  ---
+  duration_ms: 27.027219
+  type: 'test'
+  ...
+# Subtest: recusa promessa contraditória em código de UI, não só em documentação
+ok 9 - recusa promessa contraditória em código de UI, não só em documentação
+  ---
+  duration_ms: 34.10873
+  type: 'test'
+  ...
+# Subtest: recusa o contador global antigo como selo de prontidão
+ok 10 - recusa o contador global antigo como selo de prontidão
+  ---
+  duration_ms: 29.888544
+  type: 'test'
+  ...
+# Subtest: recusa remoção silenciosa de uma capacidade da matriz
+ok 11 - recusa remoção silenciosa de uma capacidade da matriz
+  ---
+  duration_ms: 25.971695
+  type: 'test'
+  ...
+# Subtest: aceita índice puro com superfícies ordenadas
+ok 12 - aceita índice puro com superfícies ordenadas
+  ---
+  duration_ms: 45.081423
+  type: 'test'
+  ...
+# Subtest: reprova regra escrita de volta no globals.css
+ok 13 - reprova regra escrita de volta no globals.css
+  ---
+  duration_ms: 40.252836
+  type: 'test'
+  ...
+# Subtest: reprova fragmento órfão
+ok 14 - reprova fragmento órfão
+  ---
+  duration_ms: 32.371594
+  type: 'test'
+  ...
+# Subtest: reprova regra idêntica copiada em duas superfícies
+ok 15 - reprova regra idêntica copiada em duas superfícies
+  ---
+  duration_ms: 29.630654
+  type: 'test'
+  ...
+# R6 testes negativos: 4/4
+# Subtest: scripts/verificar-r6-promessas.test.mjs
+ok 4 - scripts/verificar-r6-promessas.test.mjs
+  ---
+  duration_ms: 170.330134
+  type: 'test'
+  ...
+# R8 testes negativos: 4/4
+# Subtest: scripts/verificar-r8-comercial.test.mjs
+ok 5 - scripts/verificar-r8-comercial.test.mjs
+  ---
+  duration_ms: 129.738198
+  type: 'test'
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 378.189142

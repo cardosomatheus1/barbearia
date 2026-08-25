@@ -1,0 +1,1 @@
+129:if node scripts/verificar-auditoria-profunda.mjs >"$SAIDA/auditoria-profunda.log" 2>&1; then

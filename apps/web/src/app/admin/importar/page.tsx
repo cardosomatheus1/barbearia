@@ -20,6 +20,8 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { ResolverConflitos } from './resolver-conflitos';
+import { mascararTelefone } from './conflitos';
 
 /**
  * Trazer a base do sistema antigo — SPEC §5.8.
@@ -72,6 +74,8 @@ const ERRO: Record<string, string> = {
   nao_aplicada: 'Esta importação ainda não foi aplicada.',
   tem_movimento:
     'Não dá para desfazer: alguém que entrou por esta importação já marcou horário, abriu comanda ou entrou na fila.',
+  conflito_invalido: 'Escolha um dos dois cadastros antes de confirmar.',
+  conflito_nao_encontrado: 'Este conflito já foi resolvido ou o preview venceu. Recarregue a página.',
   nao_encontrada: 'Essa importação não existe mais.',
   ja_usado: 'Esse endereço já é de outra barbearia. Escolha outro.',
   ja_e_seu: 'Esse endereço já leva para cá.',
@@ -284,6 +288,12 @@ export default async function ImportarPage({ searchParams }: Props) {
         </div>
       ) : null}
 
+      {query['conflito'] ? (
+        <div className="ui-alert ui-alert--success" role="status">
+          Escolha salva. Este celular já tem um cadastro definido para a importação.
+        </div>
+      ) : null}
+
       {/* Passo 1 — o arquivo. */}
       {podeImportar ? (
       <section className="importar__bloco">
@@ -377,16 +387,32 @@ export default async function ImportarPage({ searchParams }: Props) {
             </div>
           </dl>
 
-          {emPreview.problemas.length > 0 ? (
-            <>
-              <h3 className="avisos__titulo">O que ficou de fora</h3>
-              <ul className="defeitos">
-                {emPreview.problemas.map((linha) => (
-                  <Problema key={`${linha.linha}-${linha.telefone}`} linha={linha} />
-                ))}
-              </ul>
-            </>
-          ) : null}
+          {(() => {
+            const conflitos = emPreview.problemas
+              .filter((linha) => linha.veredito === 'conflito')
+              .map((linha) => ({
+                linha: linha.linha,
+                nomeAnterior: linha.conflitaCom ?? 'Nome anterior',
+                nomeDaLinha: linha.nome,
+                telefoneMascarado: mascararTelefone(linha.telefone),
+              }));
+            const outros = emPreview.problemas.filter((linha) => linha.veredito !== 'conflito');
+            return (
+              <>
+                <ResolverConflitos conflitos={conflitos} importId={emPreview.id} />
+                {outros.length > 0 ? (
+                  <>
+                    <h3 className="avisos__titulo">O que ainda fica de fora</h3>
+                    <ul className="defeitos">
+                      {outros.map((linha) => (
+                        <Problema key={`${linha.linha}-${linha.telefone}`} linha={linha} />
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </>
+            );
+          })()}
 
           <form action={acaoAplicarImportacao}>
             <input name="id" type="hidden" value={emPreview.id} />

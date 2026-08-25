@@ -1,0 +1,890 @@
+/* ---------------------------------------------------------------------------
+   Segmento e ritmo do cliente (bloco 61, SPEC §4.4)
+
+   O selo é o único lugar do produto onde o rótulo vem colorido, e a cor é o
+   **último** recurso, nunca o primeiro: quem não distingue as cores continua
+   lendo a palavra ao lado, que diz a mesma coisa. Nenhum estado depende só dela.
+--------------------------------------------------------------------------- */
+
+.ritmo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+.ritmo__selo {
+  padding: 2px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.ritmo__texto {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.ritmo__selo--em_risco,
+.segmentos__item--em_risco .segmentos__quantos {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+.ritmo__selo--perdido,
+.segmentos__item--perdido .segmentos__quantos {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.ritmo__selo--vip,
+.segmentos__item--vip .segmentos__quantos {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* A base repartida. `auto-fit` e não uma contagem de colunas: sete grupos em
+   360px precisam caber em duas, e no notebook eles cabem em uma linha só. */
+.segmentos {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--space-2);
+}
+.segmentos__item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+}
+.segmentos__quantos {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.segmentos__rotulo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O cartão inteiro é o alvo, e por isso ele tem o piso de toque — não é link
+   dentro de frase, que a WCAG 2.5.8 isenta, e sim um destino sozinho na linha. */
+.item-cadastro--link {
+  display: grid;
+  gap: var(--space-1);
+  min-height: 44px;
+  align-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+.item-cadastro--link:hover {
+  background: var(--color-surface-hover);
+}
+.cartao-balcao__subtitulo {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Retenção: crescimento, série de faturamento e risco de abandono (bloco 62)
+--------------------------------------------------------------------------- */
+
+.crescimento {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.crescimento__item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+}
+.crescimento__valor {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.crescimento__rotulo { font-size: var(--font-size-sm); }
+.crescimento__aviso { color: var(--color-text-muted); }
+.crescimento__porque {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* A série. `height` no CSS e `viewBox` no SVG: sem os dois o navegador não
+   reserva o espaço e o gráfico empurra o conteúdo ao montar — é a mesma regra
+   da imagem com `aspect-ratio` declarado. */
+.serie { margin: 0 0 var(--space-3); }
+.serie__desenho {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 720 / 200;
+  overflow: visible;
+}
+.serie__linha {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.serie__area { fill: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.serie__eixo { stroke: var(--color-border); stroke-width: 1; }
+.serie__media {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.serie__ponto {
+  fill: var(--color-surface);
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+.serie__ponto--maior { fill: var(--color-accent); }
+.serie__media-rotulo,
+.serie__data {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+}
+.serie__pico {
+  fill: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* O selo de risco. A cor é o último recurso: o rótulo ao lado diz a mesma coisa
+   em palavras, e o número está escrito nele. */
+.risco {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+}
+.risco--medio { color: var(--color-warning); border-color: var(--color-warning); }
+.risco--alto { color: var(--color-danger); border-color: var(--color-danger); }
+
+/* A explicação, aberta. Um acordeão faria a tela ficar bonita e a explicação,
+   opcional — e a SPEC §4.5 chama a explicação de requisito funcional. */
+.motivos {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.motivos__item {
+  position: relative;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.motivos__item::before {
+  content: '·';
+  position: absolute;
+  left: var(--space-2);
+  color: var(--color-accent);
+}
+/* O que segura a pessoa aparece com o sinal trocado, porque é o único motivo da
+   lista que empurra o risco para baixo. */
+.motivos__item--assinatura_ativa::before { content: '+'; color: var(--color-success); }
+
+/* ---------------------------------------------------------------------------
+   A linha do tempo da plataforma (bloco 62)
+
+   A rampa é a mesma do heatmap de ocupação: **um tom só**, do fraco ao forte.
+   Sequencial é uma cor com intensidade variável, nunca um arco-íris — o
+   arco-íris obriga a consultar a legenda para saber se verde é mais que laranja.
+   O contraste dos degraus baixos contra o fundo fica abaixo de 3:1, e é por isso
+   que **toda célula mostra o número**: a cor nunca carrega sozinha o dado.
+--------------------------------------------------------------------------- */
+
+.plataforma__secao { margin-top: var(--space-6); }
+
+.mrr {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-block-size: 180px;
+}
+.mrr__mes {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  align-items: end;
+  justify-items: center;
+  gap: var(--space-1);
+  min-inline-size: 3.5rem;
+  block-size: 180px;
+}
+.mrr__valor {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 4px de raio só no topo: a ponta do dado é arredondada, a base fica ancorada
+   na linha de zero. Uma barra arredondada nas quatro pontas flutua. */
+.mrr__barra {
+  inline-size: 1.75rem;
+  border-radius: 4px 4px 0 0;
+  background: var(--color-accent);
+  align-self: end;
+}
+.mrr__rotulo { font-size: var(--font-size-xs); }
+.mrr__quantas {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.safras { border-collapse: separate; border-spacing: 2px; white-space: nowrap; }
+.safras__legenda {
+  caption-side: bottom;
+  padding-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: left;
+  white-space: normal;
+  max-width: var(--size-readable);
+}
+.safras th {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+}
+.safras__celula,
+.safras__fora {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+}
+/* Célula fora da curva: a safra de dois meses atrás não tem o mês +5 ainda.
+   "Ainda não aconteceu" não é "todos saíram", e pintá-la seria mentir. */
+.safras__fora { background: transparent; }
+.safras__celula--baixa { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.safras__celula--media { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+.safras__celula--alta {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---------------------------------------------------------------------------
+   O assistente (bloco 64). Sem chat: um campo, uma resposta e o link de conferir.
+--------------------------------------------------------------------------- */
+
+.pergunta { margin-bottom: var(--space-4); }
+/* Empilha no celular e fica lado a lado quando há espaço — `min-width` como
+   toda media query de layout deste arquivo. */
+.pergunta__linha { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+@media (min-width: 480px) {
+  .pergunta__linha { grid-template-columns: 1fr auto; align-items: start; }
+}
+
+.resposta__rotulo {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.resposta__numero {
+  margin: var(--space-1) 0;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.resposta__periodo {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.resposta__fatias { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-1); }
+.resposta__fatia {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.sugestoes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+/* O alvo é o cartão inteiro, com o piso de toque: sugestão é destino sozinho na
+   linha, e a isenção da WCAG 2.5.8 vale só para link dentro de frase. */
+.sugestoes__item { display: flex; min-height: 44px; align-items: center; text-align: left; }
+
+/* -- Clientes que a busca trouxe (bloco 72) -------------------------------- */
+
+.plano__nota { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.plano__aliquota { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.plano__contestar { min-height: 44px; }
+.plano__contestacao { display: grid; gap: var(--space-2); min-width: 14rem; }
+
+/* -- Página pública do barbeiro (bloco 73) --------------------------------- */
+
+.barbeiro { padding-bottom: var(--space-8); }
+.barbeiro__voltar {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-text-muted);
+}
+.barbeiro__topo {
+  display: grid;
+  gap: var(--space-4);
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+.barbeiro__foto {
+  display: block;
+  width: 96px;
+  height: 96px;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+}
+.barbeiro__foto--vazia {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+.barbeiro__nome { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); }
+.barbeiro__numeros { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.barbeiro__nota { color: var(--color-text-primary); font-weight: var(--font-weight-semibold); }
+.barbeiro__sep { opacity: 0.5; }
+
+.barbeiro__bloco { margin-bottom: var(--space-5); }
+.barbeiro__secao {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.barbeiro__especialidades {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.barbeiro__especialidade {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+}
+.barbeiro__bio { margin: 0; color: var(--color-text-muted); }
+
+.barbeiro__acoes { display: grid; gap: var(--space-3); margin-bottom: var(--space-5); }
+.barbeiro__agendar, .barbeiro__acao { min-height: 44px; }
+
+.barbeiro__pendente {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 40em) {
+  /* A foto ao lado do nome quando há largura; empilhada no celular, que é onde
+     o produto começa. */
+  .barbeiro__topo { grid-template-columns: auto 1fr; }
+  .barbeiro__acoes { grid-auto-flow: column; justify-content: start; }
+}
+
+/* -- Página pública do barbeiro, no admin (bloco 73) ----------------------- */
+
+.perfil-publico__nota { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.perfil-publico__campos { border: 0; margin: 0 0 var(--space-3); padding: 0; }
+.perfil-publico__lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+}
+/* 44px como todo alvo de toque, em qualquer largura: a caixa do navegador dá
+   13px, e a medição reprova. */
+.perfil-publico__opcao { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
+.perfil-publico__opcao input { width: 24px; height: 24px; }
+.perfil-publico__acao { min-height: 44px; }
+.perfil-publico__botoes { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+/* -- Portfólio do barbeiro (bloco 74) -------------------------------------- */
+
+.portfolio {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+}
+.portfolio__item { position: relative; }
+.portfolio__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+.portfolio__legenda {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 40em) {
+  .portfolio { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* -- Fotos do cliente, na ficha (bloco 74) --------------------------------- */
+
+.fotos__aviso { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.fotos {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, 1fr);
+}
+.fotos__item { display: grid; gap: var(--space-2); }
+.fotos__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+.fotos__tipo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fotos__acoes { display: grid; gap: var(--space-2); }
+.fotos__acao {
+  min-height: 44px;
+  width: 100%;
+  /* O piso de um item de grade é `min-content`, e o dele é a palavra mais
+     comprida do botão. A partir de 40em o cartão vira quatro colunas e as ações
+     viram linha — em 768px os dois botões passavam 24px da borda do `.quadro`,
+     que tem `overflow: hidden` e os cortava (bloco 104). É a mesma armadilha
+     dos seis consertos locais que o design system já absorveu. */
+  min-width: 0;
+}
+.fotos__form { margin-top: var(--space-3); }
+.fotos__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
+.fotos__marca input { width: 24px; height: 24px; }
+.fotos__salvar { min-height: 44px; }
+
+@media (min-width: 40em) {
+  .fotos { grid-template-columns: repeat(4, 1fr); }
+  .fotos__acoes { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+}
+
+/* -- Destaque pago na busca (bloco 75) ------------------------------------- */
+
+/* A borda marca o card pago sem escondê-lo: o rótulo em letras é quem informa,
+   e a cor sozinha não carrega dado — quem tem baixa visão lê a palavra. */
+.casa--patrocinada { border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); }
+.casa__patrocinio {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.destaque-venda { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.destaque-venda__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 60em) {
+  .destaque-venda {
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto;
+    align-items: end;
+  }
+}
+
+/* -- Cardápio padrão da franquia (bloco 76) --------------------------------- */
+
+.padrao-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.padrao-form__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .padrao-form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+}
+
+.padrao-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+/* O número ao lado do título precisa parecer contagem, não parte da frase:
+   "O padrão da rede 3" lê como um nome. */
+.padrao-lista__contagem {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+.padrao-lista__contagem::before { content: '· '; }
+
+.padrao-item {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  /* O recipiente decide o formato, não a janela: esta lista aparece no painel
+     largo e vai aparecer numa coluna estreita quando a franqueadora tiver o
+     painel dela. */
+  container-type: inline-size;
+}
+.padrao-item__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.padrao-item__nome { margin: 0; font-size: var(--font-size-base); }
+.padrao-item__referencia { font-weight: var(--font-weight-semibold); }
+.padrao-item__sobre {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.padrao-item__praticado { margin: var(--space-3) 0 0; font-size: var(--font-size-sm); }
+.padrao-item__praticado--fora { color: var(--color-text-muted); }
+
+/* A distância é informação, não acusação: sem vermelho, sem seta. A franqueada
+   é outra empresa, e o produto não pode dizer que o preço dela está errado. */
+.padrao-item__distancia { color: var(--color-text-muted); }
+.padrao-item__distancia--longe { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+
+.padrao-item__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.padrao-item__acao { min-height: 44px; }
+
+.padrao-vazio { display: grid; gap: var(--space-3); }
+.padrao-vazio__como { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+@container (min-width: 30rem) {
+  .padrao-item__acoes { flex-wrap: nowrap; }
+}
+
+/* -- Franquias, no painel da plataforma (bloco 76) -------------------------- */
+
+.franquia-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.franquia-form__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .franquia-form { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; }
+}
+
+.franquia-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+.franquia {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.franquia__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.franquia__nome { margin: 0; font-size: var(--font-size-base); }
+.franquia__numeros { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.franquia-casas { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.franquia-casa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block: var(--space-1);
+}
+.franquia-casa__nome { font-weight: var(--font-weight-medium); }
+.franquia-casa__papel {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.franquia-casa__papel--dona { color: var(--color-accent); }
+.franquia-casa__desde { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.franquia-casa__acao { min-height: 44px; }
+.franquia-casa__fixa {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.franquia__entrada {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.franquia__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .franquia__entrada { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .franquia__entrada .ui-field__label { grid-column: 1 / -1; }
+}
+
+/* -- Indicadores da rede (bloco 77) ----------------------------------------- */
+
+.franquia-atalho { margin: 0 0 var(--space-4); }
+.franquia-atalho a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-accent);
+}
+
+.rede-numeros { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.rede-numero {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.rede-numero__rotulo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.rede-numero__valor { font-size: var(--font-size-lg); }
+.rede-numero__nota { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+@media (min-width: 40em) {
+  .rede-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 64em) {
+  .rede-numeros { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* "Sem meta" não é zero por cento, e a tela mostra a diferença em letras. */
+.rede-sem-meta { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+.rede-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+}
+.rede-meta__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 40em) {
+  .rede-meta { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .rede-meta__acao { justify-self: end; }
+}
+
+.rede-lugar { margin: 0; display: grid; gap: var(--space-2); }
+.rede-lugar__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Chaves de API (bloco 78) ----------------------------------------------- */
+
+.chave-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.chave-form__acao { min-height: 44px; justify-self: start; }
+
+.chave-escopos {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* 44px como todo alvo de toque: o padrão do navegador dá 13px na caixa, e o
+   alvo é o rótulo inteiro — clicar em qualquer parte dele aciona o controle. */
+.chave-escopo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  font-weight: var(--font-weight-normal);
+}
+/* O identificador é o que o integrador copia, e ele não tem espaço: sem isto,
+   uma permissão mais comprida que `appointments.view_all_professionals` — que
+   já encosta na borda em 390px — passa a cortar. */
+.chave-escopo code { font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+
+.chave-nova { display: grid; gap: var(--space-2); }
+.chave-nova__aviso { margin: 0; }
+.chave-nova__valor {
+  display: block;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+  /* A chave é longa e não tem espaço: sem isto ela estoura o cartão. */
+  overflow-wrap: anywhere;
+}
+
+.chave-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.chave {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.chave--morta { opacity: 0.65; }
+.chave__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.chave__nome { margin: 0; font-size: var(--font-size-base); }
+.chave__prefixo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  /* A URL do webhook não tem espaço para quebrar, e `<code>` não quebra sozinho:
+     em 360px ela empurrava o cartão 43px além da própria lista, e a borda
+     direita saía cortada. É o mesmo `anywhere` de `.numero__valor` e de
+     `.cadeiras-agora__quem`, pelo mesmo motivo (bloco 104). */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.chave__escopos {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.chave__datas { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.chave__revogada { margin: var(--space-3) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.chave__revogar { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.chave__acao { min-height: 44px; justify-self: start; }
+
+@media (min-width: 48em) {
+  .chave-escopos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chave__revogar { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .chave__revogar .ui-field__label { grid-column: 1 / -1; }
+}
+
+/* -- Webhooks para terceiros (bloco 79) ------------------------------------- */
+
+/* O estado da entrega é dito em letras, e a cor só reforça: quem tem baixa
+   visão precisa da palavra, e "falhou" em vermelho sem texto não é informação. */
+.entrega-estado { font-size: var(--font-size-sm); }
+.entrega-estado--entregue { color: var(--color-success); }
+.entrega-estado--pendente { color: var(--color-text-muted); }
+.entrega-estado--falhou,
+.entrega-estado--desistiu { color: var(--color-danger); }
+
+.entrega-motivo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* O que a Meta respondeu, dentro do aviso de recusa.
+
+   Menor e recuado, porque é a fala de outro sistema e não a nossa: quem lê
+   precisa distinguir o que o produto diz do que a Meta disse — e a frase dela
+   vem em inglês, às vezes com o nome do número dentro. */
+.whatsapp__motivo {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+/* O caminho para resolver, embaixo da frase de quem recusou.
+
+   Sem opacidade e um pouco mais forte que o motivo: o motivo explica, esta
+   linha é o que a pessoa vai fazer em seguida. Hierarquia por peso antes de
+   cor, como em todo o resto. */
+.whatsapp__caminho {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* -- documento legal (bloco 89) ---------------------------------------------
+
+   A política de privacidade precisa de **URL pública** para a App Review da
+   Meta, e é o texto que o cliente da barbearia lê quando quer saber quem guarda
+   o telefone dele. Duas leituras diferentes, um documento longo, e o que decide
+   se ele é lido é a medida da linha.
+
+   `ch` e não `px`: a medida confortável de leitura é contada em caracteres, não
+   em pixels, e é a única unidade que acompanha o tamanho de fonte de quem
+   aumentou a letra do navegador. `min()` com a largura disponível mantém o piso
+   de 360px intacto sem media query — a regra do repositório é que `max-width`
+   de layout inverte a ordem de trabalho, e aqui não é preciso nenhuma das duas.
+
+   Sem `overflow-x: clip` nesta página: é justamente o recorte silencioso que
+   esconde transbordo da medição, e um documento de texto não tem o que
+   recortar. */
+.legal {
+  max-width: min(68ch, 100%);
+  padding-block: var(--space-7) var(--space-9);
+}
+.legal__titulo {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  line-height: 1.15;
+}
+.legal__meta {
+  margin: 0 0 var(--space-7);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+/* Hierarquia por tamanho e peso antes de cor: o título de seção é o que a
+   pessoa varre procurando "por quanto tempo" e "meus direitos". */
+.legal__secao {
+  margin: var(--space-7) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+}
+.legal p {
+  margin: 0 0 var(--space-4);
+  line-height: 1.65;
+}
+.legal__lista {
+  margin: 0 0 var(--space-4);
+  padding-inline-start: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+  line-height: 1.65;
+}
+.legal a {
+  color: var(--color-accent);
+}
+

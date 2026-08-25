@@ -62,7 +62,6 @@ interface CreateBody {
   serviceIds: string[];
   date: string;
   start: string;
-  holdId?: string;
   notes?: string;
   origem?: string;
 }
@@ -127,7 +126,6 @@ export class GuestAppointmentsController {
         source: body.origem && conferirOrigem(body.origem, slug, new Date())
           ? 'marketplace'
           : 'website',
-        ...(body.holdId ? { holdId: body.holdId } : {}),
         ...(body.notes ? { notes: body.notes } : {}),
         ...(idempotencyKey ? { idempotencyKey } : {}),
       });

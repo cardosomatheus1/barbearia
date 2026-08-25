@@ -1,0 +1,32 @@
+BARBERDOCK — MELHORIA DE NOTAS — BLOCO 6 E2E — 2026-08-24
+
+ACHADO
+- `balcão fecha uma venda` era falso positivo: abrir /admin/comanda sem vender podia passar.
+
+CORRIGIDO
+- abre/confere caixa pela tela;
+- abre comanda avulsa;
+- adiciona item R$ 37,90;
+- recebe R$ 50,00 em dinheiro;
+- confere troco R$ 12,10 na interface;
+- confere order/order_items/order_payments/cash_movements no banco;
+- fecha o mesmo caixa;
+- exige divergência zero no banco e confirmação visual.
+
+GUARDA
+- verificar-percurso-venda-e2e.mjs: OK.
+- testes negativos da guarda: 4/4.
+- incorporada ao verify.sh.
+
+ACHADO SECUNDARIO
+- teste negativo R8 estava preso à copy antiga do WhatsApp.
+- corrigido; R8 testes negativos: 4/4.
+
+VALIDACAO LOCAL
+- verificar-*.mjs aplicáveis: 34/34 OK.
+- 1 teste não executado: verificar-r11-modulos.test.mjs, depende de vitest ausente.
+- sintaxe percorrer.mjs: OK.
+- sintaxe verify.sh: OK.
+
+LIMITACAO
+- E2E real não executou: PostgreSQL/psql continuam ausentes neste runtime.

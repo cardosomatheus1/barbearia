@@ -1,18 +1,19 @@
 import { redirect } from 'next/navigation';
-import { casaDoPapel, painelOuDesvio } from '@/lib/painel';
+import { destinoInicialDoPainel, painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 
 /**
  * Porta do painel.
  *
- * Quem não entrou vai ao login. Quem entrou vai para **a casa do papel dele**:
- * o barbeiro para a própria agenda, o resto para o onboarding — que é onde o
- * dono continua o cadastro e de onde ele alcança tudo.
+ * Quem não entrou vai ao login. Quem entrou vai para a porta do próprio papel:
+ * barbeiro em Meu dia, recepção e gerência em Hoje, dono no Painel. Cadastro
+ * ainda não publicado continua no onboarding, porque setup incompleto vem antes
+ * da rotina diária. A decisão mora em `destinoInicialDoPainel`, não nesta rota.
  */
 export default async function AdminPage() {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
-  redirect(estado.staff.role === 'professional' ? casaDoPapel(estado) : '/admin/onboarding');
+  redirect(destinoInicialDoPainel(estado));
 }

@@ -323,6 +323,12 @@ describeIfDb('direitos do titular', () => {
       ['professionals', 'telefone de quem trabalha na casa'],
       ['staff_users', 'telefone de quem trabalha na casa'],
       ['otp_challenges', 'credencial viva de 5 minutos, como customer_sessions — e apagada por anonimizar_cliente'],
+      // Estado operacional de deduplicação: guardam o vínculo e o estado do
+      // envio, nunca o texto nem o telefone. O que o titular levaria daqui é
+      // "uma mensagem foi tentada", que já está no que a exportação traz do
+      // atendimento. E as duas somem em `anonimizar_cliente` (migração 0117).
+      ['whatsapp_manual_send_intents', 'intenção de envio: vínculo e estado, sem conteúdo — apagada por anonimizar_cliente'],
+      ['notification_send_intents', 'idem: idempotência do aviso automático, sem conteúdo'],
     ]);
 
     /**

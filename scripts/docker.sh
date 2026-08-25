@@ -32,11 +32,13 @@ if [ ! -f .env ]; then
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
 APP_DB_PASSWORD=$(openssl rand -hex 16)
 STAFF_EMAIL_PEPPER=$(openssl rand -hex 32)
+OTP_PEPPER=$(openssl rand -hex 32)
 MARKETPLACE_ORIGIN_SECRET=$(openssl rand -hex 32)
 API_KEY_PEPPER=$(openssl rand -hex 32)
 MFA_SECRET_KEY=$(openssl rand -base64 32)
 WEBHOOK_SECRET_KEY=$(openssl rand -base64 32)
 WHATSAPP_TOKEN_KEY=$(openssl rand -base64 32)
+KYC_INTENT_HMAC_SECRET=$(openssl rand -hex 32)
 ENV
   chmod 600 .env
   echo "segredos sorteados em .env"

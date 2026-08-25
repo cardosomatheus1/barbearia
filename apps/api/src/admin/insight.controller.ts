@@ -66,7 +66,7 @@ import { unidadeDoBalcao } from './unidade.js';
 @Controller('v1/admin/insights')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class InsightController {
-  @Exige('appointments.view_all_professionals', 'customers.view', 'finance.view', 'inventory.view')
+  @Exige('appointments.view_all_professionals', 'customers.view', 'customers.view_notes', 'finance.view', 'inventory.view')
   @Get()
   async insights(@Staff() staff: AuthenticatedStaff) {
     const local = await unidadeDoBalcao(staff);

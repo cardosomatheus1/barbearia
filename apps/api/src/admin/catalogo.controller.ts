@@ -2,7 +2,6 @@ import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/comm
 import {
   CatalogError,
   definirPerfilPublico,
-  conflitosDaJornada,
   createProfessional,
   createService,
   getSchedule,
@@ -10,7 +9,7 @@ import {
   listResources,
   listServices,
   saveResources,
-  saveSchedule,
+  saveScheduleWithConflicts,
   setProfessionalActive,
   setServiceActive,
   setServiceResources,
@@ -46,6 +45,7 @@ const STATUS: Record<string, number> = {
   category_not_found: 404,
   name_taken: 409,
   invalid_catalog: 422,
+  location_not_found: 404,
 };
 
 function toHttp(error: unknown): never {
@@ -280,7 +280,7 @@ export class CatalogoController {
   ) {
     try {
       const local = await this.unidade(staff);
-      const conflitos = await conflitosDaJornada({
+      return await saveScheduleWithConflicts({
         // Redigir e nao recusar: `settings.manage` e permissao de cadastro, e
         // quem nao tem `customers.view` le quantos e quando, nao os nomes.
         podeVerCliente: pode(staff.permissions, 'customers.view'),
@@ -288,19 +288,8 @@ export class CatalogoController {
         locationId: local.id,
         professionalId: id,
         faixas: body.faixas,
+        confirmarConflitos: body.confirmarConflitos,
       });
-
-      if (conflitos.length > 0 && !body.confirmarConflitos) {
-        return { saved: false, conflitos };
-      }
-
-      await saveSchedule({
-        tenantId: staff.tenantId,
-        locationId: local.id,
-        professionalId: id,
-        faixas: body.faixas,
-      });
-      return { saved: true, conflitos };
     } catch (error) {
       return toHttp(error);
     }

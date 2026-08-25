@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { FakeMessagingProvider, ConsoleMessagingProvider } from './messaging.js';
+import { FakeMessagingProvider, ConsoleMessagingProvider, type MessagingProvider } from './messaging.js';
 import {
   OTP_MAX_ATTEMPTS,
   OtpError,
@@ -100,6 +100,31 @@ describeIfDb('OTP', () => {
   it('recusa telefone inválido', async () => {
     await expect(send({ phone: 'abc' })).rejects.toMatchObject({ code: 'invalid_phone' });
     await expect(send({ phone: '20988887777' })).rejects.toMatchObject({ code: 'invalid_phone' });
+  });
+
+  it('falha do provedor preserva o código anterior e não consome o reenvio', async () => {
+    await send();
+    const anterior = codeFor();
+    const falha: MessagingProvider = {
+      async sendOtp() { throw new Error('provedor fora'); },
+      async sendStaffPassword() { throw new Error('provedor fora'); },
+    };
+
+    await expect(
+      requestOtp(
+        {
+          tenantId: TENANT, establishmentName: 'Domari', phone: PHONE,
+          now: new Date(AGORA.getTime() + 31_000),
+        },
+        falha,
+      ),
+    ).rejects.toThrow('provedor fora');
+
+    const sessao = await verifyOtp({
+      tenantId: TENANT, phone: PHONE, code: anterior,
+      now: new Date(AGORA.getTime() + 32_000),
+    });
+    expect(sessao.customerName).toBe('Carlos Souza');
   });
 
   // -- cooldown --------------------------------------------------------------

@@ -78,4 +78,12 @@ describe('endereço de imagem — limites do formato', () => {
       expect(imagemPublica(bruto), bruto).toBe(bruto);
     }
   });
+  it('aceita somente o caminho fechado do armazenamento próprio', () => {
+    expect(imagemPublica('/media/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp')).toBe(
+      '/media/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp',
+    );
+    expect(imagemPublica('/media/../../etc/passwd')).toBeNull();
+    expect(imagemPublica('/qualquer/foto.webp')).toBeNull();
+  });
+
 });

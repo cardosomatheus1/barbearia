@@ -193,6 +193,8 @@ describeIfDb('a ficha do cliente', () => {
     const ficha = await lerFicha(TENANT, CARLOS);
     expect(ficha.visitas).toBe(1);
     expect(ficha.desde?.slice(0, 10)).toBe('2026-05-10');
+    // Falta posterior continua no histórico, mas não pode virar "última visita".
+    expect(ficha.ultimaVisita?.slice(0, 10)).toBe('2026-05-10');
   });
 
   it('a linha do tempo tem teto', async () => {

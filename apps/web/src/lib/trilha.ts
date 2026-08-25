@@ -87,6 +87,7 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'commission.rule_changed': 'mudou a regra de comissão de',
 
   'import.applied': 'trouxe a base do sistema antigo',
+  'import.conflict_resolved': 'resolveu um conflito da importação',
   'import.reverted': 'desfez a importação da base',
   // LGPD (bloco 31). O verbo diz quem decidiu: a barbearia **registrou** o que
   // o cliente disse no balcão — a decisão tomada pelo próprio titular na conta

@@ -367,6 +367,7 @@ describeIfDb('cobrança da assinatura', () => {
 
   it('subir de plano emite o acerto do que falta do período', async () => {
     const { rateio, faturaId } = await trocarPlanoPeloDono({
+        idempotencyKey: 'audit-test-trocarPlanoPeloDono-1',
       tenantId: DOMARI,
       planoCode: 'business',
       agora: depois(-7),
@@ -387,6 +388,7 @@ describeIfDb('cobrança da assinatura', () => {
     `);
 
     const { rateio, faturaId } = await trocarPlanoPeloDono({
+        idempotencyKey: 'audit-test-trocarPlanoPeloDono-2',
       tenantId: DOMARI,
       planoCode: 'pro',
       agora: depois(-7),
@@ -412,19 +414,22 @@ describeIfDb('cobrança da assinatura', () => {
     expect(planos.find((p) => p.code === 'starter')?.impedimento).toContain('3 cadeiras');
 
     await expect(
-      trocarPlanoPeloDono({ tenantId: DOMARI, planoCode: 'starter', agora: depois(-7) }),
+      trocarPlanoPeloDono({
+        idempotencyKey: 'audit-test-trocarPlanoPeloDono-3', tenantId: DOMARI, planoCode: 'starter', agora: depois(-7) }),
     ).rejects.toMatchObject({ code: 'chairs_exceed_plan' });
   });
 
   it('o dono não contrata o plano que é vendido por conversa', async () => {
     await expect(
-      trocarPlanoPeloDono({ tenantId: DOMARI, planoCode: 'enterprise', agora: depois(-7) }),
+      trocarPlanoPeloDono({
+        idempotencyKey: 'audit-test-trocarPlanoPeloDono-4', tenantId: DOMARI, planoCode: 'enterprise', agora: depois(-7) }),
     ).rejects.toMatchObject({ code: 'plan_not_self_service' });
   });
 
   it('trocar para o plano em que já se está é recusado', async () => {
     await expect(
-      trocarPlanoPeloDono({ tenantId: DOMARI, planoCode: 'pro', agora: depois(-7) }),
+      trocarPlanoPeloDono({
+        idempotencyKey: 'audit-test-trocarPlanoPeloDono-5', tenantId: DOMARI, planoCode: 'pro', agora: depois(-7) }),
     ).rejects.toMatchObject({ code: 'same_plan' });
   });
 

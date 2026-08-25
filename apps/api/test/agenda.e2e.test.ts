@@ -213,6 +213,8 @@ describeIfDb('agenda do admin pela HTTP', () => {
     expect(agenda.body.days[0].entries).toHaveLength(1);
     expect(agenda.body.days[0].entries[0].customerName).toBe('João da Silva');
     expect(agenda.body.professionals.length).toBe(2);
+    expect(agenda.body.days[0].workingDays).toHaveLength(2);
+    expect(agenda.body.days[0].workingDays[0]).toHaveProperty('working');
   });
 
   it('a semana são sete dias na mesma consulta', async () => {

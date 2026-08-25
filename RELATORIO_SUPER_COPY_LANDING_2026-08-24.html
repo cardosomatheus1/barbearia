@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório de copy</title>
+<style>
+  :root { --papel:#faf8f4; --tinta:#20242c; --sec:#5c6470; --borda:#e3ded4;
+           --carta:#fff; --ruim:#b3403c; --bom:#0a7a52; --fundo-ruim:#faf0ef;
+           --fundo-bom:#edf7f2 }
+  * { box-sizing:border-box; margin:0 }
+  body { background:var(--papel); color:var(--tinta);
+          font:16px/1.55 system-ui,-apple-system,sans-serif; padding:48px 24px }
+  main { max-width:880px; margin:0 auto }
+  h1 { font-size:34px; letter-spacing:-.02em }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.08em;
+        color:var(--sec); margin:40px 0 16px }
+  .sub { color:var(--sec); margin-top:6px }
+  .notas { display:flex; align-items:center; gap:18px; margin:28px 0 8px }
+  .nota { background:var(--carta); border:1px solid var(--borda); border-radius:14px;
+           padding:14px 22px; text-align:center; color:var(--sec); font-size:12px }
+  .nota span { display:block; font-size:30px; font-weight:700; color:var(--ruim) }
+  .nota.boa span { color:var(--bom) }
+  .seta { font-size:22px; color:var(--sec) }
+  .percepcoes { padding-left:20px; display:flex; flex-direction:column; gap:6px }
+  .troca { background:var(--carta); border:1px solid var(--borda); border-radius:14px;
+            padding:18px; margin-bottom:14px }
+  .par { display:grid; grid-template-columns:1fr 1fr; gap:12px }
+  @media (max-width:640px) { .par { grid-template-columns:1fr } }
+  .antes, .depois { border-radius:10px; padding:12px 14px; font-size:15px }
+  .antes { background:var(--fundo-ruim); text-decoration:line-through;
+            text-decoration-color:rgba(179,64,60,.4); text-decoration-thickness:1px }
+  .depois { background:var(--fundo-bom); font-weight:600 }
+  .rotulo { display:block; font-size:10.5px; text-transform:uppercase;
+             letter-spacing:.08em; color:var(--sec); margin-bottom:5px;
+             font-weight:400; text-decoration:none }
+  .motivo { margin-top:10px; font-size:13.5px; color:var(--sec) }
+  .onde { background:#f3f0e9; border-radius:6px; padding:1px 7px; font-size:12px }
+  .vazio { color:var(--sec) }
+  footer { margin-top:40px; color:var(--sec); font-size:13px }
+</style>
+</head>
+<body>
+<main>
+  <h1>Relatório de copy</h1>
+  <p class="sub">59 linha(s) reescrita(s) — apps/web/src/app/page.tsx</p>
+  <div class="notas">
+  <div class="nota"><span>4/5</span>antes</div>
+  <div class="seta">→</div>
+  <div class="nota boa"><span>5/5</span>depois</div>
+</div>
+  <section>
+  <h2>O que o scanner percebeu</h2>
+  <ul class="percepcoes"><li>A leitura de 8 segundos dependia de títulos-rótulo como “Painel”, “O dia” e “Marcar”.</li>
+<li>Hero “Seu porto seguro na gestão” era memorável como marca, mas pouco específico para tráfego frio.</li>
+<li>Três pedidos diferentes apareciam na primeira faixa: Entrar, Criar conta e Abrir minha barbearia.</li>
+<li>O placar misturava prova comercial com métricas internas de engenharia; “0 kB” não correspondia à medição real do bundle público.</li>
+<li>A frase “Metade de quem entra...” não tinha origem explícita na página e foi removida.</li>
+<li>A página final passa no anti-genérico 5/5 e o scanner de persuasão não aponta falha estrutural.</li></ul>
+</section>
+  <section>
+    <h2>Cada troca, antes → depois</h2>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Barber Dock — o porto da sua barbearia</div>
+    <div class="depois"><span class="rotulo">depois</span>Barber Dock — agenda, caixa e gestão para barbearias</div>
+  </div>
+  <div class="motivo">Título de busca passa a dizer categoria e funções concretas, em vez de depender da metáfora da marca. <code class="onde">metadata.title</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar, comanda, caixa, fiado e comissão. Feito a partir do que quebra numa barbearia de verdade.</div>
+    <div class="depois"><span class="rotulo">depois</span>Agenda por duração real, fila de espera, comanda, caixa, fiado e comissão para barbearias. Importe sua base de clientes por planilha e trabalhe no navegador.</div>
+  </div>
+  <div class="motivo">Descrição troca tese interna de produto por funções e uma facilidade verificável de adoção. <code class="onde">metadata.description</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Sistema de gestão</div>
+    <div class="depois"><span class="rotulo">depois</span>Gestão para barbearias</div>
+  </div>
+  <div class="motivo">Especifica para quem é o produto já na marca. <code class="onde">.lp-marca__nome small</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Telas</div>
+    <div class="depois"><span class="rotulo">depois</span>Telas reais</div>
+  </div>
+  <div class="motivo">Diz que o visitante verá o produto, não uma seção genérica. <code class="onde">.lp-nav__links a[href=&quot;#telas&quot;]</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Recursos</div>
+    <div class="depois"><span class="rotulo">depois</span>Rotina</div>
+  </div>
+  <div class="motivo">Fala a linguagem da operação, não a de software. <code class="onde">.lp-nav__links a[href=&quot;#recursos&quot;]</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O que quebra</div>
+    <div class="depois"><span class="rotulo">depois</span>Problemas</div>
+  </div>
+  <div class="motivo">Encurta o rótulo sem perder a promessa da seção. <code class="onde">.lp-nav__links a[href=&quot;#campo&quot;]</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Criar conta</div>
+    <div class="depois"><span class="rotulo">depois</span>Criar minha conta</div>
+  </div>
+  <div class="motivo">CTA deixa claro que a próxima ação cria a conta do visitante. <code class="onde">.lp-nav__acoes .ui-button--primary</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>ERP para barbearia</div>
+    <div class="depois"><span class="rotulo">depois</span>Gestão para barbearias</div>
+  </div>
+  <div class="motivo">Remove jargão técnico e mantém a categoria explícita. <code class="onde">.lp-selo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Seu porto seguro na gestão</div>
+    <div class="depois"><span class="rotulo">depois</span>Horários que cabem no dia. Caixa que fecha sem adivinhar.</div>
+  </div>
+  <div class="motivo">O hero sai de uma metáfora vaga e abre com dois ganhos operacionais reconhecíveis. <code class="onde">.lp-heroi__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar, comanda, caixa, fiado e comissão. Construído a partir do que quebra numa barbearia de verdade — não do que cabe numa apresentação.</div>
+    <div class="depois"><span class="rotulo">depois</span>O Barber Dock calcula a agenda pela duração real do serviço, mostra quem chegou, abre comanda, registra fiado e fecha comissão. Menos ajuste manual quando o movimento aperta.</div>
+  </div>
+  <div class="motivo">Explica o mecanismo e o efeito na rotina, em vez de terminar numa tese de engenharia. <code class="onde">.lp-heroi__texto</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Abrir minha barbearia</div>
+    <div class="depois"><span class="rotulo">depois</span>Criar minha conta</div>
+  </div>
+  <div class="motivo">Evita parecer que o clique abre um novo negócio; nomeia o passo real. <code class="onde">.lp-heroi__acoes .ui-button--primary</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Ver o que costuma quebrar</div>
+    <div class="depois"><span class="rotulo">depois</span>Ver os 6 problemas tratados</div>
+  </div>
+  <div class="motivo">O link passa a prometer um destino quantificado e específico. <code class="onde">.lp-heroi__acoes .lp-link</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Sem instalação — abre no navegador</div>
+    <div class="depois"><span class="rotulo">depois</span>Abre no navegador, sem instalar app</div>
+  </div>
+  <div class="motivo">Começa pelo fato concreto e elimina cadência publicitária. <code class="onde">.lp-provas li:nth-child(1)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Traz sua base de clientes por planilha</div>
+    <div class="depois"><span class="rotulo">depois</span>Importa sua base de clientes por planilha</div>
+  </div>
+  <div class="motivo">Verbo descreve a ação real do produto. <code class="onde">.lp-provas li:nth-child(2)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Cada barbearia isolada no banco</div>
+    <div class="depois"><span class="rotulo">depois</span>Dados de cada barbearia isolados no banco</div>
+  </div>
+  <div class="motivo">Explica o que é isolado, não apenas a entidade. <code class="onde">.lp-provas li:nth-child(3)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Agenda · Fila de espera · Comanda · Caixa · Fiado · Comissão · Avisos no WhatsApp...</div>
+    <div class="depois"><span class="rotulo">depois</span>Agenda por duração real · Fila de espera · Comanda e caixa · Fiado registrado · Comissão com período fechado · Lembretes no WhatsApp...</div>
+  </div>
+  <div class="motivo">A faixa deixa de listar nomes de módulos e passa a carregar diferenças operacionais. <code class="onde">.lp-faixa__grupo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Blocos entregues — 22</div>
+    <div class="depois"><span class="rotulo">depois</span>Telas reais do produto — 5</div>
+  </div>
+  <div class="motivo">Troca métrica interna de desenvolvimento por prova visual que o visitante pode conferir na própria página. <code class="onde">.lp-placar__item:nth-child(1)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Problemas levantados em operação real — 12</div>
+    <div class="depois"><span class="rotulo">depois</span>Problemas operacionais detalhados — 6</div>
+  </div>
+  <div class="motivo">O placar passa a contar o que a landing realmente mostra, evitando depender de uma prova externa para entender o número. <code class="onde">.lp-placar__item:nth-child(2)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Piso de tela conferido — 360px</div>
+    <div class="depois"><span class="rotulo">depois</span>Etapas no cadastro inicial — 6</div>
+  </div>
+  <div class="motivo">Substitui métrica técnica de viewport por informação de adoção mais útil comercialmente. <code class="onde">.lp-placar__item:nth-child(3)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>JavaScript no celular do cliente — 0 kB</div>
+    <div class="depois"><span class="rotulo">depois</span>Apps para o cliente instalar — 0</div>
+  </div>
+  <div class="motivo">Corrige uma alegação incompatível com a medição de bundle e preserva o benefício verdadeiro: o cliente usa o navegador. <code class="onde">.lp-placar__item:nth-child(4)</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Por dentro do sistema</div>
+    <div class="depois"><span class="rotulo">depois</span>Veja antes de trocar</div>
+  </div>
+  <div class="motivo">Enquadra a seção como redução de risco para quem está comparando sistemas. <code class="onde">#telas .lp-sobrancelha</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Veja o Barber Dock funcionando</div>
+    <div class="depois"><span class="rotulo">depois</span>Cinco telas reais, do painel do dono à comanda do balcão</div>
+  </div>
+  <div class="motivo">Título diz quantidade e amplitude do que será mostrado. <code class="onde">#telas .lp-titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Fotos do produto rodando, com a barbearia de demonstração que acompanha o código — os números são os que o motor calculou. Deslize para o lado, ou use os atalhos.</div>
+    <div class="depois"><span class="rotulo">depois</span>São telas do produto rodando com a barbearia de demonstração. Você vê o que o balcão usa, o que o cliente recebe e o que o dono acompanha.</div>
+  </div>
+  <div class="motivo">Remove linguagem de repositório/código e orienta o visitante sobre o que avaliar. <code class="onde">#telas .lp-intro</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Painel</div>
+    <div class="depois"><span class="rotulo">depois</span>Painel: o que merece atenção hoje</div>
+  </div>
+  <div class="motivo">O título da tela passa a explicar o ganho do dono. <code class="onde">#telas .lp-telas__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O dia</div>
+    <div class="depois"><span class="rotulo">depois</span>O dia: quem chegou, atrasou e ainda falta</div>
+  </div>
+  <div class="motivo">O título passa a revelar o trabalho da tela. <code class="onde">#telas .lp-telas__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Marcar</div>
+    <div class="depois"><span class="rotulo">depois</span>Marcar: só aparecem horários que cabem</div>
+  </div>
+  <div class="motivo">Expõe a diferença da agenda já no título. <code class="onde">#telas .lp-telas__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Pelo cliente</div>
+    <div class="depois"><span class="rotulo">depois</span>Cliente: agenda pelo link, sem instalar app</div>
+  </div>
+  <div class="motivo">Transforma um rótulo interno em benefício para o cliente final. <code class="onde">#telas .lp-telas__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Comanda</div>
+    <div class="depois"><span class="rotulo">depois</span>Comanda: o atendimento já nasce com o combinado</div>
+  </div>
+  <div class="motivo">Mostra por que a comanda reduz retrabalho no balcão. <code class="onde">#telas .lp-telas__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O que o sistema faz</div>
+    <div class="depois"><span class="rotulo">depois</span>Da agenda ao dinheiro</div>
+  </div>
+  <div class="motivo">Troca rótulo de pasta por uma ideia de fluxo completo. <code class="onde">#recursos .lp-sobrancelha</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Do primeiro horário ao fechamento do caixa</div>
+    <div class="depois"><span class="rotulo">depois</span>O que acontece no balcão já chega ao caixa</div>
+  </div>
+  <div class="motivo">Expõe o benefício de integração entre operação e financeiro. <code class="onde">#recursos .lp-titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Cinco frentes que uma barbearia usa todo dia, integradas — não módulos vendidos separados que não conversam entre si.</div>
+    <div class="depois"><span class="rotulo">depois</span>Agenda, fila, comanda, fiado e comissão usam a mesma operação. O dado não precisa ser refeito em outra planilha no fechamento.</div>
+  </div>
+  <div class="motivo">Substitui comparação genérica por consequência operacional concreta. <code class="onde">#recursos .lp-intro</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O horário existe porque cabe</div>
+    <div class="depois"><span class="rotulo">depois</span>Cada serviço abre o espaço que realmente precisa</div>
+  </div>
+  <div class="motivo">Explica o mecanismo da agenda em linguagem do usuário. <code class="onde">#recursos .lp-bento__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Quem chegou sem marcar</div>
+    <div class="depois"><span class="rotulo">depois</span>Encaixe sem empurrar o resto do dia</div>
+  </div>
+  <div class="motivo">Transforma descrição de situação em benefício operacional. <code class="onde">#recursos .lp-bento__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Comanda, caixa e fiado</div>
+    <div class="depois"><span class="rotulo">depois</span>Saiba o que entrou, saiu e ficou para depois</div>
+  </div>
+  <div class="motivo">O título fala da pergunta financeira que o dono quer responder. <code class="onde">#recursos .lp-bento__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Fecha e congela</div>
+    <div class="depois"><span class="rotulo">depois</span>Fechou a comissão, o histórico não muda</div>
+  </div>
+  <div class="motivo">Explica a segurança do fechamento sem jargão técnico. <code class="onde">#recursos .lp-bento__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Lembrete que respeita a noite</div>
+    <div class="depois"><span class="rotulo">depois</span>Lembrete sem mensagem de madrugada</div>
+  </div>
+  <div class="motivo">Torna o benefício concreto e fácil de visualizar. <code class="onde">#recursos .lp-bento__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O que costuma quebrar</div>
+    <div class="depois"><span class="rotulo">depois</span>Problemas que viraram regra do produto</div>
+  </div>
+  <div class="motivo">Conecta os achados diretamente às decisões de produto. <code class="onde">#campo .lp-sobrancelha</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Seis coisas que a gente mediu, não imaginou</div>
+    <div class="depois"><span class="rotulo">depois</span>Seis falhas de operação que o Barber Dock trata na origem</div>
+  </div>
+  <div class="motivo">O título sai do protagonismo da equipe e volta para a dor do comprador. <code class="onde">#campo .lp-titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Antes da primeira linha de código, doze problemas foram levantados dentro de uma barbearia em funcionamento — com cronômetro, não com suposição. Eles não são de um software: são o que se repete na categoria. Seis estão abaixo, com o que cada um custa no dia e o que fazemos diferente.</div>
+    <div class="depois"><span class="rotulo">depois</span>Doze problemas foram levantados dentro de uma barbearia em funcionamento antes da primeira linha de código. Abaixo estão seis deles, com o efeito no dia e a regra criada para evitar que o mesmo problema seja aceito como normal.</div>
+  </div>
+  <div class="motivo">Mantém a origem da prova, corta tom defensivo e prepara a leitura problema → regra. <code class="onde">#campo .lp-intro</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>A grade é fixa de 15 em 15, independente do serviço.</div>
+    <div class="depois"><span class="rotulo">depois</span>Grade fixa de 15 em 15 desperdiça os minutos que não cabem no bloco.</div>
+  </div>
+  <div class="motivo">Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria. <code class="onde">#campo [data-area=&quot;Agenda&quot;] .problema</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>&quot;Cabelo + Barba&quot; cadastrado com 30 min, quando as partes somam 40.</div>
+    <div class="depois"><span class="rotulo">depois</span>Um combo cadastrado com 30 min, quando as partes somam 40, coloca atraso dentro do próprio cadastro.</div>
+  </div>
+  <div class="motivo">Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria. <code class="onde">#campo [data-area=&quot;Cardápio&quot;] .problema</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O horário mostrado vem do relógio do aparelho de quem acessa.</div>
+    <div class="depois"><span class="rotulo">depois</span>O horário da unidade não pode depender do relógio do aparelho de quem acessa.</div>
+  </div>
+  <div class="motivo">Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria. <code class="onde">#campo [data-area=&quot;Fuso&quot;] .problema</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>É preciso escolher o profissional antes de ver qualquer horário.</div>
+    <div class="depois"><span class="rotulo">depois</span>Quem quer o primeiro horário livre não deveria abrir um profissional por vez.</div>
+  </div>
+  <div class="motivo">Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria. <code class="onde">#campo [data-area=&quot;Escolha&quot;] .problema</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>A página de agendamento não traz endereço, mapa, telefone nem horário.</div>
+    <div class="depois"><span class="rotulo">depois</span>Endereço, telefone e horário de funcionamento não deveriam ficar separados do agendamento.</div>
+  </div>
+  <div class="motivo">Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria. <code class="onde">#campo [data-area=&quot;Página&quot;] .problema</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Conta de balcão entra no sistema como se fosse mais um barbeiro.</div>
+    <div class="depois"><span class="rotulo">depois</span>Conta de balcão não é barbeiro e não deveria aparecer como um.</div>
+  </div>
+  <div class="motivo">Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria. <code class="onde">#campo [data-area=&quot;Cadastro&quot;] .problema</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Metade de quem entra quer saber onde fica e se está aberto — não agendar.</div>
+    <div class="depois"><span class="rotulo">depois</span>Quem só quer saber onde fica ou se está aberto precisa procurar em outro lugar.</div>
+  </div>
+  <div class="motivo">Remove percentual sem origem explícita e preserva a dor verificável. <code class="onde">#campo .lp-achado[data-area=&quot;Página&quot;] .efeito</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Quem usa</div>
+    <div class="depois"><span class="rotulo">depois</span>Um sistema, quatro rotinas</div>
+  </div>
+  <div class="motivo">A seção passa a explicar a lógica, não apenas rotular a audiência. <code class="onde">#superficies .lp-sobrancelha</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Quatro pessoas, quatro telas, um sistema</div>
+    <div class="depois"><span class="rotulo">depois</span>Quatro rotinas sem obrigar todo mundo a trabalhar na mesma tela</div>
+  </div>
+  <div class="motivo">Mostra a diferença do produto em vez de apenas contar perfis. <code class="onde">#superficies .lp-titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>A mesma tela serve celular e notebook — o que muda é a densidade, não a regra. Nada de versão reduzida para quem está no aparelho pequeno.</div>
+    <div class="depois"><span class="rotulo">depois</span>Cliente, balcão, barbeiro e dono veem a informação necessária para o próximo passo, no celular ou no notebook, sem manter uma versão separada do sistema.</div>
+  </div>
+  <div class="motivo">Traduz decisão responsiva em benefício para cada perfil. <code class="onde">#superficies .lp-intro</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O cliente</div>
+    <div class="depois"><span class="rotulo">depois</span>Cliente: agenda sem criar conta</div>
+  </div>
+  <div class="motivo">Diz a ação e remove fricção já no título. <code class="onde">#superficies .lp-superficie__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O balcão</div>
+    <div class="depois"><span class="rotulo">depois</span>Balcão: acompanha o dia sem trocar de página</div>
+  </div>
+  <div class="motivo">Diz o ganho operacional da superfície. <code class="onde">#superficies .lp-superficie__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O barbeiro</div>
+    <div class="depois"><span class="rotulo">depois</span>Barbeiro: vê quem vem agora e o que precisa saber</div>
+  </div>
+  <div class="motivo">Prioriza a próxima ação do profissional. <code class="onde">#superficies .lp-superficie__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>O dono</div>
+    <div class="depois"><span class="rotulo">depois</span>Dono: compara o resultado antes de decidir</div>
+  </div>
+  <div class="motivo">Conecta os indicadores a uma decisão, não ao dashboard em si. <code class="onde">#superficies .lp-superficie__nome</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Atracar leva um domingo à tarde</div>
+    <div class="depois"><span class="rotulo">depois</span>Comece com sua base de clientes, não com uma tela vazia</div>
+  </div>
+  <div class="motivo">Remove prazo não necessário e termina na objeção real de troca/migração. <code class="onde">.lp-chamada__titulo</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Cadastro em seis etapas, sua base de clientes por planilha e o endereço antigo continuando a funcionar. Sem contrato de fidelidade e sem instalar nada.</div>
+    <div class="depois"><span class="rotulo">depois</span>O cadastro tem seis etapas, sua base de clientes entra por planilha e o endereço antigo continua funcionando. Sem contrato de fidelidade e sem instalar nada.</div>
+  </div>
+  <div class="motivo">Torna as ações explícitas e preserva apenas fatos já presentes no produto. <code class="onde">.lp-chamada__texto</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Criar conta</div>
+    <div class="depois"><span class="rotulo">depois</span>Criar minha conta</div>
+  </div>
+  <div class="motivo">Mantém o mesmo CTA principal usado desde o topo. <code class="onde">.lp-chamada__acoes .ui-button--primary</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Já sou cliente</div>
+    <div class="depois"><span class="rotulo">depois</span>[removido desta faixa]</div>
+  </div>
+  <div class="motivo">A entrada de cliente continua no cabeçalho e rodapé; retirar daqui deixa um único pedido no fechamento comercial. <code class="onde">.lp-chamada__acoes .ui-button--secondary</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Barber Dock — sistema de gestão para barbearias</div>
+    <div class="depois"><span class="rotulo">depois</span>Barber Dock — gestão para barbearias</div>
+  </div>
+  <div class="motivo">Mantém a categoria sem repetir “sistema”. <code class="onde">.lp-rodape p</code></div>
+</div>
+<div class="troca">
+  <div class="par">
+    <div class="antes"><span class="rotulo">antes</span>Criar conta</div>
+    <div class="depois"><span class="rotulo">depois</span>Criar minha conta</div>
+  </div>
+  <div class="motivo">Padroniza o CTA em toda a página. <code class="onde">.lp-rodape__links a[href=&quot;/admin/criar-conta&quot;]</code></div>
+</div>
+  </section>
+  <footer>Gerado pela skill super-copy. Nenhuma prova foi inventada nestas trocas.</footer>
+</main>
+</body>
+</html>

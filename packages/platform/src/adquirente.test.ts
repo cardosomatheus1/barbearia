@@ -34,6 +34,19 @@ describe('o modo do adquirente', () => {
     expect(() => modoDoAdquirente('STRIPE')).toThrow(/PSP_MODO/);
   });
 
+  it('não aceita fake em produção, nem quando o modo é passado diretamente', () => {
+    const anterior = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+    try {
+      expect(() => modoDoAdquirente('fake')).toThrow(/fake.*produção/i);
+      expect(() => adquirenteDaPlataforma('fake')).toThrow(/fake.*produção/i);
+      expect(() => adquirenteDaComanda('fake')).toThrow(/fake.*produção/i);
+    } finally {
+      if (anterior === undefined) delete process.env['NODE_ENV'];
+      else process.env['NODE_ENV'] = anterior;
+    }
+  });
+
   it('reconhece os três modos escritos', () => {
     expect(modoDoAdquirente('nenhum')).toBe('nenhum');
     expect(modoDoAdquirente('fake')).toBe('fake');
@@ -85,6 +98,7 @@ describe('as duas pontas seguem o mesmo modo', () => {
           tenantId: '11111111-1111-1111-1111-111111111111',
           faturaId: '22222222-2222-2222-2222-222222222222',
           valorCents: 100,
+          tentativa: 1,
           pspCustomerId: 'cus_1',
           pspMethodId: 'pm_1',
         }),

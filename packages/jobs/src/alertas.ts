@@ -27,14 +27,14 @@ import { semTenant, withTenant } from '@barbearia/db';
  * demanda, e excluí-los faria uma onda de cancelamento parecer queda de
  * procura, mandando olhar a página pública quando o problema é outro.
  */
-async function marcadosNoDia(tenantId: string, diaUtc: Date): Promise<number> {
-  const fim = new Date(diaUtc.getTime() + 86_400_000);
-
+async function marcadosNoDia(tenantId: string, agora: Date, atras: number): Promise<number> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ total: bigint }[]>`
       SELECT count(*) AS total
-      FROM appointments
-      WHERE created_at >= ${diaUtc} AND created_at < ${fim}
+        FROM appointments a
+        JOIN locations l ON l.id = a.location_id
+       WHERE (a.created_at AT TIME ZONE l.timezone)::date
+             = ((${agora}::timestamptz AT TIME ZONE l.timezone)::date - ${atras}::int)
     `;
     return Number(linhas[0]?.total ?? 0);
   });
@@ -74,14 +74,6 @@ async function estadoDaFila(agora: Date): Promise<{
   });
 }
 
-/** Meia-noite UTC de n dias atrás. O recorte por dia da unidade é lacuna. */
-function diaUtc(agora: Date, atras: number): Date {
-  const d = new Date(
-    Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()),
-  );
-  d.setUTCDate(d.getUTCDate() - atras);
-  return d;
-}
 
 /**
  * Coleta e avalia os alertas de uma barbearia.
@@ -92,8 +84,8 @@ function diaUtc(agora: Date, atras: number): Date {
  */
 export async function alertasDaBarbearia(tenantId: string, agora: Date): Promise<readonly Alerta[]> {
   const [hoje, semanaPassada, fila] = await Promise.all([
-    marcadosNoDia(tenantId, diaUtc(agora, 0)),
-    marcadosNoDia(tenantId, diaUtc(agora, 7)),
+    marcadosNoDia(tenantId, agora, 0),
+    marcadosNoDia(tenantId, agora, 7),
     estadoDaFila(agora),
   ]);
 

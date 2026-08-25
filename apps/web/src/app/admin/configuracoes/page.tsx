@@ -67,7 +67,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
         </header>
-        <h1 className="painel__titulo">Configurações</h1>
+        <h1 className="painel__titulo">Preferências</h1>
         <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {semPermissao
             ? 'Você não tem permissão para ver esta tela. Fale com o dono.'
@@ -107,7 +107,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
       </header>
 
       {/**
-        * O título da página é "Configurações", como o trilho ao lado a chama.
+        * O título da página é "Preferências", como o menu de Configurações a chama.
         *
         * Ele dizia "Cancelamento e remarcação" — o nome da primeira seção — e
         * era o único `h1` da tela, com a vitrine desenhada acima dele. Duas
@@ -115,7 +115,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         * 2), e uma seção fora do sumário do documento, que é o que faz um
         * quadro no topo ler como aviso do sistema em vez de configuração.
         */}
-      <h1 className="painel__titulo">Configurações</h1>
+      <h1 className="painel__titulo">Preferências</h1>
 
       {/**
         * A vitrine vem antes do resto, e é uma seção curta de propósito.

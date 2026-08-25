@@ -26,6 +26,8 @@ export const STATUS_DA_RESERVA: Readonly<Record<BookingFailure, number>> = {
   unknown_location: 404,
   slot_not_available: 409,
   slot_taken: 409,
+  idempotencia_conflitante: 409,
+  hold_invalido: 409,
   appointment_not_found: 404,
   appointment_not_active: 409,
   hold_expired: 409,

@@ -61,6 +61,7 @@ const STATUS: Record<string, number> = {
   servico_desconhecido: 404,
   profissional_desconhecido: 404,
   limite_atingido: 409,
+  idempotencia_conflitante: 409,
   janela_invalida: 400,
   periodo_invertido: 400,
   periodo_longo_demais: 400,

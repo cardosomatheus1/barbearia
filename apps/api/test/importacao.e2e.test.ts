@@ -257,6 +257,64 @@ describeIfDb('importação de base pela HTTP', () => {
     expect(recusa.body.error.code).toBe('invalid_request');
   });
 
+  it('resolve um conflito pelo endpoint antes de aplicar', async () => {
+    const dono = await abrirBarbearia();
+    const conflito = ['Nome;Celular', 'José;71988887777', 'João;71988887777'].join('\n');
+    const preview = await enviar(dono, conflito, 'conflito.csv').expect(201);
+
+    await com(dono)(
+      http()
+        .post(`/v1/admin/imports/${preview.body.id}/conflicts`)
+        .set('Idempotency-Key', 'importacao-e2e-267')
+        .send({ linha: 3, escolha: 'linha' }),
+    ).expect(201);
+
+    const relido = await com(dono)(http().get(`/v1/admin/imports/${preview.body.id}`)).expect(200);
+    expect(relido.body.problemas.find((p: { linha: number }) => p.linha === 3)).toBeUndefined();
+
+    await com(dono)(http().post(`/v1/admin/imports/${preview.body.id}/apply`)).expect(201);
+    const gravado = await admin.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM customers WHERE phone_e164 = '+5571988887777'`,
+    );
+    expect(gravado[0]?.name).toBe('João');
+  });
+
+  it('recusa escolha de conflito malformada na borda', async () => {
+    const dono = await abrirBarbearia();
+    const preview = await enviar(
+      dono,
+      ['Nome;Celular', 'José;71988887777', 'João;71988887777'].join('\n'),
+      'conflito.csv',
+    ).expect(201);
+
+    await com(dono)(
+      http()
+        .post(`/v1/admin/imports/${preview.body.id}/conflicts`)
+        .set('Idempotency-Key', 'importacao-e2e-291')
+        .send({ linha: 1, escolha: 'qualquer' }),
+    ).expect(400);
+  });
+
+  it('outra barbearia não resolve o conflito do vizinho', async () => {
+    const dono = await abrirBarbearia();
+    // A vizinha precisa ser **outra** conta: com a mesma, as duas "barbearias"
+    // são a mesma e o segundo cadastro colide consigo mesmo em `slug_taken` —
+    // o teste morria antes de chegar à regra que ele existe para provar.
+    const rival = await abrirBarbearia(RIVAL);
+    const preview = await enviar(
+      dono,
+      ['Nome;Celular', 'José;71988887777', 'João;71988887777'].join('\n'),
+      'conflito.csv',
+    ).expect(201);
+
+    await com(rival)(
+      http()
+        .post(`/v1/admin/imports/${preview.body.id}/conflicts`)
+        .set('Idempotency-Key', 'importacao-e2e-307')
+        .send({ linha: 3, escolha: 'linha' }),
+    ).expect(404);
+  });
+
   // -- aplicar e desfazer ------------------------------------------------------
 
   it('aplica, lista e desfaz', async () => {

@@ -1,4 +1,4 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   CATEGORIAS_DA_AVALIACAO,
   MAXIMO_DO_COMENTARIO,
@@ -218,18 +218,11 @@ interface LinhaDaAvaliacao {
   rating_ambience: number | null;
 }
 
-const SELECT_DA_AVALIACAO = `
+const SELECT_DA_AVALIACAO = sql`
   SELECT r.id, r.rating, r.comment, r.created_at, r.resolved_at, r.outcome,
          r.resolution_note,
          r.contested_at, r.contest_reason, r.contest_note,
          c.name AS cliente, p.name AS profissional,
-         -- O **início do serviço**, não o fim da reserva (bloco 114).
-         --
-         -- O fim da reserva inclui o buffer, então o cartão dizia "atendimento de
-         -- 18/08 às 21:40" sobre um corte das 17:20 numa casa que fecha às 20h:
-         -- a recepção, com 48h para ligar, procurava na agenda um horário que
-         -- não existe. A SPEC pede "atendimento de hoje 14:00", que é a hora em
-         -- que a pessoa sentou.
          a.service_starts_at AS atendido_em,
          (SELECT s.name FROM appointment_services aps
              JOIN services s ON s.id = aps.service_id
@@ -337,12 +330,21 @@ export async function painelDeAvaliacoes(
   tenantId: string,
   agora: Date = new Date(),
   limite = 30,
+  locationId: string | null = null,
 ): Promise<PainelDeAvaliacoes> {
   return withTenant(tenantId, async (tx) => {
     const todas = await tx.$queryRaw<
       { rating: number; created_at: Date; contested_at: Date | null }[]
     >`
-      SELECT rating, created_at, contested_at FROM reviews
+      -- LEFT JOIN: apagar o agendamento solta reviews.appointment_id para nulo,
+      -- e com o join interno a avaliacao sumia do painel inteiro. Apagar
+      -- avaliacao nao existe neste produto, e sumir por caminho lateral e a
+      -- mesma coisa com outro nome.
+      SELECT r.rating, r.created_at, r.contested_at
+        FROM reviews r
+        LEFT JOIN appointments a ON a.id = r.appointment_id
+       WHERE (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+              OR a.location_id IS NULL)
     `;
 
     /**
@@ -362,14 +364,19 @@ export async function painelDeAvaliacoes(
      * conjunto é pequeno por natureza — contestar exige motivo de lista fechada
      * e deixa trilha.
      */
-    const linhas = await tx.$queryRawUnsafe<LinhaDaAvaliacao[]>(
-      `SELECT * FROM (
-         ${SELECT_DA_AVALIACAO} ORDER BY r.created_at DESC LIMIT $1
-       ) recentes
-       UNION
-       ${SELECT_DA_AVALIACAO} WHERE r.contested_at IS NOT NULL`,
-      limite,
-    );
+    const linhas = await tx.$queryRaw<LinhaDaAvaliacao[]>(sql`
+      SELECT * FROM (
+        ${SELECT_DA_AVALIACAO}
+         WHERE (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+                OR a.location_id IS NULL)
+         ORDER BY r.created_at DESC LIMIT ${limite}
+      ) recentes
+      UNION
+      ${SELECT_DA_AVALIACAO}
+       WHERE r.contested_at IS NOT NULL
+         AND (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+              OR a.location_id IS NULL)
+    `);
     linhas.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
     const naTela = linhas.map((l) => paraTela(l, agora));
 
@@ -478,12 +485,16 @@ export async function avaliacoesDoCliente(
   tenantId: string,
   customerId: string,
   agora: Date = new Date(),
+  locationId: string | null = null,
 ): Promise<readonly AvaliacaoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<LinhaDaAvaliacao[]>(
-      `${SELECT_DA_AVALIACAO} WHERE r.customer_id = $1::uuid ORDER BY r.created_at DESC LIMIT 20`,
-      customerId,
-    );
+    const linhas = await tx.$queryRaw<LinhaDaAvaliacao[]>(sql`
+      ${SELECT_DA_AVALIACAO}
+       WHERE r.customer_id = ${customerId}::uuid
+         AND (${locationId}::uuid IS NULL OR a.location_id = ${locationId}::uuid
+              OR a.location_id IS NULL)
+       ORDER BY r.created_at DESC LIMIT 20
+    `);
     return linhas.map((l) => paraTela(l, agora));
   });
 }
@@ -505,6 +516,7 @@ export async function avaliacoesDoCliente(
  */
 export async function registrarRecuperacao(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly avaliacaoId: string;
   readonly desfecho: DesfechoDaRecuperacao;
   readonly nota: string;
@@ -529,10 +541,17 @@ export async function registrarRecuperacao(entrada: {
          SET resolved_at = ${agora}, resolved_by = ${entrada.ator.id}::uuid,
              outcome = ${entrada.desfecho}::review_outcome, resolution_note = ${nota}
        WHERE id = ${entrada.avaliacaoId}::uuid AND resolved_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM appointments a
+            WHERE a.id = reviews.appointment_id AND a.location_id = ${entrada.locationId}::uuid
+         )
     `;
     if (afetadas === 0) {
       const existe = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM reviews WHERE id = ${entrada.avaliacaoId}::uuid
+        SELECT r.id FROM reviews r
+        JOIN appointments a ON a.id = r.appointment_id
+        WHERE r.id = ${entrada.avaliacaoId}::uuid
+          AND a.location_id = ${entrada.locationId}::uuid
       `;
       recusar(existe[0] ? 'ja_resolvida' : 'avaliacao_nao_encontrada');
     }
@@ -572,6 +591,7 @@ export async function registrarRecuperacao(entrada: {
  */
 export async function contestarAvaliacao(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly avaliacaoId: string;
   readonly motivo: string;
   readonly nota: string;
@@ -599,10 +619,17 @@ export async function contestarAvaliacao(entrada: {
              contest_reason = ${entrada.motivo}::review_contest_reason,
              contest_note = ${nota}
        WHERE id = ${entrada.avaliacaoId}::uuid AND contested_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM appointments a
+            WHERE a.id = reviews.appointment_id AND a.location_id = ${entrada.locationId}::uuid
+         )
     `;
     if (afetadas === 0) {
       const existe = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM reviews WHERE id = ${entrada.avaliacaoId}::uuid
+        SELECT r.id FROM reviews r
+        JOIN appointments a ON a.id = r.appointment_id
+        WHERE r.id = ${entrada.avaliacaoId}::uuid
+          AND a.location_id = ${entrada.locationId}::uuid
       `;
       recusar(existe[0] ? 'ja_contestada' : 'avaliacao_nao_encontrada');
     }
@@ -645,6 +672,7 @@ export async function contestarAvaliacao(entrada: {
  */
 export async function retirarContestacao(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly avaliacaoId: string;
   readonly ator: Ator;
 }): Promise<{ readonly retirada: true }> {
@@ -654,10 +682,17 @@ export async function retirarContestacao(entrada: {
          SET contested_at = NULL, contested_by = NULL,
              contest_reason = NULL, contest_note = NULL
        WHERE id = ${entrada.avaliacaoId}::uuid AND contested_at IS NOT NULL
+         AND EXISTS (
+           SELECT 1 FROM appointments a
+            WHERE a.id = reviews.appointment_id AND a.location_id = ${entrada.locationId}::uuid
+         )
     `;
     if (afetadas === 0) {
       const existe = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM reviews WHERE id = ${entrada.avaliacaoId}::uuid
+        SELECT r.id FROM reviews r
+        JOIN appointments a ON a.id = r.appointment_id
+        WHERE r.id = ${entrada.avaliacaoId}::uuid
+          AND a.location_id = ${entrada.locationId}::uuid
       `;
       recusar(existe[0] ? 'nao_contestada' : 'avaliacao_nao_encontrada');
     }

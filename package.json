@@ -9,7 +9,8 @@
     "verify": "./scripts/verify.sh",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:carga-reserva": "node scripts/carga-concorrencia-reserva.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"

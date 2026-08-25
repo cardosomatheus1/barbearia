@@ -11,6 +11,13 @@ import {
   type Veredito,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import {
+  ConflitoDoPreviewNaoEncontrado,
+  resolverConflitoGuardado,
+  type EscolhaDoConflito,
+  type GuardadoDaImportacao,
+  type LinhaGravavelDaImportacao,
+} from './resolucao-de-conflito.js';
 
 /**
  * A importação de base, do arquivo ao banco — SPEC §5.8.
@@ -66,7 +73,8 @@ export type ImportacaoErro =
   | 'nao_encontrada'
   | 'ja_aplicada'
   | 'nao_aplicada'
-  | 'tem_movimento';
+  | 'tem_movimento'
+  | 'conflito_nao_encontrado';
 
 export class ImportacaoError extends Error {
   constructor(
@@ -81,9 +89,9 @@ export class ImportacaoError extends Error {
 /** Teto de linhas por arquivo. Acima disso a barbearia parte a exportação. */
 export const TETO_DE_LINHAS = 20_000;
 
-const AMOSTRA_DE_PROBLEMAS = 50;
+export const AMOSTRA_DE_PROBLEMAS = 50;
 
-interface LinhaGravavel {
+interface LinhaGravavel extends LinhaGravavelDaImportacao {
   readonly nome: string;
   readonly telefone: string;
   readonly nascimento: string | null;
@@ -107,9 +115,8 @@ const paraGravar = (linha: LinhaAnalisada): LinhaGravavel => ({
  * não recalculados na hora de mostrar — porque a tela redireciona depois do
  * envio, e o arquivo não existe mais do outro lado do redirecionamento.
  */
-interface Guardado {
+interface Guardado extends GuardadoDaImportacao {
   readonly linhas: readonly LinhaGravavel[];
-  readonly problemas: readonly LinhaAnalisada[];
 }
 
 /**
@@ -250,7 +257,11 @@ export async function analisarImportacao(params: {
 
     const guardar: Guardado = {
       linhas: aplicaveis(analise).map(paraGravar),
-      problemas: problemasDe(analise),
+      // O payload guarda todos os problemas durante os sete dias do preview.
+      // A tela continua recebendo só uma janela de 50 por vez; quando um conflito
+      // é resolvido, o próximo entra nessa janela. Sem isto o 51º conflito seria
+      // impossível de resolver sem voltar ao CSV.
+      problemas: problemasTodos(analise),
     };
     const criadas = await tx.$queryRaw<LinhaDeImport[]>`
       INSERT INTO imports (tenant_id, file_name, file_sha256, separator, summary, payload, created_by)
@@ -284,15 +295,96 @@ export async function analisarImportacao(params: {
  * que vai entrar limpo é contagem, não lista: mil e duzentas linhas na tela não
  * ajudam ninguém a decidir se aplica.
  */
+function problemasTodos(analise: Analise): readonly LinhaAnalisada[] {
+  return analise.linhas.filter(
+    (linha) =>
+      linha.veredito === 'telefone_invalido' ||
+      linha.veredito === 'sem_nome' ||
+      linha.veredito === 'conflito',
+  );
+}
+
+function problemasParaTela(problemas: readonly LinhaAnalisada[]): readonly LinhaAnalisada[] {
+  // Conflito agora tem ação na própria tela. Ele vem primeiro para que 50 linhas
+  // inválidas que só podem ser corrigidas no CSV não escondam o 51º conflito
+  // resolvível para sempre. Resolvido um lote, a releitura traz o próximo.
+  const conflitos = problemas.filter((linha) => linha.veredito === 'conflito');
+  const outros = problemas.filter((linha) => linha.veredito !== 'conflito');
+  return [
+    ...conflitos.slice(0, AMOSTRA_DE_PROBLEMAS),
+    ...outros.slice(0, Math.max(0, AMOSTRA_DE_PROBLEMAS - conflitos.length)),
+  ];
+}
+
 function problemasDe(analise: Analise): readonly LinhaAnalisada[] {
-  return analise.linhas
-    .filter(
-      (linha) =>
-        linha.veredito === 'telefone_invalido' ||
-        linha.veredito === 'sem_nome' ||
-        linha.veredito === 'conflito',
-    )
-    .slice(0, AMOSTRA_DE_PROBLEMAS);
+  return problemasParaTela(problemasTodos(analise));
+}
+
+/**
+ * Resolve um telefone repetido com nomes diferentes sem obrigar a pessoa a
+ * editar e reenviar o CSV. O telefone continua sendo a identidade: a decisão é
+ * qual **linha** representa aquele celular. Ao escolher a segunda linha, os
+ * campos dela substituem os da primeira; ao escolher a primeira, nada muda.
+ *
+ * O preview inteiro fica sob `FOR UPDATE`, porque duas abas resolvendo o mesmo
+ * conflito não podem gravar duas versões diferentes do payload. A trilha guarda
+ * somente linha e decisão — nunca nome ou telefone.
+ */
+export async function resolverConflitoDaImportacao(params: {
+  readonly tenantId: string;
+  readonly importId: string;
+  readonly linha: number;
+  readonly escolha: EscolhaDoConflito;
+  readonly staffId: string;
+  readonly staffName: string;
+  readonly agora: Date;
+  readonly ip?: string | undefined;
+}): Promise<{ readonly restantes: number }> {
+  return withTenant(params.tenantId, async (tx) => {
+    const rows = await tx.$queryRaw<{ status: string; payload: unknown }[]>`
+      SELECT status, payload FROM imports
+       WHERE id = ${params.importId}::uuid
+       FOR UPDATE
+    `;
+
+    const importacao = rows[0];
+    if (!importacao) throw new ImportacaoError('nao_encontrada');
+    if (importacao.status !== 'previewed') throw new ImportacaoError('ja_aplicada');
+
+    let payload: GuardadoDaImportacao;
+    try {
+      payload = resolverConflitoGuardado(
+        (importacao.payload ?? {}) as Partial<Guardado>,
+        params.linha,
+        params.escolha,
+      );
+    } catch (error) {
+      if (error instanceof ConflitoDoPreviewNaoEncontrado) {
+        throw new ImportacaoError('conflito_nao_encontrado');
+      }
+      throw error;
+    }
+
+    await tx.$executeRaw`
+      UPDATE imports
+         SET payload = ${JSON.stringify(payload)}::jsonb
+       WHERE id = ${params.importId}::uuid
+    `;
+
+    await audit(tx, {
+      actorId: params.staffId,
+      actorName: params.staffName,
+      action: 'import.conflict_resolved',
+      entity: 'imports',
+      entityId: params.importId,
+      after: { linha: params.linha, escolha: params.escolha },
+      ...(params.ip ? { ip: params.ip } : {}),
+    });
+
+    return {
+      restantes: payload.problemas.filter((problema) => problema.veredito === 'conflito').length,
+    };
+  });
 }
 
 export interface ResultadoDaAplicacao {
@@ -527,7 +619,10 @@ export async function lerImportacao(params: {
     if (!linha) throw new ImportacaoError('nao_encontrada');
 
     const guardado = (linha.payload ?? {}) as Partial<Guardado>;
-    return { ...paraResumo(linha), problemas: guardado.problemas ?? [] };
+    return {
+      ...paraResumo(linha),
+      problemas: problemasParaTela(guardado.problemas ?? []),
+    };
   });
 }
 
@@ -573,7 +668,7 @@ export const DIAS_DO_PREVIEW = 7;
  * decisão da anonimização, que tira a pessoa de dentro do cadastro e deixa a
  * linha.
  */
-export async function expirarPreviews(tx: TransactionClient, agora: Date): Promise<number> {
+async function expirarPreviews(tx: TransactionClient, agora: Date): Promise<number> {
   return tx.$executeRaw`
     UPDATE imports
        SET payload = NULL

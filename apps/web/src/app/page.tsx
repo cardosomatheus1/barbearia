@@ -16,9 +16,9 @@ import type { Metadata } from 'next';
  * concorrente com nome: o leitor está ali para reconhecer o próprio dia, não
  * para assistir alguém ser julgado.
  *
- * ## Zero JavaScript de cliente
+ * ## Landing sem componente client-side
  *
- * O produto inteiro é renderizado no servidor, e a landing não abre exceção. O
+ * A landing é renderizada no servidor e não abre componente client-side próprio. O
  * que no mock era JavaScript virou CSS: as abas viraram uma faixa que rola, o
  * "revelar ao rolar" saiu, e a paleta de comandos — que é enfeite de marketing —
  * não entrou. O que ficou de movimento é ambiente, e some inteiro em
@@ -32,9 +32,9 @@ import type { Metadata } from 'next';
  */
 
 export const metadata: Metadata = {
-  title: 'Barber Dock — o porto da sua barbearia',
+  title: 'Barber Dock — agenda, caixa e gestão para barbearias',
   description:
-    'Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar, comanda, caixa, fiado e comissão. Feito a partir do que quebra numa barbearia de verdade.',
+    'Agenda por duração real, fila de espera, comanda, caixa, fiado e comissão para barbearias. Importe sua base de clientes por planilha e trabalhe no navegador.',
 };
 
 /**
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
  * Refazer: suba o sistema, rode `node tirar-prints.cjs <segredo-do-2fa>` e
  * converta para 1200px de largura.
  *
- * ## Sem JavaScript, como o resto da landing
+ * ## Sem estado client-side, como o resto da landing
  *
  * A tira rola com `scroll-snap` e os atalhos são âncoras — o navegador já sabe
  * fazer as duas coisas. Abas de verdade exigiriam estado no cliente, e o
@@ -66,74 +66,79 @@ const TELAS = [
   {
     id: 'tela-dashboard',
     nome: 'Painel',
+    titulo: 'Painel: o que merece atenção hoje',
     arquivo: 'dashboard',
     alto: 'Painel do dono: faturamento do período, meta, ocupação e o que merece ação hoje',
-    nota: 'Faturamento, meta e ocupação por período — com o que merece ação agora.',
+    nota: 'Faturamento, meta e ocupação no período, com comparação para mostrar onde vale agir.',
   },
   {
     id: 'tela-dia',
     nome: 'O dia',
+    titulo: 'O dia: quem chegou, atrasou e ainda falta',
     arquivo: 'dia',
     alto: 'Painel do balcão com quem chegou, quem está na cadeira e quem faltou',
-    nota: 'Quem chegou, quem está na cadeira e há quanto tempo. A linha do agora separa o que passou.',
+    nota: 'Quem chegou, quem está na cadeira e há quanto tempo. A linha do agora separa o que passou do que ainda precisa acontecer.',
   },
   {
     id: 'tela-marcar',
     nome: 'Marcar',
+    titulo: 'Marcar: só aparecem horários que cabem',
     arquivo: 'marcar',
     alto: 'Tela de marcação pelo balcão, com a grade de horários que cabem',
-    nota: 'A grade sai da duração real do serviço — não de blocos fixos de quinze minutos.',
+    nota: 'A grade usa a duração real do serviço em vez de forçar todo atendimento em blocos fixos de quinze minutos.',
   },
   {
     id: 'tela-cliente',
     nome: 'Pelo cliente',
+    titulo: 'Cliente: agenda pelo link, sem instalar app',
     arquivo: 'cliente-agendar',
     alto: 'Página pública da barbearia, com foto, endereço, serviços e preços',
-    nota: 'Endereço, telefone, foto e preço. O cliente agenda sem instalar nada.',
+    nota: 'Endereço, telefone, foto, preço e horários livres na mesma página.',
   },
   {
     id: 'tela-comanda',
     nome: 'Comanda',
+    titulo: 'Comanda: o atendimento já nasce com o combinado',
     arquivo: 'comanda',
     alto: 'Comanda aberta com itens do atendimento e as formas de pagamento',
-    nota: 'Nasce preenchida com o que foi marcado, no preço combinado na reserva.',
+    nota: 'Serviço e preço da reserva já entram na comanda para o balcão não começar do zero.',
   },
 ] as const;
 
 const MODULOS = [
   {
     kicker: 'Agenda',
-    titulo: 'O horário existe porque cabe',
+    titulo: 'Cada serviço abre o espaço que realmente precisa',
     texto:
-      'A grade sai da duração real de cada serviço, com buffer e recurso — não de blocos fixos de 15 minutos que deixam buraco morto entre um corte e outro.',
+      'A grade usa duração, buffer e recurso de cada serviço. Se sobrou uma janela que cabe outro atendimento, ela pode voltar para a agenda.',
     classe: 'lp-bento__item--grande',
   },
   {
     kicker: 'Balcão',
-    titulo: 'Quem chegou sem marcar',
+    titulo: 'Encaixe sem empurrar o resto do dia',
     texto:
-      'Fila de espera com posição pelo celular do cliente, encaixe com o custo visível antes de confirmar, e check-in que não depende do barbeiro largar a máquina.',
+      'Quem chega sem marcar entra na fila, acompanha a posição pelo celular e o balcão vê o impacto antes de confirmar o encaixe.',
     classe: 'lp-bento__item--alto',
   },
   {
     kicker: 'Dinheiro',
-    titulo: 'Comanda, caixa e fiado',
+    titulo: 'Saiba o que entrou, saiu e ficou para depois',
     texto:
-      'Fechamento com divergência à mostra, sangria auditada por nome e fiado como forma de pagamento — não como comanda em aberto que ninguém cobra.',
+      'Comanda, caixa, sangria e fiado ficam registrados no fluxo financeiro, com divergências visíveis no fechamento.',
     classe: 'lp-bento__item--largo',
   },
   {
     kicker: 'Comissão',
-    titulo: 'Fecha e congela',
+    titulo: 'Fechou a comissão, o histórico não muda',
     texto:
-      'O lançamento guarda a base e a regra copiada, nunca o valor. Período fechado vira imutável no banco, e estorno é lançamento novo — nunca um DELETE.',
+      'O período fechado fica imutável. Se houver estorno depois, entra um novo lançamento em vez de apagar o que já aconteceu.',
     classe: 'lp-bento__item--pequeno',
   },
   {
     kicker: 'Avisos',
-    titulo: 'Lembrete que respeita a noite',
+    titulo: 'Lembrete sem mensagem de madrugada',
     texto:
-      'Confirmação, 24h, 2h e convite de retorno, com janela de silêncio das 21h às 8h no fuso da unidade — e teto de mensagem por mês, por pessoa.',
+      'Confirmação, aviso de 24h, aviso de 2h e convite de retorno respeitam o fuso da unidade e a janela de silêncio das 21h às 8h.',
     classe: 'lp-bento__item--pequeno',
   },
 ] as const;
@@ -162,66 +167,70 @@ const MODULOS = [
 const ACHADOS = [
   {
     area: 'Agenda',
-    problema: 'A grade é fixa de 15 em 15, independente do serviço.',
-    efeito: 'Um corte de 20 min começa 09:15 e deixa cinco minutos que ninguém preenche.',
-    resposta: 'A grade sai da duração de cada serviço. Sobrou janela, ela é oferecida.',
+    problema: 'Grade fixa de 15 em 15 desperdiça os minutos que não cabem no bloco.',
+    efeito: 'Um corte de 20 min começando às 09:15 deixa cinco minutos soltos.',
+    resposta: 'A grade sai da duração do serviço e reaproveita a janela quando outro atendimento cabe.',
   },
   {
     area: 'Cardápio',
-    problema: '"Cabelo + Barba" cadastrado com 30 min, quando as partes somam 40.',
-    efeito: 'Dez minutos de atraso por atendimento, acumulando o dia inteiro.',
-    resposta: 'Um validador confere o cardápio e mostra a diferença entre a duração cadastrada e a real.',
+    problema: 'Um combo cadastrado com 30 min, quando as partes somam 40, coloca atraso dentro do próprio cadastro.',
+    efeito: 'O atraso nasce antes mesmo de o primeiro cliente sentar na cadeira.',
+    resposta: 'O validador mostra a diferença entre a duração cadastrada e a soma real antes que ela vire rotina no salão.',
   },
   {
     area: 'Fuso',
-    problema: 'O horário mostrado vem do relógio do aparelho de quem acessa.',
-    efeito: 'Celular com relógio torto vê a grade deslocada e marca no horário errado.',
-    resposta: 'O fuso é o da unidade, sempre. O aparelho não opina sobre que horas são na barbearia.',
+    problema: 'O horário da unidade não pode depender do relógio do aparelho de quem acessa.',
+    efeito: 'Um aparelho fora do horário correto pode mostrar uma grade deslocada.',
+    resposta: 'A agenda usa o fuso da barbearia, independentemente do relógio do celular.',
   },
   {
     area: 'Escolha',
-    problema: 'É preciso escolher o profissional antes de ver qualquer horário.',
-    efeito: 'Quem só quer o mais cedo possível abre um barbeiro de cada vez para comparar.',
-    resposta: '"Qualquer profissional" é a primeira opção, e mostra o horário mais cedo de todos.',
+    problema: 'Quem quer o primeiro horário livre não deveria abrir um profissional por vez.',
+    efeito: 'Comparar barbeiro por barbeiro transforma uma escolha simples em várias tentativas.',
+    resposta: '“Qualquer profissional” mostra o horário mais cedo entre todos.',
   },
   {
     area: 'Página',
-    problema: 'A página de agendamento não traz endereço, mapa, telefone nem horário.',
-    efeito: 'Metade de quem entra quer saber onde fica e se está aberto — não agendar.',
-    resposta: 'A página pública responde as três coisas antes de pedir qualquer toque.',
+    problema: 'Endereço, telefone e horário de funcionamento não deveriam ficar separados do agendamento.',
+    efeito: 'Quem só quer saber onde fica ou se está aberto precisa procurar em outro lugar.',
+    resposta: 'A página pública reúne essas informações e os horários livres antes de pedir o agendamento.',
   },
   {
     area: 'Cadastro',
-    problema: 'Conta de balcão entra no sistema como se fosse mais um barbeiro.',
-    efeito: 'Ocupação e comissão saem poluídas por uma agenda que não é de ninguém.',
-    resposta: 'Cadeira tem tipo. Conta de balcão não vira barbeiro no relatório.',
+    problema: 'Conta de balcão não é barbeiro e não deveria aparecer como um.',
+    efeito: 'Ocupação e comissão passam a carregar uma agenda que não pertence a nenhum profissional.',
+    resposta: 'Conta de balcão fica separada de cadeira e não entra como barbeiro nos relatórios.',
   },
 ] as const;
 
 const SUPERFICIES = [
   {
     nome: 'O cliente',
+    titulo: 'Cliente: agenda sem criar conta',
     aparelho: 'celular, em pé, na rua',
     texto:
-      'Entra pelo link da bio, vê horário livre já tocável e agenda sem criar conta. Volta com um código de seis dígitos para remarcar ou cancelar.',
+      'Entra pelo link da bio, vê os horários livres e agenda. Para remarcar ou cancelar depois, usa um código de seis dígitos.',
   },
   {
     nome: 'O balcão',
+    titulo: 'Balcão: acompanha o dia sem trocar de página',
     aparelho: 'notebook aberto o dia inteiro',
     texto:
-      'O dia inteiro numa tela: quem chegou, quem está atrasado, quem falta atender. Marca para quem apareceu sem horário sem sair da mesma página.',
+      'Vê quem chegou, quem está atrasado e quem ainda falta atender. Se alguém aparece sem horário, marca sem sair da rotina do dia.',
   },
   {
     nome: 'O barbeiro',
+    titulo: 'Barbeiro: vê quem vem agora e o que precisa saber',
     aparelho: 'celular, entre um cliente e outro',
     texto:
-      'O próximo da cadeira, a ficha de quem vai sentar — "não usar navalha" — e os próprios números, comparados com o próprio mês passado.',
+      'O próximo cliente, a ficha de atendimento e os próprios números ficam acessíveis no celular entre um atendimento e outro.',
   },
   {
     nome: 'O dono',
+    titulo: 'Dono: compara o resultado antes de decidir',
     aparelho: 'onde estiver',
     texto:
-      'Faturamento, ocupação e falta com comparação contra o mesmo dia da semana anterior. Número sem comparação não decide nada.',
+      'Faturamento, ocupação e faltas aparecem com comparação de período para o número ter contexto antes de virar decisão.',
   },
 ] as const;
 
@@ -247,7 +256,7 @@ export default function LandingPage() {
             />
             <span className="lp-marca__nome">
               Barber Dock
-              <small>Sistema de gestão</small>
+              <small>Gestão para barbearias</small>
             </span>
           </a>
 
@@ -256,7 +265,7 @@ export default function LandingPage() {
               Entrar
             </a>
             <a className="ui-button ui-button--primary lp-beam" href="/admin/criar-conta">
-              Criar conta
+              Criar minha conta
             </a>
           </div>
 
@@ -264,9 +273,9 @@ export default function LandingPage() {
               somem. Esconder no aparelho pequeno seria decidir que não
               importavam; se não importam, saem de todas as larguras. */}
           <nav aria-label="Seções" className="lp-nav__links ui-scroll-x">
-            <a href="#telas">Telas</a>
-            <a href="#recursos">Recursos</a>
-            <a href="#campo">O que quebra</a>
+            <a href="#telas">Telas reais</a>
+            <a href="#recursos">Rotina</a>
+            <a href="#campo">Problemas</a>
             <a href="#superficies">Quem usa</a>
           </nav>
         </div>
@@ -278,35 +287,35 @@ export default function LandingPage() {
             <div>
               <p className="lp-selo">
                 <span aria-hidden="true" className="lp-selo__ponto" />
-                ERP para barbearia
+                Gestão para barbearias
               </p>
 
               <h1 className="lp-heroi__titulo">
-                Seu porto seguro
+                Horários que cabem no dia.
                 <br />
-                na <em>gestão</em>
+                <em>Caixa que fecha sem adivinhar.</em>
               </h1>
 
               <p className="lp-heroi__texto">
-                Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar,
-                comanda, caixa, fiado e comissão. Construído a partir do que quebra numa barbearia
-                de verdade — não do que cabe numa apresentação.
+                O Barber Dock calcula a agenda pela duração real do serviço, mostra quem chegou,
+                abre comanda, registra fiado e fecha comissão. Menos ajuste manual quando o
+                movimento aperta.
               </p>
 
               <div className="lp-heroi__acoes">
                 <a className="ui-button ui-button--primary ui-button--lg lp-beam" href="/admin/criar-conta">
-                  Abrir minha barbearia
+                  Criar minha conta
                 </a>
                 <a className="lp-link" href="#campo">
-                  Ver o que costuma quebrar
+                  Ver os 6 problemas tratados
                   <span aria-hidden="true">→</span>
                 </a>
               </div>
 
               <ul className="lp-provas">
-                <li>Sem instalação — abre no navegador</li>
-                <li>Traz sua base de clientes por planilha</li>
-                <li>Cada barbearia isolada no banco</li>
+                <li>Abre no navegador, sem instalar app</li>
+                <li>Importa sua base de clientes por planilha</li>
+                <li>Dados de cada barbearia isolados no banco</li>
               </ul>
             </div>
 
@@ -384,13 +393,12 @@ export default function LandingPage() {
             {/* Duplicado para o laço não ter emenda visível. */}
             {[0, 1].map((volta) => (
               <span className="lp-faixa__grupo" key={volta}>
-                <span>Agenda</span>
+                <span>Agenda por duração real</span>
                 <span>Fila de espera</span>
-                <span>Comanda</span>
-                <span>Caixa</span>
-                <span>Fiado</span>
-                <span>Comissão</span>
-                <span>Avisos no WhatsApp</span>
+                <span>Comanda e caixa</span>
+                <span>Fiado registrado</span>
+                <span>Comissão com período fechado</span>
+                <span>Lembretes no WhatsApp, quando o canal está conectado</span>
                 <span>Ficha do cliente</span>
                 <span>Metas por barbeiro</span>
                 <span>Trilha de auditoria</span>
@@ -403,20 +411,20 @@ export default function LandingPage() {
           <div className="lp-container">
             <dl className="lp-placar">
               <div className="lp-placar__item">
-                <dt>Blocos entregues</dt>
-                <dd className="tabular">22</dd>
+                <dt>Telas reais do produto</dt>
+                <dd className="tabular">5</dd>
               </div>
               <div className="lp-placar__item">
-                <dt>Problemas levantados em operação real</dt>
-                <dd className="tabular">12</dd>
+                <dt>Problemas operacionais detalhados</dt>
+                <dd className="tabular">6</dd>
               </div>
               <div className="lp-placar__item">
-                <dt>Piso de tela conferido</dt>
-                <dd className="tabular">360px</dd>
+                <dt>Etapas no cadastro inicial</dt>
+                <dd className="tabular">6</dd>
               </div>
               <div className="lp-placar__item">
-                <dt>JavaScript no celular do cliente</dt>
-                <dd className="tabular">0 kB</dd>
+                <dt>Apps para o cliente instalar</dt>
+                <dd className="tabular">0</dd>
               </div>
             </dl>
           </div>
@@ -424,11 +432,11 @@ export default function LandingPage() {
 
         <section className="lp-secao" id="telas">
           <div className="lp-container">
-            <p className="lp-sobrancelha">Por dentro do sistema</p>
-            <h2 className="lp-titulo">Veja o Barber Dock funcionando</h2>
+            <p className="lp-sobrancelha">Veja antes de trocar</p>
+            <h2 className="lp-titulo">Cinco telas reais, do painel do dono à comanda do balcão</h2>
             <p className="lp-intro">
-              Fotos do produto rodando, com a barbearia de demonstração que acompanha o código —
-              os números são os que o motor calculou. Deslize para o lado, ou use os atalhos.
+              São telas do produto rodando com a barbearia de demonstração. Você vê o que o
+              balcão usa, o que o cliente recebe e o que o dono acompanha.
             </p>
 
             {/* Âncoras, não abas: o navegador rola até o alvo sem uma linha de
@@ -463,7 +471,7 @@ export default function LandingPage() {
                       {String(indice + 1).padStart(2, '0')}
                     </span>
                     <span>
-                      <strong className="lp-telas__nome">{tela.nome}</strong>
+                      <strong className="lp-telas__nome">{tela.titulo}</strong>
                       <span className="lp-telas__nota">{tela.nota}</span>
                     </span>
                   </figcaption>
@@ -475,11 +483,11 @@ export default function LandingPage() {
 
         <section className="lp-secao" id="recursos">
           <div className="lp-container">
-            <p className="lp-sobrancelha">O que o sistema faz</p>
-            <h2 className="lp-titulo">Do primeiro horário ao fechamento do caixa</h2>
+            <p className="lp-sobrancelha">Da agenda ao dinheiro</p>
+            <h2 className="lp-titulo">O que acontece no balcão já chega ao caixa</h2>
             <p className="lp-intro">
-              Cinco frentes que uma barbearia usa todo dia, integradas — não módulos vendidos
-              separados que não conversam entre si.
+              Agenda, fila, comanda, fiado e comissão usam a mesma operação. O dado não precisa
+              ser refeito em outra planilha no fechamento.
             </p>
 
             <div className="lp-bento">
@@ -498,15 +506,14 @@ export default function LandingPage() {
 
         <section className="lp-secao" id="campo">
           <div className="lp-container">
-            <p className="lp-sobrancelha">O que costuma quebrar</p>
+            <p className="lp-sobrancelha">Problemas que viraram regra do produto</p>
             <h2 className="lp-titulo">
-              Seis coisas que a gente <em>mediu</em>, não imaginou
+              Seis falhas de operação que o Barber Dock trata na origem
             </h2>
             <p className="lp-intro">
-              Antes da primeira linha de código, doze problemas foram levantados dentro de uma
-              barbearia em funcionamento — com cronômetro, não com suposição. Eles não são de um
-              software: são o que se repete na categoria. Seis estão abaixo, com o que cada um
-              custa no dia e o que fazemos diferente.
+              Doze problemas foram levantados dentro de uma barbearia em funcionamento antes da
+              primeira linha de código. Abaixo estão seis deles, com o efeito no dia e a regra
+              criada para evitar que o mesmo problema seja aceito como normal.
             </p>
 
             <ul className="lp-achados">
@@ -528,17 +535,17 @@ export default function LandingPage() {
 
         <section className="lp-secao" id="superficies">
           <div className="lp-container">
-            <p className="lp-sobrancelha">Quem usa</p>
-            <h2 className="lp-titulo">Quatro pessoas, quatro telas, um sistema</h2>
+            <p className="lp-sobrancelha">Um sistema, quatro rotinas</p>
+            <h2 className="lp-titulo">Quatro rotinas sem obrigar todo mundo a trabalhar na mesma tela</h2>
             <p className="lp-intro">
-              A mesma tela serve celular e notebook — o que muda é a densidade, não a regra. Nada de
-              versão reduzida para quem está no aparelho pequeno.
+              Cliente, balcão, barbeiro e dono veem a informação necessária para o próximo passo,
+              no celular ou no notebook, sem manter uma versão separada do sistema.
             </p>
 
             <div className="lp-superficies">
               {SUPERFICIES.map((superficie) => (
                 <article className="lp-superficie" key={superficie.nome}>
-                  <h3 className="lp-superficie__nome">{superficie.nome}</h3>
+                  <h3 className="lp-superficie__nome">{superficie.titulo}</h3>
                   <p className="lp-superficie__aparelho">{superficie.aparelho}</p>
                   <p className="lp-superficie__texto">{superficie.texto}</p>
                 </article>
@@ -550,19 +557,29 @@ export default function LandingPage() {
         <section className="lp-secao lp-secao--final">
           <div className="lp-container">
             <div className="lp-chamada">
-              <div>
-                <h2 className="lp-chamada__titulo">Atracar leva um domingo à tarde</h2>
+              <div aria-hidden="true" className="lp-chamada__visual">
+                <img
+                  alt=""
+                  className="lp-chamada__imagem"
+                  decoding="async"
+                  height={900}
+                  loading="lazy"
+                  src="/landing/cta-final-barbershop.webp"
+                  width={1600}
+                />
+              </div>
+              <div className="lp-chamada__conteudo">
+                <p className="lp-chamada__kicker">Barbearia em operação, sistema no navegador</p>
+                <h2 className="lp-chamada__titulo">Comece com sua base de clientes, não com uma tela vazia</h2>
                 <p className="lp-chamada__texto">
-                  Cadastro em seis etapas, sua base de clientes por planilha e o endereço antigo
-                  continuando a funcionar. Sem contrato de fidelidade e sem instalar nada.
+                  O cadastro tem seis etapas, sua base de clientes entra por planilha e o endereço
+                  antigo continua funcionando. Sem contrato de fidelidade, sem instalar app para o
+                  cliente e sem recomeçar do zero.
                 </p>
               </div>
               <div className="lp-chamada__acoes">
                 <a className="ui-button ui-button--primary ui-button--lg lp-beam" href="/admin/criar-conta">
-                  Criar conta
-                </a>
-                <a className="ui-button ui-button--secondary ui-button--lg" href="/admin/entrar">
-                  Já sou cliente
+                  Criar minha conta
                 </a>
               </div>
             </div>
@@ -572,10 +589,10 @@ export default function LandingPage() {
 
       <footer className="lp-rodape">
         <div className="lp-container lp-rodape__interno">
-          <p>Barber Dock — sistema de gestão para barbearias</p>
+          <p>Barber Dock — gestão para barbearias</p>
           <nav aria-label="Rodapé" className="lp-rodape__links">
             <a href="/admin/entrar">Entrar</a>
-            <a href="/admin/criar-conta">Criar conta</a>
+            <a href="/admin/criar-conta">Criar minha conta</a>
           </nav>
         </div>
       </footer>

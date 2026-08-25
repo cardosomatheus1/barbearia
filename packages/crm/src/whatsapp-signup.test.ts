@@ -271,6 +271,7 @@ describe('a descoberta da conta e do número pelo token', () => {
       staffName: 'Matheus',
       credenciais: CREDENCIAIS,
       buscar,
+      carregarCadastro: async () => null,
     }).then(() => null, (e: Error) => e);
 
     expect(erro).not.toBeNull();

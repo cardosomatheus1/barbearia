@@ -326,6 +326,18 @@ describeIfDb('reserva', () => {
     expect(Number(total[0]?.n)).toBe(1);
   });
 
+  it('a mesma chave com outra intenção é conflito, não deduplicação silenciosa', async () => {
+    await createAppointment({ ...base, idempotencyKey: 'req-conflito' });
+    await expect(
+      createAppointment({ ...base, start: '09:20', idempotencyKey: 'req-conflito' }),
+    ).rejects.toMatchObject({ code: 'idempotencia_conflitante' });
+
+    const total = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM appointments`,
+    );
+    expect(Number(total[0]?.n)).toBe(1);
+  });
+
   it('duplo toque simultâneo com a mesma chave cria um só', async () => {
     const results = await Promise.allSettled([
       createAppointment({ ...base, idempotencyKey: 'req-2' }),
@@ -515,6 +527,115 @@ describeIfDb('reserva', () => {
     expect(Number(total[0]?.n)).toBe(1);
   });
 
+  it('recurso compartilhado não estoura com duas cadeiras concorrentes', async () => {
+    await exec(admin, `
+      INSERT INTO resource_pools (tenant_id, location_id, resource_type, capacity)
+      VALUES ('${TENANT}', '${LOCATION}', 'maca_concorrente', 1);
+      INSERT INTO service_resource_requirements (tenant_id, service_id, resource_type, quantity)
+      VALUES ('${TENANT}', '${CABELO}', 'maca_concorrente', 1);
+    `);
+
+    const resultados = await Promise.allSettled([
+      createAppointment({ ...base, professionalId: RUAN, idempotencyKey: 'recurso-ruan' }),
+      createAppointment({ ...base, professionalId: GLEIDSON, idempotencyKey: 'recurso-gleidson' }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+
+    const usados = await admin.$queryRawUnsafe<{ total: bigint }[]>(
+      `SELECT COALESCE(sum(quantity), 0)::bigint AS total
+         FROM appointment_resources WHERE resource_type = 'maca_concorrente'`,
+    );
+    expect(Number(usados[0]?.total)).toBe(1);
+  });
+
+  it('limite diário não estoura com dois horários concorrentes', async () => {
+    await admin.$executeRawUnsafe(
+      `UPDATE professionals SET daily_limit = 1 WHERE id = '${RUAN}'`,
+    );
+
+    const resultados = await Promise.allSettled([
+      createAppointment({ ...base, start: '09:00', idempotencyKey: 'limite-09' }),
+      createAppointment({ ...base, start: '14:00', idempotencyKey: 'limite-14' }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+
+    const ativos = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM appointments
+        WHERE professional_id = '${RUAN}'
+          AND status NOT IN ('cancelled_customer','cancelled_business','no_show','rescheduled')`,
+    );
+    expect(Number(ativos[0]?.n)).toBe(1);
+  });
+
+  it('duas remarcações simultâneas do mesmo compromisso criam um só sucessor', async () => {
+    const original = await createAppointment({ ...base, idempotencyKey: 'remap-origem' });
+    const resultados = await Promise.allSettled([
+      rescheduleAppointment({
+        tenantId: TENANT, appointmentId: original.id, date: TERCA, start: '14:00',
+        customerId: CARLOS, now: AGORA,
+      }),
+      rescheduleAppointment({
+        tenantId: TENANT, appointmentId: original.id, date: TERCA, start: '15:00',
+        customerId: CARLOS, now: AGORA,
+      }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+
+    const ativos = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM appointments
+        WHERE status NOT IN ('cancelled_customer','cancelled_business','no_show','rescheduled')`,
+    );
+    expect(Number(ativos[0]?.n)).toBe(1);
+  });
+
+  it('cancelar × remarcar simultaneamente: só uma decisão vence', async () => {
+    const original = await createAppointment({ ...base, idempotencyKey: 'cancel-remap' });
+    const resultados = await Promise.allSettled([
+      cancelAppointment({
+        tenantId: TENANT, appointmentId: original.id, by: 'customer', customerId: CARLOS, now: AGORA,
+      }),
+      rescheduleAppointment({
+        tenantId: TENANT, appointmentId: original.id, date: TERCA, start: '14:00',
+        customerId: CARLOS, now: AGORA,
+      }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+
+    const ativos = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM appointments
+        WHERE status NOT IN ('cancelled_customer','cancelled_business','no_show','rescheduled')`,
+    );
+    expect(Number(ativos[0]?.n)).toBeLessThanOrEqual(1);
+  });
+
+  it('hold segura também recurso compartilhado entre profissionais', async () => {
+    await exec(admin, `
+      INSERT INTO resource_pools (tenant_id, location_id, resource_type, capacity)
+      VALUES ('${TENANT}', '${LOCATION}', 'maca', 1);
+      INSERT INTO service_resource_requirements (tenant_id, service_id, resource_type, quantity)
+      VALUES ('${TENANT}', '${CABELO}', 'maca', 1);
+    `);
+
+    await holdSlot(base);
+    expect(await slotsFor(GLEIDSON)).not.toContain('09:00');
+  });
+
+  it('quantity=2 de recurso ocupa duas unidades, inclusive no hold', async () => {
+    await exec(admin, `
+      INSERT INTO resource_pools (tenant_id, location_id, resource_type, capacity)
+      VALUES ('${TENANT}', '${LOCATION}', 'cadeira_especial', 2);
+      INSERT INTO service_resource_requirements (tenant_id, service_id, resource_type, quantity)
+      VALUES ('${TENANT}', '${CABELO}', 'cadeira_especial', 2);
+    `);
+
+    await holdSlot(base);
+    expect(await slotsFor(GLEIDSON)).not.toContain('09:00');
+  });
+
   // -- reserva temporária ----------------------------------------------------
 
   it('hold tira o horário da grade e o próprio dono ainda consegue reservar', async () => {
@@ -534,6 +655,18 @@ describeIfDb('reserva', () => {
     );
     // O hold é consumido junto com a reserva.
     expect(Number(holds[0]?.n)).toBe(0);
+  });
+
+  it('hold não pode ser reaproveitado em outro horário', async () => {
+    const hold = await holdSlot(base);
+    await expect(
+      createAppointment({ ...base, start: '09:20', holdId: hold.id }),
+    ).rejects.toMatchObject({ code: 'hold_invalido' });
+
+    const aindaExiste = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM slot_holds WHERE id = '${hold.id}'`,
+    );
+    expect(Number(aindaExiste[0]?.n)).toBe(1);
   });
 
   it('hold liberado devolve o horário à grade', async () => {

@@ -12,6 +12,7 @@ import {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { lancarNoExtrato } from './comanda.js';
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * Financeiro, do banco para a tela (bloco 51, SPEC §3.10).
@@ -44,7 +45,8 @@ export type FinanceiroFailure =
   | 'motivo_obrigatorio'
   | 'nome_repetido'
   | 'ja_tem_extrato'
-  | 'gaveta_ja_existe';
+  | 'gaveta_ja_existe'
+  | 'idempotencia_conflitante';
 
 export class FinanceiroError extends Error {
   constructor(readonly code: FinanceiroFailure, message: string) {
@@ -70,6 +72,7 @@ const MENSAGEM: Readonly<Record<FinanceiroFailure, string>> = {
   ja_tem_extrato:
     'Este cliente já tem movimento no fiado. O saldo inicial só vale para quem ainda não tem nenhum.',
   gaveta_ja_existe: 'Esta loja já tem uma gaveta. Cada unidade tem uma só.',
+  idempotencia_conflitante: 'Esta Idempotency-Key já foi usada para outra transferência.',
 };
 
 function recusar(code: FinanceiroFailure): never {
@@ -613,11 +616,11 @@ async function movimentoDaConta(
 
   const saindo = params.direcao === 'pagar';
   if (saindo) {
-    const somas = await tx.$queryRaw<{ total: number | null }[]>`
-      SELECT sum(amount_cents)::int AS total FROM cash_movements
+    const somas = await tx.$queryRaw<{ total: bigint | null }[]>`
+      SELECT sum(amount_cents)::bigint AS total FROM cash_movements
        WHERE session_id = ${sessao.id}::uuid
     `;
-    const naGaveta = somas[0]?.total ?? 0;
+    const naGaveta = inteiroSeguroDoBanco(somas[0]?.total, 'saldo da gaveta');
     if (params.valorCents > naGaveta) {
       throw new FinanceiroError(
         'valor_pago_invalido',
@@ -702,21 +705,23 @@ export async function transferirEntreContas(params: {
   readonly valorCents: number;
   readonly quandoEm: string;
   readonly observacao?: string | null;
-  readonly idempotencyKey?: string;
+  readonly idempotencyKey: string;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<{ readonly id: string }> {
   if (!Number.isInteger(params.valorCents) || params.valorCents <= 0) recusar('valor_invalido');
   if (params.deContaId === params.paraContaId) recusar('mesma_conta');
+  const fingerprint = JSON.stringify([params.locationId, params.deContaId, params.paraContaId, params.valorCents, params.quandoEm, params.observacao?.trim() ?? '']);
 
   return withTenant(params.tenantId, async (tx) => {
-    if (params.idempotencyKey) {
-      const jaFeita = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM account_transfers
-         WHERE idempotency_key = ${params.idempotencyKey}
-      `;
-      const anterior = jaFeita[0];
-      if (anterior) return { id: anterior.id };
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${params.tenantId}:${params.idempotencyKey}`}, 0))`;
+    const jaFeita = await tx.$queryRaw<{ id: string; idempotency_fingerprint: string | null }[]>`
+      SELECT id, idempotency_fingerprint FROM account_transfers WHERE idempotency_key = ${params.idempotencyKey}
+    `;
+    const anterior = jaFeita[0];
+    if (anterior) {
+      if (anterior.idempotency_fingerprint && anterior.idempotency_fingerprint !== fingerprint) recusar('idempotencia_conflitante');
+      return { id: anterior.id };
     }
 
     /**
@@ -778,13 +783,13 @@ export async function transferirEntreContas(params: {
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO account_transfers
         (tenant_id, location_id, from_account_id, to_account_id, amount_cents,
-         happened_on, note, cash_movement_id, idempotency_key, created_by,
+         happened_on, note, cash_movement_id, idempotency_key, idempotency_fingerprint, created_by,
          created_by_name)
       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${params.locationId}::uuid, ${params.deContaId}::uuid,
              ${params.paraContaId}::uuid, ${params.valorCents},
              ${params.quandoEm}::date, ${params.observacao?.trim() || null},
-             ${movimentoId}::uuid, ${params.idempotencyKey ?? null},
+             ${movimentoId}::uuid, ${params.idempotencyKey}, ${fingerprint},
              ${params.staffId}::uuid, ${params.staffName}
        WHERE EXISTS (SELECT 1 FROM locations WHERE id = ${params.locationId}::uuid)
       RETURNING id
@@ -841,11 +846,11 @@ async function movimentoDaTransferencia(
   }
 
   if (params.valorCents < 0) {
-    const somas = await tx.$queryRaw<{ total: number | null }[]>`
-      SELECT sum(amount_cents)::int AS total FROM cash_movements
+    const somas = await tx.$queryRaw<{ total: bigint | null }[]>`
+      SELECT sum(amount_cents)::bigint AS total FROM cash_movements
        WHERE session_id = ${sessao.id}::uuid
     `;
-    const naGaveta = somas[0]?.total ?? 0;
+    const naGaveta = inteiroSeguroDoBanco(somas[0]?.total, 'saldo da gaveta');
     if (-params.valorCents > naGaveta) {
       throw new FinanceiroError(
         'valor_invalido',
@@ -935,6 +940,39 @@ export interface FiadoDoCliente {
   /** Negativo é dívida, como em todo o produto desde o bloco 18. */
   readonly saldoCents: number;
   readonly limiteCents: number;
+}
+
+export interface ResumoFinanceiroDoCliente {
+  /** Tudo que esta pessoa efetivamente pagou à barbearia, incluindo gorjeta. */
+  readonly gastoTotalCents: number;
+}
+
+/**
+ * Acumulado financeiro de uma pessoa.
+ *
+ * Fica fora da ficha de CRM de propósito: a rota HTTP que expõe este dado exige
+ * `customers.view` + `finance.view`, portanto abrir uma anotação de cliente não
+ * vira caminho lateral para LTV. O total vem de **todos** os pedidos pagos, não
+ * das dez ocorrências que cabem na linha do tempo visual.
+ */
+export async function resumoFinanceiroDoCliente(
+  tenantId: string,
+  customerId: string,
+): Promise<ResumoFinanceiroDoCliente> {
+  return withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ gasto_total_cents: bigint }[]>`
+      SELECT COALESCE((
+        SELECT sum(o.total_cents)::bigint
+          FROM orders o
+         WHERE o.customer_id = c.id AND o.status = 'paid'
+      ), 0)::bigint AS gasto_total_cents
+        FROM customers c
+       WHERE c.id = ${customerId}::uuid
+    `;
+    const linha = linhas[0];
+    if (!linha) recusar('cliente_nao_encontrado');
+    return { gastoTotalCents: inteiroSeguroDoBanco(linha.gasto_total_cents, 'gasto total do cliente') };
+  });
 }
 
 /**

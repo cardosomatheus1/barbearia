@@ -11,6 +11,17 @@ import { audit } from '@barbearia/identity';
 import { fecharComanda, type Comanda } from './comanda.js';
 import { derivarSplitDaVenda } from './split.js';
 
+function erroSeguroParaLog(erro: unknown): { erroTipo: string; erroCodigo?: string } {
+  if (!(erro instanceof Error)) return { erroTipo: 'erro_desconhecido' };
+  const codigo = (erro as Error & { code?: unknown }).code;
+  return {
+    erroTipo: erro.name || 'Error',
+    ...(typeof codigo === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/.test(codigo)
+      ? { erroCodigo: codigo }
+      : {}),
+  };
+}
+
 /**
  * A cobrança online da comanda (blocos 35 e 36, SPEC §3.3).
  *
@@ -55,7 +66,7 @@ import { derivarSplitDaVenda } from './split.js';
  * criar a segunda.
  */
 
-export type EstadoDaCobrancaOnline = 'aguardando' | 'pago' | 'recusado' | 'expirado';
+export type EstadoDaCobrancaOnline = 'aguardando' | 'pago' | 'recusado' | 'expirado' | 'estornado';
 
 /**
  * Quanto tempo a conferência espera antes de perguntar ao adquirente.
@@ -74,7 +85,8 @@ export type FalhaDaCobranca =
   | 'meio_nao_emitivel'
   | 'comanda_sem_valor'
   | 'cobranca_nao_encontrada'
-  | 'cobranca_encerrada';
+  | 'cobranca_encerrada'
+  | 'idempotency_key_reutilizada';
 
 export class CobrancaError extends Error {
   constructor(
@@ -114,6 +126,9 @@ interface Linha {
   expires_at: Date | null;
   paid_at: Date | null;
   refused_reason: string | null;
+  refunded_at?: Date | null;
+  psp_refund_id?: string | null;
+  refunded_cents?: number | null;
   created_by_name: string;
   created_at: Date;
 }
@@ -143,7 +158,7 @@ const paraCobranca = (l: Linha): CobrancaDaComanda => ({
   orderId: l.order_id,
   meio: MEIO_NO_DOMINIO[l.method] ?? 'pix',
   valorCents: l.amount_cents,
-  estado: l.status as EstadoDaCobrancaOnline,
+  estado: l.refunded_at ? 'estornado' : (l.status as EstadoDaCobrancaOnline),
   pagamentoId: l.psp_payment_id,
   pixCopiaECola: l.pix_payload,
   url: l.checkout_url,
@@ -179,10 +194,43 @@ export async function criarCobrancaDaComanda(params: {
              pix_payload, checkout_url, expires_at, paid_at, refused_reason,
              created_by_name, created_at
         FROM order_charges
-       WHERE idempotency_key = ${params.idempotencyKey}
+       WHERE location_id = ${params.locationId}::uuid
+         AND idempotency_key = ${params.idempotencyKey}
     `;
     const anterior = repetida[0];
-    if (anterior) return { repetida: paraCobranca(anterior) };
+    if (anterior) {
+      if (
+        anterior.order_id !== params.orderId ||
+        (MEIO_NO_DOMINIO[anterior.method] ?? 'pix') !== params.meio
+      ) {
+        throw new CobrancaError(
+          'idempotency_key_reutilizada',
+          'Esta chave de cobrança já foi usada para outra intenção.',
+        );
+      }
+      // Linha aguardando sem id do PSP = a criação pode ter sido aceita e a
+      // resposta se perdeu. Não devolvemos uma cobrança vazia nem abrimos outra:
+      // repetimos a **mesma** criação abaixo, com a chave estável da linha.
+      if (anterior.status === 'aguardando' && !anterior.psp_payment_id) {
+        const nomes = await tx.$queryRaw<{ customer_name: string | null }[]>`
+          SELECT c.name AS customer_name
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+           WHERE o.id = ${anterior.order_id}::uuid
+        `;
+        return {
+          chargeId: anterior.id,
+          valorCents: anterior.amount_cents,
+          descricao: nomes[0]?.customer_name
+            ? `Atendimento — ${nomes[0].customer_name}`
+            : 'Atendimento',
+          meio: MEIO_NO_DOMINIO[anterior.method] ?? params.meio,
+          orderId: anterior.order_id,
+          recuperando: true as const,
+        };
+      }
+      return { repetida: paraCobranca(anterior) };
+    }
 
     const comandas = await tx.$queryRaw<
       { id: string; status: string; total_cents: number; customer_name: string | null }[]
@@ -212,7 +260,34 @@ export async function criarCobrancaDaComanda(params: {
     }
 
     /**
-     * Uma cobrança viva por comanda — e a recusa é do banco.
+     * `pago` também trava nova emissão enquanto a comanda continuar aberta.
+     *
+     * Este estado existe quando o cliente pagou com a gaveta fechada: o
+     * adquirente já confirmou o dinheiro, mas a venda ainda espera um caixa
+     * aberto para ser concluída. Considerar somente `aguardando` permitia
+     * emitir uma segunda cobrança nesse intervalo e cobrar o cliente duas
+     * vezes. O `FOR UPDATE` da comanda serializa duas emissões concorrentes; o
+     * índice parcial no banco é a segunda camada caso outra porta seja criada.
+     */
+    const existentes = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status::text AS status
+        FROM order_charges
+       WHERE order_id = ${params.orderId}::uuid
+         AND status IN ('aguardando', 'pago')
+         AND refunded_at IS NULL
+       LIMIT 1
+    `;
+    if (existentes[0]) {
+      throw new CobrancaError(
+        'cobranca_em_curso',
+        existentes[0].status === 'pago'
+          ? 'Esta comanda já foi paga pelo adquirente e aguarda conclusão.'
+          : 'Já existe uma cobrança em aberto para esta comanda.',
+      );
+    }
+
+    /**
+     * Uma cobrança viva ou já confirmada por comanda — e a recusa é do banco.
      *
      * Uma consulta antes do `INSERT` tem janela de corrida, e dois toques no
      * "Cobrar" acontecem em milissegundos. Dois QR Codes abertos para a mesma
@@ -228,7 +303,7 @@ export async function criarCobrancaDaComanda(params: {
         ${MEIO_NO_BANCO[params.meio]}::payment_method, ${comanda.total_cents},
         ${params.idempotencyKey}, ${params.staffId}::uuid, ${params.staffName}
       )
-      ON CONFLICT (order_id) WHERE status = 'aguardando' DO NOTHING
+      ON CONFLICT (order_id) WHERE status IN ('aguardando', 'pago') AND refunded_at IS NULL DO NOTHING
       RETURNING id
     `;
     const criada = criadas[0];
@@ -283,6 +358,9 @@ export async function criarCobrancaDaComanda(params: {
       descricao: comanda.customer_name
         ? `Atendimento — ${comanda.customer_name}`
         : 'Atendimento',
+      meio: params.meio,
+      orderId: params.orderId,
+      recuperando: false as const,
     };
   });
 
@@ -300,8 +378,8 @@ export async function criarCobrancaDaComanda(params: {
   try {
     resposta = await params.provider.criarCobranca({
       tenantId: params.tenantId,
-      orderId: params.orderId,
-      meio: params.meio,
+      orderId: preparo.orderId,
+      meio: preparo.meio,
       valorCents: preparo.valorCents,
       descricao: preparo.descricao,
       // Derivada do id da linha: a retentativa reencontra a mesma cobrança no
@@ -309,13 +387,19 @@ export async function criarCobrancaDaComanda(params: {
       idempotencyKey: preparo.chargeId,
     });
   } catch (erro) {
-    // A linha vira `expirado` para destravar a comanda: deixá-la `aguardando`
-    // prenderia o balcão num QR Code que nunca existiu.
+    /**
+     * A falha de transporte é ambígua: o adquirente pode ter criado a cobrança
+     * e perdido só a resposta. A linha permanece `aguardando` sem id do PSP e
+     * bloqueia nova emissão. Repetir esta mesma intenção — pela mesma chave HTTP
+     * ou pela conciliação — chama `criarCobranca` com `chargeId` novamente, que
+     * o contrato do provider exige tratar idempotentemente.
+     */
     await withTenant(params.tenantId, async (tx) => {
       await tx.$executeRaw`
         UPDATE order_charges
-           SET status = 'expirado', refused_reason = 'falha ao emitir', updated_at = now()
-         WHERE id = ${preparo.chargeId}::uuid AND status = 'aguardando'
+           SET refused_reason = 'emissão sem resposta', updated_at = now()
+         WHERE id = ${preparo.chargeId}::uuid
+           AND status = 'aguardando' AND psp_payment_id IS NULL
       `;
     });
     throw erro;
@@ -372,7 +456,7 @@ export async function cobrancasDaComanda(
     const linhas = await tx.$queryRaw<Linha[]>`
       SELECT id, order_id, method::text, amount_cents, status::text, psp_payment_id,
              pix_payload, checkout_url, expires_at, paid_at, refused_reason,
-             created_by_name, created_at
+             refunded_at, psp_refund_id, refunded_cents, created_by_name, created_at
         FROM order_charges
        WHERE order_id = ${orderId}::uuid
          AND location_id = ${locationId}::uuid
@@ -393,7 +477,9 @@ export type DesfechoDaConfirmacao =
    * subir devolvia 500 ao adquirente — que reentrega por dias — e derrubava a
    * varredura da barbearia inteira no meio do laço. Agora o dinheiro fica
    * registrado como recebido e a linha aparece como divergência para alguém
-   * resolver.
+   * resolver. O fluxo atual não deixa esse dinheiro parado: ele dispara
+   * refund automático e idempotente e só libera nova cobrança depois de a
+   * devolução ficar persistida.
    */
   | 'pago_com_divergencia'
   /** Pago **depois** de a cobrança ter sido encerrada. Ver `cancelarCobranca`. */
@@ -447,6 +533,17 @@ async function diaDaLojaDaCobranca(
   return diaNaUnidade(null, fuso, agora).dia;
 }
 
+interface ReembolsoAutomatico {
+  readonly chargeId: string;
+  readonly pagamentoId: string;
+  readonly valorCents: number;
+  readonly desfecho: 'pago_orfao' | 'pago_com_divergencia';
+}
+
+type ResultadoInternoDaConfirmacao = ResultadoDaConfirmacao & {
+  readonly reembolsoAutomatico?: ReembolsoAutomatico;
+};
+
 export async function confirmarCobranca(params: {
   readonly tenantId: string;
   readonly eventoId: string;
@@ -454,10 +551,12 @@ export async function confirmarCobranca(params: {
   readonly pagamentoId: string;
   readonly estado: EstadoDoPagamento;
   readonly motivo?: string | undefined;
+  /** Provider é obrigatório porque um pagamento tardio de cobrança cancelada precisa ser devolvido. */
+  readonly provider: PaymentProvider;
   /** O relógio. O **dia** sai da loja da cobrança, lá dentro. */
   readonly agora: Date;
 }): Promise<ResultadoDaConfirmacao> {
-  return withTenant(params.tenantId, async (tx) => {
+  const resultado = await withTenant(params.tenantId, async (tx): Promise<ResultadoInternoDaConfirmacao> => {
     const registrados = await tx.$executeRaw`
       INSERT INTO order_charge_events (event_id, tenant_id, type, outcome)
       VALUES (
@@ -467,17 +566,42 @@ export async function confirmarCobranca(params: {
       )
       ON CONFLICT (event_id) DO NOTHING
     `;
-    // Já registrado é entrega repetida, e a única resposta certa é não fazer
-    // nada de novo. O adquirente reentrega por desenho.
-    if (registrados === 0) return { desfecho: 'ignorado' as const, comanda: null };
+    // Entrega repetida normalmente não faz nada. A exceção deliberada é um
+    // `pago_orfao` cujo refund ainda não foi persistido: o 500 anterior pediu
+    // justamente que o adquirente reentregasse para concluirmos essa devolução.
+    if (registrados === 0) {
+      const pendentes = await tx.$queryRaw<
+        { charge_id: string; psp_payment_id: string; amount_cents: number; outcome: 'pago_orfao' | 'pago_com_divergencia' }[]
+      >`
+        SELECT c.id AS charge_id, c.psp_payment_id, c.amount_cents, e.outcome
+          FROM order_charge_events e
+          JOIN order_charges c ON c.id = e.charge_id
+         WHERE e.event_id = ${params.eventoId}
+           AND e.outcome IN ('pago_orfao', 'pago_com_divergencia')
+           AND c.psp_refund_id IS NULL
+      `;
+      const pendente = pendentes[0];
+      return pendente
+        ? {
+            desfecho: pendente.outcome,
+            comanda: null,
+            reembolsoAutomatico: {
+              chargeId: pendente.charge_id,
+              pagamentoId: pendente.psp_payment_id,
+              valorCents: pendente.amount_cents,
+              desfecho: pendente.outcome,
+            },
+          }
+        : { desfecho: 'ignorado' as const, comanda: null };
+    }
 
     const linhas = await tx.$queryRaw<
-      (Linha & { location_id: string; created_by: string | null })[]
+      (Linha & { location_id: string; created_by: string | null; psp_refund_id: string | null })[]
     >`
       SELECT id, order_id, method::text, amount_cents, status::text, psp_payment_id,
              pix_payload, checkout_url, expires_at, paid_at, refused_reason,
              created_by_name, created_at,
-             location_id, created_by
+             location_id, created_by, psp_refund_id
         FROM order_charges
        WHERE psp_payment_id = ${params.pagamentoId}
        FOR UPDATE
@@ -496,7 +620,18 @@ export async function confirmarCobranca(params: {
       const orfao = cobranca !== undefined && cobranca.status !== 'pago' && params.estado === 'pago';
       const desfecho = orfao ? ('pago_orfao' as const) : ('ignorado' as const);
       await encerrarEvento(tx, params.eventoId, cobranca?.id ?? null, desfecho);
-      return { desfecho, comanda: null };
+      return orfao && cobranca?.psp_payment_id && cobranca.psp_refund_id === null
+        ? {
+            desfecho,
+            comanda: null,
+            reembolsoAutomatico: {
+              chargeId: cobranca.id,
+              pagamentoId: cobranca.psp_payment_id,
+              valorCents: cobranca.amount_cents,
+              desfecho: 'pago_orfao',
+            },
+          }
+        : { desfecho, comanda: null };
     }
 
     if (params.estado !== 'pago') {
@@ -564,7 +699,19 @@ export async function confirmarCobranca(params: {
 
     if (comanda === null) {
       await encerrarEvento(tx, params.eventoId, cobranca.id, 'pago_com_divergencia');
-      return { desfecho: 'pago_com_divergencia' as const, comanda: null };
+      return {
+        desfecho: 'pago_com_divergencia' as const,
+        comanda: null,
+        reembolsoAutomatico: {
+          chargeId: cobranca.id,
+          // A cobrança foi localizada exatamente pelo id confirmado pelo PSP.
+          // Usar o parâmetro preserva o estreitamento para `string` mesmo
+          // quando a coluna histórica ainda admite nulo no schema.
+          pagamentoId: params.pagamentoId,
+          valorCents: cobranca.amount_cents,
+          desfecho: 'pago_com_divergencia' as const,
+        },
+      };
     }
 
     /**
@@ -587,6 +734,34 @@ export async function confirmarCobranca(params: {
     await encerrarEvento(tx, params.eventoId, cobranca.id, 'pago');
     return { desfecho: 'pago' as const, comanda };
   });
+
+  if (resultado.reembolsoAutomatico) {
+    const reembolsoPendente = resultado.reembolsoAutomatico;
+    // Fora da transação: rede nunca segura conexão do banco. Se falhar, a
+    // exceção sobe e o webhook/conciliação repetem; a branch de evento já
+    // registrado acima reencontra este mesmo refund pendente.
+    const reembolso = await params.provider.estornar(reembolsoPendente.pagamentoId, reembolsoPendente.valorCents);
+    await withTenant(params.tenantId, async (tx) => {
+      const linhas = await tx.$queryRaw<{ psp_refund_id: string | null }[]>`
+        UPDATE order_charges
+           SET refunded_at = coalesce(refunded_at, now()),
+               psp_refund_id = coalesce(psp_refund_id, ${reembolso.estornoId}),
+               refunded_cents = coalesce(refunded_cents, ${reembolsoPendente.valorCents}),
+               refused_reason = CASE
+                 WHEN ${reembolsoPendente.desfecho} = 'pago_com_divergencia' THEN 'pagamento devolvido por divergência'
+                 ELSE refused_reason
+               END,
+               updated_at = now()
+         WHERE id = ${reembolsoPendente.chargeId}::uuid
+         RETURNING psp_refund_id
+      `;
+      if (linhas[0]?.psp_refund_id !== reembolso.estornoId) {
+        throw new Error('reembolso_automatico_divergente');
+      }
+    });
+  }
+
+  return { desfecho: resultado.desfecho, comanda: resultado.comanda };
 }
 
 /**
@@ -646,14 +821,7 @@ async function encerrarEvento(
  */
 export async function cancelarCobranca(params: {
   readonly tenantId: string;
-  /**
-   * A loja do balcão.
-   *
-   * Cancelar mata o Pix **no adquirente**: o QR Code que o cliente está com o
-   * celular apontado deixa de ser pagável. Sem a loja, a operadora da filial
-   * cancelava a cobrança de uma comanda da matriz, e a trilha registrava o nome
-   * dela sem nenhum indício de que a loja não era a sua.
-   */
+  /** A loja do balcão. */
   readonly locationId: string;
   /** A comanda da URL. Sem ela, um id de cobrança valeria em qualquer endereço. */
   readonly orderId: string;
@@ -662,28 +830,63 @@ export async function cancelarCobranca(params: {
   readonly staffName: string;
   readonly provider: PaymentProvider;
 }): Promise<void> {
+  /**
+   * Primeiro descobrimos o recurso externo, sem alterar o estado local.
+   *
+   * A versão anterior marcava `expirado` e só depois chamava o adquirente. Se a
+   * rede falhasse, a cobrança sumia da conciliação (que olha `aguardando`) mas o
+   * QR Code continuava pagável. O estado seguro em falha é o oposto: continuar
+   * `aguardando`, bloqueando nova emissão, até conseguirmos provar que o código
+   * morreu no adquirente.
+   */
   const pagamentoId = await withTenant(params.tenantId, async (tx) => {
-    const encerradas = await tx.$queryRaw<{ psp_payment_id: string | null }[]>`
+    const linhas = await tx.$queryRaw<{ psp_payment_id: string | null }[]>`
+      SELECT psp_payment_id
+        FROM order_charges
+       WHERE id = ${params.chargeId}::uuid
+         AND order_id = ${params.orderId}::uuid
+         AND location_id = ${params.locationId}::uuid
+         AND status = 'aguardando'
+       FOR UPDATE
+    `;
+    const linha = linhas[0];
+    if (!linha) {
+      throw new CobrancaError('cobranca_encerrada', 'Esta cobrança já foi encerrada.');
+    }
+    if (!linha.psp_payment_id) {
+      // A cobrança existe no banco, mas o adquirente ainda está criando o
+      // pagamento. Encerrá-la localmente agora abriria a corrida em que a
+      // resposta externa chega depois e deixa um QR Code vivo sem linha viva
+      // para conciliá-lo. O estado seguro é manter a cobrança bloqueando nova
+      // emissão até a chamada de criação terminar (ou falhar e expirar).
+      throw new CobrancaError(
+        'cobranca_em_curso',
+        'A cobrança ainda está sendo emitida. Tente cancelar novamente em instantes.',
+      );
+    }
+    return linha.psp_payment_id;
+  });
+
+  // Rede fora de transação. Se falhar, a linha continua `aguardando` e a
+  // conciliação/uma nova tentativa ainda conseguem alcançar o pagamento.
+  await params.provider.cancelar(pagamentoId);
+
+  await withTenant(params.tenantId, async (tx) => {
+    const encerradas = await tx.$queryRaw<{ id: string }[]>`
       UPDATE order_charges
          SET status = 'expirado', refused_reason = 'cancelada no balcão', updated_at = now()
        WHERE id = ${params.chargeId}::uuid
          AND order_id = ${params.orderId}::uuid
          AND location_id = ${params.locationId}::uuid
          AND status = 'aguardando'
-      RETURNING psp_payment_id
+      RETURNING id
     `;
-    const encerrada = encerradas[0];
-    if (!encerrada) {
-      throw new CobrancaError('cobranca_encerrada', 'Esta cobrança já foi encerrada.');
+    if (!encerradas[0]) {
+      // O adquirente pode ter confirmado enquanto o cancelamento estava na
+      // rede. Não sobrescrevemos `pago`: a tela/conciliação resolvem o dinheiro.
+      throw new CobrancaError('cobranca_encerrada', 'Esta cobrança mudou de estado durante o cancelamento.');
     }
 
-    /**
-     * Cancelar é ato de dinheiro, e a trilha é gravada **dentro** da transação.
-     *
-     * Sem ela, matar o QR Code de um colega não deixava rastro nenhum — e
-     * combinado com o cancelamento que não chegava ao adquirente, cada
-     * cancelamento virava um pagamento que o produto nunca registraria.
-     */
     await audit(tx, {
       actorId: params.staffId,
       actorName: params.staffName,
@@ -692,23 +895,7 @@ export async function cancelarCobranca(params: {
       entityId: params.chargeId,
       after: { orderId: params.orderId },
     });
-
-    return encerrada.psp_payment_id;
   });
-
-  /**
-   * O adquirente precisa saber, e é o ponto do achado.
-   *
-   * Cancelar só do nosso lado deixava o QR Code **pagável**: o cliente que já
-   * tinha lido o código pagava, o webhook encontrava a cobrança fora de
-   * `aguardando` e devolvia "ignorado". Dinheiro capturado, nunca registrado,
-   * nunca devolvido, e sem aviso nenhum.
-   *
-   * Fora da transação, como toda ida ao adquirente. Se ele recusar, a cobrança
-   * já está encerrada aqui e a confirmação que chegar depois cai em
-   * `pago_orfao` — que é encontrável, ao contrário do silêncio anterior.
-   */
-  if (pagamentoId) await params.provider.cancelar(pagamentoId);
 }
 
 export interface ResultadoDaVarredura {
@@ -719,6 +906,8 @@ export interface ResultadoDaVarredura {
   readonly concluidas: number;
   /** Quantas falharam. Uma cobrança ruim não pode parar a varredura inteira. */
   readonly comFalha: number;
+  /** Cobranças que continuam vivas e exigem outra volta de conciliação. */
+  readonly pendentes: number;
 }
 
 /**
@@ -744,13 +933,25 @@ export async function conciliarCobrancas(params: {
   readonly provider: PaymentProvider;
   readonly agora: Date;
 }): Promise<ResultadoDaVarredura> {
-  const contagem = { consultadas: 0, pagas: 0, encerradas: 0, concluidas: 0, comFalha: 0 };
+  const contagem = { consultadas: 0, pagas: 0, encerradas: 0, concluidas: 0, comFalha: 0, pendentes: 0 };
 
   const vivas = await withTenant(params.tenantId, async (tx) => {
-    return tx.$queryRaw<{ id: string; psp_payment_id: string | null; expires_at: Date | null }[]>`
-      SELECT id, psp_payment_id, expires_at FROM order_charges
-       WHERE status = 'aguardando'
-       ORDER BY created_at
+    return tx.$queryRaw<{
+      id: string;
+      order_id: string;
+      method: string;
+      amount_cents: number;
+      psp_payment_id: string | null;
+      expires_at: Date | null;
+      customer_name: string | null;
+    }[]>`
+      SELECT ch.id, ch.order_id, ch.method::text, ch.amount_cents,
+             ch.psp_payment_id, ch.expires_at, c.name AS customer_name
+        FROM order_charges ch
+        JOIN orders o ON o.id = ch.order_id
+        LEFT JOIN customers c ON c.id = o.customer_id
+       WHERE ch.status = 'aguardando'
+       ORDER BY ch.created_at
     `;
   });
 
@@ -764,9 +965,51 @@ export async function conciliarCobrancas(params: {
        * para sempre, porque só uma cobrança viva é permitida por vez.
        */
       if (!viva.psp_payment_id) {
-        if (viva.expires_at === null || viva.expires_at.getTime() <= params.agora.getTime()) {
-          await encerrarPorTempo(params.tenantId, viva.id, 'emissão sem resposta');
-          contagem.encerradas += 1;
+        /**
+         * Recupera a **mesma** criação, nunca abre uma cobrança nova.
+         *
+         * A linha nasceu antes da rede e seu id é a chave do adquirente. Se a
+         * primeira resposta se perdeu, o provider idempotente devolve o mesmo
+         * Pix/link. Se a chamada continuar indisponível, a linha permanece viva
+         * e outra volta é agendada abaixo — liberar a comanda seria aceitar um
+         * pagamento órfão que não conseguimos cancelar nem consultar.
+         */
+        const recuperada = await params.provider.criarCobranca({
+          tenantId: params.tenantId,
+          orderId: viva.order_id,
+          meio: MEIO_NO_DOMINIO[viva.method] ?? 'pix',
+          valorCents: viva.amount_cents,
+          descricao: viva.customer_name ? `Atendimento — ${viva.customer_name}` : 'Atendimento',
+          idempotencyKey: viva.id,
+        });
+        await withTenant(params.tenantId, async (tx) => {
+          await tx.$executeRaw`
+            UPDATE order_charges
+               SET psp_payment_id = ${recuperada.pagamentoId},
+                   pix_payload = ${recuperada.pixCopiaECola ?? null},
+                   checkout_url = ${recuperada.url ?? null},
+                   expires_at = ${recuperada.expiraEm ?? null},
+                   refused_reason = NULL,
+                   updated_at = now()
+             WHERE id = ${viva.id}::uuid
+               AND status = 'aguardando' AND psp_payment_id IS NULL
+          `;
+        });
+
+        if (recuperada.estado !== 'aguardando') {
+          const resultado = await confirmarCobranca({
+            tenantId: params.tenantId,
+            eventoId: `recon:${recuperada.pagamentoId}:${recuperada.estado}`,
+            tipo: 'conciliacao',
+            pagamentoId: recuperada.pagamentoId,
+            estado: recuperada.estado,
+            provider: params.provider,
+            agora: params.agora,
+          });
+          if (resultado.desfecho === 'pago' || resultado.desfecho === 'pago_sem_caixa') contagem.pagas += 1;
+          if (resultado.desfecho === 'recusado' || resultado.desfecho === 'expirado') contagem.encerradas += 1;
+        } else {
+          contagem.pendentes += 1;
         }
         continue;
       }
@@ -781,9 +1024,12 @@ export async function conciliarCobrancas(params: {
            * Vencido aqui **e** lá: cancelar só do nosso lado deixaria o código
            * pagável, e o pagamento chegaria para uma cobrança que já morreu.
            */
-          await params.provider.cancelar(viva.psp_payment_id).catch(() => undefined);
+          await params.provider.cancelar(viva.psp_payment_id);
           await encerrarPorTempo(params.tenantId, viva.id, 'prazo do Pix vencido');
           contagem.encerradas += 1;
+        }
+        if (viva.expires_at === null || viva.expires_at.getTime() > params.agora.getTime()) {
+          contagem.pendentes += 1;
         }
         continue;
       }
@@ -794,6 +1040,7 @@ export async function conciliarCobrancas(params: {
         tipo: 'conciliacao',
         pagamentoId: viva.psp_payment_id,
         estado,
+        provider: params.provider,
         agora: params.agora,
       });
 
@@ -806,11 +1053,33 @@ export async function conciliarCobrancas(params: {
     } catch (erro) {
       contagem.comFalha += 1;
       // O id, nunca o copia-e-cola: log não é lugar de dado que cobra alguém.
-      console.error('[cobranca] conciliação falhou', { chargeId: viva.id, erro });
+      console.error('[cobranca] conciliação falhou', { chargeId: viva.id, ...erroSeguroParaLog(erro) });
     }
   }
 
   contagem.concluidas = await concluirPagasSemCaixa(params);
+  /**
+   * A conciliação é contínua enquanto houver cobrança viva ou falha transitória.
+   *
+   * A primeira versão tinha uma única tarefa 30 minutos depois da emissão. Se o
+   * PSP estivesse fora do ar naquela volta — ou o link ainda estivesse
+   * aguardando — o job concluía e nunca mais alguém perguntava. Uma chave por
+   * janela de dez minutos deduplica workers concorrentes sem transformar a rede
+   * de segurança em laço apertado.
+   */
+  if (contagem.pendentes > 0 || contagem.comFalha > 0) {
+    const proxima = new Date(params.agora.getTime() + 10 * 60_000);
+    const janela = Math.floor(proxima.getTime() / (10 * 60_000));
+    await withTenant(params.tenantId, async (tx) => {
+      await enfileirarPara(tx, params.tenantId, {
+        kind: 'cobranca.conciliar',
+        payload: {},
+        rodarApos: proxima,
+        idempotencyKey: `cobranca-recon:${params.tenantId}:${janela}`,
+      });
+    });
+  }
+
   return contagem;
 }
 
@@ -841,7 +1110,9 @@ async function concluirPagasSemCaixa(params: {
         JOIN orders o ON o.id = c.order_id
         JOIN cash_sessions s
           ON s.location_id = c.location_id AND s.status = 'open'
-       WHERE c.status = 'pago' AND o.status = 'open'
+       WHERE c.status = 'pago'
+         AND c.refunded_at IS NULL
+         AND o.status = 'open'
        ORDER BY c.paid_at
     `;
   });
@@ -849,8 +1120,8 @@ async function concluirPagasSemCaixa(params: {
   let concluidas = 0;
   for (const cobranca of pendentes) {
     try {
-      const fechada = await withTenant(params.tenantId, async (tx) =>
-        fecharComandaOuDivergencia(tx, {
+      const fechada = await withTenant(params.tenantId, async (tx) => {
+        const venda = await fecharComandaOuDivergencia(tx, {
           tenantId: params.tenantId,
           locationId: cobranca.location_id,
           orderId: cobranca.order_id,
@@ -865,11 +1136,22 @@ async function concluirPagasSemCaixa(params: {
           hojeNaUnidade: await diaDaLojaDaCobranca(tx, cobranca.location_id, params.agora),
           idempotencyKey: `cobranca:${cobranca.id}`,
           tx,
-        }),
-      );
+        });
+        if (venda) {
+          // O caminho tardio precisa produzir os mesmos fatos do webhook com
+          // caixa aberto. Sem isto comissão existia, mas `payment_splits` não:
+          // o dinheiro do profissional nunca entrava na fila de repasse.
+          await derivarSplitDaVenda(tx, {
+            orderId: cobranca.order_id,
+            chargeId: cobranca.id,
+            pagamentoCents: cobranca.amount_cents,
+          });
+        }
+        return venda;
+      });
       if (fechada) concluidas += 1;
     } catch (erro) {
-      console.error('[cobranca] conclusão falhou', { chargeId: cobranca.id, erro });
+      console.error('[cobranca] conclusão falhou', { chargeId: cobranca.id, ...erroSeguroParaLog(erro) });
     }
   }
   return concluidas;

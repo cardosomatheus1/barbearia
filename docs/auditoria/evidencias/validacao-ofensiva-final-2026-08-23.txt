@@ -1,0 +1,21 @@
+Barberdock - validação ofensiva final - 2026-08-23
+
+== Guardas estáticas ==
+guards_ok=23 guards_fail=0
+
+== Scripts de teste sem dependências ==
+test_scripts_ok=4 unavailable=1 fail=0
+
+== Sintaxe TS/TSX ==
+ts_tsx=742 parse_errors=0
+
+== Imports internos e exports ==
+internal_import_declarations=2436 named_default_imports=7277 missing_paths=0 missing_symbols=0
+
+== Configurações/scripts ==
+mjs_ok=70
+shell_ok=29
+json_ok=46 yaml_ok=6
+
+== Portão oficial ==
+verify.sh: etapas estáticas verdes; build bloqueado por pnpm ausente; PostgreSQL bloqueado por pg_isready ausente.

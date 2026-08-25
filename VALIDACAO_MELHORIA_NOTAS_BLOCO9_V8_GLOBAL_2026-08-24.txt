@@ -1,0 +1,28 @@
+BARBERDOCK — BLOCO 9 — V8 TÉCNICO GLOBAL — 2026-08-24
+
+VEREDITO
+- Foco global de <summary>: corrigido.
+- Menu de ações da Agenda: 28x28 -> 44x44.
+- Bloqueio curto não exibe ação que não cabe na escala; ação exibida = 44px.
+- V8 estático global: 97 TSX aprovados.
+- Mutações negativas V8 estático: 8/8 detectadas.
+- Mutações negativas A11Y/UX: 10/10 detectadas.
+- Verificadores autônomos: 42 aprovados; 0 falhas; 1 skip por ausência de vitest.
+- Apps/web TS/TSX: 133/133 com sintaxe válida.
+- conferir-telas.mjs: sintaxe OK.
+- verify.sh: sintaxe shell OK.
+
+NOVO PORTÃO V8 RUNTIME
+- 1280px + 360px.
+- overflow horizontal.
+- H1 visível.
+- imagens quebradas/sem alt.
+- controles sem rótulo.
+- ações sem nome.
+- alvos <44px.
+- tabelas largas sem scroll local.
+- percorre também todas as portas visíveis do dono derivadas do menu.
+
+LIMITAÇÃO
+- V8 humano global continua pendente.
+- Novo V8 runtime ainda precisa executar no ambiente com aplicação + Playwright + PostgreSQL/psql.

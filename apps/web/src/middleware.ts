@@ -16,21 +16,21 @@ import { NextResponse, type NextRequest } from 'next/server';
  * ele mesmo escreve. Por isso a política é escrita nos dois lados: na
  * requisição, para ele encontrar; e na resposta, para o navegador cobrar.
  *
- * ## Não é componente de cliente
+ * ## Middleware continua sendo servidor
  *
- * Middleware é servidor, como as server actions e as páginas. A regra de zero
- * componente de cliente continua valendo, e é ela que torna esta política
- * possível: sem JavaScript nosso no navegador, não há o que liberar além do
- * que o próprio Next escreve.
+ * O admin possui ilhas client-side pequenas (R5/V11/R9), todas servidas pelo
+ * próprio domínio. A CSP continua fechada para script de terceiro: o nonce
+ * cobre o bootstrap inline do Next e `script-src 'self'` cobre os chunks dessas
+ * ilhas, sem abrir `unsafe-inline` para JavaScript.
  */
 
 /**
  * Uma política, escrita uma vez, com o porquê de cada diretiva.
  *
- * `img-src` é a única larga, e é decisão de produto: a foto do corte, do
- * ambiente e do barbeiro é endereço `https://` que a barbearia digita no
- * cadastro (bloco 11). Fechar em `'self'` apagaria a página que a §5 do
- * `CLAUDE.md` diz que carrega o peso do layout.
+ * `img-src` ainda aceita `https:` apenas para imagens legadas cadastradas antes
+ * do R9 e para conteúdo externo já existente. Novas fotos públicas entram pelo
+ * armazenamento `/media/...` do próprio Barberdock; quando as legadas forem
+ * migradas, essa exceção pode ser reavaliada.
  */
 /**
  * A licença da Meta saiu no bloco 86, e o motivo vale registrar.
@@ -42,18 +42,21 @@ import { NextResponse, type NextRequest } from 'next/server';
  *
  * O SDK **não funcionava no celular**: a janela virava uma aba, o callback
  * nunca disparava, e a tela ficava igual. Trocado por redirecionamento — que é
- * navegação comum —, o produto voltou a não mandar JavaScript nenhum ao
- * navegador, e a exceção deixou de ter razão de existir.
+ * navegação comum —, a licença da Meta deixou de ter razão de existir.
  *
- * O caminho mais robusto era também o que fechava a política de volta.
+ * A única exceção atual é o Turnstile na criação de conta anônima. Ela é
+ * deliberadamente limitada a essa rota; as superfícies públicas de agenda
+ * continuam server-only e sem script de terceiro.
  */
-function politica(nonce: string): string {
+function politica(nonce: string, pathname: string): string {
+  const turnstile = pathname === '/admin/criar-conta';
   return [
     "default-src 'self'",
-    // `strict-dynamic` para o carregador do Next puxar os próprios pedaços sem
-    // que cada um precise de nonce. Navegador que não o entende cai em 'self',
-    // que continua recusando script de terceiro.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    // `strict-dynamic` permite que o script do Turnstile, autenticado pelo mesmo
+    // nonce do Next, carregue os pedaços próprios sem abrir terceiros no resto do site.
+    turnstile
+      ? `script-src 'self' https://challenges.cloudflare.com 'nonce-${nonce}' 'strict-dynamic'`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     // O produto tem seis `style={{...}}` que desenham barra de progresso a
     // partir de um número calculado no servidor. Atributo de estilo não executa
     // nada; fechá-lo custaria seis classes geradas e não fecharia buraco algum.
@@ -61,8 +64,9 @@ function politica(nonce: string): string {
     "img-src 'self' data: https:",
     // A página fala com a API **pelo servidor**. Nada sai do navegador, e desde
     // o bloco 86 não há exceção: a conexão do WhatsApp virou redirecionamento.
-    "connect-src 'self'",
+    turnstile ? "connect-src 'self' https://challenges.cloudflare.com" : "connect-src 'self'",
     "font-src 'self'",
+    turnstile ? "frame-src https://challenges.cloudflare.com" : "frame-src 'self'",
     "object-src 'none'",
     // Sem isto, uma injeção de `<base>` reescreve para onde todo link relativo
     // aponta — inclusive o `action` dos formulários do painel.
@@ -78,7 +82,7 @@ export function middleware(requisicao: NextRequest): NextResponse {
   // `crypto` é global no runtime do middleware. O hífen sai porque o valor do
   // nonce é comparado literalmente e precisa ser do alfabeto base64.
   const nonce = crypto.randomUUID().replaceAll('-', '');
-  const csp = politica(nonce);
+  const csp = politica(nonce, requisicao.nextUrl.pathname);
 
   const cabecalhos = new Headers(requisicao.headers);
   cabecalhos.set('x-nonce', nonce);

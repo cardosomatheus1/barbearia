@@ -27,3 +27,10 @@ next-env.d.ts
 # tabela `teste_do_livro_caixa` que ninguém pediu — e, por ser posterior à
 # baseline, nem os bancos já adotados escapariam.
 packages/db/migrations/9999_teste_do_livro_caixa.sql
+
+# Armazenamento local do R9 quando roda sem Docker.
+.media/
+
+# R12 — medições reais de usabilidade (IDs anônimos, ainda assim dados de campo)
+/medicoes/r12/*.json
+!/medicoes/r12/.gitkeep

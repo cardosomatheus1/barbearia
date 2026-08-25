@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ESCOPOS, MODALIDADES_DE_SINAL, tryNormalizeBusinessPhone } from '@barbearia/core';
+import { ESCOPOS, fusoConhecido, MODALIDADES_DE_SINAL, tryNormalizeBusinessPhone } from '@barbearia/core';
 import { AMENITIES, PAYMENT_METHODS } from '@barbearia/onboarding';
 
 /**
@@ -63,6 +63,8 @@ export const signUpSchema = z.object({
   password: z.string().min(10).max(200),
   phone: z.string().min(8).max(24),
   businessName: z.string().trim().min(2).max(80),
+  // O token é validado pelo servidor contra o Siteverify antes de qualquer escrita.
+  turnstileToken: z.string().trim().max(2048).optional(),
 });
 
 export const loginSchema = z.object({
@@ -105,7 +107,7 @@ export const businessSchema = z.object({
   about: z.string().trim().max(600).optional().transform(vazioApaga),
   // O fuso vem da unidade, nunca do dispositivo (CLAUDE.md §2). Aqui ele é
   // escolhido explicitamente pelo dono, e é a única vez que isso acontece.
-  timezone: z.string().trim().max(64).optional(),
+  timezone: z.string().trim().max(64).refine(fusoConhecido, 'fuso desconhecido').optional(),
   amenities: z.array(z.enum(AMENITIES)).max(AMENITIES.length).optional(),
 });
 
@@ -122,6 +124,21 @@ const servicoSchema = z.object({
 
 export const servicesSchema = z.object({
   services: z.array(servicoSchema).min(1).max(80),
+}).superRefine(({ services }, ctx) => {
+  const keys = new Set<string>();
+  const names = new Set<string>();
+  for (let i = 0; i < services.length; i += 1) {
+    const service = services[i]!;
+    const key = service.key.trim();
+    const name = service.name.trim().toLocaleLowerCase('pt-BR');
+    if (keys.has(key)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['services', i, 'key'], message: 'chave de serviço repetida' });
+    if (names.has(name)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['services', i, 'name'], message: 'nome de serviço repetido' });
+    keys.add(key);
+    names.add(name);
+    if (service.componentKeys && new Set(service.componentKeys).size !== service.componentKeys.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['services', i, 'componentKeys'], message: 'combo repete componente' });
+    }
+  }
 });
 
 export const professionalsSchema = z.object({
@@ -139,13 +156,19 @@ export const professionalsSchema = z.object({
                 startMinute: minutos,
                 endMinute: minutos,
               })
-              // Jornada invertida passaria pelo banco e produziria dia sem
-              // horário nenhum, sem erro visível.
               .refine((d) => d.startMinute < d.endMinute, {
                 message: 'início precisa ser antes do fim',
               }),
           )
-          .max(21),
+          .max(7)
+          .superRefine((schedule, ctx) => {
+            const dias = new Set<number>();
+            for (let i = 0; i < schedule.length; i += 1) {
+              const weekday = schedule[i]!.weekday;
+              if (dias.has(weekday)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i, 'weekday'], message: 'dia da semana repetido; use breaks para intervalos' });
+              dias.add(weekday);
+            }
+          }),
         serviceNames: z.array(z.string().trim().max(80)).max(80).optional(),
       }),
     )
@@ -225,11 +248,11 @@ export const changeWindowSchema = z.object({
 });
 
 /**
- * Endereços de foto.
+ * Referências de foto mantidas por compatibilidade com o contrato antigo.
  *
- * A URL em si é validada pelo domínio (`imagemPublica`), que exige `https` e
- * recusa `javascript:` e `data:`. Aqui vale o formato e o teto — a string vazia
- * é aceita de propósito: é como a tela diz "tire esta foto".
+ * O fluxo normal envia o arquivo por `/photos/upload` e grava um caminho
+ * `/media/...` gerado pelo servidor. O PUT legado só aceita esse caminho do
+ * próprio tenant ou string vazia para remover a foto; não reabre hotlink externo.
  */
 const enderecoDeFoto = z.string().trim().max(500);
 

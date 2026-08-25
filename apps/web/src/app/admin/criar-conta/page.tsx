@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoCriarConta } from '../acoes';
@@ -22,6 +23,8 @@ const FALHA: Record<string, string> = {
   invalid_phone: 'Confira o celular: precisa ter DDD e nove dígitos.',
   invalid_request: 'Confira os dados. A senha precisa de pelo menos 10 caracteres.',
   rate_limited: 'Muitas tentativas. Aguarde um instante.',
+  bot_verification_failed: 'Não foi possível confirmar que esta tentativa é legítima. Tente novamente.',
+  bot_verification_unavailable: 'A proteção anti-bot está temporariamente indisponível. Tente novamente em instantes.',
 };
 
 export default async function CriarContaPage({ searchParams }: Props) {
@@ -29,6 +32,9 @@ export default async function CriarContaPage({ searchParams }: Props) {
 
   const query = await searchParams;
   const erro = typeof query['erro'] === 'string' ? query['erro'] : undefined;
+  const cabecalhos = await headers();
+  const nonce = cabecalhos.get('x-nonce') ?? undefined;
+  const turnstileSiteKey = process.env['TURNSTILE_SITE_KEY']?.trim();
 
   return (
     <main className="ui-container painel__entrada">
@@ -84,6 +90,22 @@ export default async function CriarContaPage({ searchParams }: Props) {
                  autoComplete="new-password" required minLength={10} maxLength={200} />
           <p className="ui-field__hint">Pelo menos 10 caracteres.</p>
         </div>
+
+        {turnstileSiteKey ? (
+          <>
+            <script
+              async
+              defer
+              nonce={nonce}
+              src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+            />
+            <div
+              className="cf-turnstile"
+              data-action="signup"
+              data-sitekey={turnstileSiteKey}
+            />
+          </>
+        ) : null}
 
         <button className="ui-button ui-button--primary ui-button--lg ui-button--block" type="submit">
           Criar conta

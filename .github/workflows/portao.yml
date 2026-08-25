@@ -11,7 +11,8 @@
 # O `portao` é o que decide se o commit presta: typecheck, testes contra
 # Postgres de verdade e build. Ele precisa ser verde sempre.
 #
-# A `medicao` sobe os dois servidores e mede navegador e carga. É legítimo ela
+# A `medicao` sobe API, Web e Worker e mede navegador, carga de leitura e a
+# disputa destrutiva de reserva. É legítimo ela
 # ser mais lenta e mais barulhenta — o que ela não pode é atrasar o retorno do
 # portão. Separada, o autor sabe em ~3 minutos se quebrou alguma regra, e a
 # medição chega quando chegar.
@@ -57,6 +58,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # O secret scan precisa enxergar commits antigos, não só o snapshot.
+          fetch-depth: 0
+
+      - name: varredura de segredos
+        run: node scripts/verificar-segredos.mjs --history
 
       - uses: pnpm/action-setup@v4
 
@@ -84,14 +91,13 @@ jobs:
           APP_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-portao
 
       - name: varredura de dependências
-        # SPEC §5.12 pede varredura de dependências. Ela **não** derruba o
-        # portão: um aviso novo publicado numa madrugada travaria o time inteiro
-        # por algo que ninguém introduziu. Fica visível e é olhada.
-        continue-on-error: true
+        # Vulnerabilidade high/critical conhecida não pode atravessar o mesmo
+        # portão que chama o commit de pronto. Se um advisory novo surgir, o
+        # bloqueio é intencional: atualizar/mitigar e só então publicar.
         run: pnpm audit --audit-level high
 
   medicao:
-    name: navegador e carga
+    name: pilha, navegador e cargas
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Só depois do portão: medir o layout de um commit que não compila é gastar

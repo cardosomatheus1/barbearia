@@ -1,0 +1,40 @@
+BARBERDOCK — AUDITORIA FINAL CUMULATIVA / CROSS-DOMAIN — 2026-08-25
+
+VEREDITO
+- 7 classes finais de interação cross-domain corrigidas.
+- Recursos: Agenda lê com lock shared; Catálogo escreve com lock exclusivo no mesmo namespace.
+- Profissional/jornada: walk-in/oferta/booking disputam a configuração; edições administrativas usam writer lock.
+- Walk-in revalida skill + jornada + breaks/exceções antes do INSERT.
+- Lista de espera recalcula a grade vigente antes do slot_hold.
+- Serviço/combo: Agenda lê com lock shared; update/active/franquia usam writer lock.
+- PSP/fatura, estorno e webhook tenant-scoped permanecem protegidos pelos blocos anteriores.
+- Nenhuma migração nova necessária; head continua 0115.
+
+VALIDAÇÃO EXECUTADA
+- Guardas diretas: 46/46 PASS.
+- Testes Node autônomos: 26/26 arquivos; 213/213 testes PASS.
+- Auditoria Final Cross-Domain negativa: 22/22 mutações detectadas.
+- TS/TSX sintático: 780/780 PASS.
+- Shell: 30/30 PASS.
+- YAML: 7/7 PASS.
+- Migrações: 115, 0001 -> 0115, zero versões duplicadas.
+- Prontidão: 8 funcionalidades, matriz/evidências coerentes.
+- Guardas cumulativas dos Blocos 1-6: verdes.
+
+CONFIGURAÇÃO DE PRODUÇÃO
+- Preflight recusou corretamente o runtime sem secrets reais.
+- Não contado como PASS nem como falha de código.
+
+NÃO EXECUTADO NESTE RUNTIME
+- PostgreSQL 16 / psql / pg_isready e provas SQL reais.
+- Concorrência/integration tests dependentes de PostgreSQL.
+- 25 arquivos .test.mjs que importam Vitest diretamente.
+- Suíte Vitest TypeScript completa.
+- pnpm typecheck/test/build/E2E.
+- Smoke com Meta, Stripe/PSP, fiscal, split e providers reais.
+
+CLASSIFICAÇÃO FINAL
+- Auditoria dependente de código: CONCLUÍDA.
+- Bloqueador conhecido de código após a bateria disponível: NENHUM.
+- Certificação runtime/go-live: PENDENTE dos portões externos acima.
+- Este pacote final passa a ser a base canônica.

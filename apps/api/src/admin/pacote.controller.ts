@@ -45,6 +45,7 @@ const STATUS: Record<string, number> = {
   ja_reembolsado: 409,
   nada_a_devolver: 409,
   pacote_invalido: 400,
+  estorno_da_venda_em_curso: 409,
 };
 
 function toHttp(erro: unknown): never {
@@ -171,6 +172,9 @@ export class PacoteController {
   ) {
     const local = await unidadeDoBalcao(staff);
     const dia = query.dia ?? diaNaUnidade(null, local.timezone, new Date()).dia;
-    return { dia, ...(await receitaDePacotes(staff.tenantId, dia)) };
+    return {
+      dia,
+      ...(await receitaDePacotes({ tenantId: staff.tenantId, locationId: local.id, dia })),
+    };
   }
 }

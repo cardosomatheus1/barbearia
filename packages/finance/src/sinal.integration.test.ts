@@ -23,10 +23,13 @@ const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 const TENANT = '37373737-1111-1111-1111-111111111111';
 const RIVAL = '37373737-2222-2222-2222-222222222222';
 const LOCATION = '37373737-aaaa-0000-0000-000000000001';
+const FILIAL = '37373737-aaaa-0000-0000-000000000002';
 const RUAN = '37373737-bbbb-0000-0000-000000000001';
+const BRUNO = '37373737-bbbb-0000-0000-000000000002';
 const CARLOS = '37373737-cccc-0000-0000-000000000001';
 const STAFF = '37373737-ffff-0000-0000-000000000001';
 const AGENDAMENTO = '37373737-dddd-0000-0000-000000000001';
+const AGENDAMENTO_FILIAL = '37373737-dddd-0000-0000-000000000002';
 
 const AGORA = new Date('2026-09-10T12:00:00Z');
 const operador = { staffId: STAFF, staffName: 'Maria Recepção' };
@@ -82,10 +85,12 @@ describeIfDb('o sinal recebido', () => {
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari'), ('${RIVAL}', 'Vizinha');
 
       INSERT INTO locations (id, tenant_id, name, timezone, deposit_refund_hours)
-      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 24);
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 24),
+             ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia', 24);
 
       INSERT INTO professionals (id, tenant_id, location_id, name)
-      VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan');
+      VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan'),
+             ('${BRUNO}', '${TENANT}', '${FILIAL}', 'Bruno');
 
       INSERT INTO customers (id, tenant_id, name, phone_e164)
       VALUES ('${CARLOS}', '${TENANT}', 'Carlos Souza', '+5571988887777');
@@ -98,6 +103,7 @@ describeIfDb('o sinal recebido', () => {
   const registrar = (valorCents: number) =>
     registrarSinalRecebido({
       tenantId: TENANT,
+      locationId: LOCATION,
       appointmentId: AGENDAMENTO,
       valorCents,
       ...operador,
@@ -109,6 +115,28 @@ describeIfDb('o sinal recebido', () => {
         SELECT action::text AS action, actor_name FROM audit_log ORDER BY created_at
       `,
     );
+
+  it('UUID de agendamento de outra unidade da mesma barbearia não move o sinal', async () => {
+    const comeca = new Date(AGORA.getTime() + 2 * 86_400_000);
+    await exec(`
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id, starts_at, ends_at,
+         service_starts_at, service_ends_at, status, deposit_required_cents, deposit_reason)
+      VALUES ('${AGENDAMENTO_FILIAL}', '${TENANT}', '${FILIAL}', '${CARLOS}', '${BRUNO}',
+              '${comeca.toISOString()}', '${new Date(comeca.getTime() + 1_800_000).toISOString()}',
+              '${comeca.toISOString()}', '${new Date(comeca.getTime() + 1_800_000).toISOString()}',
+              'pending', 2000, 'score')
+    `);
+
+    await expect(sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO_FILIAL)).rejects.toMatchObject({
+      code: 'agendamento_nao_encontrado',
+    });
+    await expect(registrarSinalRecebido({
+      tenantId: TENANT, locationId: LOCATION, appointmentId: AGENDAMENTO_FILIAL,
+      valorCents: 2000, ...operador,
+    })).rejects.toMatchObject({ code: 'agendamento_nao_encontrado' });
+    expect((await sinalDoAgendamento(TENANT, FILIAL, AGENDAMENTO_FILIAL)).pagoCents).toBe(0);
+  });
 
   it('registra o sinal e deixa rastro de quem disse que recebeu', async () => {
     await exec(agendamento({ exigidoCents: 2000 }));
@@ -128,7 +156,7 @@ describeIfDb('o sinal recebido', () => {
     await registrar(2000);
 
     await expect(registrar(2000)).rejects.toThrow(SinalError);
-    const atual = await sinalDoAgendamento(TENANT, AGENDAMENTO);
+    const atual = await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO);
     expect(atual.pagoCents).toBe(2000);
     expect(await trilha()).toHaveLength(1);
   });
@@ -143,7 +171,7 @@ describeIfDb('o sinal recebido', () => {
     await expect(registrar(200)).rejects.toMatchObject({
       code: 'valor_diferente_do_exigido',
     });
-    expect((await sinalDoAgendamento(TENANT, AGENDAMENTO)).pagoCents).toBe(0);
+    expect((await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).pagoCents).toBe(0);
   });
 
   it('não registra sinal em agendamento que não exige nenhum', async () => {
@@ -159,12 +187,13 @@ describeIfDb('o sinal recebido', () => {
      */
     await exec(agendamento({ exigidoCents: 2000 }));
 
-    await expect(sinalDoAgendamento(RIVAL, AGENDAMENTO)).rejects.toMatchObject({
+    await expect(sinalDoAgendamento(RIVAL, LOCATION, AGENDAMENTO)).rejects.toMatchObject({
       code: 'agendamento_nao_encontrado',
     });
     await expect(
       registrarSinalRecebido({
         tenantId: RIVAL,
+        locationId: LOCATION,
         appointmentId: AGENDAMENTO,
         valorCents: 2000,
         ...operador,
@@ -178,7 +207,7 @@ describeIfDb('o sinal recebido', () => {
         agendamento({ exigidoCents: 2000, status: 'cancelled_customer', canceladoHorasAntes: 48 }),
       );
       await registrar(2000);
-      expect(await sinalDoAgendamento(TENANT, AGENDAMENTO)).toMatchObject({
+      expect(await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).toMatchObject({
         reembolso: 'devolver',
       });
     });
@@ -188,7 +217,7 @@ describeIfDb('o sinal recebido', () => {
         agendamento({ exigidoCents: 2000, status: 'cancelled_customer', canceladoHorasAntes: 2 }),
       );
       await registrar(2000);
-      expect(await sinalDoAgendamento(TENANT, AGENDAMENTO)).toMatchObject({ reembolso: 'reter' });
+      expect(await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).toMatchObject({ reembolso: 'reter' });
     });
 
     it('a casa cancelou: devolve, mesmo em cima da hora', async () => {
@@ -196,7 +225,7 @@ describeIfDb('o sinal recebido', () => {
         agendamento({ exigidoCents: 2000, status: 'cancelled_business', canceladoHorasAntes: 0 }),
       );
       await registrar(2000);
-      expect(await sinalDoAgendamento(TENANT, AGENDAMENTO)).toMatchObject({
+      expect(await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).toMatchObject({
         reembolso: 'devolver',
       });
     });
@@ -204,7 +233,7 @@ describeIfDb('o sinal recebido', () => {
     it('faltou sem avisar: retém — é o caso para o qual o sinal existe', async () => {
       await exec(agendamento({ exigidoCents: 2000, status: 'no_show' }));
       await registrar(2000);
-      expect(await sinalDoAgendamento(TENANT, AGENDAMENTO)).toMatchObject({ reembolso: 'reter' });
+      expect(await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).toMatchObject({ reembolso: 'reter' });
     });
 
     it('cancelamento sem carimbo devolve, e não retém', async () => {
@@ -218,7 +247,7 @@ describeIfDb('o sinal recebido', () => {
         }),
       );
       await registrar(2000);
-      const atual = await sinalDoAgendamento(TENANT, AGENDAMENTO);
+      const atual = await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO);
       expect(atual.reembolso).toBe('devolver');
       expect(atual.porqueDoReembolso).toContain('registro');
     });
@@ -228,7 +257,7 @@ describeIfDb('o sinal recebido', () => {
       // recepção aprenderia a ler "devolver" num agendamento que vai acontecer.
       await exec(agendamento({ exigidoCents: 2000 }));
       await registrar(2000);
-      expect(await sinalDoAgendamento(TENANT, AGENDAMENTO)).toMatchObject({
+      expect(await sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).toMatchObject({
         reembolso: null,
         porqueDoReembolso: null,
       });
@@ -252,12 +281,13 @@ describeIfDb('o sinal recebido', () => {
     await exec(`UPDATE appointments SET status = 'rescheduled', deposit_paid_cents = 0
                  WHERE id = '${AGENDAMENTO}'`);
 
-    await expect(sinalDoAgendamento(TENANT, AGENDAMENTO)).rejects.toMatchObject({
+    await expect(sinalDoAgendamento(TENANT, LOCATION, AGENDAMENTO)).rejects.toMatchObject({
       code: 'agendamento_nao_encontrado',
     });
     await expect(
       devolverSinal({
         tenantId: TENANT,
+        locationId: LOCATION,
         appointmentId: AGENDAMENTO,
         valorCents: 0,
         ...operador,
@@ -279,6 +309,7 @@ describeIfDb('o sinal recebido', () => {
 
       const depois = await devolverSinal({
         tenantId: TENANT,
+        locationId: LOCATION,
         appointmentId: AGENDAMENTO,
         valorCents: 0,
         ...operador,
@@ -295,6 +326,7 @@ describeIfDb('o sinal recebido', () => {
       await expect(
         devolverSinal({
           tenantId: TENANT,
+          locationId: LOCATION,
           appointmentId: AGENDAMENTO,
           valorCents: 0,
           ...operador,

@@ -1,0 +1,20 @@
+BARBERDOCK — MELHORIA DE NOTAS — BLOCO 7 UX/A11Y — 2026-08-24
+
+VEREDITO
+- Skip-link global do admin: OK.
+- Busca global: foco inicial + trap Tab/Shift+Tab + Escape + restauração: OK.
+- Busca global: foco visível + aria-expanded/controls + alvo de toque: OK.
+- Comanda: uma forma visível; split progressivo em dobra: OK.
+- Contrato forma0..2/valor0..2 preservado: OK estrutural.
+- Fotos da ficha: alt semântico com legenda/fallback: OK.
+- Guarda A11Y/UX: OK.
+- Testes negativos da guarda: 5/5.
+- Verificadores autônomos aplicáveis: 36/36.
+- Único não executado: verificar-r11-modulos.test.mjs (vitest ausente no runtime).
+- TSX alterados: 4/4 transpilaram.
+- verify.sh: sintaxe OK.
+
+LIMITES
+- V8 visual humano global: ainda externo.
+- R12 com usuários/barbearias reais: ainda externo.
+- PostgreSQL/RLS/E2E real: ainda externo.

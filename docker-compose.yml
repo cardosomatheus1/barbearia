@@ -20,6 +20,7 @@ x-ambiente: &ambiente
   # código: sem segredo, falha alto.
   APP_DB_PASSWORD: ${APP_DB_PASSWORD:?rode RODAR-NO-WINDOWS.cmd (Windows) ou scripts/docker.sh (Linux/macOS) para gerar o .env}
   STAFF_EMAIL_PEPPER: ${STAFF_EMAIL_PEPPER:?falta no .env}
+  OTP_PEPPER: ${OTP_PEPPER:?falta no .env}
   MFA_SECRET_KEY: ${MFA_SECRET_KEY:?falta no .env}
   # As quatro que faltavam, e cada uma matava uma integração inteira (bloco 112).
   #
@@ -32,10 +33,31 @@ x-ambiente: &ambiente
   API_KEY_PEPPER: ${API_KEY_PEPPER:?falta no .env}
   WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?falta no .env}
   WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
+  KYC_INTENT_HMAC_SECRET: ${KYC_INTENT_HMAC_SECRET:?falta no .env}
   MARKETPLACE_ORIGIN_SECRET: ${MARKETPLACE_ORIGIN_SECRET:?falta no .env}
+  # Backup cifrado: chave própria, porque restaurar não pode depender de a
+  # chave do segundo fator continuar a mesma.
+  BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?falta no .env}
+  # OTP e credencial de primeiro acesso por WhatsApp. `console` é o padrão e
+  # não exige nada; `meta` exige os quatro abaixo.
+  IDENTITY_MESSAGING_MODO: ${IDENTITY_MESSAGING_MODO:-console}
+  IDENTITY_WHATSAPP_PHONE_NUMBER_ID: ${IDENTITY_WHATSAPP_PHONE_NUMBER_ID:-}
+  IDENTITY_WHATSAPP_ACCESS_TOKEN: ${IDENTITY_WHATSAPP_ACCESS_TOKEN:-}
+  IDENTITY_WHATSAPP_OTP_TEMPLATE: ${IDENTITY_WHATSAPP_OTP_TEMPLATE:-}
+  IDENTITY_WHATSAPP_STAFF_TEMPLATE: ${IDENTITY_WHATSAPP_STAFF_TEMPLATE:-}
+  IDENTITY_WHATSAPP_LANGUAGE: ${IDENTITY_WHATSAPP_LANGUAGE:-pt_BR}
   DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
   ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?falta no .env}@db:5432/postgres
   API_URL: http://api:3000
+  # Mídia: local serve desenvolvimento/instalação simples; `s3` usa um
+  # bucket privado S3/R2/MinIO, mantendo a URL pública em /media/... .
+  MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
+  MEDIA_ROOT: /data/media
+  MEDIA_S3_ENDPOINT: ${MEDIA_S3_ENDPOINT:-}
+  MEDIA_S3_BUCKET: ${MEDIA_S3_BUCKET:-}
+  MEDIA_S3_REGION: ${MEDIA_S3_REGION:-auto}
+  MEDIA_S3_ACCESS_KEY_ID: ${MEDIA_S3_ACCESS_KEY_ID:-}
+  MEDIA_S3_SECRET_ACCESS_KEY: ${MEDIA_S3_SECRET_ACCESS_KEY:-}
 
 services:
   db:
@@ -89,6 +111,8 @@ services:
       preparar:
         condition: service_completed_successfully
     environment: *ambiente
+    volumes:
+      - media:/data/media
     # Só o laço: publicar em todas as interfaces expõe a API de quem sobe o
     # compose num VPS ou numa rede de escritório para mostrar o produto.
     ports: ['127.0.0.1:3000:3000']
@@ -142,3 +166,6 @@ services:
       <<: *ambiente
       WEB_URL: http://localhost:3001
     command: node scripts/semear-demo.mjs
+
+volumes:
+  media:

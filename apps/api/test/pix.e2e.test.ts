@@ -61,9 +61,12 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
     process.env['STAFF_EMAIL_PEPPER'] = 'pepper-de-teste';
     process.env['MFA_SECRET_KEY'] = Buffer.alloc(32, 9).toString('base64');
     process.env['STRIPE_WEBHOOK_SECRET'] = SEGREDO;
-    // Sem `PSP_MODO`, o adquirente é o de mentira — que é o certo aqui: o que
-    // se prova é o caminho do produto, não que a Stripe responde.
-    delete process.env['PSP_MODO'];
+    // `fake` **explícito**, e não a ausência da variável: a cobrança da comanda
+    // só existe quando o modo foi escolhido, senão a barbearia que nunca
+    // configurou adquirente veria um Pix de mentira na tela e o cliente iria
+    // embora achando que pagou. O que se prova aqui é o caminho do produto, não
+    // que a Stripe responde.
+    process.env['PSP_MODO'] = 'fake';
     admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
 
     const moduleRef = await Test.createTestingModule({
@@ -250,6 +253,7 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
     const recusa = await com(entrou.body.token)(
       http()
         .post('/v1/admin/orders/11111111-1111-1111-1111-111111111111/charges')
+        .set('Idempotency-Key', 'pix-e2e-252')
         .set('Idempotency-Key', 'x')
         .send({ meio: 'pix' }),
     ).expect(403);
@@ -276,6 +280,7 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
     await com(token)(
       http()
         .post(`/v1/admin/orders/${orderId}/charges`)
+        .set('Idempotency-Key', 'pix-e2e-278')
         .set('Idempotency-Key', 'toque-1')
         .send({ meio: 'boleto' }),
     ).expect(400);

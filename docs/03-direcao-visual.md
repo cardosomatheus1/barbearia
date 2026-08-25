@@ -180,9 +180,10 @@ o estado do banco, não uma decisão de desenho: as colunas `cover_url`,
 devolvia. Faltava a **origem do dado**, que é o mesmo defeito que `blocks` teve
 por oito blocos, com o agravante de estar à vista de qualquer visitante.
 
-Corrigido no bloco 11: `/admin/fotos` dá à barbearia por onde preencher, e a
-página exibe capa, rosto do barbeiro e foto do serviço. Enquanto não há
-armazenamento próprio o endereço é colado, com validação de `https`.
+Corrigido no bloco 11 e fechado no R9: `/admin/fotos` dá à barbearia por onde
+enviar capa, logo, rosto do barbeiro e foto do serviço. O arquivo é preparado no
+navegador, revalidado no servidor e servido em `/media/...` pelo próprio
+domínio; a página pública não depende mais de host de imagem de terceiro.
 
 **A régua de horários se sabotava.** Ela sai ordenada por horário, então os
 primeiros catorze de um dia com 126 vagas eram `12:30 12:35 12:40 12:45` — a

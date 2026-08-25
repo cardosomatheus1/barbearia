@@ -42,15 +42,38 @@ x-ambiente: &ambiente
   APP_DB_PASSWORD: ${APP_DB_PASSWORD:?rode deploy/instalar.sh para gerar o .env}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta no .env}
   STAFF_EMAIL_PEPPER: ${STAFF_EMAIL_PEPPER:?falta no .env}
+  OTP_PEPPER: ${OTP_PEPPER:?falta no .env}
   MFA_SECRET_KEY: ${MFA_SECRET_KEY:?falta no .env}
   API_KEY_PEPPER: ${API_KEY_PEPPER:?falta no .env}
   WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?falta no .env}
   WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
+  KYC_INTENT_HMAC_SECRET: ${KYC_INTENT_HMAC_SECRET:?falta no .env}
   MARKETPLACE_ORIGIN_SECRET: ${MARKETPLACE_ORIGIN_SECRET:?falta no .env}
+  # Backup cifrado: chave própria, porque restaurar não pode depender de a
+  # chave do segundo fator continuar a mesma.
+  BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?falta no .env}
+  # OTP e credencial de primeiro acesso por WhatsApp. `console` é o padrão e
+  # não exige nada; `meta` exige os quatro abaixo.
+  IDENTITY_MESSAGING_MODO: ${IDENTITY_MESSAGING_MODO:-console}
+  IDENTITY_WHATSAPP_PHONE_NUMBER_ID: ${IDENTITY_WHATSAPP_PHONE_NUMBER_ID:-}
+  IDENTITY_WHATSAPP_ACCESS_TOKEN: ${IDENTITY_WHATSAPP_ACCESS_TOKEN:-}
+  IDENTITY_WHATSAPP_OTP_TEMPLATE: ${IDENTITY_WHATSAPP_OTP_TEMPLATE:-}
+  IDENTITY_WHATSAPP_STAFF_TEMPLATE: ${IDENTITY_WHATSAPP_STAFF_TEMPLATE:-}
+  IDENTITY_WHATSAPP_LANGUAGE: ${IDENTITY_WHATSAPP_LANGUAGE:-pt_BR}
   DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
   ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
   # De servidor para servidor, dentro da rede do compose.
   API_URL: http://api:3000
+  # Mídia: local serve desenvolvimento/instalação simples; `s3` usa um
+  # bucket privado S3/R2/MinIO, mantendo a URL pública em /media/... .
+  MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
+  MEDIA_ROOT: /data/media
+  MEDIA_S3_ENDPOINT: ${MEDIA_S3_ENDPOINT:-}
+  MEDIA_S3_BUCKET: ${MEDIA_S3_BUCKET:-}
+  MEDIA_S3_REGION: ${MEDIA_S3_REGION:-auto}
+  MEDIA_S3_ACCESS_KEY_ID: ${MEDIA_S3_ACCESS_KEY_ID:-}
+  MEDIA_S3_SECRET_ACCESS_KEY: ${MEDIA_S3_SECRET_ACCESS_KEY:-}
+  MEDIA_S3_ALLOW_HTTP: ${MEDIA_S3_ALLOW_HTTP:-0}
   # O endereço público, e ele **sai em mensagem**: convite de vaga, pedido de
   # avaliação, link da nota e o retorno do checkout da Stripe. Errado aqui, o
   # cliente recebe um endereço que não abre.
@@ -80,6 +103,11 @@ x-ambiente: &ambiente
   META_CONFIG_ID: ${META_CONFIG_ID:-}
   META_APP_SECRET: ${META_APP_SECRET:-}
   WHATSAPP_ONBOARDING: ${WHATSAPP_ONBOARDING:-padrao}
+  # Proteção anti-bot da criação de conta. A site key é pública; a secret key
+  # nunca sai do servidor/API. O preflight recusa produção sem as três.
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+  TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
 
 services:
   db:
@@ -121,6 +149,7 @@ services:
     command: >
       bash -c '
         set -e
+        node scripts/verificar-configuracao-producao.mjs
         psql "$$ADMIN_DATABASE_URL" -q -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'barbearia'"'"'" | grep -q 1 \
           || psql "$$ADMIN_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE barbearia"
         scripts/bootstrap-role.sh > /dev/null
@@ -133,6 +162,8 @@ services:
       preparar:
         condition: service_completed_successfully
     environment: *ambiente
+    volumes:
+      - media:/data/media
     command: node apps/api/dist/main.js
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/health/pronto | grep -q ok']
@@ -180,6 +211,7 @@ services:
 
 volumes:
   dados:
+  media:
   caddy-dados:
   caddy-config:
   caddy-log:

@@ -400,9 +400,10 @@ personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
 - **Toda media query de layout usa `min-width`.** `max-width` significa
   "desfazer o que fiz para tela grande", o que inverte a ordem de trabalho e
   deixa o celular como caso excepcional. Há teste que rejeita — no design system
-  **e** em `apps/web/src/app/globals.css`, que é onde o CSS das telas realmente
-  mora. Por um tempo só o primeiro era verificado, e o arquivo que mais cresce
-  era o que ninguém olhava.
+  **e** no conjunto importado por `apps/web/src/app/globals.css`. Desde o R10,
+  `globals.css` é só o índice da cascata e as regras moram em `app/styles/`,
+  partidas por superfície. As guardas expandem os imports antes de conferir,
+  então partir o arquivo não pode virar uma forma de esconder regra dos testes.
 - **Larguras de conferência:** 360 · 390 · 768 · 1280. Uma tela que só foi
   olhada no notebook não foi olhada — e o inverso também vale.
 - **Toda tela serve aos dois aparelhos.** Não existe "tela de celular" e "tela
@@ -454,11 +455,14 @@ personalidade tem que vir de tipografia, estrutura e do elemento assinatura.
   no celular: mouse impreciso e limitação motora não são exclusividade do
   aparelho pequeno.
 
-  A única exceção é **link dentro de frase** ("é só *escolher o horário*"), que
-  a própria WCAG 2.5.8 isenta: esticar um link no meio de um parágrafo abre
-  buraco no texto e piora a leitura. Link de navegação sozinho no topo da tela
-  **não** é isso — foi assim que `← Voltar` ficou com 21px em quatro telas até
-  a medição pegar.
+  As exceções são de **não-alvo**, nunca de alvo pequeno: link dentro de frase
+  ("é só *escolher o horário*") e intervalo puramente informativo numa régua
+  temporal proporcional. Na Agenda V10, se um buraco físico mede menos de 44px,
+  ele **não vira botão** nem é artificialmente esticado sobre o compromisso
+  vizinho; continua informativo. Todo elemento que de fato recebe clique/toque
+  continua com pelo menos 44px. Link de navegação sozinho no topo da tela não é
+  exceção — foi assim que `← Voltar` ficou com 21px em quatro telas até a
+  medição pegar.
 
 ### Componente responsivo ao recipiente, não à tela
 

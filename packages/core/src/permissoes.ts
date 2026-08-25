@@ -421,11 +421,15 @@ export const PAPEIS: readonly Papel[] = ['owner', 'manager', 'receptionist', 'pr
  * - **`customers.export` isolado.** É o vetor de roubo de base quando alguém
  *   sai, e por isso não acompanha `customers.view` nem sequer para o gerente.
  *
- * O dono tem tudo por definição: é a única conta que não pode ser trancada para
- * fora do próprio negócio.
+ * O dono tem todas as permissões **do próprio tenant** por definição: é a única
+ * conta que não pode ser trancada para fora do próprio negócio. `franchise.manage`
+ * é diferente: é um entitlement concedido pela plataforma somente quando aquele
+ * tenant vira franqueadora, portanto não faz parte do papel padrão.
  */
+const PERMISSOES_DO_OWNER = PERMISSOES.filter((p) => p !== 'franchise.manage');
+
 const PADRAO: Readonly<Record<Papel, readonly Permissao[]>> = {
-  owner: PERMISSOES,
+  owner: PERMISSOES_DO_OWNER,
 
   manager: [
     'appointments.view',

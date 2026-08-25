@@ -33,7 +33,7 @@ if not exist ".env" (
     "$b=[byte[]]::new(16); $r=[Security.Cryptography.RandomNumberGenerator]::Create();" ^
     "$hex={param($n) $x=[byte[]]::new($n); $r.GetBytes($x); ($x|%%{$_.ToString('x2')}) -join ''};" ^
     "$b64={$x=[byte[]]::new(32); $r.GetBytes($x); [Convert]::ToBase64String($x)};" ^
-    "$linhas=@('# Gerado por RODAR-NO-WINDOWS.cmd. Fora do Git.', ('POSTGRES_PASSWORD=' + (&$hex 16)), ('APP_DB_PASSWORD=' + (&$hex 16)), ('STAFF_EMAIL_PEPPER=' + (&$hex 32)), ('MARKETPLACE_ORIGIN_SECRET=' + (&$hex 32)), ('API_KEY_PEPPER=' + (&$hex 32)), ('MFA_SECRET_KEY=' + (&$b64)), ('WEBHOOK_SECRET_KEY=' + (&$b64)), ('WHATSAPP_TOKEN_KEY=' + (&$b64)));" ^
+    "$linhas=@('# Gerado por RODAR-NO-WINDOWS.cmd. Fora do Git.', ('POSTGRES_PASSWORD=' + (&$hex 16)), ('APP_DB_PASSWORD=' + (&$hex 16)), ('STAFF_EMAIL_PEPPER=' + (&$hex 32)), ('OTP_PEPPER=' + (&$hex 32)), ('MARKETPLACE_ORIGIN_SECRET=' + (&$hex 32)), ('API_KEY_PEPPER=' + (&$hex 32)), ('MFA_SECRET_KEY=' + (&$b64)), ('WEBHOOK_SECRET_KEY=' + (&$b64)), ('WHATSAPP_TOKEN_KEY=' + (&$b64)), ('KYC_INTENT_HMAC_SECRET=' + (&$hex 32)));" ^
     "Set-Content -Path '.env' -Value $linhas -Encoding ascii"
   if errorlevel 1 goto sem_env
   if not exist ".env" goto sem_env
@@ -78,17 +78,19 @@ goto fim
 :sem_env
 echo   [X] Nao consegui gerar o arquivo .env com os segredos locais.
 echo.
-echo   Crie um arquivo chamado .env nesta pasta com quatro linhas, trocando
+echo   Crie um arquivo chamado .env nesta pasta com as linhas abaixo, trocando
 echo   os valores por texto aleatorio seu:
 echo.
 echo       POSTGRES_PASSWORD=troque-por-algo-aleatorio
 echo       APP_DB_PASSWORD=troque-por-algo-aleatorio
 echo       STAFF_EMAIL_PEPPER=troque-por-algo-aleatorio
+echo       OTP_PEPPER=troque-por-algo-aleatorio
 echo       MARKETPLACE_ORIGIN_SECRET=troque-por-algo-aleatorio
 echo       API_KEY_PEPPER=troque-por-algo-aleatorio
 echo       MFA_SECRET_KEY=base64-de-32-bytes
 echo       WEBHOOK_SECRET_KEY=base64-de-32-bytes
 echo       WHATSAPP_TOKEN_KEY=base64-de-32-bytes
+echo       KYC_INTENT_HMAC_SECRET=hex-aleatorio-de-32-bytes
 echo.
 pause
 

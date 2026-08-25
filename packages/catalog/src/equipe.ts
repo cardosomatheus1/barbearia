@@ -8,6 +8,7 @@ import {
   type TipoDeCadeira,
 } from '@barbearia/core';
 import { CatalogError, exigirServicosDoTenant } from './servicos.js';
+import { travarCatalogoDoTenant, travarConfiguracaoDoProfissional } from './concorrencia.js';
 
 /**
  * Equipe e jornada, no dia a dia.
@@ -209,6 +210,7 @@ export async function updateProfessional(
   input: ProfessionalInput,
 ): Promise<void> {
   await withTenant(tenantId, async (tx) => {
+    await travarConfiguracaoDoProfissional(tx, professionalId);
     const afetadas = await tx.$executeRaw`
       UPDATE professionals SET
         name = ${input.name},
@@ -284,6 +286,9 @@ export async function definirPerfilPublico(
      */
     let slug = atual.public_slug;
     if (!slug && input.ligado) {
+      // Dois profissionais homônimos concorrem pelo mesmo namespace público.
+      // A consulta "está livre?" precisa ser serializada antes do índice único.
+      await travarCatalogoDoTenant(tx, 'professional-public-slug');
       const base = slugDoBarbeiro(atual.name);
       if (!base) {
         throw new CatalogError('invalid_public_slug', 'O nome não gera um endereço público.');
@@ -379,154 +384,195 @@ export interface ForaDaJornada {
  * Só olha o futuro: o passado já aconteceu, e alertar sobre ele seria ruído em
  * toda edição. Compara no fuso da unidade, nunca no do servidor.
  */
+interface ParametrosDeConflitoDaJornada {
+  readonly podeVerCliente: boolean;
+  readonly locationId: string;
+  readonly professionalId: string;
+  readonly faixas: readonly FaixaDoDia[];
+  readonly now: Date;
+}
+
+async function conflitosDaJornadaTx(
+  tx: TransactionClient,
+  params: ParametrosDeConflitoDaJornada,
+): Promise<readonly ForaDaJornada[]> {
+  const unidades = await tx.$queryRaw<{ timezone: string }[]>`
+    SELECT l.timezone FROM locations l
+    JOIN professionals p ON p.location_id = l.id
+    WHERE p.id = ${params.professionalId}::uuid
+      AND l.id = ${params.locationId}::uuid
+  `;
+  const timezone = unidades[0]?.timezone;
+  if (!timezone) return [];
+
+  const linhas = await tx.$queryRaw<
+    {
+      id: string;
+      service_starts_at: Date;
+      service_ends_at: Date;
+      customer_name: string | null;
+    }[]
+  >`
+    SELECT a.id, a.service_starts_at, a.service_ends_at, c.name AS customer_name
+    FROM appointments a
+    LEFT JOIN customers c ON c.id = a.customer_id
+    WHERE a.professional_id = ${params.professionalId}::uuid
+      AND a.service_starts_at >= ${params.now}
+      AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
+    ORDER BY a.service_starts_at
+  `;
+
+  const porDia = new Map<number, FaixaDoDia[]>();
+  for (const faixa of params.faixas) {
+    const doDia = porDia.get(faixa.weekday) ?? [];
+    doDia.push(faixa);
+    porDia.set(faixa.weekday, doDia);
+  }
+
+  const fora: ForaDaJornada[] = [];
+  for (const linha of linhas) {
+    const inicio = instantToLocal(timezone, linha.service_starts_at);
+    const fim = instantToLocal(timezone, linha.service_ends_at);
+    const weekday = new Date(`${inicio.date}T12:00:00Z`).getUTCDay();
+
+    const cabe = (porDia.get(weekday) ?? []).some((faixa) => {
+      const dentro = inicio.minutes >= faixa.startMinute && fim.minutes <= faixa.endMinute;
+      if (!dentro) return false;
+      return !faixa.breaks.some(
+        (intervalo) => inicio.minutes < intervalo.end && fim.minutes > intervalo.start,
+      );
+    });
+
+    if (!cabe) {
+      fora.push({
+        appointmentId: linha.id,
+        startsAt: linha.service_starts_at.toISOString(),
+        date: inicio.date,
+        time: formatHHMM(inicio.minutes),
+        customerName: params.podeVerCliente ? linha.customer_name : null,
+      });
+    }
+  }
+
+  return fora;
+}
+
+function validarFaixasDaJornada(faixas: readonly FaixaDoDia[]): void {
+  const dias = new Set<number>();
+  for (const faixa of faixas) {
+    if (faixa.startMinute >= faixa.endMinute) {
+      throw new CatalogError('invalid_catalog', 'A hora de entrada precisa ser antes da hora de saída.');
+    }
+    if (dias.has(faixa.weekday)) {
+      throw new CatalogError('invalid_catalog', 'Cada dia da semana aceita uma jornada; use breaks para os intervalos.');
+    }
+    dias.add(faixa.weekday);
+  }
+}
+
+async function substituirJornadaTx(
+  tx: TransactionClient,
+  professionalId: string,
+  faixas: readonly FaixaDoDia[],
+): Promise<void> {
+  await tx.$executeRaw`
+    DELETE FROM work_schedules WHERE professional_id = ${professionalId}::uuid
+  `;
+  for (const faixa of faixas) {
+    await tx.$executeRaw`
+      INSERT INTO work_schedules
+        (tenant_id, professional_id, weekday, start_minute, end_minute, breaks)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        ${professionalId}::uuid, ${faixa.weekday},
+        ${faixa.startMinute}, ${faixa.endMinute},
+        ${JSON.stringify(faixa.breaks)}::jsonb
+      )
+    `;
+  }
+}
+
+/**
+ * Snapshot dos conflitos da jornada. Útil para leitura, mas a gravação do
+ * painel usa `saveScheduleWithConflicts`, que repete a conferência dentro da
+ * mesma transação e sob o lock compartilhado com Scheduling.
+ */
 export async function conflitosDaJornada(params: {
   readonly tenantId: string;
-  /**
-   * Quem pode ver identidade de cliente.
-   *
-   * A conferência de dois tempos devolve **nome de cliente com hora marcada**,
-   * e a rota que a chama declara `settings.manage` — que é permissão de
-   * cadastro, não de cliente. Redigir e não recusar, como o painel do dia: sem
-   * a permissão a lista ainda diz *quantos* e *quando*, que é o que decide se a
-   * jornada nova pode entrar.
-   */
   readonly podeVerCliente: boolean;
-  /**
-   * A unidade da sessão, e ela é a **primeira** porta do handler.
-   *
-   * `conflitosDaJornada` roda antes de `saveSchedule` e devolve **nome de
-   * cliente** com hora marcada. Sem o recorte, o gerente escopado a uma filial
-   * mandava a jornada vazia para a cadeira de um barbeiro da matriz — id que
-   * sai anônimo na página pública — e recebia a agenda futura inteira dele,
-   * com nome de quem marcou. A gravação era recusada; o vazamento acontecia
-   * antes dela, e era o próprio objeto de retorno.
-   *
-   * Achado da `/security-review` deste bloco: seis funções foram escopadas e
-   * esta era a sétima, no mesmo `try` das outras duas.
-   */
   readonly locationId: string;
   readonly professionalId: string;
   readonly faixas: readonly FaixaDoDia[];
   readonly now?: Date;
 }): Promise<readonly ForaDaJornada[]> {
   const now = params.now ?? new Date();
-
-  return withTenant(params.tenantId, async (tx) => {
-    const unidades = await tx.$queryRaw<{ timezone: string }[]>`
-      SELECT l.timezone FROM locations l
-      JOIN professionals p ON p.location_id = l.id
-      WHERE p.id = ${params.professionalId}::uuid
-        AND l.id = ${params.locationId}::uuid
-    `;
-    // Vazio aqui é "não é sua cadeira" ou "não existe" — e `saveSchedule`, logo
-    // adiante, recusa com a mensagem de inexistente nos dois casos.
-    const timezone = unidades[0]?.timezone;
-    if (!timezone) return [];
-
-    const linhas = await tx.$queryRaw<
-      {
-        id: string;
-        service_starts_at: Date;
-        service_ends_at: Date;
-        customer_name: string | null;
-      }[]
-    >`
-      SELECT a.id, a.service_starts_at, a.service_ends_at, c.name AS customer_name
-      FROM appointments a
-      LEFT JOIN customers c ON c.id = a.customer_id
-      WHERE a.professional_id = ${params.professionalId}::uuid
-        AND a.service_starts_at >= ${now}
-        AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
-      ORDER BY a.service_starts_at
-    `;
-
-    const porDia = new Map<number, FaixaDoDia[]>();
-    for (const faixa of params.faixas) {
-      const doDia = porDia.get(faixa.weekday) ?? [];
-      doDia.push(faixa);
-      porDia.set(faixa.weekday, doDia);
-    }
-
-    const fora: ForaDaJornada[] = [];
-    for (const linha of linhas) {
-      const inicio = instantToLocal(timezone, linha.service_starts_at);
-      const fim = instantToLocal(timezone, linha.service_ends_at);
-      const weekday = new Date(`${inicio.date}T12:00:00Z`).getUTCDay();
-
-      const cabe = (porDia.get(weekday) ?? []).some((faixa) => {
-        // O fim do atendimento também precisa caber: um corte que começa às
-        // 11:50 e termina 12:20 não cabe numa jornada que fecha ao meio-dia.
-        const dentro = inicio.minutes >= faixa.startMinute && fim.minutes <= faixa.endMinute;
-        if (!dentro) return false;
-        return !faixa.breaks.some(
-          (intervalo) => inicio.minutes < intervalo.end && fim.minutes > intervalo.start,
-        );
-      });
-
-      if (!cabe) {
-        fora.push({
-          appointmentId: linha.id,
-          startsAt: linha.service_starts_at.toISOString(),
-          date: inicio.date,
-          time: formatHHMM(inicio.minutes),
-          customerName: params.podeVerCliente ? linha.customer_name : null,
-        });
-      }
-    }
-
-    return fora;
-  });
+  return withTenant(params.tenantId, (tx) => conflitosDaJornadaTx(tx, { ...params, now }));
 }
 
-/**
- * Grava a jornada da semana inteira desta pessoa.
- *
- * Substitui o conjunto de propósito: a jornada é uma coisa só, e editar dia a
- * dia deixaria linha órfã do dia que o dono tirou do formulário.
- *
- * `conflitosDaJornada` roda **antes**, na mesma transação: quem chama decide se
- * grava assim mesmo, mas ninguém grava sem ter a lista na mão.
- */
+/** Grava a jornada sem a etapa de confirmação; callers internos já validados. */
 export async function saveSchedule(params: {
   readonly tenantId: string;
   readonly locationId: string;
   readonly professionalId: string;
   readonly faixas: readonly FaixaDoDia[];
 }): Promise<void> {
+  validarFaixasDaJornada(params.faixas);
   await withTenant(params.tenantId, async (tx) => {
-    // O `DELETE` abaixo apaga a jornada inteira da pessoa. Conferir a unidade
-    // aqui é o que impede que ele apague a de outra loja.
+    await travarConfiguracaoDoProfissional(tx, params.professionalId);
     const existe = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM professionals
        WHERE id = ${params.professionalId}::uuid
          AND location_id = ${params.locationId}::uuid
+       FOR UPDATE
     `;
-    if (!existe[0]) {
-      throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
+    if (!existe[0]) throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
+    await substituirJornadaTx(tx, params.professionalId, params.faixas);
+  });
+}
+
+/**
+ * Conferência + gravação atômicas da jornada.
+ *
+ * O advisory lock tem a mesma chave usada por criação/hold/remarcação na
+ * Agenda. Assim, ou o agendamento entra primeiro e aparece nos conflitos, ou a
+ * jornada entra primeiro e o agendamento recalcula a grade nova; não existe
+ * mais a janela "conferiu vazio -> outra reserva entrou -> salvou".
+ */
+export async function saveScheduleWithConflicts(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly professionalId: string;
+  readonly faixas: readonly FaixaDoDia[];
+  readonly confirmarConflitos: boolean;
+  readonly podeVerCliente: boolean;
+  readonly now?: Date;
+}): Promise<{ readonly saved: boolean; readonly conflitos: readonly ForaDaJornada[] }> {
+  validarFaixasDaJornada(params.faixas);
+  const now = params.now ?? new Date();
+
+  return withTenant(params.tenantId, async (tx) => {
+    await travarConfiguracaoDoProfissional(tx, params.professionalId);
+    const existe = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM professionals
+       WHERE id = ${params.professionalId}::uuid
+         AND location_id = ${params.locationId}::uuid
+       FOR UPDATE
+    `;
+    if (!existe[0]) throw new CatalogError('professional_not_found', 'Profissional não encontrado.');
+
+    const conflitos = await conflitosDaJornadaTx(tx, {
+      podeVerCliente: params.podeVerCliente,
+      locationId: params.locationId,
+      professionalId: params.professionalId,
+      faixas: params.faixas,
+      now,
+    });
+    if (conflitos.length > 0 && !params.confirmarConflitos) {
+      return { saved: false, conflitos };
     }
 
-    await tx.$executeRaw`
-      DELETE FROM work_schedules WHERE professional_id = ${params.professionalId}::uuid
-    `;
-
-    for (const faixa of params.faixas) {
-      if (faixa.startMinute >= faixa.endMinute) {
-        throw new CatalogError(
-          'invalid_catalog',
-          'A hora de entrada precisa ser antes da hora de saída.',
-        );
-      }
-      await tx.$executeRaw`
-        INSERT INTO work_schedules
-          (tenant_id, professional_id, weekday, start_minute, end_minute, breaks)
-        VALUES (
-          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-          ${params.professionalId}::uuid, ${faixa.weekday},
-          ${faixa.startMinute}, ${faixa.endMinute},
-          ${JSON.stringify(faixa.breaks)}::jsonb
-        )
-      `;
-    }
+    await substituirJornadaTx(tx, params.professionalId, params.faixas);
+    return { saved: true, conflitos };
   });
 }
 
@@ -555,6 +601,7 @@ export async function setProfessionalActive(params: {
   const now = params.now ?? new Date();
 
   return withTenant(params.tenantId, async (tx) => {
+    await travarConfiguracaoDoProfissional(tx, params.professionalId);
     const afetadas = await tx.$executeRaw`
       UPDATE professionals SET active = ${params.active}, updated_at = now()
       WHERE id = ${params.professionalId}::uuid AND location_id = ${params.locationId}::uuid

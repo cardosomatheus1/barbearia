@@ -1,3 +1,4 @@
+import { HORA_DA_APURACAO_UTC } from '@barbearia/core';
 import { semTenant, withTenant } from '@barbearia/db';
 
 /**
@@ -255,7 +256,6 @@ export async function agendarApuracaoDeTodas(params: {
 }
 
 /** A hora, em UTC, a partir da qual o dia anterior já acabou no Brasil inteiro. */
-export const HORA_DA_APURACAO_UTC = 9;
 
 /**
  * Que dia apurar, e a partir de quando.

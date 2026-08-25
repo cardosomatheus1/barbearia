@@ -31,6 +31,7 @@ const APP_URL = process.env['APP_DATABASE_URL'];
 const TENANT = '11111111-1111-1111-1111-111111111111';
 const RIVAL = '22222222-2222-2222-2222-222222222222';
 const LOCATION = 'aaaaaaaa-0000-0000-0000-000000000001';
+const FILIAL = 'aaaaaaaa-0000-0000-0000-000000000003';
 const LOCAL_RIVAL = 'aaaaaaaa-0000-0000-0000-000000000002';
 const RUAN = 'bbbbbbbb-0000-0000-0000-000000000001';
 const CABELO = 'eeeeeeee-0000-0000-0000-000000000001';
@@ -69,6 +70,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
       INSERT INTO locations (id, tenant_id, name, timezone)
       VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia'),
+             ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia'),
              ('${LOCAL_RIVAL}', '${RIVAL}', 'Rival', 'America/Bahia');
 
       INSERT INTO professionals (id, tenant_id, location_id, name, kind)
@@ -132,6 +134,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     await abrir();
     await expect(
       movimentarCaixa({
+        idempotencyKey: 'audit-test-movimentarCaixa-1',
         tenantId: TENANT,
         locationId: LOCATION,
         kind: 'withdrawal',
@@ -145,10 +148,12 @@ describeIfDb('comanda, caixa e fiado', () => {
   it('sangria e suprimento mexem no esperado nos dois sentidos', async () => {
     await abrir();
     await movimentarCaixa({
+        idempotencyKey: 'audit-test-movimentarCaixa-2',
       tenantId: TENANT, locationId: LOCATION, kind: 'withdrawal',
       amountCents: 15000, reason: 'Banco', ...operador,
     });
     await movimentarCaixa({
+        idempotencyKey: 'audit-test-movimentarCaixa-3',
       tenantId: TENANT, locationId: LOCATION, kind: 'supply',
       amountCents: 5000, reason: 'Troco', ...operador,
     });
@@ -670,6 +675,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     });
 
     const { saldoCents } = await receberFiado({
+        idempotencyKey: 'audit-test-receberFiado-1',
       tenantId: TENANT, locationId: LOCATION, customerId: CARLOS,
       amountCents: 5000, forma: 'cash', ...operador,
     });
@@ -731,6 +737,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     await expect(
       receberFiado({
+        idempotencyKey: 'audit-test-receberFiado-2',
         tenantId: TENANT, locationId: LOCATION, customerId: CARLOS,
         amountCents: 9000, forma: 'cash', ...operador,
       }),
@@ -747,6 +754,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     await expect(
       receberFiado({
+        idempotencyKey: 'audit-test-receberFiado-3',
         tenantId: TENANT, locationId: LOCATION, customerId: CARLOS,
         amountCents: 1000, forma: 'fiado', ...operador,
       }),
@@ -799,6 +807,7 @@ describeIfDb('comanda, caixa e fiado', () => {
 
     await expect(
       receberFiado({
+        idempotencyKey: 'audit-test-receberFiado-4',
         tenantId: RIVAL, locationId: LOCAL_RIVAL, customerId: CARLOS,
         amountCents: 1000, forma: 'cash', ...operador,
       }),
@@ -817,6 +826,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     // mundo, e é isso que o controle de caixa existe para não produzir.
     await abrir();
     await movimentarCaixa({
+        idempotencyKey: 'audit-test-movimentarCaixa-4',
       tenantId: TENANT, locationId: LOCATION, kind: 'withdrawal',
       amountCents: 5000, reason: 'Depósito no banco', ...operador,
     });
@@ -844,6 +854,7 @@ describeIfDb('comanda, caixa e fiado', () => {
     await abrir();
     await expect(
       movimentarCaixa({
+        idempotencyKey: 'audit-test-movimentarCaixa-5',
         tenantId: TENANT, locationId: LOCATION, kind: 'withdrawal',
         amountCents: 999999, reason: 'Engano', ...operador,
       }),
@@ -926,6 +937,43 @@ describeIfDb('comanda, caixa e fiado', () => {
     expect(devendo.devedores[0]?.saldoCents).toBe(-6000);
   });
 
+  it('repetir a inclusão com a mesma chave não duplica o item da comanda', async () => {
+    const com = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    const entrada = {
+      tenantId: TENANT, locationId: LOCATION, orderId: com.id, tipo: 'service' as const,
+      serviceId: CABELO, descricao: 'Corte', quantidade: 1, precoUnitarioCents: 7000,
+      idempotencyKey: 'item-balcao-1',
+    };
+
+    await adicionarItem(entrada);
+    const repetida = await adicionarItem(entrada);
+
+    expect(repetida.itens).toHaveLength(1);
+    expect(repetida.totalCents).toBe(7000);
+    const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*) AS n FROM order_items WHERE order_id = '${com.id}'`,
+    );
+    expect(Number(linhas[0]?.n)).toBe(1);
+  });
+
+  it('a mesma chave de item não pode ser reutilizada para outro conteúdo', async () => {
+    const com = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    const base = {
+      tenantId: TENANT, locationId: LOCATION, orderId: com.id, tipo: 'service' as const,
+      serviceId: CABELO, descricao: 'Corte', quantidade: 1, precoUnitarioCents: 7000,
+      idempotencyKey: 'item-balcao-conflito',
+    };
+    await adicionarItem(base);
+
+    await expect(adicionarItem({ ...base, quantidade: 2 })).rejects.toMatchObject({
+      code: 'idempotencia_conflitante',
+    });
+  });
+
   it('a mesma chave de idempotência devolve a comanda paga, não um erro', async () => {
     await abrir();
     const com = await comItem(7000);
@@ -946,5 +994,49 @@ describeIfDb('comanda, caixa e fiado', () => {
       `SELECT count(*) AS n FROM order_payments WHERE order_id = '${com.id}'`,
     );
     expect(Number(pagos[0]?.n)).toBe(1);
+  });
+
+  it('a mesma chave de fechamento pode ser usada em duas unidades sem cruzar a venda', async () => {
+    // O índice de idempotência é (tenant, location, chave). A leitura precisa
+    // ter o mesmo escopo: sem `location_id`, a filial reencontrava a venda da
+    // matriz e podia devolver erro/objeto da loja errada em vez de fechar a sua.
+    await abrir();
+    await abrirCaixa({
+      tenantId: TENANT, locationId: FILIAL, openingCents: 20000, ...operador,
+    });
+
+    const matriz = await comItem(7000);
+    const filial = await abrirComanda({
+      tenantId: TENANT, locationId: FILIAL, customerId: CARLOS, staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: FILIAL, orderId: filial.id, tipo: 'service',
+      serviceId: CABELO, descricao: 'Corte', quantidade: 1, precoUnitarioCents: 7000,
+    });
+
+    const chave = 'balcao-mesma-chave-em-duas-lojas';
+    const primeira = await fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: matriz.id,
+      pagamentos: [{ forma: 'cash', valorCents: 7000 }],
+      idempotencyKey: chave, ...fecha,
+    });
+    const segunda = await fecharComanda({
+      tenantId: TENANT, locationId: FILIAL, orderId: filial.id,
+      pagamentos: [{ forma: 'cash', valorCents: 7000 }],
+      idempotencyKey: chave, ...fecha,
+    });
+
+    expect(primeira.id).not.toBe(segunda.id);
+    expect(segunda.id).toBe(filial.id);
+    expect(segunda.status).toBe('paid');
+
+    const linhas = await admin.$queryRawUnsafe<{ location_id: string; chave: string }[]>(
+      `SELECT location_id::text, close_idempotency_key AS chave
+         FROM orders
+        WHERE close_idempotency_key = '${chave}'
+        ORDER BY location_id`,
+    );
+    expect(linhas).toHaveLength(2);
+    expect(new Set(linhas.map((l) => l.location_id))).toEqual(new Set([LOCATION, FILIAL]));
   });
 });

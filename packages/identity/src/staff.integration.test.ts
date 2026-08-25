@@ -99,6 +99,42 @@ describeIfDb('conta de gestor', () => {
     expect(linhas[0]?.password_hash).toMatch(/^scrypt\$\d+\$/);
   });
 
+  it('cadastro público pode criar conta sem deixar sessão fantasma', async () => {
+    const resultado = await signUpOwner({ ...CONTA, issueSession: false });
+    expect(resultado.created).toBe(true);
+    if (!resultado.created) return;
+
+    const sessoes = await admin.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT count(*) FROM staff_sessions WHERE tenant_id = '${resultado.tenantId}'`,
+    );
+    expect(Number(sessoes[0]?.count)).toBe(0);
+  });
+
+  it('serializa dois cadastros simultâneos do mesmo e-mail', async () => {
+    const [a, b] = await Promise.all([
+      signUpOwner(CONTA),
+      signUpOwner({ ...CONTA, businessName: 'Mesmo dono em outra requisição' }),
+    ]);
+
+    expect([a.created, b.created].sort()).toEqual([false, true]);
+    const tenants = await admin.$queryRawUnsafe<{ count: bigint }[]>('SELECT count(*) FROM tenants');
+    expect(Number(tenants[0]?.count)).toBe(1);
+  });
+
+  it('serializa slugs iguais em cadastros simultâneos', async () => {
+    const [a, b] = await Promise.all([
+      signUpOwner(CONTA),
+      signUpOwner({ ...CONTA, email: 'outro@domari.com.br' }),
+    ]);
+
+    expect(a.created).toBe(true);
+    expect(b.created).toBe(true);
+    if (!a.created || !b.created) return;
+    expect(new Set([a.session.slug, b.session.slug])).toEqual(
+      new Set(['domari-barber-club', 'domari-barber-club-2']),
+    );
+  });
+
   it('e-mail já cadastrado não vira erro nem cria barbearia', async () => {
     // Recusar com código próprio seria oráculo de quem é dono na plataforma —
     // a mesma lista que o HMAC do índice existe para proteger.

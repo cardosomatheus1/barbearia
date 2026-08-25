@@ -46,8 +46,8 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  * máquina do balcão.
  *
  * **Não há QR Code desenhado aqui.** Gerar a imagem exigiria dependência nova
- * ou JavaScript no cliente, e este produto não tem componente de cliente em
- * lugar nenhum. O segredo em texto grande e espaçado é o que todo autenticador
+ * ou uma ilha de cliente nesta tela. O R5 abriu ilhas no admin, mas não há razão
+ * para fazer Segurança pagar esse JS. O segredo em texto grande e espaçado é o que todo autenticador
  * aceita como entrada manual — e funciona em celular sem câmera boa, que é o
  * aparelho real de quem trabalha no balcão.
  */

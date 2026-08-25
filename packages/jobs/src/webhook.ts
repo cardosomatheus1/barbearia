@@ -1,6 +1,6 @@
 import type { TransactionClient } from '@barbearia/db';
 import type { CorpoDoWebhook, EventoDeWebhook } from '@barbearia/core';
-import { enfileirarPara } from './fila.js';
+import { enfileirar } from './fila.js';
 
 /**
  * Registrar um evento de webhook, de dentro da transação que cria o fato
@@ -26,7 +26,6 @@ import { enfileirarPara } from './fila.js';
  */
 
 export interface EventoParaEntregar {
-  readonly tenantId: string;
   readonly evento: EventoDeWebhook;
   readonly objetoId: string;
   readonly locationId: string | null;
@@ -79,7 +78,7 @@ export async function registrarEventoDeWebhook(
   `;
 
   for (const id of ids) {
-    await enfileirarPara(tx, entrada.tenantId, {
+    await enfileirar(tx, {
       kind: 'webhook.entregar',
       /** Id, nunca conteúdo: `jobs` não tem RLS, e o payload é legível sem tenant. */
       payload: { entregaId: id },

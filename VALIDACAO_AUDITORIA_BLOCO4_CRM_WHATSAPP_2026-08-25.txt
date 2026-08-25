@@ -1,0 +1,52 @@
+BARBERDOCK — AUDITORIA BLOCO 4 — CRM / WHATSAPP — 2026-08-25
+
+BASE CANÔNICA
+- barberdock-auditoria-bloco3-financeiro-2026-08-24.zip
+- Migrações anteriores preservadas: 0110 Scheduling, 0111 Financeiro, 0112 Pacote.
+- Nova migração: 0113_crm_whatsapp_concorrencia.sql.
+- Total: 113 migrações numeradas; zero versões duplicadas.
+
+VEREDITO
+- CRM/WhatsApp auditado e corrigido no escopo executável.
+- Principais frentes: cota promocional, campanha, automação, avulso, templates, Meta, webhook, WABA, lifecycle e isolamento multi-tenant.
+- Bloqueador conhecido de código no Bloco 4: nenhum após a bateria disponível.
+
+CORREÇÕES CENTRAIS
+- Reserva promocional compartilhada entre campanha, automação e avulso antes da rede.
+- Estado incerto preservado quando o desfecho externo pode ter sido aceito.
+- sent_at somente após sucesso do provider.
+- Envio avulso não aceita sucesso sem wamid.
+- Idempotência avulsa com claim persistente/fingerprint.
+- notification_send_intents usa explicitamente tenant_id + intent_key.
+- Conciliação de templates respeita locationId.
+- Submissão de template tem FOR UPDATE + submission_claim persistente.
+- Timeout de template vira uncertain; recusa explícita pode liberar retry.
+- Lifecycle roteado por entry.id/WABA, não por phone_number visível.
+- ACCOUNT_OFFBOARDED, PARTNER_REMOVED e ACCOUNT_RECONNECTED tratados.
+- WABA pertence a exatamente um tenant.
+- Tabela pública de roteamento guarda apenas ids opacos; telefone/token não entram nela.
+
+VALIDAÇÃO LOCAL
+- Guardas diretas aplicáveis: 43/43 PASS.
+- Testes Node autônomos sem Vitest: 23/23 arquivos PASS.
+- Asserções Node agregadas: 144/144 PASS.
+- Auditoria CRM/WhatsApp negativa: 21/21 mutações detectadas.
+- TS/TSX parse sintático: 779/779.
+- Shell bash -n: 30/30.
+- YAML: 7/7.
+- Guarda modular CRM/WhatsApp: PASS.
+- verificar-configuracao-producao recusou corretamente o ambiente sem secrets reais; não contado como falha de código.
+
+PROVA SQL 0113 PREPARADA
+- Colunas do ledger promocional.
+- Claim persistente de template.
+- RLS/FORCE RLS de WABA.
+- Uma WABA = um tenant.
+- intent_key composta por tenant (compatibilidade 0106).
+- Segunda reserva promocional do mesmo cliente/dia recusada.
+- Tenant rival não consegue anexar unidade à WABA alheia.
+
+PENDÊNCIA HONESTA DE RUNTIME
+- PostgreSQL/psql não disponível: migração 0113 e prova SQL não executadas contra banco real.
+- Dependências completas/Vitest não disponíveis: suíte de integração completa não executada.
+- Credenciais Meta reais não disponíveis: envio/template/lifecycle não certificados contra provider real nesta sessão.

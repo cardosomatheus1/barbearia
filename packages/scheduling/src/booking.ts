@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   agendarAvisosDoAgendamento,
@@ -17,13 +16,18 @@ import {
   parseHHMM,
   repartirPreco,
   type ChangeDecision,
-  type ChangeRefusal,
   type DecisaoDeReembolso,
   type DecisaoDeSinal,
   type MotivoDoSinal,
 } from '@barbearia/core';
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
+import { travarConfiguracaoDeRecursos, travarConfiguracaoDeServicos, travarConfiguracaoDoProfissional, travarDiaDaAgenda } from './concorrencia.js';
+import {
+  bookingIntentFingerprint,
+  findByIdempotencyKey,
+  scopedIdempotencyKey,
+} from './booking-idempotencia.js';
 import { avaliarSinalEm, conferirMarcacaoOnline, registrarRecusaOnline } from './confianca.js';
 import {
   fecharEsperasAtendidas,
@@ -49,165 +53,17 @@ import {
  * sobre colisão entre agendamentos.
  */
 
-/** Códigos estáveis de falha. A API os traduz para HTTP sem reinterpretar. */
-export type BookingFailure =
-  | 'unknown_location'
-  | 'slot_not_available'
-  | 'slot_taken'
-  | 'appointment_not_found'
-  | 'appointment_not_active'
-  | 'hold_expired'
-  | 'too_late'
-  | 'too_many_reschedules'
-  | 'already_started'
-  /** Bloco 60: score baixo não marca sozinho em hora cheia. Só a recepção. */
-  | 'score_no_pico';
-
-/** Espelha o enum `appointment_source`. Valor fora da lista quebraria o INSERT
- *  com erro de banco em vez de recusa limpa. */
-export type AppointmentSource =
-  | 'website' | 'app' | 'whatsapp' | 'instagram' | 'google' | 'marketplace'
-  | 'reception' | 'professional' | 'api' | 'recurrence' | 'waitlist';
-
-/**
- * Os canais em que quem marca é **a casa**, e não o cliente sozinho.
- *
- * A SPEC §2.13 escreve *"só recepção"*, e a lista existe para que um canal novo
- * nasça do lado certo: quem for acrescentado sem pensar cai no lado do cliente,
- * que é o conservador — a regra vale, e alguém repara.
- *
- * `recurrence` entra porque a recorrência foi criada por alguém do balcão uma
- * vez e se repete sozinha; recusá-la faria a série morrer no meio sem que o
- * cliente tenha feito nada. `waitlist` entra porque a vaga foi **oferecida**
- * pela casa: convidar e depois recusar é o pior desfecho possível.
- */
-const PELO_BALCAO = new Set<AppointmentSource>(['reception', 'professional', 'recurrence', 'waitlist']);
-
-/**
- * A recusa carrega o score e o limiar para o registro ser feito depois.
- *
- * Fora da transação, porque a transação voltou atrás: `registrarRecusaOnline`
- * abre a sua. Uma falha ao registrar não pode transformar uma recusa explicada
- * num erro genérico na tela de quem está com o telefone na mão.
- */
-export class BookingRecusadoPorScore extends Error {
-  readonly code = 'score_no_pico' as const;
-  constructor(
-    readonly score: number,
-    readonly limiar: number,
-    readonly comecaEm: Date,
-  ) {
-    super('Este horário só pode ser marcado pela recepção.');
-    this.name = 'BookingRecusadoPorScore';
-  }
-}
-
-export class BookingError extends Error {
-  constructor(readonly code: BookingFailure, message: string) {
-    super(message);
-    this.name = 'BookingError';
-  }
-}
-
-const EXCLUSION_VIOLATION = '23P01';
-const UNIQUE_VIOLATION = '23505';
-const DEADLOCK = '40P01';
-const SERIALIZATION_FAILURE = '40001';
-
-/**
- * Duas pessoas disputando o mesmo horário — pelos **três** códigos que isso tem.
- *
- * A constraint de exclusão anti-overbooking recusa o segundo com `23P01`, e era
- * só isso que este código reconhecia. Mas o Postgres tem outro desfecho para a
- * mesma disputa, e ele é o comum quando três ou mais chegam juntos: cada
- * transação grava a própria entrada no índice GiST e **depois** espera o xid da
- * outra para saber se pode. Duas esperando uma pela outra é `40P01`; sob
- * `SERIALIZABLE` a mesma cena sai como `40001`.
- *
- * Seis `POST` simultâneos no mesmo horário devolviam `201` e **cinco `500`** —
- * "Erro interno" para quem só chegou em segundo lugar, e uma repetição que
- * sempre falha, porque o horário de fato acabou. O desfecho verdadeiro é o
- * mesmo nos três: quem ganhou gravou, e este pedido precisa reler a grade.
- *
- * A pergunta do produto é *"o horário ainda é meu?"*, e a resposta é não. Não
- * há ambiguidade a resolver: quem perdeu o deadlock foi abortado sem gravar
- * nada, e quem venceu segue para o commit.
- *
- * O `catch` envolve **uma** instrução — o `INSERT` do agendamento —, então não
- * há como um deadlock de outra origem entrar por aqui e virar "horário
- * ocupado".
- */
-export function contencaoDeHorario(error: unknown): boolean {
-  const code = pgCode(error);
-  return code === EXCLUSION_VIOLATION || code === DEADLOCK || code === SERIALIZATION_FAILURE;
-}
-
-/**
- * Extrai o SQLSTATE do Postgres de um erro do Prisma.
- *
- * Consulta crua falha como `PrismaClientKnownRequestError` com `code: 'P2010'`
- * — o código do Prisma, não do banco. O SQLSTATE real fica em `meta.code`, e
- * como último recurso na mensagem. Ler só `error.code` devolveria sempre
- * 'P2010' e nenhuma violação seria reconhecida.
- */
-export function pgCode(error: unknown): string | null {
-  const meta = (error as { meta?: { code?: unknown } })?.meta;
-  if (typeof meta?.code === 'string') return meta.code;
-
-  const code = (error as { code?: unknown })?.code;
-  if (typeof code === 'string' && !/^P\d+$/.test(code)) return code;
-
-  const message = error instanceof Error ? error.message : '';
-  return /Code: `(\w+)`/.exec(message)?.[1] ?? null;
-}
-
-export interface AppointmentRef {
-  readonly id: string;
-  readonly startsAt: string;
-  readonly endsAt: string;
-  readonly serviceStartsAt: string;
-  readonly serviceEndsAt: string;
-  readonly professionalId: string;
-  readonly status: string;
-  readonly priceCents: number;
-  /**
-   * Sinal exigido na criação, em centavos. Zero quando não foi exigido.
-   *
-   * Congelado aqui e não recalculado na leitura: a política da unidade e o
-   * histórico do cliente mudam, e o que ele combinou de pagar não muda com
-   * eles. Ler de novo faria a recepção cobrar um valor e a tela mostrar outro.
-   */
-  readonly depositRequiredCents: number;
-  /** Por que o sinal foi exigido. Nulo quando não foi. */
-  readonly depositReason: MotivoDoSinal | null;
-  /** Verdadeiro quando a chave de idempotência devolveu um registro já existente. */
-  readonly deduplicated: boolean;
-}
-
-export interface CreateAppointmentRequest {
-  readonly tenantId: string;
-  readonly locationId: string;
-  readonly professionalId: string;
-  readonly serviceIds: readonly string[];
-  /** Data local da unidade, YYYY-MM-DD. */
-  readonly date: string;
-  /** Início visível ao cliente, HH:mm local. */
-  readonly start: string;
-  readonly customerId?: string;
-  readonly source?: AppointmentSource;
-  readonly notes?: string;
-  readonly idempotencyKey?: string;
-  readonly holdId?: string;
-  readonly now?: Date;
-  /**
-   * Marcação pelo balcão: sem antecedência mínima e sem janela máxima.
-   *
-   * Só quem já está autenticado como equipe pode passar isto — nunca vem do
-   * corpo de uma requisição do cliente, senão a guarda de autoatendimento seria
-   * desligada por quem ela existe para conter.
-   */
-  readonly atCounter?: boolean;
-}
+import {
+  BookingError,
+  BookingRecusadoPorScore,
+  PELO_BALCAO,
+  UNIQUE_VIOLATION,
+  contencaoDeHorario,
+  pgCode,
+  type AppointmentRef,
+  type AppointmentSource,
+  type CreateAppointmentRequest,
+} from './booking-contratos.js';
 
 interface ResolvedSlot {
   readonly occupiedStart: Date;
@@ -238,6 +94,7 @@ async function resolveSlot(
     serviceIds: request.serviceIds,
     date: request.date,
     professionalId: request.professionalId,
+    ...(request.atCounter ? { atCounter: true } : {}),
     ...(request.holdId ? { ignoreHoldId: request.holdId } : {}),
     ...(options.ignoreAppointmentId
       ? { ignoreAppointmentId: options.ignoreAppointmentId }
@@ -360,70 +217,6 @@ async function fusoDaUnidade(
   return linhas[0]?.timezone ?? null;
 }
 
-/**
- * Deriva a chave gravada a partir do tenant, do cliente e da chave bruta.
- *
- * A chave bruta vem do cliente e é livre — na prática as aplicações mandam
- * coisas como "1" ou um timestamp. Buscar só por ela dentro do tenant faria dois
- * clientes com a mesma string colidirem, e o segundo receberia de volta o
- * agendamento do primeiro: id, horário, preço. Com o id, cancelaria o horário
- * alheio.
- *
- * Derivar elimina a colisão sem exigir que a chave seja secreta.
- */
-function scopedIdempotencyKey(
-  tenantId: string,
-  customerId: string | undefined,
-  raw: string,
-): string {
-  return createHash('sha256')
-    .update(`${tenantId}\u0000${customerId ?? ''}\u0000${raw}`)
-    .digest('hex');
-}
-
-async function findByIdempotencyKey(
-  tx: TransactionClient,
-  key: string,
-): Promise<AppointmentRef | null> {
-  const rows = await tx.$queryRaw<
-    {
-      id: string;
-      starts_at: Date;
-      ends_at: Date;
-      service_starts_at: Date;
-      service_ends_at: Date;
-      professional_id: string;
-      status: string;
-      price_cents: number;
-      deposit_required_cents: number;
-      deposit_reason: string | null;
-    }[]
-  >`
-    SELECT id, starts_at, ends_at, service_starts_at, service_ends_at,
-           professional_id, status, price_cents,
-           deposit_required_cents, deposit_reason
-    FROM appointments WHERE idempotency_key = ${key} LIMIT 1
-  `;
-  const row = rows[0];
-  if (!row) return null;
-
-  return {
-    id: row.id,
-    startsAt: row.starts_at.toISOString(),
-    endsAt: row.ends_at.toISOString(),
-    serviceStartsAt: row.service_starts_at.toISOString(),
-    serviceEndsAt: row.service_ends_at.toISOString(),
-    professionalId: row.professional_id,
-    status: row.status,
-    priceCents: row.price_cents,
-    // O sinal vem gravado, não recalculado. A repetição da mesma chave é o
-    // mesmo agendamento, e ele não pode passar a exigir outro valor porque o
-    // histórico do cliente mudou entre os dois toques.
-    depositRequiredCents: row.deposit_required_cents,
-    depositReason: (row.deposit_reason as MotivoDoSinal | null) ?? null,
-    deduplicated: true,
-  };
-}
 
 /**
  * Programa o que o agendamento recém-criado dispara sozinho: os avisos e a
@@ -488,12 +281,13 @@ async function insertAppointment(
   request: CreateAppointmentRequest,
   slot: ResolvedSlot,
   sinal: DecisaoDeSinal,
+  idempotencyFingerprint: string | null = null,
 ): Promise<string> {
   const rows = await tx.$queryRaw<{ id: string }[]>`
     INSERT INTO appointments (
       tenant_id, location_id, customer_id, professional_id,
       starts_at, ends_at, service_starts_at, service_ends_at,
-      status, source, notes, price_cents, idempotency_key,
+      status, source, notes, price_cents, idempotency_key, idempotency_fingerprint,
       deposit_required_cents, deposit_reason
     ) VALUES (
       ${request.tenantId}::uuid,
@@ -506,7 +300,7 @@ async function insertAppointment(
       ${request.source ?? 'website'}::appointment_source,
       ${request.notes ?? null},
       ${slot.priceCents},
-      ${request.idempotencyKey ?? null},
+      ${request.idempotencyKey ?? null}, ${idempotencyFingerprint},
       ${sinal.valorCents}, ${sinal.motivo}
     )
     RETURNING id
@@ -602,7 +396,26 @@ export async function createAppointment(
       locationId: request.locationId,
       ...(request.customerId ? { customerId: request.customerId } : {}),
     },
-    () => criarDentroDaTransacao(request),
+    async () => {
+      const storedKey = request.idempotencyKey
+        ? scopedIdempotencyKey(request.tenantId, request.customerId, request.idempotencyKey)
+        : undefined;
+      const fingerprint = bookingIntentFingerprint(request);
+      try {
+        return await criarDentroDaTransacao(request);
+      } catch (erro) {
+        // Depois de 23505 o PostgreSQL aborta a transação inteira. A releitura
+        // idempotente precisa acontecer numa NOVA transação; consultar no mesmo
+        // tx só produz 25P02 e transforma retry legítimo em 500.
+        if (storedKey && pgCode(erro) === UNIQUE_VIOLATION) {
+          const existente = await withTenant(request.tenantId, (tx) =>
+            findByIdempotencyKey(tx, storedKey, fingerprint),
+          );
+          if (existente) return existente;
+        }
+        throw erro;
+      }
+    },
   );
 }
 
@@ -613,13 +426,61 @@ async function criarDentroDaTransacao(
     const storedKey = request.idempotencyKey
       ? scopedIdempotencyKey(request.tenantId, request.customerId, request.idempotencyKey)
       : undefined;
+    const fingerprint = bookingIntentFingerprint(request);
 
     if (storedKey) {
-      const existing = await findByIdempotencyKey(tx, storedKey);
+      const existing = await findByIdempotencyKey(tx, storedKey, fingerprint);
       if (existing) return existing;
     }
 
+    await travarDiaDaAgenda(tx, request.locationId, request.date);
+    await travarConfiguracaoDoProfissional(tx, request.professionalId);
+    await travarConfiguracaoDeRecursos(tx);
+    await travarConfiguracaoDeServicos(tx);
+
+    // `holdId` é uma credencial interna de capacidade, não um atalho para
+    // mandar o motor ignorar qualquer reserva temporária conhecida. A API
+    // pública nem aceita esse campo; mesmo assim, valide no domínio para que
+    // um chamador interno futuro não consiga sequestrar/reaproveitar o hold de
+    // outro horário, profissional ou conjunto de recursos.
+    const hold = request.holdId
+      ? (await tx.$queryRaw<
+          { professional_id: string; starts_at: Date; ends_at: Date; resource_type: string | null; quantity: number | null }[]
+        >`
+          SELECT h.professional_id, h.starts_at, h.ends_at,
+                 shr.resource_type, shr.quantity
+            FROM slot_holds h
+            LEFT JOIN slot_hold_resources shr ON shr.hold_id = h.id
+           WHERE h.id = ${request.holdId}::uuid
+             AND h.expires_at > now()
+           ORDER BY shr.resource_type
+           FOR UPDATE OF h
+        `)
+      : [];
+    if (request.holdId && hold.length === 0) {
+      throw new BookingError('hold_invalido', 'A reserva temporária expirou ou não existe');
+    }
+
     const slot = await resolveSlot(tx, request);
+
+    if (request.holdId) {
+      const cabecalho = hold[0]!;
+      const recursosDoHold = hold
+        .filter((r) => r.resource_type !== null)
+        .map((r) => ({ resourceType: r.resource_type!, quantity: Number(r.quantity ?? 0) }));
+      const recursosDoSlot = [...slot.resources]
+        .map((r) => ({ resourceType: r.resourceType, quantity: r.quantity }))
+        .sort((a, b) => a.resourceType.localeCompare(b.resourceType));
+
+      const corresponde =
+        cabecalho.professional_id === request.professionalId
+        && cabecalho.starts_at.getTime() === slot.occupiedStart.getTime()
+        && cabecalho.ends_at.getTime() === slot.occupiedEnd.getTime()
+        && JSON.stringify(recursosDoHold) === JSON.stringify(recursosDoSlot);
+      if (!corresponde) {
+        throw new BookingError('hold_invalido', 'A reserva temporária não pertence a este horário');
+      }
+    }
 
     /**
      * A recusa por score, **antes** do sinal e dentro da mesma transação
@@ -668,6 +529,7 @@ async function criarDentroDaTransacao(
         { ...request, ...(storedKey ? { idempotencyKey: storedKey } : {}) },
         slot,
         sinal,
+        storedKey ? fingerprint : null,
       );
     } catch (error) {
       const code = pgCode(error);
@@ -678,10 +540,9 @@ async function criarDentroDaTransacao(
           'Este horário já não está mais disponível. Tente em um outro horário.',
         );
       }
-      if (code === UNIQUE_VIOLATION && storedKey) {
-        const existing = await findByIdempotencyKey(tx, storedKey);
-        if (existing) return existing;
-      }
+      // 23505 de idempotência é resolvido pelo chamador em uma NOVA transação.
+      // Não consulte depois da violação aqui: este tx já está abortado.
+      void code;
       throw error;
     }
 
@@ -726,7 +587,6 @@ async function criarDentroDaTransacao(
      * grava nada — que é o caso da esmagadora maioria das barbearias.
      */
     await registrarEventoDeWebhook(tx, {
-      tenantId: request.tenantId,
       evento: 'appointment.created',
       objetoId: id,
       locationId: request.locationId,
@@ -763,6 +623,10 @@ export async function holdSlot(request: HoldRequest): Promise<HoldRef> {
   const ttl = request.ttlSeconds ?? 600;
 
   return withTenant(request.tenantId, async (tx) => {
+    await travarDiaDaAgenda(tx, request.locationId, request.date);
+    await travarConfiguracaoDoProfissional(tx, request.professionalId);
+    await travarConfiguracaoDeRecursos(tx);
+    await travarConfiguracaoDeServicos(tx);
     const slot = await resolveSlot(tx, request);
 
     const rows = await tx.$queryRaw<{ id: string; expires_at: Date }[]>`
@@ -777,6 +641,13 @@ export async function holdSlot(request: HoldRequest): Promise<HoldRef> {
 
     const row = rows[0];
     if (!row) throw new BookingError('slot_taken', 'Não foi possível reservar o horário');
+    for (const resource of slot.resources) {
+      await tx.$executeRaw`
+        INSERT INTO slot_hold_resources (hold_id, tenant_id, resource_type, quantity)
+        VALUES (${row.id}::uuid, ${request.tenantId}::uuid,
+                ${resource.resourceType}, ${resource.quantity})
+      `;
+    }
     return { id: row.id, expiresAt: row.expires_at.toISOString() };
   });
 }
@@ -988,7 +859,6 @@ export async function cancelAppointment(
       SELECT location_id FROM appointments WHERE id = ${request.appointmentId}::uuid
     `;
     await registrarEventoDeWebhook(tx, {
-      tenantId: request.tenantId,
       evento: 'appointment.cancelled',
       objetoId: request.appointmentId,
       locationId: daLinha[0]?.location_id ?? null,
@@ -1147,6 +1017,8 @@ export async function rescheduleAppointment(
 
   return comRegistroDaRecusa(contexto, () =>
     withTenant(request.tenantId, async (tx) => {
+    // A linha antiga é a trava da operação. Duas remarcações, ou cancelar ×
+    // remarcar, precisam decidir em série sobre o mesmo compromisso.
     const current = await tx.$queryRaw<
       {
         id: string;
@@ -1163,20 +1035,20 @@ export async function rescheduleAppointment(
     >`
       SELECT a.id, a.location_id, a.customer_id, a.professional_id, a.status, a.source,
              a.deposit_required_cents, a.deposit_paid_cents, a.deposit_reason,
-             array_agg(s.service_id::text ORDER BY s.position) AS service_ids
-      FROM appointments a
-      JOIN appointment_services s ON s.appointment_id = a.id
-      WHERE a.id = ${request.appointmentId}::uuid
-        AND (${request.customerId ?? null}::uuid IS NULL
-             OR a.customer_id = ${request.customerId ?? null}::uuid)
-        -- RLS separa barbearias, não profissionais dentro de uma. Sem este
-        -- recorte, quem enxerga só a própria agenda remarcava o cliente do
-        -- colega — bastava ter o id, e a lista de conflitos dava o id.
-        AND (${request.onlyProfessionalId ?? null}::uuid IS NULL
-             OR a.professional_id = ${request.onlyProfessionalId ?? null}::uuid)
-        AND (${request.onlyLocationId ?? null}::uuid IS NULL
-             OR a.location_id = ${request.onlyLocationId ?? null}::uuid)
-      GROUP BY a.id
+             COALESCE((
+               SELECT array_agg(s.service_id::text ORDER BY s.position)
+                 FROM appointment_services s
+                WHERE s.appointment_id = a.id
+             ), ARRAY[]::text[]) AS service_ids
+        FROM appointments a
+       WHERE a.id = ${request.appointmentId}::uuid
+         AND (${request.customerId ?? null}::uuid IS NULL
+              OR a.customer_id = ${request.customerId ?? null}::uuid)
+         AND (${request.onlyProfessionalId ?? null}::uuid IS NULL
+              OR a.professional_id = ${request.onlyProfessionalId ?? null}::uuid)
+         AND (${request.onlyLocationId ?? null}::uuid IS NULL
+              OR a.location_id = ${request.onlyLocationId ?? null}::uuid)
+       FOR UPDATE OF a
     `;
 
     const appointment = current[0];
@@ -1218,8 +1090,14 @@ export async function rescheduleAppointment(
       start: request.start,
       ...(appointment.customer_id ? { customerId: appointment.customer_id } : {}),
       source: appointment.source,
+      ...(!request.customerId ? { atCounter: true } : {}),
       ...(request.now ? { now: request.now } : {}),
     };
+
+    await travarDiaDaAgenda(tx, appointment.location_id, request.date);
+    await travarConfiguracaoDoProfissional(tx, professionalId);
+    await travarConfiguracaoDeRecursos(tx);
+    await travarConfiguracaoDeServicos(tx);
 
     // O horário que está saindo não pode bloquear a si mesmo na validação.
     const slot = await resolveSlot(tx, target, {
@@ -1244,11 +1122,15 @@ export async function rescheduleAppointment(
      *
      * Achado da `/security-review` deste bloco.
      */
-    await tx.$executeRaw`
+    const encerrados = await tx.$executeRaw`
       UPDATE appointments
          SET status = 'rescheduled', deposit_paid_cents = 0, updated_at = now()
        WHERE id = ${request.appointmentId}::uuid
+         AND status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
     `;
+    if (encerrados !== 1) {
+      throw new BookingError('appointment_not_active', 'Somente agendamento ativo pode ser remarcado');
+    }
 
     /**
      * A recusa por score vale **também na remarcação** (bloco 60).
@@ -1335,7 +1217,6 @@ export async function rescheduleAppointment(
      * `cancelAppointment`, que a remarcação chama.
      */
     await registrarEventoDeWebhook(tx, {
-      tenantId: request.tenantId,
       evento: 'appointment.rescheduled',
       objetoId: id,
       locationId: appointment.location_id,
@@ -1359,356 +1240,24 @@ export async function rescheduleAppointment(
   );
 }
 
-export interface CustomerAppointment {
-  readonly id: string;
-  readonly state: ReceiptState;
-  readonly startsAt: string;
-  readonly endsAt: string;
-  readonly status: string;
-  readonly professionalName: string;
-  readonly services: readonly string[];
-  /** Ids do catálogo: é com eles que a tela de remarcação consulta a grade. */
-  readonly serviceIds: readonly string[];
-  readonly professionalId: string;
-  readonly priceCents: number;
-  readonly canCancel: boolean;
-  readonly canReschedule: boolean;
-  /**
-   * Por que o botão não está lá.
-   *
-   * Botão ausente sem explicação faz o cliente achar que o site quebrou e
-   * ligar para a barbearia — que é exatamente o trabalho que este produto
-   * existe para eliminar.
-   */
-  readonly blockedReason: ChangeRefusal | null;
-  readonly minHoursToChange: number;
-}
+export {
+  BookingError,
+  BookingRecusadoPorScore,
+  contencaoDeHorario,
+  pgCode,
+  type AppointmentRef,
+  type AppointmentSource,
+  type BookingFailure,
+  type CreateAppointmentRequest,
+} from './booking-contratos.js';
 
-/**
- * Agendamentos de um cliente.
- *
- * Filtra por `customerId` além do tenant: a RLS separa barbearias, não separa
- * clientes dentro de uma. Sem esse filtro a listagem devolveria a agenda inteira
- * da barbearia para qualquer cliente autenticado.
- */
-export async function listCustomerAppointments(params: {
-  readonly tenantId: string;
-  readonly customerId: string;
-  readonly includePast?: boolean;
-  readonly now?: Date;
-  readonly limit?: number;
-}): Promise<readonly CustomerAppointment[]> {
-  const now = params.now ?? new Date();
-  const limit = Math.min(params.limit ?? 50, 100);
-
-  return withTenant(params.tenantId, async (tx) => {
-    const rows = await tx.$queryRaw<
-      {
-        id: string;
-        service_starts_at: Date;
-        service_ends_at: Date;
-        status: string;
-        professional_name: string;
-        services: string[];
-        service_ids: string[];
-        professional_id: string;
-        price_cents: number;
-        times_rescheduled: bigint;
-        cancel_min_hours: number;
-        reschedule_min_hours: number;
-        max_reschedules: number;
-      }[]
-    >`
-      -- Uma consulta só, incluindo quantas vezes cada horário já foi remarcado.
-      -- A recursão percorre todas as correntes do cliente de uma vez; contar
-      -- por agendamento seria N+1 numa tela que lista dezenas (CLAUDE.md §3).
-      WITH RECURSIVE cadeia AS (
-        SELECT id AS raiz, rescheduled_from, 0 AS saltos
-        FROM appointments
-        WHERE customer_id = ${params.customerId}::uuid
-        UNION ALL
-        SELECT c.raiz, anterior.rescheduled_from, c.saltos + 1
-        FROM appointments anterior
-        JOIN cadeia c ON anterior.id = c.rescheduled_from
-      ),
-      remarcacoes AS (
-        SELECT raiz, max(saltos) AS vezes FROM cadeia GROUP BY raiz
-      )
-      SELECT a.id, a.service_starts_at, a.service_ends_at, a.status,
-             p.name AS professional_name,
-             array_agg(s.name ORDER BY aps.position) AS services,
-             array_agg(aps.service_id::text ORDER BY aps.position) AS service_ids,
-             a.professional_id,
-             a.price_cents,
-             COALESCE(r.vezes, 0) AS times_rescheduled,
-             l.cancel_min_hours, l.reschedule_min_hours, l.max_reschedules
-      FROM appointments a
-      JOIN professionals p ON p.id = a.professional_id
-      JOIN locations l ON l.id = a.location_id
-      JOIN appointment_services aps ON aps.appointment_id = a.id
-      JOIN services s ON s.id = aps.service_id
-      LEFT JOIN remarcacoes r ON r.raiz = a.id
-      WHERE a.customer_id = ${params.customerId}::uuid
-        AND (${params.includePast ?? false} OR a.service_ends_at >= ${now})
-      GROUP BY a.id, p.name, r.vezes, l.cancel_min_hours, l.reschedule_min_hours,
-               l.max_reschedules, a.professional_id
-      ORDER BY a.service_starts_at DESC
-      LIMIT ${limit}
-    `;
-
-    return rows.map((row) => {
-      const active = (ACTIVE_STATUSES as readonly string[]).includes(row.status);
-      const minutes = minutesBetween(now, row.service_starts_at);
-      const window = {
-        cancelMinHours: row.cancel_min_hours,
-        rescheduleMinHours: row.reschedule_min_hours,
-        maxReschedules: row.max_reschedules,
-      };
-
-      // A mesma decisão que a API vai aplicar na hora de cancelar. Calcular a
-      // permissão de um jeito aqui e de outro lá é como a tela acaba oferecendo
-      // um botão que o servidor recusa.
-      const cancel = active ? canCancel(minutes, window) : null;
-      const reschedule = active
-        ? canReschedule(minutes, Number(row.times_rescheduled), window)
-        : null;
-
-      const refused = [cancel, reschedule].find((d) => d && !d.allowed);
-
-      return {
-        id: row.id,
-        state: receiptState(row.status),
-        startsAt: row.service_starts_at.toISOString(),
-        endsAt: row.service_ends_at.toISOString(),
-        status: row.status,
-        professionalName: row.professional_name,
-        services: row.services,
-        serviceIds: row.service_ids,
-        professionalId: row.professional_id,
-        priceCents: row.price_cents,
-        canCancel: cancel?.allowed ?? false,
-        canReschedule: reschedule?.allowed ?? false,
-        blockedReason: refused && !refused.allowed ? refused.refusal : null,
-        /**
-         * O prazo é o **da recusa que apareceu**, não o de cancelar sempre.
-         *
-         * A tela escreve "só até N horas antes" ao lado de `blockedReason`, e a
-         * recusa pode vir da janela de remarcação — que a barbearia costuma
-         * deixar mais folgada, porque remarcar preserva a receita e cancelar
-         * não. Citando o prazo de cancelar, o cliente lia "remarque com até 2
-         * horas" numa casa que exige 6, tentava às 3 e era recusado de novo.
-         *
-         * `canReschedule` já devolve o próprio `minHours`; ele estava sendo
-         * descartado.
-         */
-        minHoursToChange:
-          refused && !refused.allowed ? refused.minHours : row.cancel_min_hours,
-      };
-    });
-  });
-}
-
-/**
- * O que o comprovante precisa dizer, em três estados.
- *
- * O enum do banco tem dez valores e vai crescer; a tela não deve conhecê-los.
- * Traduzir aqui é o que impede a view de decidir regra de negócio — e de errar
- * ao inventar nome de status (`cancelled` não existe: são `cancelled_customer`
- * e `cancelled_business`).
- */
-export type ReceiptState = 'active' | 'done' | 'cancelled' | 'rescheduled';
-
-/**
- * Conjunto próprio, não `ACTIVE_STATUSES`: aquele responde "ainda dá para
- * cancelar?" e por isso deixa `in_progress` de fora. Aqui a pergunta é "esse
- * horário ainda vale?", e um corte em andamento vale.
- */
-const RECEIPT_ACTIVE = ['pending', 'confirmed', 'checked_in', 'waiting', 'in_progress'];
-
-function receiptState(status: string): ReceiptState {
-  if (RECEIPT_ACTIVE.includes(status)) return 'active';
-  if (status === 'completed') return 'done';
-  // Separado de cancelado: o horário não sumiu, virou outro. Dizer "cancelado"
-  // para quem acabou de remarcar faz o cliente achar que perdeu a vaga.
-  if (status === 'rescheduled') return 'rescheduled';
-  return 'cancelled';
-}
-
-export interface AppointmentReceipt {
-  readonly id: string;
-  readonly state: ReceiptState;
-  readonly startsAt: string;
-  readonly endsAt: string;
-  readonly professionalName: string;
-  readonly services: readonly string[];
-  readonly priceCents: number;
-  readonly locationId: string;
-  /**
-   * O sinal deste horário, quando ele existe (bloco 37).
-   *
-   * O comprovante é a única tela que o cliente volta a abrir, e ele precisa
-   * dizer que falta pagar — senão o cliente descobre no balcão, na frente de
-   * outras pessoas. O **motivo** não vem: "seu histórico de faltas" é uma frase
-   * sobre a pessoa, e a SPEC §2.13 regra 5 manda o score nunca chegar a ela.
-   * O que ele vê é o valor e se já está pago.
-   */
-  readonly deposit: {
-    readonly exigidoCents: number;
-    readonly pagoCents: number;
-  } | null;
-}
-
-/**
- * Comprovante de um agendamento, legível por quem tem o link.
- *
- * O id é UUID aleatório e funciona como a própria credencial — é o padrão de
- * link mágico de confirmação. Por isso o retorno traz só o que cabe num
- * comprovante: **nada do cliente**. Nome e celular ficariam expostos a quem
- * recebesse o link encaminhado, e a tela de confirmação não precisa deles.
- *
- * A separação entre barbearias é da RLS; aqui não há filtro por cliente porque
- * não há cliente autenticado. Cancelar e reagendar continuam exigindo sessão.
- */
-export async function getAppointmentReceipt(
-  tenantId: string,
-  appointmentId: string,
-): Promise<AppointmentReceipt | null> {
-  return withTenant(tenantId, async (tx) => {
-    const rows = await tx.$queryRaw<
-      {
-        id: string;
-        service_starts_at: Date;
-        service_ends_at: Date;
-        status: string;
-        professional_name: string;
-        services: string[];
-        price_cents: number;
-        location_id: string;
-        deposit_required_cents: number;
-        deposit_paid_cents: number;
-      }[]
-    >`
-      SELECT a.deposit_required_cents, a.deposit_paid_cents,
-             a.id, a.service_starts_at, a.service_ends_at, a.status,
-             p.name AS professional_name,
-             array_agg(s.name ORDER BY aps.position) AS services,
-             a.price_cents, a.location_id
-      FROM appointments a
-      JOIN professionals p ON p.id = a.professional_id
-      JOIN appointment_services aps ON aps.appointment_id = a.id
-      JOIN services s ON s.id = aps.service_id
-      WHERE a.id = ${appointmentId}::uuid
-      GROUP BY a.id, p.name
-    `;
-
-    const row = rows[0];
-    if (!row) return null;
-
-    return {
-      id: row.id,
-      state: receiptState(row.status),
-      startsAt: row.service_starts_at.toISOString(),
-      endsAt: row.service_ends_at.toISOString(),
-      professionalName: row.professional_name,
-      services: row.services,
-      priceCents: row.price_cents,
-      locationId: row.location_id,
-      deposit:
-        row.deposit_required_cents > 0
-          ? {
-              exigidoCents: row.deposit_required_cents,
-              pagoCents: row.deposit_paid_cents,
-            }
-          : null,
-    };
-  });
-}
-
-/**
- * O agendamento de um cliente, para montar a grade de remarcação.
- *
- * Devolve `null` quando o agendamento não é deste cliente — sem distinguir de
- * "não existe", pela mesma razão de `cancelAppointment`.
- */
-export async function getReschedulableAppointment(params: {
-  readonly tenantId: string;
-  readonly customerId: string;
-  readonly appointmentId: string;
-}): Promise<{
-  readonly locationId: string;
-  readonly professionalId: string;
-  readonly serviceIds: readonly string[];
-} | null> {
-  return withTenant(params.tenantId, async (tx) => {
-    const rows = await tx.$queryRaw<
-      { location_id: string; professional_id: string; service_ids: string[] }[]
-    >`
-      SELECT a.location_id, a.professional_id,
-             array_agg(aps.service_id::text ORDER BY aps.position) AS service_ids
-      FROM appointments a
-      JOIN appointment_services aps ON aps.appointment_id = a.id
-      WHERE a.id = ${params.appointmentId}::uuid
-        AND a.customer_id = ${params.customerId}::uuid
-        AND a.status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
-      GROUP BY a.id
-    `;
-
-    const row = rows[0];
-    if (!row) return null;
-    return {
-      locationId: row.location_id,
-      professionalId: row.professional_id,
-      serviceIds: row.service_ids,
-    };
-  });
-}
-
-/** Política de identificação da unidade, para a API decidir se exige sessão. */
-export async function bookingPolicy(
-  tenantId: string,
-  locationId: string,
-): Promise<{ readonly requireOtpForBooking: boolean } | null> {
-  return withTenant(tenantId, async (tx) => {
-    const rows = await tx.$queryRaw<{ require_otp_for_booking: boolean }[]>`
-      SELECT require_otp_for_booking FROM locations WHERE id = ${locationId}::uuid
-    `;
-    const row = rows[0];
-    return row ? { requireOtpForBooking: row.require_otp_for_booking } : null;
-  });
-}
-
-/**
- * O cliente confirmando presença (bloco 55).
- *
- * Nasce com o botão "Confirmar" da mensagem, e não existia antes: até aqui
- * `confirmed` era estado que só o balcão escrevia. O que ele muda é a leitura
- * do dia — a recepção vê quem respondeu — e não a grade: `pending` e `confirmed`
- * ocupam o horário igualmente, então confirmar nunca libera nem toma vaga de
- * ninguém.
- *
- * `customerId` é **obrigatório**, ao contrário do cancelamento, em que ele é
- * opcional porque a barbearia também cancela. Aqui quem confirma é sempre a
- * pessoa: a RLS separa barbearias e não separa clientes dentro de uma, e o
- * toque no botão chega por um endereço público.
- *
- * Só avança a partir de `pending`. Um horário já cancelado, atendido ou
- * remarcado não volta a `confirmed` porque alguém tocou num botão de uma
- * mensagem antiga — e a contagem de linhas é o que separa "confirmei" de "não
- * havia o que confirmar".
- */
-export async function confirmAppointment(request: {
-  readonly tenantId: string;
-  readonly appointmentId: string;
-  readonly customerId: string;
-}): Promise<boolean> {
-  return withTenant(request.tenantId, async (tx) => {
-    const afetadas = await tx.$executeRaw`
-      UPDATE appointments
-         SET status = 'confirmed', updated_at = now()
-       WHERE id = ${request.appointmentId}::uuid
-         AND customer_id = ${request.customerId}::uuid
-         AND status = 'pending'
-    `;
-    return afetadas === 1;
-  });
-}
+export {
+  bookingPolicy,
+  confirmAppointment,
+  getAppointmentReceipt,
+  getReschedulableAppointment,
+  listCustomerAppointments,
+  type AppointmentReceipt,
+  type CustomerAppointment,
+  type ReceiptState,
+} from './booking-leitura.js';

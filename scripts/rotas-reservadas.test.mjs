@@ -67,6 +67,14 @@ const SEM_PASTA = {
  * sub-páginas (`/ir/agendar`, `/ir/entrar`) sumindo de uma barbearia que ainda
  * enxerga a própria página inicial.
  */
+function contemArquivoDeRota(pasta) {
+  for (const entrada of readdirSync(pasta, { withFileTypes: true })) {
+    if (entrada.isFile() && /^(?:page|route)\.(?:ts|tsx|js|jsx)$/.test(entrada.name)) return true;
+    if (entrada.isDirectory() && contemArquivoDeRota(join(pasta, entrada.name))) return true;
+  }
+  return false;
+}
+
 function rotasDoWeb() {
   const rotas = [];
   for (const entrada of readdirSync(APP, { withFileTypes: true })) {
@@ -77,11 +85,6 @@ function rotasDoWeb() {
     // o que ela reserva.
     if (nome.startsWith('[')) continue;
 
-    // Grupo de rota `(x)`, rota paralela `@x` e pasta privada `_x` mudam o que
-    // vira segmento na URL, e nenhuma existe hoje. Tratá-las agora seria código
-    // que ninguém executa; ignorá-las seria a falha calada que este arquivo
-    // existe para impedir — um `(marketing)/precos/page.tsx` põe `precos` no
-    // primeiro nível sem passar por aqui. Então a guarda para e pede socorro.
     if (/^[(@_]/.test(nome)) {
       throw new Error(
         `apps/web/src/app/${nome}: esta guarda só sabe ler pasta comum e ` +
@@ -91,6 +94,9 @@ function rotasDoWeb() {
       );
     }
 
+    // `app/styles` é organização de fonte, não segmento de URL. Uma pasta só
+    // ocupa slug quando contém `page.*` ou `route.*` em algum descendente.
+    if (!contemArquivoDeRota(join(APP, nome))) continue;
     rotas.push(nome);
   }
   return rotas.sort();

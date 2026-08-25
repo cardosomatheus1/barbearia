@@ -1,0 +1,844 @@
+/* ============================================================================
+   Página pública da barbearia.
+   Direção em docs/03-direcao-visual.md. Mobile-first: só min-width.
+   ========================================================================== */
+
+/*
+  A cor de link, uma vez (bloco 111).
+
+  Sem regra global, todo `<a>` sem classe herdava o azul-lilás do navegador —
+  quatro pontos do painel saíam assim, entre eles "Baixe a planilha modelo" e o
+  link de permissões da equipe. Cada tela que sofria ganhava a própria classe,
+  que é como uma cor passa a ter cinco definições e nenhuma dona.
+
+  `inherit` não serve: link precisa se distinguir do texto para ser clicável, e
+  a distinção não pode ser só o sublinhado.
+*/
+a { color: var(--color-accent); }
+
+.topo {
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4) 0;
+}
+.topo__linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.topo__nome {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+.topo__onde {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.estado__ponto {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+.estado--aberto { color: var(--color-success); }
+.estado--aberto .estado__ponto { background: var(--color-success); }
+.estado__detalhe { color: var(--color-text-muted); }
+
+/* Rótulo de seção: caixa alta, tracking folgado, pequeno. Estrutura, não título. */
+.rotulo {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
+}
+
+/* -- Herói: a disponibilidade ---------------------------------------------- */
+
+.hoje { padding: var(--space-6) 0 var(--space-5); }
+
+.faixa { min-width: 0; margin: 0 calc(var(--space-4) * -1); padding: 0 var(--space-4); }
+.faixa__lista {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 5.25rem;
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              background-color var(--motion-fast) var(--motion-ease);
+}
+.chip:hover { background: var(--color-surface-hover); border-color: var(--color-accent); }
+.chip:active { transform: translateY(1px); }
+
+/* O numeral é o elemento tipográfico da página, não acessório do texto. */
+.chip__hora {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.chip__quem {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.hoje__nota {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.vazio {
+  padding: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.vazio__titulo { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.vazio__saida { margin: var(--space-2) 0 var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* -- Seções ---------------------------------------------------------------- */
+
+.secao { padding: var(--space-6) 0; border-top: 1px solid var(--color-border); }
+.grupo + .grupo { margin-top: var(--space-6); }
+
+/* A régua carrega a categoria, então a linha é informação e não enfeite. */
+.grupo__titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+}
+.grupo__regua { flex: 1; height: 1px; background: var(--color-border); }
+
+.servicos { margin: 0; padding: 0; list-style: none; }
+.servicos > li + li { border-top: 1px solid var(--color-border); }
+
+.servico {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-4);
+  align-items: baseline;
+  min-height: var(--size-touch);
+  padding: var(--space-3) 0;
+  text-decoration: none;
+  color: inherit;
+}
+.servico:hover .servico__nome { color: var(--color-accent); }
+
+.servico__nome { font-weight: var(--font-weight-medium); }
+.servico__sobre {
+  grid-column: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.servico__dados {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+/* Duração antes do preço: é ela que decide o que cabe no dia de quem escolhe. */
+.servico__duracao { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.servico__preco {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+.servico__moeda { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* Uma regra só para o cartão de pessoa.
+   Havia duas — `.pessoa a` e `.pessoa__link` — casando no mesmo elemento, e a
+   primeira empilhava em coluna o que a segunda queria em linha. Foto em cima do
+   nome, centralizada, num cartão largo: ninguém escreveu isso, saiu da briga
+   entre os dois seletores. */
+.equipe { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.pessoa__nome { font-weight: var(--font-weight-medium); }
+.pessoa__bio {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.onde { display: grid; gap: var(--space-6); }
+.onde__endereco { margin: 0; }
+.onde__cep { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.onde__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+
+.tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.tag {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.horarios { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.horarios th { text-align: left; font-weight: var(--font-weight-normal); padding: var(--space-2) 0; }
+.horarios td { text-align: right; padding: var(--space-2) 0; font-variant-numeric: tabular-nums; }
+.horarios tr + tr th, .horarios tr + tr td { border-top: 1px solid var(--color-border); }
+.horarios--fechado { color: var(--color-text-muted); }
+
+/* `overflow-wrap` porque o encarregado entrou aqui no bloco 31: e-mail é uma
+   palavra só, e um domínio comprido transborda em 360px. */
+.politica { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: var(--size-readable); overflow-wrap: anywhere; }
+
+/* A barra fixa cobriria o fim do conteúdo sem esta folga. */
+main { padding-bottom: var(--space-8); }
+
+.vazio-pagina { padding: var(--space-8) var(--space-4); }
+
+/* ----------------------------------------------------------------------------
+   Retorno do pagamento.
+
+   A única tela do produto cujo endereço quem escolhe é o adquirente: a Stripe
+   manda para cá quem terminou (ou desistiu de) um checkout aberto por link no
+   WhatsApp. Quem chega não tem sessão, não tem contexto e pode nem ser cliente
+   cadastrado — e o caminho de saída dele é fechar a aba, que é o que o texto
+   diz.
+
+   Por isso o cartão é centrado e curto: não há segunda coisa a fazer aqui, e
+   qualquer link que oferecêssemos levaria a alguma tela que não é dele.
+   -------------------------------------------------------------------------- */
+
+.recibo {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-4);
+}
+.recibo__cartao {
+  width: 100%;
+  max-width: var(--size-readable);
+  padding: var(--space-6);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+}
+/* O traço no lugar de um emoji: é o mesmo desenho do trilho do painel. */
+.recibo__marca { color: var(--color-accent); }
+.recibo__titulo { margin: 0; font-size: var(--font-size-2xl); letter-spacing: -0.01em; }
+.recibo__texto { margin: 0; color: var(--color-text-muted); max-width: var(--size-readable); }
+
+
+/* ----------------------------------------------------------------------------
+   Foto.
+
+   A direção visual (docs/03-direcao-visual.md) sempre disse que o herói é a
+   disponibilidade e que "a foto continua presente logo abaixo". A primeira
+   metade foi construída; a segunda ficou só no documento, e a página passou dez
+   blocos sem uma única imagem — num negócio em que o cliente escolhe pelo olho.
+
+   Toda imagem aqui vem com `width` e `height` no HTML: sem eles o navegador não
+   reserva o espaço e a foto empurra a grade de horários ao carregar, bem na
+   hora em que o polegar já está descendo para tocar num horário.
+   -------------------------------------------------------------------------- */
+
+.capa { margin: 0; }
+.capa__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Panorâmica de propósito: uma capa alta empurraria o cardápio para fora da
+     tela e desfaria a tese da página. */
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+/* ----------------------------------------------------------------------------
+   Corpo em duas colunas a partir do tablet.
+
+   Antes existia uma coluna só, esticada até 1280: a linha ia de "Pezinho" na
+   margem esquerda a "R$ 15,00" na direita, com mil pixels de nada no meio, e o
+   olho tinha que atravessar a tela para ligar o serviço ao preço.
+
+   Não é "versão de PC": é a mesma tela ganhando densidade quando há espaço, que
+   é a regra do CLAUDE.md §5. No celular continua uma coluna, na ordem em que se
+   lê.
+   -------------------------------------------------------------------------- */
+
+.corpo { display: grid; gap: 0; }
+/* O cardápio é o evento principal; endereço, equipe e horário são referência.
+   Antes as cinco seções tinham exatamente o mesmo peso, e a política de
+   cancelamento gritava tanto quanto o preço do corte. */
+.secao--menu { border-top: 0; }
+.lado { display: grid; }
+.secao--miudo .politica { font-size: var(--font-size-sm); }
+
+/* ----------------------------------------------------------------------------
+   Quem atende — com rosto.
+   -------------------------------------------------------------------------- */
+
+.pessoa__link {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0 var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.pessoa__foto, .pessoa__inicial { grid-row: 1 / span 2; }
+/* Sem bio a foto continua centrada: a linha vazia não existe para ocupar. */
+.pessoa__link:not(:has(.pessoa__bio)) .pessoa__foto,
+.pessoa__link:not(:has(.pessoa__bio)) .pessoa__inicial { grid-row: 1; }
+.pessoa__link:hover { background: var(--color-surface-hover); }
+.pessoa__foto,
+.pessoa__inicial {
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+}
+/* Sem foto o lugar continua reservado, com a inicial: some a foto, não some a
+   pessoa — e a lista não muda de altura quando a barbearia preenche uma só. */
+.pessoa__inicial {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ----------------------------------------------------------------------------
+   Foto no item do cardápio.
+   -------------------------------------------------------------------------- */
+
+.servico__foto {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  align-self: center;
+}
+.servico--ilustrado { grid-template-columns: 1fr auto 3.5rem; }
+
+@media (min-width: 768px) {
+  .topo { padding: var(--space-5) 0; }
+  .topo__nome { font-size: var(--font-size-2xl); }
+  .hoje { padding: var(--space-7) 0 var(--space-6); }
+  .chip { min-width: 6rem; }
+  .chip__hora { font-size: var(--font-size-2xl); }
+  .onde { grid-template-columns: 1.4fr 1fr; gap: var(--space-7); }
+
+  /* Cardápio à esquerda, referência à direita. O que mata a linha de mil
+     pixels não é limitar a largura da página — é dar trabalho à segunda coluna. */
+  .corpo { grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr); gap: var(--space-7); }
+  .lado { align-content: start; }
+  .lado .secao { padding-top: var(--space-5); }
+  .onde { grid-template-columns: 1fr; gap: var(--space-5); }
+  /* Teto de altura além da proporção: em 1280 uma faixa 21:9 tem 535px e
+     empurra o cardápio inteiro para baixo da dobra — a foto passaria a ser o
+     herói, que é justamente o que a direção recusa. */
+  .capa__img { aspect-ratio: 21 / 9; max-height: 20rem; }
+  .equipe { display: grid; gap: var(--space-1); }
+}
+
+/* ============================================================================
+   Fluxo de agendamento — serviço · profissional · horário · nome
+   ========================================================================== */
+
+.fluxo-topo { border-bottom: 1px solid var(--color-border); padding: var(--space-3) 0 0; }
+.fluxo-topo__linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.fluxo-topo__nome { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+.voltar:hover { color: var(--color-accent); }
+
+/* A régua de passos mostra progresso real: são quatro decisões, nem uma a mais. */
+.passos {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 0 var(--space-3);
+  list-style: none;
+}
+.passos__item {
+  flex: 1;
+  padding-top: var(--space-2);
+  border-top: 2px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.passos__item--feito { border-top-color: var(--color-accent); }
+.passos__item--atual {
+  border-top-color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.fluxo { padding: var(--space-6) var(--space-4) var(--space-8); }
+.fluxo__titulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+}
+.fluxo__ajuda { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* -- Escolha de serviço ---------------------------------------------------- */
+
+.escolha {
+  grid-template-columns: 1.5rem 1fr auto;
+  padding-left: 0;
+}
+.escolha__marca {
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-on-accent);
+}
+.escolha--marcada .escolha__marca {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.escolha .servico__nome { grid-column: 2; }
+.escolha .servico__sobre { grid-column: 2; }
+.escolha .servico__dados { grid-column: 3; }
+
+/* -- Opções (profissional) ------------------------------------------------- */
+
+.opcoes { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.opcao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--size-touch);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.opcao:hover { border-color: var(--color-accent); }
+.opcao--destaque { border-color: var(--color-accent); }
+.opcao__nome { font-weight: var(--font-weight-semibold); }
+.opcao__sobre { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Dias e horas ---------------------------------------------------------- */
+
+.dias { min-width: 0; margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
+.dias__lista { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+
+.dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 3.25rem;
+  min-height: var(--size-touch);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--color-text-muted);
+}
+.dia--atual {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.dia__semana { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+.dia__numero { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+
+.horas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hora {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: var(--size-touch);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.hora:hover { border-color: var(--color-accent); background: var(--color-surface-hover); }
+.hora__valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: -0.02em; }
+.hora__quem { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* O preço do horário, quando ele difere da tabela (bloco 105).
+
+   Só aparece no chip que difere: escrito em todos, num dia com noventa chips,
+   ele some no próprio excesso. E a cor não carrega o dado sozinha — o valor
+   está escrito, e o rodapé fixo mostra o preço de tabela ao lado. Os dois pares
+   (`warning` e `success` sobre `surface-raised`) são conferidos pelo teste de
+   contraste do design system. */
+.hora__preco { font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.hora__preco--acima { color: var(--color-warning); }
+.hora__preco--abaixo { color: var(--color-success); }
+
+/* -- Confirmação e formulário ---------------------------------------------- */
+
+.confirmacao { margin-bottom: var(--space-5); }
+/* Rótulo em coluna fixa e valor alinhado à esquerda.
+   Com `space-between` e valor à direita, "sexta-feira, 07 de agosto, 20:40"
+   quebra e deixa o horário pendurado sozinho na segunda linha. */
+.confere { margin: 0; display: grid; gap: var(--space-3); }
+.confere > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.confere dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.confere dd { margin: 0; font-weight: var(--font-weight-medium); }
+/* A diferença entre o preço deste horário e o de tabela, em letras.
+
+   Fica fora do `<dl>` de propósito: não é mais um par rótulo/valor, é a
+   explicação do valor que acabou de ser lido. */
+.confere__ajuste {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Link de navegação sozinho dentro do cartão: 44px como todo alvo autônomo, em
+   qualquer largura. Saía com 91x21 — é o mesmo caso do `← Voltar` de 21px que a
+   medição pegou antes, e a isenção da WCAG 2.5.8 não alcança: ele não está
+   dentro de uma frase. */
+.confere__trocar {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
+.formulario { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.resumo { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.resumo__servicos { margin: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.resumo__dados { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Confirmado ------------------------------------------------------------ */
+
+.confirmado { padding: var(--space-8) var(--space-4); text-align: center; max-width: 34rem; }
+.confirmado__marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-2xl);
+}
+.confirmado__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
+.confirmado__quando { margin: 0 0 var(--space-2); font-size: var(--font-size-lg); color: var(--color-accent); }
+.confirmado__onde { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* O comprovante herda o alinhamento do bloco de conferência do passo 4: mesma
+   informação, mesma forma — o cliente reconhece o que acabou de confirmar. */
+.comprovante {
+  margin: 0 0 var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  text-align: left;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-lg);
+}
+.comprovante__linha { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.comprovante dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.comprovante dd { margin: 0; font-weight: var(--font-weight-medium); }
+
+/* Cancelado: a marca deixa de ser o acento, senão um × verde parece sucesso. */
+.confirmado--cancelado .confirmado__marca {
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+}
+
+.confirmado__aviso { text-align: left; margin-bottom: var(--space-5); }
+.confirmado__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; }
+.confirmado__politica { margin: var(--space-6) 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+@media (min-width: 768px) {
+  .horas { grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr)); }
+  .fluxo__titulo { font-size: var(--font-size-3xl); }
+}
+
+.fluxo__falha { margin-bottom: var(--space-5); }
+.fluxo__falha a { color: inherit; font-weight: var(--font-weight-semibold); }
+
+/* -- Entrar ---------------------------------------------------------------- */
+
+.entrar { padding: var(--space-6) var(--space-4) var(--space-8); max-width: 26rem; }
+/* Link de navegação é alvo autônomo, não texto corrido: precisa dos 44px como
+   qualquer botão. A isenção da WCAG vale para link dentro de frase, e "voltar"
+   sozinho no topo da tela não é isso. */
+.entrar__voltar {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin-bottom: var(--space-4);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+.entrar__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
+.entrar__sub { margin: 0 0 var(--space-6); color: var(--color-text-muted); }
+.entrar__falha { margin-bottom: var(--space-5); }
+
+/* O código é o dado da tela: seis dígitos grandes, espaçados, tabulares.
+   Campo pequeno faz errar a digitação com o polegar em pé na rua. */
+.codigo {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-2xl);
+  letter-spacing: 0.35em;
+  text-align: center;
+}
+
+.entrar__trocar {
+  display: inline-block;
+  margin-top: var(--space-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+.entrar__nota {
+  margin: var(--space-7) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.entrar__nota a { color: var(--color-accent); }
+
+/* -- Meus agendamentos ----------------------------------------------------- */
+
+/* Espaço para a barra fixa; sem isso o último cartão fica sob ela. */
+/* Coluna de leitura, não a largura toda: no notebook o cartão esticaria a
+   1200px para carregar três linhas de texto. */
+.meus { padding: var(--space-5) var(--space-4) var(--space-8); max-width: 44rem; }
+.meus__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.meus__voltar {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+}
+.meus__sair { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+.meus__titulo { margin: 0 0 var(--space-5); font-size: var(--font-size-2xl); }
+.meus__aviso { margin-bottom: var(--space-5); }
+
+.cartoes { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-3); }
+
+.cartao {
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+/* O que já passou não compete com o próximo horário. */
+.cartao--cancelled, .cartao--done, .cartao--rescheduled { opacity: 0.72; }
+/* O convite tem prazo, e por isso é o único cartão que pede atenção sozinho. */
+.cartao--convite { border-color: var(--color-accent); }
+.cartao__selo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+
+.cartao__quando {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+}
+.cartao__servico { margin: 0 0 var(--space-1); font-weight: var(--font-weight-medium); }
+.cartao__dados { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.cartao__estado {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.cartao__bloqueio {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.cartao__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+/* Cancelar não é a ação que a tela quer incentivar: fica em `ghost`, ao lado
+   de remarcar, que é o desfecho melhor para as duas partes. */
+.cartao__cancelar { color: var(--color-danger); }
+.cartao__repetir {
+  display: inline-block;
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
+/* -- Remarcar -------------------------------------------------------------- */
+
+.remarcar__atual { margin-bottom: var(--space-5); }
+.remarcar__rotulo {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.remarcar__quando { margin: 0 0 var(--space-1); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.remarcar__servico { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.remarcar__nota {
+  margin: var(--space-6) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O horário vira botão ao remarcar (a escolha já grava). Herda a aparência de
+   `.hora` e desfaz só o que o agente de formulário traz de fábrica. */
+.hora--botao {
+  width: 100%;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* O horário que o cliente já tem: presente na grade, mas não é escolha.
+   Borda de acento e rótulo, sem virar alvo de toque. */
+.hora--atual {
+  margin: 0;
+  border-color: var(--color-accent);
+  cursor: default;
+}
+.hora--atual .hora__quem { color: var(--color-accent); }
+
+/* Trocar de profissional ao remarcar. Régua horizontal como a de dias: no
+   celular a equipe não cabe empilhada sem empurrar a grade para fora da tela. */
+.quem { min-width: 0; margin: 0 calc(var(--space-4) * -1) var(--space-4); padding: 0 var(--space-4); }
+.quem__lista { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.quem__opcao {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+.quem__opcao--atual {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Aviso de combo mais barato. Discreto de propósito: informa uma economia real,
+   não vende — banner de oferta no meio da escolha faz o cliente desconfiar do
+   preço lá na frente. */
+.oferta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+.oferta__texto { margin: 0; font-size: var(--font-size-sm); }
+.oferta__trocar { flex-shrink: 0; }
+

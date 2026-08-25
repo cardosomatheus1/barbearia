@@ -185,6 +185,7 @@ describeIfDb('fidelidade pela HTTP', () => {
     await com(casa.token)(
       http()
         .post(`/v1/admin/fidelidade/clientes/${carlos}/ajuste`)
+        .set('Idempotency-Key', 'fidelidade-e2e-187')
         .send({ quantidade: 100, motivo: 'cortesia de reabertura da loja' }),
     ).expect(201);
 
@@ -207,6 +208,7 @@ describeIfDb('fidelidade pela HTTP', () => {
     await com(casa.token)(
       http()
         .post(`/v1/admin/fidelidade/clientes/${carlos}/ajuste`)
+        .set('Idempotency-Key', 'fidelidade-e2e-209')
         .send({ quantidade: 100, motivo: 'oi' }),
     ).expect(400);
   });
@@ -218,6 +220,7 @@ describeIfDb('fidelidade pela HTTP', () => {
     const recusa = await com(casa.token)(
       http()
         .post(`/v1/admin/fidelidade/clientes/${carlos}/ajuste`)
+        .set('Idempotency-Key', 'fidelidade-e2e-220')
         .send({ quantidade: 100, motivo: 'cortesia de reabertura da loja' }),
     ).expect(409);
     expect(recusa.body.error.code).toBe('sem_programa');
@@ -232,6 +235,7 @@ describeIfDb('fidelidade pela HTTP', () => {
     await com(casa.token)(
       http()
         .post(`/v1/admin/fidelidade/clientes/${carlos}/ajuste`)
+        .set('Idempotency-Key', 'fidelidade-e2e-234')
         .send({ quantidade: 100, motivo: 'cortesia de reabertura da loja' }),
     ).expect(201);
 
@@ -280,6 +284,7 @@ describeIfDb('fidelidade pela HTTP', () => {
     const negado = await com(maria.body.token)(
       http()
         .post(`/v1/admin/fidelidade/clientes/${carlos}/ajuste`)
+        .set('Idempotency-Key', 'fidelidade-e2e-282')
         .send({ quantidade: 100, motivo: 'cortesia de reabertura da loja' }),
     ).expect(403);
     expect(negado.body.error.code).toBe('forbidden');
@@ -302,6 +307,7 @@ describeIfDb('fidelidade pela HTTP', () => {
     const recusa = await com(casa.token)(
       http()
         .post(`/v1/admin/fidelidade/clientes/${carlos}/ajuste`)
+        .set('Idempotency-Key', 'fidelidade-e2e-304')
         .send({ quantidade: 100, motivo: 'cortesia de reabertura da loja' }),
     ).expect(403);
     expect(['mfa_required', 'mfa_setup_required']).toContain(recusa.body.error.code);

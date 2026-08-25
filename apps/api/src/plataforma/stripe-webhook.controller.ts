@@ -5,6 +5,7 @@ import {
   conferirAssinaturaDoWebhook,
   estadoDoPagamento,
   WebhookInvalido,
+  adquirenteDaComanda,
 } from '@barbearia/platform';
 import { confirmarCobranca } from '@barbearia/finance';
 import { primaryLocation } from '@barbearia/scheduling';
@@ -45,12 +46,13 @@ import { badRequest, DomainError } from '../common/errors.js';
  * metadado apontando para a barbearia errada não encontra cobrança nenhuma lá,
  * e vira `ignorado` em vez de mexer no dinheiro de quem não é dele.
  *
- * ## Por que a resposta é 200 sempre que a assinatura confere
+ * ## Quando a resposta pode ser 5xx mesmo com assinatura válida
  *
  * A Stripe reentrega tudo que não recebeu 2xx. Responder 404 para um evento
  * sobre comanda já paga faria ela repetir por horas o que já está certo, e no
  * fim marcar o endereço como quebrado. Duplicata e desconhecido são respostas
- * normais.
+ * normais. A exceção é pagamento órfão cujo refund falhou: nesse caso o erro
+ * sobe de propósito para a Stripe reentregar e a devolução ser tentada novamente.
  */
 
 /**
@@ -184,6 +186,7 @@ export class StripeWebhookController {
       tipo: evento.type,
       pagamentoId: objeto.id,
       estado,
+      provider: adquirenteDaComanda(),
       ...(objeto.last_payment_error?.code ? { motivo: objeto.last_payment_error.code } : {}),
       agora: new Date(),
     });

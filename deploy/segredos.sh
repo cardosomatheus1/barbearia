@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Os oito segredos do `.env`, gerados na máquina e preservados entre execuções.
+# Os segredos do `.env`, gerados na máquina e preservados entre execuções.
 #
 #   deploy/segredos.sh <arquivo-env> <dominio> <email-do-certificado>
 #
@@ -8,7 +8,7 @@
 # Ele nasceu dentro de `instalar.sh` e tinha um defeito que só aparecia na
 # **primeira** execução — exatamente o caso que o instalador anuncia servir.
 # Separado, ele roda sozinho, e por isso tem teste: `scripts/segredos-do-deploy.test.mjs`
-# executa este arquivo duas vezes contra um `.env` vazio e confere que os oito
+# executa este arquivo duas vezes contra um `.env` vazio e confere que os obrigatórios
 # saem preenchidos na primeira e **idênticos** na segunda.
 #
 # ## O defeito, escrito para não voltar
@@ -46,6 +46,7 @@ guardar() { # nome, valor
 # Gera se não houver; **preserva** se houver. Preservar é o que torna o
 # instalador repetível, e não é conforto:
 #   - `STAFF_EMAIL_PEPPER` indexa o login. Trocá-lo tranca todo mundo para fora.
+#   - `OTP_PEPPER` protege códigos curtos contra força bruta de um dump.
 #   - `MFA_SECRET_KEY` cifra o segundo fator. Trocá-lo invalida todos.
 #   - `API_KEY_PEPPER` é o HMAC das chaves de API. Trocá-lo derruba integrações.
 #   - as duas senhas de banco são a única forma de abrir o volume que já existe.
@@ -67,11 +68,14 @@ manter() { # nome, gerador
 manter POSTGRES_PASSWORD          "openssl rand -hex 24"
 manter APP_DB_PASSWORD            "openssl rand -hex 24"
 manter STAFF_EMAIL_PEPPER         "openssl rand -hex 32"
+manter OTP_PEPPER                 "openssl rand -hex 32"
 manter MARKETPLACE_ORIGIN_SECRET  "openssl rand -hex 32"
 manter API_KEY_PEPPER             "openssl rand -hex 32"
 manter MFA_SECRET_KEY             "openssl rand -base64 32"
 manter WEBHOOK_SECRET_KEY         "openssl rand -base64 32"
 manter WHATSAPP_TOKEN_KEY         "openssl rand -base64 32"
+manter KYC_INTENT_HMAC_SECRET      "openssl rand -hex 32"
+manter BACKUP_ENCRYPTION_KEY       "openssl rand -base64 32"
 
 # Estes dois vêm do argumento e são sobrescritos: quem roda o instalador de novo
 # com outro domínio está **dizendo** que o domínio mudou.
@@ -83,3 +87,4 @@ guardar ACME_EMAIL "$EMAIL"
 # desligá-la.
 grep -qE '^PSP_MODO='    "$ENV" || guardar PSP_MODO nenhum
 grep -qE '^FISCAL_MODO=' "$ENV" || guardar FISCAL_MODO nenhum
+grep -qE '^MEDIA_STORAGE=' "$ENV" || guardar MEDIA_STORAGE local

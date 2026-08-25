@@ -1,0 +1,200 @@
+/* ============================================================================
+   Painel do negócio — usa a linguagem interna existente do Barber Dock.
+
+   Aqui só existe CSS de composição. Superfícies, tipografia, filtros, números,
+   barras e estados vêm de `.quadro`, `.numero`, `.filtro`, `.totalzinho`,
+   `.meta`, `.defeito` e `.selo`, que já são o design system real do admin.
+   ============================================================================ */
+
+.painel-negocio { max-width: 68rem !important; padding-bottom: var(--space-8); }
+
+/* A régua de período é a mesma usada no balcão. No celular ela rola dentro de
+   si; a página nunca ganha scroll horizontal. */
+.painel-periodos {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin-top: calc(var(--space-3) * -1);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-1);
+}
+.painel-periodos .filtro { background: color-mix(in srgb, var(--color-surface-raised) 70%, transparent); }
+.painel-periodos .filtro--ativo {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 10%, transparent),
+    color-mix(in srgb, var(--color-accent) 4%, transparent)
+  );
+}
+
+.painel-resumo { display: grid; gap: var(--space-3); }
+.painel-faturamento__valor {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 8vw, 3.25rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.painel-faturamento__valor--protegido { color: var(--color-text-muted); font-size: var(--font-size-2xl); }
+.painel-meta { margin-top: var(--space-4); max-width: 34rem; }
+.painel-kpis { margin: 0; }
+
+.painel-secao__cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+}
+.painel-secao__cabeca .avisos__titulo { margin: 0 0 var(--space-3); }
+
+/* Totalzinho já é a assinatura da operação. Aqui só deixamos os quatro caberem
+   e crescerem igualmente quando houver espaço. */
+.painel-hoje {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+.painel-hoje .totalzinho { min-width: 0; }
+
+.painel-alertas { margin: 0; gap: var(--space-2); }
+.painel-alerta { padding: 0; overflow: hidden; }
+.painel-alerta--grave { --severidade: var(--color-danger); }
+.painel-alerta--aviso { --severidade: var(--color-warning); }
+.painel-alerta--ok { --severidade: var(--color-success); }
+.painel-alerta__link {
+  display: block;
+  min-height: var(--size-touch);
+  padding: var(--space-3) var(--space-4);
+  color: inherit;
+  text-decoration: none;
+}
+.painel-alerta__link:hover .defeito__link { text-decoration: underline; }
+
+.painel-desempenho { display: grid; gap: var(--space-3); }
+.dashboard-grafico {
+  position: relative;
+  height: 10rem;
+  border-bottom: 1px solid var(--color-border);
+  background-image: linear-gradient(to bottom,
+    transparent 24%, var(--color-border) 25%, transparent 26%,
+    transparent 49%, var(--color-border) 50%, transparent 51%,
+    transparent 74%, var(--color-border) 75%, transparent 76%);
+}
+.dashboard-grafico svg { width: 100%; height: 100%; padding: .5rem .125rem .125rem; }
+.dashboard-grafico path { fill: none; vector-effect: non-scaling-stroke; }
+.dashboard-grafico__real { stroke: var(--color-accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.dashboard-grafico__meta { stroke: var(--color-warning); stroke-width: 1.5; stroke-dasharray: 5 6; opacity: .75; }
+.dashboard-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.painel-equipe { display: grid; gap: var(--space-4); }
+.painel-equipe__linha { min-width: 0; }
+.painel-equipe__nome {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+.painel-equipe__nome strong { font-family: var(--font-display); font-size: var(--font-size-lg); }
+.painel-equipe .meta__barra { margin-top: 0; }
+.painel-negocio__mfa { margin-top: var(--space-6); }
+
+@media (min-width: 640px) {
+  .painel-hoje { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (min-width: 720px) {
+  .painel-resumo { grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .85fr); }
+  .painel-kpis { grid-template-columns: 1fr 1fr; align-content: stretch; }
+  .painel-kpis .numero { display: flex; flex-direction: column; justify-content: center; }
+}
+
+@media (min-width: 900px) {
+  .painel-desempenho { grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .85fr); }
+}
+
+/* -- Lista de espera (bloco 38) --------------------------------------------- */
+
+/**
+ * Mora dentro do estado vazio da grade, e é a segunda saída dele.
+ *
+ * Fechada por padrão: quem chegou aqui ainda quer marcar, e um formulário de
+ * seis campos aberto empurraria para baixo o "ver o dia seguinte", que é a
+ * saída mais provável. Abre sozinha quando houve erro — senão a mensagem
+ * ficaria escondida atrás de um resumo fechado.
+ */
+.espera {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+.espera__abrir {
+  /* Alvo de toque: 44px em qualquer largura, e o resumo é um alvo autônomo. */
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.espera__sobre {
+  margin: var(--space-3) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/**
+ * Uma coluna no piso de 360px.
+ *
+ * Dois campos de data lado a lado cabem em 390 e estouram em 360 com o seletor
+ * nativo do Android, que é largo. `min-width` a partir de 400 é o que mantém a
+ * regra de nunca desfazer para tela pequena.
+ */
+.espera__faixa { display: grid; gap: var(--space-3); }
+
+@media (min-width: 400px) {
+  .espera__faixa { grid-template-columns: 1fr 1fr; }
+}
+
+/* -- Quem está esperando, no balcão ----------------------------------------- */
+
+.esperando { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.esperando__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.esperando__quem { font-weight: var(--font-weight-semibold); }
+.esperando__quando { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.esperando__fone { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+/* Quem já foi chamada: destaque discreto, porque é informação de contexto e não
+   ação. O balcão precisa saber que o horário tem dono antes de oferecê-lo. */
+.esperando__convite {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-accent);
+}
+
+/* O botão de sair da lista, alinhado à esquerda dentro do item da espera. O
+   piso de 44px vem do design system e vale em qualquer largura. */
+.esperando__sair { justify-self: start; margin-top: var(--space-1); }
+

@@ -1,4 +1,4 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   estadoDoPacote,
   fraseDoPacote,
@@ -6,12 +6,15 @@ import {
   reembolsoProporcional,
   restamNoPacote,
   valorDaUnidade,
+  valorDoProximoConsumo,
+  diferidoDoPacote,
   vencimentoDoPacote,
   type EstadoDoPacote,
   type PacoteDoCliente,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { lancarNoExtrato } from './comanda.js';
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * Pacotes, do banco para a decisão (bloco 42, SPEC §4.7).
@@ -34,7 +37,8 @@ export type PacoteFailure =
   | 'sem_saldo'
   | 'ja_reembolsado'
   | 'nada_a_devolver'
-  | 'pacote_invalido';
+  | 'pacote_invalido'
+  | 'estorno_da_venda_em_curso';
 
 export class PacoteError extends Error {
   constructor(readonly code: PacoteFailure, message: string) {
@@ -51,6 +55,7 @@ const MENSAGEM: Readonly<Record<PacoteFailure, string>> = {
   ja_reembolsado: 'Este pacote já foi reembolsado.',
   nada_a_devolver: 'Não há unidades para devolver.',
   pacote_invalido: 'Confira os números do pacote.',
+  estorno_da_venda_em_curso: 'A venda que criou este pacote está em processo de estorno.',
 };
 
 function recusar(code: PacoteFailure): never {
@@ -78,7 +83,7 @@ export async function catalogoDePacotes(
   incluirInativos = false,
 ): Promise<readonly PacoteNoCatalogo[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<
+    const linhas = await tx.$queryRaw<
       {
         id: string;
         name: string;
@@ -90,15 +95,14 @@ export async function catalogoDePacotes(
         transferable: boolean;
         active: boolean;
       }[]
-    >(
-      `SELECT p.id, p.name, p.service_id, s.name AS servico, p.quantity, p.price_cents,
-              p.validity_days, p.transferable, p.active
-         FROM packages p
-         JOIN services s ON s.id = p.service_id
-        WHERE ($1::boolean OR p.active)
-        ORDER BY p.name`,
-      incluirInativos,
-    );
+    >(sql`
+      SELECT p.id, p.name, p.service_id, s.name AS servico, p.quantity, p.price_cents,
+             p.validity_days, p.transferable, p.active
+        FROM packages p
+        JOIN services s ON s.id = p.service_id
+       WHERE (${incluirInativos}::boolean OR p.active)
+       ORDER BY p.name
+    `);
 
     return linhas.map((l) => ({
       id: l.id,
@@ -222,19 +226,29 @@ const doBanco = (l: LinhaDoPacote): PacoteDoCliente => ({
   usados: Number(l.usados),
   venceEm: l.expires_at,
   valorDaUnidadeCents: l.unit_value_cents,
+  precoCents: l.price_cents,
   compradoEm: l.purchased_at,
   transferivel: l.transferable,
   reembolsadoEm: l.refunded_at,
 });
 
-const SELECT_DO_PACOTE = `
-  SELECT cp.id, cp.service_id, s.name AS servico, cp.quantity,
-         (SELECT count(*) FROM package_uses u WHERE u.customer_package_id = cp.id) AS usados,
-         cp.expires_at, cp.unit_value_cents, cp.price_cents, cp.purchased_at,
-         cp.transferable, cp.refunded_at, cp.refunded_cents
-    FROM customer_packages cp
-    LEFT JOIN services s ON s.id = cp.service_id
-`;
+const selectDoPacote = (comCliente = false) => comCliente
+  ? sql`
+      SELECT cp.id, cp.service_id, s.name AS servico, cp.quantity,
+             (SELECT count(*) FROM package_uses u WHERE u.customer_package_id = cp.id) AS usados,
+             cp.expires_at, cp.unit_value_cents, cp.price_cents, cp.purchased_at,
+             cp.transferable, cp.refunded_at, cp.refunded_cents, cp.customer_id
+        FROM customer_packages cp
+        LEFT JOIN services s ON s.id = cp.service_id
+    `
+  : sql`
+      SELECT cp.id, cp.service_id, s.name AS servico, cp.quantity,
+             (SELECT count(*) FROM package_uses u WHERE u.customer_package_id = cp.id) AS usados,
+             cp.expires_at, cp.unit_value_cents, cp.price_cents, cp.purchased_at,
+             cp.transferable, cp.refunded_at, cp.refunded_cents
+        FROM customer_packages cp
+        LEFT JOIN services s ON s.id = cp.service_id
+    `;
 
 export interface PacoteNaTela {
   readonly id: string;
@@ -290,10 +304,11 @@ export async function pacotesDoCliente(
   agora: Date = new Date(),
 ): Promise<readonly PacoteNaTela[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<LinhaDoPacote[]>(
-      `${SELECT_DO_PACOTE} WHERE cp.customer_id = $1::uuid ORDER BY cp.purchased_at DESC`,
-      customerId,
-    );
+    const linhas = await tx.$queryRaw<LinhaDoPacote[]>(sql`
+      ${selectDoPacote()}
+       WHERE cp.customer_id = ${customerId}::uuid
+       ORDER BY cp.purchased_at DESC
+    `);
     return linhas.map((l) => paraTela(l, agora));
   });
 }
@@ -301,9 +316,10 @@ export async function pacotesDoCliente(
 /**
  * Vende um pacote, **dentro da transação que fecha a comanda**.
  *
- * Tudo congelado aqui: serviço, quantidade, preço, valor da unidade e validade.
- * O corte avulso sobe em março e as unidades compradas em janeiro continuam
- * valendo o que valiam.
+ * Os termos não são relidos do catálogo aqui. Eles foram congelados no
+ * `order_item` quando a recepção adicionou o pacote à comanda. Isso evita que
+ * uma edição do catálogo entre "adicionar" e "receber" mude serviço,
+ * quantidade, validade ou transferibilidade depois que o preço já foi aceito.
  */
 export async function venderPacote(
   tx: TransactionClient,
@@ -312,23 +328,15 @@ export async function venderPacote(
     readonly customerId: string;
     readonly packageId: string;
     readonly orderId: string;
+    readonly serviceId: string;
+    readonly quantidade: number;
+    readonly precoCents: number;
+    readonly validadeDias: number | null;
+    readonly transferivel: boolean;
     readonly agora: Date;
   },
 ): Promise<{ readonly id: string }> {
-  const catalogo = await tx.$queryRaw<
-    {
-      service_id: string;
-      quantity: number;
-      price_cents: number;
-      validity_days: number | null;
-      transferable: boolean;
-    }[]
-  >`
-    SELECT service_id, quantity, price_cents, validity_days, transferable
-      FROM packages WHERE id = ${params.packageId}::uuid AND active
-  `;
-  const item = catalogo[0];
-  if (!item) recusar('catalogo_nao_encontrado');
+  if (params.quantidade < 1 || params.precoCents <= 0) recusar('pacote_invalido');
 
   const criados = await tx.$queryRaw<{ id: string }[]>`
     INSERT INTO customer_packages
@@ -336,10 +344,10 @@ export async function venderPacote(
        price_cents, unit_value_cents, transferable, purchased_at, expires_at)
     VALUES (
       ${params.tenantId}::uuid, ${params.customerId}::uuid, ${params.packageId}::uuid,
-      ${params.orderId}::uuid, ${item.service_id}::uuid, ${item.quantity},
-      ${item.price_cents}, ${valorDaUnidade(item.price_cents, item.quantity)},
-      ${item.transferable}, ${params.agora},
-      ${vencimentoDoPacote(item.validity_days, params.agora)}
+      ${params.orderId}::uuid, ${params.serviceId}::uuid, ${params.quantidade},
+      ${params.precoCents}, ${valorDaUnidade(params.precoCents, params.quantidade)},
+      ${params.transferivel}, ${params.agora},
+      ${vencimentoDoPacote(params.validadeDias, params.agora)}
     )
     RETURNING id
   `;
@@ -368,11 +376,33 @@ async function vivosDoCliente(
   customerId: string,
   travar: boolean,
 ): Promise<readonly PacoteDoCliente[]> {
-  const linhas = await tx.$queryRawUnsafe<LinhaDoPacote[]>(
-    `${SELECT_DO_PACOTE} WHERE cp.customer_id = $1::uuid AND cp.refunded_at IS NULL
-       ORDER BY cp.purchased_at${travar ? ' FOR UPDATE OF cp' : ''}`,
-    customerId,
-  );
+  if (travar) {
+    /**
+     * Trave **antes** de contar usos ou consultar `refund_pending_at`.
+     *
+     * Em READ COMMITTED, uma única `SELECT ... FOR UPDATE` pode começar com um
+     * snapshot anterior, esperar outra transação soltar `customer_packages` e
+     * ainda carregar subqueries que não viram o `package_uses`/lease recém
+     * confirmado. Duas instruções transformam a trava em barreira de verdade:
+     * depois que este SELECT termina, a consulta seguinte abre snapshot novo.
+     */
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM customer_packages
+       WHERE customer_id = ${customerId}::uuid AND refunded_at IS NULL
+       ORDER BY purchased_at
+       FOR UPDATE
+    `;
+  }
+
+  const linhas = await tx.$queryRaw<LinhaDoPacote[]>(sql`
+    ${selectDoPacote()}
+     WHERE cp.customer_id = ${customerId}::uuid AND cp.refunded_at IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM order_charges oc
+          WHERE oc.order_id = cp.order_id AND oc.refund_pending_at IS NOT NULL
+       )
+     ORDER BY cp.purchased_at
+  `);
   return linhas.map(doBanco);
 }
 
@@ -408,7 +438,7 @@ export async function consumoDisponivel(params: {
 
     return {
       customerPackageId: escolhido.id,
-      valorCents: escolhido.valorDaUnidadeCents,
+      valorCents: valorDoProximoConsumo(escolhido),
       restamDepois: restamNoPacote(escolhido) - 1,
     };
   };
@@ -482,11 +512,29 @@ export async function reembolsarPacote(entrada: {
   const agora = entrada.agora ?? new Date();
 
   return withTenant(entrada.tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<(LinhaDoPacote & { customer_id: string })[]>(
-      `${SELECT_DO_PACOTE.replace('cp.refunded_cents', 'cp.refunded_cents, cp.customer_id')}
-        WHERE cp.id = $1::uuid FOR UPDATE OF cp`,
-      entrada.customerPackageId,
-    );
+    // Primeiro adquira a linha do pacote; só depois releia o lease em snapshot
+    // novo. Assim `reembolsar × estornar` tem uma ordem total mesmo quando uma
+    // das transações precisou esperar a outra.
+    const travado = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM customer_packages
+       WHERE id = ${entrada.customerPackageId}::uuid
+       FOR UPDATE
+    `;
+    if (!travado[0]) recusar('pacote_nao_encontrado');
+
+    const pendente = await tx.$queryRaw<{ id: string }[]>`
+      SELECT cp.id FROM customer_packages cp
+      JOIN order_charges oc ON oc.order_id = cp.order_id
+       WHERE cp.id = ${entrada.customerPackageId}::uuid
+         AND oc.refund_pending_at IS NOT NULL
+       LIMIT 1
+    `;
+    if (pendente[0]) recusar('estorno_da_venda_em_curso');
+
+    const linhas = await tx.$queryRaw<(LinhaDoPacote & { customer_id: string })[]>(sql`
+      ${selectDoPacote(true)}
+       WHERE cp.id = ${entrada.customerPackageId}::uuid
+    `);
     const linha = linhas[0];
     if (!linha) recusar('pacote_nao_encontrado');
 
@@ -546,6 +594,8 @@ export interface ReceitaDePacotes {
   readonly vendidoCents: number;
   /** Consumido no dia. É a receita que a venda de antes prometeu. */
   readonly reconhecidoCents: number;
+  /** Saldo que virou receita porque o pacote venceu no dia. */
+  readonly vencidoCents: number;
   /** O passivo: tudo que foi pago e ainda não foi entregue. */
   readonly diferidoCents: number;
 }
@@ -562,35 +612,67 @@ export interface ReceitaDePacotes {
  * pacote que venceu ontem já não é passivo, e nenhuma varredura precisou rodar
  * para isso ser verdade.
  */
-export async function receitaDePacotes(
-  tenantId: string,
-  dia: string,
-  agora: Date = new Date(),
-): Promise<ReceitaDePacotes> {
-  return withTenant(tenantId, async (tx) => {
-    const vendas = await tx.$queryRaw<{ total: number | null }[]>`
-      SELECT sum(cp.price_cents)::int AS total
+export async function receitaDePacotes(params: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly dia: string;
+  readonly agora?: Date;
+}): Promise<ReceitaDePacotes> {
+  const agora = params.agora ?? new Date();
+  return withTenant(params.tenantId, async (tx) => {
+    const vendas = await tx.$queryRaw<{ total: bigint | null }[]>`
+      SELECT sum(cp.price_cents)::bigint AS total
         FROM customer_packages cp
         JOIN orders o ON o.id = cp.order_id
-       WHERE o.business_day = ${dia}::date AND o.status = 'paid'
+       WHERE o.location_id = ${params.locationId}::uuid
+         AND o.business_day = ${params.dia}::date AND o.status = 'paid'
     `;
 
-    const usos = await tx.$queryRaw<{ total: number | null }[]>`
-      SELECT sum(value_cents)::int AS total
-        FROM package_uses WHERE business_day = ${dia}::date
+    const usos = await tx.$queryRaw<{ total: bigint | null }[]>`
+      SELECT sum(u.value_cents)::bigint AS total
+        FROM package_uses u
+        JOIN orders o ON o.id = u.order_id
+       WHERE o.location_id = ${params.locationId}::uuid
+         AND u.business_day = ${params.dia}::date
     `;
 
-    const abertos = await tx.$queryRawUnsafe<LinhaDoPacote[]>(
-      `${SELECT_DO_PACOTE} WHERE cp.refunded_at IS NULL`,
-    );
-    const diferidoCents = abertos
+    const vencidos = await tx.$queryRaw<{ total: bigint | null }[]>`
+      SELECT sum(
+               GREATEST(
+                 cp.price_cents - COALESCE((
+                   SELECT sum(u.value_cents)::bigint FROM package_uses u
+                    WHERE u.customer_package_id = cp.id
+                 ), 0),
+                 0
+               )
+             )::bigint AS total
+        FROM customer_packages cp
+        JOIN orders venda ON venda.id = cp.order_id
+        JOIN locations l ON l.id = venda.location_id
+       WHERE venda.location_id = ${params.locationId}::uuid
+         AND cp.refunded_at IS NULL
+         AND cp.expires_at IS NOT NULL
+         -- Evita reconhecer breakage antes do horário real do vencimento quando
+         -- o relatório é aberto no próprio dia. Enquanto expires_at > agora,
+         -- o mesmo saldo ainda aparece em diferidoCents.
+         AND cp.expires_at <= ${agora}
+         AND (cp.expires_at AT TIME ZONE l.timezone)::date = ${params.dia}::date
+    `;
+
+    const abertos = await tx.$queryRaw<LinhaDoPacote[]>(sql`
+      ${selectDoPacote()}
+      JOIN orders venda ON venda.id = cp.order_id
+       WHERE cp.refunded_at IS NULL AND venda.location_id = ${params.locationId}::uuid
+    `);
+    const diferidoBig = abertos
       .map(doBanco)
-      .filter((p) => estadoDoPacote(p, agora) === 'ativo')
-      .reduce((soma, p) => soma + restamNoPacote(p) * p.valorDaUnidadeCents, 0);
+      .reduce((soma, p) => soma + BigInt(diferidoDoPacote(p, agora)), 0n);
+    const diferidoCents = inteiroSeguroDoBanco(diferidoBig, 'saldo diferido de pacotes');
 
     return {
-      vendidoCents: vendas[0]?.total ?? 0,
-      reconhecidoCents: usos[0]?.total ?? 0,
+      vendidoCents: inteiroSeguroDoBanco(vendas[0]?.total, 'venda de pacotes do dia'),
+      reconhecidoCents: inteiroSeguroDoBanco(usos[0]?.total, 'uso de pacotes do dia'),
+      vencidoCents: inteiroSeguroDoBanco(vencidos[0]?.total, 'saldo vencido de pacotes do dia'),
       diferidoCents,
     };
   });

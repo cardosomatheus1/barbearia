@@ -110,7 +110,6 @@ export const fecharComandaSchema = z.object({
         valorCents: centavosPositivos,
       }),
     )
-    .min(1)
     .max(5),
   /**
    * Quantos pontos, visitas ou centavos o cliente está resgatando (bloco 41).
@@ -135,6 +134,8 @@ export const fecharComandaSchema = z.object({
    * pacote da comanda, que são os que carregam o preço cobrado.
    */
   servicoDoPacote: uuidSchema.optional(),
+  /** Serviço coberto pela assinatura, quando a forma é `assinatura`. */
+  servicoDaAssinatura: uuidSchema.optional(),
 });
 
 export const receberFiadoSchema = z.object({

@@ -64,6 +64,8 @@ export interface Ficha {
   /** Quantas vezes já veio de fato. É o número que muda como se trata alguém. */
   readonly visitas: number;
   readonly desde: string | null;
+  /** Último atendimento concluído; faltas/cancelamentos não contam como visita. */
+  readonly ultimaVisita: string | null;
   /**
    * O segmento e o ritmo (bloco 61, SPEC §4.4) — **sem nenhum valor em reais**.
    *
@@ -208,6 +210,7 @@ export async function lerFicha(
       })),
       visitas: Number(linha.visitas),
       desde: linha.desde?.toISOString() ?? null,
+      ultimaVisita: naBase?.ultimaVisita?.toISOString() ?? null,
       /**
        * Cliente anonimizado sai da base — e a ficha dele continua abrindo, para
        * a tela poder dizer que o cadastro foi apagado. `novo` é o rótulo honesto

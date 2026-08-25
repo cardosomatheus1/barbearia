@@ -9,10 +9,11 @@ import { secao } from '../secoes';
 /**
  * O assistente do gestor (blocos 63 e 64, SPEC §4.15).
  *
- * ## Sem componente de cliente, e por isso um formulário
+ * ## Esta tela continua server-first, e por isso usa formulário
  *
- * Um chat com balões exigiria estado no navegador, e este painel é 100%
- * renderizado no servidor. O que a tela faz é o que um chat faz de útil: a pessoa
+ * Um chat com balões exigiria estado no navegador. O R5 abriu uma ilha apenas
+ * onde ela se paga; este assistente continua renderizado no servidor. O que a
+ * tela faz é o que um chat faz de útil: a pessoa
  * escreve em português, e a resposta aparece com o número, o período e o link
  * para conferir. A pergunta volta na URL — e o texto dela é o **próprio texto**,
  * não uma métrica: o que não pode ir para a URL é o resultado, não a pergunta.
@@ -27,7 +28,7 @@ import { secao } from '../secoes';
  */
 
 export const metadata: Metadata = {
-  title: 'Assistente',
+  title: 'Assistente de gestão',
   robots: { index: false, follow: false },
 };
 
@@ -68,10 +69,9 @@ export default async function AssistentePage({ searchParams }: Props) {
         </form>
       </header>
 
-      <h1 className="painel__titulo">Assistente</h1>
+      <h1 className="painel__titulo">Assistente de gestão</h1>
       <p className="painel__sub">
-        Pergunte em português. A resposta vem com o período que ela usou e o link da tela onde o
-        número pode ser conferido.
+        Pergunte em português. O assistente consulta um catálogo fechado de métricas; a resposta vem com o período usado e o link da tela onde o número pode ser conferido.
       </p>
 
       <form action={acaoPerguntarAoAssistente} className="pergunta">

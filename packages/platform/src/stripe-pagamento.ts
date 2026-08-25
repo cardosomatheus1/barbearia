@@ -272,15 +272,30 @@ export class StripePaymentProvider implements PaymentProvider {
     pagamentoId: string,
     valorCents?: number,
   ): Promise<{ readonly estornoId: string }> {
+    // Link de pagamento guarda `cs_...` (Checkout Session), mas `/refunds`
+    // aceita o PaymentIntent `pi_...`. Resolver aqui mantém o contrato do
+    // domínio uniforme: quem chama estorna pelo mesmo id que recebeu ao criar
+    // a cobrança, sem precisar saber que a Stripe tem dois recursos diferentes.
+    let paymentIntentId = pagamentoId;
+    if (pagamentoId.startsWith('cs_')) {
+      const sessao = await this.cliente.get<Sessao>(
+        `/checkout/sessions/${noCaminho(pagamentoId)}`,
+      );
+      if (!sessao.payment_intent) {
+        throw new Error('checkout_sem_payment_intent');
+      }
+      paymentIntentId = sessao.payment_intent;
+    }
+
     const estorno = await this.cliente.post<{ id: string }>(
       '/refunds',
       {
-        payment_intent: pagamentoId,
+        payment_intent: paymentIntentId,
         ...(valorCents === undefined ? {} : { amount: valorCents }),
       },
-      // Estorno é POST que move dinheiro, e portanto exige chave. Derivada, não
-      // sorteada: a retentativa precisa produzir a mesma, senão a resposta que
-      // se perdeu devolve o dinheiro duas vezes.
+      // A chave continua derivada do id **original** guardado pelo Barberdock.
+      // Assim uma repetição de `cs_...` produz a mesma chave mesmo depois de
+      // resolver o `pi_...` correspondente.
       { idempotencyKey: chaveDoEstorno(pagamentoId, valorCents) },
     );
     return { estornoId: estorno.id };
@@ -331,10 +346,10 @@ export class StripePspProvider implements PspProvider {
           confirm: true,
           metadata: { fatura_id: pedido.faturaId, tenant_id: pedido.tenantId },
         },
-        // A fatura é a chave: a régua pode rodar duas vezes no mesmo dia — dois
-        // workers, um reinício — e a segunda volta não pode emitir a segunda
-        // cobrança da mesma fatura.
-        { idempotencyKey: `fatura:${pedido.faturaId}` },
+        // A tentativa é parte da chave: dois workers executando **o mesmo**
+        // degrau reencontram a mesma cobrança; D+1/D+3/D+7, depois de uma
+        // recusa definitiva, precisam criar uma nova tentativa de verdade.
+        { idempotencyKey: `fatura:${pedido.faturaId}:tentativa:${pedido.tentativa}` },
       );
 
       return { estado: paraEstadoDaCobranca(intent.status), chargeId: intent.id };

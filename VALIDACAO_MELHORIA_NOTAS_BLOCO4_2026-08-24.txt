@@ -1,0 +1,43 @@
+BARBERDOCK — MELHORIA DE NOTAS — BLOCO 4 — 2026-08-24
+
+FOCO
+- Finance / Comissao: modularizacao conservadora + guardas de invariantes financeiros.
+
+RESULTADO ESTRUTURAL
+- comissao.ts: 1390 -> 51 linhas (fachada).
+- comissao-contratos.ts: 56.
+- comissao-lancamentos.ts: 298.
+- comissao-periodos.ts: 406.
+- comissao-configuracao.ts: 363.
+- comissao-assinatura.ts: 278.
+- Maior modulo resultante: 406 linhas.
+
+COMPATIBILIDADE
+- API publica antes/depois: 30/30 exports preservados.
+- Removidos: 0.
+- Adicionados acidentalmente: 0.
+- Grafo interno de comissao: sem ciclos.
+
+VALIDACAO EXECUTADA
+- TypeScript semantico isolado dos modulos alterados: OK.
+- Guardas verificar-*.mjs executaveis: 27/27.
+- Auditoria ofensiva: OK.
+- Auditoria profunda: OK.
+- Invariantes: OK.
+- verify.sh: sintaxe OK.
+
+NOVOS CONTROLES
+- scripts/verificar-finance-comissao-modulos.mjs integrado ao verify.sh.
+- Teto de crescimento por modulo.
+- Guarda de ciclo entre modulos.
+- Estorno positivo->negativo preservado.
+- Vales filtrados aos profissionais pagos + FOR UPDATE.
+- Fechamento carimba exatamente os IDs calculados.
+- Validacao de FK sob RLS preservada.
+- Taxa do adquirente limitada e proibida para fiado.
+- Modelo da assinatura limitado e auditado.
+
+LIMITACOES
+- Toolchain completo do projeto (pnpm/node_modules) ausente neste runtime.
+- PostgreSQL ausente.
+- Typecheck/build/Vitest completos do workspace nao repetidos aqui.

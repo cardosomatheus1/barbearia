@@ -1,0 +1,34 @@
+BARBERDOCK — AUDITORIA POR BLOCOS — BLOCO 2 SCHEDULING — 2026-08-24
+
+VEREDITO
+- 12 classes de achado corrigidas no domínio de agenda/scheduling.
+- Remarcação serializada por linha.
+- Capacidade serializada por unidade+dia.
+- Idempotência valida intenção.
+- Holds congelam recursos e quantity.
+- Walk-in respeita limite diário e recursos.
+- bookable_online separa público de balcão.
+- Lista de espera serializa limite por cliente.
+- Oferta revalida vaga/cota/recursos.
+- API pública não aceita holdId.
+- Hold interno valida profissional/janela/recursos.
+- undo_no_show revalida recurso compartilhado.
+- Migração 0110 + prova SQL preparadas.
+
+VALIDAÇÃO EXECUTADA
+- Guardas diretos aplicáveis: 41/41 PASS.
+- Testes Node sem Vitest: 21/21 arquivos; 106 testes PASS.
+- Auditoria Scheduling negativa: 11/11 PASS.
+- TS/TSX sintático amplo: 773/773 OK.
+- Scheduling TS: 33/33 OK.
+- API TS: 131/131 OK.
+- Shell: OK.
+- YAML: OK.
+
+NÃO EXECUTADO NESTE RUNTIME
+- 25 arquivos que importam Vitest (dependência ausente).
+- PostgreSQL 16 / migração 0110 / RLS / testes de concorrência e integração DB.
+
+CLASSIFICAÇÃO
+- bloqueador conhecido de código no bloco: nenhum.
+- prova runtime de concorrência/banco: pendente de PostgreSQL real.

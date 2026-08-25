@@ -13,6 +13,7 @@ import {
   definirLimiteDeFiado,
   lancarSaldoInicialDeFiado,
   quitarContaDoFinanceiro,
+  resumoFinanceiroDoCliente,
   transferenciasRecentes,
   transferirEntreContas,
 } from './financeiro.js';
@@ -353,6 +354,7 @@ describeIfDb('financeiro', () => {
     const banco = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Banco do Brasil' });
 
     await transferirEntreContas({
+        idempotencyKey: 'audit-test-transferirEntreContas-1',
       tenantId: TENANT,
       locationId: LOCATION,
       deContaId: gaveta.id,
@@ -386,6 +388,7 @@ describeIfDb('financeiro', () => {
 
     await expect(
       transferirEntreContas({
+        idempotencyKey: 'audit-test-transferirEntreContas-2',
         tenantId: TENANT,
         locationId: LOCATION,
         deContaId: minha.id,
@@ -416,6 +419,7 @@ describeIfDb('financeiro', () => {
     const cofre = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Cofre' });
 
     await transferirEntreContas({
+        idempotencyKey: 'audit-test-transferirEntreContas-3',
       tenantId: TENANT,
       locationId: LOCATION,
       deContaId: cofre.id,
@@ -462,6 +466,7 @@ describeIfDb('financeiro', () => {
     const cofre = await criarContaFinanceira({ autorizadas: [], tenantId: TENANT, nome: 'Cofre' });
     await expect(
       transferirEntreContas({
+        idempotencyKey: 'audit-test-transferirEntreContas-4',
         tenantId: TENANT,
         locationId: LOCATION,
         deContaId: cofre.id,
@@ -491,6 +496,33 @@ describeIfDb('financeiro', () => {
       }),
     ).rejects.toThrow();
     expect((await contasFinanceiras(TENANT)).filter((c) => c.ehGaveta)).toHaveLength(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // Resumo financeiro do cliente
+  // -------------------------------------------------------------------------
+
+  it('o gasto total usa todos os pedidos pagos, não uma janela visual de visitas', async () => {
+    await exec(`
+      INSERT INTO orders (tenant_id, location_id, customer_id, status, subtotal_cents, total_cents, closed_at)
+      VALUES
+        ('${TENANT}', '${LOCATION}', '${CARLOS}', 'paid', 6000, 6500, now()),
+        ('${TENANT}', '${LOCATION}', '${CARLOS}', 'paid', 8000, 8000, now()),
+        ('${TENANT}', '${LOCATION}', '${CARLOS}', 'open', 9999, 9999, null)
+    `);
+
+    await expect(resumoFinanceiroDoCliente(TENANT, CARLOS))
+      .resolves.toEqual({ gastoTotalCents: 14_500 });
+  });
+
+  it('o resumo financeiro não encontra cliente de outro tenant', async () => {
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('c5151515-0000-0000-0000-000000000009', '${RIVAL}', 'Deles', '+5571900000000');
+    `);
+    await expect(
+      resumoFinanceiroDoCliente(TENANT, 'c5151515-0000-0000-0000-000000000009'),
+    ).rejects.toMatchObject({ code: 'cliente_nao_encontrado' });
   });
 
   // -------------------------------------------------------------------------

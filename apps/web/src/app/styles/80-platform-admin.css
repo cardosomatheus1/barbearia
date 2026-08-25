@@ -1,0 +1,1252 @@
+/* ============================================================================
+   Plataforma — o painel do Super Admin (bloco 24)
+
+   Tela nova, e a primeira do produto que **não** é de uma barbearia. O risco de
+   desenho aqui não é ficar feia: é ficar parecida demais com o painel do
+   gestor. Quem administra a plataforma quase sempre tem também uma conta de
+   teste em alguma barbearia, e as duas telas usam o mesmo tema escuro, a mesma
+   tipografia e os mesmos componentes. Confundir as duas é bloquear a conta
+   errada.
+
+   O que separa é a barra: ela é a única superfície do produto com o âmbar no
+   **fundo** em vez de no detalhe, e o selo "plataforma" fica ao lado da marca.
+   Nenhuma tela de barbearia tem isso, e nenhuma vai ter.
+   ============================================================================ */
+
+.plataforma__barra {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 22%, var(--color-surface-raised)),
+    var(--color-surface-raised)
+  );
+  border-bottom: 1px solid var(--color-border);
+}
+.plataforma__barra-interna {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+}
+.plataforma__marca {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.02em;
+}
+.plataforma__selo {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+.plataforma__nav {
+  display: flex;
+  /* A barra externa quebra em linhas; a **de dentro** também precisa quebrar.
+     Sem isto os seis destinos formam uma linha só que não cabe em 390px, e os
+     dois últimos — Trilha e Segurança — ficam fora da tela, alcançáveis apenas
+     digitando a URL. O comentário antigo prometia "sem nada sumir" e era o
+     contrário: o que sumia eram justamente a trilha de auditoria e a tela de
+     segurança. */
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  /* Empurra "Sair" para a ponta quando há espaço. */
+  margin-inline-end: auto;
+}
+.plataforma__link,
+.plataforma__sair {
+  display: inline-flex;
+  align-items: center;
+  /* 44px em qualquer largura: mouse impreciso e limitação motora não são
+     exclusividade do celular. */
+  min-height: 2.75rem;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+.plataforma__link:hover { background: var(--color-surface-hover); }
+
+.plataforma__trabalho { padding-block: var(--space-5) var(--space-8); }
+
+/* O painel da plataforma é console, não coluna de leitura.
+   `46rem` é a largura certa para as telas de formulário da barbearia, e errada
+   aqui: as tabelas desta seção têm seis colunas e a última carrega um motivo
+   escrito. Com o teto de leitura, o botão de cancelar o destaque ficava fora
+   da vista **no notebook**, atrás de uma rolagem interna que ninguém procura
+   numa tela larga. Só a partir de 64em: abaixo disso a coluna estreita
+   continua sendo a certa. */
+@media (min-width: 64em) {
+  .plataforma .painel__conteudo { max-width: 72rem; }
+}
+
+/* ----------------------------------------------------------------------------
+   A lista de contas
+
+   Uma coluna no piso; a partir de 900px o plano e a ação sobem para a mesma
+   linha do nome. Não é "versão de desktop": é a mesma linha ganhando densidade
+   quando há espaço.
+   ---------------------------------------------------------------------------- */
+
+.contas { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+
+.conta {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+.conta--bloqueada {
+  border-color: var(--color-danger);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-danger) 10%, var(--color-surface-hover)),
+    var(--color-surface-raised)
+  );
+}
+.conta__quem { min-width: 0; }
+.conta__nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+}
+.conta__selo {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+.conta__meta {
+  margin: var(--space-1) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.conta__slug { letter-spacing: 0.01em; }
+.conta__slug--vazio { font-style: italic; }
+.conta__motivo {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-danger);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.conta__plano { min-width: 0; }
+/* O plano visto por quem só consulta: mesmo lugar, sem formulário. */
+.conta__plano-atual { margin: var(--space-1) 0 0; font-weight: 600; }
+/* Campo em cima, botão embaixo — e não lado a lado.
+
+   Lado a lado, o `<select>` fica com a largura da coluna menos o botão, e
+   "Completo · R$ 199,00" é cortado no meio: a tela passa a mostrar preço pela
+   metade, que é pior do que não mostrar. Empilhado, ele usa a coluna inteira e
+   o mesmo desenho vale do piso de 360px ao 1440. */
+.conta__plano-linha { display: grid; gap: var(--space-2); min-width: 0; }
+.conta__plano-linha .ui-field__input { min-width: 0; }
+
+.conta__acao {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+}
+.conta__bloquear-abrir {
+  /* `<summary>` com aparência de botão precisa perder o triângulo, senão ele
+     aparece dentro da cápsula. */
+  list-style: none;
+  cursor: pointer;
+}
+.conta__bloquear-abrir::-webkit-details-marker { display: none; }
+.conta__bloquear-form {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.conta__aviso { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+/* ----------------------------------------------------------------------------
+   A trilha
+   ---------------------------------------------------------------------------- */
+
+.trilha-plataforma { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.evento-plataforma {
+  padding: var(--space-3);
+  border-inline-start: 2px solid var(--color-border);
+  background: var(--color-surface-raised);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  min-width: 0;
+}
+.evento-plataforma__linha { margin: 0; }
+.evento-plataforma__detalhe {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.evento-plataforma__quando {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Áreas nomeadas, e não três colunas contadas na mão.
+
+   A versão anterior declarava `grid-template-columns` com três faixas e o
+   cartão tinha três filhos. O bloco 26 acrescentou o quarto — os recursos — e
+   a colocação automática empurrou tudo uma célula para o lado: o nome da
+   barbearia ficou numa coluna de noventa pixels, quebrando uma palavra por
+   linha, com o rótulo "Plano" por cima dele.
+   
+   A medição não pegou, e não pegaria: ela confere rolagem horizontal,
+   transbordo e alvo de toque, e nenhum dos três acontece quando uma coluna
+   apenas encolhe. Quem pegou foi olhar a tela. Área nomeada é o que impede a
+   repetição — filho novo sem área declarada não entra em lugar nenhum, em vez
+   de entrar no lugar errado. */
+@media (min-width: 900px) {
+  .conta {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 16rem) minmax(0, 12rem);
+    grid-template-areas:
+      'quem plano acao'
+      'recursos recursos acao';
+    align-items: start;
+    gap: var(--space-4) var(--space-5);
+  }
+  .conta__quem { grid-area: quem; }
+  .conta__plano { grid-area: plano; }
+  .conta__recursos { grid-area: recursos; }
+  .conta__acao { grid-area: acao; }
+}
+
+/* ----------------------------------------------------------------------------
+   Métricas da plataforma (bloco 25)
+
+   Seis números em cima e uma tabela larga embaixo. A tabela é larga por
+   natureza — oito colunas —, então ela rola **dentro do próprio recipiente**
+   (`.ui-scroll-x`), e o recipiente zera o mínimo para não empurrar a página de
+   lado quando um nome de barbearia é comprido.
+   ---------------------------------------------------------------------------- */
+
+.painel__secao {
+  margin: var(--space-7) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.01em;
+}
+
+.janelas {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+.janelas__opcao {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+.janelas__opcao--atual {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+}
+.indicador {
+  padding: var(--space-4);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+/* Cor é o **último** recurso da hierarquia, e aqui ela não carrega nenhuma
+   informação sozinha: o número e a nota já dizem o que houve. A borda só chama
+   o olho para a linha que merece uma ligação hoje. */
+.indicador--alerta { border-color: var(--color-danger); }
+.indicador__rotulo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.indicador__valor {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-variant-numeric: tabular-nums;
+  /* Nome de barbearia longo e "R$ 1.234.567,89" cabem no mesmo cartão de
+     360px porque a palavra quebra em vez de esticar a caixa. */
+  overflow-wrap: anywhere;
+}
+.indicador__nota {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.saude-rolagem { min-width: 0; }
+.saude {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+.saude__legenda {
+  text-align: start;
+  padding-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.saude th,
+.saude td {
+  /* Respiro menor na horizontal: oito colunas com o espaçamento de cartão
+     empurram a tabela para além do recipiente e ela chega ao 1440 cortada.
+     Rolar dentro do próprio quadro é a regra e continua valendo — mas a régua
+     que não precisa rolar no notebook é melhor do que a que precisa. */
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  text-align: start;
+  white-space: nowrap;
+}
+.saude thead th {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.saude__nome {
+  white-space: normal;
+  font-weight: var(--font-weight-semibold);
+  /* A coluna de nome é a única elástica: as outras sete são número curto, e
+     deixar o nome quebrar é o que faz a tabela caber sem encolher dado. */
+  min-width: 10rem;
+}
+.saude__num { text-align: end; }
+.saude__quando { color: var(--color-text-muted); }
+/* Barbearia sem nenhum agendamento na janela: é a linha que a tela existe para
+   destacar, e ela vem primeiro por ordenação, não por cor. */
+.saude__linha--sem-sinal .saude__nome { color: var(--color-danger); }
+.saude__nunca,
+.saude__parada { color: var(--color-danger); }
+
+/* ----------------------------------------------------------------------------
+   Suporte assistido e recursos (bloco 26)
+   ---------------------------------------------------------------------------- */
+
+/* A faixa é a única superfície do painel com fundo de alerta ocupando a largura
+   inteira. É de propósito: ela não pode competir com o conteúdo, ela precisa
+   ganhar dele. */
+.faixa-suporte {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  padding-inline: max(var(--space-4), env(safe-area-inset-left));
+  background: var(--color-danger);
+  color: var(--color-text-on-danger);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.conta__recursos { min-width: 0; }
+.recursos {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.recursos__forma { display: contents; }
+.recursos__botao {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  /* 44px em qualquer largura, como todo alvo autônomo. */
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.recursos__botao--ligado {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+.recursos__estado {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+/* O segredo do segundo fator aparece uma vez e é digitado à mão no celular:
+   quebra em qualquer ponto e usa numerais tabulares para não dançar. */
+.segredo-mfa {
+  margin: var(--space-3) 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  overflow-wrap: anywhere;
+}
+.codigos-mfa {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--space-2);
+}
+.codigos-mfa__item {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+/* Um campo de e-mail com mil pixels de largura não fica mais fácil de
+   preencher — fica mais difícil de mirar, e denuncia que ninguém olhou a tela
+   depois de montá-la. A medida é a de leitura confortável, e ela vale a partir
+   do ponto em que sobra espaço; no piso de 360px o campo continua ocupando
+   tudo. */
+@media (min-width: 700px) {
+  .plataforma__trabalho .formulario,
+  .plataforma__trabalho .painel__grupo > .ui-field__ajuda {
+    max-width: 32rem;
+  }
+}
+
+/* O selo da barbearia bloqueada encostava no nome dela na tabela. */
+.saude__nome .conta__selo { margin-inline-start: var(--space-2); }
+
+/* ----------------------------------------------------------------------------
+   Plano da barbearia (bloco 27)
+   ---------------------------------------------------------------------------- */
+
+.plano__publico {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+.plano__cadeiras {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-variant-numeric: tabular-nums;
+}
+.plano__aviso {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-accent);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano__recursos {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.plano__recurso {
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+/* Fora do plano some do foco sem sumir da tela: esconder seria decidir que o
+   dono não precisa saber o que existe um degrau acima. */
+.plano__recurso--fora { opacity: 0.65; }
+.plano__recurso-nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.plano__recurso-sobre {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano__selo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+.plano__selo--fora { color: var(--color-text-muted); border-color: var(--color-border); }
+
+/* -- Plano: as opções e o extrato (bloco 28) -------------------------------- */
+
+/*
+   Cartão por recipiente e não por tela.
+
+   A vitrine de planos aparece aqui em largura cheia e, no dia em que couber
+   numa barra lateral, o cartão precisa virar coluna única sem que ninguém
+   escreva outra media query. `@container` responde à largura disponível, que é
+   o que de fato decide o formato.
+
+   **O recipiente é a seção, não a própria lista.** Consulta de recipiente
+   pergunta ao ancestral: um elemento que declara `container-type` não responde
+   sobre si mesmo. A primeira versão punha `container-type` na `<ul>` e
+   consultava a `<ul>` — nenhuma das duas condições casava, e os três planos
+   ficavam empilhados em 1280px. A medição não pegou: uma coluna só nunca rola
+   nem estoura, e olhar foi o que pegou. De novo.
+*/
+.plano-vitrine { container-type: inline-size; }
+
+.plano-opcoes {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+@container (min-width: 640px) {
+  .plano-opcoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (min-width: 960px) {
+  .plano-opcoes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.plano-opcao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+
+/* O plano em que se está ganha a borda de acento — hierarquia por posição e
+   peso antes de cor, mas aqui a cor é o que responde "onde eu estou". */
+.plano-opcao--atual { border-color: var(--color-accent); }
+
+.plano-opcao__nome {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.plano-opcao__preco {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+}
+.plano-opcao__mes {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+.plano-opcao__publico,
+.plano-opcao__cadeiras {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano-opcao__acerto {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+}
+.plano-opcao__impedimento {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+/* `margin-top: auto` alinha o botão no rodapé de todos os cartões da linha,
+   mesmo com textos de alturas diferentes — sem ele a fileira fica serrilhada.
+
+   A borda existe porque o `ghost` do design system é transparente e sem
+   contorno: certo para "Sair" na barra, errado para o único botão de um cartão,
+   que sem ela lê como legenda centralizada. */
+.plano-opcao__botao {
+  margin-top: auto;
+  width: 100%;
+  border: 1px solid var(--color-border);
+}
+
+.plano__vazio {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+}
+
+.plano-faturas {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  /* Data, período e valor não quebram em duas linhas: a tabela rola dentro do
+     `.ui-scroll-x`, que é o recipiente, e nunca leva a página junto. */
+  white-space: nowrap;
+}
+.plano-faturas th,
+.plano-faturas td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.plano-faturas th {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+.plano-fatura__estado {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+.plano-fatura__estado--open { color: var(--color-warning); border-color: var(--color-warning); }
+.plano-fatura__estado--paid { color: var(--color-success); border-color: var(--color-success); }
+
+/* -- Plataforma: a fila de cobrança (bloco 28) ------------------------------ */
+
+.cobranca__total {
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.cobranca__lista {
+  container-type: inline-size;
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cobranca__item {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+
+/* Nome à esquerda, valor à direita — e os dois na mesma linha só quando cabem.
+   Em 360px o valor desce, que é melhor do que espremer o nome da barbearia. */
+.cobranca__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.cobranca__barbearia {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  min-width: 0;
+}
+.cobranca__valor {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+.cobranca__sobre {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.cobranca__prazo {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+}
+/* Cinco dias ou menos até a suspensão é o que muda a ordem do dia do suporte.
+   Cor **depois** da informação, nunca no lugar dela: o texto já diz quantos. */
+.cobranca__prazo--critico { color: var(--color-danger); border-color: var(--color-danger); }
+
+.cobranca__acoes {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+@container (min-width: 620px) {
+  .cobranca__acoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Mês e ano lado a lado, com piso legível.
+
+   `minmax(0, 1fr)` e não `1fr`: o piso de uma coluna de grade é o `min-content`
+   do que ela guarda, e sem o zero um dos dois campos decide a largura da tela
+   em 360px. É a regra do design system, e ela existe porque havia seis
+   consertos locais deste mesmo defeito escritos à mão neste arquivo. */
+.cobranca__validade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.cobranca__forma {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+}
+/* O `<select>` herda a altura do campo de texto, e com ela o alvo de 44px que
+   vale em qualquer largura — mouse impreciso não é exclusividade do celular. */
+.cobranca__metodo { width: 100%; }
+
+/* Mesma razão do botão do cartão de plano: sem contorno, o `ghost` some no
+   fundo e "Cancelar fatura" lê como aviso, não como ação. */
+.cobranca__forma .ui-button--ghost { border: 1px solid var(--color-border); }
+
+/* -- Plano: o cartão que a plataforma debita (bloco 29) --------------------- */
+
+.plano-cartao {
+  margin: var(--space-3) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+}
+.plano-cartao__bandeira {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+/* Tabular para os quatro dígitos não dançarem ao lado da marca. */
+.plano-cartao__final {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+}
+.plano-cartao__validade {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.plano-cartao__sem { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+
+/* -- Permissões por papel (bloco 30) ----------------------------------------
+
+   `.permissao__*` e não `.papel__*`: `.papel` já era o cartão de escolha de
+   papel da tela de equipe, e um bloco novo herdaria a grade de três colunas
+   dele em silêncio. **Terceira vez** — `.marca` no bloco 21, `.achado` no 22 —,
+   e as três só apareceram ao olhar o print. */
+
+.permissoes-do-papel .painel__secao { margin-top: 0; }
+
+.permissao__grupo {
+  container-type: inline-size;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: var(--space-4) 0 0;
+  min-width: 0;
+}
+.permissao__legenda {
+  padding: 0 var(--space-2);
+  font-weight: var(--font-weight-semibold);
+}
+.permissao__sobre {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.permissao__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* Duas colunas quando o recipiente comporta — e é o recipiente que decide, não
+   a janela: a mesma lista cabe numa barra lateral estreita do admin. */
+@container (min-width: 560px) {
+  .permissao__lista { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.permissao__item { min-width: 0; }
+
+/* O alvo é a linha inteira, não o quadradinho de 13px: 44px de altura vale em
+   qualquer largura, e mouse impreciso não é exclusividade do celular. */
+.permissao__opcao {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.permissao__opcao:hover { background: var(--color-surface-hover); }
+.permissao__opcao input { width: 20px; height: 20px; flex: none; }
+
+.permissao__texto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+.permissao__selo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+
+/*
+ * O selo da permissao que ainda nao tem tela.
+ *
+ * Cor de aviso e nao de perigo: nao e erro nem risco, e a caixa que existe e
+ * ainda nao faz nada. A regra deste repositorio para gatilho que ainda nao
+ * funciona e aparecer marcado, nunca escondido.
+ */
+.permissao__selo--espera {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.permissao__salvar { margin-top: var(--space-4); }
+
+/* -- Consentimento do titular (bloco 31) ------------------------------------ */
+
+.meus__consentimento {
+  margin-top: var(--space-8);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.meus__secao {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+}
+.meus__consentimento-texto { margin: 0 0 var(--space-2); }
+.meus__consentimento-estado {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  /* O e-mail do encarregado é uma palavra só e pode ser comprido. Em 360px ele
+     encosta na borda do cartão; um domínio maior transbordaria. */
+  overflow-wrap: anywhere;
+}
+/* As três finalidades, separadas por uma linha (bloco 129).
+
+   Separador e não cartão dentro de cartão: a seção já é um cartão, e aninhar
+   outro em 360px come a largura útil duas vezes. O primeiro item não leva
+   borda de cima — ela ficaria colada na frase que abre a seção. */
+.meus__consentimento-item + .meus__consentimento-item {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+.meus__consentimento-titulo {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+/* Contorno pelo mesmo motivo dos blocos 28 e 30: o `ghost` do design system é
+   transparente, e sem borda a única ação da seção lê como legenda. */
+.meus__consentimento-botao {
+  width: 100%;
+  border: 1px solid var(--color-border);
+}
+
+/* ============================================================================
+   Consentimento e pedidos de dados (bloco 31).
+
+   Duas telas, um princípio: o texto que a pessoa aceitou fica **maior que o
+   botão** que a registra. Consentimento cujo texto virou letra miúda ao lado do
+   botão é o consentimento que não se defende — e a tentação de encolher a
+   frase para caber é exatamente o que a lei recusa.
+   ============================================================================ */
+
+.consentimentos {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.consentimentos__item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.consentimentos__texto { display: grid; gap: var(--space-1); min-width: 0; }
+
+.consentimentos__titulo { font-weight: var(--font-weight-semibold); }
+
+.consentimentos__frase { overflow-wrap: anywhere; }
+
+.consentimentos__estado {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Largura própria, não a da linha: um botão esticado em 1280px viraria a coisa
+   mais pesada da tela, e a decisão é do cliente, não da tela. */
+.consentimentos__botao { justify-self: start; }
+
+.consentimentos__nota {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.consentimentos__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.pedidos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pedido {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+/* A borda muda, não o fundo: fundo colorido em cima de texto de prazo derruba o
+   contraste medido, e o que precisa saltar é a linha, não a leitura. */
+.pedido--urgente { border-color: var(--color-danger); }
+
+.pedido__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.pedido__tipo { font-weight: var(--font-weight-semibold); }
+
+.pedido__prazo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.pedido--urgente .pedido__prazo {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-medium);
+}
+
+.pedido__quando,
+.pedido__nota {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.pedido__forma { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+
+.pedido__botoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@container (min-width: 30rem) {
+  /* Com largura, o texto e o botão dividem a linha — a lista fica mais curta e
+     o balcão vê os três aceites sem rolar. Quem decide é o recipiente: esta
+     lista também aparece dentro da coluna estreita da ficha. */
+  .consentimentos__item {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+
+/* O pedido de exclusão, atrás de um passo (bloco 32). Ver o comentário na tela:
+   não é esconder, é separar de "pedir uma cópia", que tem outra gravidade. */
+.meus__apagar { margin: 0 0 var(--space-4); }
+.meus__apagar-abrir {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+/* ============================================================================
+   A zona de perigo (bloco 32).
+
+   Um `details` como os outros, com a borda e o rótulo em vermelho. O
+   destaque é de **cor e não de tamanho**, de propósito: a ação mais
+   destrutiva do painel não pode ser a coisa mais chamativa de uma tela que
+   o barbeiro abre para ver como cortar o cabelo.
+   ============================================================================ */
+
+.perigo {
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+.perigo__abrir { color: var(--color-danger); }
+.perigo .formulario { margin-top: var(--space-4); }
+
+/* Link sozinho na linha é alvo autônomo, e alvo autônomo tem 44px — em
+   qualquer largura. A medição do bloco 32 pegou este com 18px. */
+.pedido__ficha {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  font-size: var(--font-size-sm);
+}
+
+/* ============================================================================
+   Sessões abertas (bloco 33). Mesma forma dos consentimentos: texto à esquerda,
+   ação à direita quando há largura, empilhado quando não há.
+   ============================================================================ */
+
+.sessoes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.sessoes__item {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.sessoes__texto { display: grid; gap: var(--space-1); min-width: 0; }
+.sessoes__aparelho { font-weight: var(--font-weight-medium); }
+.sessoes__quando { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.sessoes__botao { justify-self: start; }
+
+@media (min-width: 480px) {
+  .sessoes__item { grid-template-columns: 1fr auto; align-items: center; }
+}
+
+/* ---------------------------------------------------------------------------
+   O Pix no balcão (bloco 35)
+
+   O QR Code é o conteúdo, não a decoração: ele precisa ser grande o bastante
+   para ler de um celular a um braço de distância, e pequeno o bastante para
+   caber inteiro numa tela de 360px sem rolagem. Daí `min()` com `100%` — o
+   limite superior é o desejo, o inferior é a regra.
+   --------------------------------------------------------------------------- */
+.cobranca__codigo {
+  width: min(16rem, 100%);
+  margin: 0 auto var(--space-4);
+  /* Fundo branco próprio: o painel é escuro, e leitor de QR Code precisa de
+     contraste com área tranquila em volta. Sobre o fundo do tema, não lê. */
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+.cobranca__codigo svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Selecionável e legível: é o caminho de quem paga pelo mesmo aparelho que
+   abriu a tela, e o de quem não enxerga o código. */
+.cobranca__texto {
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+.cobranca__recebido {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+
+@media (min-width: 768px) {
+  /* Com espaço, o código cresce — no notebook do balcão o cliente lê de longe. */
+  .cobranca__codigo { width: min(20rem, 100%); }
+}
+
+/* ---------------------------------------------------------------------------
+   As alíquotas do adquirente (bloco 36)
+
+   Uma linha por meio de pagamento, cada uma com o próprio formulário — salvar
+   uma não pode arrastar as outras junto, senão corrigir o crédito reenviaria um
+   débito que ninguém tocou.
+
+   Empilhado no piso de 360px e em linha quando há espaço: o campo é curto e o
+   rótulo é uma palavra, então a partir do tablet os três cabem lado a lado sem
+   apertar o alvo de toque.
+   --------------------------------------------------------------------------- */
+.aliquotas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.aliquotas__item + .aliquotas__item {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.aliquotas__linha {
+  display: grid;
+  gap: var(--space-2);
+}
+.aliquotas__nome {
+  margin: 0;
+}
+/* Numerais tabulares: a coluna não dança ao trocar 3,19 por 1,99. */
+.aliquotas__campo {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 768px) {
+  .aliquotas__linha {
+    grid-template-columns: 10rem 1fr auto;
+    align-items: center;
+  }
+  .aliquotas__nome {
+    align-self: center;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Nas cadeiras agora (correção de fluxo, depois do bloco 36)
+
+   A pergunta que a recepção faz o dia inteiro, e a única que o painel não
+   respondia. Faixa no topo, antes do resumo: quem está sendo atendido não pode
+   estar espalhado na ordem do relógio, porque quem procura essa informação
+   procura **agora**, não às 14h37.
+
+   Rola na horizontal dentro de si — cinco cadeiras não cabem em 360px, e a
+   página nunca rola junto.
+   --------------------------------------------------------------------------- */
+.cadeiras-agora {
+  margin-top: var(--space-4);
+}
+.cadeiras-agora__hora {
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.cadeiras-agora__lista {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  /* Item de grade que rola precisa poder encolher: sem isto ele adota a largura
+     do conteúdo e leva a página junto — o defeito que o piso do projeto proíbe. */
+  min-width: 0;
+}
+.cadeiras-agora__item {
+  display: grid;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  min-width: 11rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.cadeiras-agora__quem {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.cadeiras-agora__barbeiro,
+.cadeiras-agora__tempo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+

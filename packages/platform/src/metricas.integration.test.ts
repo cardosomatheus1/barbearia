@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { inicioDaJanela, resumoDaPlataforma, saudeDasBarbearias } from './metricas.js';
+import { inicioDaJanela, resumoDaPlataforma, saudeDasBarbearias, ultimoDiaComMetricas } from './metricas.js';
 
 /**
  * As métricas globais contra Postgres real.
@@ -94,6 +94,17 @@ describeIfDb('métricas globais da plataforma', () => {
       UPDATE tenant_platform SET plan_id = (SELECT id FROM plans WHERE code = 'essencial')
        WHERE tenant_id = '${RIVAL}';
     `);
+  });
+
+  it('usa o último dia realmente consolidado e não um dia apenas esperado pelo relógio', async () => {
+    await dia(DOMARI, '2026-09-28', { agendamentos: 2 });
+    await dia(RIVAL, '2026-09-29', { agendamentos: 3 });
+
+    expect(await ultimoDiaComMetricas('2026-09-30')).toBe('2026-09-29');
+  });
+
+  it('sem métrica alguma preserva o fallback do corte operacional', async () => {
+    expect(await ultimoDiaComMetricas('2026-09-30')).toBe('2026-09-30');
   });
 
   // -- assinatura -------------------------------------------------------------

@@ -1,0 +1,27 @@
+BARBERDOCK — AUDITORIA BLOCO 3 — FINANCEIRO — 2026-08-24
+
+VEREDITO
+- Comanda/caixa/pagamentos/fiado/pacotes/assinatura/estornos: auditados e corrigidos no escopo executável.
+- Achados corrigidos: 16 classes.
+- Migrações novas neste bloco: 0111 e 0112.
+- Total de migrações: 112.
+
+ACHADOS FINAIS ADICIONAIS
+- Pacote transferido bloqueia estorno integral da venda de origem.
+- Termos do pacote são congelados no order_item; fechamento não relê catálogo mutável.
+
+VALIDAÇÃO LOCAL
+- Guardas diretos aplicáveis: 42/42 PASS.
+- Testes Node autônomos sem Vitest: 22/22 arquivos PASS.
+- Asserções Node agregadas: 123/123 PASS.
+- Auditoria financeiro — mutações negativas: 17/17 detectadas.
+- TS/TSX parse sintático: 776/776.
+- Shell: 30 arquivos OK.
+- verify.sh: sintaxe OK.
+- YAML: 5/5.
+- comanda.ts: 1.499 linhas; teto de 1.500 preservado.
+- comanda-pacote.ts: 71 linhas.
+
+PENDÊNCIA HONESTA
+- PostgreSQL/psql e dependências Vitest não estão disponíveis neste runtime.
+- Testes novos de concorrência/estorno/snapshot e SQL 0111/0112 aguardam execução no banco real.

@@ -71,8 +71,8 @@ const curto = (caminho: string) => caminho.slice(process.cwd().length + 1);
  */
 const ESCOLHE_TIPO = /TIPOS_DE_CAMPANHA\.map\(/;
 
-/** Um corpo de template desenhado na tela: `{algo.corpo}`. */
-const MOSTRA_CORPO = /\{\s*\w+\.corpo\s*\}/;
+/** Um corpo de template desenhado como conteúdo: `>{algo.corpo}<`. */
+const MOSTRA_CORPO = />\s*\{\s*\w+\.corpo\s*\}\s*</;
 
 /** O corpo com as variáveis já preenchidas, que é como o cliente vai ler. */
 const PREENCHE = /corpoComExemplos\(/;

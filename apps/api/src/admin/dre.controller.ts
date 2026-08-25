@@ -15,13 +15,14 @@ import {
   cancelarVale,
   conceberVale,
   dreDoPeriodo,
-  estornarVenda,
+  estornarVendaComAdquirente,
   tetoDoVale,
   transferirPacote,
   valesDoPeriodo,
 } from '@barbearia/finance';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { DomainError } from '../common/errors.js';
+import { adquirenteDaComanda } from '@barbearia/platform';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
@@ -66,18 +67,27 @@ const STATUS: Record<string, number> = {
   ja_estornada: 409,
   motivo_obrigatorio: 400,
   periodo_fechado: 409,
+  estorno_externo_falhou: 502,
+  estorno_em_curso: 409,
+  fiado_ja_recebido: 409,
+  caixa_sem_saldo_para_estorno: 409,
+  pacote_vendido_ja_usado: 409,
+  pacote_vendido_ja_reembolsado: 409,
+  pacote_vendido_ja_transferido: 409,
   valor_invalido: 400,
   vale_maior_que_a_comissao: 409,
   vale_nao_aberto: 409,
   vale_nao_encontrado: 404,
   profissional_nao_encontrado: 404,
   sem_caixa_aberto: 409,
+  idempotencia_conflitante: 409,
   pacote_nao_encontrado: 404,
   pacote_nao_transferivel: 409,
   sem_saldo: 409,
   mesma_pessoa: 400,
   destino_nao_encontrado: 404,
   pacote_reembolsado: 409,
+  estorno_da_venda_em_curso: 409,
 };
 
 function toHttp(erro: unknown): never {
@@ -178,8 +188,8 @@ export class DreController {
     },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
-      throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError('idempotency_key_obrigatoria', 400, 'Mande um Idempotency-Key de até 128 caracteres.');
     }
 
     const local = await this.unidade(staff);
@@ -192,7 +202,7 @@ export class DreController {
         // Escopada por operador, como em toda rota de dinheiro: a chave vem do
         // cliente e é livre, e duas recepcionistas mandando "1" fariam a segunda
         // receber o vale da primeira de volta em vez de lançar o dela.
-        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         staffId: staff.staffUserId,
         staffName: staff.name,
       });
@@ -233,7 +243,7 @@ export class DreController {
   ) {
     const local = await this.unidade(staff);
     try {
-      return await estornarVenda({
+      return await estornarVendaComAdquirente({
         tenantId: staff.tenantId,
         locationId: local.id,
         orderId: id,
@@ -241,6 +251,7 @@ export class DreController {
         hoje: local.today,
         staffId: staff.staffUserId,
         staffName: staff.name,
+        provider: adquirenteDaComanda(),
       });
     } catch (erro) {
       return toHttp(erro);

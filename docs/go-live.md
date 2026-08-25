@@ -13,27 +13,48 @@ foram executadas**, e numa quarta que é decisão comercial.
 
 ## 1. As três que nunca foram executadas
 
-### 1.1 O navegador — fechado
+### 1.1 O navegador — cobertura principal automatizada, aceite ainda parcial
 
 Oitenta blocos de interface, e nada clicava. O e2e da API monta o corpo em
 JavaScript; a medição renderiza e mede layout; os testes de integração provam a
 regra sem tela. Entre o `<input name="...">` e o `z.object({...})` da borda não
 havia nada.
 
-`scripts/percorrer.mjs` fecha isso, e roda dentro da medição. **Os seis
-percursos passam:**
+`scripts/percorrer.mjs` fecha os caminhos abaixo e roda dentro da medição. **Os
+10 percursos atualmente definidos são:**
 
 | Percurso | O que só ele prova |
 |---|---|
 | Cliente marca pelo site | a grade, o formulário e o agendamento gravado |
+| Cliente marca pela conversa | texto livre chega ao mesmo motor e termina na reserva gravada |
+| Dono monta campanha sem texto aprovado | a UI não promete envio por um canal que ainda não foi conectado |
 | Balcão entra e fecha venda | login de gestor de verdade e a comanda |
 | Onboarding do dono, do zero | conta nova → seis etapas → **o link publicado abre** |
 | O dia do barbeiro | senha de primeiro acesso na tela, troca obrigada, desvio para `/admin/meu-dia` |
 | LGPD: registrar, exportar e anonimizar | o pedido, o arquivo baixado, e o texto satélite saindo junto |
 | Plataforma reativa e bloqueia | a porta sem cadastro, e o efeito no `tenant_platform` |
+| Cabeçalhos de segurança | CSP/HSTS e demais cabeçalhos saem do servidor real |
+| Menu respeita capacidades | a navegação não oferece o que a conta não consegue abrir |
 
 Cada percurso termina **perguntando ao banco**. "A tela mostrou pronto" é
 exatamente o que o gatilho inerte da migração 0079 também mostrava.
+
+#### Cobertura que ainda falta no navegador
+
+Os 10 percursos acima não são sinônimo de cobertura integral do produto. Antes
+do go-live, a mesma forma clique → API → banco → efeito precisa cobrir:
+
+- cancelamento e remarcação pelo cliente;
+- lista de espera, oferta e aceite de vaga;
+- walk-in, atendimento e fechamento da comanda;
+- compra/consumo de pacote e ciclo de assinatura;
+- segunda unidade operando ao mesmo tempo que a matriz;
+- estorno online refletido na interface e no razão;
+- WhatsApp real, que depende de número e templates aprovados.
+
+Há cobertura de domínio/API para partes desses casos, mas ela não prova os nomes
+dos campos, navegação e efeitos externos do navegador. Até esses percursos
+entrarem e passarem, o aceite de interface continua parcial.
 
 #### O que os quatro novos acharam na primeira execução
 
@@ -54,16 +75,22 @@ Nenhum deles falhou por acaso, e nenhum dos três achados aparecia no portão:
    400 por id malformado, depois 403 por papel. O cartão "bloqueada", que a
    função diz existir para medir a linha mais larga da tela, nunca existiu.
 
-### 1.2 As integrações reais — bloqueado por contrato
+### 1.2 As integrações reais — certificação atual
 
-Nenhuma teve contato com o mundo. O padrão de todas é **não estar ligada**, e
-isso é decisão escrita:
+O código contém providers reais para identidade Meta, WhatsApp CRM e Stripe. O
+ROADMAP registra exercício histórico da Stripe em test mode, mas o head `0117`
+ainda precisa de uma evidência reproduzível com as contas atuais. Fiscal e split
+não possuem provider real; nesses dois casos não basta preencher credenciais.
+
+O padrão seguro continua sendo **não ligar o que não foi certificado**:
 
 | Integração | Interruptor | Padrão | O que falta |
 |---|---|---|---|
-| Adquirente | `PSP_MODO` | `nenhum` | conta contratada na Stripe |
-| Fiscal | **recurso da plataforma** + `FISCAL_MODO` | desligado | emissor contratado (a regra municipal **não** entra no código, SPEC §5.11) |
-| WhatsApp | cadastro por barbearia | sem número | conta na Meta e verificação de empresa |
+| OTP/primeiro acesso | `IDENTITY_MESSAGING_MODO` | `console` apenas fora de produção | WABA central, número, dois templates aprovados e entrega real em aparelho |
+| Adquirente | `PSP_MODO` | `nenhum` | conta contratada na Stripe e smoke atual de cobrança/webhook/estorno |
+| Fiscal | **recurso da plataforma** + `FISCAL_MODO` | desligado | implementar e contratar emissor real (a regra municipal **não** entra no código, SPEC §5.11) |
+| WhatsApp CRM | cadastro por barbearia | sem número | conta Meta, empresa verificada, Embedded Signup e templates reais |
+| Split | provider montado no Worker | fake, com repasse recusado | implementar provider real, contratar split e concluir KYC dos recebedores |
 
 Com o padrão, o produto opera: a plataforma fatura e o Super Admin registra o
 que viu no extrato (bloco 28), a nota **não aparece**, e o aviso cai no canal de
@@ -90,7 +117,7 @@ existe** para o outro lado — é a mesma razão de a guarda responder 404 e nã
 
 | Ensaio | Resultado | Medido em |
 |---|---|---|
-| Restauração de backup | **14s** para 8.000 clientes / dump de 2,1 MB. Confere 123 tabelas por contagem, 147 políticas de RLS, `FORCE` em 121, constraints de exclusão, gatilhos, checks e a versão do schema | `scripts/ensaio-de-restauracao.sh` |
+| Restauração de backup — medição histórica | **14s** para 8.000 clientes / dump de 2,1 MB. Naquele head, conferiu 123 tabelas por contagem, 147 políticas de RLS, `FORCE` em 121, constraints de exclusão, gatilhos, checks e a versão do schema | `scripts/ensaio-de-restauracao.sh`; precisa ser repetido no head `0117` antes do go-live |
 | Migrações 0079–0081 sobre volume | **153 ms, 131 ms, 48 ms** com 400 mil linhas nas tabelas que elas alteram (troca de chave estrangeira e de constraint) | banco descartável com volume gerado |
 
 O ensaio de restauração pergunta ao **banco restaurado**, não ao código de saída
@@ -178,8 +205,8 @@ agrupam em quatro famílias:
 | Família | Quantas | Bloqueia? |
 |---|---|---|
 | Depende de **contrato** (Stripe, Meta, emissor fiscal, e-mail, SMS) | 9 | Não — o interruptor deixa o produto operar sem |
-| Depende de **infraestrutura** (armazenamento de objeto, Redis, staging/CD, proxy de egresso, tracing) | 6 | **Uma sim** — ver §3 |
-| Depende do **primeiro componente de cliente** (arraste na agenda, "perto de mim", tela que se atualiza sozinha, conflito de telefone) | 5 | Não — decisão de arquitetura que merece bloco próprio |
+| Depende de **infraestrutura** (bucket S3 já tem driver; ainda há Redis, staging/CD, proxy de egresso, tracing e provisionamento externo) | 6 | **Uma sim** — ver §3 |
+| Dependia do **primeiro componente de cliente** | 3 abertas | **R5 resolveu a arquitetura e o conflito de telefone**; continuam arraste, "perto de mim" e atualização automática, cada um com dependência própria |
 | **Deferimento de produto** com motivo escrito (ranking, papel novo, teto por pessoa, PDF, CAC) | 18 | Não |
 
 A leitura completa de cada uma está em
@@ -194,9 +221,9 @@ existe, o que falta e por quê.
 
 Era a lacuna 20 e a única da lista que impedia a operação. O que dependia de
 código está pronto e mora em [`docs/deploy.md`](deploy.md): `deploy/instalar.sh`
-leva um VPS Ubuntu vazio ao produto no ar em um comando — Docker, os oito
-segredos gerados na máquina, as 83 migrações, cinco serviços, TLS automático e
-backup diário agendado. `deploy/atualizar.sh` faz o backup **antes** de migrar,
+leva um VPS Ubuntu vazio ao produto no ar em um comando — Docker, os segredos obrigatórios
+gerados na máquina, as migrações do repositório, cinco serviços, TLS automático e
+backup diário criptografado/agendado. `deploy/atualizar.sh` faz o backup **antes** de migrar,
 e `deploy/voltar.sh` sobe a versão anterior sem tocar no banco.
 
 O que falta é comercial e não código: **a máquina contratada e o domínio**. E
@@ -215,8 +242,8 @@ Corrigido, e agora há guarda derivada (`scripts/env-example.test.mjs`) que lê
 
 ### 3.5 O backup mora na mesma máquina
 
-`deploy/backup.sh` roda todo dia, confere o arquivo antes de rotacionar e avisa
-em **toda execução** enquanto `BACKUP_REMOTO` não estiver configurado. O aviso é
+`deploy/backup.sh` roda todo dia, confere o arquivo, cifra com AES-256-GCM antes de mantê-lo
+no disco/mandá-lo para fora e avisa em **toda execução** enquanto `BACKUP_REMOTO` não estiver configurado. O aviso é
 deliberado: backup no mesmo disco cobre o erro humano e não cobre o caso que
 tira a barbearia do ar, que é a máquina sumir.
 
@@ -248,7 +275,12 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 
 ## 4. Go / no-go
 
-- [x] Os seis percursos verdes
+- [x] Os 10 percursos definidos estão ligados à medição
+- [ ] Os 10 percursos executados e verdes no head `0117`
+- [ ] Percursos críticos complementares: cancelar/remarcar, espera, walk-in,
+      pacote/assinatura, multiunidade, estorno e WhatsApp real
+- [ ] Carga destrutiva: 100 reservas no mesmo slot, 1 sucesso, 99 conflitos e zero 500
+- [ ] API + Web + Worker juntos, incluindo retomada do Worker após `SIGKILL`
 - [x] Caminho de deploy definido — um comando, com volta atrás pronta
 - [ ] VPS e domínio contratados, e o comando rodado uma vez
 - [x] Rollback de migração escrito e ensaiado

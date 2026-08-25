@@ -1,0 +1,525 @@
+/* ============================================================================
+   Painéis, selos de estado e gráficos — a linguagem interna do Barber Dock
+   ============================================================================
+
+   O mock não desenha "caixas com texto": desenha **painéis**, com cabeçalho,
+   corpo e uma ação à direita. É o que separa uma tela de sistema de uma folha
+   de formulário, e vale para as trinta telas de uma vez porque mora nas classes
+   que todas já usam.
+   ============================================================================ */
+
+/* -- o painel ---------------------------------------------------------------- */
+
+.quadro {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  overflow: hidden;
+  min-width: 0;
+  transition: border-color var(--motion-base) var(--motion-ease);
+}
+.quadro:hover { border-color: color-mix(in srgb, var(--color-accent) 20%, transparent); }
+.quadro__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+.quadro__titulo {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.quadro__sub {
+  margin: 2px 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.quadro__acao {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+}
+.quadro__corpo { padding: var(--space-4); }
+
+/* -- o cartão de número ------------------------------------------------------
+   `.numero` é usado no painel do dono, no diagnóstico e nos números do
+   barbeiro. Ganha o tratamento do mock: degradê, o clarão do poste no canto e
+   o número na condensada. */
+
+.numero {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-4);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+  transition: border-color var(--motion-base) var(--motion-ease);
+}
+.numero:hover { border-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.numero::after {
+  content: '';
+  position: absolute;
+  right: -30%;
+  bottom: -60%;
+  width: 80%;
+  height: 90%;
+  transform: rotate(-12deg);
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--color-accent) 10%, transparent),
+    transparent 62%
+  );
+  filter: blur(10px);
+  pointer-events: none;
+}
+.numero > * { position: relative; }
+.numero__valor { font-size: var(--font-size-2xl); }
+
+/* -- selo de estado ----------------------------------------------------------
+   Pílula com borda e fundo da própria cor, como no mock. Cor **e** texto: um em
+   doze homens não distingue verde de vermelho, e barbearia é público de homem. */
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.selo--feito {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+}
+.selo--agora {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.selo--espera {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 26%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+.selo--fora {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* -- linha de atendimento ----------------------------------------------------
+   A linha do balcão ganha o degradê e a elevação do mock, mantendo a tarja de
+   estado que já existia — ela é o que se lê de relance. */
+
+.atendimento {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border-radius: var(--radius-lg);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+.atendimento:hover { border-color: color-mix(in srgb, var(--color-accent) 20%, transparent); }
+
+/* -- totais do dia ----------------------------------------------------------- */
+
+.totalzinho {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border-radius: var(--radius-lg);
+}
+.totalzinho__valor { font-family: var(--font-display); font-size: var(--font-size-xl); }
+
+/* -- estado vazio ------------------------------------------------------------ */
+
+.vazio {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-5);
+}
+/* Condensada sim, caixa alta não: "Nenhum aviso saiu ainda" em versal vira
+   grito, e estado vazio é convite, não repreensão. */
+.vazio__titulo { font-family: var(--font-display); letter-spacing: 0.01em; }
+
+/* -- os blocos de lista que já existiam -------------------------------------- */
+
+.evento,
+.defeito,
+.cardapio__item {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+}
+
+/* -- o anel de percentual ----------------------------------------------------
+   O gráfico do mock, em `conic-gradient`: um arco preenchido até a fração e o
+   miolo recortado. Zero SVG, zero JavaScript.
+
+   O número fica **escrito no meio**, não só desenhado: quem usa leitor de tela e
+   quem não distingue o arco do fundo leem o mesmo valor. O anel é a leitura
+   rápida, não a informação. */
+
+.anel {
+  --anel-parte: 0%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: var(--radius-full);
+  background: conic-gradient(
+    var(--color-accent) 0 var(--anel-parte),
+    var(--color-border) var(--anel-parte) 100%
+  );
+  flex: none;
+}
+.anel::before {
+  content: '';
+  position: absolute;
+  inset: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+}
+.anel__valor {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  line-height: 1;
+  color: var(--color-accent);
+}
+.anel__rotulo {
+  position: relative;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+/* Acima do esperado o arco muda de cor — e a legenda ao lado diz o mesmo. */
+.anel--atras { background: conic-gradient(var(--color-warning) 0 var(--anel-parte), var(--color-border) var(--anel-parte) 100%); }
+.anel--atras .anel__valor { color: var(--color-warning); }
+
+.anel-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.anel-linha__texto { min-width: 0; }
+
+/* O alerta que traz uma saída — "Confirmar agora", "Voltar ao dia" — precisa
+   empilhar. Como `.ui-alert` é um bloco e o botão é `inline-flex`, os dois
+   dividiam a mesma linha e o botão montava em cima do texto. */
+.ui-alert:has(.painel__saida) {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+.ui-alert .painel__saida { margin-top: 0; }
+
+/* ============================================================================
+   O acabamento das telas internas.
+
+   O casco, os painéis e os selos já tinham entrado. O que faltava era o miolo:
+   trinta telas onde o título flutuava sobre a grade, o rótulo de seção era um
+   texto solto encostado no bloco de cima e todo formulário era um campo atrás
+   do outro no fundo da página. A moldura estava premium e o conteúdo dentro
+   dela continuava parecendo um formulário — que foi exatamente a reclamação.
+
+   Tudo aqui mora em classes que as telas **já usam** (`painel__titulo`,
+   `painel__grupo`, `rotulo`, `formulario`). Nenhuma tela precisou de marcação
+   nova, e por isso vale para as trinta de uma vez — inclusive as que ninguém
+   olhou hoje.
+   ============================================================================ */
+
+/* -- a cabeça da tela --------------------------------------------------------
+   O título ganha a condensada e uma régua que corre até a borda direita. A
+   régua não é enfeite: é o que ancora o texto na largura da tela e o tira de
+   cima da grade de fundo, que era o que fazia o título parecer largado. */
+
+.trabalho .painel__titulo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: var(--space-2) 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.005em;
+  line-height: 1.05;
+}
+.trabalho .painel__titulo::after {
+  content: '';
+  flex: 1 1 var(--space-6);
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-accent) 45%, transparent),
+    transparent
+  );
+}
+
+/* Linha de apoio nunca atravessa a tela inteira: acima de ~65 caracteres o olho
+   perde a volta, e o painel é justamente onde se lê de relance. */
+.trabalho .painel__sub {
+  max-width: 62ch;
+  margin-bottom: var(--space-6);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+/* A barra do topo é trilha de volta, não título. Ela repetia o nome da barbearia
+   em branco e negrito enquanto o contexto, dois centímetros à esquerda, dizia a
+   mesma coisa maior — duas marcas brigando na mesma tela. */
+.casco .painel__marca {
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.casco .painel__marca:hover { color: var(--color-accent); }
+
+/* -- o rótulo de seção -------------------------------------------------------
+   Ganha um traço âmbar na frente, do mesmo comprimento da barra que acende o
+   módulo no trilho. É a mesma marca dizendo a mesma coisa em duas escalas:
+   "aqui começa um bloco". */
+
+.trabalho .rotulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+}
+.trabalho .rotulo::before {
+  content: '';
+  flex: none;
+  width: 1.125rem;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+/* Só o rótulo que abre um bloco solto precisa do respiro; dentro do painel ele
+   já tem o recuo da caixa. */
+.trabalho main > section > .rotulo,
+.trabalho main > .rotulo {
+  margin-top: var(--space-6);
+}
+
+/* -- o grupo de campos vira painel -------------------------------------------
+   `painel__grupo` nasceu como reset de `<fieldset>` — zero borda, zero recuo —
+   e virou o agrupador de formulário de meia dúzia de telas. Continuava sem
+   caixa, então "Adicionar alguém" e "Chegou agora" eram campos jogados no fundo
+   da página, sem nada dizendo onde o assunto começa e termina. */
+
+.trabalho .painel__grupo,
+.trabalho main > form.formulario {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+  min-width: 0;
+}
+.trabalho .painel__grupo + .painel__grupo { margin-top: var(--space-4); }
+.trabalho .painel__grupo > .rotulo,
+.trabalho .painel__grupo > legend {
+  margin: 0 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  width: 100%;
+}
+
+/* O painel dentro de um formulário que já é painel viraria caixa dentro de
+   caixa. Aí ele volta a ser só um agrupador com uma régua em cima. */
+.trabalho main > form.formulario .painel__grupo {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+/* -- as superfícies em lista -------------------------------------------------
+   Cartão de pessoa, de cadeira, de espera e de item de cadastro pintavam o fundo
+   chapado enquanto `.ui-card`, `.quadro` e `.numero` já tinham o degradê. Numa
+   tela onde os dois aparecem juntos — e aparecem, a fila tem cadeira e espera na
+   mesma rolagem — a diferença lê como descuido, não como hierarquia. */
+
+.pessoa-equipe,
+.espera,
+.cadeira,
+.item-cadastro,
+.cartao-seguranca {
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+}
+
+/* -- as abas -----------------------------------------------------------------
+   A pílula ativa era só uma borda âmbar. Ganha o preenchimento e o brilho curto
+   do mock, que é o que faz a régua parecer um controle e não uma lista de
+   links. */
+
+.trabalho .cadastro-nav__aba {
+  background: color-mix(in srgb, var(--color-surface-raised) 70%, transparent);
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+}
+.trabalho .cadastro-nav__aba--atual {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 22%, transparent),
+    color-mix(in srgb, var(--color-accent) 8%, transparent)
+  );
+  color: var(--color-text-primary);
+}
+
+/* ============================================================================
+   A abertura da página pública.
+
+   A dobra era a agenda à esquerda e meio metro de fundo vazio à direita, com a
+   única foto da página esperando abaixo dela. Em barbearia a escolha é visual
+   (CLAUDE.md §5): a foto tem que trabalhar junto do horário, não depois dele.
+
+   A ordem do DOM não mudou — no celular vem o horário e só então a foto, que é
+   a tese da direção visual. Quem reordena é a grade, e só quando há largura
+   para as duas coisas caberem lado a lado sem apertar nenhuma.
+   ============================================================================ */
+
+.abertura {
+  position: relative;
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: clip;
+}
+/* A mesma malha do casco interno, e pelo mesmo motivo: sem ela a faixa é um
+   retângulo liso, e o horário fica boiando. */
+.abertura::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-accent) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 4%, transparent) 1px, transparent 1px);
+  background-size: 4.5rem 4.5rem;
+  mask-image: radial-gradient(120% 100% at 20% 0%, black, transparent 70%);
+}
+.abertura__grade {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-5);
+  padding-bottom: var(--space-6);
+  min-width: 0;
+}
+
+/* A foto ganha moldura: canto, borda e um brilho quente curto embaixo, que é a
+   luz do salão continuando fora do quadro. Solta e sangrando de ponta a ponta
+   ela parecia banner de anúncio. */
+.capa {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.capa::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, transparent);
+  background: linear-gradient(
+    180deg,
+    transparent 55%,
+    color-mix(in srgb, var(--color-surface) 55%, transparent)
+  );
+}
+
+@media (min-width: 900px) {
+  .abertura__grade {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    align-items: center;
+    gap: var(--space-7);
+    padding-bottom: var(--space-7);
+  }
+  /* A foto não cresce além da altura do que está ao lado dela: o cardápio é o
+     que a pessoa veio ver, e empurrá-lo para fora da tela para caber uma
+     panorâmica maior seria trocar o produto pelo cartaz. */
+  .capa { align-self: stretch; display: grid; }
+  .capa__img { height: 100%; aspect-ratio: auto; }
+}
+
+/* ============================================================================
+   O passo em que se escolhe o serviço.
+
+   Duas regras `.escolha` conviviam: a primeira montava a grade de três colunas,
+   a segunda declarava `display: flex` e `justify-content: space-between`. A
+   segunda vencia, a grade da primeira era letra morta, e o resultado era o nome
+   do serviço boiando no meio da linha em tela larga — texto centralizado numa
+   lista em que preço e duração estão alinhados à direita. Parecia defeito
+   porque era.
+   ============================================================================ */
+
+.servico.escolha {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  justify-content: normal;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  background: linear-gradient(180deg, var(--color-surface-hover), var(--color-surface-raised));
+}
+.servico.escolha > .escolha__marca { grid-column: 1; grid-row: 1 / -1; margin-top: 0; }
+.servico.escolha > .servico__nome { grid-column: 2; grid-row: 1; }
+.servico.escolha > .servico__sobre { grid-column: 2; grid-row: 2; }
+.servico.escolha > .servico__dados { grid-column: 3; grid-row: 1 / -1; }
+
+/* A foto fica na última coluna, como no cardápio da página pública. Metade dos
+   serviços não tem foto: numa coluna à esquerda a ausência empurraria o nome e
+   a lista ficaria com dois recuos diferentes. À direita ela some sem desalinhar
+   nada. */
+.escolha__foto {
+  grid-column: 4;
+  grid-row: 1 / -1;
+  width: 3.25rem;
+  height: 3.25rem;
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+}
+
+/* Escolhido é estado, e estado se lê de longe: a borda âmbar sozinha some numa
+   lista de doze linhas com o polegar em cima da tela. */
+.escolha--marcada {
+  border-color: var(--color-accent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-hover)),
+    var(--color-surface-raised)
+  );
+}
+
+/* O aviso dentro de um painel virava caixa dentro de caixa: mesma superfície,
+   mesmo canto, mesma borda, um centímetro para dentro do outro. A régua colorida
+   à esquerda já diz o que ele é — o fundo era repetição. */
+.trabalho .painel__grupo > .ui-alert,
+.trabalho .quadro__corpo > .ui-alert {
+  background: none;
+  padding-inline: var(--space-3) 0;
+}
+

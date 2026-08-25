@@ -3,21 +3,21 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { lerCssGlobal } from './css-test-helper';
+
 /**
  * Responsividade das telas (CLAUDE.md §5).
  *
  * O design system já tinha esta guarda, mas ela só olhava o CSS de
- * `packages/ui`. **Todo o CSS das telas mora aqui** — página pública, fluxo de
- * agendamento, meus agendamentos e painel do balcão —, e nada verificava.
+ * `packages/ui`. O CSS das telas agora mora nos fragmentos importados por
+ * `globals.css`; `lerCssGlobal()` expande o índice na ordem da cascata antes de
+ * qualquer guarda rodar.
  *
- * A regra dizia "há teste que rejeita" e era verdade pela metade: o arquivo que
- * mais cresce era justamente o que ninguém checava.
+ * A regra dizia "há teste que rejeita" e já foi verdade pela metade: partir o
+ * arquivo não pode recriar o mesmo buraco, com uma superfície fora da leitura.
  */
 
-const css = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'globals.css'),
-  'utf8',
-);
+const css = lerCssGlobal();
 
 /**
  * O mesmo CSS sem as condições de `@media`.
@@ -342,14 +342,14 @@ describe('tokens usados existem', () => {
  * porque um `className` errado é uma string válida para o TypeScript e para o
  * React, e a tela renderiza.
  *
- * A guarda é derivada dos dois arquivos de estilo que existem, e não de uma
- * lista escrita ao lado: classe nova no design system passa a valer aqui sem
- * ninguém lembrar de cadastrá-la.
+ * A guarda é derivada do design system e do conjunto de fragmentos globais, e
+ * não de uma lista escrita ao lado: classe nova passa a valer aqui sem ninguém
+ * lembrar de cadastrá-la.
  */
 describe('classes do design system', () => {
   const AQUI = dirname(fileURLToPath(import.meta.url));
   const folha =
-    readFileSync(join(AQUI, 'globals.css'), 'utf8') +
+    lerCssGlobal() +
     readFileSync(join(AQUI, '../../../../packages/ui/dist/tokens.css'), 'utf8');
 
   const definidas = new Set(

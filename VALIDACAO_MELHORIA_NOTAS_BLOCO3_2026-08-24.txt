@@ -1,0 +1,41 @@
+BARBERDOCK — MELHORIA DE NOTAS — BLOCO 3 — 2026-08-24
+
+FOCO
+- CRM / WhatsApp: modularizacao + hardening testavel da assinatura Meta.
+
+RESULTADO ESTRUTURAL
+- whatsapp.ts: 1490 -> 50 linhas (fachada).
+- whatsapp-erros.ts: 49.
+- whatsapp-cadastro.ts: 406.
+- whatsapp-templates.ts: 361.
+- whatsapp-mensagens.ts: 604.
+- whatsapp-assinatura.ts: 77.
+- whatsapp-roteamento.ts: 26.
+- Maior modulo resultante: 604 linhas.
+
+COMPATIBILIDADE
+- API publica antes/depois: 29/29 exports preservados.
+- Removidos: 0.
+- Adicionados acidentalmente: 0.
+- Grafo WhatsApp: sem ciclos.
+
+VALIDACAO EXECUTADA
+- Checagem semantica isolada dos novos modulos: OK.
+- CRM TS transpile: 48/48.
+- Assinatura runtime: 7/7 cenarios.
+- Guardas verificar-*.mjs executaveis: 26/26.
+- Auditoria ofensiva: OK.
+- Auditoria profunda: OK.
+- Invariantes: OK.
+- verify.sh: sintaxe OK.
+
+NOVOS CONTROLES
+- scripts/verificar-crm-whatsapp-modulos.mjs integrado ao verify.sh.
+- packages/crm/src/whatsapp-assinatura.test.ts adicionado.
+- Guard ofensivo adaptado a nova fronteira fisica sem relaxar invariantes.
+
+LIMITACOES
+- pnpm/node_modules do projeto ausentes neste runtime.
+- PostgreSQL ausente.
+- Typecheck/build/Vitest completos nao repetidos aqui.
+- Meta real ainda exige credenciais/ambiente correspondente.

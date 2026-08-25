@@ -1,0 +1,2 @@
+TS/TSX parsed: 736
+Parse errors: 0

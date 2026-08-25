@@ -46,6 +46,7 @@ model appointments {
   deposit_required_cents Int                    @default(0)
   deposit_paid_cents     Int                    @default(0)
   idempotency_key        String?
+  idempotency_fingerprint String?
   created_at             DateTime               @default(now()) @db.Timestamptz(6)
   updated_at             DateTime               @default(now()) @db.Timestamptz(6)
   appointment_services   appointment_services[]
@@ -253,9 +254,25 @@ model slot_holds {
   created_at      DateTime      @default(now()) @db.Timestamptz(6)
   professionals   professionals @relation(fields: [professional_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   tenants         tenants       @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  slot_hold_resources slot_hold_resources[]
 
   @@index([expires_at], map: "slot_holds_expiry_idx")
   @@index([professional_id, starts_at], map: "slot_holds_professional_idx")
+}
+
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model slot_hold_resources {
+  hold_id       String     @db.Uuid
+  tenant_id     String     @db.Uuid
+  resource_type String
+  quantity      Int        @default(1) @db.SmallInt
+  slot_holds    slot_holds @relation(fields: [hold_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tenants       tenants    @relation(fields: [tenant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([hold_id, resource_type])
+  @@index([tenant_id, resource_type], map: "slot_hold_resources_type_idx")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -289,6 +306,7 @@ model tenants {
   service_resource_requirements service_resource_requirements[]
   services                      services[]
   slot_holds                    slot_holds[]
+  slot_hold_resources           slot_hold_resources[]
   tenant_slugs                  tenant_slugs[]
   work_schedules                work_schedules[]
 }

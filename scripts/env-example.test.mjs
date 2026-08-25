@@ -54,6 +54,7 @@ const SO_DE_FORA = {
   SUPER_ADMIN_PASSWORD: 'script de criação da conta de plataforma, uma vez',
   RATE_LIMIT_SHORT: 'comentada no arquivo, com o padrão de produção',
   RATE_LIMIT_LONG: 'idem',
+  HOSTNAME: 'o runtime do contêiner define; não é configuração de quem instala',
 };
 
 /** `NEXT_*` e `__NEXT_*` são internos do framework, não configuração nossa. */
@@ -213,10 +214,12 @@ describe('o compose entrega ao contêiner o que o código lê', () => {
    */
   const OBRIGATORIAS = [
     'STAFF_EMAIL_PEPPER',
+    'OTP_PEPPER',
     'MFA_SECRET_KEY',
     'API_KEY_PEPPER',
     'WEBHOOK_SECRET_KEY',
     'WHATSAPP_TOKEN_KEY',
+    'KYC_INTENT_HMAC_SECRET',
     'MARKETPLACE_ORIGIN_SECRET',
   ];
 

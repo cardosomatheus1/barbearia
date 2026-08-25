@@ -41,6 +41,8 @@ export interface PedidoDeCobranca {
   readonly tenantId: string;
   readonly faturaId: string;
   readonly valorCents: number;
+  /** Tentativa da régua: mesma tentativa = mesma cobrança; tentativa seguinte = nova cobrança. */
+  readonly tentativa: number;
   readonly pspCustomerId: string;
   readonly pspMethodId: string | null;
 }
@@ -106,8 +108,13 @@ export class FakePspProvider implements PspProvider {
   readonly estornos: PedidoDeEstorno[] = [];
   proximoEstado: EstadoDaCobranca = 'recusada';
   private contador = 0;
+  private readonly cobrancasPorTentativa = new Map<string, RespostaDaCobranca>();
+  private readonly estornosPorId = new Map<string, string>();
 
   async cobrar(pedido: PedidoDeCobranca): Promise<RespostaDaCobranca> {
+    const chave = `${pedido.tenantId}:${pedido.faturaId}:${pedido.tentativa}`;
+    const anterior = this.cobrancasPorTentativa.get(chave);
+    if (anterior) return anterior;
     this.cobrancas.push(pedido);
     this.contador += 1;
     /**
@@ -120,11 +127,15 @@ export class FakePspProvider implements PspProvider {
      * existe.
      */
     if (this.proximoEstado === 'recusada') {
-      return { estado: 'recusada', chargeId: '', motivo: 'cartão recusado' };
+      const resposta: RespostaDaCobranca = { estado: 'recusada', chargeId: '', motivo: 'cartão recusado' };
+      this.cobrancasPorTentativa.set(chave, resposta);
+      return resposta;
     }
     const chargeId = `ch_fake_${this.contador}`;
     this.estados.set(chargeId, this.proximoEstado);
-    return { estado: this.proximoEstado, chargeId };
+    const resposta: RespostaDaCobranca = { estado: this.proximoEstado, chargeId };
+    this.cobrancasPorTentativa.set(chave, resposta);
+    return resposta;
   }
 
   private readonly estados = new Map<string, EstadoDaCobranca>();
@@ -157,9 +168,13 @@ export class FakePspProvider implements PspProvider {
     if (this.recusaOEstorno) {
       throw new EstornoRecusado('charge_already_refunded', 'Cobrança já estornada');
     }
+    const anterior = this.estornosPorId.get(pedido.estornoId);
+    if (anterior) return { refundId: anterior };
     this.estornos.push(pedido);
     this.contador += 1;
-    return { refundId: `re_fake_${this.contador}` };
+    const refundId = `re_fake_${this.contador}`;
+    this.estornosPorId.set(pedido.estornoId, refundId);
+    return { refundId };
   }
 }
 
@@ -193,6 +208,7 @@ export class PspCobrancaProvider implements CobrancaProvider {
       tenantId: pedido.tenantId,
       faturaId: pedido.faturaId,
       valorCents: pedido.valorCents,
+      tentativa: pedido.tentativa,
       pspCustomerId: conta.pspCustomerId,
       pspMethodId: conta.pspMethodId,
     });
@@ -377,16 +393,15 @@ export function conferirAssinaturaDoWebhook(entrada: {
     throw new WebhookInvalido('missing_signature', 'Assinatura ausente');
   }
 
-  const partes = new Map(
-    entrada.cabecalho
-      .split(',')
-      .map((p) => p.trim().split('='))
-      .filter((p): p is [string, string] => p.length === 2 && p[0] !== undefined && p[1] !== undefined)
-      .map(([k, v]) => [k, v] as const),
-  );
-  const t = partes.get('t');
-  const v1 = partes.get('v1');
-  if (!t || !v1) throw new WebhookInvalido('malformed_signature', 'Assinatura malformada');
+  const partes = entrada.cabecalho
+    .split(',')
+    .map((p) => p.trim().split('='))
+    .filter((p): p is [string, string] => p.length === 2 && p[0] !== undefined && p[1] !== undefined);
+  const t = partes.find(([k]) => k === 't')?.[1];
+  const assinaturas = partes.filter(([k]) => k === 'v1').map(([, v]) => v);
+  if (!t || assinaturas.length === 0) {
+    throw new WebhookInvalido('malformed_signature', 'Assinatura malformada');
+  }
 
   const instante = Number(t);
   if (!Number.isFinite(instante)) {
@@ -399,10 +414,22 @@ export function conferirAssinaturaDoWebhook(entrada: {
 
   const esperado = assinarWebhook({ corpoCru: entrada.corpoCru, segredo: entrada.segredo, instante });
   const a = Buffer.from(esperado, 'utf8');
-  const b = Buffer.from(v1, 'utf8');
-  // Comprimento diferente já é recusa, e `timingSafeEqual` lança nesse caso —
-  // conferir antes é o que transforma a exceção em recusa.
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+
+  /**
+   * Durante rotação de segredo a Stripe pode mandar **mais de uma** `v1`.
+   * A versão anterior colocava o cabeçalho num `Map`, portanto conservava só a
+   * última assinatura. Se a que corresponde ao segredo ainda configurado não
+   * fosse a última, um evento legítimo era recusado durante a rotação.
+   *
+   * Conferimos todas em tempo constante e aceitamos se **qualquer uma** casa.
+   * O comprimento é conferido antes porque `timingSafeEqual` lança quando os
+   * buffers têm tamanhos diferentes.
+   */
+  const confere = assinaturas.some((assinatura) => {
+    const b = Buffer.from(assinatura, 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
+  if (!confere) {
     throw new WebhookInvalido('invalid_signature', 'Assinatura inválida');
   }
 }

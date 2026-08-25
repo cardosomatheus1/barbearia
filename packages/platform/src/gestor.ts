@@ -71,7 +71,9 @@ const RESUMO: Readonly<Record<AssuntoDoAviso, string>> = {
 };
 
 /**
- * Escreve no log em vez de enviar. É o que o worker usa até haver provedor.
+ * Provedor de desenvolvimento: escreve no log em vez de enviar. Em produção,
+ * falha explicitamente para impedir que ausência de integração seja registrada
+ * como cobrança entregue ao gestor.
  *
  * O e-mail vai inteiro e o telefone vai mascarado, como no provedor de
  * notificação: e-mail de gestor é o endereço para onde a cobrança tem que ir e
@@ -80,7 +82,14 @@ const RESUMO: Readonly<Record<AssuntoDoAviso, string>> = {
 export class ConsoleGestorProvider implements GestorProvider {
   constructor(private readonly log: (message: string) => void = console.log) {}
 
+  private assegurarDesenvolvimento(): void {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('console_delivery_forbidden_in_production');
+    }
+  }
+
   async avisarDeCobranca(mensagem: MensagemAoGestor): Promise<void> {
+    this.assegurarDesenvolvimento();
     const valor = (mensagem.valorCents / 100).toLocaleString('pt-BR', {
       style: 'currency',
       currency: 'BRL',

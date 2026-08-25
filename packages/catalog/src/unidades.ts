@@ -1,7 +1,8 @@
-import { resolverCoordenada } from '@barbearia/core';
+import { fusoConhecido, resolverCoordenada } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
 import { CatalogError } from './servicos.js';
+import { travarCatalogoDoTenant } from './concorrencia.js';
 
 /**
  * Abrir e fechar uma loja (bloco 58, SPEC §1.1).
@@ -73,6 +74,9 @@ export async function criarUnidade(request: {
 }): Promise<{ readonly id: string }> {
   const nome = request.nome.trim();
   if (nome.length < 2) throw new CatalogError('invalid_location', 'O nome da unidade é curto demais.');
+  if (!fusoConhecido(request.timezone)) {
+    throw new CatalogError('invalid_location', 'O fuso horário da unidade é desconhecido.');
+  }
 
   return withTenant(request.tenantId, async (tx) => {
     const ponto = resolverCoordenada({
@@ -108,7 +112,7 @@ export async function criarUnidade(request: {
     await tx.$executeRaw`
       INSERT INTO financial_accounts (tenant_id, location_id, name, is_cash)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-              ${criada.id}::uuid, ${`Caixa · ${nome}`}, true)
+              ${criada.id}::uuid, ${`Caixa · ${nome} · ${criada.id.slice(0, 8)}`}, true)
       -- Alvo explicito, e nao um ON CONFLICT DO NOTHING solto.
       --
       -- Sem alvo, o DO NOTHING engole **qualquer** indice unico da tabela, e ha
@@ -160,6 +164,10 @@ export async function definirUnidadeAtiva(request: {
   readonly ator: { readonly id: string; readonly name: string };
 }): Promise<void> {
   await withTenant(request.tenantId, async (tx) => {
+    // A decisão "não fechar a última" atravessa linhas diferentes. Travar só
+    // a unidade alvo permite que duas últimas lojas sejam fechadas em paralelo.
+    await travarCatalogoDoTenant(tx, 'locations-active');
+
     const linhas = await tx.$queryRaw<{ id: string; name: string; active: boolean }[]>`
       SELECT id, name, active FROM locations WHERE id = ${request.locationId}::uuid FOR UPDATE
     `;

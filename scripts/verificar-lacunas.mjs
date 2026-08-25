@@ -94,15 +94,10 @@ for (const [numero, nome, marca] of blocos ?? []) {
 
 }
 
-// 1. O contador do topo bate com o número de blocos marcados.
-const contador = /\*\*Status: (\d+) de (\d+) blocos\.\*\*/.exec(roadmap);
-if (!contador) {
-  falhar('não achei a linha "Status: N de M blocos" no ROADMAP.md');
-} else if (Number(contador[1]) !== feitos.size) {
-  falhar(
-    `o contador diz ${contador[1]} blocos concluídos e a tabela tem ${feitos.size} marcados`,
-  );
-}
+// O contador global de blocos deixou de ser prontidão no R7. Os ✅ das tabelas
+// continuam sendo histórico de execução e ainda são usados abaixo para impedir
+// que uma lacuna aponte para um bloco já fechado. A leitura de prontidão agora
+// fica em `scripts/verificar-prontidao.mjs`.
 
 // ---------------------------------------------------------------------------
 // As lacunas

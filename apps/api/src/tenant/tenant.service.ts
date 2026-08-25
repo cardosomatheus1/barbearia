@@ -32,6 +32,9 @@ export class TenantService {
   /** Slug muda raramente; TTL curto evita uma ida ao banco por requisição. */
   private readonly ttlMs = 60_000;
 
+  /** Limite duro: TTL sozinho não contém uma varredura distribuída de slugs. */
+  private readonly maxCacheEntries = 10_000;
+
   /**
    * O bloqueio expira mais rápido que o slug, e o motivo não é performance.
    *
@@ -78,7 +81,7 @@ export class TenantService {
     // Slug inexistente também é cacheado: sem isso, um atacante que varre slugs
     // aleatórios gera uma consulta ao banco por tentativa.
     this.cache.set(key, { tenantId, expiresAt: this.now() + this.ttlMs });
-    if (this.cache.size > 10_000) this.evictExpired();
+    if (this.cache.size > this.maxCacheEntries) this.limitarCache(this.cache, 'slugs');
 
     return tenantId;
   }
@@ -106,12 +109,7 @@ export class TenantService {
       : { bloqueada: false, motivo: null };
 
     this.bloqueios.set(tenantId, { ...estado, expiresAt: this.now() + this.ttlDoBloqueioMs });
-    if (this.bloqueios.size > 10_000) {
-      const agora = this.now();
-      for (const [id, entrada] of this.bloqueios) {
-        if (entrada.expiresAt <= agora) this.bloqueios.delete(id);
-      }
-    }
+    if (this.bloqueios.size > this.maxCacheEntries) this.limitarCache(this.bloqueios, 'bloqueios');
     return estado;
   }
 
@@ -157,11 +155,25 @@ export class TenantService {
     return rows[0]?.nome ?? 'Barbearia';
   }
 
-  private evictExpired(): void {
-    const now = this.now();
-    for (const [key, entry] of this.cache) {
-      if (entry.expiresAt <= now) this.cache.delete(key);
+  /**
+   * Remove expirados e, se um burst ainda mantiver tudo vivo, descarta as
+   * entradas mais antigas até o teto. `Map` preserva ordem de inserção, então
+   * isto é determinístico e impede crescimento sem limite sob slugs aleatórios.
+   */
+  private limitarCache<T extends { readonly expiresAt: number }>(
+    cache: Map<string, T>,
+    nome: string,
+  ): void {
+    const agora = this.now();
+    for (const [key, entry] of cache) {
+      if (entry.expiresAt <= agora) cache.delete(key);
     }
-    this.logger.debug(`cache de slugs: ${this.cache.size} entradas`);
+
+    while (cache.size > this.maxCacheEntries) {
+      const maisAntiga = cache.keys().next().value;
+      if (maisAntiga === undefined) break;
+      cache.delete(maisAntiga);
+    }
+    this.logger.debug(`cache de ${nome}: ${cache.size} entradas`);
   }
 }

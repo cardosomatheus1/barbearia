@@ -6,6 +6,9 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
@@ -29,6 +32,7 @@ const APP_URL = process.env['APP_DATABASE_URL'];
 let app: INestApplication;
 let admin: PrismaClient;
 let tenants: TenantService;
+let mediaRoot = '';
 
 const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 
@@ -50,6 +54,8 @@ describeIfDb('painel do gestor', () => {
   beforeAll(async () => {
     if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
     process.env['STAFF_EMAIL_PEPPER'] = 'pepper-de-teste';
+    mediaRoot = await mkdtemp(join(tmpdir(), 'barberdock-admin-media-'));
+    process.env['MEDIA_ROOT'] = mediaRoot;
     admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
 
     const moduleRef = await Test.createTestingModule({
@@ -72,6 +78,8 @@ describeIfDb('painel do gestor', () => {
   afterAll(async () => {
     await app?.close();
     await admin?.$disconnect();
+    delete process.env['MEDIA_ROOT'];
+    await rm(mediaRoot, { recursive: true, force: true });
   });
 
   beforeEach(async () => {
@@ -386,107 +394,96 @@ describeIfDb('painel do gestor', () => {
 
   // -- fotos -----------------------------------------------------------------
 
-  it('grava a foto e ela chega na página pública', async () => {
-    // As colunas existiam desde o bloco 1 e o perfil já as devolvia; faltava por
-    // onde preencher, e a página de barbearia ficava sem uma única imagem.
+  it('recebe o arquivo, hospeda e a imagem chega na página pública', async () => {
     const um = await criarConta();
     const slug = await percorrer(um.token);
-
     const alvos = await http()
       .get('/v1/admin/photos')
       .set('Authorization', `Bearer ${um.token}`)
       .expect(200);
-    expect(alvos.body.professionals.length).toBeGreaterThan(0);
+    const profissional = alvos.body.professionals[0].id;
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
-    await http()
-      .put('/v1/admin/photos')
+    const capa = await http()
+      .post('/v1/admin/photos/upload?target=cover')
       .set('Authorization', `Bearer ${um.token}`)
-      .send({
-        coverUrl: 'https://cdn.exemplo.com/fachada.jpg',
-        professionals: [
-          { id: alvos.body.professionals[0].id, photoUrl: 'https://cdn.exemplo.com/ruan.jpg' },
-        ],
-      })
-      .expect(200);
+      .set('Content-Type', 'image/png')
+      .send(png)
+      .expect(201);
+    const rosto = await http()
+      .post(`/v1/admin/photos/upload?target=professional&id=${profissional}`)
+      .set('Authorization', `Bearer ${um.token}`)
+      .set('Content-Type', 'image/png')
+      .send(png)
+      .expect(201);
 
+    expect(capa.body.url).toMatch(/^\/media\/.+\.png$/);
+    expect(rosto.body.url).toMatch(/^\/media\/.+\.png$/);
     const publico = await http().get(`/v1/b/${slug}`).expect(200);
-    expect(publico.body.location.coverUrl).toBe('https://cdn.exemplo.com/fachada.jpg');
-    expect(publico.body.professionals[0].photoUrl).toBe('https://cdn.exemplo.com/ruan.jpg');
+    expect(publico.body.location.coverUrl).toBe(capa.body.url);
+    expect(publico.body.professionals[0].photoUrl).toBe(rosto.body.url);
   });
 
-  it('recusa endereço que não é https, sem derrubar o resto', async () => {
-    // A foto é opcional: uma URL ruim num campo não pode impedir de salvar os
-    // outros. O que não passa volta em branco, e a tela mostra isso.
+  it('endpoint legado não deixa URL externa nova voltar ao perfil público', async () => {
     const um = await criarConta();
     await percorrer(um.token);
-
     const alvos = await http()
       .get('/v1/admin/photos')
       .set('Authorization', `Bearer ${um.token}`)
       .expect(200);
-
     const salvo = await http()
       .put('/v1/admin/photos')
       .set('Authorization', `Bearer ${um.token}`)
       .send({
-        coverUrl: 'javascript:alert(1)',
-        professionals: [
-          { id: alvos.body.professionals[0].id, photoUrl: 'https://cdn.exemplo.com/ok.jpg' },
-        ],
+        coverUrl: 'https://cdn.exemplo.com/fachada.jpg',
+        professionals: [{ id: alvos.body.professionals[0].id, photoUrl: 'https://cdn.exemplo.com/ruan.jpg' }],
       })
       .expect(200);
-
     expect(salvo.body.photos.coverUrl).toBeNull();
-    expect(salvo.body.photos.professionals[0].photoUrl).toBe('https://cdn.exemplo.com/ok.jpg');
+    expect(salvo.body.photos.professionals[0].photoUrl).toBeNull();
   });
 
-  it('campo ausente não apaga a foto que já estava lá', async () => {
-    // Ausente é diferente de vazio: sem essa distinção, salvar a foto de um
-    // barbeiro apagaria a dos outros.
+  it('campo ausente não apaga imagem hospedada e vazio remove', async () => {
     const um = await criarConta();
     await percorrer(um.token);
-
-    await http()
-      .put('/v1/admin/photos')
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+    const capa = await http()
+      .post('/v1/admin/photos/upload?target=cover')
       .set('Authorization', `Bearer ${um.token}`)
-      .send({ coverUrl: 'https://cdn.exemplo.com/fachada.jpg' })
-      .expect(200);
+      .set('Content-Type', 'image/png')
+      .send(png)
+      .expect(201);
 
     const depois = await http()
       .put('/v1/admin/photos')
       .set('Authorization', `Bearer ${um.token}`)
-      .send({ logoUrl: 'https://cdn.exemplo.com/logo.png' })
+      .send({ logoUrl: '' })
       .expect(200);
+    expect(depois.body.photos.coverUrl).toBe(capa.body.url);
 
-    expect(depois.body.photos.coverUrl).toBe('https://cdn.exemplo.com/fachada.jpg');
-
-    // E vazio apaga de propósito: é como a tela diz "tire esta foto".
     const limpo = await http()
-      .put('/v1/admin/photos')
+      .delete('/v1/admin/photos/upload?target=cover')
       .set('Authorization', `Bearer ${um.token}`)
-      .send({ coverUrl: '' })
       .expect(200);
-    expect(limpo.body.photos.coverUrl).toBeNull();
+    expect(limpo.body.removed).toBe(true);
+    const alvos = await http().get('/v1/admin/photos').set('Authorization', `Bearer ${um.token}`).expect(200);
+    expect(alvos.body.coverUrl).toBeNull();
   });
 
-  it('não põe foto no profissional de outra barbearia', async () => {
+  it('não põe foto no profissional de outra barbearia pelo upload', async () => {
     const um = await criarConta();
     const slug = await percorrer(um.token);
-    const alvos = await http()
-      .get('/v1/admin/photos')
-      .set('Authorization', `Bearer ${um.token}`)
-      .expect(200);
+    const alvos = await http().get('/v1/admin/photos').set('Authorization', `Bearer ${um.token}`).expect(200);
     const alheio = alvos.body.professionals[0].id;
-
     const dois = await criarConta({ ...CONTA, email: 'rival@rival.com', businessName: 'Rival' });
-
-    // O id existe, mas a RLS não enxerga a linha: o UPDATE não encontra nada.
+    await percorrer(dois.token);
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
     await http()
-      .put('/v1/admin/photos')
+      .post(`/v1/admin/photos/upload?target=professional&id=${alheio}`)
       .set('Authorization', `Bearer ${dois.token}`)
-      .send({ professionals: [{ id: alheio, photoUrl: 'https://cdn.rival.com/pichacao.jpg' }] })
-      .expect(200);
-
+      .set('Content-Type', 'image/png')
+      .send(png)
+      .expect(404);
     const publico = await http().get(`/v1/b/${slug}`).expect(200);
     expect(publico.body.professionals[0].photoUrl).toBeNull();
   });

@@ -183,7 +183,9 @@ export default async function RetencaoPage({ searchParams }: Props) {
   void query;
 
   const podeVerRisco =
-    podeNaTela(estado, 'customers.view') && podeNaTela(estado, 'reviews.view');
+    podeNaTela(estado, 'customers.view') &&
+    podeNaTela(estado, 'customers.view_notes') &&
+    podeNaTela(estado, 'reviews.view');
   /**
    * A tela esconde o que a API recusaria — as **três**, como a rota declara.
    *
@@ -194,7 +196,8 @@ export default async function RetencaoPage({ searchParams }: Props) {
   const podeVerCrescimento =
     podeNaTela(estado, 'finance.view') &&
     podeNaTela(estado, 'reports.finance') &&
-    podeNaTela(estado, 'customers.view');
+    podeNaTela(estado, 'customers.view') &&
+    podeNaTela(estado, 'customers.view_notes');
 
   const [risco, crescimento] = await Promise.all([
     podeVerRisco ? churnNaApi(token) : Promise.resolve(null),

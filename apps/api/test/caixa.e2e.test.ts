@@ -472,6 +472,7 @@ describeIfDb('caixa e comanda pela HTTP', () => {
     const recusa = await com(token)(
       http()
         .post('/v1/admin/cash/movements')
+        .set('Idempotency-Key', 'caixa-e2e-474')
         .send({ kind: 'withdrawal', amountCents: 999999, reason: 'Engano de digitação' }),
     ).expect(400);
     expect(recusa.body.error.code).toBe('sangria_maior_que_a_gaveta');

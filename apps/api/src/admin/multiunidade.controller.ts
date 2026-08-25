@@ -142,7 +142,7 @@ export class MultiunidadeController {
   async abrirUnidade(
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(criarUnidadeSchema))
-    body: { nome: string; timezone: string; cidade?: string | null },
+    body: { nome: string; timezone: string; cidade?: string | null; estado?: string | null; linkDoMapa?: string | null },
   ) {
     try {
       return await criarUnidade({
@@ -150,6 +150,8 @@ export class MultiunidadeController {
         nome: body.nome,
         timezone: body.timezone,
         cidade: body.cidade ?? null,
+        estado: body.estado ?? null,
+        linkDoMapa: body.linkDoMapa ?? null,
         ator: { id: staff.staffUserId, name: staff.name },
       });
     } catch (erro) {

@@ -9,6 +9,7 @@ import {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { PlataformaError, registrarNaTrilha } from './plataforma.js';
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * A comissão do marketplace, do atendimento à fatura (bloco 72, SPEC §5.2).
@@ -263,7 +264,10 @@ export async function emitirComissaoDoMarketplace(entrada: {
        WHERE status = 'pendente' AND attributed_at < ${fim}
     `,
   );
-  const total = somadas.reduce((soma, l) => soma + Number(l.fee_cents), 0);
+  const total = inteiroSeguroDoBanco(
+    somadas.reduce((soma, l) => soma + BigInt(l.fee_cents), 0n),
+    'comissão de marketplace a faturar',
+  );
 
   // Nada a cobrar não vira fatura de R$ 0,00: é um documento que não se paga e
   // que a régua persegue até bloquear uma barbearia que não deve nada.
@@ -342,7 +346,7 @@ export async function emitirComissaoDoMarketplace(entrada: {
         FROM marketplace_attributions
        WHERE invoice_id = ${fatura.id}::uuid
     `;
-    return Number(linhas[0]?.soma ?? 0);
+    return inteiroSeguroDoBanco(linhas[0]?.soma, 'comissão já anexada à fatura');
   });
   if (jaAnexado + total !== Number(fatura.amount_cents)) return null;
 
@@ -449,11 +453,14 @@ export async function atribuicoesDaBarbearia(
  */
 export async function pendenteDoMarketplace(tenantId: string): Promise<number> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<{ total: number | null }[]>`
-      SELECT sum(fee_cents)::int AS total
+    const linhas = await tx.$queryRaw<{ total: bigint | null }[]>`
+      SELECT sum(fee_cents)::bigint AS total
         FROM marketplace_attributions WHERE status = 'pendente'
     `;
-    return Number(linhas[0]?.total ?? 0);
+    return inteiroSeguroDoBanco(
+      linhas[0]?.total ?? 0n,
+      'Comissão pendente do marketplace',
+    );
   });
 }
 

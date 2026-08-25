@@ -1,0 +1,29 @@
+BARBERDOCK — BLOCO 12 — SEGURANCA DE LANCAMENTO — 2026-08-24
+
+VEREDITO
+- SQL raw-unsafe em produção: 0.
+- Turnstile server-side no signup: implementado.
+- Rate limit global em duas janelas: guardado.
+- Secret scan snapshot: limpo.
+- Secret scan de histórico: implementado/testado em Git artificial; checkout atual não tem .git.
+- Dependency audit high/critical: bloqueante no CI; registry indisponível neste runtime.
+- Dependabot: npm/pnpm + GitHub Actions.
+- Backup: AES-256-GCM, chave própria, IV aleatório, tag autenticada, plaintext removido.
+- HTTPS: implementação/preflight fechados; domínio real ainda exige smoke.
+- RLS: implementação preservada; PostgreSQL real continua pendente.
+
+TESTES DESTA RODADA
+- Verificadores diretos: 40/40 PASS.
+- Testes Node autônomos: 19/19 PASS.
+- Vitest indisponível: 23 scripts não executados.
+- TS/TSX sintaxe: 772/772.
+- Turnstile runtime: 9/9.
+- Backup crypto runtime: 5/5.
+- Backup shell integrado: 1/1.
+- Shell: OK.
+- YAML: 4/4.
+
+CHECKLIST 20 ITENS
+- 15 fechados.
+- 4 dependem de prova externa: histórico Git real, PostgreSQL/RLS, HTTPS público, dependency audit com registry.
+- 1 não se aplica: public key de banco no browser.

@@ -1,5 +1,11 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type Sql, type TransactionClient } from '@barbearia/db';
 import { segmentosDaBase } from './segmento.js';
+import {
+  confirmarDisparoPromocional,
+  liberarDisparoPromocional,
+  marcarDisparoPromocionalIncerto,
+  reservarDisparoPromocional,
+} from './disparo-promocional.js';
 import {
   chaveDoFato,
   decidirDisparo,
@@ -81,9 +87,9 @@ export interface AutomacaoNaTela {
   readonly alcancadas: number;
 }
 
-const COLUNAS = `a.id, a.name, a.trigger::text AS trigger, a.threshold, a.delay_minutes,
-                 a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active,
-                 a.template_id, a.audience`;
+const COLUNAS = sql`a.id, a.name, a.trigger::text AS trigger, a.threshold, a.delay_minutes,
+                    a.kind::text AS kind, a.goal::text AS goal, a.goal_window_days, a.active,
+                    a.template_id, a.audience`;
 
 /**
  * O título do texto é só da tela, e por isso não entra em `COLUNAS`.
@@ -93,7 +99,7 @@ const COLUNAS = `a.id, a.name, a.trigger::text AS trigger, a.threshold, a.delay_
  * Numa constante compartilhada, ele quebrava a varredura com "missing
  * FROM-clause entry", que foi o que aconteceu.
  */
-const TITULO_DO_TEXTO = `w.titulo AS texto_titulo`;
+const TITULO_DO_TEXTO = sql`w.titulo AS texto_titulo`;
 
 const paraTela = (l: {
   id: string;
@@ -137,16 +143,16 @@ const paraTela = (l: {
  */
 export async function automacoesDaCasa(tenantId: string): Promise<readonly AutomacaoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
-      `SELECT ${COLUNAS}, ${TITULO_DO_TEXTO},
-              count(s.id) FILTER (WHERE s.sent_at IS NOT NULL) AS enviadas,
-              count(s.id) FILTER (WHERE s.goal_met_at IS NOT NULL) AS alcancadas
-         FROM automations a
-         LEFT JOIN automation_sends s ON s.automation_id = a.id
-         LEFT JOIN whatsapp_templates w ON w.id = a.template_id
-        GROUP BY a.id, w.titulo
-        ORDER BY a.created_at DESC`,
-    );
+    const linhas = await tx.$queryRaw<Parameters<typeof paraTela>[0][]>(sql`
+      SELECT ${COLUNAS}, ${TITULO_DO_TEXTO},
+             count(s.id) FILTER (WHERE s.sent_at IS NOT NULL) AS enviadas,
+             count(s.id) FILTER (WHERE s.goal_met_at IS NOT NULL) AS alcancadas
+        FROM automations a
+        LEFT JOIN automation_sends s ON s.automation_id = a.id
+        LEFT JOIN whatsapp_templates w ON w.id = a.template_id
+       GROUP BY a.id, w.titulo
+       ORDER BY a.created_at DESC
+    `);
     return linhas.map(paraTela);
   });
 }
@@ -332,243 +338,153 @@ async function candidatos(
   limiar: number | null,
   agora: Date,
 ): Promise<readonly Candidato[]> {
-  const comum = `c.phone_e164 IS NOT NULL AS tem_telefone,
-                 c.accepts_marketing AS aceita`;
+  type LinhaCandidato = {
+    customer_id: string;
+    referencia: string;
+    fato_em: Date;
+    tem_telefone: boolean;
+    aceita: boolean;
+  };
 
-  if (gatilho === 'sem_retorno') {
-    const dias = limiar ?? 30;
-    return (
-      await tx.$queryRawUnsafe<
-        { customer_id: string; referencia: string; fato_em: Date; tem_telefone: boolean; aceita: boolean }[]
-      >(
-        `SELECT c.id AS customer_id,
-                to_char(max(a.starts_at), 'YYYY-MM-DD') AS referencia,
-                max(a.starts_at) AS fato_em, ${comum}
-           FROM customers c
-           JOIN appointments a ON a.customer_id = c.id AND a.status = 'completed'
-          WHERE c.anonymized_at IS NULL
-          GROUP BY c.id
-         HAVING max(a.starts_at) < $1::timestamptz - ($2::int * interval '1 day')
-            AND max(a.starts_at) > $1::timestamptz - (($2::int + 7) * interval '1 day')`,
-        agora,
-        dias,
-      )
-    ).map((l) => ({
+  const comum = sql`c.phone_e164 IS NOT NULL AS tem_telefone,
+                    c.accepts_marketing AS aceita`;
+  const mapear = (linhas: readonly LinhaCandidato[]): readonly Candidato[] =>
+    linhas.map((l) => ({
       customerId: l.customer_id,
       referencia: l.referencia,
       fatoEm: l.fato_em,
       temTelefone: l.tem_telefone,
       aceitaPromocional: l.aceita,
     }));
+  const simples = async (consulta: Sql): Promise<readonly Candidato[]> =>
+    mapear(await tx.$queryRaw<LinhaCandidato[]>(consulta));
+
+  if (gatilho === 'sem_retorno') {
+    const dias = limiar ?? 30;
+    return simples(sql`
+      SELECT c.id AS customer_id,
+             to_char(max(a.starts_at), 'YYYY-MM-DD') AS referencia,
+             max(a.starts_at) AS fato_em, ${comum}
+        FROM customers c
+        JOIN appointments a ON a.customer_id = c.id AND a.status = 'completed'
+       WHERE c.anonymized_at IS NULL
+       GROUP BY c.id
+      HAVING max(a.starts_at) < ${agora}::timestamptz - (${dias}::int * interval '1 day')
+         AND max(a.starts_at) > ${agora}::timestamptz - ((${dias}::int + 7) * interval '1 day')
+    `);
   }
 
   if (gatilho === 'aniversario') {
     const antes = limiar ?? 0;
-    return (
-      await tx.$queryRawUnsafe<
-        { customer_id: string; referencia: string; fato_em: Date; tem_telefone: boolean; aceita: boolean }[]
-      >(
-        `SELECT c.id AS customer_id, to_char(c.birth_date, 'MM-DD') AS referencia,
-                $1::timestamptz AS fato_em, ${comum}
-           FROM customers c
-          WHERE c.anonymized_at IS NULL
-            AND c.birth_date IS NOT NULL
-            AND to_char(c.birth_date, 'MM-DD')
-              = to_char(($1::timestamptz + ($2::int * interval '1 day'))::date, 'MM-DD')`,
-        agora,
-        antes,
-      )
-    ).map((l) => ({
-      customerId: l.customer_id,
-      referencia: l.referencia,
-      fatoEm: l.fato_em,
-      temTelefone: l.tem_telefone,
-      aceitaPromocional: l.aceita,
-    }));
+    return simples(sql`
+      SELECT c.id AS customer_id, to_char(c.birth_date, 'MM-DD') AS referencia,
+             ${agora}::timestamptz AS fato_em, ${comum}
+        FROM customers c
+       WHERE c.anonymized_at IS NULL
+         AND c.birth_date IS NOT NULL
+         AND to_char(c.birth_date, 'MM-DD')
+           = to_char((${agora}::timestamptz + (${antes}::int * interval '1 day'))::date, 'MM-DD')
+    `);
   }
 
   if (gatilho === 'primeiro_atendimento') {
-    /**
-     * O `::text` vai **dentro** do agregado, e não depois dele.
-     *
-     * `min(uuid)` não existe no Postgres: `min(a.id)::text` passa por todo
-     * typecheck e por toda suíte deste repositório e morre em tempo de
-     * execução com `42883`. Ela derrubou a volta inteira da automação por
-     * quatro dias em produção — a exceção sobe de um gatilho e mata os outros
-     * dez da mesma barbearia, porque a varredura é uma tarefa só.
-     *
-     * O `HAVING count(a.id) = 1` garante uma linha por grupo, então qualquer
-     * agregado devolve aquele único atendimento; o que precisava mudar era o
-     * tipo que entra em `min`, não qual agregado se usa.
-     */
-    return (
-      await tx.$queryRawUnsafe<
-        { customer_id: string; referencia: string; fato_em: Date; tem_telefone: boolean; aceita: boolean }[]
-      >(
-        `SELECT c.id AS customer_id, min(a.id::text) AS referencia,
-                min(a.starts_at) AS fato_em, ${comum}
-           FROM customers c
-           JOIN appointments a ON a.customer_id = c.id AND a.status = 'completed'
-          WHERE c.anonymized_at IS NULL
-          GROUP BY c.id
-         HAVING count(a.id) = 1
-            AND min(a.starts_at) > $1::timestamptz - interval '2 days'`,
-        agora,
-      )
-    ).map((l) => ({
-      customerId: l.customer_id,
-      referencia: l.referencia,
-      fatoEm: l.fato_em,
-      temTelefone: l.tem_telefone,
-      aceitaPromocional: l.aceita,
-    }));
+    return simples(sql`
+      SELECT c.id AS customer_id, min(a.id::text) AS referencia,
+             min(a.starts_at) AS fato_em, ${comum}
+        FROM customers c
+        JOIN appointments a ON a.customer_id = c.id AND a.status = 'completed'
+       WHERE c.anonymized_at IS NULL
+       GROUP BY c.id
+      HAVING count(a.id) = 1
+         AND min(a.starts_at) > ${agora}::timestamptz - interval '2 days'
+    `);
   }
 
-  const simples = async (sql: string, ...args: unknown[]) =>
-    (
-      await tx.$queryRawUnsafe<
-        {
-          customer_id: string;
-          referencia: string;
-          fato_em: Date;
-          tem_telefone: boolean;
-          aceita: boolean;
-        }[]
-      >(sql, ...args)
-    ).map((l) => ({
-      customerId: l.customer_id,
-      referencia: l.referencia,
-      fatoEm: l.fato_em,
-      temTelefone: l.tem_telefone,
-      aceitaPromocional: l.aceita,
-    }));
-
-  /**
-   * Os oito que faltavam (bloco 57).
-   *
-   * Todos têm a mesma forma — quem é, quando o fato aconteceu, qual a chave — e
-   * todos olham só o passado recente: a varredura roda de hora em hora, e uma
-   * consulta sem recorte de tempo reprocessaria a base inteira toda volta para
-   * descobrir que já disparou. A unicidade por fato garante a corretude; o
-   * recorte garante que ela não custe a base inteira.
-   */
   if (gatilho === 'cancelamento') {
-    return simples(
-      `SELECT c.id AS customer_id, a.id::text AS referencia, a.cancelled_at AS fato_em, ${comum}
-         FROM appointments a
-         JOIN customers c ON c.id = a.customer_id
-        WHERE a.status = 'cancelled_customer'
-          AND a.cancelled_at > $1::timestamptz - interval '2 days'
-          AND c.anonymized_at IS NULL`,
-      agora,
-    );
+    return simples(sql`
+      SELECT c.id AS customer_id, a.id::text AS referencia, a.cancelled_at AS fato_em, ${comum}
+        FROM appointments a
+        JOIN customers c ON c.id = a.customer_id
+       WHERE a.status = 'cancelled_customer'
+         AND a.cancelled_at > ${agora}::timestamptz - interval '2 days'
+         AND c.anonymized_at IS NULL
+    `);
   }
 
   if (gatilho === 'avaliacao_positiva' || gatilho === 'avaliacao_negativa') {
-    /**
-     * O limiar é em estrelas, e o sentido muda com o gatilho: "a partir de
-     * quantas" para a boa, "até quantas" para a ruim. É o mesmo campo com dois
-     * significados — a razão de o rótulo morar em `core` e não na tela.
-     */
     const positiva = gatilho === 'avaliacao_positiva';
     const estrelas = limiar ?? (positiva ? 4 : 3);
-    return simples(
-      `SELECT c.id AS customer_id, r.id::text AS referencia, r.created_at AS fato_em, ${comum}
-         FROM reviews r
-         JOIN customers c ON c.id = r.customer_id
-        WHERE r.created_at > $1::timestamptz - interval '2 days'
-          AND r.rating ${positiva ? '>=' : '<='} $2::int
-          AND c.anonymized_at IS NULL`,
-      agora,
-      estrelas,
-    );
+    const comparacao = positiva
+      ? sql`r.rating >= ${estrelas}::int`
+      : sql`r.rating <= ${estrelas}::int`;
+    return simples(sql`
+      SELECT c.id AS customer_id, r.id::text AS referencia, r.created_at AS fato_em, ${comum}
+        FROM reviews r
+        JOIN customers c ON c.id = r.customer_id
+       WHERE r.created_at > ${agora}::timestamptz - interval '2 days'
+         AND ${comparacao}
+         AND c.anonymized_at IS NULL
+    `);
   }
 
   if (gatilho === 'servico_realizado' || gatilho === 'produto_comprado') {
     const tipo = gatilho === 'servico_realizado' ? 'service' : 'product';
-    return simples(
-      `SELECT c.id AS customer_id, o.id::text AS referencia, o.closed_at AS fato_em, ${comum}
-         FROM orders o
-         JOIN customers c ON c.id = o.customer_id
-        WHERE o.status = 'paid'
-          AND o.closed_at > $1::timestamptz - interval '2 days'
-          AND c.anonymized_at IS NULL
-          AND EXISTS (
-            SELECT 1 FROM order_items i
-             -- order_item_type, e nao order_item_kind: a coluna se chama
-             -- kind e o tipo dela nao. O nome inventado derrubava a consulta
-             -- com 42704 e, com ela, a varredura inteira da barbearia.
-             WHERE i.order_id = o.id AND i.kind = $2::order_item_type
-          )`,
-      agora,
-      tipo,
-    );
+    return simples(sql`
+      SELECT c.id AS customer_id, o.id::text AS referencia, o.closed_at AS fato_em, ${comum}
+        FROM orders o
+        JOIN customers c ON c.id = o.customer_id
+       WHERE o.status = 'paid'
+         AND o.closed_at > ${agora}::timestamptz - interval '2 days'
+         AND c.anonymized_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM order_items i
+            WHERE i.order_id = o.id AND i.kind = ${tipo}::order_item_type
+         )
+    `);
   }
 
   if (gatilho === 'pacote_acabando') {
-    /**
-     * "Faltam quantas unidades" — e o saldo é **derivado**, como manda a
-     * convenção do produto: comprado menos consumido. Um contador responderia
-     * mais rápido e estaria errado no dia em que alguém estornasse uma venda.
-     */
     const restantes = limiar ?? 1;
-    /**
-     * Pacote vivo é `refunded_at IS NULL` mais a validade, e **não** um estado.
-     *
-     * `customer_packages` nunca teve coluna `status`: o pacote não some quando
-     * é reembolsado, ele fica com a data — é a decisão do bloco 45. A cláusula
-     * `p.status = 'active'` derrubava a consulta com `42703` em toda volta da
-     * varredura, e como a varredura da barbearia é uma transação só, ela levava
-     * os outros dez gatilhos junto. Achada pela guarda que executa todos eles.
-     *
-     * O predicado é o mesmo de `vivosDoCliente`, em `packages/finance`, mais o
-     * vencimento — anunciar "faltam duas unidades" de um pacote que venceu
-     * ontem é mandar a pessoa ao balcão para ouvir não.
-     */
-    return simples(
-      `SELECT c.id AS customer_id, p.id::text AS referencia, $1::timestamptz AS fato_em, ${comum}
-         FROM customer_packages p
-         JOIN customers c ON c.id = p.customer_id
-        WHERE c.anonymized_at IS NULL
-          AND p.refunded_at IS NULL
-          AND (p.expires_at IS NULL OR p.expires_at > $1::timestamptz)
-          AND p.quantity - (
-                SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
-              ) <= $2::int
-          AND p.quantity - (
-                SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
-              ) > 0`,
-      agora,
-      restantes,
-    );
+    return simples(sql`
+      SELECT c.id AS customer_id, p.id::text AS referencia, ${agora}::timestamptz AS fato_em, ${comum}
+        FROM customer_packages p
+        JOIN customers c ON c.id = p.customer_id
+       WHERE c.anonymized_at IS NULL
+         AND p.refunded_at IS NULL
+         AND (p.expires_at IS NULL OR p.expires_at > ${agora}::timestamptz)
+         AND p.quantity - (
+               SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
+             ) <= ${restantes}::int
+         AND p.quantity - (
+               SELECT count(*) FROM package_uses u WHERE u.customer_package_id = p.id
+             ) > 0
+    `);
   }
 
   if (gatilho === 'assinatura_vencendo') {
     const dias = limiar ?? 3;
-    return simples(
-      `SELECT c.id AS customer_id,
-              to_char(f.due_at, 'YYYY-MM-DD') AS referencia, f.due_at AS fato_em, ${comum}
-         FROM club_invoices f
-         JOIN club_subscriptions s ON s.id = f.subscription_id
-         JOIN customers c ON c.id = s.customer_id
-        WHERE c.anonymized_at IS NULL
-          AND f.status = 'aberta'
-          AND f.due_at BETWEEN $1::timestamptz AND $1::timestamptz + ($2::int * interval '1 day')`,
-      agora,
-      dias,
-    );
+    return simples(sql`
+      SELECT c.id AS customer_id,
+             to_char(f.due_at, 'YYYY-MM-DD') AS referencia, f.due_at AS fato_em, ${comum}
+        FROM club_invoices f
+        JOIN club_subscriptions s ON s.id = f.subscription_id
+        JOIN customers c ON c.id = s.customer_id
+       WHERE c.anonymized_at IS NULL
+         AND f.status = 'aberta'
+         AND f.due_at BETWEEN ${agora}::timestamptz
+                          AND ${agora}::timestamptz + (${dias}::int * interval '1 day')
+    `);
   }
 
   if (gatilho === 'vaga_na_espera') {
-    return simples(
-      `SELECT c.id AS customer_id, o.id::text AS referencia, o.created_at AS fato_em, ${comum}
-         FROM waitlist_offers o
-         JOIN waitlist_entries e ON e.id = o.entry_id
-         JOIN customers c ON c.id = e.customer_id
-        WHERE c.anonymized_at IS NULL
-          AND o.created_at > $1::timestamptz - interval '1 day'`,
-      agora,
-    );
+    return simples(sql`
+      SELECT c.id AS customer_id, o.id::text AS referencia, o.created_at AS fato_em, ${comum}
+        FROM waitlist_offers o
+        JOIN waitlist_entries e ON e.id = o.entry_id
+        JOIN customers c ON c.id = e.customer_id
+       WHERE c.anonymized_at IS NULL
+         AND o.created_at > ${agora}::timestamptz - interval '1 day'
+    `);
   }
 
   return [];
@@ -592,10 +508,10 @@ export async function varrerAutomacoes(params: {
   readonly timeZone: string;
 }): Promise<ResultadoDaAutomacao> {
   return withTenant(params.tenantId, async (tx) => {
-    const regras = await tx.$queryRawUnsafe<Parameters<typeof paraTela>[0][]>(
-      `SELECT ${COLUNAS}, NULL AS texto_titulo, 0 AS enviadas, 0 AS alcancadas
-         FROM automations a WHERE a.active`,
-    );
+    const regras = await tx.$queryRaw<Parameters<typeof paraTela>[0][]>(sql`
+      SELECT ${COLUNAS}, NULL AS texto_titulo, 0 AS enviadas, 0 AS alcancadas
+        FROM automations a WHERE a.active
+    `);
 
     let marcados = 0;
     let pulados = 0;
@@ -794,107 +710,147 @@ export async function disparosAEnviar(
 }
 
 /**
- * Carimba o envio **antes** de a mensagem sair.
+ * Reserva a vaga promocional **antes** da rede, sem afirmar que já enviou.
  *
- * É o precedente do bloco 54, e a razão é a mesma: carimbar depois perde o
- * carimbo se o processo cair, e a volta seguinte remanda. Entre repetir e não
- * mandar, o produto escolhe não mandar.
- *
- * O índice do dia é único no enviado, então esta gravação é também quem barra a
- * segunda automação do mesmo cliente no mesmo dia — inclusive contra outro
- * processo, que a leitura da varredura não alcançaria.
+ * O antigo `sent_at` antes do provider resolvia duplicata às custas de um erro
+ * pior: recusa explícita da Meta continuava aparecendo como mensagem enviada.
+ * Agora o estado em voo vive na intenção compartilhada; `sent_at` só nasce
+ * quando o provider terminou com sucesso.
+ */
+export async function reservarDisparoDaAutomacao(params: {
+  readonly tenantId: string;
+  readonly disparoId: string;
+  readonly agora: Date;
+  readonly timeZone: string;
+}): Promise<boolean> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ customer_id: string; kind: TipoDeNotificacao }[]>`
+      SELECT s.customer_id, a.kind::text AS kind
+        FROM automation_sends s
+        JOIN automations a ON a.id = s.automation_id
+       WHERE s.id = ${params.disparoId}::uuid
+         AND s.sent_at IS NULL AND s.skipped_reason IS NULL
+    `;
+    const disparo = linhas[0];
+    if (!disparo) return false;
+
+    const reserva = await reservarDisparoPromocional(tx, {
+      tenantId: params.tenantId,
+      customerId: disparo.customer_id,
+      intentKey: `promo:automacao:${params.disparoId}`,
+      tipo: disparo.kind,
+      agora: params.agora,
+      timeZone: params.timeZone,
+    });
+    if (reserva.nossa) return true;
+    if (reserva.motivo === 'ja_enviado' || reserva.motivo === 'envio_em_andamento') return false;
+
+    await tx.$executeRaw`
+      UPDATE automation_sends
+         SET skipped_reason = ${reserva.motivo ?? 'ja_recebeu_hoje'}
+       WHERE id = ${params.disparoId}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
+    `;
+    return false;
+  });
+}
+
+/** Confirma o disparo e o histórico só depois do sucesso do provider. */
+export async function confirmarDisparoDaAutomacao(params: {
+  readonly tenantId: string;
+  readonly disparoId: string;
+  readonly agora: Date;
+}): Promise<boolean> {
+  return withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ customer_id: string; kind: TipoDeNotificacao }[]>`
+      SELECT s.customer_id, a.kind::text AS kind
+        FROM automation_sends s
+        JOIN automations a ON a.id = s.automation_id
+       WHERE s.id = ${params.disparoId}::uuid
+         AND s.sent_at IS NULL AND s.skipped_reason IS NULL
+    `;
+    const disparo = linhas[0];
+    if (!disparo) return false;
+
+    const afetadas = await tx.$executeRaw`
+      UPDATE automation_sends SET sent_at = ${params.agora}
+       WHERE id = ${params.disparoId}::uuid
+         AND sent_at IS NULL AND skipped_reason IS NULL
+    `;
+    if (afetadas !== 1) return false;
+
+    const confirmou = await confirmarDisparoPromocional(tx, {
+      intentKey: `promo:automacao:${params.disparoId}`,
+      tipo: disparo.kind,
+      customerId: disparo.customer_id,
+      phoneMasked: null,
+      enviadoEm: params.agora,
+    });
+    if (!confirmou) throw new Error('reserva promocional da automação não pôde ser confirmada');
+    return true;
+  });
+}
+
+/** Timeout/queda depois da chamada: não reenvia e explica o desfecho na tela. */
+export async function marcarDisparoDaAutomacaoIncerto(params: {
+  readonly tenantId: string;
+  readonly disparoId: string;
+  readonly agora: Date;
+}): Promise<void> {
+  await withTenant(params.tenantId, async (tx) => {
+    await marcarDisparoPromocionalIncerto(tx, `promo:automacao:${params.disparoId}`, params.agora);
+    await tx.$executeRaw`
+      UPDATE automation_sends SET skipped_reason = 'entrega_incerta'
+       WHERE id = ${params.disparoId}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
+    `;
+  });
+}
+
+/** Recusa definitiva do provider: libera a reserva e deixa a fila tentar de novo. */
+export async function liberarDisparoDaAutomacao(params: {
+  readonly tenantId: string;
+  readonly disparoId: string;
+}): Promise<void> {
+  await withTenant(params.tenantId, (tx) =>
+    liberarDisparoPromocional(tx, `promo:automacao:${params.disparoId}`),
+  );
+}
+
+/**
+ * Compatibilidade para testes/chamadores antigos: reserva e confirma sem rede.
+ * O worker de produção usa as duas fases acima.
  */
 export async function marcarDisparoEnviado(params: {
   readonly tenantId: string;
   readonly disparoId: string;
 }): Promise<boolean> {
-  /**
-   * A regra do dia é conferida **na própria instrução**, e não por exceção.
-   *
-   * A primeira versão tentava carimbar e pegava a violação do índice único num
-   * `catch` dentro da transação — e não funcionava: no Postgres a transação
-   * aborta na violação, e toda instrução seguinte é recusada com "current
-   * transaction is aborted". O `catch` existia e não conseguia gravar o motivo.
-   *
-   * Com o `NOT EXISTS`, o caso normal — duas automações do mesmo cliente na
-   * mesma volta — não gera exceção nenhuma: o `UPDATE` simplesmente não pega
-   * linha, e o motivo é gravado depois, em transação limpa.
-   *
-   * O índice único continua sendo a última linha de defesa, para dois processos
-   * varrendo ao mesmo tempo. Aí a exceção sobe, e ela é tratada **fora** da
-   * transação — que é o único lugar em que dá para tratá-la.
-   */
-  const carimbar = () =>
-    withTenant(params.tenantId, async (tx) => {
-      /**
-       * A última linha de defesa do "uma por dia" passa a olhar `notifications`.
-       *
-       * Ela olhava só `automation_sends`, e por isso não via a campanha do mesmo
-       * dia: duas mensagens promocionais no mesmo celular, cada mecanismo
-       * correto sozinho. Agora os dois escrevem e leem no mesmo lugar.
-       *
-       * O fuso continua sendo o do banco aqui de propósito — este `NOT EXISTS`
-       * é a guarda entre **processos**, e ela roda com `now()`, não com o
-       * relógio injetado. Quem decide de verdade é `decidirDisparo`, que recebe
-       * o fuso da unidade; isto é a rede embaixo.
-       */
-      const afetadas = await tx.$executeRaw`
-        UPDATE automation_sends AS s SET sent_at = now()
-         WHERE s.id = ${params.disparoId}::uuid
-           AND s.sent_at IS NULL
-           AND s.skipped_reason IS NULL
-           AND NOT EXISTS (
-             SELECT 1 FROM notifications n
-              WHERE n.customer_id = s.customer_id
-                AND n.status = 'sent'
-                AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
-                AND (n.sent_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date
-           )
-      `;
-      if (afetadas !== 1) return false;
-
-      /**
-       * E a linha que faz este disparo **contar**, na mesma transação.
-       *
-       * Sem ela o teto do mês seguiria valendo zero: as duas contagens leem
-       * `notifications`, e até o bloco 108 nenhum dos dois motores escrevia lá.
-       */
-      // O tipo mora em `automations.kind`, não no disparo: `automation_sends`
-      // guarda o fato e o desfecho, e quem a mensagem é sai da regra.
-      await tx.$executeRaw`
-        INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
-        SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-               a.kind, s.customer_id, 'sent', NULL
-          FROM automation_sends s
-          JOIN automations a ON a.id = s.automation_id
-         WHERE s.id = ${params.disparoId}::uuid
-      `;
-      return true;
-    });
-
-  let carimbou = false;
-  try {
-    carimbou = await carimbar();
-  } catch {
-    // Dois processos ao mesmo tempo: o índice único recusou. Não é erro — é a
-    // regra funcionando entre processos.
-    carimbou = false;
-  }
-  if (carimbou) return true;
-
-  /**
-   * Não carimbou: o motivo fica escrito para o balcão poder ler.
-   *
-   * Em transação própria, porque a anterior pode ter abortado. Guardado por
-   * `sent_at IS NULL` para não sobrescrever um disparo que de fato saiu.
-   */
-  await withTenant(params.tenantId, async (tx) => {
-    await tx.$executeRaw`
-      UPDATE automation_sends SET skipped_reason = 'ja_recebeu_hoje'
-       WHERE id = ${params.disparoId}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
+  const contexto = await withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ timezone: string }[]>`
+      -- A automação é da barbearia e não de uma loja: nem automations nem
+      -- automation_sends tem location_id, e juntar por ele recusava a consulta
+      -- inteira com "column a.location_id does not exist". O fuso sai da
+      -- unidade mais antiga, que e o mesmo recorte de notificacoes.ts quando o
+      -- fato nao aponta para uma loja. A RLS ja limita locations.
+      -- Sem crase aqui: ela fecharia o template e o erro sairia como sintaxe.
+      SELECT l.timezone
+        FROM automation_sends s
+        JOIN automations a ON a.id = s.automation_id
+        CROSS JOIN LATERAL (
+          SELECT timezone FROM locations ORDER BY created_at LIMIT 1
+        ) l
+       WHERE s.id = ${params.disparoId}::uuid
     `;
+    return linhas[0] ?? null;
   });
-  return false;
+  if (!contexto) return false;
+  const agora = new Date();
+  const reservou = await reservarDisparoDaAutomacao({
+    tenantId: params.tenantId,
+    disparoId: params.disparoId,
+    agora,
+    timeZone: contexto.timezone,
+  });
+  if (!reservou) return false;
+  return confirmarDisparoDaAutomacao({ tenantId: params.tenantId, disparoId: params.disparoId, agora });
 }
 
 /**

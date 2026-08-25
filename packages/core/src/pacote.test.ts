@@ -11,6 +11,8 @@ import {
   restamNoPacote,
   restoDaPrimeiraUnidade,
   valorDaUnidade,
+  valorDoProximoConsumo,
+  reconhecidoDoPacote,
   vencimentoDoPacote,
   type PacoteDoCliente,
 } from './pacote.js';
@@ -28,6 +30,7 @@ const pacote = (extra: Partial<PacoteDoCliente> = {}): PacoteDoCliente => {
     usados: 0,
     venceEm: null,
     valorDaUnidadeCents: 5000,
+    precoCents: 25_000,
     compradoEm: new Date(AGORA.getTime() - 30 * 86_400_000),
     transferivel: false,
     reembolsadoEm: null,
@@ -61,6 +64,22 @@ describe('o estado do pacote é calculado, não guardado', () => {
 
   it('todo estado tem rótulo', () => {
     for (const estado of ESTADOS_DO_PACOTE) expect(ROTULO_DO_PACOTE[estado]).toBeTruthy();
+  });
+});
+
+
+describe('aritmética exata do pacote', () => {
+  it('preserva o resto da divisão na primeira unidade e no saldo', () => {
+    const irregular = pacote({ total: 5, usados: 0, precoCents: 5001, valorDaUnidadeCents: 1000 });
+    expect(valorDoProximoConsumo(irregular)).toBe(1001);
+    expect(reconhecidoDoPacote(irregular)).toBe(0);
+    expect(diferidoDoPacote(irregular, AGORA)).toBe(5001);
+
+    const depoisDaPrimeira = { ...irregular, usados: 1 };
+    expect(reconhecidoDoPacote(depoisDaPrimeira)).toBe(1001);
+    expect(valorDoProximoConsumo(depoisDaPrimeira)).toBe(1000);
+    expect(diferidoDoPacote(depoisDaPrimeira, AGORA)).toBe(4000);
+    expect(reembolsoProporcional(depoisDaPrimeira, AGORA)).toEqual({ valorCents: 4000 });
   });
 });
 

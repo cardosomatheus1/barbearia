@@ -214,7 +214,7 @@ describeIfDb('avaliações', () => {
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
 
     await registrarRecuperacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, desfecho: 'retrabalho',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, desfecho: 'retrabalho',
       nota: 'Liguei, refiz o corte de graça na quinta.', ator, agora: horas(2),
     });
 
@@ -249,7 +249,7 @@ describeIfDb('avaliações', () => {
 
     const tratar = () =>
       registrarRecuperacao({
-        tenantId: TENANT, avaliacaoId: alvo.id, desfecho: 'contato',
+        tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, desfecho: 'contato',
         nota: 'Liguei e conversei com ele.', ator, agora: horas(1),
       });
 
@@ -273,7 +273,7 @@ describeIfDb('avaliações', () => {
 
     await expect(
       registrarRecuperacao({
-        tenantId: TENANT, avaliacaoId: alvo.id, desfecho: 'contato', nota: 'ok', ator,
+        tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, desfecho: 'contato', nota: 'ok', ator,
       }),
     ).rejects.toMatchObject({ code: 'motivo_curto' });
   });
@@ -557,7 +557,7 @@ describeIfDb('avaliações', () => {
     expect(antes.media).toBe(4);
 
     await contestarAvaliacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
       nota: 'Não temos atendimento no nome dela, e o telefone não é de cliente nosso.',
       ator, agora: horas(2),
     });
@@ -590,7 +590,7 @@ describeIfDb('avaliações', () => {
 
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]!;
     await contestarAvaliacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'spam',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'spam',
       nota: 'Texto de propaganda, o mesmo que apareceu em três barbearias da rua.',
       ator, agora: horas(1),
     });
@@ -609,7 +609,7 @@ describeIfDb('avaliações', () => {
     });
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
     await contestarAvaliacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'ofensa',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'ofensa',
       nota: 'O comentário completo tem xingamento que não cabe na tela.',
       ator, agora: horas(1),
     });
@@ -637,7 +637,7 @@ describeIfDb('avaliações', () => {
 
     const contestar = (motivo: 'spam' | 'duplicada') =>
       contestarAvaliacao({
-        tenantId: TENANT, avaliacaoId: alvo.id, motivo,
+        tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo,
         nota: 'A mesma avaliação já tinha entrado no dia anterior.',
         ator, agora: horas(1),
       });
@@ -667,14 +667,14 @@ describeIfDb('avaliações', () => {
 
     await expect(
       contestarAvaliacao({
-        tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nao_gostei',
+        tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'nao_gostei',
         nota: 'Não gostei desta avaliação.', ator, agora: horas(1),
       }),
     ).rejects.toMatchObject({ code: 'motivo_invalido' });
 
     await expect(
       contestarAvaliacao({
-        tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'spam',
+        tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'spam',
         nota: 'spam', ator, agora: horas(1),
       }),
     ).rejects.toMatchObject({ code: 'motivo_curto' });
@@ -694,7 +694,7 @@ describeIfDb('avaliações', () => {
 
     await expect(
       contestarAvaliacao({
-        tenantId: RIVAL, avaliacaoId: alvo.id, motivo: 'spam',
+        tenantId: RIVAL, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'spam',
         nota: 'Isto não é da minha barbearia, e mesmo assim tentei.',
         ator, agora: horas(1),
       }),
@@ -720,12 +720,12 @@ describeIfDb('avaliações', () => {
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
 
     await contestarAvaliacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'duplicada',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'duplicada',
       nota: 'A mesma avaliação já tinha entrado no dia anterior.', ator, agora: horas(1),
     });
     expect((await avaliacoesPublicas(TENANT, depois)).total).toBe(3);
 
-    await retirarContestacao({ tenantId: TENANT, avaliacaoId: alvo.id, ator });
+    await retirarContestacao({ tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, ator });
 
     const voltou = await avaliacoesPublicas(TENANT, depois);
     expect(voltou.total).toBe(4);
@@ -753,10 +753,10 @@ describeIfDb('avaliações', () => {
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]!;
 
     await expect(
-      retirarContestacao({ tenantId: TENANT, avaliacaoId: alvo.id, ator }),
+      retirarContestacao({ tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, ator }),
     ).rejects.toMatchObject({ code: 'nao_contestada' });
     await expect(
-      retirarContestacao({ tenantId: RIVAL, avaliacaoId: alvo.id, ator }),
+      retirarContestacao({ tenantId: RIVAL, locationId: LOCAL, avaliacaoId: alvo.id, ator }),
     ).rejects.toMatchObject({ code: 'avaliacao_nao_encontrada' });
   });
 
@@ -774,7 +774,7 @@ describeIfDb('avaliações', () => {
     });
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).aRecuperar[0]!;
     await contestarAvaliacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
       nota: 'O Carlos Souza nunca foi atendido aqui, e o telefone não é de cliente nosso.',
       ator, agora: horas(1),
     });
@@ -812,7 +812,7 @@ describeIfDb('avaliações', () => {
     const alvo = (await painelDeAvaliacoes(TENANT, AGORA)).ultimas[0]!;
 
     await contestarAvaliacao({
-      tenantId: TENANT, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
+      tenantId: TENANT, locationId: LOCAL, avaliacaoId: alvo.id, motivo: 'nunca_foi_cliente',
       nota: 'Não temos atendimento no nome dela.', ator, agora: AGORA,
     });
 

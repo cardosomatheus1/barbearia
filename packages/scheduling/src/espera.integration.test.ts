@@ -131,6 +131,22 @@ describeIfDb('lista de espera', () => {
     expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(1);
   });
 
+  it('a mesma chave em outra unidade não devolve a espera da matriz', async () => {
+    const FILIAL = '38383838-aaaa-0000-0000-000000000009';
+    await exec(`
+      INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes)
+      VALUES ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia', 30)
+    `);
+
+    const matriz = await esperar({ idempotencyKey: 'mesma-chave' });
+    const filial = await esperar({ locationId: FILIAL, idempotencyKey: 'mesma-chave' });
+
+    expect(filial.id).not.toBe(matriz.id);
+    expect((await esperasDoCliente(TENANT, CARLOS)).map((e) => e.id)).toEqual(
+      expect.arrayContaining([matriz.id, filial.id]),
+    );
+  });
+
   it('pedir de novo a mesma coisa devolve a que já existe, não uma segunda', async () => {
     // A chave de idempotência resolve o duplo toque; isto resolve o pedido
     // repetido dias depois, que ela não alcança. Sem o índice parcial, quem
@@ -149,6 +165,30 @@ describeIfDb('lista de espera', () => {
 
     await expect(esperar({ de: '2026-09-11', ate: '2026-09-11' })).rejects.toMatchObject({
       code: 'limite_atingido',
+    });
+  });
+
+  it('duas intenções simultâneas não ultrapassam o teto de três esperas', async () => {
+    await esperar({ de: '2026-09-08', ate: '2026-09-08' });
+    await esperar({ de: '2026-09-09', ate: '2026-09-09' });
+
+    const resultados = await Promise.allSettled([
+      esperar({ de: '2026-09-10', ate: '2026-09-10' }),
+      esperar({ de: '2026-09-11', ate: '2026-09-11' }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(await esperasDoCliente(TENANT, CARLOS)).toHaveLength(3);
+  });
+
+  it('lista pública não aceita serviço ou profissional marcado como só balcão', async () => {
+    await exec(`UPDATE services SET bookable_online = false WHERE id = '${CABELO}'`);
+    await expect(esperar()).rejects.toMatchObject({ code: 'servico_desconhecido' });
+
+    await exec(`UPDATE services SET bookable_online = true WHERE id = '${CABELO}'`);
+    await exec(`UPDATE professionals SET bookable_online = false WHERE id = '${RUAN}'`);
+    await expect(esperar({ professionalId: RUAN })).rejects.toMatchObject({
+      code: 'profissional_desconhecido',
     });
   });
 

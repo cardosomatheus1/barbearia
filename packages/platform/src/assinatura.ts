@@ -83,12 +83,11 @@ const paraAssinatura = (l: LinhaDeAssinatura): Assinatura => ({
  *
  * As duas consultas repetem as colunas, e a repetição é preferível.
  *
- * A alternativa era uma string base concatenada com o `WHERE`, montada por
- * `$queryRawUnsafe`. Ela seria segura aqui — o parâmetro continuaria ligado —,
- * mas seria a **primeira** ocorrência de raw-unsafe em código de produto neste
- * repositório, e essa ausência é uma propriedade que vale mais do que doze
- * linhas economizadas: enquanto ela vale, procurar SQL montado à mão é procurar
- * por uma string que não existe.
+ * A alternativa era uma string base concatenada com o `WHERE` e executada por
+ * uma API de SQL sem composição tipada. Mesmo com parâmetros ligados, isso
+ * destruiria uma propriedade útil do repositório: código de produto só executa
+ * SQL por template/tag ou `Prisma.sql`, nunca por uma função que aceita texto
+ * montado em runtime.
  */
 export async function assinaturaDaBarbearia(tenantId: string): Promise<Assinatura | null> {
   return semTenant(async (tx) => {
@@ -348,36 +347,34 @@ export async function trocarPlanoPeloDono(entrada: {
   readonly tenantId: string;
   readonly planoCode: string;
   readonly agora: Date;
-  readonly idempotencyKey?: string | undefined;
+  readonly idempotencyKey: string;
 }): Promise<{ readonly rateio: Rateio; readonly faturaId: string | null }> {
   return semTenant(async (tx) => {
-    /**
-     * A repetição do mesmo POST devolve o mesmo acerto, sem cobrar de novo.
-     *
-     * Ela cobre o caminho que move dinheiro — a subida de plano, que emite
-     * fatura. A descida não emite nada e por isso não tem o que repetir: o
-     * segundo envio esbarra em `same_plan`, e é essa recusa que impede o
-     * crédito em dobro. Duas defesas diferentes porque são dois efeitos
-     * diferentes, e nenhuma delas depende de o cliente mandar a chave.
-     */
-    if (entrada.idempotencyKey) {
-      const jaFeitas = await tx.$queryRaw<{ id: string; amount_cents: number }[]>`
-        SELECT id, amount_cents FROM invoices
-         WHERE tenant_id = ${entrada.tenantId}::uuid
-           AND idempotency_key = ${entrada.idempotencyKey}
-      `;
-      const repetida = jaFeitas[0];
-      if (repetida) {
-        return {
-          rateio: {
-            cobrarCents: repetida.amount_cents,
-            creditarCents: 0,
-            diasRestantes: 0,
-            diasDoPeriodo: 0,
-          },
-          faturaId: repetida.id,
-        };
+    if (!entrada.idempotencyKey || entrada.idempotencyKey.length > 200) {
+      throw new PlataformaError('idempotency_key_required', 'Informe uma chave de idempotência válida');
+    }
+    const fingerprint = JSON.stringify([entrada.planoCode]);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${entrada.tenantId}:${entrada.idempotencyKey}`}, 0))`;
+    const intencoes = await tx.$queryRaw<{
+      request_fingerprint: string; charge_cents: number; credit_cents: number;
+      days_remaining: number; days_in_period: number; invoice_id: string | null;
+    }[]>`
+      SELECT request_fingerprint, charge_cents, credit_cents, days_remaining, days_in_period, invoice_id
+        FROM subscription_change_intents
+       WHERE tenant_id = ${entrada.tenantId}::uuid AND idempotency_key = ${entrada.idempotencyKey}
+    `;
+    const repetida = intencoes[0];
+    if (repetida) {
+      if (repetida.request_fingerprint !== fingerprint) {
+        throw new PlataformaError('idempotency_conflict', 'Esta Idempotency-Key já foi usada para outro plano');
       }
+      return {
+        rateio: {
+          cobrarCents: repetida.charge_cents, creditarCents: repetida.credit_cents,
+          diasRestantes: repetida.days_remaining, diasDoPeriodo: repetida.days_in_period,
+        },
+        faturaId: repetida.invoice_id,
+      };
     }
 
     const linhas = await tx.$queryRaw<
@@ -400,6 +397,7 @@ export async function trocarPlanoPeloDono(entrada: {
         FROM subscriptions s
         LEFT JOIN plans p ON p.code = ${entrada.planoCode}
        WHERE s.tenant_id = ${entrada.tenantId}::uuid
+       FOR UPDATE OF s
     `;
     const atual = linhas[0];
     if (!atual) throw new PlataformaError('unknown_tenant', 'Barbearia não encontrada');
@@ -455,6 +453,17 @@ export async function trocarPlanoPeloDono(entrada: {
       });
       faturaId = fatura.id;
     }
+
+    await tx.$executeRaw`
+      INSERT INTO subscription_change_intents
+        (tenant_id, idempotency_key, request_fingerprint, from_plan, to_plan,
+         charge_cents, credit_cents, days_remaining, days_in_period, invoice_id)
+      VALUES (
+        ${entrada.tenantId}::uuid, ${entrada.idempotencyKey}, ${fingerprint},
+        ${atual.plan_code}, ${atual.novo_code}, ${rateio.cobrarCents}, ${rateio.creditarCents},
+        ${rateio.diasRestantes}, ${rateio.diasDoPeriodo}, ${faturaId}::uuid
+      )
+    `;
 
     /**
      * A trilha da plataforma, com `admin_id` nulo — foi o dono, não o suporte.

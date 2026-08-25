@@ -1,5 +1,6 @@
 import { withTenant } from '@barbearia/db';
 import { CatalogError } from './servicos.js';
+import { travarCatalogoDoTenant } from './concorrencia.js';
 
 /**
  * Recursos: cadeira, lavatório, sala.
@@ -67,7 +68,21 @@ export async function saveResources(params: {
   readonly pools: readonly { readonly resourceType: string; readonly capacity: number }[];
 }): Promise<void> {
   await withTenant(params.tenantId, async (tx) => {
+    // Pool é por unidade, mas a exigência do serviço é da rede inteira. As duas
+    // rotas que mexem nessa invariável disputam a mesma trava do tenant.
+    await travarCatalogoDoTenant(tx, 'resources');
+    const unidades = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM locations WHERE id = ${params.locationId}::uuid AND active
+    `;
+    if (!unidades[0]) throw new CatalogError('location_not_found', 'Esta unidade não existe.');
+
+    const vistos = new Set<string>();
     for (const pool of params.pools) {
+      const tipo = pool.resourceType.trim();
+      if (!tipo || vistos.has(tipo)) {
+        throw new CatalogError('invalid_catalog', 'Cada tipo de recurso deve aparecer uma única vez.');
+      }
+      vistos.add(tipo);
       if (pool.capacity < 1) {
         throw new CatalogError(
           'invalid_catalog',
@@ -135,6 +150,12 @@ export async function setServiceResources(params: {
   readonly requirements: readonly { readonly resourceType: string; readonly quantity: number }[];
 }): Promise<void> {
   await withTenant(params.tenantId, async (tx) => {
+    await travarCatalogoDoTenant(tx, 'resources');
+    const unidades = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM locations WHERE id = ${params.locationId}::uuid AND active
+    `;
+    if (!unidades[0]) throw new CatalogError('location_not_found', 'Esta unidade não existe.');
+
     const existe = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM services WHERE id = ${params.serviceId}::uuid
     `;
@@ -145,7 +166,12 @@ export async function setServiceResources(params: {
     `;
     const conhecidos = new Set(pools.map((p) => p.resource_type));
 
+    const exigenciasVistas = new Set<string>();
     for (const exigencia of params.requirements) {
+      if (exigenciasVistas.has(exigencia.resourceType)) {
+        throw new CatalogError('invalid_catalog', 'Cada recurso deve aparecer uma única vez no serviço.');
+      }
+      exigenciasVistas.add(exigencia.resourceType);
       if (!conhecidos.has(exigencia.resourceType)) {
         throw new CatalogError(
           'invalid_catalog',

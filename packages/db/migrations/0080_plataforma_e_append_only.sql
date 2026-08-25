@@ -49,12 +49,11 @@ CREATE POLICY plans_escrita ON plans
  *    contra `FORCE ROW LEVEL SECURITY`, que sujeita até o dono da tabela.
  *
  * Ou seja: a tabela é escrita pelo lado da barbearia o tempo todo, de propósito.
- * O que ela não pode escrever são as **três colunas comerciais** — e RLS não
+ * O que ela não pode escrever são os **termos comerciais da plataforma** — e RLS não
  * recorta coluna, então o recorte é gatilho, como em `marketplace_attributions`.
  *
- * O achado do bloco 49 é este e nenhum outro: `platform_fee_bps` e
- * `marketplace_fee_bps` são o preço que a barbearia paga, e `blocked_at` é o
- * bloqueio que ela cumpre. Numa coluna de `tenants` a rota do painel deixava o
+ * O achado do bloco 49 começou pelas taxas e pelo bloqueio; migrações posteriores
+ * também tratam `plan_id` e `blocked_reason` como termos mantidos pela plataforma. Numa coluna de `tenants` a rota do painel deixava o
  * cliente definir o próprio preço; mover a coluna resolveu o caminho, e a
  * conclusão daquele bloco foi que o caminho de acesso não basta.
  */

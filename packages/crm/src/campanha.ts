@@ -1,4 +1,4 @@
-import { withTenant } from '@barbearia/db';
+import { sql, withTenant, type Sql } from '@barbearia/db';
 import {
   campanhaParada,
   decidirDisparo,
@@ -8,6 +8,7 @@ import {
   TIPOS_DE_CAMPANHA,
   TIPOS_PROMOCIONAIS,
   tipoDeCampanhaValido,
+  WhatsAppDeliveryUnknownError,
   type EstadoDeCampanha,
   type FiltroDeCampanha,
   type Segmento,
@@ -17,6 +18,12 @@ import { audit } from '@barbearia/identity';
 import { enfileirarPara } from '@barbearia/jobs';
 import { churnDaBase } from './churn.js';
 import { segmentosDaBase } from './segmento.js';
+import {
+  confirmarDisparoPromocional,
+  liberarDisparoPromocional,
+  marcarDisparoPromocionalIncerto,
+  reservarDisparoPromocional,
+} from './disparo-promocional.js';
 
 /**
  * Campanhas (bloco 57, SPEC §4.13).
@@ -447,19 +454,22 @@ export async function criarCampanha(params: {
      * receberam" com gente que nunca poderia receber — e a receita atribuída
      * divide por esse número.
      */
-    const publico = await tx.$executeRawUnsafe(
-      `INSERT INTO campaign_targets (tenant_id, campaign_id, customer_id)
-       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid, $1::uuid, c.id
-         FROM customers c
-        WHERE c.anonymized_at IS NULL AND c.phone_e164 IS NOT NULL
-          AND ${condicaoDoFiltro(params.filtro)}
-       ON CONFLICT (campaign_id, customer_id) DO NOTHING`,
-      campanha.id,
-      params.agora,
-      params.valorDoFiltro ?? 0,
-      params.diaDaSemana ?? 0,
-      params.filtro === 'risco_de_abandono' ? doChurn : doSegmento,
-    );
+    const publicoAlvo = params.filtro === 'risco_de_abandono' ? doChurn : doSegmento;
+    const condicao = condicaoDoFiltro({
+      filtro: params.filtro,
+      agora: params.agora,
+      valor: params.valorDoFiltro ?? 0,
+      diaDaSemana: params.diaDaSemana ?? 0,
+      ids: publicoAlvo,
+    });
+    const publico = await tx.$executeRaw(sql`
+      INSERT INTO campaign_targets (tenant_id, campaign_id, customer_id)
+      SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid, ${campanha.id}::uuid, c.id
+        FROM customers c
+       WHERE c.anonymized_at IS NULL AND c.phone_e164 IS NOT NULL
+         AND ${condicao}
+      ON CONFLICT (campaign_id, customer_id) DO NOTHING
+    `);
 
     await audit(tx, {
       actorId: params.staffId,
@@ -485,61 +495,40 @@ export async function criarCampanha(params: {
  * Por isso todo caso menciona os quatro: um parâmetro que o Postgres nunca vê no
  * texto é um parâmetro sem tipo inferido, e a instrução é recusada.
  */
-function condicaoDoFiltro(filtro: FiltroDeCampanha): string {
-  /**
-   * Todo caso menciona os quatro parâmetros, inclusive os que não usa.
-   *
-   * Não é adorno: a instrução vai com cinco valores sempre, e o Postgres recusa
-   * um `bind` com mais parâmetros do que o texto declara. Antes de `$5` existir
-   * isso já era assim para `$3` e `$4` — o que muda é que agora há uma frase
-   * explicando por quê.
-   */
-  const naoUsados = `$2::timestamptz IS NOT NULL AND $3::int IS NOT NULL
-                     AND $4::int IS NOT NULL AND $5::uuid[] IS NOT NULL`;
-  switch (filtro) {
+function condicaoDoFiltro(params: {
+  readonly filtro: FiltroDeCampanha;
+  readonly agora: Date;
+  readonly valor: number;
+  readonly diaDaSemana: number;
+  readonly ids: readonly string[];
+}): Sql {
+  switch (params.filtro) {
     case 'em_risco':
     case 'perdido':
     case 'vip':
     case 'risco_de_abandono':
-      /**
-       * A lista já veio decidida por `packages/core`, e ela sai de uma consulta
-       * feita sob a RLS **desta** barbearia — ninguém de fora entra por aqui.
-       * As condições de anonimizado e telefone continuam valendo por cima, como
-       * em todo filtro.
-       */
-      return `c.id = ANY($5::uuid[]) AND $2::timestamptz IS NOT NULL
-              AND $3::int IS NOT NULL AND $4::int IS NOT NULL`;
+      return sql`c.id = ANY(${[...params.ids]}::uuid[])`;
     case 'todos':
-      return `(${naoUsados})`;
+      return sql`TRUE`;
     case 'inativos':
-      return `NOT EXISTS (
-                SELECT 1 FROM appointments a
-                 WHERE a.customer_id = c.id
-                   AND a.starts_at > $2::timestamptz - ($3::int * interval '1 day')
-              ) AND $4::int IS NOT NULL AND $5::uuid[] IS NOT NULL`;
+      return sql`NOT EXISTS (
+        SELECT 1 FROM appointments a
+         WHERE a.customer_id = c.id
+           AND a.starts_at > ${params.agora}::timestamptz - (${params.valor}::int * interval '1 day')
+      )`;
     case 'aniversariantes':
-      return `c.birth_date IS NOT NULL
-              AND EXTRACT(MONTH FROM c.birth_date) = EXTRACT(MONTH FROM $2::timestamptz)
-              AND $3::int IS NOT NULL AND $4::int IS NOT NULL
-              AND $5::uuid[] IS NOT NULL`;
+      return sql`c.birth_date IS NOT NULL
+        AND EXTRACT(MONTH FROM c.birth_date) = EXTRACT(MONTH FROM ${params.agora}::timestamptz)`;
     case 'celula_fria':
-      /**
-       * Quem **costuma vir naquele horário** — e não quem já veio uma vez.
-       *
-       * A célula fria é uma hora que a barbearia quer encher; o público certo é
-       * quem tem o hábito daquele horário, porque é quem pode voltar a ele. Uma
-       * campanha para toda a base sobre uma terça às 14h é ruído para quem só
-       * corta no sábado.
-       */
-      return `EXISTS (
-                SELECT 1 FROM appointments a
-                 JOIN locations l ON l.id = a.location_id
-                 WHERE a.customer_id = c.id
-                   AND a.status = 'completed'
-                   AND a.starts_at > $2::timestamptz - interval '180 days'
-                   AND EXTRACT(DOW FROM a.starts_at AT TIME ZONE l.timezone)::int = $4::int
-                   AND EXTRACT(HOUR FROM a.starts_at AT TIME ZONE l.timezone)::int = $3::int
-              ) AND $5::uuid[] IS NOT NULL`;
+      return sql`EXISTS (
+        SELECT 1 FROM appointments a
+        JOIN locations l ON l.id = a.location_id
+         WHERE a.customer_id = c.id
+           AND a.status = 'completed'
+           AND a.starts_at > ${params.agora}::timestamptz - interval '180 days'
+           AND EXTRACT(DOW FROM a.starts_at AT TIME ZONE l.timezone)::int = ${params.diaDaSemana}::int
+           AND EXTRACT(HOUR FROM a.starts_at AT TIME ZONE l.timezone)::int = ${params.valor}::int
+      )`;
   }
 }
 
@@ -767,69 +756,81 @@ export async function despacharCampanha(params: {
     }
 
     /**
-     * O carimbo vem antes da mensagem — precedente do bloco 54 — e usa o
-     * relógio **injetado**, não o `now()` do banco.
-     *
-     * A decisão logo acima já recebe `agora` por parâmetro, como manda a regra
-     * do projeto. Carimbar com `now()` fazia as duas discordarem: a regra de
-     * um-por-dia comparava a data do parâmetro com uma coluna gravada pelo
-     * relógio do processo, e o teste flagrou — a segunda campanha do mesmo dia
-     * saía porque as duas datas eram diferentes.
+     * A vaga promocional é reservada **antes** da chamada externa, usando o
+     * relógio injetado e o dia local da unidade. `sent_at` só é gravado depois
+     * de o provedor confirmar o envio. Assim concorrência não duplica a vaga e
+     * uma falha explícita do provedor não vira falso positivo de entrega.
      */
-    const nosso = await withTenant(params.tenantId, async (tx) => {
-      const afetadas = await tx.$executeRaw`
-        UPDATE campaign_targets SET sent_at = ${params.agora}
-         WHERE id = ${alvo.id}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
-      `;
-      if (afetadas !== 1) return false;
+    const intentKey = `promo:campanha:${alvo.id}`;
+    const reserva = await withTenant(params.tenantId, (tx) =>
+      reservarDisparoPromocional(tx, {
+        tenantId: params.tenantId,
+        customerId: alvo.customerId,
+        intentKey,
+        tipo: alvo.tipo,
+        agora: params.agora,
+        timeZone: params.timeZone,
+      }),
+    );
 
-      /**
-       * A linha em `notifications`, **na mesma transação do carimbo**.
-       *
-       * É ela que faz esta mensagem contar no teto do mês e na regra de uma por
-       * dia — as duas leem daqui. Fora da transação, um processo que caísse
-       * entre o carimbo e a gravação deixaria uma mensagem enviada que não
-       * conta em lugar nenhum, e o teto voltaria a valer menos do que promete.
-       */
-      /**
-       * `sent_at` sai do relógio **injetado**, e não do `DEFAULT now()`.
-       *
-       * O carimbo em `campaign_targets` logo acima usa `params.agora`; deixar
-       * esta linha no relógio do banco faz as duas discordarem, e quem conta o
-       * dia compara `agora` com uma coluna gravada por outro relógio. Foi assim
-       * que a primeira versão deste conserto passou o teste do teto e reprovou
-       * o de "uma por dia": a linha existia, com a data de hoje, e a pergunta
-       * era sobre o dia de `AGORA`.
-       */
-      await tx.$executeRaw`
-        INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked, sent_at)
-        VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-                ${alvo.tipo}::notification_kind, ${alvo.customerId}::uuid,
-                'sent', NULL, ${params.agora})
-      `;
-      return true;
-    });
-    if (!nosso) continue;
+    if (!reserva.nossa) {
+      if (reserva.motivo === 'ja_enviado') continue;
+      if (reserva.motivo === 'envio_em_andamento') {
+        // Outro worker ganhou este alvo e ainda está na chamada externa. Não
+        // fecha a campanha enquanto o desfecho dele não existir.
+        throw new Error('há um alvo de campanha ainda em envio');
+      }
 
-    const wamid = await params.enviar(alvo);
-    enviados += 1;
-
-    /**
-     * O `wamid` numa gravação **depois** do envio, e não junto do carimbo.
-     *
-     * O carimbo vem antes por decisão do bloco 54 — carimbar depois perde o
-     * carimbo se o processo cair, e a volta seguinte remanda. O id só existe
-     * depois de a Meta responder, então ele não cabe naquela instrução. Perdê-lo
-     * custa a linha de "entregue" desta pessoa; perder o carimbo custaria a
-     * mensagem duas vezes, e entre as duas o produto escolhe a primeira.
-     */
-    if (wamid) {
       await withTenant(params.tenantId, async (tx) => {
         await tx.$executeRaw`
-          UPDATE campaign_targets SET wamid = ${wamid} WHERE id = ${alvo.id}::uuid
+          UPDATE campaign_targets
+             SET skipped_reason = ${reserva.motivo ?? 'ja_recebeu_hoje'}
+           WHERE id = ${alvo.id}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
         `;
       });
+      pulados += 1;
+      continue;
     }
+
+    let wamid: string | null;
+    try {
+      wamid = await params.enviar(alvo);
+    } catch (erro) {
+      if (erro instanceof WhatsAppDeliveryUnknownError) {
+        await withTenant(params.tenantId, async (tx) => {
+          await marcarDisparoPromocionalIncerto(tx, intentKey, params.agora);
+          await tx.$executeRaw`
+            UPDATE campaign_targets SET skipped_reason = 'entrega_incerta'
+             WHERE id = ${alvo.id}::uuid AND sent_at IS NULL AND skipped_reason IS NULL
+          `;
+        });
+        pulados += 1;
+        continue;
+      }
+
+      await withTenant(params.tenantId, (tx) => liberarDisparoPromocional(tx, intentKey));
+      throw erro;
+    }
+
+    await withTenant(params.tenantId, async (tx) => {
+      const afetadas = await tx.$executeRaw`
+        UPDATE campaign_targets
+           SET sent_at = ${params.agora}, wamid = ${wamid}, skipped_reason = NULL
+         WHERE id = ${alvo.id}::uuid AND sent_at IS NULL
+      `;
+      if (afetadas !== 1) throw new Error('alvo deixou de pertencer a este despacho');
+
+      const confirmou = await confirmarDisparoPromocional(tx, {
+        intentKey,
+        tipo: alvo.tipo,
+        customerId: alvo.customerId,
+        phoneMasked: null,
+        wamid,
+        enviadoEm: params.agora,
+      });
+      if (!confirmou) throw new Error('reserva promocional da campanha não pôde ser confirmada');
+    });
+    enviados += 1;
   }
 
   await withTenant(params.tenantId, async (tx) => {

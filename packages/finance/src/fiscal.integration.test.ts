@@ -308,6 +308,35 @@ describeIfDb('fiscal', () => {
     expect(emissor.emitidas.every((p) => p.orderId === orderId)).toBe(true);
   });
 
+  it('resposta perdida da emissão é retomada pela mesma chave, sem nota duplicada', async () => {
+    await cadastrar();
+    const orderId = await venderCorte();
+    const emissor = new FakeFiscalProvider();
+    emissor.proximoEstado = 'processando';
+    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
+
+    const emitirReal = emissor.emitir.bind(emissor);
+    let primeira = true;
+    emissor.emitir = async (pedido) => {
+      const resposta = await emitirReal(pedido);
+      if (primeira) {
+        primeira = false;
+        throw new Error('resposta da prefeitura se perdeu');
+      }
+      return resposta;
+    };
+
+    await expect(enviarNota({ tenantId: TENANT, invoiceId: nota!.id, provider: emissor }))
+      .rejects.toThrow(/resposta da prefeitura/);
+    expect((await notaDaVenda(TENANT, LOCATION, orderId))?.estado).toBe('processando');
+
+    await enviarNota({ tenantId: TENANT, invoiceId: nota!.id, provider: emissor });
+    // O Fake respeita `chaveDaNota`: a segunda chamada reencontra a emissão
+    // externa da primeira e não cria uma segunda nota.
+    expect(emissor.emitidas).toHaveLength(1);
+    expect((await notaDaVenda(TENANT, LOCATION, orderId))?.estado).toBe('processando');
+  });
+
   it('a nota em curso é perguntada de novo, e é assim que ela sai de processando', async () => {
     /**
      * A prefeitura responde depois e sem webhook: perguntar é o **único**

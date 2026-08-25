@@ -148,6 +148,113 @@ async function menuDoPainel(page) {
   return new Set(hrefs);
 }
 
+/**
+ * V8 técnico em runtime.
+ *
+ * Não tenta decidir se a tela é bonita. Mede defeitos objetivos que uma revisão
+ * visual costuma descobrir tarde: rolagem horizontal do documento, imagem
+ * quebrada, controle sem nome/rótulo, alvo autônomo pequeno, tabela larga sem
+ * recipiente próprio e hierarquia sem um H1 único.
+ *
+ * O mesmo diagnóstico roda em 1280 e 360 px. Assim "não tem scrollbar no
+ * desktop" não vira aprovação de uma tela que corta conteúdo no celular.
+ */
+async function auditarSuperficie(page, rota, largura) {
+  await page.setViewportSize({ width: largura, height: largura <= 480 ? 800 : 1000 });
+  // Um frame basta para media/container queries e layout assentarem após mudar
+  // o viewport; não há animação necessária para a medição.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+
+  return page.evaluate(({ rota, largura }) => {
+    const visivel = (el) => {
+      const estilo = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return estilo.display !== 'none' && estilo.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+    };
+    const textoDe = (id) => document.getElementById(id)?.textContent?.trim() ?? '';
+    const nomeAcessivelBasico = (el) => {
+      const aria = el.getAttribute('aria-label')?.trim();
+      if (aria) return aria;
+      const por = el.getAttribute('aria-labelledby')?.trim();
+      if (por) {
+        const lido = por.split(/\s+/).map(textoDe).filter(Boolean).join(' ').trim();
+        if (lido) return lido;
+      }
+      if ('labels' in el && el.labels?.length) {
+        const lido = [...el.labels].map((l) => l.textContent?.trim() ?? '').filter(Boolean).join(' ').trim();
+        if (lido) return lido;
+      }
+      const texto = el.textContent?.trim();
+      if (texto) return texto;
+      const title = el.getAttribute('title')?.trim();
+      if (title) return title;
+      return '';
+    };
+    const alvo = (el) => {
+      if (el instanceof HTMLInputElement && ['checkbox', 'radio'].includes(el.type)) {
+        const label = el.labels?.[0];
+        if (label && visivel(label)) return label.getBoundingClientRect();
+      }
+      return el.getBoundingClientRect();
+    };
+
+    const problemas = [];
+    const raiz = document.documentElement;
+    const excesso = Math.ceil(raiz.scrollWidth - raiz.clientWidth);
+    if (excesso > 1) problemas.push(`overflow horizontal do documento: +${excesso}px`);
+
+    const h1 = [...document.querySelectorAll('h1')].filter(visivel);
+    if (h1.length !== 1) problemas.push(`H1 visível: ${h1.length} (esperado 1)`);
+
+    const imagens = [...document.images].filter(visivel);
+    for (const img of imagens) {
+      if (!img.hasAttribute('alt')) problemas.push(`imagem sem alt: ${img.currentSrc || img.src}`);
+      if (img.complete && img.naturalWidth === 0) problemas.push(`imagem quebrada: ${img.currentSrc || img.src}`);
+    }
+
+    const controles = [...document.querySelectorAll('input, select, textarea')].filter(visivel);
+    for (const el of controles) {
+      if (el instanceof HTMLInputElement && ['hidden', 'submit', 'button', 'reset', 'image'].includes(el.type)) continue;
+      if (!nomeAcessivelBasico(el)) {
+        problemas.push(`controle sem rótulo: ${el.tagName.toLowerCase()}[name="${el.getAttribute('name') ?? ''}"]`);
+      }
+    }
+
+    const interativos = [...document.querySelectorAll('button, summary, a[href], [role="button"]')].filter(visivel);
+    for (const el of interativos) {
+      if (!nomeAcessivelBasico(el)) {
+        problemas.push(`ação sem nome: ${el.tagName.toLowerCase()}.${el.className || ''}`);
+      }
+    }
+
+    // 44px é o contrato do Barberdock para alvos autônomos. Links corridos em
+    // texto ficam fora: a exceção é intencional e evita marcar parágrafos como
+    // se fossem botões.
+    const alvos = [...document.querySelectorAll('button, summary, a.ui-button, input[type="checkbox"], input[type="radio"], select')].filter(visivel);
+    for (const el of alvos) {
+      const r = alvo(el);
+      if (r.width + 0.5 < 44 || r.height + 0.5 < 44) {
+        problemas.push(`alvo <44px: ${el.tagName.toLowerCase()}.${el.className || ''} (${Math.round(r.width)}x${Math.round(r.height)})`);
+      }
+    }
+
+    for (const tabela of [...document.querySelectorAll('table')].filter(visivel)) {
+      const r = tabela.getBoundingClientRect();
+      if (r.width > innerWidth + 1 && !tabela.closest('.ui-scroll-x')) {
+        problemas.push(`tabela larga sem .ui-scroll-x: ${Math.round(r.width)}px`);
+      }
+    }
+
+    return { rota, largura, problemas };
+  }, { rota, largura });
+}
+
+function registrarAuditoria(resultado, destino = falhas) {
+  for (const problema of resultado.problemas) {
+    destino.push(`V8 ${resultado.largura}px ${resultado.rota}: ${problema}`);
+  }
+}
+
 let menu = null;
 
 for (const [nome, rota, papel, pergunta] of AREAS) {
@@ -215,6 +322,12 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
     continue;
   }
 
+  // V8 técnico nas duas larguras de aceite. Restauramos o desktop porque a
+  // próxima navegação do laço foi originalmente medida nele.
+  registrarAuditoria(await auditarSuperficie(page, rota, 1280));
+  registrarAuditoria(await auditarSuperficie(page, rota, 360));
+  await page.setViewportSize({ width: 1280, height: 1000 });
+
   /**
    * O estado vazio é uma tela **certa** — e é ela que mente quando há dado.
    *
@@ -236,6 +349,37 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
   }
   console.log(`\x1b[32mok\x1b[0m     ${nome.padEnd(16)} ${String(noBanco).padStart(6)} no banco · ${(levou / 1000).toFixed(1)}s · ${papel}`);
 }
+
+// ---------------------------------------------------------------------------
+// V8 técnico — todas as portas visíveis do dono
+// ---------------------------------------------------------------------------
+
+// As áreas acima cobrem o dado de cada domínio. Aqui a pergunta é outra: toda
+// porta que o dono consegue abrir precisa continuar tecnicamente íntegra mesmo
+// quando não há uma consulta de banco específica para ela (Clientes, Recursos,
+// Plano, Preferências etc.). O próprio menu é a fonte, então tela nova entra na
+// auditoria sem uma segunda lista para manter.
+if (!paginas['dono']) {
+  const ctx = await navegador.newContext({ viewport: { width: 1280, height: 1000 } });
+  paginas['dono'] = await ctx.newPage();
+  await entrar(paginas['dono'], 'dono');
+}
+const paginaV8 = paginas['dono'];
+menu ??= await menuDoPainel(paginaV8);
+let v8Conferidas = 0;
+for (const rota of [...menu].filter((href) => href.startsWith('/admin/'))) {
+  const resposta = await paginaV8.goto(`${WEB}${rota}`, { waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => null);
+  if (!resposta || resposta.status() >= 400 || !paginaV8.url().includes(rota)) {
+    falhas.push(`V8: ${rota} não abriu para o dono`);
+    continue;
+  }
+  await paginaV8.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+  registrarAuditoria(await auditarSuperficie(paginaV8, rota, 1280));
+  registrarAuditoria(await auditarSuperficie(paginaV8, rota, 360));
+  await paginaV8.setViewportSize({ width: 1280, height: 1000 });
+  v8Conferidas += 1;
+}
+console.log(`V8 técnico: ${v8Conferidas} porta(s) visíveis auditadas em 1280px e 360px`);
 
 // ---------------------------------------------------------------------------
 // O mesmo fato, por dois caminhos

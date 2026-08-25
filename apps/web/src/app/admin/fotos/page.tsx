@@ -3,23 +3,11 @@ import type { Metadata } from 'next';
 import { fotosDaBarbearia, type AlvosDeFoto } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoFotos, acaoSair } from '../acoes';
+import { acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { FalhaDaLeitura } from '../falha-da-leitura';
-
-/**
- * Fotos da barbearia.
- *
- * As colunas `cover_url`, `photo_url` e `logo_url` existiam desde o bloco 1 e o
- * perfil público já as devolvia. **Nunca houve por onde preenchê-las** — e o
- * resultado era uma página de barbearia sem uma única imagem, num negócio em
- * que a escolha do cliente é visual antes de ser qualquer outra coisa.
- *
- * Enquanto não há armazenamento próprio (bloco declarado no ROADMAP), o
- * endereço é colado: a barbearia já tem as fotos publicadas em algum lugar. É
- * uma etapa a menos que esperar por infraestrutura de upload para a página
- * deixar de parecer um cardápio de texto.
- */
+import { AvisoDeRecusa } from '../aviso-de-recusa';
+import { UploadDeFoto } from './upload-de-foto';
 
 export const metadata: Metadata = {
   title: 'Fotos',
@@ -33,56 +21,16 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-function Campo({
-  nome,
-  rotulo,
-  valor,
-  dica,
-}: {
-  readonly nome: string;
-  readonly rotulo: string;
-  readonly valor: string | null;
-  readonly dica?: string;
-}) {
-  return (
-    <div className="ui-field foto-campo">
-      <label className="ui-field__label" htmlFor={nome}>
-        {rotulo}
-      </label>
-      <div className="foto-campo__linha">
-        {valor ? (
-          // eslint-disable-next-line @next/next/no-img-element -- endereço externo
-          // arbitrário; `next/image` exigiria cadastrar cada domínio de antemão.
-          <img className="foto-campo__mini" src={valor} alt="" width={96} height={96} />
-        ) : (
-          <span className="foto-campo__mini foto-campo__mini--vazia" aria-hidden="true" />
-        )}
-        <input
-          className="ui-field__input"
-          id={nome}
-          name={nome}
-          type="url"
-          inputMode="url"
-          defaultValue={valor ?? ''}
-          placeholder="https://..."
-          maxLength={500}
-          autoComplete="off"
-        />
-      </div>
-      {dica ? <p className="ui-field__hint">{dica}</p> : null}
-    </div>
-  );
-}
-
 export default async function FotosPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');
 
   const estado = await painelOuDesvio(token);
-
   const resposta = await fotosDaBarbearia(token);
   const query = await searchParams;
   const salvo = first(query['salvo']) === '1';
+  const removido = first(query['removido']) === '1';
+  const erro = first(query['erro']);
 
   if (!resposta.ok) {
     return (
@@ -95,6 +43,7 @@ export default async function FotosPage({ searchParams }: Props) {
   const fotos: AlvosDeFoto = resposta.dados;
   const preenchidas =
     (fotos.coverUrl ? 1 : 0) +
+    (fotos.logoUrl ? 1 : 0) +
     fotos.professionals.filter((p) => p.photoUrl).length +
     fotos.services.filter((s) => s.photoUrl).length;
 
@@ -103,88 +52,87 @@ export default async function FotosPage({ searchParams }: Props) {
       <header className="painel__topo">
         <a className="painel__marca" href="/admin/dia">← {estado.businessName}</a>
         <form action={acaoSair}>
-          <button className="ui-button ui-button--ghost painel__sair" type="submit">
-            Sair
-          </button>
+          <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
         </form>
       </header>
 
-      <h1 className="painel__titulo">Fotos</h1>
+      <h1 className="painel__titulo">Fotos e marca</h1>
       <p className="painel__sub">
-        Cole o endereço de fotos que você já publicou. Elas aparecem na sua página, que hoje é
-        só texto — e em barbearia a escolha do cliente é visual.
+        Envie os arquivos daqui. O Barberdock recorta, reduz e hospeda as imagens no próprio domínio —
+        a sua página deixa de depender de links de Instagram, Drive ou outro host.
       </p>
 
+      <AvisoDeRecusa
+        erro={erro}
+        mapa={{
+          arquivo_vazio: 'Escolha uma imagem antes de enviar.',
+          photo_too_large: 'A imagem preparada passa de 3 MB. Escolha outra.',
+          invalid_photo_type: 'Envie uma imagem JPEG, PNG ou WebP.',
+          invalid_photo_target: 'Não foi possível identificar onde essa imagem deve aparecer.',
+          request_failed: 'Não foi possível enviar a imagem agora. Tente novamente.',
+        }}
+      />
       {salvo ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Fotos salvas. {preenchidas === 0 ? 'Nenhuma foi aceita — confira se o endereço começa com https://.' : null}{' '}
-          <a href={`/${estado.slug}`} rel="noopener noreferrer" target="_blank">
-            Ver a página
-          </a>
+          Imagem enviada e publicada.{' '}
+          <a href={`/${estado.slug}`} rel="noopener noreferrer" target="_blank">Ver a página</a>
         </div>
       ) : null}
+      {removido ? <div className="ui-alert painel__aviso" role="status">Imagem removida.</div> : null}
 
-      <form action={acaoFotos} className="formulario">
-        <fieldset className="painel__grupo">
-          <legend className="rotulo">A barbearia</legend>
-          <Campo
-            nome="coverUrl"
-            rotulo="Foto do ambiente"
-            valor={fotos.coverUrl}
-            dica="A que mostra o salão. Aparece logo abaixo dos horários de hoje."
-          />
-          <Campo
-            nome="logoUrl"
-            rotulo="Logo"
-            valor={fotos.logoUrl}
-            dica="Opcional. Usada no cabeçalho e no compartilhamento."
-          />
-        </fieldset>
+      <section className="painel__grupo" aria-labelledby="fotos-casa">
+        <h2 className="rotulo" id="fotos-casa">A barbearia</h2>
+        <UploadDeFoto
+          atual={fotos.coverUrl}
+          dica="Ambiente/fachada. Recorte automático 16:9, até 1600 × 900."
+          rotulo="Foto do ambiente"
+          target="cover"
+        />
+        <UploadDeFoto
+          atual={fotos.logoUrl}
+          dica="A imagem inteira é preservada dentro de 800 × 800."
+          rotulo="Logo"
+          target="logo"
+        />
+      </section>
 
-        {fotos.professionals.length > 0 ? (
-          <fieldset className="painel__grupo">
-            <legend className="rotulo">Quem atende</legend>
-            <p className="ui-field__hint">
-              O cliente escolhe barbeiro por rosto. Sem foto, esta seção é uma lista de nomes.
-            </p>
-            {fotos.professionals.map((pessoa) => (
-              <Campo
-                key={pessoa.id}
-                nome={`pro_${pessoa.id}`}
-                rotulo={pessoa.name}
-                valor={pessoa.photoUrl}
-              />
-            ))}
-          </fieldset>
-        ) : null}
+      {fotos.professionals.length > 0 ? (
+        <section className="painel__grupo" aria-labelledby="fotos-equipe">
+          <h2 className="rotulo" id="fotos-equipe">Quem atende</h2>
+          <p className="ui-field__hint">Retrato quadrado. O rosto fica no centro do recorte.</p>
+          {fotos.professionals.map((pessoa) => (
+            <UploadDeFoto
+              atual={pessoa.photoUrl}
+              dica="Recorte automático 1:1, até 800 × 800."
+              key={pessoa.id}
+              rotulo={pessoa.name}
+              target="professional"
+              targetId={pessoa.id}
+            />
+          ))}
+        </section>
+      ) : null}
 
-        {fotos.services.length > 0 ? (
-          <fieldset className="painel__grupo">
-            <legend className="rotulo">Serviços</legend>
-            <p className="ui-field__hint">
-              A foto do resultado vende melhor que a descrição. Deixe em branco o que não tiver.
-            </p>
-            {fotos.services.map((servico) => (
-              <Campo
-                key={servico.id}
-                nome={`srv_${servico.id}`}
-                rotulo={servico.name}
-                valor={servico.photoUrl}
-              />
-            ))}
-          </fieldset>
-        ) : null}
-
-        <div className="ui-sticky-action">
-          <button className="ui-button ui-button--primary ui-button--block" type="submit">
-            Salvar fotos
-          </button>
-        </div>
-      </form>
+      {fotos.services.length > 0 ? (
+        <section className="painel__grupo" aria-labelledby="fotos-servicos">
+          <h2 className="rotulo" id="fotos-servicos">Serviços</h2>
+          <p className="ui-field__hint">Use a foto do resultado. Ela aparece no catálogo público.</p>
+          {fotos.services.map((servico) => (
+            <UploadDeFoto
+              atual={servico.photoUrl}
+              dica="Recorte automático 1:1, até 600 × 600."
+              key={servico.id}
+              rotulo={servico.name}
+              target="service"
+              targetId={servico.id}
+            />
+          ))}
+        </section>
+      ) : null}
 
       <p className="painel__nota">
-        Endereço precisa começar com <code>https://</code>. O que não for aceito volta em branco —
-        não é erro seu, é o navegador que bloquearia a imagem.
+        {preenchidas} imagem(ns) cadastrada(s). JPEG, PNG ou WebP; o arquivo original pode ter até 12 MB
+        e a versão enviada ao servidor fica limitada a 3 MB.
       </p>
     </main>
   );

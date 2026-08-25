@@ -425,6 +425,67 @@ describeIfDb('transferência de estoque entre unidades', () => {
     expect(daRede.atual.receitaAssinaturasCents).toBe(9900);
   });
 
+  it('assinatura histórica sem unidade aparece só no consolidado', async () => {
+    const CLIENTE = 'c5858585-0000-0000-0000-000000000011';
+    const PLANO = 'b5858585-0000-0000-0000-000000000011';
+    const ASSINATURA = 'f5858585-0000-0000-0000-000000000011';
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('${CLIENTE}', '${TENANT}', 'Cliente legado', '+5571988887711');
+      INSERT INTO club_plans (id, tenant_id, name, price_cents)
+      VALUES ('${PLANO}', '${TENANT}', 'Plano legado', 9900);
+      INSERT INTO club_subscriptions (id, tenant_id, customer_id, plan_id, price_cents, status, started_at, location_id)
+      VALUES ('${ASSINATURA}', '${TENANT}', '${CLIENTE}', '${PLANO}', 9900, 'ativa', '${HOJE}T12:00:00Z', NULL);
+      INSERT INTO club_invoices (tenant_id, subscription_id, period_start, period_end, due_at, amount_cents, status, paid_at)
+      VALUES ('${TENANT}', '${ASSINATURA}', '${HOJE}T00:00:00Z', '2026-12-01T00:00:00Z',
+              '${HOJE}T00:00:00Z', 9900, 'paga', '${HOJE}T14:00:00Z');
+    `);
+
+    const janela = { tenantId: TENANT, de: '2026-11-01', ate: '2026-11-30' };
+    expect((await dreDoPeriodo({ ...janela, unidade: MATRIZ })).atual.receitaAssinaturasCents).toBe(0);
+    expect((await dreDoPeriodo({ ...janela, unidade: FILIAL })).atual.receitaAssinaturasCents).toBe(0);
+    expect((await dreDoPeriodo({ ...janela, unidade: TODAS_AS_UNIDADES })).atual.receitaAssinaturasCents).toBe(9900);
+  });
+
+  it('mensalidade usa o dia local da unidade e benefício não duplica receita', async () => {
+    const CLIENTE = 'c5858585-0000-0000-0000-000000000012';
+    const PLANO = 'b5858585-0000-0000-0000-000000000012';
+    const ASSINATURA = 'f5858585-0000-0000-0000-000000000012';
+    await exec(`
+      INSERT INTO customers (id, tenant_id, name, phone_e164)
+      VALUES ('${CLIENTE}', '${TENANT}', 'Assinante', '+5571988887712');
+      INSERT INTO club_plans (id, tenant_id, name, price_cents)
+      VALUES ('${PLANO}', '${TENANT}', 'Plano', 9900);
+      INSERT INTO club_subscriptions (id, tenant_id, customer_id, plan_id, price_cents, status, started_at, location_id)
+      VALUES ('${ASSINATURA}', '${TENANT}', '${CLIENTE}', '${PLANO}', 9900, 'ativa', '2026-10-01T12:00:00Z', '${FILIAL}');
+      INSERT INTO club_invoices (tenant_id, subscription_id, period_start, period_end, due_at, amount_cents, status, paid_at)
+      VALUES ('${TENANT}', '${ASSINATURA}', '2026-10-01T00:00:00Z', '2026-11-01T00:00:00Z',
+              '2026-10-31T00:00:00Z', 9900, 'paga', '2026-11-01T01:30:00Z');
+
+      WITH nova AS (
+        INSERT INTO orders (tenant_id, location_id, customer_id, status, subtotal_cents, total_cents, business_day, closed_at)
+        VALUES ('${TENANT}', '${FILIAL}', '${CLIENTE}', 'paid', 6000, 6000, '2026-10-31', '2026-11-01T01:30:00Z')
+        RETURNING id
+      ), item AS (
+        INSERT INTO order_items (tenant_id, order_id, kind, description, quantity, unit_price_cents, position)
+        SELECT '${TENANT}', id, 'service', 'Corte incluído', 1, 6000, 0 FROM nova RETURNING order_id
+      )
+      INSERT INTO order_payments (tenant_id, order_id, method, amount_cents)
+      SELECT '${TENANT}', order_id, 'assinatura', 6000 FROM item;
+    `);
+
+    const outubro = await dreDoPeriodo({
+      tenantId: TENANT, unidade: FILIAL, de: '2026-10-31', ate: '2026-10-31',
+    });
+    expect(outubro.atual.receitaAssinaturasCents).toBe(9900);
+    expect(outubro.atual.receitaServicosCents).toBe(0);
+
+    const novembro = await dreDoPeriodo({
+      tenantId: TENANT, unidade: FILIAL, de: '2026-11-01', ate: '2026-11-01',
+    });
+    expect(novembro.atual.receitaAssinaturasCents).toBe(0);
+  });
+
   it('o consolidado soma a receita de serviço das duas lojas', async () => {
     /**
      * Sobre venda, que é a linha que o dono olha primeiro — e o teste é de soma,

@@ -1,5 +1,6 @@
 export * from './ficha.js';
 export * from './importacao.js';
+export * from './resolucao-de-conflito.js';
 export * from './slug-legado.js';
 export * from './lgpd.js';
 export * from './anonimizacao.js';
@@ -16,3 +17,5 @@ export * from './automacao.js';
 export * from './campanha.js';
 export * from './fotos.js';
 export * from './mensagem-avulsa.js';
+
+export * from './clientes.js';

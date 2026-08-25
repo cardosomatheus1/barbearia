@@ -6,9 +6,11 @@
  * resultado é uma página de barbearia sem nenhuma imagem, num negócio em que a
  * escolha do cliente é visual (CLAUDE.md §5).
  *
- * Enquanto não há armazenamento próprio, o endereço vem de fora: a barbearia
- * cola o link da foto que já publicou. Isso torna o campo entrada externa, e
- * entrada externa é validada na borda.
+ * As imagens públicas da barbearia passam a usar `/media/...`, hospedado pelo
+ * próprio produto. `https://` continua aceito aqui porque a mesma função ainda
+ * lê fotos históricas e o portfólio do cliente, cuja migração exige preservar
+ * as regras de consentimento e exclusão — aceitar na leitura não significa que
+ * a tela de Fotos continue permitindo cadastrar host externo.
  */
 
 /** Teto generoso, mas teto: URL sem limite é armazenamento gratuito. */
@@ -27,6 +29,7 @@ const MAX_LENGTH = 500;
  * caractere: é isso que separa `https://exemplo.com/a.jpg` de `https://`.
  */
 const HTTPS = /^https:\/\/[^\s/?#]+(?:[/?#]\S*)?$/i;
+const MEDIA_LOCAL = /^\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[0-9a-f-]{36}\.(?:webp|jpg|png)$/i;
 
 /** Caractere de controle não tem uso legítimo numa URL e quebra cabeçalho. */
 const CONTROLE = /[\u0000-\u001f\u007f]/;
@@ -34,7 +37,9 @@ const CONTROLE = /[\u0000-\u001f\u007f]/;
 /**
  * Aceita a URL como veio, ou devolve `null`.
  *
- * **Só `https`.** Três motivos, nesta ordem:
+ * **Só `https` externo ou `/media/...` hospedado por nós.** A rota local é
+ * fechada no formato que o armazenamento gera; qualquer outro caminho relativo
+ * continua recusado. Para endereço externo, três motivos, nesta ordem:
  *
  * - `javascript:` num `href` é execução de script. Aqui o destino é `src` de
  *   `<img>`, onde não executa — mas a mesma coluna alimenta `og:image`, e uma
@@ -54,7 +59,7 @@ export function imagemPublica(bruto: string | null | undefined): string | null {
   if (texto.length === 0 || texto.length > MAX_LENGTH) return null;
 
   if (CONTROLE.test(texto)) return null;
-  if (!HTTPS.test(texto)) return null;
+  if (!HTTPS.test(texto) && !MEDIA_LOCAL.test(texto)) return null;
 
   return texto;
 }

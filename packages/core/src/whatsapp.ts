@@ -538,6 +538,21 @@ export interface MensagemEnviada {
 }
 
 /**
+ * A chamada de envio terminou sem prova de desfecho.
+ *
+ * Não significa que a mensagem falhou: timeout, reset de conexão ou uma
+ * resposta 2xx sem `wamid` podem acontecer **depois** de a Meta já ter aceitado
+ * o envio. Quem recebe este erro não deve disparar outra mensagem; deve manter
+ * a intenção em estado incerto até reconciliação/decisão explícita.
+ */
+export class WhatsAppDeliveryUnknownError extends Error {
+  constructor(mensagem = 'não foi possível confirmar se a mensagem saiu') {
+    super(mensagem);
+    this.name = 'WhatsAppDeliveryUnknownError';
+  }
+}
+
+/**
  * O que a Meta responde sobre o número em si (bloco 90).
  *
  * `verificado` é a posse do número provada — a pessoa digitou no painel da Meta

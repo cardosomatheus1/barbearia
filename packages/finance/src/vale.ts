@@ -10,6 +10,7 @@ import {
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { lancamentosAbertos, lerModeloDaAssinatura, paraLancamento } from './comissao.js';
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * Vale / adiantamento ao profissional (bloco 52, SPEC §3.10).
@@ -33,7 +34,8 @@ export type ValeRepoFailure =
   | 'vale_nao_aberto'
   | 'vale_nao_encontrado'
   | 'profissional_nao_encontrado'
-  | 'sem_caixa_aberto';
+  | 'sem_caixa_aberto'
+  | 'idempotencia_conflitante';
 
 export class ValeError extends Error {
   constructor(
@@ -55,6 +57,7 @@ const MENSAGEM: Readonly<Record<ValeRepoFailure, string>> = {
   profissional_nao_encontrado: 'Profissional não encontrado.',
   sem_caixa_aberto:
     'Não há caixa aberto. Abra o caixa para tirar ou devolver dinheiro da gaveta.',
+  idempotencia_conflitante: 'Esta Idempotency-Key já foi usada para outro vale.',
 };
 
 function recusar(code: ValeRepoFailure, detalhe?: Record<string, number>): never {
@@ -102,11 +105,11 @@ async function jaAdiantado(
   tx: TransactionClient,
   professionalId: string,
 ): Promise<number> {
-  const linhas = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(amount_cents)::int AS total FROM professional_advances
+  const linhas = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(amount_cents)::bigint AS total FROM professional_advances
      WHERE professional_id = ${professionalId}::uuid AND status = 'aberto'
   `;
-  return linhas[0]?.total ?? 0;
+  return inteiroSeguroDoBanco(linhas[0]?.total, 'adiantamentos do profissional');
 }
 
 export interface TetoDoVale {
@@ -168,12 +171,13 @@ export async function conceberVale(params: {
   readonly ate: string;
   readonly motivo?: string | null;
   readonly pelaGaveta: boolean;
-  readonly idempotencyKey?: string;
+  readonly idempotencyKey: string;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<{ readonly id: string }> {
   const falhaDoMotivo = validarMotivoDoVale(params.motivo);
   if (falhaDoMotivo) recusar('motivo_obrigatorio');
+  const fingerprint = JSON.stringify([params.locationId, params.professionalId, params.valorCents, params.concedidoEm, params.de, params.ate, params.motivo?.trim() ?? '', params.pelaGaveta]);
 
   return withTenant(params.tenantId, async (tx) => {
     /**
@@ -182,13 +186,15 @@ export async function conceberVale(params: {
      * há estado que distinga o segundo da repetição do primeiro. É a mesma
      * situação da transferência entre contas do bloco 51.
      */
-    if (params.idempotencyKey) {
-      const jaFeito = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM professional_advances
-         WHERE idempotency_key = ${params.idempotencyKey}
-      `;
-      const anterior = jaFeito[0];
-      if (anterior) return { id: anterior.id };
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${params.tenantId}:${params.idempotencyKey}`}, 0))`;
+    const jaFeito = await tx.$queryRaw<{ id: string; idempotency_fingerprint: string | null }[]>`
+      SELECT id, idempotency_fingerprint FROM professional_advances
+       WHERE idempotency_key = ${params.idempotencyKey}
+    `;
+    const anterior = jaFeito[0];
+    if (anterior) {
+      if (anterior.idempotency_fingerprint && anterior.idempotency_fingerprint !== fingerprint) recusar('idempotencia_conflitante');
+      return { id: anterior.id };
     }
 
     /**
@@ -240,12 +246,12 @@ export async function conceberVale(params: {
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO professional_advances
         (tenant_id, location_id, professional_id, amount_cents, granted_on, reason,
-         cash_movement_id, idempotency_key, created_by, created_by_name)
+         cash_movement_id, idempotency_key, idempotency_fingerprint, created_by, created_by_name)
       SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid,
              ${params.locationId}::uuid, ${params.professionalId}::uuid,
              ${params.valorCents}, ${params.concedidoEm}::date,
              ${params.motivo?.trim() || null}, ${movimentoId}::uuid,
-             ${params.idempotencyKey ?? null},
+             ${params.idempotencyKey}, ${fingerprint},
              ${params.staffId}::uuid, ${params.staffName}
        -- O profissional precisa ser **desta loja**, e nao so existir.
        -- A versao anterior conferia a unidade, nunca a cadeira: a gerente
@@ -301,11 +307,11 @@ async function sangriaDoVale(
   const sessao = sessoes[0];
   if (!sessao) recusar('sem_caixa_aberto');
 
-  const somas = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(amount_cents)::int AS total FROM cash_movements
+  const somas = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(amount_cents)::bigint AS total FROM cash_movements
      WHERE session_id = ${sessao.id}::uuid
   `;
-  const naGaveta = somas[0]?.total ?? 0;
+  const naGaveta = inteiroSeguroDoBanco(somas[0]?.total, 'saldo da gaveta');
   if (params.valorCents > naGaveta) {
     throw new ValeError(
       'valor_invalido',

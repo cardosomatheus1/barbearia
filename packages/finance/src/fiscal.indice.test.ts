@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ESTADOS_EM_VOO, ESTADOS_QUE_OCUPAM_A_VENDA } from '@barbearia/core';
@@ -68,7 +68,13 @@ describe('nota viva por comanda', () => {
     // O `IN ('pendente', ...)` literal é justamente o que divergiu, e as duas
     // listas deste arquivo se parecem o bastante para que a cópia errada não
     // chame atenção na revisão. Nenhuma delas mora aqui: as duas vêm de `core`.
-    const codigo = readFileSync(join(import.meta.dirname, 'fiscal.ts'), 'utf8')
+    // Todos os módulos de fiscal, não só `fiscal.ts`: ele virou barril quando o
+    // arquivo foi partido, e uma guarda que lê o barril passa a olhar para um
+    // `export *` — verde sobre um lugar onde consulta nenhuma mora.
+    const codigo = readdirSync(import.meta.dirname)
+      .filter((nome) => /^fiscal[-.].*\.ts$/.test(nome) && !nome.includes('.test.'))
+      .map((nome) => readFileSync(join(import.meta.dirname, nome), 'utf8'))
+      .join('\n')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/[^\n]*/g, '');
     expect(codigo).not.toMatch(/status\s*(::text)?\s+IN\s*\(/i);

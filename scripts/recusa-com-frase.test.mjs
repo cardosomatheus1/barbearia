@@ -69,7 +69,7 @@ describe('a recusa mostra a frase do domínio', () => {
   it('as ações passam o resultado inteiro, para a frase ser gravada', () => {
     const soOCodigo = [];
 
-    for (const f of arquivos('apps/web/src/app').filter((f) => f.endsWith('acoes.ts'))) {
+    for (const f of arquivos('apps/web/src/app').filter((f) => f.endsWith('acoes.ts') || /\/acoes\/[^/]+\.ts$/.test(f))) {
       const texto = ler(f);
       for (const [i, linha] of texto.split('\n').entries()) {
         if (!/\bfalhar\(/.test(linha) || !/resultado\.code/.test(linha)) continue;

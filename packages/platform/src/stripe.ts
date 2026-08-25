@@ -40,6 +40,14 @@ export const VERSAO_DA_API_STRIPE = '2024-06-20';
 
 const BASE = 'https://api.stripe.com/v1';
 
+
+class StripeTransportError extends Error {
+  constructor() {
+    super('falha de transporte ao falar com a Stripe');
+    this.name = 'StripeTransportError';
+  }
+}
+
 export class StripeError extends Error {
   constructor(
     readonly status: number,
@@ -153,20 +161,39 @@ export class StripeCliente {
     corpo: string | null,
     opcoes: OpcoesDaChamada,
   ): Promise<T> {
-    const resposta = await this.rede(`${BASE}${caminho}`, {
-      method: metodo,
-      headers: {
-        authorization: `Bearer ${chave()}`,
-        'stripe-version': VERSAO_DA_API_STRIPE,
-        ...(corpo === null ? {} : { 'content-type': 'application/x-www-form-urlencoded' }),
-        ...(opcoes.idempotencyKey ? { 'idempotency-key': opcoes.idempotencyKey } : {}),
-        ...(opcoes.contaConectada ? { 'stripe-account': opcoes.contaConectada } : {}),
-      },
-      ...(corpo === null ? {} : { body: corpo }),
-    });
+    // Configuração não é falha de transporte: ela precisa continuar dizendo
+    // exatamente qual variável falta, antes de qualquer tentativa de rede.
+    const secreta = chave();
+    let resposta: Response;
+    try {
+      resposta = await this.rede(`${BASE}${caminho}`, {
+        method: metodo,
+        headers: {
+          authorization: `Bearer ${secreta}`,
+          'stripe-version': VERSAO_DA_API_STRIPE,
+          ...(corpo === null ? {} : { 'content-type': 'application/x-www-form-urlencoded' }),
+          ...(opcoes.idempotencyKey ? { 'idempotency-key': opcoes.idempotencyKey } : {}),
+          ...(opcoes.contaConectada ? { 'stripe-account': opcoes.contaConectada } : {}),
+        },
+        ...(corpo === null ? {} : { body: corpo }),
+        // Não seguir 3xx: o cabeçalho Authorization carrega a chave secreta.
+        redirect: 'manual',
+        // O polling/conciliação é a rede de segurança; conexão pendurada não é.
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      // Não propaga mensagem de rede: proxy/agent pode incluir URL ou detalhe
+      // operacional. A borda precisa saber que foi transporte, não o segredo.
+      throw new StripeTransportError();
+    }
 
     const texto = await resposta.text();
-    const json = texto ? (JSON.parse(texto) as Record<string, unknown>) : {};
+    let json: Record<string, unknown> = {};
+    try {
+      json = texto ? (JSON.parse(texto) as Record<string, unknown>) : {};
+    } catch {
+      throw new StripeError(resposta.status, 'stripe_invalid_response', 'Stripe devolveu resposta inválida');
+    }
 
     if (!resposta.ok) {
       /**

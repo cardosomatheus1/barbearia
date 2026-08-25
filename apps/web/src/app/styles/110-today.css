@@ -1,0 +1,161 @@
+/* ============================================================================
+   V5 — Hoje é a casa da operação
+   ============================================================================
+
+   A primeira dobra responde três coisas sem pedir interpretação: quantos
+   atendimentos existem, quem é o próximo e o que precisa de ação agora. O
+   painel do dono continua responsável por gráfico, tendência e desempenho.
+   Aqui não existe gráfico: o balcão trabalha com pessoas e estados.
+   ========================================================================== */
+
+.hoje-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  margin-bottom: var(--space-3);
+}
+.hoje-cabeca__texto { min-width: 0; flex: 1 1 18rem; }
+.hoje-cabeca__texto .rotulo { margin: 0 0 var(--space-1); }
+.hoje-cabeca__texto .balcao__sub { margin-bottom: 0; }
+.hoje-cabeca__acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+.hoje-resumo {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.hoje-proximo {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 42%, var(--color-border));
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 52%),
+    var(--color-surface-raised);
+}
+.hoje-proximo__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.hoje-proximo__topo .rotulo { margin: 0; }
+.hoje-proximo__quando {
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+.hoje-proximo__corpo {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+.hoje-proximo__hora {
+  grid-row: 1 / span 2;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 9vw, 3.2rem);
+  line-height: .95;
+  letter-spacing: .01em;
+}
+.hoje-proximo__pessoa { min-width: 0; }
+.hoje-proximo__nome {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+.hoje-proximo__servico {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+.hoje-proximo__corpo > .selo {
+  grid-column: 2;
+  justify-self: start;
+}
+.hoje-proximo__vazio h2 { margin: 0 0 var(--space-1); font-size: var(--font-size-xl); }
+.hoje-proximo__vazio p { margin: 0; color: var(--color-text-muted); }
+
+.hoje-leituras {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  min-width: 0;
+}
+.hoje-leitura {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-raised) 62%, transparent);
+}
+.hoje-leitura--atencao { border-top-color: var(--color-warning); }
+.hoje-leitura__titulo {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.hoje-leitura strong {
+  font-size: var(--font-size-base);
+  overflow-wrap: anywhere;
+}
+.hoje-leitura span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.hoje-timeline__topo {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.hoje-timeline__topo .rotulo { margin: 0 0 2px; }
+.hoje-timeline__titulo { margin: 0; font-size: var(--font-size-xl); }
+.hoje-timeline__marcar { flex: 0 0 auto; }
+
+@media (min-width: 0px) and (max-width: 479px) {
+  .hoje-cabeca__acoes { width: 100%; justify-content: space-between; }
+  .hoje-cabeca__texto .painel__titulo { font-size: 1.7rem; line-height: 1.08; }
+  .hoje-proximo { padding: var(--space-3); }
+  .hoje-proximo__hora { font-size: 2.35rem; }
+  .hoje-proximo__nome { font-size: var(--font-size-xl); }
+  .hoje-timeline__marcar { display: none; }
+}
+
+@media (min-width: 960px) {
+  .hoje-resumo {
+    grid-template-columns: minmax(0, 1.35fr) minmax(22rem, .85fr);
+    align-items: stretch;
+  }
+  .hoje-proximo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 13rem;
+    padding: var(--space-5);
+  }
+  .hoje-proximo__hora { font-size: 3.5rem; }
+  .hoje-proximo__nome { font-size: var(--font-size-3xl); }
+}

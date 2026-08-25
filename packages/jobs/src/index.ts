@@ -12,3 +12,5 @@ export * from './clube.js';
 export * from './fiscal.js';
 export * from './whatsapp-conciliacao.js';
 export * from './webhook.js';
+
+export * from './observabilidade.js';

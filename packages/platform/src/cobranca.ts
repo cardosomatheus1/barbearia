@@ -364,32 +364,45 @@ export async function faturasEmCobranca(): Promise<readonly Fatura[]> {
  * gente registrando o que viu no extrato. Os dois caminhos escrevem a mesma
  * trilha, e é ela que responde "quem deu esta fatura por paga".
  */
+export async function pagarFaturaNaTransacao(
+  tx: TransactionClient,
+  entrada: {
+    readonly adminId: string | null;
+    readonly faturaId: string;
+    readonly metodo: MetodoDePagamento;
+    /** Quando o PSP chama, impede um evento velho de quitar uma cobrança nova. */
+    readonly chargeIdEsperado?: string;
+  },
+): Promise<{ readonly tenantId: string }> {
+  const linhas = await tx.$queryRaw<LinhaDeFatura[]>`
+    UPDATE invoices
+       SET status = 'paid', paid_at = now(), paid_method = ${entrada.metodo}, updated_at = now()
+     WHERE id = ${entrada.faturaId}::uuid AND status = 'open'
+       AND (${entrada.chargeIdEsperado ?? null}::text IS NULL
+            OR psp_charge_id = ${entrada.chargeIdEsperado ?? null})
+    RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
+              period_end, due_at, attempts, notified_at, past_due_at, paid_at,
+              paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
+  `;
+  const fatura = linhas[0];
+  if (!fatura) throw new PlataformaError('not_payable', 'Fatura inexistente ou já encerrada');
+
+  await registrarNaTrilha(tx, entrada.adminId, fatura.tenant_id, 'invoice.paid', {
+    faturaId: entrada.faturaId,
+    valorCents: fatura.amount_cents,
+    metodo: entrada.metodo,
+  });
+
+  await encerrar(tx, fatura);
+  return { tenantId: fatura.tenant_id };
+}
+
 export async function pagarFatura(entrada: {
   readonly adminId: string | null;
   readonly faturaId: string;
   readonly metodo: MetodoDePagamento;
 }): Promise<{ readonly tenantId: string }> {
-  return semTenant(async (tx) => {
-    const linhas = await tx.$queryRaw<LinhaDeFatura[]>`
-      UPDATE invoices
-         SET status = 'paid', paid_at = now(), paid_method = ${entrada.metodo}, updated_at = now()
-       WHERE id = ${entrada.faturaId}::uuid AND status = 'open'
-      RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
-                period_end, due_at, attempts, notified_at, past_due_at, paid_at,
-                paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
-    `;
-    const fatura = linhas[0];
-    if (!fatura) throw new PlataformaError('not_payable', 'Fatura inexistente ou já encerrada');
-
-    await registrarNaTrilha(tx, entrada.adminId, fatura.tenant_id, 'invoice.paid', {
-      faturaId: entrada.faturaId,
-      valorCents: fatura.amount_cents,
-      metodo: entrada.metodo,
-    });
-
-    await encerrar(tx, fatura);
-    return { tenantId: fatura.tenant_id };
-  });
+  return semTenant((tx) => pagarFaturaNaTransacao(tx, entrada));
 }
 
 /**
@@ -567,8 +580,15 @@ export async function aplicarRegua(entrada: {
       });
 
       if (resultado.pago) {
-        await pagarFatura({ adminId: null, faturaId: fatura.id, metodo: resultado.metodo });
-        contagem.pagas += 1;
+        try {
+          await pagarFatura({ adminId: null, faturaId: fatura.id, metodo: resultado.metodo });
+          contagem.pagas += 1;
+        } catch (erro) {
+          // Dois workers podem receber a mesma resposta idempotente do
+          // adquirente. O primeiro fecha a fatura; o segundo não transforma
+          // esse sucesso já aplicado em falha da régua inteira.
+          if (!(erro instanceof PlataformaError) || erro.code !== 'not_payable') throw erro;
+        }
       } else if (resultado.aguardando) {
         /**
          * Saiu e ainda não voltou: marca a data e **não** gasta um degrau.
@@ -584,15 +604,18 @@ export async function aplicarRegua(entrada: {
         });
         contagem.aguardando += 1;
       } else {
-        await semTenant(async (tx) => {
-          await tx.$executeRaw`
+        const avancou = await semTenant(async (tx) => {
+          const mexidas = await tx.$executeRaw`
             UPDATE invoices SET attempts = attempts + 1, last_attempt_at = ${entrada.agora},
                                 updated_at = now()
              WHERE id = ${fatura.id}::uuid AND status = 'open'
+               AND attempts = ${fatura.tentativas}
           `;
+          if (mexidas === 0) return false;
           await avisar(tx, fatura, 'tentativa_recusada');
+          return true;
         });
-        contagem.cobradas += 1;
+        if (avancou) contagem.cobradas += 1;
       }
       continue;
     }

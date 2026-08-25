@@ -1,6 +1,8 @@
 import { withTenant } from '@barbearia/db';
 import type { ChaveDeMetrica, DimensaoDaMetrica } from '@barbearia/core';
 
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
+
 /**
  * O executor do schema semântico (bloco 63, SPEC §4.15).
  *
@@ -231,16 +233,16 @@ function dobrar(
   como: 'soma' | 'media',
   dimensao: DimensaoDaMetrica,
 ): RespostaDaMetrica {
-  const soma = linhas.reduce((s, l) => s + Number(l.total), 0);
+  const soma = linhas.reduce((s, l) => s + inteiroSeguroDoBanco(l.total, 'métrica agregada'), 0);
   const comandas = linhas.reduce((s, l) => s + Number(l.comandas), 0);
 
   const fatias = linhas.map((l) => ({
     rotulo: l.rotulo,
     valor:
       como === 'soma'
-        ? Number(l.total)
+        ? inteiroSeguroDoBanco(l.total, 'fatia da métrica')
         : Number(l.comandas) > 0
-          ? Math.round(Number(l.total) / Number(l.comandas))
+          ? Math.round(inteiroSeguroDoBanco(l.total, 'fatia da métrica') / Number(l.comandas))
           : null,
   }));
 

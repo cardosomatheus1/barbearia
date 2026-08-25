@@ -48,6 +48,8 @@ const FALHA: Record<string, string> = {
     'Este horário acabou de ser ocupado. Escolha outro — a lista já está atualizada.',
   invalid_phone: 'Confira o celular: precisa ter DDD e nove dígitos.',
   invalid_request: 'Confira os dados e tente de novo.',
+  api_timeout: 'O servidor demorou para responder. Seu horário não foi confirmado ainda; tente novamente — o mesmo pedido não será duplicado.',
+  api_indisponivel: 'Não foi possível falar com o servidor agora. Tente novamente — o mesmo pedido não será duplicado.',
   unknown_location: 'Esta unidade não está mais disponível.',
   otp_required: 'Esta barbearia pede validação do número. Entre com seu celular primeiro.',
   /**
@@ -79,6 +81,8 @@ const FALHA_DA_ESPERA: Record<string, string> = {
   dia_no_passado: 'Escolha um dia que ainda não passou.',
   periodo_longo_demais: 'A lista de espera vai até 60 dias à frente.',
   invalid_request: 'Confira o nome e o celular.',
+  api_timeout: 'O servidor demorou para responder. Tente novamente — o mesmo pedido não cria uma segunda entrada.',
+  api_indisponivel: 'Não foi possível falar com o servidor agora. Tente novamente — o mesmo pedido não cria uma segunda entrada.',
   otp_required: 'Esta barbearia pede confirmação do número. Entre com o seu celular primeiro.',
 };
 

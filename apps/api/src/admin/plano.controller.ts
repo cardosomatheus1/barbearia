@@ -254,8 +254,8 @@ export class PlanoController {
     @Body(new ZodValidationPipe(trocaDePlanoSchema)) corpo: { planoCode: string },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
-      throw badRequest('invalid_request', 'Idempotency-Key com tamanho inválido');
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw badRequest('idempotency_key_obrigatoria', 'Mande um Idempotency-Key de até 128 caracteres.');
     }
 
     try {
@@ -263,7 +263,7 @@ export class PlanoController {
         tenantId: staff.tenantId,
         planoCode: corpo.planoCode,
         agora: new Date(),
-        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
       });
       return {
         cobrarCents: rateio.cobrarCents,
@@ -284,6 +284,7 @@ const STATUS: Record<string, number> = {
   plan_not_self_service: 409,
   chairs_exceed_plan: 409,
   invoice_failed: 500,
+  idempotency_conflict: 409,
 };
 
 /**

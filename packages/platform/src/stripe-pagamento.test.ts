@@ -263,6 +263,21 @@ describe('a barbearia cobrando o cliente', () => {
     expect(parcial.chamadas[0]?.corpo).toContain('amount=1500');
   });
 
+  it('estorno de link resolve a Checkout Session para o PaymentIntent', async () => {
+    const { cliente, chamadas } = stripeDeMentira([
+      { status: 200, json: { id: 'cs_1', payment_status: 'paid', payment_intent: 'pi_link_1' } },
+      { status: 200, json: { id: 're_link_1' } },
+    ]);
+
+    await new StripePaymentProvider(cliente).estornar('cs_1', 4900);
+
+    expect(chamadas[0]?.url).toContain('/checkout/sessions/cs_1');
+    expect(chamadas[1]?.url).toContain('/refunds');
+    expect(chamadas[1]?.corpo).toContain('payment_intent=pi_link_1');
+    expect(chamadas[1]?.corpo).toContain('amount=4900');
+    expect(chamadas[1]?.cabecalhos['idempotency-key']).toContain('cs_1');
+  });
+
   it('estorno também leva chave de idempotência', async () => {
     /**
      * Ele é POST que move dinheiro, e o CLAUDE.md §2 não abre exceção. A chave é
@@ -298,6 +313,7 @@ describe('a plataforma cobrando a barbearia', () => {
     tenantId: '11111111-1111-1111-1111-111111111111',
     faturaId: '33333333-3333-3333-3333-333333333333',
     valorCents: 24900,
+    tentativa: 1,
     pspCustomerId: 'cus_1',
     pspMethodId: 'pm_1',
   };
@@ -315,9 +331,25 @@ describe('a plataforma cobrando a barbearia', () => {
     // confirmar às três da manhã.
     expect(corpo).toContain('off_session=true');
     expect(corpo).toContain('confirm=true');
-    // A chave é a fatura: dois workers rodando a régua no mesmo dia não podem
-    // emitir a segunda cobrança da mesma fatura.
-    expect(chamadas[0]?.cabecalhos['idempotency-key']).toBe(`fatura:${COBRANCA.faturaId}`);
+    // Mesma tentativa é a mesma cobrança; uma tentativa seguinte precisa ter
+    // outra chave para o cartão poder ser tentado novamente.
+    expect(chamadas[0]?.cabecalhos['idempotency-key']).toBe(
+      `fatura:${COBRANCA.faturaId}:tentativa:1`,
+    );
+  });
+
+  it('retentativa legítima usa outra chave sem perder idempotência do mesmo degrau', async () => {
+    const { cliente, chamadas } = stripeDeMentira([
+      { status: 200, json: { id: 'pi_1', status: 'requires_payment_method', last_payment_error: { code: 'card_declined' } } },
+      { status: 200, json: { id: 'pi_2', status: 'succeeded' } },
+    ]);
+    const provider = new StripePspProvider(cliente);
+
+    await provider.cobrar({ ...COBRANCA, tentativa: 1 });
+    await provider.cobrar({ ...COBRANCA, tentativa: 2 });
+
+    expect(chamadas[0]?.cabecalhos['idempotency-key']).toBe(`fatura:${COBRANCA.faturaId}:tentativa:1`);
+    expect(chamadas[1]?.cabecalhos['idempotency-key']).toBe(`fatura:${COBRANCA.faturaId}:tentativa:2`);
   });
 
   it('cartão recusado é resposta, não exceção', async () => {
@@ -480,6 +512,7 @@ describe('o que a conta de verdade recusou', () => {
       tenantId: '11111111-1111-4111-8111-111111111111',
       faturaId: '22222222-2222-4222-8222-222222222222',
       valorCents: 9900,
+      tentativa: 1,
       pspCustomerId: 'cus_1',
       pspMethodId: null,
     });
@@ -499,6 +532,7 @@ describe('o que a conta de verdade recusou', () => {
       tenantId: '11111111-1111-4111-8111-111111111111',
       faturaId: '33333333-3333-4333-8333-333333333333',
       valorCents: 9900,
+      tentativa: 1,
       pspCustomerId: 'cus_1',
       pspMethodId: 'pm_42',
     });

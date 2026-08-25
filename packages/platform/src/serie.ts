@@ -1,4 +1,5 @@
 import { semTenant } from '@barbearia/db';
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * A linha do tempo da plataforma (bloco 62, lacuna do bloco 27).
@@ -154,7 +155,7 @@ export async function linhaDoTempoDaPlataforma(
     return {
       mrr: mrr.map((l) => ({
         mes: l.mes,
-        mrrCents: Number(l.total),
+        mrrCents: inteiroSeguroDoBanco(l.total, 'MRR mensal'),
         barbeariasPagantes: Number(l.quantas),
       })),
       safras: [...porSafra.entries()]
@@ -185,7 +186,10 @@ export async function linhaDoTempoDaPlataforma(
           ),
         }))
         .sort((a, b) => a.safra.localeCompare(b.safra)),
-      maiorMrrCents: mrr.reduce((m, l) => Math.max(m, Number(l.total)), 0),
+      maiorMrrCents: mrr.reduce(
+        (m, l) => Math.max(m, inteiroSeguroDoBanco(l.total, 'MRR mensal')),
+        0,
+      ),
     };
   });
 }

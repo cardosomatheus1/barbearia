@@ -399,7 +399,8 @@ export type MotivoDeNaoEnviar =
   | 'sem_telefone'
   | 'cancelado'
   | 'optou_por_nao_receber'
-  | 'teto_do_mes';
+  | 'teto_do_mes'
+  | 'entrega_incerta';
 
 export interface DecisaoDeEnvio {
   readonly enviar: boolean;

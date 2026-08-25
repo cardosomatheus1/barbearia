@@ -9,7 +9,21 @@
  * inteiro em todo o sistema (CLAUDE.md).
  */
 export function centavosDoCampo(bruto: string): number | null {
-  const limpo = bruto.trim().replace(/\s/g, '').replace(',', '.');
+  /**
+   * O separador de milhar entra, porque é o que o produto **mostra**.
+   *
+   * Desde que o dinheiro passou a ser exibido com milhar (`R$ 1.848,00`), o
+   * fechamento cego do caixa ficou impossível de completar: a tela diz quanto a
+   * gaveta tem, o operador digita exatamente o que lê, e a resposta era "valor
+   * inválido". O ponto só é milhar quando vem seguido de três dígitos e há mais
+   * coisa depois — `49.90` continua sendo quarenta e nove e noventa, que é o
+   * que o teclado do notebook produz.
+   */
+  const semEspaco = bruto.trim().replace(/\s/g, '');
+  const semMilhar = /^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(semEspaco)
+    ? semEspaco.replace(/\./g, '')
+    : semEspaco;
+  const limpo = semMilhar.replace(',', '.');
   if (!/^\d+(\.\d{1,2})?$/.test(limpo)) return null;
 
   const [reais = '0', centavos = ''] = limpo.split('.');
