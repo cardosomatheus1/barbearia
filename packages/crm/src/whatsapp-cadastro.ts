@@ -1,6 +1,7 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { type EstadoDoWhatsApp, type WhatsAppProvider } from '@barbearia/core';
 import { audit, cifrarCom, decifrarCom } from '@barbearia/identity';
+import { reivindicarWaba } from './whatsapp-waba.js';
 import { recusar } from './whatsapp-erros.js';
 
 /**
@@ -313,36 +314,10 @@ export async function salvarCadastroDoWhatsApp(params: {
     }
 
 
-    /**
-     * Confere a dona **antes**, e depois insere sem `DO UPDATE`.
-     *
-     * Sob RLS, `ON CONFLICT DO UPDATE` contra uma linha que a politica de
-     * escrita recusa **levanta erro** em vez de alcancar zero linhas: o
-     * `recusar` logo abaixo nunca era alcancado e a colisao com outra
-     * barbearia saia como 500. Entrada que colide e defeito de borda, e a
-     * resposta certa e 4xx com motivo.
-     *
-     * A leitura desta tabela e aberta de proposito — ela so guarda ids opacos
-     * de roteamento —, entao a conferencia enxerga a dona de verdade. A mesma
-     * mensagem de indisponivel serve para "ja e de outra" e para "nao deu":
-     * confirmar de quem e seria oraculo.
-     */
-    const jaTemDona = await tx.$queryRaw<{ minha: boolean }[]>`
-      SELECT tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid AS minha
-        FROM whatsapp_waba_owners WHERE waba_id = ${params.wabaId}
-    `;
-    if (jaTemDona[0] && !jaTemDona[0].minha) recusar('numero_indisponivel');
-
-    if (!jaTemDona[0]) {
-      const donaDaWaba = await tx.$executeRaw`
-        INSERT INTO whatsapp_waba_owners (waba_id, tenant_id)
-        VALUES (${params.wabaId}, NULLIF(current_setting('app.tenant_id', true), '')::uuid)
-        ON CONFLICT (waba_id) DO NOTHING
-      `;
-      // Zero aqui e a corrida entre dois processos: outra barbearia reivindicou
-      // a WABA entre a conferencia e o INSERT. O indice unico e a ultima linha
-      // de defesa, e a recusa e a mesma.
-      if (donaDaWaba === 0) recusar('numero_indisponivel');
+    if ((await reivindicarWaba(tx, params.wabaId)) === 'de_outra') {
+      // A mesma mensagem de indisponivel serve para "ja e de outra" e para "nao
+      // deu": confirmar de quem e seria oraculo.
+      recusar('numero_indisponivel');
     }
 
     const rotaDaWaba = await tx.$executeRaw`
