@@ -32,6 +32,32 @@ mkdir -p "$PASTA"
 carimbo="$(date -u +%Y%m%dT%H%M%SZ)"
 arquivo="$PASTA/barbearia-$carimbo.dump"
 midia="$PASTA/barbearia-$carimbo-media.tar.gz"
+
+# Node **não** é dependência do host.
+#
+# `deploy/instalar.sh` leva um Ubuntu limpo ao produto no ar instalando Docker,
+# e nada mais — é a promessa do deploy. Cifrar o backup com um `node` do host
+# quebrava o backup em toda máquina instalada pelo caminho documentado, e com
+# ele a atualização inteira, porque ela aborta quando o backup falha.
+#
+# A imagem base do próprio produto (`node:22-bookworm-slim`) já está no cache
+# local de quem rodou o compose uma vez, então o contêiner sobe sem rede. O
+# `node` do host continua sendo usado quando existe: é mais rápido e é o caso
+# da máquina de desenvolvimento.
+#
+# A chave vai por ambiente, nunca em argumento — é a mesma regra que o
+# `backup-crypto.mjs` documenta sobre não vazar em linha de comando.
+cripto() {
+  if command -v node > /dev/null 2>&1; then
+    node "$DESTINO/scripts/backup-crypto.mjs" "$@"
+  else
+    docker run --rm \
+      -e BACKUP_ENCRYPTION_KEY \
+      -v "$DESTINO/scripts:/app/scripts:ro" \
+      -v "$PASTA:$PASTA" \
+      node:22-bookworm-slim node /app/scripts/backup-crypto.mjs "$@"
+  fi
+}
 arquivo_enc="$arquivo.enc"
 midia_enc="$midia.enc"
 MEDIA_STORAGE="$(grep -E '^MEDIA_STORAGE=' "$DESTINO/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)"
@@ -94,11 +120,11 @@ fi
 # A chave é independente das demais chaves da aplicação: girar MFA/WhatsApp
 # não deve tornar backup antigo ilegível. O GCM autentica o arquivo inteiro;
 # `check` lê e valida a tag antes de aceitarmos o artefato criptografado.
-node "$DESTINO/scripts/backup-crypto.mjs" encrypt "$arquivo" "$arquivo_enc"
-node "$DESTINO/scripts/backup-crypto.mjs" check "$arquivo_enc"
+cripto "encrypt" "$arquivo" "$arquivo_enc"
+cripto "check" "$arquivo_enc"
 if [ "$MEDIA_STORAGE" = "local" ]; then
-  node "$DESTINO/scripts/backup-crypto.mjs" encrypt "$midia" "$midia_enc"
-  node "$DESTINO/scripts/backup-crypto.mjs" check "$midia_enc"
+  cripto "encrypt" "$midia" "$midia_enc"
+  cripto "check" "$midia_enc"
 fi
 rm -f "$arquivo" "$midia"
 
