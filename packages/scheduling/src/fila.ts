@@ -2,12 +2,16 @@ import { randomBytes, createHash } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { agendarAvisoDeFila } from '@barbearia/jobs';
 import { contencaoDeHorario, pgCode } from './booking.js';
+import { travarConfiguracaoDeRecursos, travarConfiguracaoDeServicos, travarConfiguracaoDoProfissional, travarDiaDaAgenda } from './concorrencia.js';
+import { loadDayContext } from './repository.js';
 import {
   custoDoEncaixe,
   duracaoEsperada,
   estimarFila,
   frasePosicao,
   instantToLocal,
+  resolveWorkingDay,
+  subtract,
   type AtendenteNaFila,
   type CustoDoEncaixe,
 } from '@barbearia/core';
@@ -30,7 +34,8 @@ export type QueueFailure =
   | 'already_in_queue'
   | 'unknown_service'
   | 'unknown_professional'
-  | 'slot_taken';
+  | 'slot_taken'
+  | 'idempotencia_conflitante';
 
 export class QueueError extends Error {
   constructor(
@@ -489,6 +494,19 @@ const UNIQUE_VIOLATION = '23505';
  * checagem de integridade referencial do Postgres ignora row security, então a
  * chave estrangeira sozinha aceitaria um serviço de outra barbearia.
  */
+function fingerprintDaFila(params: {
+  readonly locationId: string;
+  readonly customerId: string;
+  readonly serviceIds: readonly string[];
+  readonly professionalId?: string | null;
+  readonly notes?: string;
+}): string {
+  return JSON.stringify([
+    params.locationId, params.customerId, [...params.serviceIds].sort(),
+    params.professionalId ?? null, params.notes?.trim() ?? '',
+  ]);
+}
+
 export async function joinQueue(params: {
   readonly tenantId: string;
   readonly locationId: string;
@@ -500,21 +518,26 @@ export async function joinQueue(params: {
   readonly now?: Date;
 }): Promise<{ readonly id: string; readonly token: string; readonly posicao: number }> {
   const now = params.now ?? new Date();
+  const fingerprint = fingerprintDaFila(params);
 
   return withTenant(params.tenantId, async (tx) => {
     if (params.idempotencyKey) {
-      // Escopada por cliente, nunca só por tenant: a chave vem de fora e é
-      // livre, então duas pessoas mandando "1" colidiriam — e a segunda
-      // receberia de volta o token da primeira, que dá acesso à posição dela.
-      const jaExiste = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM queue_entries
-         WHERE customer_id = ${params.customerId}::uuid
+      // Serializa a intenção antes do SELECT; a segunda requisição espera o
+      // commit da primeira e então relê a entrada vencedora.
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${`${params.tenantId}:${params.locationId}:${params.customerId}:${params.idempotencyKey}`}, 0))
+      `;
+      const jaExiste = await tx.$queryRaw<{ id: string; request_fingerprint: string | null }[]>`
+        SELECT id, request_fingerprint FROM queue_entries
+         WHERE location_id = ${params.locationId}::uuid
+           AND customer_id = ${params.customerId}::uuid
            AND idempotency_key = ${params.idempotencyKey}
       `;
       const anterior = jaExiste[0];
       if (anterior) {
-        // O token não volta: só o hash existe. Quem repetiu a chamada recebe a
-        // entrada, e o link continua sendo o que foi entregue na primeira.
+        if (anterior.request_fingerprint && anterior.request_fingerprint !== fingerprint) {
+          throw new QueueError('idempotencia_conflitante', 'Esta Idempotency-Key já foi usada para outra entrada.');
+        }
         return { id: anterior.id, token: '', posicao: await posicaoNaFila(tx, anterior.id) };
       }
     }
@@ -543,12 +566,12 @@ export async function joinQueue(params: {
       const criada = await tx.$queryRaw<{ id: string }[]>`
         INSERT INTO queue_entries
           (tenant_id, location_id, customer_id, professional_id, public_token_hash,
-           idempotency_key, notes, joined_at)
+           idempotency_key, request_fingerprint, notes, joined_at)
         VALUES (
           NULLIF(current_setting('app.tenant_id', true), '')::uuid,
           ${params.locationId}::uuid, ${params.customerId}::uuid,
           ${params.professionalId ?? null}::uuid, ${hash},
-          ${params.idempotencyKey ?? null}, ${params.notes ?? null}, ${now}
+          ${params.idempotencyKey ?? null}, ${fingerprint}, ${params.notes ?? null}, ${now}
         )
         RETURNING id
       `;
@@ -732,11 +755,45 @@ export async function seatQueueEntry(params: {
       );
     }
 
-    const pro = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM professionals
-       WHERE id = ${params.professionalId}::uuid AND location_id = ${entrada.location_id}::uuid
+    const profissionais = await tx.$queryRaw<
+      { id: string; daily_limit: number | null; timezone: string }[]
+    >`
+      SELECT p.id, p.daily_limit, l.timezone
+        FROM professionals p
+        JOIN locations l ON l.id = p.location_id
+       WHERE p.id = ${params.professionalId}::uuid
+         AND p.location_id = ${entrada.location_id}::uuid
+         AND p.active
+         AND p.kind IN ('professional', 'external')
     `;
-    if (!pro[0]) throw new QueueError('unknown_professional', 'Profissional não encontrado.');
+    const pro = profissionais[0];
+    if (!pro) throw new QueueError('unknown_professional', 'Profissional não encontrado.');
+
+    const dataLocal = instantToLocal(pro.timezone, now).date;
+    await travarDiaDaAgenda(tx, entrada.location_id, dataLocal);
+    await travarConfiguracaoDoProfissional(tx, params.professionalId);
+    await travarConfiguracaoDeRecursos(tx);
+    await travarConfiguracaoDeServicos(tx);
+
+    if (pro.daily_limit !== null) {
+      const usados = await tx.$queryRaw<{ total: bigint }[]>`
+        SELECT count(*) AS total
+          FROM (
+            SELECT 1 FROM appointments
+             WHERE professional_id = ${params.professionalId}::uuid
+               AND (service_starts_at AT TIME ZONE ${pro.timezone})::date = ${dataLocal}::date
+               AND status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+            UNION ALL
+            SELECT 1 FROM slot_holds
+             WHERE professional_id = ${params.professionalId}::uuid
+               AND (starts_at AT TIME ZONE ${pro.timezone})::date = ${dataLocal}::date
+               AND expires_at > now()
+          ) AS compromissos
+      `;
+      if (Number(usados[0]?.total ?? 0) >= pro.daily_limit) {
+        throw new QueueError('slot_taken', 'Este profissional atingiu o limite de atendimentos do dia.');
+      }
+    }
 
     const servicos = await tx.$queryRaw<
       {
@@ -765,6 +822,98 @@ export async function seatQueueEntry(params: {
     const fim = new Date(inicio.getTime() + duracao * 60_000);
     const ocupadoDe = new Date(inicio.getTime() - bufferAntes * 60_000);
     const ocupadoAte = new Date(fim.getTime() + bufferDepois * 60_000);
+
+    /**
+     * Walk-in continua sendo encaixe manual, mas não é atalho para furar a
+     * qualificação nem a jornada. `loadDayContext` usa exatamente os mesmos
+     * vínculos de serviço, exceções e bloqueios da Agenda; `atCounter` só
+     * desliga as regras de autoatendimento (bookable_online/lead time).
+     */
+    const contextoDoDia = await loadDayContext(tx, {
+      locationId: entrada.location_id,
+      serviceIds: entrada.service_ids ?? [],
+      date: dataLocal,
+      professionalId: params.professionalId,
+      atCounter: true,
+    });
+    const profissionalHabilitado = contextoDoDia?.professionals.find(
+      (item) => item.id === params.professionalId,
+    );
+    if (!contextoDoDia || !profissionalHabilitado) {
+      throw new QueueError(
+        'unknown_professional',
+        'Este profissional não executa todos os serviços escolhidos.',
+      );
+    }
+
+    const jornada = resolveWorkingDay({
+      weekday: contextoDoDia.weekday,
+      weeklyPlans: contextoDoDia.weeklyPlans.get(params.professionalId) ?? [],
+      exceptions: contextoDoDia.exceptions.get(params.professionalId) ?? [],
+      blocks: contextoDoDia.blocks.get(params.professionalId) ?? [],
+    });
+    const janelasAtendiveis = subtract(jornada.working, jornada.breaks);
+    const localDe = instantToLocal(pro.timezone, ocupadoDe);
+    const localAte = instantToLocal(pro.timezone, ocupadoAte);
+    const cabeNaJornada =
+      localDe.date === dataLocal
+      && localAte.date === dataLocal
+      && janelasAtendiveis.some(
+        (janela) => janela.start <= localDe.minutes && localAte.minutes <= janela.end,
+      );
+    if (!cabeNaJornada) {
+      throw new QueueError(
+        'slot_taken',
+        'Este atendimento não cabe na jornada atual do profissional.',
+      );
+    }
+
+    const recursos = await tx.$queryRaw<{ resource_type: string; quantity: number }[]>`
+      SELECT rr.resource_type, max(rr.quantity)::int AS quantity
+        FROM service_resource_requirements rr
+       WHERE rr.service_id = ANY(${entrada.service_ids ?? []}::uuid[])
+       GROUP BY rr.resource_type
+    `;
+    if (recursos.length > 0) {
+      const tipos = recursos.map((r) => r.resource_type);
+      const capacidades = await tx.$queryRaw<
+        { resource_type: string; capacity: number; usadas: bigint }[]
+      >`
+        SELECT rp.resource_type, rp.capacity,
+               (COALESCE((
+                  SELECT sum(ar.quantity)
+                    FROM appointment_resources ar
+                    JOIN appointments a ON a.id = ar.appointment_id
+                   WHERE a.location_id = ${entrada.location_id}::uuid
+                     AND ar.resource_type = rp.resource_type
+                     AND a.starts_at < ${ocupadoAte}
+                     AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${ocupadoDe}
+                     AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
+                     AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+                ), 0)
+                + COALESCE((
+                  SELECT sum(shr.quantity)
+                    FROM slot_hold_resources shr
+                    JOIN slot_holds h ON h.id = shr.hold_id
+                    JOIN professionals hp ON hp.id = h.professional_id
+                   WHERE hp.location_id = ${entrada.location_id}::uuid
+                     AND shr.resource_type = rp.resource_type
+                     AND h.starts_at < ${ocupadoAte}
+                     AND h.ends_at > ${ocupadoDe}
+                     AND h.expires_at > now()
+                ), 0))::bigint AS usadas
+          FROM resource_pools rp
+         WHERE rp.location_id = ${entrada.location_id}::uuid
+           AND rp.resource_type = ANY(${tipos}::text[])
+      `;
+      const porTipo = new Map(capacidades.map((c) => [c.resource_type, c]));
+      for (const recurso of recursos) {
+        const pool = porTipo.get(recurso.resource_type);
+        if (!pool || Number(pool.usadas) + recurso.quantity > pool.capacity) {
+          throw new QueueError('slot_taken', `Não há ${recurso.resource_type} disponível para iniciar este atendimento agora.`);
+        }
+      }
+    }
 
     let appointmentId: string;
     try {
@@ -808,6 +957,14 @@ export async function seatQueueEntry(params: {
           NULLIF(current_setting('app.tenant_id', true), '')::uuid, ${posicao},
           ${servico?.price_cents ?? 0}, ${servico?.duration_minutes ?? 1}
         )
+      `;
+    }
+
+    for (const recurso of recursos) {
+      await tx.$executeRaw`
+        INSERT INTO appointment_resources (appointment_id, resource_type, tenant_id, quantity)
+        VALUES (${appointmentId}::uuid, ${recurso.resource_type},
+                NULLIF(current_setting('app.tenant_id', true), '')::uuid, ${recurso.quantity})
       `;
     }
 

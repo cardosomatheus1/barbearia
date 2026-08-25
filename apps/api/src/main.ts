@@ -7,11 +7,15 @@ import { AppModule } from './app.module.js';
 import { TETO_DO_ARQUIVO } from './admin/importacao.schemas.js';
 import { guardarCorpoCru } from './common/corpo-cru.js';
 import { ajustarKeepAlive } from './common/keep-alive.js';
+import { validarConfiguracaoDeMidia } from './media/storage.js';
 
 async function bootstrap(): Promise<void> {
   // Antes de servir a primeira requisição: se a conexão ignora RLS, o
   // isolamento entre barbearias não existe. Melhor não subir.
   await assertRlsEnforced();
+  // Se MEDIA_STORAGE=s3 foi escolhido, credenciais incompletas derrubam a API
+  // antes de ela aceitar upload e falhar só na primeira foto de um cliente.
+  validarConfiguracaoDeMidia();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],

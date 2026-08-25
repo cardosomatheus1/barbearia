@@ -36,9 +36,13 @@ describe('catálogo de permissões', () => {
 });
 
 describe('padrão de fábrica dos papéis', () => {
-  it('o dono tem tudo', () => {
-    // É a única conta que não pode ser trancada para fora do próprio negócio.
-    expect([...permissoesPadrao('owner')].sort()).toEqual([...PERMISSOES].sort());
+  it('o dono tem tudo do próprio tenant, sem entitlement de franquia', () => {
+    // `franchise.manage` é concedida pela plataforma à franqueadora; não nasce
+    // automaticamente em toda conta owner.
+    expect([...permissoesPadrao('owner')].sort()).toEqual(
+      PERMISSOES.filter((permissao) => permissao !== 'franchise.manage').sort(),
+    );
+    expect(permissoesPadrao('owner')).not.toContain('franchise.manage');
   });
 
   it('o profissional vê a própria comissão e não a do colega', () => {

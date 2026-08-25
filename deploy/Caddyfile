@@ -48,6 +48,12 @@ www.{$DOMINIO} {
 	# A API pelo mesmo domínio: `/api/v1/...` chega como `/v1/...` do outro
 	# lado. O prefixo existe para o webhook do adquirente e para a chave de
 	# API terem um endereço público estável sem um segundo nome de DNS.
+	# Imagens públicas hospedadas pelo próprio Barberdock. O caminho é
+	# imutável (UUID), então pode ir direto à API e aproveitar cache longo.
+	handle /media/* {
+		reverse_proxy api:3000
+	}
+
 	handle_path /api/* {
 		reverse_proxy api:3000
 	}

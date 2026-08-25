@@ -1,4 +1,4 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   MAXIMO_DA_RESPOSTA,
   MAXIMO_DO_RECADO,
@@ -134,7 +134,7 @@ function daLinha(linha: LinhaDoRecado, agora: Date): Recado {
   };
 }
 
-const SELECT_DO_RECADO = `
+const SELECT_DO_RECADO = sql`
   SELECT f.id, f.kind, f.status::text AS status, f.body, f.answer, f.answered_at,
          f.created_at, f.assigned_to, s.name AS assigned_name,
          f.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
@@ -224,15 +224,13 @@ export async function recadosDaCasa(
 ): Promise<readonly Recado[]> {
   const agora = params.agora ?? new Date();
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<LinhaDoRecado[]>(
-      `${SELECT_DO_RECADO}
-        WHERE f.location_id = $1::uuid
-          AND ($2::boolean OR f.status <> 'encerrado')
-        ORDER BY f.created_at DESC
-        LIMIT 200`,
-      params.locationId,
-      params.incluirEncerrados ?? false,
-    );
+    const linhas = await tx.$queryRaw<LinhaDoRecado[]>(sql`
+      ${SELECT_DO_RECADO}
+       WHERE f.location_id = ${params.locationId}::uuid
+         AND (${params.incluirEncerrados ?? false}::boolean OR f.status <> 'encerrado')
+       ORDER BY f.created_at DESC
+       LIMIT 200
+    `);
     // A ordem é do domínio, e ele pensa em `Date`. A conversão de ida e volta
     // fica aqui, na borda do banco, e não vaza para a regra.
     const paraOrdenar = linhas.map((linha) => ({
@@ -249,14 +247,15 @@ export async function recadosDaCasa(
 /** Um recado, para a tela de resposta. */
 export async function recadoPorId(
   tenantId: string,
+  locationId: string,
   id: string,
   agora: Date = new Date(),
 ): Promise<Recado | null> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<LinhaDoRecado[]>(
-      `${SELECT_DO_RECADO} WHERE f.id = $1::uuid`,
-      id,
-    );
+    const linhas = await tx.$queryRaw<LinhaDoRecado[]>(sql`
+      ${SELECT_DO_RECADO}
+       WHERE f.id = ${id}::uuid AND f.location_id = ${locationId}::uuid
+    `);
     const linha = linhas[0];
     return linha ? daLinha(linha, agora) : null;
   });
@@ -277,6 +276,7 @@ export interface Ator {
  */
 export async function assumirRecado(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly recadoId: string;
   readonly responsavelId: string | null;
   readonly ator: Ator;
@@ -289,7 +289,7 @@ export async function assumirRecado(entrada: {
       if (!existe[0]) recusar('responsavel_desconhecido');
     }
 
-    const atual = await estadoAtual(tx, entrada.recadoId);
+    const atual = await estadoAtual(tx, entrada.recadoId, entrada.locationId);
     if (atual === 'encerrado') recusar('transicao_invalida');
 
     const afetados = await tx.$executeRaw`
@@ -298,7 +298,9 @@ export async function assumirRecado(entrada: {
              status = CASE WHEN status = 'aberto' THEN 'em_analise'::feedback_status
                            ELSE status END,
              updated_at = now()
-       WHERE id = ${entrada.recadoId}::uuid AND status <> 'encerrado'
+       WHERE id = ${entrada.recadoId}::uuid
+         AND location_id = ${entrada.locationId}::uuid
+         AND status <> 'encerrado'
     `;
     if (afetados === 0) recusar('recado_nao_encontrado');
 
@@ -335,6 +337,7 @@ export interface RespostaEnviada {
  */
 export async function responderRecado(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly recadoId: string;
   readonly resposta: string;
   readonly ator: Ator;
@@ -360,6 +363,7 @@ export async function responderRecado(entrada: {
         JOIN locations l ON l.id = f.location_id
         LEFT JOIN customers c ON c.id = f.customer_id
        WHERE f.id = ${entrada.recadoId}::uuid
+         AND f.location_id = ${entrada.locationId}::uuid
        FOR UPDATE OF f
     `;
     const atual = linhas[0];
@@ -372,6 +376,7 @@ export async function responderRecado(entrada: {
          SET status = 'respondido', answer = ${resposta}, answered_at = ${agora},
              answered_by = ${entrada.ator.id}::uuid, updated_at = now()
        WHERE id = ${entrada.recadoId}::uuid
+         AND location_id = ${entrada.locationId}::uuid
     `;
 
     /**
@@ -413,20 +418,23 @@ export async function responderRecado(entrada: {
  */
 export async function encerrarRecado(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly recadoId: string;
   readonly ator: Ator;
   readonly agora?: Date;
 }): Promise<void> {
   const agora = entrada.agora ?? new Date();
   await withTenant(entrada.tenantId, async (tx) => {
-    const atual = await estadoAtual(tx, entrada.recadoId);
+    const atual = await estadoAtual(tx, entrada.recadoId, entrada.locationId);
     if (atual === null) return recusar('recado_nao_encontrado');
     if (!transicaoDoRecado(atual, 'encerrado')) recusar('transicao_invalida');
 
     await tx.$executeRaw`
       UPDATE feedbacks
          SET status = 'encerrado', closed_at = ${agora}, updated_at = now()
-       WHERE id = ${entrada.recadoId}::uuid AND status <> 'encerrado'
+       WHERE id = ${entrada.recadoId}::uuid
+         AND location_id = ${entrada.locationId}::uuid
+         AND status <> 'encerrado'
     `;
 
     await audit(tx, {
@@ -443,9 +451,11 @@ export async function encerrarRecado(entrada: {
 async function estadoAtual(
   tx: TransactionClient,
   id: string,
+  locationId: string,
 ): Promise<EstadoDoRecado | null> {
   const linhas = await tx.$queryRaw<{ status: EstadoDoRecado }[]>`
-    SELECT status::text AS status FROM feedbacks WHERE id = ${id}::uuid
+    SELECT status::text AS status FROM feedbacks
+     WHERE id = ${id}::uuid AND location_id = ${locationId}::uuid
   `;
   return linhas[0]?.status ?? null;
 }

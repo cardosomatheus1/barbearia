@@ -36,7 +36,7 @@ import {
   type Pagamento,
   type TipoDeItem,
 } from '@barbearia/core';
-import { adquirenteDaComanda } from '@barbearia/platform';
+import { adquirenteDaComanda, cobrancaDaComandaDisponivel } from '@barbearia/platform';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { badRequest, DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -75,6 +75,7 @@ const STATUS: Record<string, number> = {
   // 409 e não 400: já existe um QR Code vivo para esta comanda, e é isso que
   // impede o cliente de pagar duas vezes.
   cobranca_em_curso: 409,
+  idempotencia_conflitante: 409,
   cobranca_encerrada: 409,
   cobranca_nao_encontrada: 404,
   comanda_sem_valor: 409,
@@ -196,8 +197,8 @@ export class CaixaController {
     body: { kind: 'withdrawal' | 'supply'; amountCents: number; reason: string },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
-      throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError('idempotency_key_obrigatoria', 400, 'Mande um Idempotency-Key de até 128 caracteres.');
     }
 
     const local = await this.unidade(staff);
@@ -208,7 +209,7 @@ export class CaixaController {
         // Escopada por operador, como em toda rota de dinheiro: a chave vem do
         // cliente e é livre, e duas recepcionistas mandando "1" fariam a segunda
         // receber a sangria da primeira de volta em vez de lançar a dela.
-        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         staffId: staff.staffUserId,
         staffName: staff.name,
         kind: body.kind,
@@ -410,6 +411,7 @@ export class CaixaController {
   async item(
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(itemSchema))
     body: {
       tipo: TipoDeItem;
@@ -422,6 +424,10 @@ export class CaixaController {
       productId?: string;
     },
   ) {
+    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
+      throw badRequest('invalid_request', 'Idempotency-Key com tamanho inválido');
+    }
+
     const local = await this.unidade(staff);
     try {
       return comandaVisivel({
@@ -437,6 +443,7 @@ export class CaixaController {
         professionalId: body.professionalId ?? null,
         packageId: body.packageId ?? null,
         productId: body.productId ?? null,
+        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
         }),
         podeVerCliente: pode(staff.permissions, 'customers.view'),
       });
@@ -538,6 +545,7 @@ export class CaixaController {
       pagamentos: Pagamento[];
       resgateQuantidade?: number;
       servicoDoPacote?: string;
+      servicoDaAssinatura?: string;
     },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
@@ -557,6 +565,7 @@ export class CaixaController {
           ? { resgateQuantidade: body.resgateQuantidade }
           : {}),
         ...(body.servicoDoPacote ? { servicoDoPacote: body.servicoDoPacote } : {}),
+        ...(body.servicoDaAssinatura ? { servicoDaAssinatura: body.servicoDaAssinatura } : {}),
         staffId: staff.staffUserId,
         staffName: staff.name,
         // O dia da unidade, não o do servidor: às 22h de Salvador o UTC já
@@ -610,8 +619,8 @@ export class CaixaController {
     body: { customerId: string; amountCents: number; forma: 'cash' | 'debit' | 'credit' | 'pix' },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
-      throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError('idempotency_key_obrigatoria', 400, 'Mande um Idempotency-Key de até 128 caracteres.');
     }
 
     const local = await this.unidade(staff);
@@ -623,7 +632,7 @@ export class CaixaController {
         amountCents: body.amountCents,
         forma: body.forma,
         // Escopada por operador, como em toda rota de dinheiro.
-        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         staffId: staff.staffUserId,
         staffName: staff.name,
       });
@@ -680,6 +689,12 @@ export class CaixaController {
   ) {
     if (!idempotencyKey || idempotencyKey.length > 128) {
       throw badRequest('invalid_request', 'Idempotency-Key é obrigatória para cobrar');
+    }
+    if (!cobrancaDaComandaDisponivel()) {
+      throw new DomainError(
+        'psp_nao_configurado', 503,
+        'Cobranças online estão indisponíveis: configure PSP_MODO=fake para teste ou PSP_MODO=stripe em produção.',
+      );
     }
 
     const local = await this.unidade(staff);

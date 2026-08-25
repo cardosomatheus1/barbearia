@@ -8,23 +8,20 @@ import { Exige, PermissaoGuard } from './permissao.guard.js';
 /**
  * A leitura de segmentação da base (bloco 61, SPEC §4.4).
  *
- * ## Por que `customers.view` e nada mais
+ * ## Por que `customers.view_notes` acompanha `customers.view`
  *
- * A rota devolve **contagem por segmento** e uma lista curta de quem está em
- * risco, com nome, ciclo e dias sem vir. Nenhum valor em reais atravessa: o
- * segmento é derivado de gasto entre outras coisas, mas o gasto em si é
- * `finance.view`, e devolvê-lo aqui seria o faturamento por cliente saindo de
- * uma rota chamada "segmentos" — a quarta vez que a regra da rota que agrega
- * seria quebrada neste repositório.
+ * A rota devolve classificação de relacionamento e uma lista de pessoas em
+ * risco. Isso é exatamente a camada que a ficha chama de **anotação/insight do
+ * cliente**: esconder o segmento em `/clientes` e entregá-lo aqui só com
+ * `customers.view` transformaria a rota agregada num bypass da permissão.
  *
- * A contagem sozinha também não é dinheiro: ao contrário de "quantos assinam
- * cada plano" (bloco 48), ela não tem preço para multiplicar. "Trinta em risco"
- * não vira faturamento por nenhuma conta.
+ * `finance.view` continua desnecessária porque nenhum valor em reais atravessa;
+ * `customers.view_notes` protege a inferência e o contexto de relacionamento.
  */
 @Controller('v1/admin/segments')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class SegmentoController {
-  @Exige('customers.view')
+  @Exige('customers.view', 'customers.view_notes')
   @Get()
   async ler(@Staff() staff: AuthenticatedStaff) {
     const dados = await segmentosNaTela(staff.tenantId);

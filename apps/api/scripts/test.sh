@@ -46,6 +46,7 @@ export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-100000}"
 # Uma linha por requisição enterraria a mensagem do teste que falhou.
 export LOG_REQUISICOES=nao
 export STAFF_EMAIL_PEPPER="${STAFF_EMAIL_PEPPER:-pepper-de-teste}"
+export OTP_PEPPER="${OTP_PEPPER:-otp-pepper-de-teste-0123456789abcdef}"
 export MARKETPLACE_ORIGIN_SECRET="${MARKETPLACE_ORIGIN_SECRET:-origem-de-teste-0123456789abcdef}"
 # Sorteada por execução: o banco é descartável e o segredo não sobrevive a ela.
 # Sem esta variável o segundo fator falha alto, de propósito — e a suíte do

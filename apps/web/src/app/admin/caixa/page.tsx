@@ -10,6 +10,7 @@ import { acaoAbrirCaixa, acaoFecharCaixa, acaoMovimentarCaixa, acaoSair } from '
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { BotaoDeEnvio } from '@/app/admin/botao-de-envio';
 
 /**
  * O caixa: a gaveta com dono.
@@ -301,9 +302,12 @@ export default async function CaixaPage({ searchParams }: Props) {
                 </p>
               </div>
 
-              <button className="ui-button ui-button--primary ui-button--block" type="submit">
+              <BotaoDeEnvio
+                className="ui-button ui-button--primary ui-button--block"
+                enviando="Registrando…"
+              >
                 Registrar
-              </button>
+              </BotaoDeEnvio>
             </form>
           </details>
 
@@ -341,9 +345,12 @@ export default async function CaixaPage({ searchParams }: Props) {
                 />
               </div>
 
-              <button className="ui-button ui-button--primary ui-button--block" type="submit">
+              <BotaoDeEnvio
+                className="ui-button ui-button--primary ui-button--block"
+                enviando="Fechando caixa…"
+              >
                 Fechar caixa
-              </button>
+              </BotaoDeEnvio>
             </form>
           </details>
         </>
@@ -369,9 +376,12 @@ export default async function CaixaPage({ searchParams }: Props) {
                 required
               />
             </div>
-            <button className="ui-button ui-button--primary ui-button--block" type="submit">
+            <BotaoDeEnvio
+              className="ui-button ui-button--primary ui-button--block"
+              enviando="Abrindo caixa…"
+            >
               Abrir caixa
-            </button>
+            </BotaoDeEnvio>
           </form>
         </section>
       )}

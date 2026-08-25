@@ -1,0 +1,163 @@
+.gatilho {
+  min-height: var(--size-touch);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gatilho:hover,
+.gatilho:focus-visible {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.gatilho kbd {
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border-left: 1px solid var(--color-border);
+  padding-left: var(--space-2);
+}
+
+.fundo {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding: min(14vh, 120px) var(--space-4) var(--space-4);
+  background: color-mix(in srgb, #02070b 72%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.dialogo {
+  width: min(680px, 100%);
+  max-height: min(680px, calc(100vh - 140px));
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 35%);
+}
+
+.cabecalho {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.cabecalho input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-lg);
+}
+
+.cabecalho:focus-within {
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+.cabecalho input::placeholder { color: var(--color-text-muted); }
+
+.fechar {
+  min-height: var(--size-touch);
+  min-width: var(--size-touch);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+.fechar:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.resultados {
+  max-height: min(600px, calc(100vh - 200px));
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.grupo + .grupo { margin-top: var(--space-3); }
+.grupo h2 {
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.resultado {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.resultado:hover {
+  background: var(--color-surface-hover);
+}
+.resultado:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background: var(--color-surface-hover);
+}
+
+.icone {
+  min-height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+.hora { font-variant-numeric: tabular-nums; }
+.corpo { min-width: 0; display: grid; gap: 2px; }
+.corpo strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.corpo small { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.estado,
+.dica {
+  margin: var(--space-3) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 560px) {
+  .gatilho { min-height: 44px; }
+  .gatilho kbd { display: none; }
+  .fundo { place-items: start stretch; padding: var(--space-3); }
+  .dialogo { width: 100%; max-height: calc(100vh - 24px); border-radius: var(--radius-md); }
+  .resultados { max-height: calc(100vh - 96px); }
+  .cabecalho { min-height: 58px; padding: 0 var(--space-3); }
+  .resultado { min-height: 58px; }
+}

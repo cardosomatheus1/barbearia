@@ -1,0 +1,35 @@
+BARBERDOCK — CORRECOES E RETESTE — 2026-08-24
+
+VEREDITO
+- Bloqueadores conhecidos de codigo/build/typecheck/unitarios: CORRIGIDOS.
+- Typecheck: 14/14 projetos.
+- Builds: 11/11 pacotes + API + Worker + Next OK.
+- Next 15.5.23: build sem avisos; 73 paginas estaticas.
+- Guardas estruturais: 23/23.
+- Guardas Vitest do repositorio: 83/83.
+- Testes Node autonomos: 17/17 assercoes em 5 arquivos.
+- Core: 1421/1421.
+- UI: 90/90.
+- Web: 179/179.
+- API sem banco: 77 aprovados; 439 skipped por banco.
+- S3 simulado: 6/6.
+- Total de casos dependentes de PostgreSQL coletados e skipped: 2011.
+
+R5
+- First Load JS compartilhado do Next: 102 kB.
+- Medidor: publico 101 kB JS + 0 kB CSS gzip.
+- Importar: 101 kB JS + 1 kB CSS gzip.
+- 2 arquivos exclusivos do admin.
+- LCP publico em 4G ainda requer ambiente publicado e referencia.
+
+LIMITACAO DO AMBIENTE
+- Ausentes: postgres, psql, pg_isready, Docker e Podman.
+- scripts/pg-de-pe.sh para antes dos testes reais.
+- Banco/RLS/migracoes/integracoes/E2E nao foram aprovados nem reprovados: nao executaram.
+
+PENDENCIAS EXTERNAS
+- PostgreSQL 16 + scripts/verify.sh completo.
+- V8 visual humano.
+- R5 LCP publico.
+- R12 com pessoas/barbearias reais.
+- Smoke em bucket S3 real.

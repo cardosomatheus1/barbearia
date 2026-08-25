@@ -1,247 +1,202 @@
 /**
  * Arquitetura de navegação do painel.
  *
- * A regra aqui é simples: o menu deve refletir a pergunta que o gestor está
- * tentando responder, e não a estrutura interna do código.
+ * V0 troca o vocabulário da arquitetura pelo vocabulário do trabalho. A pessoa
+ * não deveria aprender onde um engenheiro colocaria "Cadastros" ou
+ * "Integrações" para achar o que usa no balcão. O índice principal passa a ser:
  *
- * ## Por que sete módulos, e não cinco
+ * Hoje · Agenda · Clientes · Atendimento · Financeiro · Crescimento · Gestão
+ * Configurações
  *
- * A primeira divisão tinha cinco áreas, e uma delas — "Administração" —
- * carregava **dezesseis dos quarenta destinos**. Um módulo que junta a folha de
- * permissões, o token da API, a política de privacidade e a campanha de
- * retorno não está organizando nada: está sendo o lugar onde cai o que não
- * coube nos outros quatro. No notebook a lista passava da dobra, e a última
- * tela — plano e cobrança — só aparecia rolando.
+ * V1 abre `Clientes` como área de primeira ordem. A ficha individual deixa de
+ * ficar escondida dentro de Atendimento e passa a ter uma porta própria.
  *
- * O corte novo é pela **pergunta que a pessoa está fazendo**:
- *
- * | Módulo | A pergunta |
- * |---|---|
- * | Visão geral | como está o negócio? |
- * | Atendimento | o que está acontecendo agora? |
- * | Financeiro | quanto entrou, quanto saiu, quanto sobrou? |
- * | Marketing | quem não está voltando, e o que a casa manda? |
- * | Cadastros | o que a casa vende e com o quê? |
- * | Integrações | o que fala com o mundo lá fora? |
- * | Administração | quem pode o quê, e as obrigações da empresa |
- *
- * Marketing e Integrações são os dois que saíram de dentro de Administração, e
- * os dois eram exatamente o que estava escondido lá: campanha e automação são a
- * ferramenta de trazer cliente de volta, e ninguém as procura no mesmo lugar
- * onde troca a senha.
- *
- * ## O terceiro nível: `grupo`
- *
- * Módulo com seis ou nove telas vira lista, e lista é o que ninguém lê até o
- * fim. O `grupo` quebra a lista em blocos curtos — *O dia*, *Voz do cliente* —
- * e ele é **dado**, não desenho: o casco emite o rótulo quando o grupo muda, e
- * a ordem do registro é a ordem da tela.
+ * O painel do dono mora em Gestão. O Assistente continua no mesmo registro para
+ * não criar uma segunda fonte de nome/href/permissão, mas `posicao: 'utilitario'`
+ * tira-o do menu de áreas; o casco o apresenta como ação transversal no topo.
  */
 
 import type { Permissao } from '@barbearia/core';
 
+export type MoldeDePagina = 'operacional' | 'cadastro' | 'gestao' | 'configuracao' | 'excecao';
+
 export type Modulo =
-  | 'inicio'
+  | 'hoje'
+  | 'agenda'
+  | 'clientes'
   | 'atendimento'
   | 'financeiro'
-  | 'marketing'
-  | 'cadastros'
-  | 'integracoes'
-  | 'administracao';
+  | 'crescimento'
+  | 'gestao'
+  | 'configuracoes';
 
 export interface Destino {
   readonly href: string;
   readonly nome: string;
   readonly secao: string;
   readonly nota: string;
-  /**
-   * O recurso da plataforma que liga esta tela, quando ela depende de um
-   * (bloco 26). Ausente é o caso normal: a tela é do produto e existe sempre.
-   *
-   * O código é `string` e não uma união escrita aqui de propósito — o catálogo
-   * mora em `packages/platform`, e copiá-lo para cá seria a lista paralela que
-   * `secoes.ts` já custou uma vez. Quem impede o erro de digitação é
-   * `scripts/recursos-da-navegacao.test.mjs`, que compara os dois arquivos: um
-   * código inexistente esconderia a tela para sempre, e em silêncio.
-   */
   readonly recurso?: string;
-  /**
-   * A permissão que **abre a porta** desta tela — a que, faltando, faz a
-   * primeira leitura dela ser recusada.
-   *
-   * Lista com mais de um elemento é *qualquer uma serve*, e existe por um caso
-   * só: Comissões tem duas portas — `commission.view_own` mostra os números de
-   * quem entrou, `commission.view_all` mostra os da casa —, e declarar uma
-   * esconderia a tela de quem tem a outra.
-   *
-   * Ausente é legítimo e quer dizer *não há porta*: o Assistente, Segurança e
-   * Unidades abrem para qualquer conta da casa.
-   *
-   * ## Por que uma coluna aqui, e não a leitura do `@Exige` da rota
-   *
-   * A objeção estava escrita e era boa: uma coluna à mão em quarenta linhas é a
-   * sexta lista paralela deste código, e **errar uma linha esconde uma tela de
-   * quem deveria vê-la** — que é pior do que o defeito original.
-   *
-   * O que responde por isso não é a coluna, é a guarda, e ela é **empírica e
-   * nos dois sentidos** (`scripts/percorrer.mjs`): entra no painel com cada
-   * papel padrão, abre **todo destino que o menu ofereceu** e reprova se algum
-   * recusar, e abre **todo destino que o menu escondeu** e reprova se algum
-   * abrir. Escrever a permissão errada fica vermelho de um dos dois lados.
-   *
-   * Ler o `@Exige` da rota seria mais fraco, não mais forte: a tela chama várias
-   * rotas, a união delas esconde demais, a primeira esconde de menos, e nenhuma
-   * das duas enxerga a tela que engole o 403 e desenha um formulário que só vai
-   * recusar no botão — que era o caso de WhatsApp, Campanhas e Automações.
-   */
   readonly permissao?: readonly Permissao[];
-  /**
-   * O subgrupo dentro do módulo, quando ele tem telas o bastante para pedir um.
-   *
-   * Ausente é legítimo: módulo curto não precisa de divisão, e inventar um
-   * rótulo para quatro itens é hierarquia que não ajuda ninguém. Telas do mesmo
-   * grupo ficam **juntas na ordem do registro** — o casco não reordena nada, e
-   * um grupo que aparecesse duas vezes seria erro de escrita visível na tela.
-   */
   readonly grupo?: string;
+  /** V7: padrão visual/estrutural desta tela. `excecao` exige justificativa. */
+  readonly molde: MoldeDePagina;
+  readonly excecaoDeMolde?: string;
+  /**
+   * Destino transversal: existe, tem seção e permissão, mas não compete com as
+   * áreas de trabalho no menu. Hoje só o Assistente usa esta posição; no V11
+   * ele passa a dividir a barra superior com a busca global.
+   */
+  readonly posicao?: 'menu' | 'utilitario';
+}
+
+export interface DestinoInterno {
+  readonly secao: string;
+  readonly nome: string;
+  readonly nota: string;
+  /** V7: páginas internas também declaram o mesmo contrato visual. */
+  readonly molde: MoldeDePagina;
+  readonly excecaoDeMolde?: string;
+  /** Tela listada que funciona como porta de volta, quando houver. */
+  readonly pai?: string;
+  readonly recurso?: string;
+  readonly permissao?: readonly Permissao[];
 }
 
 export interface ModuloDoPainel {
   readonly id: Modulo;
   readonly nome: string;
   readonly telas: readonly Destino[];
-  /** Seções que pertencem ao módulo, mas são abertas a partir de outra tela. */
-  readonly dentro: readonly string[];
+  /**
+   * Seções que pertencem ao módulo, mas não ocupam uma aba própria.
+   *
+   * V3 dá nome e contexto a elas porque a migalha precisa ser derivada do
+   * registro tanto na porta quanto numa ficha aberta por id. Guardar só a
+   * string da seção deixava justamente as telas internas sem vocabulário.
+   */
+  readonly dentro: readonly DestinoInterno[];
+  /** Configuração é visualmente secundária às áreas usadas no dia a dia. */
+  readonly categoria?: 'principal' | 'configuracao';
 }
 
 export const MODULOS = [
   {
-    id: 'inicio',
-    nome: 'Visão geral',
+    id: 'hoje',
+    nome: 'Hoje',
     telas: [
-      { href: '/admin/painel', nome: 'Painel', secao: 'painel', nota: 'indicadores e visão do negócio', permissao: ['reports.operational'] },
-      { href: '/admin/assistente', nome: 'Assistente', secao: 'assistente', nota: 'pergunte em português' },
+      { href: '/admin/dia', nome: 'Hoje', secao: 'dia', molde: 'operacional', nota: 'operação do dia em tempo real', permissao: ['appointments.view'] },
+    ],
+    // A tela privada do barbeiro pertence ao mesmo momento operacional.
+    dentro: [{ secao: 'meu-dia', molde: 'operacional', nome: 'Meu dia', nota: 'sua agenda e seus atendimentos', pai: 'dia', permissao: ['appointments.view'] }],
+  },
+  {
+    id: 'agenda',
+    nome: 'Agenda',
+    telas: [
+      { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', molde: 'operacional', nota: 'dia, semana e próximos horários', permissao: ['appointments.view'] },
     ],
     dentro: [],
+  },
+  {
+    id: 'clientes',
+    nome: 'Clientes',
+    telas: [
+      { href: '/admin/clientes', nome: 'Clientes', secao: 'clientes', molde: 'cadastro', nota: 'buscar, reconhecer e agir sobre a base', permissao: ['customers.view'] },
+    ],
+    // A ficha pertence à mesma área, embora continue sendo aberta por id.
+    dentro: [{ secao: 'cliente', molde: 'cadastro', nome: 'Ficha do cliente', nota: 'histórico, preferências e relacionamento', pai: 'clientes', permissao: ['customers.view'] }],
   },
   {
     id: 'atendimento',
     nome: 'Atendimento',
     telas: [
-      { href: '/admin/dia', nome: 'Hoje', secao: 'dia', nota: 'operação do dia em tempo real', grupo: 'O dia', permissao: ['appointments.view'] },
-      { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', nota: 'dia, semana e próximos horários', grupo: 'O dia', permissao: ['appointments.view'] },
-      { href: '/admin/fila', nome: 'Fila', secao: 'fila', nota: 'clientes que chegaram sem marcar', grupo: 'O dia', recurso: 'fila', permissao: ['appointments.view'] },
-      { href: '/admin/recados', nome: 'Recados', secao: 'recados', nota: 'sugestões e reclamações de clientes', grupo: 'Voz do cliente', permissao: ['feedback.view'] },
-      { href: '/admin/recepcao', nome: 'Recepção', secao: 'recepcao', nota: 'perguntas que o site não soube responder', grupo: 'Voz do cliente', permissao: ['feedback.view'] },
-      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', nota: 'notas dos atendimentos e nota baixa a tratar', grupo: 'Voz do cliente', permissao: ['reviews.view'] },
+      { href: '/admin/fila', nome: 'Fila', secao: 'fila', molde: 'operacional', nota: 'clientes que chegaram sem marcar', grupo: 'Agora', recurso: 'fila', permissao: ['appointments.view'] },
+      { href: '/admin/comanda', nome: 'Cobrar', secao: 'comanda', molde: 'operacional', nota: 'cobrança dos atendimentos', grupo: 'Agora', permissao: ['cashier.open'] },
+      { href: '/admin/recados', nome: 'Recados', secao: 'recados', molde: 'gestao', nota: 'sugestões e reclamações de clientes', grupo: 'Voz do cliente', permissao: ['feedback.view'] },
+      { href: '/admin/recepcao', nome: 'Recepção', secao: 'recepcao', molde: 'operacional', nota: 'perguntas que o site não soube responder', grupo: 'Voz do cliente', permissao: ['feedback.view'] },
+      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', molde: 'gestao', nota: 'notas dos atendimentos e nota baixa a tratar', grupo: 'Voz do cliente', permissao: ['reviews.view'] },
     ],
-    dentro: ['cliente', 'meu-dia'],
+    dentro: [],
   },
   {
     id: 'financeiro',
     nome: 'Financeiro',
     telas: [
-      { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', nota: 'abertura, movimentos e fechamento', grupo: 'Balcão', permissao: ['cashier.open'] },
-      // "Cobrar", como o título da tela. Mesmo defeito do fiado, mais leve.
-      { href: '/admin/comanda', nome: 'Cobrar', secao: 'comanda', nota: 'cobrança dos atendimentos', grupo: 'Balcão', permissao: ['cashier.open'] },
-      // "Fiado" e não "Pendências": todo o resto do produto diz fiado — a rota, a
-      // função `quemEstaDevendo`, "Pagamento de fiado" no extrato do caixa, o
-      // resumo do dia e o próprio título da tela. Quando o dono fala "abre o
-      // Fiado", a recepção procurava "Fiado" no menu e não achava (§6, pergunta 2).
-      { href: '/admin/fiado', nome: 'Fiado', secao: 'fiado', nota: 'valores em aberto de clientes', grupo: 'Balcão', permissao: ['cashier.open'] },
-      { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', nota: 'o que a casa deve e tem a receber', grupo: 'Fechamento', permissao: ['finance.view'] },
-      { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', nota: 'o que a casa precisa pagar', grupo: 'Fechamento', permissao: ['commission.view_own', 'commission.view_all'] },
-      { href: '/admin/dre', nome: 'Resultado', secao: 'dre', nota: 'o que sobrou depois de tudo', grupo: 'Fechamento', permissao: ['finance.view_profit'] },
+      { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', molde: 'operacional', nota: 'abertura, movimentos e fechamento', grupo: 'Balcão', permissao: ['cashier.open'] },
+      { href: '/admin/fiado', nome: 'Fiado', secao: 'fiado', molde: 'operacional', nota: 'valores em aberto de clientes', grupo: 'Balcão', permissao: ['cashier.open'] },
+      { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', molde: 'gestao', nota: 'o que a casa deve e tem a receber', grupo: 'Fechamento', permissao: ['finance.view'] },
+      { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', molde: 'gestao', nota: 'o que a casa precisa pagar', grupo: 'Fechamento', permissao: ['commission.view_own', 'commission.view_all'] },
+      { href: '/admin/dre', nome: 'Resultado', secao: 'dre', molde: 'gestao', nota: 'o que sobrou depois de tudo', grupo: 'Fechamento', permissao: ['finance.view_profit'] },
     ],
-    dentro: ['meus-numeros'],
+    dentro: [{ secao: 'meus-numeros', molde: 'gestao', nome: 'Meus números', nota: 'seu resultado e suas comissões', pai: 'comissao', permissao: ['commission.view_own'] }],
   },
   {
-    id: 'marketing',
-    nome: 'Marketing',
+    id: 'crescimento',
+    nome: 'Crescimento',
     telas: [
-      /**
-       * O WhatsApp abre o grupo, e é onde ele passou a morar (bloco 83).
-       *
-       * Ele estava em "Integrações", ao lado de nota fiscal, chave de API e
-       * webhook — que são coisas de quem liga sistema em sistema. Mas quem abre
-       * a tela do WhatsApp é quem vai mandar campanha, e ela é **pré-requisito
-       * das duas telas abaixo**: sem número conectado e texto aprovado, nem
-       * automação nem campanha chegam a ninguém.
-       *
-       * Primeiro do grupo por causa disso: a ordem do menu passa a ser a ordem
-       * em que se faz o trabalho.
-       */
-      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', nota: 'o número por onde tudo sai — conecte antes de enviar', grupo: 'Envios', permissao: ['whatsapp.manage'] },
-      { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', nota: 'horários vazios e quem chamar', grupo: 'Envios', permissao: ['marketing.send'] },
-      { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', nota: 'o que a casa manda sozinha', grupo: 'Envios', permissao: ['marketing.send'] },
-      // "Lembretes" no menu e "Avisos ao cliente" no título da própria tela — e
-      // o botão do onboarding, a primeira coisa que um dono novo vê, também diz
-      // "Avisos ao cliente". O produto mandava para um nome e escondia atrás de
-      // outro (§6, pergunta 2).
-      { href: '/admin/avisos', nome: 'Avisos ao cliente', secao: 'avisos', nota: 'confirmação, lembrete e retorno', grupo: 'Envios', recurso: 'avisos', permissao: ['settings.manage'] },
-      { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', nota: 'quem está indo embora, e por quê', grupo: 'Retorno', permissao: ['customers.view'] },
-      { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', nota: 'pontos, visitas ou cashback', grupo: 'Retorno', permissao: ['appointments.view'] },
+      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', molde: 'configuracao', nota: 'o número por onde tudo sai — conecte antes de enviar', grupo: 'Relacionamento', permissao: ['whatsapp.manage'] },
+      { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', molde: 'gestao', nota: 'horários vazios e quem chamar', grupo: 'Relacionamento', permissao: ['marketing.send'] },
+      { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', molde: 'configuracao', nota: 'o que a casa manda sozinha', grupo: 'Relacionamento', permissao: ['marketing.send'] },
+      { href: '/admin/avisos', nome: 'Avisos ao cliente', secao: 'avisos', molde: 'configuracao', nota: 'confirmação, lembrete e retorno', grupo: 'Relacionamento', recurso: 'avisos', permissao: ['settings.manage'] },
+      { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', molde: 'gestao', nota: 'quem está indo embora, e por quê', grupo: 'Retorno', permissao: ['customers.view', 'customers.view_notes', 'reviews.view'] },
+      { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', molde: 'gestao', nota: 'pontos, visitas ou cashback', grupo: 'Retorno', permissao: ['appointments.view'] },
+      { href: '/admin/clube', nome: 'Clube', secao: 'clube', molde: 'gestao', nota: 'planos de assinatura e quem assina', grupo: 'Retorno', permissao: ['appointments.view'] },
     ],
     dentro: [],
   },
   {
-    id: 'cadastros',
-    nome: 'Cadastros',
+    id: 'gestao',
+    nome: 'Gestão',
     telas: [
-      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', nota: 'preço, duração e regras do serviço', grupo: 'Catálogo', permissao: ['settings.manage'] },
-      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'Catálogo', permissao: ['settings.manage'] },
-      { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', nota: 'combos pagos adiantado, como 5 cortes', grupo: 'Catálogo', permissao: ['appointments.view'] },
-      { href: '/admin/clube', nome: 'Clube', secao: 'clube', nota: 'planos de assinatura e quem assina', grupo: 'Catálogo', permissao: ['appointments.view'] },
-      { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', nota: 'barbeiros, jornadas e metas', grupo: 'Estrutura', permissao: ['settings.manage'] },
-      { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', nota: 'cadeiras, lavatórios e salas', grupo: 'Estrutura', permissao: ['settings.manage'] },
-      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', nota: 'produtos, contagem e ficha de consumo', grupo: 'Estrutura', permissao: ['inventory.view'] },
-      { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', nota: 'logo e imagens da página pública', grupo: 'Marca', permissao: ['settings.manage'] },
-      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', nota: 'o cardápio padrão da rede e o que esta casa adotou', grupo: 'Marca', permissao: ['settings.manage'] },
+      // A primeira tela é deliberadamente o painel: esta é a casa do dono.
+      { href: '/admin/painel', nome: 'Painel', secao: 'painel', molde: 'gestao', nota: 'indicadores e visão do negócio', grupo: 'Visão do negócio', permissao: ['reports.operational'] },
+      { href: '/admin/assistente', nome: 'Assistente de gestão', secao: 'assistente', molde: 'gestao', nota: 'pergunte em português', grupo: 'Visão do negócio', posicao: 'utilitario' },
+      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', molde: 'cadastro', nota: 'preço, duração e regras do serviço', grupo: 'Oferta', permissao: ['settings.manage'] },
+      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', molde: 'cadastro', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'Oferta', permissao: ['settings.manage'] },
+      { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', molde: 'cadastro', nota: 'combos pagos adiantado, como 5 cortes', grupo: 'Oferta', permissao: ['appointments.view'] },
+      { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', molde: 'cadastro', nota: 'barbeiros, jornadas e metas', grupo: 'Operação', permissao: ['settings.manage'] },
+      { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', molde: 'cadastro', nota: 'cadeiras, lavatórios e salas', grupo: 'Operação', permissao: ['settings.manage'] },
+      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', molde: 'cadastro', nota: 'produtos, contagem e ficha de consumo', grupo: 'Operação', permissao: ['inventory.view'] },
+      { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', molde: 'configuracao', nota: 'logo e imagens da página pública', grupo: 'Estrutura', permissao: ['settings.manage'] },
+      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', molde: 'configuracao', nota: 'o cardápio padrão da rede e o que esta casa adotou', grupo: 'Estrutura', permissao: ['settings.manage'] },
+      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', molde: 'configuracao', nota: 'lojas da rede, quem opera cada uma e estoque entre elas', grupo: 'Estrutura' },
+      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', molde: 'configuracao', nota: 'CNPJ, regime e notas emitidas', grupo: 'Estrutura', recurso: 'fiscal', permissao: ['fiscal.settings', 'finance.view'] },
     ],
     dentro: [],
   },
   {
-    id: 'integracoes',
-    nome: 'Integrações',
+    id: 'configuracoes',
+    nome: 'Configurações',
+    categoria: 'configuracao',
     telas: [
-      /*
-        A porta **não** é `fiscal.view`, e foi a guarda de percurso que disse.
-        A tela desenha a lista quando se tem `fiscal.view` **e** `finance.view`
-        — trezentas notas com valor são o faturamento do mês por outro caminho —
-        ou o cadastro quando se tem `fiscal.settings`. A recepção tem a primeira
-        e não a segunda, então para ela a tela recusa inteira.
-      */
-      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', nota: 'CNPJ, regime e notas emitidas', recurso: 'fiscal', permissao: ['fiscal.settings', 'finance.view'] },
-      { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', nota: 'integração do seu site ou do seu ERP', permissao: ['team.manage'] },
-      { href: '/admin/webhooks', nome: 'Webhooks', secao: 'webhooks', nota: 'avisar outro sistema quando algo acontece aqui', permissao: ['team.manage'] },
+      { href: '/admin/equipe', nome: 'Usuários e acessos', secao: 'equipe', molde: 'configuracao', nota: 'contas, papéis e permissões', grupo: 'Conta', permissao: ['team.manage'] },
+      { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', molde: 'configuracao', nota: 'senha e segundo fator', grupo: 'Conta' },
+      { href: '/admin/chaves', nome: 'Chaves de API', secao: 'chaves', molde: 'configuracao', nota: 'integração do seu site ou do seu ERP', grupo: 'Integrações', permissao: ['team.manage'] },
+      { href: '/admin/webhooks', nome: 'Webhooks', secao: 'webhooks', molde: 'configuracao', nota: 'avisar outro sistema quando algo acontece aqui', grupo: 'Integrações', permissao: ['team.manage'] },
+      { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', molde: 'configuracao', nota: 'solicitações e dados de clientes', grupo: 'Conta e dados', permissao: ['settings.manage'] },
+      { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', molde: 'configuracao', nota: 'histórico de alterações', grupo: 'Conta e dados', permissao: ['settings.manage'] },
+      { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', molde: 'configuracao', nota: 'trazer base de outro sistema', grupo: 'Conta e dados', recurso: 'importacao', permissao: ['customers.edit'] },
+      { href: '/admin/plano', nome: 'Plano e cobrança', secao: 'plano', molde: 'gestao', nota: 'assinatura, uso e limites', grupo: 'Negócio', permissao: ['settings.manage'] },
+      { href: '/admin/configuracoes', nome: 'Preferências', secao: 'configuracoes', molde: 'configuracao', nota: 'horários, políticas e preferências', grupo: 'Negócio', permissao: ['settings.manage'] },
     ],
-    dentro: [],
-  },
-  {
-    id: 'administracao',
-    nome: 'Administração',
-    telas: [
-      { href: '/admin/equipe', nome: 'Usuários e acessos', secao: 'equipe', nota: 'contas, papéis e permissões', grupo: 'A conta', permissao: ['team.manage'] },
-      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', nota: 'lojas da rede, quem opera cada uma e estoque entre elas', grupo: 'A conta' },
-      { href: '/admin/plano', nome: 'Plano e cobrança', secao: 'plano', nota: 'assinatura, uso e limites', grupo: 'A conta', permissao: ['settings.manage'] },
-      { href: '/admin/configuracoes', nome: 'Configurações', secao: 'configuracoes', nota: 'horários, políticas e preferências', grupo: 'Preferências', permissao: ['settings.manage'] },
-      { href: '/admin/seguranca', nome: 'Segurança', secao: 'seguranca', nota: 'senha e segundo fator', grupo: 'Preferências' },
-      { href: '/admin/importar', nome: 'Importar dados', secao: 'importar', nota: 'trazer base de outro sistema', grupo: 'Preferências', recurso: 'importacao', permissao: ['customers.edit'] },
-      { href: '/admin/lgpd', nome: 'Privacidade', secao: 'lgpd', nota: 'solicitações e dados de clientes', grupo: 'Obrigações', permissao: ['settings.manage'] },
-      { href: '/admin/trilha', nome: 'Auditoria', secao: 'trilha', nota: 'histórico de alterações', grupo: 'Obrigações', permissao: ['settings.manage'] },
-    ],
-    dentro: ['onboarding'],
+    dentro: [{ secao: 'onboarding', molde: 'configuracao', nome: 'Primeiros passos', nota: 'o necessário para colocar a casa no ar', permissao: ['settings.manage'] }],
   },
 ] as const satisfies readonly ModuloDoPainel[];
 
 export type Secao =
   | (typeof MODULOS)[number]['telas'][number]['secao']
-  | (typeof MODULOS)[number]['dentro'][number];
+  | (typeof MODULOS)[number]['dentro'][number]['secao'];
+
+const MOLDE_DA_SECAO = new Map<string, MoldeDePagina>(
+  MODULOS.flatMap((m) => [
+    ...m.telas.map((t) => [t.secao, t.molde] as const),
+    ...m.dentro.map((s) => [s.secao, s.molde] as const),
+  ]),
+);
 
 const MODULO_DA_SECAO = new Map<string, Modulo>(
   MODULOS.flatMap((m) => [
     ...m.telas.map((t) => [t.secao, m.id] as const),
-    ...m.dentro.map((s) => [s, m.id] as const),
+    ...m.dentro.map((s) => [s.secao, m.id] as const),
   ]),
 );
 
@@ -296,6 +251,11 @@ export function modulosVisiveis(
         (!tela.recurso || recursos.includes(tela.recurso)) &&
         (!tela.permissao || tela.permissao.some((p) => tem.has(p))),
     ),
+    dentro: modulo.dentro.filter(
+      (tela) =>
+        (!tela.recurso || recursos.includes(tela.recurso)) &&
+        (!tela.permissao || tela.permissao.some((p) => tem.has(p))),
+    ),
   })).filter((modulo) => modulo.telas.length > 0);
 }
 
@@ -309,6 +269,68 @@ export function modulosVisiveis(
  */
 const REGISTRO: readonly ModuloDoPainel[] = MODULOS;
 
+
+/** O que ocupa espaço na navegação da área; utilitários transversais ficam fora. */
+export function telasDoMenu(modulo: ModuloDoPainel): readonly Destino[] {
+  return modulo.telas.filter((tela) => tela.posicao !== 'utilitario');
+}
+
+/** Utilitários visíveis, já depois dos cortes de recurso e permissão. */
+export function utilitariosVisiveis(modulos: readonly ModuloDoPainel[]): readonly Destino[] {
+  return modulos.flatMap((modulo) => modulo.telas).filter((tela) => tela.posicao === 'utilitario');
+}
+
+export interface OrientacaoDaTela {
+  readonly modulo: Modulo;
+  readonly moduloNome: string;
+  readonly moduloHref: string;
+  readonly secao: string;
+  readonly nome: string;
+  readonly nota: string;
+  readonly pai?: string;
+  readonly listada: boolean;
+  readonly molde: MoldeDePagina;
+}
+
+/**
+ * O vocabulário que o V3 desenha acima de cada tela, derivado da mesma fonte
+ * que decide menu, permissão e módulo ativo. Não existe uma segunda lista de
+ * breadcrumbs para esquecer quando entrar uma tela nova.
+ */
+export function orientacoesVisiveis(
+  modulos: readonly ModuloDoPainel[],
+): readonly OrientacaoDaTela[] {
+  return modulos.flatMap((modulo) => {
+    const porta = telasDoMenu(modulo)[0]?.href ?? modulo.telas[0]?.href;
+    if (!porta) return [];
+
+    const listadas: OrientacaoDaTela[] = modulo.telas.map((tela) => ({
+      modulo: modulo.id,
+      moduloNome: modulo.nome,
+      moduloHref: porta,
+      secao: tela.secao,
+      nome: tela.nome,
+      nota: tela.nota,
+      listada: tela.posicao !== 'utilitario',
+      molde: tela.molde,
+    }));
+
+    const internas: OrientacaoDaTela[] = modulo.dentro.map((tela) => ({
+      modulo: modulo.id,
+      moduloNome: modulo.nome,
+      moduloHref: porta,
+      secao: tela.secao,
+      nome: tela.nome,
+      nota: tela.nota,
+      ...(tela.pai !== undefined ? { pai: tela.pai } : {}),
+      listada: false,
+      molde: tela.molde,
+    }));
+
+    return [...listadas, ...internas];
+  });
+}
+
 /** Os destinos que só existem quando a plataforma liga o recurso. */
 export const DESTINOS_GATEADOS: readonly (Destino & { readonly recurso: string })[] = REGISTRO
   .flatMap((modulo) => modulo.telas)
@@ -317,10 +339,12 @@ export const DESTINOS_GATEADOS: readonly (Destino & { readonly recurso: string }
 export function secao(nome: Secao): {
   readonly 'data-secao': string;
   readonly 'data-modulo-atual': Modulo;
+  readonly 'data-molde': MoldeDePagina;
 } {
   const modulo = MODULO_DA_SECAO.get(nome);
-  if (!modulo) throw new Error(`seção fora do casco: ${nome}`);
-  return { 'data-secao': nome, 'data-modulo-atual': modulo };
+  const molde = MOLDE_DA_SECAO.get(nome);
+  if (!modulo || !molde) throw new Error(`seção fora do casco: ${nome}`);
+  return { 'data-secao': nome, 'data-modulo-atual': modulo, 'data-molde': molde };
 }
 
 /**
@@ -337,7 +361,7 @@ export function secao(nome: Secao): {
  * rede: há teste que confere que as chaves são exatamente os ids de `MODULOS`.
  */
 const PORTA_ABERTA: Record<string, readonly string[]> = Object.fromEntries(
-  MODULOS.map((m) => [m.id, [...m.telas.map((t) => t.secao), ...m.dentro]]),
+  MODULOS.map((m) => [m.id, [...m.telas.map((t) => t.secao), ...m.dentro.map((s) => s.secao)]]),
 );
 
 export const SECOES_POR_MODULO = PORTA_ABERTA as Readonly<Record<Modulo, readonly string[]>>;

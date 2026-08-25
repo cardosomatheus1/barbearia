@@ -35,6 +35,7 @@ const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 
 const TENANT = '35353535-1111-1111-1111-111111111111';
 const LOCATION = '35353535-aaaa-0000-0000-000000000001';
+const FILIAL = '35353535-aaaa-0000-0000-000000000002';
 const RUAN = '35353535-bbbb-0000-0000-000000000001';
 const CABELO = '35353535-eeee-0000-0000-000000000001';
 const CARLOS = '35353535-cccc-0000-0000-000000000001';
@@ -69,7 +70,8 @@ describeIfDb('a cobrança online da comanda', () => {
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
 
       INSERT INTO locations (id, tenant_id, name, timezone)
-      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia');
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia'),
+             ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia');
 
       INSERT INTO professionals (id, tenant_id, location_id, name, kind)
       VALUES ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan', 'professional');
@@ -170,6 +172,43 @@ describeIfDb('a cobrança online da comanda', () => {
     expect(await cobrancasDaComanda(TENANT, orderId, LOCATION)).toHaveLength(1);
   });
 
+  it('a mesma chave pode existir em duas unidades sem devolver o Pix da outra loja', async () => {
+    const provider = new FakePaymentProvider();
+    const matriz = await comandaDe4900();
+    const primeira = await cobrar(matriz, provider, 'mesma-chave');
+
+    const comandaFilial = await abrirComanda({
+      tenantId: TENANT,
+      locationId: FILIAL,
+      customerId: CARLOS,
+      ...operador,
+    });
+    await adicionarItem({
+      tenantId: TENANT,
+      locationId: FILIAL,
+      orderId: comandaFilial.id,
+      tipo: 'service',
+      serviceId: CABELO,
+      descricao: 'Corte',
+      quantidade: 1,
+      precoUnitarioCents: 4900,
+    });
+    const segunda = await criarCobrancaDaComanda({
+      tenantId: TENANT,
+      locationId: FILIAL,
+      orderId: comandaFilial.id,
+      meio: 'pix',
+      idempotencyKey: 'mesma-chave',
+      provider,
+      agora: AGORA,
+      ...operador,
+    });
+
+    expect(segunda.id).not.toBe(primeira.id);
+    expect(segunda.orderId).toBe(comandaFilial.id);
+    expect(provider.cobrancas).toHaveLength(2);
+  });
+
   it('duas chaves diferentes na mesma comanda: a segunda é recusada', async () => {
     /**
      * A trava é o índice único parcial, não uma consulta antes do `INSERT` —
@@ -200,24 +239,71 @@ describeIfDb('a cobrança online da comanda', () => {
     });
   });
 
-  it('falha ao emitir destrava a comanda em vez de prendê-la', async () => {
+  it('resposta perdida na emissão preserva a cobrança e a mesma chave a recupera', async () => {
     /**
-     * A linha nasce antes da chamada — é o que impede um Pix existir no mundo
-     * sem o produto saber. O preço é a linha órfã quando o adquirente não
-     * responde, e deixá-la `aguardando` prenderia o balcão num QR Code que
-     * nunca existiu.
+     * O adquirente pode ter criado o Pix e perdido apenas a resposta. Expirar
+     * a linha local nesse ponto abriria uma segunda cobrança enquanto a
+     * primeira continua pagável no mundo externo. A linha permanece viva e a
+     * mesma Idempotency-Key reapresenta a mesma intenção.
      */
     const orderId = await comandaDe4900();
-    const quebrado = new FakePaymentProvider();
-    quebrado.criarCobranca = async () => {
-      throw new Error('adquirente fora do ar');
+    const provider = new FakePaymentProvider();
+    const criarReal = provider.criarCobranca.bind(provider);
+    let primeira = true;
+    provider.criarCobranca = async (pedido) => {
+      const criada = await criarReal(pedido);
+      if (primeira) {
+        primeira = false;
+        throw new Error('resposta perdida depois de criar');
+      }
+      return criada;
     };
 
-    await expect(cobrar(orderId, quebrado)).rejects.toThrow(/fora do ar/);
+    await expect(cobrar(orderId, provider, 'mesma-intencao')).rejects.toThrow(/resposta perdida/);
 
-    // E a comanda aceita uma cobrança nova em seguida.
-    const nova = await cobrar(orderId, new FakePaymentProvider(), 'toque-2');
-    expect(nova.estado).toBe('aguardando');
+    const depoisDaFalha = await cobrancasDaComanda(TENANT, orderId, LOCATION);
+    expect(depoisDaFalha).toHaveLength(1);
+    expect(depoisDaFalha[0]).toMatchObject({ estado: 'aguardando', pagamentoId: null });
+    expect(provider.cobrancas).toHaveLength(1);
+
+    // Uma chave nova continua bloqueada: não sabemos que a cobrança externa morreu.
+    await expect(cobrar(orderId, provider, 'outra-intencao')).rejects.toMatchObject({
+      code: 'cobranca_em_curso',
+    });
+
+    const recuperada = await cobrar(orderId, provider, 'mesma-intencao');
+    expect(recuperada.pagamentoId).toBe('fake_pay_1');
+    expect(provider.cobrancas).toHaveLength(1);
+  });
+
+  it('a conciliação recupera emissão sem resposta e se reagenda enquanto houver cobrança viva', async () => {
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const criarReal = provider.criarCobranca.bind(provider);
+    let primeira = true;
+    provider.criarCobranca = async (pedido) => {
+      const criada = await criarReal(pedido);
+      if (primeira) {
+        primeira = false;
+        throw new Error('resposta perdida depois de criar');
+      }
+      return criada;
+    };
+
+    await expect(cobrar(orderId, provider, 'recon')).rejects.toThrow();
+
+    const varredura = await conciliarCobrancas({ tenantId: TENANT, provider, agora: AGORA });
+    expect(varredura).toMatchObject({ pendentes: 1, comFalha: 0 });
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.pagamentoId).toBe('fake_pay_1');
+    expect(provider.cobrancas).toHaveLength(1);
+
+    const tarefas = await withTenant(TENANT, (tx) => tx.$queryRaw<{ idempotency_key: string }[]>`
+      SELECT idempotency_key FROM jobs
+       WHERE tenant_id = ${TENANT}::uuid
+         AND kind = 'cobranca.conciliar'
+         AND idempotency_key LIKE 'cobranca-recon:%'
+    `);
+    expect(tarefas).toHaveLength(1);
   });
 
   it('a conferência é enfileirada **junto** com a cobrança', async () => {
@@ -297,13 +383,18 @@ describeIfDb('a cobrança online da comanda', () => {
 
   // -- confirmação -----------------------------------------------------------
 
-  const confirmar = (pagamentoId: string, eventoId = 'evt_1') =>
+  const confirmar = (
+    pagamentoId: string,
+    eventoId = 'evt_1',
+    provider: FakePaymentProvider = new FakePaymentProvider(),
+  ) =>
     confirmarCobranca({
       tenantId: TENANT,
       eventoId,
       tipo: 'payment_intent.succeeded',
       pagamentoId,
       estado: 'pago',
+      provider,
       agora: AGORA,
     });
 
@@ -410,6 +501,7 @@ describeIfDb('a cobrança online da comanda', () => {
       pagamentoId: cobranca.pagamentoId ?? '',
       estado: 'recusado',
       motivo: 'card_declined',
+      provider,
       agora: AGORA,
     });
 
@@ -580,7 +672,8 @@ describeIfDb('a cobrança online da comanda', () => {
      */
     await abrirGaveta();
     const orderId = await comandaDe4900();
-    const cobranca = await cobrar(orderId, new FakePaymentProvider());
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
 
     // A comanda fecha por um caminho que não passa pela guarda.
     await withTenant(TENANT, (tx) => tx.$executeRaw`
@@ -588,15 +681,61 @@ describeIfDb('a cobrança online da comanda', () => {
        WHERE id = ${orderId}::uuid
     `);
 
-    const resultado = await confirmar(cobranca.pagamentoId ?? '');
+    const resultado = await confirmar(cobranca.pagamentoId ?? '', 'evt_divergencia', provider);
 
     expect(resultado.desfecho).toBe('pago_com_divergencia');
-    // O dinheiro fica registrado como recebido, e a linha é encontrável.
-    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('pago');
+    // Dinheiro que não pode ser aplicado à venda é devolvido; não fica como
+    // `pago` pedindo ao balcão para abrir caixa para uma divergência insolúvel.
+    expect(provider.estornos).toHaveLength(1);
+    expect(provider.estornos[0]).toMatchObject({
+      pagamentoId: cobranca.pagamentoId,
+      valorCents: 4900,
+    });
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('estornado');
     const eventos = await withTenant(TENANT, (tx) => tx.$queryRaw<{ outcome: string }[]>`
       SELECT outcome FROM order_charge_events
     `);
     expect(eventos[0]?.outcome).toBe('pago_com_divergencia');
+  });
+
+
+  it('divergência reembolsa uma vez e libera nova cobrança só depois do refund', async () => {
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const primeira = await cobrar(orderId, provider, 'toque-div-1');
+
+    // Simula integração legada/out-of-band mudando o total depois da emissão.
+    await withTenant(TENANT, (tx) => tx.$executeRaw`
+      UPDATE orders SET total_cents = 5000 WHERE id = ${orderId}::uuid
+    `);
+
+    const resultado = await confirmar(primeira.pagamentoId ?? '', 'evt_div_retry', provider);
+    expect(resultado.desfecho).toBe('pago_com_divergencia');
+    expect(provider.estornos).toHaveLength(1);
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('estornado');
+
+    // Depois da devolução, a cobrança não é mais dinheiro vivo: a recepção
+    // precisa poder corrigir a comanda e tentar cobrar novamente.
+    const corrigida = await adicionarItem({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId,
+      tipo: 'service',
+      descricao: 'Ajuste após refund',
+      quantidade: 1,
+      precoUnitarioCents: 100,
+    });
+    expect(corrigida.totalCents).toBe(5000);
+
+    // Reentrega do mesmo evento não devolve novamente.
+    const repetido = await confirmar(primeira.pagamentoId ?? '', 'evt_div_retry', provider);
+    expect(repetido.desfecho).toBe('ignorado');
+    expect(provider.estornos).toHaveLength(1);
+
+    // O refund persistido tira a cobrança do índice de "dinheiro vivo".
+    const segunda = await cobrar(orderId, provider, 'toque-div-2');
+    expect(segunda.valorCents).toBe(5000);
   });
 
   it('uma cobrança ruim não para a varredura das outras', async () => {
@@ -653,6 +792,71 @@ describeIfDb('a cobrança online da comanda', () => {
     expect(provider.cancelados).toEqual([cobranca.pagamentoId]);
   });
 
+
+  it('não enterra localmente uma cobrança enquanto o adquirente ainda está emitindo', async () => {
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const original = provider.criarCobranca.bind(provider);
+
+    let iniciou!: () => void;
+    let liberar!: () => void;
+    const iniciouEmissao = new Promise<void>((resolve) => { iniciou = resolve; });
+    const bloqueio = new Promise<void>((resolve) => { liberar = resolve; });
+    provider.criarCobranca = async (pedido) => {
+      iniciou();
+      await bloqueio;
+      return original(pedido);
+    };
+
+    const emissao = cobrar(orderId, provider);
+    await iniciouEmissao;
+
+    const [nascendo] = await cobrancasDaComanda(TENANT, orderId, LOCATION);
+    expect(nascendo?.pagamentoId).toBeNull();
+    await expect(cancelarCobranca({
+      locationId: LOCATION,
+      tenantId: TENANT,
+      orderId,
+      chargeId: nascendo?.id ?? '',
+      provider,
+      ...operador,
+    })).rejects.toMatchObject({ code: 'cobranca_em_curso' });
+
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('aguardando');
+
+    liberar();
+    const pronta = await emissao;
+    expect(pronta.pagamentoId).toBeTruthy();
+
+    await cancelarCobranca({
+      locationId: LOCATION,
+      tenantId: TENANT,
+      orderId,
+      chargeId: pronta.id,
+      provider,
+      ...operador,
+    });
+    expect(provider.cancelados).toEqual([pronta.pagamentoId]);
+  });
+
+  it('falha ao cancelar no adquirente mantém a cobrança viva e conciliável', async () => {
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
+    provider.cancelar = async () => { throw new Error('adquirente fora do ar'); };
+
+    await expect(cancelarCobranca({
+      locationId: LOCATION,
+      tenantId: TENANT,
+      orderId,
+      chargeId: cobranca.id,
+      provider,
+      ...operador,
+    })).rejects.toThrow(/adquirente fora do ar/);
+
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('aguardando');
+  });
+
   it('pagamento que chega depois do cancelamento tem nome próprio', async () => {
     // `ignorado` é reentrega normal. Dinheiro sobre cobrança morta é outra
     // coisa, e chamar as duas do mesmo jeito é como a segunda nunca aparece.
@@ -669,8 +873,68 @@ describeIfDb('a cobrança online da comanda', () => {
       ...operador,
     });
 
-    const resultado = await confirmar(cobranca.pagamentoId ?? '');
+    const resultado = await confirmar(cobranca.pagamentoId ?? '', 'evt_orfao', provider);
     expect(resultado.desfecho).toBe('pago_orfao');
+    expect(provider.estornos).toHaveLength(1);
+    expect(provider.estornos[0]).toMatchObject({
+      pagamentoId: cobranca.pagamentoId,
+      valorCents: 4900,
+    });
+    const [linha] = await withTenant(TENANT, (tx) => tx.$queryRaw<
+      { psp_refund_id: string | null; refunded_cents: number | null }[]
+    >`SELECT psp_refund_id, refunded_cents FROM order_charges WHERE id = ${cobranca.id}::uuid`);
+    expect(linha?.psp_refund_id).toBe('fake_refund_1');
+    expect(linha?.refunded_cents).toBe(4900);
+  });
+
+  it('reentrega do mesmo webhook conclui o refund órfão que falhou na primeira tentativa', async () => {
+    // O evento fica `pago_orfao` antes da chamada de rede. Se a Stripe cai,
+    // devolvemos 5xx; na reentrega do MESMO event_id a branch de duplicata
+    // precisa reencontrar o refund pendente, sem criar uma segunda devolução.
+    await abrirGaveta();
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
+    await cancelarCobranca({
+      locationId: LOCATION, tenantId: TENANT, orderId, chargeId: cobranca.id,
+      provider, ...operador,
+    });
+
+    let tentativas = 0;
+    const estornarReal = provider.estornar.bind(provider);
+    provider.estornar = async (pagamentoId, valorCents) => {
+      tentativas += 1;
+      if (tentativas === 1) throw new Error('stripe temporariamente fora do ar');
+      return estornarReal(pagamentoId, valorCents);
+    };
+
+    await expect(
+      confirmar(cobranca.pagamentoId ?? '', 'evt_orfao_retry', provider),
+    ).rejects.toThrow(/temporariamente fora do ar/);
+
+    const [pendente] = await withTenant(TENANT, (tx) => tx.$queryRaw<
+      { outcome: string; psp_refund_id: string | null }[]
+    >`
+      SELECT e.outcome, c.psp_refund_id
+        FROM order_charge_events e
+        JOIN order_charges c ON c.id = e.charge_id
+       WHERE e.event_id = 'evt_orfao_retry'
+    `);
+    expect(pendente?.outcome).toBe('pago_orfao');
+    expect(pendente?.psp_refund_id).toBeNull();
+
+    const recuperado = await confirmar(
+      cobranca.pagamentoId ?? '', 'evt_orfao_retry', provider,
+    );
+    expect(recuperado.desfecho).toBe('pago_orfao');
+    expect(tentativas).toBe(2);
+    expect(provider.estornos).toHaveLength(1);
+
+    const [final] = await withTenant(TENANT, (tx) => tx.$queryRaw<
+      { psp_refund_id: string | null; refunded_cents: number | null }[]
+    >`SELECT psp_refund_id, refunded_cents FROM order_charges WHERE id = ${cobranca.id}::uuid`);
+    expect(final?.psp_refund_id).toBe('fake_refund_1');
+    expect(final?.refunded_cents).toBe(4900);
   });
 
   it('cancelar de uma comanda não alcança a cobrança de outra', async () => {
@@ -739,6 +1003,44 @@ describeIfDb('a cobrança online da comanda', () => {
 
     expect(varredura.concluidas).toBe(1);
     expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('paid');
+  });
+
+  it('fechamento tardio de cobrança paga também deriva o split', async () => {
+    await exec(`UPDATE tenants SET split_enabled = true WHERE id = '${TENANT}'`);
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const cobranca = await cobrar(orderId, provider);
+
+    expect((await confirmar(cobranca.pagamentoId ?? '', 'evt_split_sem_caixa')).desfecho)
+      .toBe('pago_sem_caixa');
+    await abrirGaveta();
+    await conciliarCobrancas({ tenantId: TENANT, provider, agora: AGORA });
+
+    const fatias = await withTenant(TENANT, (tx) => tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM payment_splits WHERE order_id = ${orderId}::uuid
+    `);
+    expect(fatias.length).toBeGreaterThan(0);
+  });
+
+  it('cobrança paga sem caixa impede emitir uma segunda cobrança', async () => {
+    /**
+     * O dinheiro já entrou, mas sem gaveta a comanda permanece `open`. A
+     * proteção antiga olhava apenas cobranças `aguardando`, então outro toque
+     * com uma nova Idempotency-Key podia gerar um segundo QR/link.
+     */
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    const primeira = await cobrar(orderId, provider, 'primeira');
+
+    const confirmada = await confirmar(primeira.pagamentoId ?? '', 'evt_pago_sem_caixa');
+    expect(confirmada.desfecho).toBe('pago_sem_caixa');
+    expect((await getComanda(TENANT, orderId, LOCATION)).status).toBe('open');
+
+    await expect(cobrar(orderId, provider, 'segunda')).rejects.toMatchObject({
+      code: 'cobranca_em_curso',
+    });
+    expect(provider.cobrancas).toHaveLength(1);
+    expect(await cobrancasDaComanda(TENANT, orderId, LOCATION)).toHaveLength(1);
   });
 
   it('com a cobrança já paga, a comanda não aceita item novo', async () => {
@@ -830,6 +1132,21 @@ describeIfDb('a cobrança online da comanda', () => {
     expect((await cobrar(orderId, provider, 'toque-2')).estado).toBe('aguardando');
   });
 
+
+  it('falha ao cancelar Pix vencido não o enterra só no banco', async () => {
+    const orderId = await comandaDe4900();
+    const provider = new FakePaymentProvider();
+    provider.expiraEm = new Date('2026-09-10T11:00:00Z');
+    await cobrar(orderId, provider);
+    provider.cancelar = async () => { throw new Error('cancelamento externo indisponível'); };
+
+    const varredura = await conciliarCobrancas({ tenantId: TENANT, provider, agora: AGORA });
+
+    expect(varredura.comFalha).toBe(1);
+    expect(varredura.encerradas).toBe(0);
+    expect((await cobrancasDaComanda(TENANT, orderId, LOCATION))[0]?.estado).toBe('aguardando');
+  });
+
   it('Pix ainda dentro do prazo não é encerrado por engano', async () => {
     const orderId = await comandaDe4900();
     const provider = new FakePaymentProvider();
@@ -893,6 +1210,7 @@ describeIfDb('a cobrança online da comanda', () => {
       tipo: 'payment_intent.succeeded',
       pagamentoId: cobranca.pagamentoId ?? '',
       estado: 'pago',
+      provider: new FakePaymentProvider(),
       agora: AGORA,
     });
 

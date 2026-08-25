@@ -112,7 +112,7 @@ export async function diagnosticarCatalogo(params: {
       }[]
     >`
       SELECT sc.id, sc.name, sc.declared_duration_minutes, sc.tolerance_minutes,
-             (SELECT s.price_cents FROM services s WHERE s.name = sc.name LIMIT 1) AS price_cents,
+             (SELECT s.price_cents FROM services s WHERE s.id = sc.sold_as_service_id) AS price_cents,
              (SELECT json_agg(json_build_object(
                        'durationMinutes', parte.duration_minutes,
                        'priceCents', parte.price_cents))

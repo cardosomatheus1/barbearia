@@ -1,0 +1,58 @@
+== verificar-prontidao.mjs ==
+prontidão: 8 funcionalidade(s), matriz e evidências coerentes
+
+== verificar-r8-comercial.mjs ==
+R8: 2 superfície(s) comercial(is) coerentes com a matriz
+
+== verificar-v0-navegacao.mjs ==
+V0: vocabulário, 40 destinos legados e porta por perfil coerentes
+
+== verificar-v1-clientes.mjs ==
+V1: porta Clientes, permissões agregadas, busca, filtros e navegação coerentes
+
+== verificar-v3-orientacao.mjs ==
+V3: 45 seções com localização derivada e apenas um eixo vertical
+
+== verificar-v4-separacao.mjs ==
+V4: operação e configuração em grupos distintos; tablet sem rolagem estrutural
+
+== verificar-v5-hoje.mjs ==
+V5: Hoje é centro operacional; próximo em destaque, quatro leituras e nenhum gráfico
+
+== verificar-r5-ilha.mjs ==
+R5 estrutural: ilha isolada; fonte gzip 1189 bytes; 17 arquivo(s) públicos continuam servidor. Bundle/LCP final dependem do build.
+
+== verificar-r6-promessas.mjs ==
+R6: 9 promessa(s) históricas limitadas por lacunas abertas
+
+== verificar-lacunas.mjs ==
+lacunas: 40 declarada(s), todas com destino válido
+
+== verificar-v10-agenda.mjs ==
+V10: agenda proporcional ao tempo; jornada real, alvos livres seguros e mobile sem colunas espremidas
+
+== verificar-v11-busca.mjs ==
+V11 ok: busca global permissionada, 41 destinos continuam derivados, ações contextuais ligadas.
+
+== verificar-v2-ficha.mjs ==
+V2 ok: ficha orientada por intenção, resumo e ações contextuais preservadas.
+
+== verificar-v6-painel.mjs ==
+V6 ok: resultado → agenda → equipe → atenção → ação, com Hoje como padrão.
+
+== verificar-v789-visual.mjs ==
+V7/V9 ok; V8 estrutural ok: 45 seções sob moldes e níveis explícitos nas telas-chave. Aceitação visual global de V8 continua manual.
+
+== verificar-r12-percursos.mjs ==
+R12: 5 percursos disponíveis; instrumento pronto; validação humana permanece pendente de campo
+
+== verificar-r9-midia.mjs ==
+R9 mídia: upload, armazenamento, domínio, backup e consentimento coerentes
+
+== verificar-r10-css.mjs ==
+R10 ok: 18 fragmentos; maior 80-platform-admin.css com 1253 linhas; zero regra idêntica duplicada.
+
+== verificar-r11-modulos.mjs ==
+R11 ok: admin-api 11 módulos; ações 6; 154 Server Actions; maior operacao.ts 1079 linhas.
+
+TOTAL pass=19 fail=0

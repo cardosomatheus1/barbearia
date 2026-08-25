@@ -147,9 +147,12 @@ export async function getOnboardingState(
              l.phone_e164, l.whatsapp_e164, l.about, l.timezone, l.amenities,
              l.latitude, l.longitude,
              (SELECT count(*) FROM services WHERE active) AS services,
-             (SELECT count(*) FROM professionals WHERE active AND kind = 'professional')
+             (SELECT count(*) FROM professionals p
+                WHERE p.active AND p.kind = 'professional' AND p.location_id = l.id)
                AS professionals,
-             (SELECT count(*) FROM work_schedules) AS schedules
+             (SELECT count(*) FROM work_schedules w
+                JOIN professionals p ON p.id = w.professional_id
+               WHERE p.location_id = l.id) AS schedules
       FROM tenants t
       JOIN tenant_slugs s ON s.tenant_id = t.id AND s.is_primary
       JOIN locations l ON l.tenant_id = t.id
@@ -221,7 +224,7 @@ async function advance(tx: TransactionClient, step: number): Promise<void> {
  */
 async function recusarSeJaPublicada(tx: TransactionClient, onde: string): Promise<void> {
   const linhas = await tx.$queryRaw<{ published_at: Date | null }[]>`
-    SELECT published_at FROM tenants LIMIT 1
+    SELECT published_at FROM tenants LIMIT 1 FOR UPDATE
   `;
   if (linhas[0]?.published_at) {
     throw new OnboardingError(
@@ -358,7 +361,10 @@ export async function saveBusiness(input: BusinessInput): Promise<{ slug: string
 
     const afetadas = await tx.$executeRaw`
       UPDATE locations SET
-        name = ${input.name},
+        -- Em rede, o nome da unidade é cadastro próprio; o nome da empresa não
+        -- pode transformar "Shopping" em "Barbearia X" ao editar endereço.
+        name = CASE WHEN (SELECT count(*) FROM locations) = 1
+                    THEN ${input.name} ELSE name END,
         street = CASE WHEN ${input.street === undefined}::boolean
                     THEN street ELSE ${input.street ?? null} END,
         district = CASE WHEN ${input.district === undefined}::boolean
@@ -380,7 +386,8 @@ export async function saveBusiness(input: BusinessInput): Promise<{ slug: string
         about = CASE WHEN ${input.about === undefined}::boolean
                     THEN about ELSE ${input.about ?? null} END,
         timezone = COALESCE(${input.timezone ?? null}, timezone),
-        amenities = ${[...(input.amenities ?? [])]},
+        amenities = CASE WHEN ${input.amenities === undefined}::boolean
+                    THEN amenities ELSE ${[...(input.amenities ?? [])]} END,
         updated_at = now()
       WHERE id = ${input.locationId}::uuid
     `;
@@ -424,16 +431,46 @@ export function templatesForOnboarding(): readonly ServiceTemplate[] {
  * Substitui o cardápio inteiro em vez de mesclar. A etapa é "estes são os meus
  * serviços", e mesclar deixaria para trás o que o dono removeu da lista.
  */
+function validarEstruturaDoCatalogoInicial(services: readonly ServiceInput[]): void {
+  const chaves = new Set<string>();
+  const nomes = new Set<string>();
+  const todas = new Set(services.map((s) => s.key.trim()));
+
+  for (const servico of services) {
+    const chave = servico.key.trim();
+    const nome = servico.name.trim().toLocaleLowerCase('pt-BR');
+    if (chaves.has(chave)) {
+      throw new OnboardingError('invalid_catalog', `A chave "${chave}" aparece mais de uma vez.`);
+    }
+    if (nomes.has(nome)) {
+      throw new OnboardingError('invalid_catalog', `O serviço "${servico.name}" aparece mais de uma vez.`);
+    }
+    chaves.add(chave);
+    nomes.add(nome);
+
+    const componentes = servico.componentKeys ?? [];
+    if (new Set(componentes).size !== componentes.length) {
+      throw new OnboardingError('invalid_catalog', `O combo "${servico.name}" repete um componente.`);
+    }
+    for (const componente of componentes) {
+      if (!todas.has(componente.trim())) {
+        throw new OnboardingError('invalid_catalog', `O combo "${servico.name}" referencia um serviço que não existe.`);
+      }
+    }
+  }
+}
+
 export async function saveServices(
   tenantId: string,
   services: readonly ServiceInput[],
 ): Promise<{ created: number }> {
+  validarEstruturaDoCatalogoInicial(services);
   const problemas = validateCombos(
     services.map((s) => ({
-      key: s.key,
+      key: s.key.trim(),
       durationMinutes: s.durationMinutes,
       priceCents: s.priceCents,
-      ...(s.componentKeys ? { componentKeys: s.componentKeys } : {}),
+      ...(s.componentKeys ? { componentKeys: s.componentKeys.map((k) => k.trim()) } : {}),
     })),
   );
   if (problemas.length > 0) {
@@ -479,14 +516,14 @@ export async function saveServices(
         RETURNING id
       `;
       const id = linhas[0]?.id;
-      if (id) idPorChave.set(servico.key, id);
+      if (id) idPorChave.set(servico.key.trim(), id);
     }
 
     // Combos: o vínculo com as partes é o que faz a tela do cliente avisar
     // quando a escolha avulsa sai mais cara (bloco 9).
     for (const servico of services) {
       if (!servico.componentKeys || servico.componentKeys.length < 2) continue;
-      const comboServiceId = idPorChave.get(servico.key);
+      const comboServiceId = idPorChave.get(servico.key.trim());
       if (!comboServiceId) continue;
 
       const criado = await tx.$queryRaw<{ id: string }[]>`
@@ -500,7 +537,7 @@ export async function saveServices(
       if (!comboId) continue;
 
       for (const chave of servico.componentKeys) {
-        const parte = idPorChave.get(chave);
+        const parte = idPorChave.get(chave.trim());
         if (!parte) continue;
         await tx.$executeRaw`
           INSERT INTO service_combo_components (combo_id, service_id, tenant_id)
@@ -545,14 +582,36 @@ export async function saveProfessionals(
   return withTenant(tenantId, async (tx) => {
     await recusarSeJaPublicada(tx, 'a tela de Profissionais');
 
+    // A FK não aplica RLS. Conferir a unidade sob RLS impede criar uma cadeira
+    // deste tenant apontando para a location de outro tenant por chamada interna.
+    const unidades = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM locations WHERE id = ${locationId}::uuid AND active FOR UPDATE
+    `;
+    if (!unidades[0]) throw new OnboardingError('location_not_found', 'Unidade não encontrada.');
+
     const servicos = await tx.$queryRaw<{ id: string; name: string }[]>`
       SELECT id, name FROM services WHERE active
     `;
     const idPorNome = new Map(servicos.map((s) => [s.name, s.id]));
 
+    for (const pessoa of professionals) {
+      const dias = new Set<number>();
+      for (const faixa of pessoa.schedule) {
+        if (dias.has(faixa.weekday)) {
+          throw new OnboardingError('invalid_catalog', `A jornada de "${pessoa.name}" repete um dia da semana.`);
+        }
+        dias.add(faixa.weekday);
+      }
+      for (const nome of pessoa.serviceNames ?? []) {
+        if (!idPorNome.has(nome)) {
+          throw new OnboardingError('invalid_catalog', `O serviço "${nome}" atribuído a "${pessoa.name}" não existe.`);
+        }
+      }
+    }
+
     await tx.$executeRaw`
       UPDATE professionals SET active = false, updated_at = now()
-      WHERE kind = 'professional'
+      WHERE kind = 'professional' AND location_id = ${locationId}::uuid
     `;
 
     let criados = 0;
@@ -569,7 +628,7 @@ export async function saveProfessionals(
       criados += 1;
 
       const habilitados = pessoa.serviceNames?.length
-        ? pessoa.serviceNames.map((nome) => idPorNome.get(nome)).filter((v): v is string => !!v)
+        ? pessoa.serviceNames.map((nome) => idPorNome.get(nome)!)
         : servicos.map((s) => s.id);
 
       for (const servicoId of habilitados) {
@@ -626,23 +685,48 @@ export interface PublishResult {
  * barbearia está fechada e não volta.
  */
 export async function publish(tenantId: string): Promise<PublishResult> {
-  const estado = await getOnboardingState(tenantId);
-  if (!estado) throw new OnboardingError('unknown_tenant', 'Barbearia não encontrada');
-
-  if (estado.counts.services === 0 || estado.counts.professionals === 0) {
-    throw new OnboardingError(
-      'nothing_to_publish',
-      'Cadastre pelo menos um serviço e um profissional antes de publicar.',
-    );
-  }
-  if (estado.counts.schedules === 0) {
-    throw new OnboardingError(
-      'nothing_to_publish',
-      'Defina o horário de trabalho da equipe: sem jornada, a agenda nasce vazia.',
-    );
-  }
-
   return withTenant(tenantId, async (tx) => {
+    // O mesmo row lock usado pelas etapas destrutivas: publicação e replace não
+    // podem decidir sobre snapshots diferentes do primeiro dia.
+    const base = await tx.$queryRaw<{ published_at: Date | null; slug: string }[]>`
+      SELECT t.published_at, s.slug
+        FROM tenants t
+        JOIN tenant_slugs s ON s.tenant_id = t.id AND s.is_primary
+       LIMIT 1
+       FOR UPDATE OF t
+    `;
+    const tenant = base[0];
+    if (!tenant) throw new OnboardingError('unknown_tenant', 'Barbearia não encontrada');
+
+    const contagens = await tx.$queryRaw<{
+      services: bigint;
+      professionals: bigint;
+      schedules: bigint;
+    }[]>`
+      SELECT
+        (SELECT count(*) FROM services WHERE active) AS services,
+        (SELECT count(*) FROM professionals p
+          JOIN locations l ON l.id = p.location_id
+         WHERE p.active AND p.kind = 'professional' AND l.active) AS professionals,
+        (SELECT count(*) FROM work_schedules w
+          JOIN professionals p ON p.id = w.professional_id
+          JOIN locations l ON l.id = p.location_id
+         WHERE p.active AND p.kind = 'professional' AND l.active) AS schedules
+    `;
+    const counts = contagens[0];
+    if (!counts || Number(counts.services) === 0 || Number(counts.professionals) === 0) {
+      throw new OnboardingError(
+        'nothing_to_publish',
+        'Cadastre pelo menos um serviço e um profissional antes de publicar.',
+      );
+    }
+    if (Number(counts.schedules) === 0) {
+      throw new OnboardingError(
+        'nothing_to_publish',
+        'Defina o horário de trabalho da equipe: sem jornada, a agenda nasce vazia.',
+      );
+    }
+
     const linhas = await tx.$queryRaw<{ published_at: Date }[]>`
       UPDATE tenants
       SET published_at = COALESCE(published_at, now()),
@@ -652,7 +736,7 @@ export async function publish(tenantId: string): Promise<PublishResult> {
     `;
     const quando = linhas[0]?.published_at;
     if (!quando) throw new OnboardingError('unknown_tenant', 'Barbearia não encontrada');
-    return { slug: estado.slug, publishedAt: quando.toISOString() };
+    return { slug: tenant.slug, publishedAt: quando.toISOString() };
   });
 }
 
@@ -733,7 +817,8 @@ export async function saveChangeWindow(
         cancel_min_hours = ${input.cancelMinHours},
         reschedule_min_hours = ${input.rescheduleMinHours},
         max_reschedules = ${input.maxReschedules},
-        cancellation_policy = ${input.cancellationPolicy ?? null},
+        cancellation_policy = CASE WHEN ${input.cancellationPolicy === undefined}::boolean
+                              THEN cancellation_policy ELSE ${input.cancellationPolicy ?? null} END,
         updated_at = now()
       WHERE id = ${locationId}::uuid
     `;
@@ -808,12 +893,15 @@ export async function saveChangeWindow(
     // e salvar metade deixaria o e-mail do antecessor apontando para o nome do
     // sucessor. Vazio vira nulo — a CHECK do banco recusa `''` como e-mail.
     if (input.dpoName !== undefined || input.dpoEmail !== undefined) {
-      const nome = (input.dpoName ?? '').trim();
-      const email = (input.dpoEmail ?? '').trim();
+      const nome = input.dpoName === undefined ? undefined : input.dpoName.trim();
+      const email = input.dpoEmail === undefined ? undefined : input.dpoEmail.trim();
       await tx.$executeRaw`
-        UPDATE tenants SET dpo_name = ${nome.length > 0 ? nome : null},
-                           dpo_email = ${email.length > 0 ? email : null},
-                           updated_at = now()
+        UPDATE tenants SET
+          dpo_name = CASE WHEN ${nome === undefined}::boolean THEN dpo_name
+                          ELSE ${nome && nome.length > 0 ? nome : null} END,
+          dpo_email = CASE WHEN ${email === undefined}::boolean THEN dpo_email
+                           ELSE ${email && email.length > 0 ? email : null} END,
+          updated_at = now()
          WHERE id = ${tenantId}::uuid
       `;
     }
@@ -821,7 +909,7 @@ export async function saveChangeWindow(
 }
 
 /** O que a tela de políticas mostra preenchido. */
-export async function getPolicies(tenantId: string): Promise<{
+export async function getPolicies(tenantId: string, locationId: string): Promise<{
   readonly cancelMinHours: number;
   readonly rescheduleMinHours: number;
   readonly maxReschedules: number;
@@ -864,7 +952,7 @@ export async function getPolicies(tenantId: string): Promise<{
              l.deposit_refund_hours
         FROM locations l
         JOIN tenants t ON t.id = l.tenant_id
-       ORDER BY l.created_at
+       WHERE l.id = ${locationId}::uuid
        LIMIT 1
     `;
     const linha = linhas[0];
@@ -909,10 +997,10 @@ export interface PhotoTargets {
 }
 
 /** O que a tela de fotos precisa listar, com o que já está preenchido. */
-export async function getPhotoTargets(tenantId: string): Promise<PhotoTargets | null> {
+export async function getPhotoTargets(tenantId: string, locationId: string): Promise<PhotoTargets | null> {
   return withTenant(tenantId, async (tx) => {
     const unidades = await tx.$queryRaw<{ cover_url: string | null }[]>`
-      SELECT cover_url FROM locations ORDER BY created_at LIMIT 1
+      SELECT cover_url FROM locations WHERE id = ${locationId}::uuid LIMIT 1
     `;
     const unidade = unidades[0];
     if (!unidade) return null;
@@ -923,7 +1011,8 @@ export async function getPhotoTargets(tenantId: string): Promise<PhotoTargets | 
 
     const equipe = await tx.$queryRaw<{ id: string; name: string; photo_url: string | null }[]>`
       SELECT id, name, photo_url FROM professionals
-      WHERE active AND kind = 'professional' ORDER BY name
+      WHERE active AND kind = 'professional' AND location_id = ${locationId}::uuid
+      ORDER BY name
     `;
 
     const servicos = await tx.$queryRaw<{ id: string; name: string; photo_url: string | null }[]>`
@@ -984,19 +1073,21 @@ export async function savePhotos(
 
     for (const pessoa of input.professionals ?? []) {
       if (pessoa.photoUrl === undefined) continue;
-      await tx.$executeRaw`
+      const afetadas = await tx.$executeRaw`
         UPDATE professionals SET photo_url = ${pessoa.photoUrl}, updated_at = now()
-        WHERE id = ${pessoa.id}::uuid
+        WHERE id = ${pessoa.id}::uuid AND location_id = ${locationId}::uuid
       `;
+      if (afetadas === 0) throw new OnboardingError('invalid_catalog', 'Profissional da foto não encontrado nesta unidade.');
       if (pessoa.photoUrl) gravadas += 1;
     }
 
     for (const servico of input.services ?? []) {
       if (servico.photoUrl === undefined) continue;
-      await tx.$executeRaw`
+      const afetadas = await tx.$executeRaw`
         UPDATE services SET photo_url = ${servico.photoUrl}, updated_at = now()
         WHERE id = ${servico.id}::uuid
       `;
+      if (afetadas === 0) throw new OnboardingError('invalid_catalog', 'Serviço da foto não encontrado.');
       if (servico.photoUrl) gravadas += 1;
     }
 

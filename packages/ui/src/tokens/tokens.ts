@@ -62,8 +62,9 @@ export interface ColorScheme {
  * sistema. Um botão "Agendar" vermelho ao lado de um "Cancelar" vermelho é a
  * receita de toque errado no balcão, com cliente na frente.
  *
- * O que o vermelho faz é o que faz no selo: aparece pouco e chama atenção —
- * na tarja de seção, no traço sob a palavra do título, no que remove dinheiro.
+ * No produto, a listra vermelha do selo cede seu papel ao vocabulário semântico:
+ * vermelho aparece apenas quando há problema, erro, falta, cancelamento ou ação
+ * destrutiva. Navegação e decoração usam o acento, nunca `danger`.
  */
 export const dark: ColorScheme = {
   surface: '#071018',

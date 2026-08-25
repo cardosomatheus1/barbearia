@@ -55,6 +55,10 @@ export default {
   // A página pública é o principal ativo de SEO da barbearia; o pacote do
   // cliente fica separado do admin de propósito (defeito D10).
   transpilePackages: ['@barbearia/ui'],
+  // O R9 envia a imagem preparada por Server Action antes de encaminhá-la à API.
+  // O Next limita Server Actions a 1 MB por padrão; a API aceita até 3 MB.
+  // 4 MB deixa margem para o envelope multipart sem ampliar o teto de domínio.
+  experimental: { serverActions: { bodySizeLimit: '4mb' } },
   poweredByHeader: false,
   async headers() {
     return [

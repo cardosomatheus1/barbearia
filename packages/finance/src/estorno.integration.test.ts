@@ -1,8 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { FakePaymentProvider } from '@barbearia/core';
 import { abrirCaixa, caixaAberto } from './caixa.js';
-import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda } from './comanda.js';
-import { estornarVenda, transferirPacote } from './estorno.js';
+import { abrirComanda, adicionarItem, ajustarComanda, fecharComanda, receberFiado } from './comanda.js';
+import { estornarVenda, estornarVendaComAdquirente, transferirPacote } from './estorno.js';
 import { salvarRegraDeComissao } from './comissao.js';
 import { salvarProduto } from './estoque.js';
 import { salvarPrograma } from './fidelidade.js';
@@ -152,6 +153,38 @@ describeIfDb('vale, estorno e DRE', () => {
     expect(comissao[0]?.base_cents).toBe(comissao[1]?.base_cents);
   });
 
+  it('venda com cobrança online devolve no adquirente antes de marcar o estorno local', async () => {
+    const orderId = await venderCorte();
+    const chargeId = 'd2525252-0000-4000-8000-000000000001';
+    await exec(`
+      INSERT INTO order_charges
+        (id, tenant_id, location_id, order_id, method, amount_cents, status,
+         psp_payment_id, paid_at, created_by_name)
+      VALUES
+        ('${chargeId}', '${TENANT}', '${LOCATION}', '${orderId}', 'credit', 5000, 'pago',
+         'fake_online_1', now(), 'Maria')
+    `);
+
+    const provider = new FakePaymentProvider();
+    await estornarVendaComAdquirente({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId,
+      motivo: 'Devolução integral para o cliente',
+      hoje: HOJE,
+      ...operador,
+      provider,
+    });
+
+    expect(provider.estornos).toHaveLength(1);
+    expect(provider.estornos[0]).toMatchObject({ pagamentoId: 'fake_online_1', valorCents: 5000 });
+    const charge = await admin.$queryRawUnsafe<
+      { psp_refund_id: string | null; refunded_cents: number | null }[]
+    >(`SELECT psp_refund_id, refunded_cents FROM order_charges WHERE id = '${chargeId}'`);
+    expect(charge[0]?.psp_refund_id).toBe('fake_refund_1');
+    expect(charge[0]?.refunded_cents).toBe(5000);
+  });
+
   it('o dinheiro volta da gaveta na mesma transação', async () => {
     const antes = await caixaAberto(TENANT, LOCATION);
     const orderId = await venderCorte();
@@ -194,6 +227,58 @@ describeIfDb('vale, estorno e DRE', () => {
       `SELECT balance_cents FROM customers WHERE id = '${CARLOS}'`,
     );
     expect(zerado[0]?.balance_cents).toBe(0);
+  });
+
+  it('fiado parcialmente recebido bloqueia o estorno automático', async () => {
+    await exec(`UPDATE customers SET credit_limit_cents = 20000 WHERE id = '${CARLOS}'`);
+    const orderId = await venderCorte({ forma: 'fiado' });
+    await receberFiado({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      customerId: CARLOS,
+      amountCents: 2000,
+      forma: 'cash',
+      idempotencyKey: 'audit-bloco3-fiado-parcial',
+      ...operador,
+    });
+
+    await expect(
+      estornarVenda({
+        tenantId: TENANT, locationId: LOCATION, orderId,
+        motivo: 'Tentativa depois de recebimento parcial', hoje: HOJE, ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'fiado_ja_recebido' });
+
+    const cliente = await admin.$queryRawUnsafe<{ balance_cents: number }[]>(
+      `SELECT balance_cents FROM customers WHERE id = '${CARLOS}'`,
+    );
+    expect(cliente[0]?.balance_cents).toBe(-3000);
+  });
+
+  it('duas solicitações simultâneas de estorno online movem dinheiro externo uma vez', async () => {
+    const orderId = await venderCorte();
+    const chargeId = 'd2525252-0000-4000-8000-000000000002';
+    await exec(`
+      INSERT INTO order_charges
+        (id, tenant_id, location_id, order_id, method, amount_cents, status,
+         psp_payment_id, paid_at, created_by_name)
+      VALUES
+        ('${chargeId}', '${TENANT}', '${LOCATION}', '${orderId}', 'credit', 5000, 'pago',
+         'fake_online_concorrente', now(), 'Maria')
+    `);
+    const provider = new FakePaymentProvider();
+    const pedir = () => estornarVendaComAdquirente({
+      tenantId: TENANT, locationId: LOCATION, orderId,
+      motivo: 'Devolução concorrente', hoje: HOJE, ...operador, provider,
+    });
+
+    const resultados = await Promise.allSettled([pedir(), pedir()]);
+    expect(provider.estornos).toHaveLength(1);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const falha = resultados.find((r) => r.status === 'rejected');
+    if (falha?.status === 'rejected') {
+      expect(['estorno_em_curso', 'ja_estornada']).toContain((falha.reason as { code?: string }).code);
+    }
   });
 
   it('o produto volta ao estoque com o custo congelado da saída', async () => {
@@ -393,6 +478,7 @@ describeIfDb('vale, estorno e DRE', () => {
     await venderCorte();
     await expect(
       conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-1',
         tenantId: TENANT,
         locationId: LOCATION,
         professionalId: RUAN,
@@ -415,6 +501,7 @@ describeIfDb('vale, estorno e DRE', () => {
     await venderCorte();
     const pedir = (valorCents: number) =>
       conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-2',
         tenantId: TENANT,
         locationId: LOCATION,
         professionalId: RUAN,
@@ -435,6 +522,7 @@ describeIfDb('vale, estorno e DRE', () => {
     const antes = await caixaAberto(TENANT, LOCATION);
 
     await conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-3',
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -460,6 +548,7 @@ describeIfDb('vale, estorno e DRE', () => {
     await venderCorte();
     await venderCorte();
     await conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-4',
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -502,6 +591,7 @@ describeIfDb('vale, estorno e DRE', () => {
     const antes = await caixaAberto(TENANT, LOCATION);
 
     const vale = await conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-5',
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -539,6 +629,7 @@ describeIfDb('vale, estorno e DRE', () => {
      */
     await venderCorte();
     const vale = await conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-6',
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -619,6 +710,7 @@ describeIfDb('vale, estorno e DRE', () => {
   it('cancelar exige motivo e só vale para o que está aberto', async () => {
     await venderCorte();
     const vale = await conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-7',
       tenantId: TENANT,
       locationId: LOCATION,
       professionalId: RUAN,
@@ -913,6 +1005,93 @@ describeIfDb('vale, estorno e DRE', () => {
     if (!id) throw new Error('pacote não foi criado');
     return id;
   }
+
+  it('estornar a venda que criou o pacote invalida o benefício vendido', async () => {
+    const pacoteId = await venderPacote(true);
+    const origem = await admin.$queryRawUnsafe<{ order_id: string }[]>(
+      `SELECT order_id FROM customer_packages WHERE id = '${pacoteId}'`,
+    );
+    const orderId = origem[0]?.order_id;
+    if (!orderId) throw new Error('pacote sem venda de origem');
+
+    await estornarVenda({
+      tenantId: TENANT, locationId: LOCATION, orderId,
+      motivo: 'Venda de pacote cancelada integralmente', hoje: HOJE, ...operador,
+    });
+
+    const pacote = await admin.$queryRawUnsafe<{ refunded_at: Date | null; refunded_cents: number | null }[]>(
+      `SELECT refunded_at, refunded_cents FROM customer_packages WHERE id = '${pacoteId}'`,
+    );
+    expect(pacote[0]?.refunded_at).not.toBeNull();
+    expect(pacote[0]?.refunded_cents).toBe(25000);
+    await expect(
+      transferirPacote({
+        tenantId: TENANT, customerPackageId: pacoteId, paraCustomerId: DIEGO,
+        motivo: 'Não pode transferir depois do estorno', ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'pacote_reembolsado' });
+  });
+
+  it('pacote vendido já usado impede estorno integral da venda de origem', async () => {
+    const pacoteId = await venderPacote(true);
+    const origem = await admin.$queryRawUnsafe<{ order_id: string }[]>(
+      `SELECT order_id FROM customer_packages WHERE id = '${pacoteId}'`,
+    );
+    const orderId = origem[0]?.order_id;
+    if (!orderId) throw new Error('pacote sem venda de origem');
+
+    const aberta = await abrirComanda({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS, staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id, tipo: 'service',
+      descricao: 'Corte', serviceId: CORTE, professionalId: RUAN, quantidade: 1,
+      precoUnitarioCents: 5000, ...operador,
+    });
+    await fecharComanda({
+      tenantId: TENANT, locationId: LOCATION, orderId: aberta.id,
+      pagamentos: [{ forma: 'pacote', valorCents: 5000 }],
+      servicoDoPacote: CORTE, ...fecha,
+    });
+
+    await expect(
+      estornarVenda({
+        tenantId: TENANT, locationId: LOCATION, orderId,
+        motivo: 'Tentativa depois de consumir unidade', hoje: HOJE, ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'pacote_vendido_ja_usado' });
+  });
+
+
+  it('pacote vendido já transferido impede estorno integral da venda de origem', async () => {
+    const pacoteId = await venderPacote(true);
+    const origem = await admin.$queryRawUnsafe<{ order_id: string }[]>(
+      `SELECT order_id FROM customer_packages WHERE id = '${pacoteId}'`,
+    );
+    const orderId = origem[0]?.order_id;
+    if (!orderId) throw new Error('pacote sem venda de origem');
+
+    await transferirPacote({
+      tenantId: TENANT,
+      customerPackageId: pacoteId,
+      paraCustomerId: DIEGO,
+      motivo: 'Presente antes do pedido de estorno',
+      ...operador,
+    });
+
+    await expect(
+      estornarVenda({
+        tenantId: TENANT, locationId: LOCATION, orderId,
+        motivo: 'Tentativa depois de transferir o benefício', hoje: HOJE, ...operador,
+      }),
+    ).rejects.toMatchObject({ code: 'pacote_vendido_ja_transferido' });
+
+    const pacote = await admin.$queryRawUnsafe<{ customer_id: string; refunded_at: Date | null }[]>(
+      `SELECT customer_id, refunded_at FROM customer_packages WHERE id = '${pacoteId}'`,
+    );
+    expect(pacote[0]?.customer_id).toBe(DIEGO);
+    expect(pacote[0]?.refunded_at).toBeNull();
+  });
 
   it('o pacote transferível muda de dono com as unidades restantes', async () => {
     const pacoteId = await venderPacote(true);

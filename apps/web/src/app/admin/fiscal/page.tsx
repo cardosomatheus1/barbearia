@@ -307,7 +307,7 @@ export default async function FiscalPage({ searchParams }: Props) {
               </select>
               {/* Só a explicação do regime **em vigor**.
                   As três juntas viravam um parágrafo de cinco linhas que ninguém
-                  lê — e o produto não tem componente de cliente para trocar o
+                  lê — e esta tela continua sem ilha de cliente só para trocar o
                   texto ao mexer no seletor. Quem muda vê a explicação nova
                   depois de salvar, que é quando ela passa a valer. */}
               <p className="ui-field__hint">

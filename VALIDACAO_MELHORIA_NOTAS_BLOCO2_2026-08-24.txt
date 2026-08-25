@@ -1,0 +1,25 @@
+BARBERDOCK — MELHORIA DE NOTAS — BLOCO 2 — 2026-08-24
+
+FOCO
+- packages/scheduling/src/booking.ts
+
+RESULTADO
+- booking.ts: 1731 -> 1251 linhas (-27,7% aprox.)
+- booking-leitura.ts: 359 linhas
+- booking-contratos.ts: 163 linhas
+- API pública: 27/27 exports preservados; 0 removidos; 0 adicionados acidentalmente
+- 29/29 verificadores Node executáveis: OK
+- Scheduling syntax/transpile: 31/31
+- Grafo de imports relativos: OK
+- Nova guarda modular integrada ao verify.sh: OK
+- bash -n scripts/verify.sh: OK
+
+NÃO EXECUTADO NESTE RUNTIME
+- pnpm typecheck/build/Vitest completo: pnpm/node_modules ausentes e Corepack sem acesso ao registry
+- PostgreSQL/RLS/E2E: serviço PostgreSQL ausente
+
+PRÓXIMO PORTÃO EM AMBIENTE COMPLETO
+- pnpm --filter @barbearia/scheduling typecheck
+- pnpm --filter @barbearia/scheduling build
+- pnpm --filter @barbearia/scheduling test
+- scripts/verify.sh com PostgreSQL 16

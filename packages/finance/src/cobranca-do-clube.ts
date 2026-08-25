@@ -7,6 +7,7 @@ import {
   diasAteSuspender,
   fraseDoAvisoDoClube,
   proximoPassoDaCobranca,
+  chaveDoClube,
   type CobrancaDoClubeProvider,
   type FaturaDoClube,
   type MotivoDoAvisoDoClube,
@@ -398,13 +399,18 @@ export async function aplicarReguaDoClube(entrada: {
        */
       if (!fatura.payment_token) continue;
 
-      const resultado = await entrada.provider.cobrar({
+      const tentativa = fatura.attempts + 1;
+      const pedidoBase = {
         tenantId: entrada.tenantId,
         faturaId: fatura.id,
         token: fatura.payment_token,
         valorCents: fatura.amount_cents,
-        tentativa: fatura.attempts + 1,
+        tentativa,
         descricao: `Plano ${fatura.plano ?? 'assinatura'}`,
+      };
+      const resultado = await entrada.provider.cobrar({
+        ...pedidoBase,
+        idempotencyKey: chaveDoClube(pedidoBase),
       });
 
       await withTenant(entrada.tenantId, async (tx) => {

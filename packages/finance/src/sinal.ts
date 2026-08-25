@@ -75,6 +75,7 @@ const MS_POR_HORA = 3_600_000;
 async function carregar(
   tx: TransactionClient,
   appointmentId: string,
+  locationId: string,
 ): Promise<SinalDoAgendamento> {
   const linhas = await tx.$queryRaw<LinhaDoSinal[]>`
     SELECT a.id, a.deposit_required_cents, a.deposit_paid_cents, a.deposit_reason,
@@ -83,6 +84,7 @@ async function carregar(
       FROM appointments a
       JOIN locations l ON l.id = a.location_id
      WHERE a.id = ${appointmentId}::uuid
+       AND a.location_id = ${locationId}::uuid
        -- O remarcado não é um agendamento: ele virou outro, e o sinal foi
        -- junto. Aceitar o id antigo faria a recepção registrar um Pix contra
        -- uma linha morta — ou devolver de novo um dinheiro já devolvido, com o
@@ -137,6 +139,7 @@ function montar(linha: LinhaDoSinal): SinalDoAgendamento {
 
 export interface RegistroDeSinal {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly appointmentId: string;
   readonly valorCents: number;
   readonly staffId: string;
@@ -157,7 +160,7 @@ export async function registrarSinalRecebido(
   entrada: RegistroDeSinal,
 ): Promise<SinalDoAgendamento> {
   return withTenant(entrada.tenantId, async (tx) => {
-    const atual = await carregar(tx, entrada.appointmentId);
+    const atual = await carregar(tx, entrada.appointmentId, entrada.locationId);
 
     if (atual.exigidoCents <= 0) {
       throw new SinalError(
@@ -179,13 +182,14 @@ export async function registrarSinalRecebido(
       UPDATE appointments
          SET deposit_paid_cents = ${entrada.valorCents}, updated_at = now()
        WHERE id = ${entrada.appointmentId}::uuid
+         AND location_id = ${entrada.locationId}::uuid
          AND deposit_paid_cents = 0
          AND deposit_required_cents = ${entrada.valorCents}
     `;
     if (afetadas === 0) {
       // Outra sessão registrou entre a leitura e a escrita. Devolver o estado é
       // mais certo que erro: a operação que a pessoa queria aconteceu.
-      return carregar(tx, entrada.appointmentId);
+      return carregar(tx, entrada.appointmentId, entrada.locationId);
     }
 
     await audit(tx, {
@@ -200,7 +204,7 @@ export async function registrarSinalRecebido(
       ...(entrada.userAgent ? { userAgent: entrada.userAgent } : {}),
     });
 
-    return carregar(tx, entrada.appointmentId);
+    return carregar(tx, entrada.appointmentId, entrada.locationId);
   });
 }
 
@@ -220,7 +224,7 @@ export async function registrarSinalRecebido(
  */
 export async function devolverSinal(entrada: RegistroDeSinal): Promise<SinalDoAgendamento> {
   return withTenant(entrada.tenantId, async (tx) => {
-    const atual = await carregar(tx, entrada.appointmentId);
+    const atual = await carregar(tx, entrada.appointmentId, entrada.locationId);
     if (atual.pagoCents <= 0) {
       throw new SinalError(
         'sinal_nao_registrado',
@@ -232,9 +236,10 @@ export async function devolverSinal(entrada: RegistroDeSinal): Promise<SinalDoAg
       UPDATE appointments
          SET deposit_paid_cents = 0, updated_at = now()
        WHERE id = ${entrada.appointmentId}::uuid
+         AND location_id = ${entrada.locationId}::uuid
          AND deposit_paid_cents > 0
     `;
-    if (afetadas === 0) return carregar(tx, entrada.appointmentId);
+    if (afetadas === 0) return carregar(tx, entrada.appointmentId, entrada.locationId);
 
     await audit(tx, {
       actorId: entrada.staffId,
@@ -248,14 +253,15 @@ export async function devolverSinal(entrada: RegistroDeSinal): Promise<SinalDoAg
       ...(entrada.userAgent ? { userAgent: entrada.userAgent } : {}),
     });
 
-    return carregar(tx, entrada.appointmentId);
+    return carregar(tx, entrada.appointmentId, entrada.locationId);
   });
 }
 
 /** O sinal de um agendamento, para a tela. */
 export async function sinalDoAgendamento(
   tenantId: string,
+  locationId: string,
   appointmentId: string,
 ): Promise<SinalDoAgendamento> {
-  return withTenant(tenantId, (tx) => carregar(tx, appointmentId));
+  return withTenant(tenantId, (tx) => carregar(tx, appointmentId, locationId));
 }

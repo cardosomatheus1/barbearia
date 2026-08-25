@@ -30,8 +30,10 @@ const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 
 const TENANT = '49494949-1111-1111-1111-111111111111';
 const LOCATION = '49494949-aaaa-0000-0000-000000000001';
+const FILIAL = '49494949-aaaa-0000-0000-000000000002';
 const RUAN = '49494949-bbbb-0000-0000-000000000001';
 const BRUNO = '49494949-bbbb-0000-0000-000000000002';
+const PROF_FILIAL = '49494949-bbbb-0000-0000-000000000003';
 const CORTE = '49494949-eeee-0000-0000-000000000001';
 const BARBA = '49494949-eeee-0000-0000-000000000002';
 const CARLOS = '49494949-cccc-0000-0000-000000000001';
@@ -66,7 +68,8 @@ describeIfDb('split de pagamento', () => {
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
 
       INSERT INTO locations (id, tenant_id, name, timezone)
-      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia');
+      VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia'),
+             ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia');
 
       INSERT INTO customers (id, tenant_id, name, phone_e164)
       VALUES ('${CARLOS}', '${TENANT}', 'Carlos Souza', '+5571988887777');
@@ -76,7 +79,8 @@ describeIfDb('split de pagamento', () => {
 
       INSERT INTO professionals (id, tenant_id, location_id, name) VALUES
         ('${RUAN}', '${TENANT}', '${LOCATION}', 'Ruan'),
-        ('${BRUNO}', '${TENANT}', '${LOCATION}', 'Bruno');
+        ('${BRUNO}', '${TENANT}', '${LOCATION}', 'Bruno'),
+        ('${PROF_FILIAL}', '${TENANT}', '${FILIAL}', 'Da Filial');
 
       INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes) VALUES
         ('${CORTE}', '${TENANT}', 'Corte', 6000, 30),
@@ -134,6 +138,7 @@ describeIfDb('split de pagamento', () => {
       tipo: 'payment_intent.succeeded',
       pagamentoId: cobranca.pagamentoId,
       estado: 'pago',
+      provider: new FakePaymentProvider(),
       agora: AGORA,
     });
   }
@@ -206,7 +211,8 @@ describeIfDb('split de pagamento', () => {
       if (!c) throw new Error('sem cobrança');
       await confirmarCobranca({
         tenantId: TENANT, eventoId: 'ev-2', tipo: 'payment_intent.succeeded',
-        pagamentoId: c.psp_payment_id, estado: 'pago', agora: AGORA,
+        pagamentoId: c.psp_payment_id, estado: 'pago',
+        provider: new FakePaymentProvider(), agora: AGORA,
       });
     });
 
@@ -302,14 +308,28 @@ describeIfDb('split de pagamento', () => {
 
   // -- KYC, liquidação e estorno (bloco 50) ------------------------------------
 
+  it('painel e cadastro de recebedor respeitam a unidade atual', async () => {
+    const lista = await recebedores(TENANT, LOCATION);
+    expect(lista.map((r) => r.professionalId)).not.toContain(PROF_FILIAL);
+
+    await expect(cadastrarRecebedor({
+      tenantId: TENANT, locationId: LOCATION, professionalId: PROF_FILIAL,
+      documento: '12345678900', banco: '001', agencia: '1234', conta: '12345-6',
+      idempotencyKey: 'kyc-outra-unidade', provider: new FakeSplitProvider(),
+      ...operador,
+    })).rejects.toMatchObject({ code: 'profissional_nao_encontrado' });
+  });
+
   const cadastro = (provider: FakeSplitProvider, professionalId = RUAN) =>
     cadastrarRecebedor({
+      locationId: LOCATION,
       tenantId: TENANT,
       professionalId,
       documento: '12345678900',
       banco: '260',
       agencia: '0001',
       conta: '1234567-8',
+      idempotencyKey: `kyc-${professionalId}`,
       provider,
       ...operador,
       agora: AGORA,
@@ -400,7 +420,7 @@ describeIfDb('split de pagamento', () => {
     const provider = new FakeSplitProvider();
     provider.proximoEstadoDoRecebedor = 'aprovado';
     await cadastro(provider);
-    provider.proximoResultado = { ok: false, codigo: 'conta_invalida', motivo: 'conta inválida' };
+    provider.proximoResultado = { ok: false, codigo: 'conta_invalida', motivo: 'conta inválida', definitiva: true };
 
     for (let i = 0; i < 3; i += 1) {
       await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
@@ -577,6 +597,80 @@ describeIfDb('split de pagamento', () => {
     expect(tentativas.some((t) => t.ok)).toBe(true);
   });
 
+  it('falha definitiva depois do estorno em voo desfaz o clawback provisório', async () => {
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+
+    const falhaDepoisDoEstorno: typeof provider = Object.assign(
+      Object.create(Object.getPrototypeOf(provider)),
+      provider,
+      {
+        transferir: async () => {
+          await withTenant(TENANT, (tx) => estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }));
+          return { ok: false as const, codigo: 'conta_bloqueada', motivo: 'não transferiu', definitiva: true };
+        },
+      },
+    );
+
+    const resultado = await liquidarRepasses({ tenantId: TENANT, provider: falhaDepoisDoEstorno, agora: AGORA });
+    expect(resultado.compensados).toBe(1);
+
+    const soma = await withTenant(TENANT, (tx) => tx.$queryRaw<{ total: bigint }[]>`
+      SELECT coalesce(sum(sign * value), 0)::bigint AS total
+        FROM commission_entries
+       WHERE order_id = ${orderId}::uuid AND order_item_id IS NULL
+    `);
+    expect(Number(soma[0]?.total)).toBe(0);
+
+    const [fatia] = await withTenant(TENANT, (tx) => tx.$queryRaw<{
+      recovery_pending: boolean;
+      clawback_entry_id: string | null;
+      clawback_reversal_entry_id: string | null;
+    }[]>`
+      SELECT recovery_pending, clawback_entry_id, clawback_reversal_entry_id
+        FROM payment_splits
+       WHERE order_id = ${orderId}::uuid AND party = 'profissional'
+    `);
+    expect(fatia).toMatchObject({ recovery_pending: false });
+    expect(fatia?.clawback_entry_id).toBeTruthy();
+    expect(fatia?.clawback_reversal_entry_id).toBeTruthy();
+  });
+
+  it('falha ambígua no repasse estornado é reapresentada com a mesma intenção até desfecho', async () => {
+    await ligarSplit(0);
+    const orderId = await comandaDe100();
+    await pagarPeloPix(orderId);
+
+    const provider = new FakeSplitProvider();
+    provider.proximoEstadoDoRecebedor = 'aprovado';
+    await cadastro(provider);
+    const chaves: string[] = [];
+    let primeira = true;
+    const recuperavel: typeof provider = Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+      transferir: async (pedido: { idempotencyKey: string }) => {
+        chaves.push(pedido.idempotencyKey);
+        if (primeira) {
+          primeira = false;
+          await withTenant(TENANT, (tx) => estornarSplitDaVenda(tx, { orderId, quandoISO: HOJE }));
+          throw new Error('resposta perdida');
+        }
+        return { ok: false as const, codigo: 'conta_bloqueada', motivo: 'não transferiu', definitiva: true };
+      },
+    });
+
+    const uma = await liquidarRepasses({ tenantId: TENANT, provider: recuperavel, agora: AGORA });
+    expect(uma.compensados).toBe(0);
+    const duas = await liquidarRepasses({ tenantId: TENANT, provider: recuperavel, agora: AGORA });
+    expect(duas.compensados).toBe(1);
+    expect(chaves).toHaveLength(2);
+    expect(new Set(chaves).size).toBe(1);
+  });
+
   it('a chamada que não responde não vira segundo repasse', async () => {
     /**
      * Um tempo limite é o caso em que o adquirente **executou** a transferência
@@ -621,13 +715,13 @@ describeIfDb('split de pagamento', () => {
     const provider = new FakeSplitProvider();
     provider.proximoEstadoDoRecebedor = 'aprovado';
     await cadastro(provider);
-    provider.proximoResultado = { ok: false, codigo: 'indisponivel', motivo: 'fora do ar' };
+    provider.proximoResultado = { ok: false, codigo: 'indisponivel', motivo: 'fora do ar', definitiva: false };
 
     await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
     await liquidarRepasses({ tenantId: TENANT, provider, agora: AGORA });
 
     const doProfissional = provider.repasses.filter((r) => r.recebedorId !== '');
-    expect(doProfissional.length).toBeGreaterThan(1);
+    expect(doProfissional).toHaveLength(1);
     expect(new Set(doProfissional.map((r) => r.idempotencyKey)).size).toBe(1);
   });
 

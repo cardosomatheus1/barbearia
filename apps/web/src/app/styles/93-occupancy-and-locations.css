@@ -1,0 +1,452 @@
+/* ---------------------------------------------------------------------------
+   O heatmap de ocupação (bloco 57)
+
+   Grade de sete colunas que **rola dentro do próprio recipiente**, nunca
+   levando a página junto: é a regra mais antiga deste CSS, e uma tabela de
+   sete dias em 360px é exatamente o conteúdo que a quebra.
+
+   A cor diz a faixa, e o número diz o valor — cor sozinha não serve a quem tem
+   baixa visão, e é por isso que cada célula escreve o percentual.
+   --------------------------------------------------------------------------- */
+/* O texto que o cliente vai ler, dentro do formulário (bloco 83).
+
+   A pergunta que a tela não respondia era "e a mensagem, não tem lugar pra
+   colocar?". Não tem, e não pode ter: a Meta aprova cada texto antes, e um
+   campo livre aqui prometeria o que o canal recusa. O que faltava era **mostrar
+   o que existe**, com o caminho para escrevê-lo. */
+.textos-aprovados {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  /* Mesmo piso de `.passo`: coluna de grade nasce em `min-content`, e o nome de
+     um template aprovado é uma palavra só que a Meta não deixa ter espaço. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.textos-aprovados li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.textos-aprovados__nome {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+
+/* O corpo do template é texto de verdade, com `{{1}}` dentro: ele precisa
+   quebrar linha e nunca esticar a tela. */
+.textos-aprovados__corpo { overflow-wrap: anywhere; }
+
+/* O que um campo significa, em pares nome/significado.
+
+   Empilhado por padrão e em duas colunas a partir de 768px. A primeira versão
+   era tabela dentro de `.ui-scroll-x`: a página não rolava de lado, mas a
+   coluna do significado ficava fora da tela em 360px — e era ela que a lista
+   existia para mostrar. Nunca esconder conteúdo no celular: refluir.
+
+   A tela de automações usava isto para explicar o número de cada gatilho e
+   deixou de usar no bloco 92: lá a definição passou a morar dentro da própria
+   opção, que é onde ela é lida na hora de preencher. Importação e WhatsApp
+   continuam usando, e ali o par é o formato certo — o nome não é escolhível. */
+.significados {
+  margin: var(--space-2) 0 0;
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.significados__par { display: grid; gap: 0; }
+.significados dt { font-weight: var(--font-weight-medium); }
+.significados dd { margin: 0; color: var(--color-text-muted); }
+
+@media (min-width: 48em) {
+  .significados__par {
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+/* Alternativas: a opção que carrega o próprio significado (bloco 92).
+
+   Nome próprio, e não `.escolha`. Aquela classe já existe duas vezes neste
+   arquivo — a linha do cardápio de serviços e a da marcação pelo balcão —, com
+   `display: flex` e `justify-content: space-between` valendo. Herdá-la aqui
+   jogaria o texto explicativo para a direita da tela e me daria a terceira
+   regra `.escolha` a brigar com as outras duas, que é exatamente o defeito que
+   o comentário do bloco do cardápio documenta.
+
+   ## Por que aberto, e não seletor
+
+   O significado do número muda por gatilho, e não há componente de cliente
+   neste produto para trocar um rótulo ao mexer num `<select>`. A tela resolvia
+   isso repetindo: cada `<option>` dizia "Sumiu há um tempo — depois de quantos
+   dias sem vir", e uma lista de seis definições logo abaixo dizia o mesmo de
+   novo, ocupando o maior bloco da página. Duas cópias do mesmo mapa, e nenhuma
+   visível na hora de preencher — porque o texto da opção some quando o seletor
+   fecha.
+
+   Aberto, o significado fica na tela enquanto a pessoa digita o número. Uma
+   cópia só, sem JavaScript, e a lista de definições deixa de existir. */
+.alternativas {
+  display: grid;
+  /* Coluna de grade nasce em `min-content`, e o `min-content` de um nome de
+     gatilho comprido decide a largura da tela sem este piso. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+/* O `container-type` vai no **ancestral**, e a primeira versão o pôs na própria
+   `.alternativas` — o defeito que a convenção deste repositório descreve em uma
+   linha: um elemento não responde sobre si mesmo. A regra nunca casava, a lista
+   ficava em coluna única em 1280, e nada ficava vermelho. Quem mostrou foi o
+   print.
+   `:has(>)` em vez de `container-type` no `.ui-field` inteiro porque
+   `container-type: inline-size` cria contenção, e o design system usa
+   `.ui-field` em toda tela do produto. */
+.ui-field:has(> .alternativas) { container-type: inline-size; }
+
+/* A pastilha da caixa de seleção tem a largura do próprio texto. Dentro de um
+   `.ui-field`, que é grade, ela esticava de ponta a ponta do cartão: uma
+   pastilha de 740px em volta de duas palavras lê como campo de texto, não como
+   caixa de marcar. */
+.ui-field > .marca { justify-self: start; }
+
+/* Onze alternativas empilhadas são uma tela inteira de rolagem no notebook do
+   balcão; em duas colunas cabem de uma olhada. O corte é acima da largura que o
+   cartão tem em 768px — em duas colunas ali, o nome mais comprido ("Abriu vaga
+   na lista de espera") quebra em três linhas e a lista fica mais alta do que
+   era em coluna única. */
+@container (min-width: 40rem) {
+  .alternativas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.alternativa {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  /* Alvo de toque em qualquer largura: a alternativa inteira é clicável, e não
+     só o botão de 13px que o navegador desenha. */
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.alternativa:hover { border-color: var(--color-border-strong); }
+
+/* Marcado é estado, e estado se lê de longe. `:has` porque o `<input>` é irmão
+   do corpo, não pai dele — e sem suporte a alternativa continua legível, só sem
+   o realce. */
+.alternativa:has(input:checked) {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-raised));
+}
+
+.alternativa:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.alternativa input {
+  /* O padrão do navegador é 13px e não cresce com `width`: o alvo é a
+     alternativa inteira, e o botão só marca onde ela está. */
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.alternativa__corpo { display: grid; gap: var(--space-1); min-width: 0; }
+.alternativa__nome { font-weight: var(--font-weight-medium); }
+/*
+  Quem nao recebeu, aberto dentro do cartao da campanha (bloco 97).
+
+  Recuado e com fio a esquerda para dizer que pertence aquela campanha e nao a
+  proxima: a lista abre no meio de uma lista, e sem a marca visual as duas se
+  confundem.
+*/
+.pulados {
+  margin-top: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* O piso de uma coluna e o min-content dela: sem isto um nome comprido
+     decide a largura da tela. */
+  min-width: 0;
+}
+
+.pulados__titulo {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.alternativa__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.alternativa__nota--risco { color: var(--color-danger); }
+
+/* O texto aprovado é o que o cliente lê, com `{{1}}` dentro: ele quebra linha e
+   nunca estica a tela. Em itálico porque é citação — o produto está mostrando
+   palavra de outra tela, não escrevendo a própria. */
+.alternativa__texto {
+  font-size: var(--font-size-sm);
+  font-style: italic;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* O caminho até a mensagem chegar (bloco 83).
+
+   Lista ordenada de verdade (`ol`), porque a ordem **é** a informação: não dá
+   para aprovar texto antes de conectar o número. Estrutura que codifica algo
+   verdadeiro sobre o conteúdo, e não numeração decorativa.
+
+   O estado vai em letras — "Feito" / "Passo 2" —, e a cor só reforça. Um passo
+   verde sem palavra não é informação para quem tem baixa visão, e é a mesma
+   decisão do estado da entrega de webhook e do estado da campanha. */
+.caminho {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.caminho__passo {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border);
+}
+
+.caminho__passo--feito { border-left-color: var(--color-success); }
+
+.caminho__marca {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.caminho__passo--feito .caminho__marca { color: var(--color-success); }
+
+.caminho__titulo { font-weight: var(--font-weight-medium); }
+
+.caminho__texto {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Um passo de formulário longo (bloco 83).
+
+   Campanha e automação são frases de três partes — quem, o quê, como medir —, e
+   a versão anterior era uma fila de seis a oito campos técnicos sem nada
+   dizendo o que se estava montando. `fieldset`/`legend` e não `div`/`h3`: o
+   leitor de tela anuncia a legenda ao entrar em **cada** campo do grupo, então
+   "O número que o público pede" é lido dentro de "1. Quem recebe" em vez de
+   solto. Semântica que já existia e não estava sendo usada.
+
+   Sem borda de caixa: o `cartao-balcao` em volta já é a caixa, e caixa dentro
+   de caixa em 360px come a largura que o campo precisa. O que separa os passos
+   é o espaço e o peso do título — hierarquia por tamanho antes de cor. */
+/* `etapa` e não `passo`, e o nome é a correção.
+
+   `.passo` já era a pílula da régua de agendamento — `display: flex`, borda
+   arredondada e, o que estourou a tela, `white-space: nowrap`. Reusar o nome
+   fez cada campo deste formulário herdar "não quebre linha": a frase de ajuda
+   saía numa linha só de mil pixels dentro de um cartão de 324, cortada na
+   direita, e o campo do passo 3 nascia com a largura do texto.
+
+   Não apareceu na medição porque `.trabalho` recorta (`overflow-x: clip`) na
+   largura de celular: a página não rolava de lado, o conteúdo era **cortado** —
+   que é pior, porque some sem deixar rastro.
+
+   É a mesma lição do nome repetido num barril de exportação, agora em CSS: a
+   diferença é que aqui ninguém reclama. O `tsc` não olha classe. */
+.etapa {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  /* Coluna de grade nasce com piso de `min-content`, e o `min-content` de um
+     campo é o texto mais comprido que ele carrega. Com o `nowrap` fora, isto é
+     cinto e suspensório — e o suspensório fica, porque a frase de ajuda de
+     amanhã pode trazer um endereço sem espaço. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.etapa__titulo {
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.etapa__texto {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O que separa um passo do seguinte, sem desenhar linha: o formulário já tem
+   `gap`, e o passo só precisa respirar mais que os campos dentro dele. */
+.formulario .etapa + .etapa,
+.formulario .etapa + .ui-field {
+  margin-top: var(--space-3);
+}
+
+/* O estado de uma campanha (bloco 82).
+
+   Em letras, com a cor só reforçando — mesmo padrão do estado da entrega de
+   webhook: "Enviando" em âmbar sem a palavra não é informação para quem tem
+   baixa visão. `enviando` é o único que pede atenção, porque é o estado em que
+   a tela ainda vai mudar sozinha. */
+.campanha-estado { font-weight: var(--font-weight-medium); }
+.campanha-estado--rascunho { color: var(--color-text-muted); }
+.campanha-estado--enviando { color: var(--color-accent); }
+.campanha-estado--enviada { color: var(--color-success); }
+
+.heatmap {
+  display: grid;
+  grid-template-columns: auto repeat(7, minmax(3rem, 1fr));
+  gap: var(--space-1);
+  min-inline-size: max-content;
+}
+
+.heatmap__canto,
+.heatmap__dia,
+.heatmap__hora {
+  padding: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.heatmap__hora { text-align: end; }
+
+.heatmap__celula {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--size-touch);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap__celula--fechado {
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-border) 25%, transparent);
+}
+.heatmap__celula--fria {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.heatmap__celula--morna {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.heatmap__celula--cheia {
+  color: var(--color-text-on-accent);
+  background: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---------------------------------------------------------------------------
+   Unidades (bloco 58)
+
+   A tela responde três perguntas na mesma rolagem: onde estou, quem administra
+   o quê, e como mando produto de uma loja para a outra. O que muda de forma
+   entre o celular e o notebook é só a linha de escolha — no aparelho estreito
+   ela empilha nome e botão, e o botão ocupa a largura toda, porque trocar de
+   loja é a ação que a recepção faz com uma mão ao chegar.
+   --------------------------------------------------------------------------- */
+
+.unidade-atual {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.unidade-linha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.unidade-linha__nome {
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+}
+/* Ocupa o lugar do botão quando ele não existe, e diz por quê — a alternativa
+   era o botão que só sabe falhar (bloco 104). */
+.unidade-linha__nota {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+/* O botão nasce com a largura toda: no piso de 360px é o alvo mais fácil de
+   acertar em pé, com uma mão. */
+.unidade-linha .ui-button {
+  width: 100%;
+}
+
+@media (min-width: 40rem) {
+  .unidade-linha {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .unidade-linha .ui-button {
+    width: auto;
+  }
+}
+
+/* O botão nasce colado à esquerda do cartão. Dentro de `.formulario`, que é
+   flex em coluna, ele esticaria para a largura toda e pareceria uma faixa —
+   que é o que a primeira medição mostrou em "Salvar unidades". */
+.unidade-vinculo .ui-button {
+  align-self: flex-start;
+}
+
+.unidades-saldos {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  /* Produto e loja não quebram em duas linhas: a tabela rola dentro do
+     `.ui-scroll-x`, que é o recipiente, e nunca leva a página junto. */
+  white-space: nowrap;
+}
+.unidades-saldos th,
+.unidades-saldos td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.unidades-saldos thead th {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+.unidades-saldos td {
+  font-variant-numeric: tabular-nums;
+}
+

@@ -4,6 +4,7 @@ import {
   concluirTarefa,
   enfileirar,
   falharTarefa,
+  renovarTarefa,
   soltarOrfas,
   tomarTarefas,
   type Tarefa,
@@ -815,7 +816,11 @@ export interface ResultadoDaRodada {
  */
 export async function rodada(
   contexto: Contexto,
-  opcoes: { readonly lote?: number; readonly quem?: string } = {},
+  opcoes: {
+    readonly lote?: number;
+    readonly quem?: string;
+    readonly aoEvento?: (evento: EventoDaTarefa) => void;
+  } = {},
 ): Promise<ResultadoDaRodada> {
   const tarefas = await tomarTarefas(
     opcoes.lote ?? 10,
@@ -829,19 +834,52 @@ export async function rodada(
 
   for (const tarefa of tarefas) {
     const handler = HANDLERS[tarefa.kind];
+    const inicio = Date.now();
+    const base = {
+      tarefaId: tarefa.id,
+      tenantId: tarefa.tenantId,
+      kind: tarefa.kind,
+      tentativa: tarefa.attempts,
+      maxTentativas: tarefa.maxAttempts,
+    } as const;
+    opcoes.aoEvento?.({ fase: 'inicio', ...base });
+
+    // A janela do reaper é 15 min. Renovar a cada 5 deixa margem para uma
+    // rodada lenta do event loop sem permitir que um segundo worker execute a
+    // mesma tarefa enquanto o primeiro ainda está falando com a rede.
+    let heartbeatEmCurso = false;
+    const heartbeat = setInterval(() => {
+      if (heartbeatEmCurso) return;
+      heartbeatEmCurso = true;
+      void renovarTarefa(tarefa, contexto.relogio.agora()).catch(() => false).finally(() => {
+        heartbeatEmCurso = false;
+      });
+    }, 5 * 60_000);
+    heartbeat.unref?.();
+
     try {
       if (!handler) throw new Error(`tarefa sem handler: ${tarefa.kind}`);
       await handler(tarefa, contexto);
-      await concluirTarefa(tarefa.id);
+      await concluirTarefa(tarefa);
       concluidas += 1;
+      opcoes.aoEvento?.({ fase: 'concluida', ...base, duracaoMs: Date.now() - inicio });
     } catch (erro) {
       const desfecho = await falharTarefa(
         tarefa,
-        erro instanceof Error ? erro.message : String(erro),
+        resumoPersistivelDoErro(erro),
         contexto.relogio.agora(),
       );
+      const seguro = identificarErroDaTarefa(erro);
       if (desfecho === 'failed') falhadas += 1;
       else reagendadas += 1;
+      opcoes.aoEvento?.({
+        fase: desfecho === 'failed' ? 'falhou' : 'reagendada',
+        ...base,
+        duracaoMs: Date.now() - inicio,
+        ...seguro,
+      });
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 
@@ -861,10 +899,36 @@ export async function rodarWorker(
     readonly intervaloMs?: number;
     readonly parar?: () => boolean;
     readonly aoRodar?: (resultado: ResultadoDaRodada) => void;
+    readonly aoEvento?: (evento: EventoDaTarefa) => void;
+    /** Falha de manutenção global: sanitizada e isolada do laço principal. */
+    readonly aoErroGlobal?: (evento: {
+      readonly operacao: string;
+      readonly erroTipo: string;
+      readonly erroCodigo?: string;
+    }) => void;
   } = {},
 ): Promise<void> {
   const intervalo = opcoes.intervaloMs ?? 5_000;
   const parar = opcoes.parar ?? (() => false);
+
+  // Uma integração externa indisponível não pode matar lembretes, agenda e
+  // todas as outras filas. Falha global entra em backoff curto e o processo
+  // continua; o marcador de periodicidade só avança depois do sucesso.
+  const tentarDepoisDe = new Map<string, number>();
+  const executarGlobal = async (operacao: string, executar: () => Promise<void>): Promise<boolean> => {
+    const agora = contexto.relogio.agora().getTime();
+    if ((tentarDepoisDe.get(operacao) ?? 0) > agora) return false;
+    try {
+      await executar();
+      tentarDepoisDe.delete(operacao);
+      return true;
+    } catch (erro) {
+      tentarDepoisDe.set(operacao, agora + Math.max(intervalo, 60_000));
+      const seguro = identificarErroDaTarefa(erro);
+      opcoes.aoErroGlobal?.({ operacao, ...seguro });
+      return false;
+    }
+  };
   /**
    * O último dia já enfileirado por **este** processo.
    *
@@ -896,12 +960,14 @@ export async function rodarWorker(
   let ultimoClube: string | null = null;
 
   while (!parar()) {
-    await soltarOrfas(15, contexto.relogio.agora());
+    await executarGlobal('fila.soltar_orfas', async () => {
+      await soltarOrfas(15, contexto.relogio.agora());
+    });
 
     const hoje = contexto.relogio.agora().toISOString().slice(0, 10);
     if (hoje !== ultimaRegua) {
-      ultimaRegua = hoje;
-      await contexto.rodarRegua(contexto.relogio.agora());
+      const ok = await executarGlobal('cobranca.regua', () => contexto.rodarRegua(contexto.relogio.agora()));
+      if (ok) ultimaRegua = hoje;
     }
 
     // A apuração diária mora aqui, ao lado da varredura de órfãs, porque é a
@@ -910,8 +976,8 @@ export async function rodarWorker(
     // nenhuma corrente iniciada ontem.
     const pendente = apuracaoPendente(contexto.relogio.agora());
     if (pendente.dia !== ultimaApuracao) {
-      ultimaApuracao = pendente.dia;
-      await agendarApuracaoDeTodas(pendente);
+      const ok = await executarGlobal('metricas.agendar_apuracao', () => agendarApuracaoDeTodas(pendente));
+      if (ok) ultimaApuracao = pendente.dia;
     }
 
     // A retenção mora ao lado da apuração pelo mesmo motivo: alguém precisa
@@ -919,8 +985,8 @@ export async function rodarWorker(
     // corrente iniciada ontem.
     const retencao = retencaoPendente(contexto.relogio.agora());
     if (retencao.dia !== ultimaRetencao) {
-      ultimaRetencao = retencao.dia;
-      await agendarRetencaoDeTodas(retencao);
+      const ok = await executarGlobal('lgpd.agendar_retencao', () => agendarRetencaoDeTodas(retencao));
+      if (ok) ultimaRetencao = retencao.dia;
     }
 
     /**
@@ -933,17 +999,20 @@ export async function rodarWorker(
      */
     // A automação acompanha a entrega da nota: mesma cadência, mesma razão.
     if (entregaDeNotasPendente(contexto.relogio.agora()).hora !== ultimaAutomacao) {
-      ultimaAutomacao = entregaDeNotasPendente(contexto.relogio.agora()).hora;
-      await agendarAutomacaoDeTodas(entregaDeNotasPendente(contexto.relogio.agora()));
+      const automacao = entregaDeNotasPendente(contexto.relogio.agora());
+      const ok = await executarGlobal('crm.agendar_automacao', () => agendarAutomacaoDeTodas(automacao));
+      if (ok) ultimaAutomacao = automacao.hora;
     }
 
     const entrega = entregaDeNotasPendente(contexto.relogio.agora());
     if (entrega.hora !== ultimaEntregaDeNotas) {
-      ultimaEntregaDeNotas = entrega.hora;
-      await agendarEntregaDeNotasDeTodas(entrega);
-      // A conciliação na mesma cadência: a prefeitura responde em minutos ou
-      // em horas, e uma volta de hora em hora é a ordem de grandeza certa.
-      await agendarConciliacaoDeNotasDeTodas(entrega);
+      const ok = await executarGlobal('fiscal.agendar_entrega_conciliacao', async () => {
+        await agendarEntregaDeNotasDeTodas(entrega);
+        // A conciliação na mesma cadência: a prefeitura responde em minutos ou
+        // em horas, e uma volta de hora em hora é a ordem de grandeza certa.
+        await agendarConciliacaoDeNotasDeTodas(entrega);
+      });
+      if (ok) ultimaEntregaDeNotas = entrega.hora;
     }
 
     /**
@@ -965,15 +1034,14 @@ export async function rodarWorker(
      * duas justifica correr a cada volta do laço.
      */
     if (entrega.hora !== ultimaVarreduraGlobal) {
-      ultimaVarreduraGlobal = entrega.hora;
       const agora = contexto.relogio.agora();
-
-      const refeitos = await contexto.varrerVitrine(agora);
-      if (refeitos > 0) console.log('[vitrine]', { refeitos });
-
-      for (const entregaId of await contexto.varrerWebhooks(agora)) {
-        await contexto.entregarWebhook(entregaId, agora);
-      }
+      const ok = await executarGlobal('integracoes.varredura_global', async () => {
+        await contexto.varrerVitrine(agora);
+        for (const entregaId of await contexto.varrerWebhooks(agora)) {
+          await contexto.entregarWebhook(entregaId, agora);
+        }
+      });
+      if (ok) ultimaVarreduraGlobal = entrega.hora;
     }
 
     /**
@@ -986,14 +1054,14 @@ export async function rodarWorker(
      * acima.
      */
     if (entrega.hora !== ultimaConciliacaoDoWhatsApp) {
-      ultimaConciliacaoDoWhatsApp = entrega.hora;
-      await agendarConciliacaoDoWhatsApp(entrega);
+      const ok = await executarGlobal('whatsapp.agendar_conciliacao', () => agendarConciliacaoDoWhatsApp(entrega));
+      if (ok) ultimaConciliacaoDoWhatsApp = entrega.hora;
     }
 
     const alerta = alertaPendente(contexto.relogio.agora());
     if (alerta.dia !== ultimoAlerta) {
-      ultimoAlerta = alerta.dia;
-      await agendarAlertasDeTodas(alerta);
+      const ok = await executarGlobal('operacao.agendar_alertas', () => agendarAlertasDeTodas(alerta));
+      if (ok) ultimoAlerta = alerta.dia;
     }
 
     // A cobrança do clube, pelo mesmo motivo das duas acima: alguém precisa
@@ -1001,15 +1069,20 @@ export async function rodarWorker(
     // e por isso roda de madrugada e sozinha na volta.
     const clube = cobrancaDoClubePendente(contexto.relogio.agora());
     if (clube.dia !== ultimoClube) {
-      ultimoClube = clube.dia;
-      await agendarCobrancaDoClubeDeTodas(clube);
-      // Na mesma volta: as duas falam com o adquirente, e é de madrugada que
-      // isso não disputa rede com o balcão.
-      await agendarLiquidacaoDeTodas(clube);
+      const ok = await executarGlobal('finance.agendar_clube_split', async () => {
+        await agendarCobrancaDoClubeDeTodas(clube);
+        // Na mesma volta: as duas falam com o adquirente, e é de madrugada que
+        // isso não disputa rede com o balcão.
+        await agendarLiquidacaoDeTodas(clube);
+      });
+      if (ok) ultimoClube = clube.dia;
     }
 
-    const resultado = await rodada(contexto);
-    opcoes.aoRodar?.(resultado);
+    let resultado: ResultadoDaRodada = { tomadas: 0, concluidas: 0, falhadas: 0, reagendadas: 0 };
+    const rodadaOk = await executarGlobal('fila.rodada', async () => {
+      resultado = await rodada(contexto, { aoEvento: opcoes.aoEvento });
+    });
+    if (rodadaOk) opcoes.aoRodar?.(resultado);
 
     // Só dorme quando não havia nada: com fila cheia, a próxima volta é
     // imediata. Dormir sempre atrasaria o lembrete em até um intervalo por

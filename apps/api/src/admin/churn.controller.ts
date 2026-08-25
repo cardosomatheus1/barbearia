@@ -12,12 +12,13 @@ import { unidadeDoBalcao } from './unidade.js';
 /**
  * O risco de abandono e o crescimento sobre série longa (bloco 62).
  *
- * ## Duas permissões, e por que a terceira ficou de fora
+ * ## Três permissões, e por que `finance.view` ficou de fora
  *
  * A explicação de churn diz *"a última avaliação dele foi nota 2"* ao lado de um
  * nome — isso é mais preciso que a lista de avaliações, então `reviews.view`
- * entra junto de `customers.view`. É a regra da rota que agrega, quebrada quatro
- * vezes neste repositório.
+ * entra junto. E risco/ciclo/dias sem voltar são inferências de relacionamento:
+ * `customers.view_notes` impede que esta rota contorne a mesma proteção da ficha
+ * e da lista de Clientes.
  *
  * **`finance.view` não entra, e é decisão escrita.** Ela derivaria segundo fator
  * (o prefixo `finance.` é o que a `PermissaoGuard` lê), e esta é a tela que a
@@ -37,7 +38,7 @@ import { unidadeDoBalcao } from './unidade.js';
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class ChurnController {
-  @Exige('customers.view', 'reviews.view')
+  @Exige('customers.view', 'customers.view_notes', 'reviews.view')
   @Get('churn')
   async risco(@Staff() staff: AuthenticatedStaff) {
     const todos = await churnDaBase(staff.tenantId);
@@ -81,7 +82,7 @@ export class ChurnController {
    * É por isso que o risco de abandono é **rota separada**: ali não passa
    * centavo nenhum, e a gerência abre aquela tela o dia inteiro.
    */
-  @Exige('finance.view', 'reports.finance', 'customers.view')
+  @Exige('finance.view', 'reports.finance', 'customers.view', 'customers.view_notes')
   @Get('crescimento')
   async crescimento(
     @Staff() staff: AuthenticatedStaff,

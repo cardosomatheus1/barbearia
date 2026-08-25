@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import {
   ACAO_PRINCIPAL,
   ROTULO_DO_ESTADO,
+  TOM_SEMANTICO_DO_ESTADO,
   VERBO_CURTO,
   type AttendanceAction as AcaoAtendimento,
 } from '@barbearia/core';
@@ -118,7 +119,7 @@ function Cartao({
       <p className="atende__servico">{linha.services.join(' + ') || 'Sem serviço'}</p>
 
       {RÓTULO[linha.status] ? (
-        <p className="atende__estado">{RÓTULO[linha.status]}</p>
+        <p className={`atende__estado selo selo--${TOM_SEMANTICO_DO_ESTADO[linha.status]}`}>{RÓTULO[linha.status]}</p>
       ) : null}
 
       <div className="atende__acoes">

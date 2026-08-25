@@ -99,7 +99,14 @@ export type EstornoFailure =
   | 'venda_nao_paga'
   | 'ja_estornada'
   | 'motivo_obrigatorio'
-  | 'periodo_fechado';
+  | 'periodo_fechado'
+  | 'estorno_externo_falhou'
+  | 'estorno_em_curso'
+  | 'fiado_ja_recebido'
+  | 'caixa_sem_saldo_para_estorno'
+  | 'pacote_vendido_ja_usado'
+  | 'pacote_vendido_ja_reembolsado'
+  | 'pacote_vendido_ja_transferido';
 
 /**
  * Dá para desfazer esta venda?

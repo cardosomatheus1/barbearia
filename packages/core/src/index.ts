@@ -75,3 +75,5 @@ export * from './slug.js';
 export * from './geo.js';
 export * from './meio-de-pagamento.js';
 export * from './assinatura-da-plataforma.js';
+
+export * from './apuracao.js';

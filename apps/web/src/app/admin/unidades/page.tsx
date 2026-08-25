@@ -327,6 +327,21 @@ export default async function UnidadesPage({ searchParams }: Props) {
               </div>
 
               <div className="ui-field">
+                <label className="ui-field__label" htmlFor="estado">
+                  UF
+                </label>
+                <input
+                  className="ui-field__input"
+                  id="estado"
+                  maxLength={2}
+                  minLength={2}
+                  name="estado"
+                  placeholder="BA"
+                />
+                <p className="ui-field__hint">Ajuda a posicionar a unidade na busca quando não há link do mapa.</p>
+              </div>
+
+              <div className="ui-field">
                 <label className="ui-field__label" htmlFor="timezone">
                   Fuso da loja
                 </label>
@@ -348,6 +363,20 @@ export default async function UnidadesPage({ searchParams }: Props) {
                   É ele que decide de que dia é o dinheiro da loja, no fechamento do caixa.
                 </p>
               </div>
+            </div>
+
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="linkDoMapa">
+                Link do mapa
+              </label>
+              <input
+                className="ui-field__input"
+                id="linkDoMapa"
+                maxLength={500}
+                name="linkDoMapa"
+                placeholder="Cole o link da unidade no Google Maps"
+              />
+              <p className="ui-field__hint">O ponto exato faz esta unidade aparecer corretamente na busca e no mapa do cliente.</p>
             </div>
 
             <button className="ui-button ui-button--ghost" type="submit">

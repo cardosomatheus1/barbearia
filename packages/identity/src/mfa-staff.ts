@@ -383,7 +383,9 @@ export async function verificarSegundoFator(params: {
 
     await tx.$executeRaw`
       UPDATE staff_sessions SET mfa_verified_at = now()
-       WHERE id = ${params.sessionId}::uuid AND revoked_at IS NULL
+       WHERE id = ${params.sessionId}::uuid
+         AND staff_user_id = ${params.staffUserId}::uuid
+         AND revoked_at IS NULL
     `;
 
     return { usouRecuperacao, restantes };

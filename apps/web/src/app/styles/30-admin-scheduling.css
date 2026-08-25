@@ -1,0 +1,497 @@
+/* ---------------------------------------------------------------------------
+   Agenda do admin (bloco 15)
+
+   Colunas por profissional, como a SPEC §2.14 pede. A coluna é larga por
+   natureza — rola dentro de `.ui-scroll-x`, nunca leva a página junto.
+   --------------------------------------------------------------------------- */
+
+.agenda-dias { display: grid; gap: var(--space-5); margin-bottom: var(--space-6); }
+/* Item de grade nasce com `min-width: auto`, e `.colunas` tem min-content de
+   15rem × N profissionais. Sem isto o dia empurra a página inteira — é a
+   terceira vez que este mesmo defeito aparece, sempre onde há recipiente que
+   rola dentro de uma grade. */
+.agenda-dia { min-width: 0; }
+.agenda-dia__titulo { min-width: 0; overflow-wrap: anywhere; }
+.agenda-dia__titulo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-base);
+}
+.agenda-dia__semana { text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.agenda-dia__hoje {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-size: var(--font-size-xs);
+}
+
+.colunas { display: flex; gap: var(--space-3); align-items: flex-start; min-width: 0; }
+.coluna {
+  flex: 1 0 15rem;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.coluna__nome {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.coluna__contagem { color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.coluna__vazia { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.compromissos { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.compromisso {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.compromisso--confirmed { border-left-color: var(--color-success); }
+.compromisso--in_progress { border-left-color: var(--color-accent); }
+.compromisso--checked_in, .compromisso--waiting { border-left-color: var(--color-warning); }
+.compromisso__hora { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; }
+.compromisso__hora time { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.compromisso__ate { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+/* O buffer é o que explica o horário seguinte não estar livre. Discreto, mas
+   presente: escondê-lo devolveria a pergunta "por que não dá para marcar?". */
+.compromisso__buffer {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border-bottom: 1px dashed var(--color-border);
+}
+.compromisso__quem { margin-top: var(--space-1); min-width: 0; }
+.compromisso__nome { margin: 0; font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.compromisso__servico { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.compromisso__estado {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* Alvo próprio de 44px: link de navegação sozinho não é link dentro de frase, e
+   foi assim que `← Voltar` ficou com 21px em quatro telas. */
+.compromisso__ir {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-2);
+  margin-inline-start: auto;
+  color: var(--color-accent);
+}
+.compromisso__mover { margin-top: var(--space-2); }
+
+.bloqueios { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: grid; gap: var(--space-2); }
+.bloqueio {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  /* Hachurado, como a SPEC pede: o bloqueio não é um compromisso, é a ausência
+     de um — e a diferença precisa ser visível de relance. */
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-surface-hover),
+    var(--color-surface-hover) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border: 1px dashed var(--color-border);
+}
+.bloqueio__quando { margin: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.bloqueio__oque { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.bloqueio__acao { margin-top: var(--space-1); }
+.bloqueio__miuda { padding: 0 var(--space-2); font-size: var(--font-size-xs); }
+
+@media (min-width: 768px) {
+  /* A partir daqui as colunas param de rolar e cabem lado a lado. */
+  .colunas { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+}
+
+/* ---------------------------------------------------------------------------
+   Balcão: comanda, caixa, fiado e segundo fator.
+
+   A densidade aqui é do admin — a recepção passa o dia nesta tela e rolagem
+   custa tempo. Duas exceções deliberadas, e as duas por legibilidade a um
+   metro de distância: o total da comanda e o valor da gaveta. Esses dois
+   números são lidos de pé, muitas vezes com o cliente olhando junto, e ler o
+   valor errado é o defeito mais caro que um balcão pode ter.
+   --------------------------------------------------------------------------- */
+
+.cartao-balcao {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.cartao-balcao__titulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.cartao-balcao__texto {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* O número que a recepção procura: quanto tem na gaveta agora. */
+.gaveta {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+}
+.gaveta__rotulo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.gaveta__valor {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.gaveta__quem { margin: var(--space-1) 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.resumo-dia { margin-top: var(--space-4); }
+.resumo-dia__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.resumo-dia__lista { display: grid; gap: var(--space-2); margin: 0; }
+.resumo-dia__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  min-width: 0;
+}
+.resumo-dia__item dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.resumo-dia__item dd { margin: 0; font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+.resumo-dia__nota { margin: var(--space-2) 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.movimentos, .fechamentos, .itens-comanda, .devedores, .para-cobrar-lista, .pagamentos {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2);
+}
+
+.movimento, .pagamentos__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* O troco é a linha que fecha a conta, não um pagamento: cor secundária para
+   ele não ser lido como mais uma forma. */
+.pagamentos__item--troco { color: var(--color-text-muted); }
+.movimento__quem { display: grid; min-width: 0; }
+.movimento__tipo { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.movimento__detalhe { font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.movimento__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); white-space: nowrap; }
+/* Sinal e cor juntos: cor sozinha não serve para quem não a distingue. */
+.movimento__valor--saiu { color: var(--color-text-muted); }
+
+.fechamento {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.fechamento__quando { display: flex; gap: var(--space-2); font-size: var(--font-size-sm); min-width: 0; }
+.fechamento__quem { color: var(--color-text-muted); overflow-wrap: anywhere; }
+.fechamento__contado { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
+.fechamento__divergencia { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.fechamento__divergencia--fora { color: var(--color-danger); font-weight: var(--font-weight-medium); }
+
+.item-comanda {
+  display: grid;
+  gap: var(--space-2);
+  align-items: baseline;
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.item-comanda__quem { display: grid; min-width: 0; }
+.item-comanda__nome { font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.item-comanda__executor { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.item-comanda__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
+.item-comanda__tirar { padding: 0 var(--space-2); font-size: var(--font-size-sm); }
+
+.total-comanda {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+}
+.total-comanda__linhas { display: grid; gap: var(--space-1); margin: 0 0 var(--space-3); }
+.total-comanda__linha { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-sm); min-width: 0; }
+.total-comanda__linha dt { color: var(--color-text-muted); }
+.total-comanda__linha dd { margin: 0; font-variant-numeric: tabular-nums; }
+.total-comanda__rotulo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.total-comanda__valor {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.pagamento-linha {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.pagamento-linha__legenda {
+  padding: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.pagamentos-extras {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 0;
+}
+.pagamentos-extras__titulo {
+  min-height: var(--size-touch);
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+}
+.pagamentos-extras__ajuda {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+}
+.pagamentos-extras[open] {
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+
+.devedor {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.devedor__cabeca { display: flex; justify-content: space-between; gap: var(--space-3); align-items: baseline; min-width: 0; }
+.devedor__nome { margin: 0; font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
+.devedor__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-semibold); white-space: nowrap; }
+
+.para-cobrar {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.para-cobrar__quem { display: grid; min-width: 0; }
+.para-cobrar__nome { font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.para-cobrar__detalhe { font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.para-cobrar__valor { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-medium); }
+
+/* Duas ações na linha da comanda aberta: abrir e cancelar. `wrap` porque em
+   360px os dois botões não cabem lado a lado com o valor, e o piso de toque é
+   44px em qualquer largura. */
+.para-cobrar__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cartao-seguranca {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.cartao-seguranca--destaque { border-color: var(--color-accent); }
+.cartao-seguranca__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.cartao-seguranca__texto { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* O segredo é digitado à mão num celular: monoespaçado, grande e quebrável. */
+.segredo-mfa {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  border: 1px dashed var(--color-border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+.codigos-recuperacao {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.codigos-recuperacao__item {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-base);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.campo-codigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.atalhos-dinheiro { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@media (min-width: 480px) {
+  /* Com um pouco mais de largura, o item da comanda deixa de empilhar: o valor
+     ao lado do nome é como se lê uma conta de papel. */
+  .item-comanda { grid-template-columns: 1fr auto auto; }
+  .para-cobrar { grid-template-columns: 1fr auto auto; align-items: center; }
+  .fechamento { grid-template-columns: 1fr auto auto; align-items: baseline; }
+}
+
+@media (min-width: 768px) {
+  .resumo-dia__lista { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+  .codigos-recuperacao { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---------------------------------------------------------------------------
+   Comissão.
+
+   O número que o barbeiro procura é "quanto eu tenho a receber", e ele o
+   confere de pé, uma vez por mês. Por isso ele reusa `.gaveta`, que já é o
+   maior número da tela no balcão — dois vocabulários para a mesma função
+   fariam a página parecer montada por pessoas diferentes.
+   --------------------------------------------------------------------------- */
+
+.linhas-comissao, .fechamentos-comissao, .regras-comissao {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2);
+}
+
+.linha-comissao, .regra-comissao {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.linha-comissao__quem, .regra-comissao__quem { display: grid; min-width: 0; }
+.linha-comissao__nome, .regra-comissao__alvo {
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+.linha-comissao__detalhe, .regra-comissao__como {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+.linha-comissao__valor {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.regra-comissao__tirar { padding: 0 var(--space-2); font-size: var(--font-size-sm); }
+
+.fechamento-comissao {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.fechamento-comissao__cabeca {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: baseline;
+  min-width: 0;
+}
+.fechamento-comissao__periodo { font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
+.fechamento-comissao__total { font-variant-numeric: tabular-nums; font-weight: var(--font-weight-semibold); }
+.fechamento-comissao__linhas {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+.fechamento-comissao__linhas li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+.fechamento-comissao__quem {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.faixas-comissao { margin: 0 0 var(--space-3); padding: 0; border: 0; min-width: 0; }
+.faixas-comissao__legenda {
+  padding: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.faixas-comissao__linha { display: grid; gap: var(--space-2); min-width: 0; }
+
+@media (min-width: 480px) {
+  /* Teto e alíquota lado a lado quando há largura: é como se lê uma tabela de
+     faixas no papel. */
+  .faixas-comissao__linha { grid-template-columns: 2fr 1fr; align-items: start; }
+}
+

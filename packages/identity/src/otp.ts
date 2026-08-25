@@ -1,7 +1,7 @@
-import { createHash, randomInt, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomInt, randomBytes, timingSafeEqual } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { normalizePhone, InvalidPhoneError } from '@barbearia/core';
-import type { MessagingProvider } from './messaging.js';
+import { MessagingDeliveryUnknownError, type MessagingProvider } from './messaging.js';
 
 /**
  * Autenticação do cliente por código de uso único.
@@ -65,6 +65,30 @@ function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+/**
+ * Segredo exclusivo do OTP.
+ *
+ * Um código de 6 dígitos tem só 1.000.000 de combinações. SHA-256 puro evita
+ * guardar o código em claro, mas não protege um dump: quem obtiver apenas o
+ * banco testa todas as combinações offline em segundos. HMAC transforma o
+ * hash numa verificação que também exige um segredo fora do banco.
+ *
+ * É uma chave própria, não STAFF_EMAIL_PEPPER/API_KEY_PEPPER: rotacionar uma
+ * finalidade não deve quebrar outra. Desafios duram minutos, então a rotação
+ * desta chave só invalida OTPs pendentes — um efeito pequeno e previsível.
+ */
+function otpPepper(): Buffer {
+  const valor = process.env['OTP_PEPPER']?.trim() ?? '';
+  if (valor.length < 32) {
+    throw new Error('OTP_PEPPER é obrigatória e precisa de pelo menos 32 caracteres');
+  }
+  return Buffer.from(valor, 'utf8');
+}
+
+function hashDoCodigo(codigo: string): string {
+  return createHmac('sha256', otpPepper()).update(codigo).digest('hex');
+}
+
 /** Código numérico com entropia criptográfica — `Math.random` não serve aqui. */
 function generateCode(): string {
   const max = 10 ** OTP_LENGTH;
@@ -78,7 +102,7 @@ function cooldownFor(sendCount: number): number {
 
 /** Comparação em tempo constante: `===` vaza o prefixo correto pelo tempo. */
 function codeMatches(candidate: string, storedHash: string): boolean {
-  const a = Buffer.from(sha256(candidate), 'hex');
+  const a = Buffer.from(hashDoCodigo(candidate), 'hex');
   const b = Buffer.from(storedHash, 'hex');
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
@@ -123,9 +147,13 @@ export async function requestOtp(
 
   const code = await withTenant(input.tenantId, async (tx) => {
     const existing = await tx.$queryRaw<
-      { send_count: number; last_sent_at: Date; expires_at: Date }[]
+      {
+        code_hash: string; pending_name: string | null; send_count: number; last_sent_at: Date;
+        expires_at: Date; attempts: number; max_attempts: number; consumed_at: Date | null;
+      }[]
     >`
-      SELECT send_count, last_sent_at, expires_at
+      SELECT code_hash, pending_name, send_count, last_sent_at, expires_at,
+             attempts, max_attempts, consumed_at
       FROM otp_challenges
       WHERE phone_e164 = ${phone}
       FOR UPDATE
@@ -167,7 +195,7 @@ export async function requestOtp(
         (tenant_id, phone_e164, code_hash, pending_name, expires_at, send_count,
          last_sent_at, attempts, consumed_at)
       VALUES (
-        ${input.tenantId}::uuid, ${phone}, ${sha256(generated)},
+        ${input.tenantId}::uuid, ${phone}, ${hashDoCodigo(generated)},
         ${input.name ?? null},
         ${new Date(now.getTime() + OTP_TTL_MINUTES * 60_000)},
         ${sendCount}, ${now}, 0, NULL
@@ -182,15 +210,69 @@ export async function requestOtp(
         consumed_at = NULL
     `;
 
-    return { generated, sendCount };
+    return { generated, sendCount, anterior: current ?? null };
   });
 
-  await messaging.sendOtp({
-    phoneE164: phone,
-    code: code.generated,
-    establishmentName: input.establishmentName,
-    ttlMinutes: OTP_TTL_MINUTES,
-  });
+  try {
+    await messaging.sendOtp({
+      phoneE164: phone,
+      code: code.generated,
+      establishmentName: input.establishmentName,
+      ttlMinutes: OTP_TTL_MINUTES,
+    });
+  } catch (erro) {
+    /**
+     * Timeout/reset depois do POST é desfecho incerto, não falha provada. A
+     * Meta pode ter aceitado o mesmo código; invalidá-lo aqui faria o cliente
+     * receber um OTP que o banco já recusou. Mantém o desafio e devolve o mesmo
+     * contrato de solicitação — o reenvio continua protegido pelo cooldown.
+     */
+    if (erro instanceof MessagingDeliveryUnknownError) {
+      return {
+        expiresInSeconds: OTP_TTL_MINUTES * 60,
+        resendAfterSeconds: cooldownFor(code.sendCount),
+      };
+    }
+
+    /**
+     * O provedor falhou depois do commit. Não se pode deixar o novo código
+     * invalidar o anterior e consumir cooldown por uma mensagem não entregue.
+     *
+     * A compensação só toca a linha se ela ainda contém **este** código: se uma
+     * requisição posterior já a substituiu, voltar no tempo aqui destruiria o
+     * desafio mais novo.
+     */
+    const hashGerado = hashDoCodigo(code.generated);
+    await withTenant(input.tenantId, async (tx) => {
+      const atual = await tx.$queryRaw<{ code_hash: string }[]>`
+        SELECT code_hash FROM otp_challenges
+         WHERE phone_e164 = ${phone}
+         FOR UPDATE
+      `;
+      if (atual[0]?.code_hash !== hashGerado) return;
+
+      if (code.anterior) {
+        await tx.$executeRaw`
+          UPDATE otp_challenges SET
+            code_hash = ${code.anterior.code_hash},
+            pending_name = ${code.anterior.pending_name},
+            expires_at = ${code.anterior.expires_at},
+            send_count = ${code.anterior.send_count},
+            last_sent_at = ${code.anterior.last_sent_at},
+            attempts = ${code.anterior.attempts},
+            max_attempts = ${code.anterior.max_attempts},
+            consumed_at = ${code.anterior.consumed_at}
+           WHERE phone_e164 = ${phone} AND code_hash = ${hashGerado}
+        `;
+      } else {
+        await tx.$executeRaw`
+          DELETE FROM otp_challenges
+           WHERE phone_e164 = ${phone} AND code_hash = ${hashGerado}
+        `;
+      }
+    });
+    throw erro;
+  }
 
   return {
     expiresInSeconds: OTP_TTL_MINUTES * 60,

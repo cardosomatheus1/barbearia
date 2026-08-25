@@ -268,6 +268,32 @@ describeIfDb('balcão — o que a antecedência mínima não alcança', () => {
     expect(balcao.days[0]?.slots[0]?.start).toBe('09:00');
   });
 
+  it('serviço e profissional só de balcão continuam marcáveis pela recepção', async () => {
+    await exec(admin, `
+      UPDATE services SET bookable_online = false WHERE id = '${CABELO}';
+      UPDATE professionals SET bookable_online = false WHERE id = '${RUAN}';
+    `);
+
+    const site = await grade(false);
+    expect(site.days[0]?.slots).toEqual([]);
+
+    const balcao = await grade(true);
+    expect(balcao.days[0]?.slots.length).toBeGreaterThan(0);
+    await expect(
+      createAppointment({
+        tenantId: TENANT,
+        locationId: LOCATION,
+        professionalId: RUAN,
+        serviceIds: [CABELO],
+        date: TERCA,
+        start: balcao.days[0]!.slots[0]!.start,
+        source: 'reception',
+        atCounter: true,
+        now: NOVE_DA_MANHA,
+      }),
+    ).resolves.toMatchObject({ status: 'pending' });
+  });
+
   it('o balcão também não oferece o que já passou', async () => {
     // Desligar a antecedência não é desligar o relógio: 08:00 já foi.
     const balcao = await grade(true);

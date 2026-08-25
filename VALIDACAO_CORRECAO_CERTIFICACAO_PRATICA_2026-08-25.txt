@@ -1,0 +1,40 @@
+BARBERDOCK — CORREÇÃO DA CERTIFICAÇÃO PRÁTICA — 2026-08-25
+
+CORRIGIDO
+- Medição sobe API + Web + Worker.
+- Worker observado por evento de partida.
+- SIGKILL + retomada real do processo na medição.
+- Worker precisa permanecer vivo após percursos e cargas.
+- Nova carga: 100 reservas simultâneas no mesmo slot.
+- Propriedade: 1 sucesso, 99 conflitos 409, zero 500.
+- Replay idempotente precisa devolver o mesmo agendamento.
+- PostgreSQL precisa terminar com uma linha ativa no slot.
+- Teste autônomo positivo e negativo do contrato da carga.
+- Guarda permanente com 8 mutações negativas.
+- CI, go-live, deploy e ROADMAP atualizados.
+- Documentação atualizada para 116 migrações e 10 percursos existentes.
+- Fiscal e split classificados corretamente como sem provider real.
+
+VALIDAÇÃO EXECUTADA
+- Guardas diretas: 48/48 PASS.
+- Testes Node autônomos: 29/29 arquivos PASS.
+- Asserções Node: 237/237 PASS.
+- Mutações negativas novas: 8/8 detectadas.
+- Contrato autônomo da carga: 2/2 PASS.
+- Shell: 30/30 PASS.
+- YAML: 7/7 PASS.
+- Migrações: 116, 0001 -> 0116.
+
+PENDENTE DE AMBIENTE/CONTRATO
+- PostgreSQL 16 real, 116 migrações e 60 provas SQL.
+- pnpm install, typecheck, Vitest completo, build e E2E real.
+- Execução da medição corrigida com 100 reservas.
+- Backup/restore no head 0116.
+- Smokes WABA/WhatsApp/Stripe.
+- Providers reais de fiscal e split.
+- Percursos Playwright complementares e piloto real.
+
+CLASSIFICAÇÃO
+- problemas corrigíveis da esteira: corrigidos.
+- selo de produção: continua dependente dos portões reais acima.
+- este ZIP substitui o Recheck Final como base canônica para a próxima execução.

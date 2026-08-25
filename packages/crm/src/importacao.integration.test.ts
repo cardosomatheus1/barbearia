@@ -8,6 +8,7 @@ import {
   lerImportacao,
   listarImportacoes,
   reverterImportacao,
+  resolverConflitoDaImportacao,
   varrerPreviewsVencidos,
 } from './importacao.js';
 
@@ -188,6 +189,81 @@ describeIfDb('importação de base', () => {
     const relido = await lerImportacao({ tenantId: TENANT, importId: preview.id });
     expect(relido.problemas).toEqual([]);
     expect(JSON.stringify(relido)).not.toContain('José');
+  });
+
+  it('conflitos resolvíveis não ficam escondidos atrás de 50 linhas inválidas', async () => {
+    const invalidas = Array.from({ length: 55 }, (_, i) => `Inválido ${i};telefone-quebrado-${i}`);
+    const preview = await analisar(
+      ['Nome;Celular', ...invalidas, 'José;71988887777', 'João;71988887777'].join('\n'),
+      TENANT,
+      'muitos-problemas.csv',
+    );
+
+    expect(preview.problemas.some((p) => p.veredito === 'conflito')).toBe(true);
+    expect(preview.problemas).toHaveLength(50);
+  });
+
+  it('resolve na tela qual linha representa um telefone em conflito', async () => {
+    const preview = await analisar(
+      ['Nome;Celular;Observações', 'José;71988887777;primeira', 'João;71988887777;segunda'].join('\n'),
+    );
+    const conflito = preview.problemas.find((p) => p.veredito === 'conflito');
+    expect(conflito?.linha).toBe(3);
+
+    await resolverConflitoDaImportacao({
+      tenantId: TENANT,
+      importId: preview.id,
+      linha: 3,
+      escolha: 'linha',
+      staffId: GESTOR,
+      staffName: 'Matheus Cardoso',
+      agora: AGORA,
+    });
+
+    const relido = await lerImportacao({ tenantId: TENANT, importId: preview.id });
+    expect(relido.problemas.find((p) => p.linha === 3)).toBeUndefined();
+
+    await aplicar(preview.id);
+    const base = await clientes();
+    expect(base).toHaveLength(1);
+    expect(base[0]?.name).toBe('João');
+  });
+
+  it('manter a primeira linha só encerra o conflito, sem trocar o cadastro', async () => {
+    const preview = await analisar(
+      ['Nome;Celular', 'José;71988887777', 'João;71988887777'].join('\n'),
+    );
+
+    await resolverConflitoDaImportacao({
+      tenantId: TENANT,
+      importId: preview.id,
+      linha: 3,
+      escolha: 'anterior',
+      staffId: GESTOR,
+      staffName: 'Matheus Cardoso',
+      agora: AGORA,
+    });
+    await aplicar(preview.id);
+
+    expect((await clientes())[0]?.name).toBe('José');
+  });
+
+  it('a barbearia rival não resolve conflito de outra importação', async () => {
+    const preview = await analisar(
+      ['Nome;Celular', 'José;71988887777', 'João;71988887777'].join('\n'),
+    );
+
+    const erro = await resolverConflitoDaImportacao({
+      tenantId: RIVAL,
+      importId: preview.id,
+      linha: 3,
+      escolha: 'linha',
+      staffId: GESTOR,
+      staffName: 'Rival',
+      agora: AGORA,
+    }).catch((e: ImportacaoError) => e);
+
+    expect((erro as ImportacaoError).code).toBe('nao_encontrada');
   });
 
   it('a observação do sistema antigo vira a anotação da ficha', async () => {

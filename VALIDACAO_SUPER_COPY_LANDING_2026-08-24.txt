@@ -1,0 +1,107 @@
+BARBERDOCK — SUPER COPY LANDING — 2026-08-24
+
+SUPER COPY — PERSUASAO ANTES
+── a página em 8 segundos (só títulos e chamadas, que é como ela é lida)
+
+   ▸ cta  Entrar
+   ▸ cta  Criar conta
+     h1   Seu porto seguro na gestão
+   ▸ cta  Abrir minha barbearia
+     h2   Veja o Barber Dock funcionando
+     h3   Painel
+     h3   O dia
+     h3   Marcar
+     h3   Pelo cliente
+     h3   Comanda
+     h2   Do primeiro horário ao fechamento do caixa
+     h3   O horário existe porque cabe
+     h3   Quem chegou sem marcar
+     h3   Comanda, caixa e fiado
+     h3   Fecha e congela
+     h3   Lembrete que respeita a noite
+     h2   Seis coisas que a gente mediu, não imaginou
+     h3   Agenda
+     h3   Cardápio
+     h3   Fuso
+     h3   Escolha
+     h3   Página
+     h3   Cadastro
+     h2   Quatro pessoas, quatro telas, um sistema
+     h3   O cliente
+     h3   O balcão
+     h3   O barbeiro
+     h3   O dono
+     h2   Atracar leva um domingo à tarde
+   ▸ cta  Criar conta
+   ▸ cta  Já sou cliente
+
+   90 palavras no total. Se isso sozinho não explica a oferta, a página depende de alguém ler os parágrafos — e quase ninguém lê.
+
+── problemas certos
+
+   ✗ 3 pedidos diferentes na mesma faixa: ['abrir minha barbearia', 'criar conta', 'entrar']
+     → um pedido por tela. Dois CTAs é zero CTA — escolha o principal e rebaixe o resto a link
+
+
+SUPER COPY — PERSUASAO DEPOIS
+── a página em 8 segundos (só títulos e chamadas, que é como ela é lida)
+
+   ▸ cta  Criar minha conta
+     h1   Horários que cabem no dia. Caixa que fecha sem adivinhar.
+   ▸ cta  Criar minha conta
+     h2   Cinco telas reais, do painel do dono à comanda do balcão
+     h3   Painel: o que merece atenção hoje
+     h3   O dia: quem chegou, atrasou e ainda falta
+     h3   Marcar: só aparecem horários que cabem
+     h3   Cliente: agenda pelo link, sem instalar app
+     h3   Comanda: o atendimento já nasce com o combinado
+     h2   O que acontece no balcão já chega ao caixa
+     h3   Cada serviço abre o espaço que realmente precisa
+     h3   Encaixe sem empurrar o resto do dia
+     h3   Saiba o que entrou, saiu e ficou para depois
+     h3   Fechou a comissão, o histórico não muda
+     h3   Lembrete sem mensagem de madrugada
+     h2   Seis falhas de operação que o Barber Dock trata na origem
+     h2   Quatro rotinas sem obrigar todo mundo a trabalhar na mesma tela
+     h3   Cliente: agenda sem criar conta
+     h3   Balcão: acompanha o dia sem trocar de página
+     h3   Barbeiro: vê quem vem agora e o que precisa saber
+     h3   Dono: compara o resultado antes de decidir
+     h2   Comece com sua base de clientes, não com uma tela vazia
+   ▸ cta  Criar minha conta
+
+   173 palavras no total. Se isso sozinho não explica a oferta, a página depende de alguém ler os parágrafos — e quase ninguém lê.
+
+── nada a apontar. A estrutura está de pé.
+
+
+SUPER COPY — ANTIGENERICO ANTES
+946 palavras de texto visível
+
+  cadência de pontuação:
+    · dois ou mais travessões na mesma frase  (O próximo da cadeira, a ficha de quem vai sentar — “não usar navalha”)
+
+  nota 4/5  precisa de uma limpeza
+
+SUPER COPY — ANTIGENERICO DEPOIS
+917 palavras de texto visível
+
+
+  nota 5/5  LIMPO
+
+TYPESCRIPT LANDING
+tsc exit: 0
+
+GUARDAS
+R5 estrutural: ilha isolada; fonte gzip 1189 bytes; 17 arquivo(s) públicos continuam servidor. Bundle/LCP final dependem do build.
+R6: 9 promessa(s) históricas limitadas por lacunas abertas
+R8: 2 superfície(s) comercial(is) coerentes com a matriz
+R9 mídia: upload, recorte, S3 compatível, domínio próprio, fallback/backup e consentimento coerentes
+V7/V9 ok; V8 estrutural ok: 45 seções sob moldes e níveis explícitos nas telas-chave. Aceitação visual global de V8 continua manual.
+
+CHECAGEM DE COPY ANTIGA
+OK removido: Seu porto seguro
+OK removido: JavaScript no celular do cliente
+OK removido: 0 kB
+OK removido: Metade de quem entra
+OK removido: Atracar leva um domingo

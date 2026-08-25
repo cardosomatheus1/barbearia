@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, UseGuards } from '@nestjs/common';
 import {
   FidelidadeError,
   ajustarSaldo,
@@ -42,6 +42,7 @@ const STATUS: Record<string, number> = {
   resgate_acima_do_teto: 409,
   motivo_curto: 400,
   programa_invalido: 400,
+  idempotencia_conflitante: 409,
 };
 
 function toHttp(erro: unknown): never {
@@ -111,7 +112,11 @@ export class FidelidadeController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(ajusteDeSaldoSchema))
     body: { quantidade: number; motivo: string },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError('idempotency_key_obrigatoria', 400, 'Mande um Idempotency-Key de até 128 caracteres.');
+    }
     const local = await unidadeDoBalcao(staff);
     try {
       return await ajustarSaldo({
@@ -119,6 +124,7 @@ export class FidelidadeController {
         customerId: id,
         quantidade: body.quantidade,
         motivo: body.motivo,
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         // A unidade do balcão decide de qual bolso o ajuste sai (bloco 59). Ela
         // vem da sessão, nunca do corpo: quem ajusta saldo está criando valor
         // gastável, e escolher o bolso pelo pedido seria escolher de onde tirar.

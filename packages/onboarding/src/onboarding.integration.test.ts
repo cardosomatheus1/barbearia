@@ -6,11 +6,13 @@ import { computeFromContext } from '@barbearia/scheduling';
 import { withTenant } from '@barbearia/db';
 import {
   getOnboardingState,
+  getPhotoTargets,
   OnboardingError,
   publish,
   saveBusiness,
   saveChangeWindow,
   savePayments,
+  savePhotos,
   saveProfessionals,
   saveServices,
   templatesForOnboarding,
@@ -282,6 +284,28 @@ describeIfDb('onboarding', () => {
       timezone: 'America/Rio_Branco',
       city: 'Rio Branco',
     });
+  });
+
+  it('capa e equipe de fotos respeitam a unidade escolhida', async () => {
+    const { tenantId } = await percorrer();
+    const matriz = (await getOnboardingState(tenantId))!.locationId;
+    const filial = 'ffff0000-0000-0000-0000-00000000f222';
+    await admin.$executeRawUnsafe(`
+      INSERT INTO locations (id, tenant_id, name, timezone, city, cover_url)
+      VALUES ('${filial}', '${tenantId}', 'Domari Filial', 'America/Bahia', 'Salvador', '/media/${tenantId}/filial.webp')
+    `);
+
+    await savePhotos(tenantId, matriz, { coverUrl: `/media/${tenantId}/matriz.webp` });
+
+    const fotosDaMatriz = await getPhotoTargets(tenantId, matriz);
+    const fotosDaFilial = await getPhotoTargets(tenantId, filial);
+    expect(fotosDaMatriz?.coverUrl).toBe(`/media/${tenantId}/matriz.webp`);
+    expect(fotosDaFilial?.coverUrl).toBe(`/media/${tenantId}/filial.webp`);
+
+    // A equipe criada no onboarding pertence à matriz e não pode aparecer como
+    // alvo editável quando o balcão troca para a filial.
+    expect(fotosDaMatriz?.professionals.length).toBeGreaterThan(0);
+    expect(fotosDaFilial?.professionals).toEqual([]);
   });
 
   it('a unidade de outra barbearia não é editável nem com o id na mão', async () => {

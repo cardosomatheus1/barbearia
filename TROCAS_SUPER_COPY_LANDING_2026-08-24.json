@@ -1,0 +1,369 @@
+{
+  "pagina": "apps/web/src/app/page.tsx",
+  "nota_antes": "4/5",
+  "nota_depois": "5/5",
+  "percepcoes": [
+    "A leitura de 8 segundos dependia de títulos-rótulo como “Painel”, “O dia” e “Marcar”.",
+    "Hero “Seu porto seguro na gestão” era memorável como marca, mas pouco específico para tráfego frio.",
+    "Três pedidos diferentes apareciam na primeira faixa: Entrar, Criar conta e Abrir minha barbearia.",
+    "O placar misturava prova comercial com métricas internas de engenharia; “0 kB” não correspondia à medição real do bundle público.",
+    "A frase “Metade de quem entra...” não tinha origem explícita na página e foi removida.",
+    "A página final passa no anti-genérico 5/5 e o scanner de persuasão não aponta falha estrutural."
+  ],
+  "trocas": [
+    {
+      "onde": "metadata.title",
+      "antes": "Barber Dock — o porto da sua barbearia",
+      "depois": "Barber Dock — agenda, caixa e gestão para barbearias",
+      "motivo": "Título de busca passa a dizer categoria e funções concretas, em vez de depender da metáfora da marca."
+    },
+    {
+      "onde": "metadata.description",
+      "antes": "Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar, comanda, caixa, fiado e comissão. Feito a partir do que quebra numa barbearia de verdade.",
+      "depois": "Agenda por duração real, fila de espera, comanda, caixa, fiado e comissão para barbearias. Importe sua base de clientes por planilha e trabalhe no navegador.",
+      "motivo": "Descrição troca tese interna de produto por funções e uma facilidade verificável de adoção."
+    },
+    {
+      "onde": ".lp-marca__nome small",
+      "antes": "Sistema de gestão",
+      "depois": "Gestão para barbearias",
+      "motivo": "Especifica para quem é o produto já na marca."
+    },
+    {
+      "onde": ".lp-nav__links a[href=\"#telas\"]",
+      "antes": "Telas",
+      "depois": "Telas reais",
+      "motivo": "Diz que o visitante verá o produto, não uma seção genérica."
+    },
+    {
+      "onde": ".lp-nav__links a[href=\"#recursos\"]",
+      "antes": "Recursos",
+      "depois": "Rotina",
+      "motivo": "Fala a linguagem da operação, não a de software."
+    },
+    {
+      "onde": ".lp-nav__links a[href=\"#campo\"]",
+      "antes": "O que quebra",
+      "depois": "Problemas",
+      "motivo": "Encurta o rótulo sem perder a promessa da seção."
+    },
+    {
+      "onde": ".lp-nav__acoes .ui-button--primary",
+      "antes": "Criar conta",
+      "depois": "Criar minha conta",
+      "motivo": "CTA deixa claro que a próxima ação cria a conta do visitante."
+    },
+    {
+      "onde": ".lp-selo",
+      "antes": "ERP para barbearia",
+      "depois": "Gestão para barbearias",
+      "motivo": "Remove jargão técnico e mantém a categoria explícita."
+    },
+    {
+      "onde": ".lp-heroi__titulo",
+      "antes": "Seu porto seguro na gestão",
+      "depois": "Horários que cabem no dia. Caixa que fecha sem adivinhar.",
+      "motivo": "O hero sai de uma metáfora vaga e abre com dois ganhos operacionais reconhecíveis."
+    },
+    {
+      "onde": ".lp-heroi__texto",
+      "antes": "Agenda que respeita a duração real do serviço, balcão para quem chega sem marcar, comanda, caixa, fiado e comissão. Construído a partir do que quebra numa barbearia de verdade — não do que cabe numa apresentação.",
+      "depois": "O Barber Dock calcula a agenda pela duração real do serviço, mostra quem chegou, abre comanda, registra fiado e fecha comissão. Menos ajuste manual quando o movimento aperta.",
+      "motivo": "Explica o mecanismo e o efeito na rotina, em vez de terminar numa tese de engenharia."
+    },
+    {
+      "onde": ".lp-heroi__acoes .ui-button--primary",
+      "antes": "Abrir minha barbearia",
+      "depois": "Criar minha conta",
+      "motivo": "Evita parecer que o clique abre um novo negócio; nomeia o passo real."
+    },
+    {
+      "onde": ".lp-heroi__acoes .lp-link",
+      "antes": "Ver o que costuma quebrar",
+      "depois": "Ver os 6 problemas tratados",
+      "motivo": "O link passa a prometer um destino quantificado e específico."
+    },
+    {
+      "onde": ".lp-provas li:nth-child(1)",
+      "antes": "Sem instalação — abre no navegador",
+      "depois": "Abre no navegador, sem instalar app",
+      "motivo": "Começa pelo fato concreto e elimina cadência publicitária."
+    },
+    {
+      "onde": ".lp-provas li:nth-child(2)",
+      "antes": "Traz sua base de clientes por planilha",
+      "depois": "Importa sua base de clientes por planilha",
+      "motivo": "Verbo descreve a ação real do produto."
+    },
+    {
+      "onde": ".lp-provas li:nth-child(3)",
+      "antes": "Cada barbearia isolada no banco",
+      "depois": "Dados de cada barbearia isolados no banco",
+      "motivo": "Explica o que é isolado, não apenas a entidade."
+    },
+    {
+      "onde": ".lp-faixa__grupo",
+      "antes": "Agenda · Fila de espera · Comanda · Caixa · Fiado · Comissão · Avisos no WhatsApp...",
+      "depois": "Agenda por duração real · Fila de espera · Comanda e caixa · Fiado registrado · Comissão com período fechado · Lembretes no WhatsApp...",
+      "motivo": "A faixa deixa de listar nomes de módulos e passa a carregar diferenças operacionais."
+    },
+    {
+      "onde": ".lp-placar__item:nth-child(1)",
+      "antes": "Blocos entregues — 22",
+      "depois": "Telas reais do produto — 5",
+      "motivo": "Troca métrica interna de desenvolvimento por prova visual que o visitante pode conferir na própria página."
+    },
+    {
+      "onde": ".lp-placar__item:nth-child(2)",
+      "antes": "Problemas levantados em operação real — 12",
+      "depois": "Problemas operacionais detalhados — 6",
+      "motivo": "O placar passa a contar o que a landing realmente mostra, evitando depender de uma prova externa para entender o número."
+    },
+    {
+      "onde": ".lp-placar__item:nth-child(3)",
+      "antes": "Piso de tela conferido — 360px",
+      "depois": "Etapas no cadastro inicial — 6",
+      "motivo": "Substitui métrica técnica de viewport por informação de adoção mais útil comercialmente."
+    },
+    {
+      "onde": ".lp-placar__item:nth-child(4)",
+      "antes": "JavaScript no celular do cliente — 0 kB",
+      "depois": "Apps para o cliente instalar — 0",
+      "motivo": "Corrige uma alegação incompatível com a medição de bundle e preserva o benefício verdadeiro: o cliente usa o navegador."
+    },
+    {
+      "onde": "#telas .lp-sobrancelha",
+      "antes": "Por dentro do sistema",
+      "depois": "Veja antes de trocar",
+      "motivo": "Enquadra a seção como redução de risco para quem está comparando sistemas."
+    },
+    {
+      "onde": "#telas .lp-titulo",
+      "antes": "Veja o Barber Dock funcionando",
+      "depois": "Cinco telas reais, do painel do dono à comanda do balcão",
+      "motivo": "Título diz quantidade e amplitude do que será mostrado."
+    },
+    {
+      "onde": "#telas .lp-intro",
+      "antes": "Fotos do produto rodando, com a barbearia de demonstração que acompanha o código — os números são os que o motor calculou. Deslize para o lado, ou use os atalhos.",
+      "depois": "São telas do produto rodando com a barbearia de demonstração. Você vê o que o balcão usa, o que o cliente recebe e o que o dono acompanha.",
+      "motivo": "Remove linguagem de repositório/código e orienta o visitante sobre o que avaliar."
+    },
+    {
+      "onde": "#telas .lp-telas__nome",
+      "antes": "Painel",
+      "depois": "Painel: o que merece atenção hoje",
+      "motivo": "O título da tela passa a explicar o ganho do dono."
+    },
+    {
+      "onde": "#telas .lp-telas__nome",
+      "antes": "O dia",
+      "depois": "O dia: quem chegou, atrasou e ainda falta",
+      "motivo": "O título passa a revelar o trabalho da tela."
+    },
+    {
+      "onde": "#telas .lp-telas__nome",
+      "antes": "Marcar",
+      "depois": "Marcar: só aparecem horários que cabem",
+      "motivo": "Expõe a diferença da agenda já no título."
+    },
+    {
+      "onde": "#telas .lp-telas__nome",
+      "antes": "Pelo cliente",
+      "depois": "Cliente: agenda pelo link, sem instalar app",
+      "motivo": "Transforma um rótulo interno em benefício para o cliente final."
+    },
+    {
+      "onde": "#telas .lp-telas__nome",
+      "antes": "Comanda",
+      "depois": "Comanda: o atendimento já nasce com o combinado",
+      "motivo": "Mostra por que a comanda reduz retrabalho no balcão."
+    },
+    {
+      "onde": "#recursos .lp-sobrancelha",
+      "antes": "O que o sistema faz",
+      "depois": "Da agenda ao dinheiro",
+      "motivo": "Troca rótulo de pasta por uma ideia de fluxo completo."
+    },
+    {
+      "onde": "#recursos .lp-titulo",
+      "antes": "Do primeiro horário ao fechamento do caixa",
+      "depois": "O que acontece no balcão já chega ao caixa",
+      "motivo": "Expõe o benefício de integração entre operação e financeiro."
+    },
+    {
+      "onde": "#recursos .lp-intro",
+      "antes": "Cinco frentes que uma barbearia usa todo dia, integradas — não módulos vendidos separados que não conversam entre si.",
+      "depois": "Agenda, fila, comanda, fiado e comissão usam a mesma operação. O dado não precisa ser refeito em outra planilha no fechamento.",
+      "motivo": "Substitui comparação genérica por consequência operacional concreta."
+    },
+    {
+      "onde": "#recursos .lp-bento__titulo",
+      "antes": "O horário existe porque cabe",
+      "depois": "Cada serviço abre o espaço que realmente precisa",
+      "motivo": "Explica o mecanismo da agenda em linguagem do usuário."
+    },
+    {
+      "onde": "#recursos .lp-bento__titulo",
+      "antes": "Quem chegou sem marcar",
+      "depois": "Encaixe sem empurrar o resto do dia",
+      "motivo": "Transforma descrição de situação em benefício operacional."
+    },
+    {
+      "onde": "#recursos .lp-bento__titulo",
+      "antes": "Comanda, caixa e fiado",
+      "depois": "Saiba o que entrou, saiu e ficou para depois",
+      "motivo": "O título fala da pergunta financeira que o dono quer responder."
+    },
+    {
+      "onde": "#recursos .lp-bento__titulo",
+      "antes": "Fecha e congela",
+      "depois": "Fechou a comissão, o histórico não muda",
+      "motivo": "Explica a segurança do fechamento sem jargão técnico."
+    },
+    {
+      "onde": "#recursos .lp-bento__titulo",
+      "antes": "Lembrete que respeita a noite",
+      "depois": "Lembrete sem mensagem de madrugada",
+      "motivo": "Torna o benefício concreto e fácil de visualizar."
+    },
+    {
+      "onde": "#campo .lp-sobrancelha",
+      "antes": "O que costuma quebrar",
+      "depois": "Problemas que viraram regra do produto",
+      "motivo": "Conecta os achados diretamente às decisões de produto."
+    },
+    {
+      "onde": "#campo .lp-titulo",
+      "antes": "Seis coisas que a gente mediu, não imaginou",
+      "depois": "Seis falhas de operação que o Barber Dock trata na origem",
+      "motivo": "O título sai do protagonismo da equipe e volta para a dor do comprador."
+    },
+    {
+      "onde": "#campo .lp-intro",
+      "antes": "Antes da primeira linha de código, doze problemas foram levantados dentro de uma barbearia em funcionamento — com cronômetro, não com suposição. Eles não são de um software: são o que se repete na categoria. Seis estão abaixo, com o que cada um custa no dia e o que fazemos diferente.",
+      "depois": "Doze problemas foram levantados dentro de uma barbearia em funcionamento antes da primeira linha de código. Abaixo estão seis deles, com o efeito no dia e a regra criada para evitar que o mesmo problema seja aceito como normal.",
+      "motivo": "Mantém a origem da prova, corta tom defensivo e prepara a leitura problema → regra."
+    },
+    {
+      "onde": "#campo [data-area=\"Agenda\"] .problema",
+      "antes": "A grade é fixa de 15 em 15, independente do serviço.",
+      "depois": "Grade fixa de 15 em 15 desperdiça os minutos que não cabem no bloco.",
+      "motivo": "Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria."
+    },
+    {
+      "onde": "#campo [data-area=\"Cardápio\"] .problema",
+      "antes": "\"Cabelo + Barba\" cadastrado com 30 min, quando as partes somam 40.",
+      "depois": "Um combo cadastrado com 30 min, quando as partes somam 40, coloca atraso dentro do próprio cadastro.",
+      "motivo": "Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria."
+    },
+    {
+      "onde": "#campo [data-area=\"Fuso\"] .problema",
+      "antes": "O horário mostrado vem do relógio do aparelho de quem acessa.",
+      "depois": "O horário da unidade não pode depender do relógio do aparelho de quem acessa.",
+      "motivo": "Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria."
+    },
+    {
+      "onde": "#campo [data-area=\"Escolha\"] .problema",
+      "antes": "É preciso escolher o profissional antes de ver qualquer horário.",
+      "depois": "Quem quer o primeiro horário livre não deveria abrir um profissional por vez.",
+      "motivo": "Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria."
+    },
+    {
+      "onde": "#campo [data-area=\"Página\"] .problema",
+      "antes": "A página de agendamento não traz endereço, mapa, telefone nem horário.",
+      "depois": "Endereço, telefone e horário de funcionamento não deveriam ficar separados do agendamento.",
+      "motivo": "Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria."
+    },
+    {
+      "onde": "#campo [data-area=\"Cadastro\"] .problema",
+      "antes": "Conta de balcão entra no sistema como se fosse mais um barbeiro.",
+      "depois": "Conta de balcão não é barbeiro e não deveria aparecer como um.",
+      "motivo": "Reformula o problema pelo efeito operacional, sem atacar concorrente nem usar linguagem de auditoria."
+    },
+    {
+      "onde": "#campo .lp-achado[data-area=\"Página\"] .efeito",
+      "antes": "Metade de quem entra quer saber onde fica e se está aberto — não agendar.",
+      "depois": "Quem só quer saber onde fica ou se está aberto precisa procurar em outro lugar.",
+      "motivo": "Remove percentual sem origem explícita e preserva a dor verificável."
+    },
+    {
+      "onde": "#superficies .lp-sobrancelha",
+      "antes": "Quem usa",
+      "depois": "Um sistema, quatro rotinas",
+      "motivo": "A seção passa a explicar a lógica, não apenas rotular a audiência."
+    },
+    {
+      "onde": "#superficies .lp-titulo",
+      "antes": "Quatro pessoas, quatro telas, um sistema",
+      "depois": "Quatro rotinas sem obrigar todo mundo a trabalhar na mesma tela",
+      "motivo": "Mostra a diferença do produto em vez de apenas contar perfis."
+    },
+    {
+      "onde": "#superficies .lp-intro",
+      "antes": "A mesma tela serve celular e notebook — o que muda é a densidade, não a regra. Nada de versão reduzida para quem está no aparelho pequeno.",
+      "depois": "Cliente, balcão, barbeiro e dono veem a informação necessária para o próximo passo, no celular ou no notebook, sem manter uma versão separada do sistema.",
+      "motivo": "Traduz decisão responsiva em benefício para cada perfil."
+    },
+    {
+      "onde": "#superficies .lp-superficie__nome",
+      "antes": "O cliente",
+      "depois": "Cliente: agenda sem criar conta",
+      "motivo": "Diz a ação e remove fricção já no título."
+    },
+    {
+      "onde": "#superficies .lp-superficie__nome",
+      "antes": "O balcão",
+      "depois": "Balcão: acompanha o dia sem trocar de página",
+      "motivo": "Diz o ganho operacional da superfície."
+    },
+    {
+      "onde": "#superficies .lp-superficie__nome",
+      "antes": "O barbeiro",
+      "depois": "Barbeiro: vê quem vem agora e o que precisa saber",
+      "motivo": "Prioriza a próxima ação do profissional."
+    },
+    {
+      "onde": "#superficies .lp-superficie__nome",
+      "antes": "O dono",
+      "depois": "Dono: compara o resultado antes de decidir",
+      "motivo": "Conecta os indicadores a uma decisão, não ao dashboard em si."
+    },
+    {
+      "onde": ".lp-chamada__titulo",
+      "antes": "Atracar leva um domingo à tarde",
+      "depois": "Comece com sua base de clientes, não com uma tela vazia",
+      "motivo": "Remove prazo não necessário e termina na objeção real de troca/migração."
+    },
+    {
+      "onde": ".lp-chamada__texto",
+      "antes": "Cadastro em seis etapas, sua base de clientes por planilha e o endereço antigo continuando a funcionar. Sem contrato de fidelidade e sem instalar nada.",
+      "depois": "O cadastro tem seis etapas, sua base de clientes entra por planilha e o endereço antigo continua funcionando. Sem contrato de fidelidade e sem instalar nada.",
+      "motivo": "Torna as ações explícitas e preserva apenas fatos já presentes no produto."
+    },
+    {
+      "onde": ".lp-chamada__acoes .ui-button--primary",
+      "antes": "Criar conta",
+      "depois": "Criar minha conta",
+      "motivo": "Mantém o mesmo CTA principal usado desde o topo."
+    },
+    {
+      "onde": ".lp-chamada__acoes .ui-button--secondary",
+      "antes": "Já sou cliente",
+      "depois": "[removido desta faixa]",
+      "motivo": "A entrada de cliente continua no cabeçalho e rodapé; retirar daqui deixa um único pedido no fechamento comercial."
+    },
+    {
+      "onde": ".lp-rodape p",
+      "antes": "Barber Dock — sistema de gestão para barbearias",
+      "depois": "Barber Dock — gestão para barbearias",
+      "motivo": "Mantém a categoria sem repetir “sistema”."
+    },
+    {
+      "onde": ".lp-rodape__links a[href=\"/admin/criar-conta\"]",
+      "antes": "Criar conta",
+      "depois": "Criar minha conta",
+      "motivo": "Padroniza o CTA em toda a página."
+    }
+  ]
+}

@@ -1,0 +1,278 @@
+/* ---------------------------------------------------------------------------
+   Pacotes (bloco 42)
+
+   As três contas do topo respondem uma pergunta que a barbearia costuma errar:
+   vender R$ 250 de pacote não é faturar R$ 250. "A receber em serviço" ganha
+   peso visual porque é o número que muda decisão — é trabalho já pago que a
+   casa ainda deve.
+
+   `@container` e não largura de janela: o mesmo bloco cabe na tela cheia de
+   Pacotes e dentro da ficha do cliente, que é bem mais estreita.
+   --------------------------------------------------------------------------- */
+.pacotes__contas {
+  container-type: inline-size;
+  margin-block: var(--space-5);
+}
+.pacotes__numeros {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+@container (min-width: 34rem) {
+  .pacotes__numeros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.pacotes__numero {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.pacotes__numero dt {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.pacotes__numero dd {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+}
+.pacotes__numero--peso {
+  border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.pacotes__numero--peso dd { color: var(--color-accent); }
+.pacotes__nota {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* Os pacotes de uma pessoa, na ficha dela. */
+.pacote-cliente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.pacote-cliente + .pacote-cliente { margin-top: var(--space-3); }
+.pacote-cliente__quem { min-width: 0; flex: 1 1 14rem; }
+.pacote-cliente__nome {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pacote-cliente__frase {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+/* A barra existe porque "3 de 5" é mais rápido de ver que de ler, e a recepção
+   olha isto com o cliente na cadeira. */
+.pacote-cliente__barra {
+  margin-top: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-hover);
+  overflow: hidden;
+}
+.pacote-cliente__barra span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+.pacote-cliente__acao { flex: none; }
+
+/* ---------------------------------------------------------------------------
+   Avaliações (bloco 43)
+
+   O cartão de alerta tem borda de atenção e o prazo em destaque, porque ele tem
+   validade — e é a única parte do painel que tem. As outras avaliações são
+   histórico e ficam quietas.
+
+   `@container` e não largura de janela: o mesmo cartão aparece na tela cheia de
+   Avaliações e dentro da ficha do cliente, que é bem mais estreita.
+   --------------------------------------------------------------------------- */
+.avaliacao {
+  container-type: inline-size;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.avaliacao + .avaliacao { margin-top: var(--space-3); }
+.avaliacao--alerta {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface-raised));
+}
+.avaliacao__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.avaliacao__estrelas {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+}
+.avaliacao__prazo {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.avaliacao--alerta .avaliacao__prazo {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-semibold);
+}
+.avaliacao__quem {
+  margin: var(--space-2) 0 0;
+  font-weight: var(--font-weight-semibold);
+}
+.avaliacao__quando {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+/* A citação é o que a pessoa escreveu, e é o que se lê primeiro no cartão. */
+.avaliacao__texto {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border-strong);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+.avaliacao__texto--vazio { color: var(--color-text-muted); font-style: italic; }
+.avaliacao__categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.avaliacao__tratada {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.avaliacao__form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+@container (min-width: 32rem) {
+  .avaliacao__form { grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); align-items: start; }
+  .avaliacao__form button { grid-column: 2; justify-self: start; }
+}
+
+/* A contestação (bloco 80).
+
+   Mesma forma da zona de perigo da ficha do cliente: um `<details>` com o
+   rótulo em cor de aviso, e destaque de **cor e nunca de tamanho**. A ação
+   primária desta tela continua sendo registrar o que a casa fez; tirar uma nota
+   do ar não pode ser a coisa mais chamativa do cartão.
+
+   O `margin-bottom` de `.anotar` não serve aqui — este `<details>` é o último
+   filho do cartão, e a folga embaixo dele viraria buraco. */
+.avaliacao__contestar {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.avaliacao__contestar-abrir {
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+}
+.avaliacao__contestar .painel__nota { margin-top: var(--space-2); }
+
+/* Coluna mais larga que a do formulário de recuperação, e não é capricho.
+
+   Os cinco motivos são frases — "Propaganda ou texto repetido" —, e em 14rem o
+   seletor saía como "Propaganda ou texto re": a pessoa escolheria sem saber o
+   que escolheu. O `min-width: 0` do design system é o que faz o corte acontecer
+   em silêncio em vez de transbordar, então o piso legível precisa ser dado
+   aqui. */
+@container (min-width: 32rem) {
+  .avaliacao__form--contestar { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
+}
+/* A saída do estado. Fantasma e não secundário: quem abre esta tela com uma
+   contestação registrada quase sempre veio ler o motivo, não desfazê-la. */
+.avaliacao__retirar { margin-top: var(--space-3); }
+
+/* O formulário que o cliente vê, na página dele. */
+.dar-nota { container-type: inline-size; }
+/* Cinco colunas iguais, e não `flex-wrap`.
+   Com as estrelas acumuladas (★ ★★ ★★★…) os botões têm larguras diferentes e
+   quebravam em duas linhas a partir de 390px — a nota 5 sozinha embaixo parecia
+   outra coisa. Em grade eles cabem numa linha até no piso de 360px, e cada um
+   continua com 44px de alvo. */
+.dar-nota__estrelas {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  border: 0;
+}
+.dar-nota__estrelas legend { grid-column: 1 / -1; }
+/* Alvo de 44px em qualquer largura: o rádio nativo é pequeno demais para o
+   polegar, e esta é a única interação da tela. */
+.dar-nota__estrela {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-touch);
+  min-height: var(--size-touch);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+}
+.dar-nota__estrela input { position: absolute; opacity: 0; pointer-events: none; }
+.dar-nota__estrela:has(input:checked) {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent);
+}
+.dar-nota__estrela:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.dar-nota__item {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.dar-nota__item + .dar-nota__item { margin-top: var(--space-3); }
+.dar-nota__quem { margin: 0 0 var(--space-3); font-weight: var(--font-weight-semibold); }
+
+/* A reputação na página pública. */
+.reputacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+}
+.reputacao__nota {
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+.reputacao__quantas { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+

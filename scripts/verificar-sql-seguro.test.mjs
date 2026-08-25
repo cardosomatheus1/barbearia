@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+const script=resolve('scripts/verificar-sql-seguro.mjs');
+const run=(conteudo,caminho='apps/api/src/x.ts')=>{const d=mkdtempSync(join(tmpdir(),'sql-guard-'));try{mkdirSync(join(d,'apps'),{recursive:true});mkdirSync(join(d,'packages'),{recursive:true});const f=join(d,caminho);mkdirSync(resolve(f,'..'),{recursive:true});writeFileSync(f,conteudo);return spawnSync(process.execPath,[script],{cwd:d,encoding:'utf8'})}finally{rmSync(d,{recursive:true,force:true})}};
+test('template raw seguro passa',()=>{const r=run('export async function x(tx:any,id:string){return tx.$queryRaw`SELECT * FROM x WHERE id = ${id}`}');assert.equal(r.status,0,r.stderr)});
+test('queryRawUnsafe em produção é recusado',()=>{const r=run("export async function x(tx:any,q:string){return tx.$queryRawUnsafe('SELECT '+q)}");assert.equal(r.status,1);assert.match(r.stderr,/SQL inseguro/)});
+test('executeRawUnsafe em produção é recusado',()=>{const r=run("export async function x(tx:any,q:string){return tx.$executeRawUnsafe('UPDATE '+q)}");assert.equal(r.status,1);assert.match(r.stderr,/SQL inseguro/)});
+test('ferramenta de limpeza de teste não vira falso positivo',()=>{const r=run("export async function limpar(tx:any,q:string){return tx.$executeRawUnsafe('TRUNCATE '+q)}",'apps/api/test/limpar.ts');assert.equal(r.status,0,r.stderr)});

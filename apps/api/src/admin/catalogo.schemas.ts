@@ -51,7 +51,11 @@ export const serviceSchema = z.object({
    * serviço com outro nome, e vira exatamente o tipo de catálogo duplicado que
    * o defeito D4 descreve.
    */
-  componentIds: z.array(idSchema).max(10).optional(),
+  componentIds: z.array(idSchema).max(10).optional().superRefine((ids, ctx) => {
+    if (!ids) return;
+    if (ids.length === 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Combo precisa de pelo menos dois componentes.' });
+    if (new Set(ids).size !== ids.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Combo não pode repetir componente.' });
+  }),
   /**
    * O ganho de fazer o combo na sequência, em minutos (bloco 111).
    *
@@ -115,7 +119,14 @@ const faixaSchema = z
   );
 
 export const scheduleSchema = z.object({
-  faixas: z.array(faixaSchema).max(28),
+  faixas: z.array(faixaSchema).max(7).superRefine((faixas, ctx) => {
+    const dias = new Set<number>();
+    for (let i = 0; i < faixas.length; i += 1) {
+      const dia = faixas[i]!.weekday;
+      if (dias.has(dia)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i, 'weekday'], message: 'Dia da semana repetido; use breaks para intervalos.' });
+      dias.add(dia);
+    }
+  }),
   /**
    * Gravar mesmo deixando agendamento fora da jornada.
    *
@@ -135,7 +146,15 @@ export const resourcesSchema = z.object({
         capacity: z.number().int().min(1).max(100),
       }),
     )
-    .max(30),
+    .max(30)
+    .superRefine((pools, ctx) => {
+      const tipos = new Set<string>();
+      for (let i = 0; i < pools.length; i += 1) {
+        const tipo = pools[i]!.resourceType;
+        if (tipos.has(tipo)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i, 'resourceType'], message: 'Tipo de recurso repetido.' });
+        tipos.add(tipo);
+      }
+    }),
 });
 
 export const serviceResourcesSchema = z.object({
@@ -146,7 +165,15 @@ export const serviceResourcesSchema = z.object({
         quantity: z.number().int().min(1).max(20),
       }),
     )
-    .max(10),
+    .max(10)
+    .superRefine((requirements, ctx) => {
+      const tipos = new Set<string>();
+      for (let i = 0; i < requirements.length; i += 1) {
+        const tipo = requirements[i]!.resourceType;
+        if (tipos.has(tipo)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i, 'resourceType'], message: 'Recurso repetido no serviço.' });
+        tipos.add(tipo);
+      }
+    }),
 });
 
 /**

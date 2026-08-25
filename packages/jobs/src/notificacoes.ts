@@ -1,6 +1,7 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   chaveDaNotificacao,
+  WhatsAppDeliveryUnknownError,
   decidirEnvioDeAgendamento,
   decidirRetorno,
   maskPhone,
@@ -304,7 +305,17 @@ export class FakeNotificationProvider implements NotificationProvider {
 export class ConsoleNotificationProvider implements NotificationProvider {
   constructor(private readonly log: (message: string) => void = console.log) {}
 
+  private assegurarDesenvolvimento(): void {
+    // Console é instrumento de desenvolvimento, não canal de entrega. Em
+    // produção, tratá-lo como sucesso faria `notifications.status='sent'`
+    // afirmar ao dono que o cliente foi avisado quando só houve uma linha de log.
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('notification_console_forbidden_in_production');
+    }
+  }
+
   async enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] ${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}${mensagem.quandoTexto ? `, ${mensagem.quandoTexto}` : ''})`,
@@ -312,6 +323,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
   }
 
   async enviarDeFila(mensagem: MensagemDeFila): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] sua_vez para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}, posição ${mensagem.posicao})`,
@@ -327,6 +339,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
    * ele o entrega na mensagem e esquece.
    */
   async enviarDeVaga(mensagem: MensagemDeVaga): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] vaga_liberada para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}, ${mensagem.quandoTexto}, ` +
@@ -343,6 +356,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
    * com ela impressa.
    */
   async enviarDeRecado(mensagem: MensagemDeRecado): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] resposta_recado para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}, ${mensagem.resposta.length} caracteres)`,
@@ -350,6 +364,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
   }
 
   async enviarDoClube(mensagem: MensagemDoClube): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] clube_${mensagem.motivo} para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia})`,
@@ -365,6 +380,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
    * costuma ir para lugares que a política de dado pessoal não cobre.
    */
   async enviarDeNota(mensagem: MensagemDeNota): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] nota_fiscal para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia}${mensagem.numero ? `, nota ${mensagem.numero}` : ''})`,
@@ -372,6 +388,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
   }
 
   async enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] automacao_${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia})`,
@@ -380,6 +397,7 @@ export class ConsoleNotificationProvider implements NotificationProvider {
 
   /** Quem recebeu é dado de cliente; o log fica com a contagem e o tipo. */
   async enviarDeCampanha(mensagem: MensagemDeCampanha): Promise<string | null> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[aviso] campanha_${mensagem.tipo} para ${maskPhone(mensagem.phoneE164)} ` +
         `(${mensagem.barbearia})`,
@@ -522,6 +540,60 @@ const TERMINAIS: ReadonlySet<string> = new Set([
   'rescheduled',
 ]);
 
+
+type EstadoDaIntencaoDeEnvio = 'sending' | 'uncertain' | 'sent';
+
+/**
+ * Reserva uma intenção **antes** da rede.
+ *
+ * `notifications` é histórico do desfecho; não pode ser a trava porque só
+ * nasce depois que o provider retorna. Uma linha `sending` que ficou para trás
+ * após crash também é conservadoramente considerada ambígua: sem idempotência
+ * oferecida pela Meta, retentá-la poderia duplicar uma mensagem que já saiu.
+ */
+async function reivindicarIntencaoDeEnvio(
+  tx: TransactionClient,
+  intentKey: string,
+): Promise<{ readonly nossa: boolean; readonly status: EstadoDaIntencaoDeEnvio }> {
+  const novas = await tx.$queryRaw<{ status: EstadoDaIntencaoDeEnvio }[]>`
+    INSERT INTO notification_send_intents (tenant_id, intent_key, status)
+    VALUES (
+      NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+      ${intentKey}, 'sending'
+    )
+    ON CONFLICT (tenant_id, intent_key) DO NOTHING
+    RETURNING status
+  `;
+  if (novas[0]) return { nossa: true, status: novas[0].status };
+
+  const existentes = await tx.$queryRaw<{ status: EstadoDaIntencaoDeEnvio }[]>`
+    SELECT status
+      FROM notification_send_intents
+     WHERE intent_key = ${intentKey}
+  `;
+  return { nossa: false, status: existentes[0]?.status ?? 'uncertain' };
+}
+
+async function finalizarIntencaoDeEnvio(
+  tx: TransactionClient,
+  intentKey: string,
+  status: 'uncertain' | 'sent',
+): Promise<void> {
+  await tx.$executeRaw`
+    UPDATE notification_send_intents
+       SET status = ${status}, updated_at = now()
+     WHERE intent_key = ${intentKey}
+  `;
+}
+
+/** Falha **definitiva** libera a intenção para a fila tentar de novo. */
+async function liberarIntencaoDeEnvio(tx: TransactionClient, intentKey: string): Promise<void> {
+  await tx.$executeRaw`
+    DELETE FROM notification_send_intents
+     WHERE intent_key = ${intentKey} AND status = 'sending'
+  `;
+}
+
 /**
  * Executa um aviso de agendamento.
  *
@@ -536,7 +608,8 @@ export async function executarAvisoDeAgendamento(params: {
   readonly provider: NotificationProvider;
   readonly agora: Date;
 }): Promise<{ readonly enviado: boolean; readonly motivo: MotivoDeNaoEnviar | null }> {
-  return withTenant(params.tenantId, async (tx) => {
+  const intentKey = chaveDaNotificacao(params.tipo, params.appointmentId);
+  const preparo = await withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<EstadoDoAviso[]>`
       SELECT a.starts_at, a.status::text AS status, l.timezone, a.location_id,
              a.customer_id, c.name AS customer_name, c.phone_e164 AS phone,
@@ -557,9 +630,7 @@ export async function executarAvisoDeAgendamento(params: {
     `;
 
     const estado = linhas[0];
-    // Agendamento apagado entre a criação da tarefa e agora: não é erro, é o
-    // mundo tendo mudado. Falhar aqui poria a tarefa em retry até esgotar.
-    if (!estado) return registrar(tx, params, null, 'cancelado');
+    if (!estado) return { pronto: await registrar(tx, params, null, 'cancelado') } as const;
 
     const decisao = decidirEnvioDeAgendamento({
       tipo: params.tipo,
@@ -571,9 +642,24 @@ export async function executarAvisoDeAgendamento(params: {
       jaEnviada: estado.ja_enviada,
       aceitaPromocional: estado.accepts_marketing,
     });
+    if (!decisao.enviar) return { pronto: await registrar(tx, params, estado, decisao.motivo) } as const;
 
-    if (!decisao.enviar) return registrar(tx, params, estado, decisao.motivo);
+    const intencao = await reivindicarIntencaoDeEnvio(tx, intentKey);
+    if (!intencao.nossa) {
+      return {
+        pronto: {
+          enviado: false,
+          motivo: intencao.status === 'sent' ? 'ja_enviada' : 'entrega_incerta',
+        },
+      } as const;
+    }
+    return { estado } as const;
+  });
 
+  if ('pronto' in preparo) return preparo.pronto;
+  const estado = preparo.estado;
+
+  try {
     await params.provider.enviarDeAgendamento({
       tenantId: params.tenantId,
       locationId: estado.location_id,
@@ -584,7 +670,19 @@ export async function executarAvisoDeAgendamento(params: {
       profissional: estado.professional_name,
       quandoTexto: horaLocal(estado.starts_at, estado.timezone),
     });
+  } catch (erro) {
+    if (erro instanceof WhatsAppDeliveryUnknownError) {
+      return withTenant(params.tenantId, async (tx) => {
+        await finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain');
+        return registrar(tx, params, estado, 'entrega_incerta');
+      });
+    }
+    await withTenant(params.tenantId, (tx) => liberarIntencaoDeEnvio(tx, intentKey));
+    throw erro;
+  }
 
+  return withTenant(params.tenantId, async (tx) => {
+    await finalizarIntencaoDeEnvio(tx, intentKey, 'sent');
     return registrar(tx, params, estado, null);
   });
 }
@@ -648,7 +746,8 @@ export async function executarAvisoDeFila(params: {
   readonly queueEntryId: string;
   readonly provider: NotificationProvider;
 }): Promise<{ readonly enviado: boolean; readonly motivo: MotivoDeNaoEnviar | null }> {
-  return withTenant(params.tenantId, async (tx) => {
+  const intentKey = chaveDaNotificacao('sua_vez', params.queueEntryId);
+  const preparo = await withTenant(params.tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
       {
         status: string;
@@ -683,24 +782,30 @@ export async function executarAvisoDeFila(params: {
     `;
 
     const entrada = linhas[0];
-    if (!entrada) return { enviado: false, motivo: 'cancelado' };
-    if (entrada.ja_enviada) return { enviado: false, motivo: 'ja_enviada' };
-    if (!entrada.phone) return { enviado: false, motivo: 'sem_telefone' };
-    /**
-     * `waiting` e `called`, não só `waiting`.
-     *
-     * A tarefa nasce quando a pessoa vira a primeira da fila e o worker a pega
-     * segundos depois — tempo suficiente para a recepção já ter apertado
-     * "Chamar". Recusar `called` faria justamente quem está sendo chamado
-     * agora perder a mensagem, que é o pior caso possível para este aviso.
-     *
-     * Sentou, terminou ou desistiu: aí o aviso perdeu o sentido, e mandá-lo
-     * faria a pessoa voltar correndo à toa.
-     */
+    if (!entrada) return { pronto: { enviado: false, motivo: 'cancelado' as const } };
+    if (entrada.ja_enviada) return { pronto: { enviado: false, motivo: 'ja_enviada' as const } };
+    const telefone = entrada.phone;
+    if (!telefone) return { pronto: { enviado: false, motivo: 'sem_telefone' as const } };
     if (entrada.status !== 'waiting' && entrada.status !== 'called') {
-      return { enviado: false, motivo: 'cancelado' };
+      return { pronto: { enviado: false, motivo: 'cancelado' as const } };
     }
 
+    const intencao = await reivindicarIntencaoDeEnvio(tx, intentKey);
+    if (!intencao.nossa) {
+      return {
+        pronto: {
+          enviado: false,
+          motivo: intencao.status === 'sent' ? ('ja_enviada' as const) : ('entrega_incerta' as const),
+        },
+      };
+    }
+    return { entrada: { ...entrada, phone: telefone } };
+  });
+
+  if ('pronto' in preparo) return preparo.pronto;
+  const entrada = preparo.entrada;
+
+  try {
     await params.provider.enviarDeFila({
       tenantId: params.tenantId,
       locationId: entrada.location_id,
@@ -709,7 +814,26 @@ export async function executarAvisoDeFila(params: {
       barbearia: entrada.tenant_name,
       posicao: Number(entrada.posicao),
     });
+  } catch (erro) {
+    if (erro instanceof WhatsAppDeliveryUnknownError) {
+      return withTenant(params.tenantId, async (tx) => {
+        await finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain');
+        await tx.$executeRaw`
+          INSERT INTO notifications (tenant_id, kind, customer_id, status, reason, phone_masked)
+          VALUES (
+            NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+            'sua_vez', ${entrada.customer_id}::uuid, 'failed', 'entrega_incerta', ${maskPhone(entrada.phone)}
+          )
+        `;
+        return { enviado: false, motivo: 'entrega_incerta' as const };
+      });
+    }
+    await withTenant(params.tenantId, (tx) => liberarIntencaoDeEnvio(tx, intentKey));
+    throw erro;
+  }
 
+  return withTenant(params.tenantId, async (tx) => {
+    await finalizarIntencaoDeEnvio(tx, intentKey, 'sent');
     await tx.$executeRaw`
       INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
       VALUES (
@@ -717,7 +841,6 @@ export async function executarAvisoDeFila(params: {
         'sua_vez', ${entrada.customer_id}::uuid, 'sent', ${maskPhone(entrada.phone)}
       )
     `;
-
     return { enviado: true, motivo: null };
   });
 }
@@ -737,8 +860,13 @@ export async function varrerRetornos(params: {
 }): Promise<{ readonly enviados: number }> {
   const limite = Math.min(Math.max(1, params.limite ?? 50), 200);
 
-  return withTenant(params.tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<
+  /**
+   * Só a leitura dos candidatos fica dentro da transação. A chamada à Meta
+   * **nunca** segura a conexão/lock do banco — além de desperdiçar pool, uma
+   * demora de rede transformava a varredura promocional numa transação longa.
+   */
+  const linhas = await withTenant(params.tenantId, (tx) =>
+    tx.$queryRaw<
       {
         customer_id: string;
         customer_name: string;
@@ -760,12 +888,13 @@ export async function varrerRetornos(params: {
                WHERE a.customer_id = c.id AND a.status = 'completed') AS ultima_visita,
              (SELECT count(*) FROM notifications n
                WHERE n.customer_id = c.id AND n.kind = 'retorno'
-                 AND n.status = 'sent'
+                 AND (n.status = 'sent' OR n.reason = 'entrega_incerta')
                  AND n.sent_at > ${params.agora} - interval '30 days')::bigint
                AS promocionais_no_mes,
              EXISTS (
                SELECT 1 FROM notifications n
-                WHERE n.customer_id = c.id AND n.kind = 'retorno' AND n.status = 'sent'
+                WHERE n.customer_id = c.id AND n.kind = 'retorno'
+                  AND (n.status = 'sent' OR n.reason = 'entrega_incerta')
                   AND n.sent_at > ${params.agora} - interval '60 days'
              ) AS ja_enviada
         FROM customers c
@@ -784,23 +913,40 @@ export async function varrerRetornos(params: {
          AND l.notify_comeback
        ORDER BY c.id
        LIMIT ${limite}
-    `;
+    `,
+  );
 
-    let enviados = 0;
+  let enviados = 0;
 
-    for (const linha of linhas) {
-      const decisao = decidirRetorno({
-        ultimaVisita: linha.ultima_visita,
-        diasParaRetorno: linha.comeback_after_days,
-        agora: params.agora,
-        timeZone: linha.timezone,
-        temTelefone: Boolean(linha.phone),
-        aceitaPromocional: linha.accepts_marketing,
-        promocionaisNoMes: Number(linha.promocionais_no_mes),
-        jaEnviada: linha.ja_enviada,
-      });
-      if (!decisao.enviar) continue;
+  for (const linha of linhas) {
+    const decisao = decidirRetorno({
+      ultimaVisita: linha.ultima_visita,
+      diasParaRetorno: linha.comeback_after_days,
+      agora: params.agora,
+      timeZone: linha.timezone,
+      temTelefone: Boolean(linha.phone),
+      aceitaPromocional: linha.accepts_marketing,
+      promocionaisNoMes: Number(linha.promocionais_no_mes),
+      jaEnviada: linha.ja_enviada,
+    });
+    if (!decisao.enviar) continue;
 
+    /**
+     * A identidade é a **ausência atual**: cliente + última visita concluída.
+     * Enquanto ele não voltar, uma intenção `sending/uncertain` sobrevivente a
+     * crash bloqueia qualquer reenvio automático. Se o envio der certo, a linha
+     * de `notifications` passa a ser a trava dos próximos 60 dias e a intenção
+     * pode ser liberada; depois desse prazo o produto continua podendo fazer o
+     * convite novamente, como já fazia antes.
+     */
+    const episodio = linha.ultima_visita?.toISOString() ?? 'sem-visita';
+    const intentKey = `retorno:${linha.customer_id}:${episodio}`;
+    const intencao = await withTenant(params.tenantId, (tx) =>
+      reivindicarIntencaoDeEnvio(tx, intentKey),
+    );
+    if (!intencao.nossa) continue;
+
+    try {
       await params.provider.enviarDeAgendamento({
         tenantId: params.tenantId,
         locationId: linha.location_id,
@@ -811,7 +957,29 @@ export async function varrerRetornos(params: {
         profissional: '',
         quandoTexto: '',
       });
+    } catch (erro) {
+      if (erro instanceof WhatsAppDeliveryUnknownError) {
+        await withTenant(params.tenantId, async (tx) => {
+          await finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain');
+          await tx.$executeRaw`
+            INSERT INTO notifications
+              (tenant_id, kind, customer_id, status, reason, phone_masked)
+            VALUES (
+              NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+              'retorno', ${linha.customer_id}::uuid, 'failed', 'entrega_incerta',
+              ${maskPhone(linha.phone)}
+            )
+          `;
+        });
+        continue;
+      }
+      // Recusa definitiva: sabemos que não saiu, portanto a fila pode tentar de
+      // novo sem risco de duplicar uma mensagem aceita pela Meta.
+      await withTenant(params.tenantId, (tx) => liberarIntencaoDeEnvio(tx, intentKey));
+      throw erro;
+    }
 
+    await withTenant(params.tenantId, async (tx) => {
       await tx.$executeRaw`
         INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
         VALUES (
@@ -819,11 +987,15 @@ export async function varrerRetornos(params: {
           'retorno', ${linha.customer_id}::uuid, 'sent', ${maskPhone(linha.phone)}
         )
       `;
-      enviados += 1;
-    }
+      // Depois que o fato `sent` existe, ele próprio barra os próximos 60 dias.
+      // Remover a intenção preserva o comportamento histórico de poder convidar
+      // novamente depois do prazo, sem sacrificar a segurança da janela ambígua.
+      await liberarIntencaoDeEnvio(tx, intentKey);
+    });
+    enviados += 1;
+  }
 
-    return { enviados };
-  });
+  return { enviados };
 }
 
 export { naturezaDe };

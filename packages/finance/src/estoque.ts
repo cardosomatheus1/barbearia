@@ -1,4 +1,4 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   JANELA_DO_CONSUMO_SEMANAS,
   alertasDoProduto,
@@ -16,6 +16,8 @@ import {
   type TipoDeProduto,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * Produtos, estoque, ficha técnica e CMV (bloco 44, SPEC §3.7 e §3.8).
@@ -126,12 +128,12 @@ interface LinhaDoProduto {
  * A tela de transferencia ja acertava e mostra por que: ela escreve "44 na
  * rede" e usa `saldosPorUnidade`. Esta copiava o numero e largava o rotulo.
  */
-const SELECT_DO_PRODUTO = `
+const selectDoProduto = (locationId: string | null) => sql`
   SELECT p.id, p.sku, p.barcode, p.name, p.category, p.supplier, p.kind,
          p.cost_cents, p.price_cents, p.min_stock, p.unit, p.expires_on, p.active,
          (SELECT sum(m.quantity) FROM stock_movements m
            WHERE m.product_id = p.id
-             AND ($2::uuid IS NULL OR m.location_id = $2::uuid)) AS saldo
+             AND (${locationId}::uuid IS NULL OR m.location_id = ${locationId}::uuid)) AS saldo
     FROM products p
 `;
 
@@ -212,11 +214,11 @@ export async function produtos(
   locationId: string | null = null,
 ): Promise<readonly ProdutoNaTela[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<LinhaDoProduto[]>(
-      `${SELECT_DO_PRODUTO} WHERE ($1::boolean OR p.active) ORDER BY p.name`,
-      incluirInativos,
-      locationId,
-    );
+    const linhas = await tx.$queryRaw<LinhaDoProduto[]>(sql`
+      ${selectDoProduto(locationId)}
+       WHERE (${incluirInativos}::boolean OR p.active)
+       ORDER BY p.name
+    `);
     return linhas.map((l) => paraTela(l, agora));
   });
 }
@@ -892,7 +894,10 @@ export async function margemPorServico(
          AND o.business_day <= ${ate}::date
        GROUP BY m.order_id
     `;
-    const insumoDaComanda = new Map(consumos.map((c) => [c.order_id, Number(c.insumo)]));
+    const insumoDaComanda = new Map(consumos.map((c) => [
+      c.order_id,
+      inteiroSeguroDoBanco(c.insumo, 'insumo da comanda'),
+    ]));
 
     const porServico = new Map<
       string,
@@ -963,14 +968,15 @@ export async function cmvDoPeriodo(
 ): Promise<{ readonly vendaCents: number; readonly consumoCents: number; readonly perdaCents: number }> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ kind: TipoDeMovimentoDeEstoque; custo: bigint }[]>`
-      SELECT kind, sum(abs(quantity) * unit_cost_cents)::bigint AS custo
+      SELECT kind, sum(abs(quantity)::bigint * unit_cost_cents)::bigint AS custo
         FROM stock_movements
        WHERE location_id = ${locationId}::uuid
          AND business_day >= ${de}::date AND business_day <= ${ate}::date
          AND kind IN ('venda', 'consumo', 'perda')
        GROUP BY kind
     `;
-    const de_ = (k: TipoDeMovimentoDeEstoque) => Number(linhas.find((l) => l.kind === k)?.custo ?? 0);
+    const de_ = (k: TipoDeMovimentoDeEstoque) =>
+      inteiroSeguroDoBanco(linhas.find((l) => l.kind === k)?.custo, `CMV ${k}`);
     return { vendaCents: de_('venda'), consumoCents: de_('consumo'), perdaCents: de_('perda') };
   });
 }

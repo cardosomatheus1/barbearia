@@ -1,6 +1,6 @@
 import { semTenant, type TransactionClient } from '@barbearia/db';
 import { PlataformaError, registrarNaTrilha } from './plataforma.js';
-import { faturasEmCobranca, pagarFatura } from './cobranca.js';
+import { faturasEmCobranca, pagarFaturaNaTransacao } from './cobranca.js';
 import { EstornoRecusado, type EstadoDaCobranca, type PspProvider } from './psp.js';
 
 /**
@@ -24,17 +24,12 @@ import { EstornoRecusado, type EstadoDaCobranca, type PspProvider } from './psp.
  *
  * ## Quem carrega a idempotência, de verdade
  *
- * A **máquina de estados**, e vale escrever porque a primeira versão deste
- * arquivo afirmava outra coisa. Quebrar a chave de `psp_events` de propósito
- * deixou todos os testes de reentrega verdes: depois de `charge.paid` a fatura
- * está `paid` e a segunda entrega esbarra no estado; depois de `charge.failed`
- * o `psp_charge_id` foi limpo e a segunda entrega não encontra a fatura.
- *
- * `psp_events` continua valendo por duas razões que não são essa: ela é a
- * trilha do que o adquirente disse e quando — o que se abre numa divergência de
- * valor —, e é a trava para a entrega **concorrente**, em que as duas passariam
- * pela consulta antes de qualquer uma escrever. Esta segunda não tem teste:
- * o pool serializa as transações e o caso não se reproduz aqui.
+ * `psp_events` e a máquina de estados trabalham juntos. A chave do evento
+ * serializa reentregas concorrentes e registra o que o adquirente afirmou; a
+ * transição da fatura impede que um evento antigo altere um estado já fechado.
+ * O ponto crítico é que **registro e efeito usam a mesma transação**: uma linha
+ * de evento nunca pode ficar commitada sem o efeito financeiro correspondente.
+ * Linhas legadas com `processed_at IS NULL` são retomadas com `FOR UPDATE`.
  */
 
 export type TipoDeEvento = 'charge.paid' | 'charge.failed' | 'charge.pending';
@@ -57,88 +52,102 @@ export type DesfechoDoEvento = 'paid' | 'failed' | 'ignored';
  * exatamente o que a reentrega produz.
  */
 export async function aplicarEvento(evento: EventoDoPsp): Promise<DesfechoDoEvento> {
-  const novo = await semTenant(async (tx) => registrarEvento(tx, evento));
-  // A chave primária é a trava. Já registrado é entrega repetida, e a única
-  // resposta certa é não fazer nada de novo.
-  if (!novo) return 'ignored';
-
-  const alvo = await semTenant(async (tx) => {
-    const linhas = await tx.$queryRaw<{ id: string; tenant_id: string; status: string }[]>`
-      SELECT id, tenant_id, status::text FROM invoices
-       WHERE psp_charge_id = ${evento.chargeId}
+  /**
+   * Registro do evento e efeito financeiro são uma unidade atômica.
+   *
+   * Antes, `psp_events` era commitado primeiro e a fatura era alterada numa
+   * transação seguinte. Um crash entre os dois deixava `processed_at IS NULL`,
+   * mas a reentrega via a PK já existente e retornava `ignored` para sempre.
+   * Agora a PK continua serializando entregas concorrentes, só que ela só fica
+   * visível depois que o mesmo commit fechou o efeito — ou tudo volta atrás.
+   * Linhas legadas pendentes também são retomadas em vez de abandonadas.
+   */
+  return semTenant(async (tx) => {
+    const inseridas = await tx.$queryRaw<{ event_id: string }[]>`
+      INSERT INTO psp_events (event_id, type, payload)
+      VALUES (${evento.eventoId}, ${evento.tipo}, ${JSON.stringify(evento.payload)}::jsonb)
+      ON CONFLICT (event_id) DO NOTHING
+      RETURNING event_id
     `;
-    return linhas[0] ?? null;
-  });
 
-  if (!alvo || alvo.status !== 'open') {
-    await encerrarEvento(evento.eventoId, alvo?.tenant_id ?? null, alvo?.id ?? null, 'ignored');
-    return 'ignored';
-  }
+    if (inseridas.length === 0) {
+      const existentes = await tx.$queryRaw<{ processed_at: Date | null }[]>`
+        SELECT processed_at FROM psp_events
+         WHERE event_id = ${evento.eventoId}
+         FOR UPDATE
+      `;
+      // Processado é reentrega normal. Pendente é uma linha legada ou uma
+      // execução antiga que caiu antes deste endurecimento: retomamos abaixo.
+      if (existentes[0]?.processed_at) return 'ignored';
+    }
 
-  if (evento.tipo === 'charge.paid') {
-    await pagarFatura({ adminId: null, faturaId: alvo.id, metodo: 'card' });
-    await encerrarEvento(evento.eventoId, alvo.tenant_id, alvo.id, 'paid');
-    return 'paid';
-  }
+    const alvos = await tx.$queryRaw<{ id: string; tenant_id: string; status: string }[]>`
+      SELECT id, tenant_id, status::text
+        FROM invoices
+       WHERE psp_charge_id = ${evento.chargeId}
+       FOR UPDATE
+    `;
+    const alvo = alvos[0] ?? null;
 
-  if (evento.tipo === 'charge.failed') {
-    /**
-     * A recusa **solta a fatura** para a próxima tentativa.
-     *
-     * Enquanto houver `psp_charge_id`, a régua não retenta — é o que impede um
-     * Pix por dia. Limpar aqui é o que devolve a fatura para a escada, agora
-     * com um degrau a menos.
-     */
-    await semTenant(async (tx) => {
-      await tx.$executeRaw`
+    if (!alvo || alvo.status !== 'open') {
+      await encerrarEventoNaTransacao(tx, evento.eventoId, alvo?.tenant_id ?? null, alvo?.id ?? null, 'ignored');
+      return 'ignored';
+    }
+
+    if (evento.tipo === 'charge.paid') {
+      try {
+        await pagarFaturaNaTransacao(tx, {
+          adminId: null,
+          faturaId: alvo.id,
+          metodo: 'card',
+          chargeIdEsperado: evento.chargeId,
+        });
+      } catch (erro) {
+        if (!(erro instanceof PlataformaError) || erro.code !== 'not_payable') throw erro;
+        await encerrarEventoNaTransacao(tx, evento.eventoId, alvo.tenant_id, alvo.id, 'ignored');
+        return 'ignored';
+      }
+      await encerrarEventoNaTransacao(tx, evento.eventoId, alvo.tenant_id, alvo.id, 'paid');
+      return 'paid';
+    }
+
+    if (evento.tipo === 'charge.failed') {
+      const alteradas = await tx.$executeRaw`
         UPDATE invoices
            SET attempts = attempts + 1, psp_charge_id = NULL, updated_at = now()
          WHERE id = ${alvo.id}::uuid AND status = 'open'
+           AND psp_charge_id = ${evento.chargeId}
       `;
-      await registrarNaTrilha(tx, null, alvo.tenant_id, 'invoice.charge_failed', {
-        faturaId: alvo.id,
-        chargeId: evento.chargeId,
-      });
-    });
-    await encerrarEvento(evento.eventoId, alvo.tenant_id, alvo.id, 'failed');
-    return 'failed';
-  }
+      if (alteradas === 1) {
+        await registrarNaTrilha(tx, null, alvo.tenant_id, 'invoice.charge_failed', {
+          faturaId: alvo.id,
+          chargeId: evento.chargeId,
+        });
+        await encerrarEventoNaTransacao(tx, evento.eventoId, alvo.tenant_id, alvo.id, 'failed');
+        return 'failed';
+      }
+      await encerrarEventoNaTransacao(tx, evento.eventoId, alvo.tenant_id, alvo.id, 'ignored');
+      return 'ignored';
+    }
 
-  await encerrarEvento(evento.eventoId, alvo.tenant_id, alvo.id, 'ignored');
-  return 'ignored';
+    await encerrarEventoNaTransacao(tx, evento.eventoId, alvo.tenant_id, alvo.id, 'ignored');
+    return 'ignored';
+  });
 }
 
-/**
- * Grava o evento. `false` quer dizer "este id já passou por aqui".
- *
- * `ON CONFLICT DO NOTHING` sobre a chave primária, e não um `SELECT` antes: a
- * reentrega do adquirente é concorrente com a original mais vezes do que se
- * imagina, e a janela entre consultar e inserir é onde nasce o pagamento
- * contado duas vezes.
- */
-async function registrarEvento(tx: TransactionClient, evento: EventoDoPsp): Promise<boolean> {
-  const gravadas = await tx.$executeRaw`
-    INSERT INTO psp_events (event_id, type, payload)
-    VALUES (${evento.eventoId}, ${evento.tipo}, ${JSON.stringify(evento.payload)}::jsonb)
-    ON CONFLICT (event_id) DO NOTHING
-  `;
-  return gravadas > 0;
-}
-
-async function encerrarEvento(
+async function encerrarEventoNaTransacao(
+  tx: TransactionClient,
   eventoId: string,
   tenantId: string | null,
   faturaId: string | null,
   desfecho: DesfechoDoEvento,
 ): Promise<void> {
-  await semTenant(async (tx) => {
-    await tx.$executeRaw`
-      UPDATE psp_events
-         SET processed_at = now(), outcome = ${desfecho},
-             tenant_id = ${tenantId}::uuid, invoice_id = ${faturaId}::uuid
-       WHERE event_id = ${eventoId}
-    `;
-  });
+  await tx.$executeRaw`
+    UPDATE psp_events
+       SET processed_at = now(), outcome = ${desfecho},
+           tenant_id = ${tenantId}::uuid, invoice_id = ${faturaId}::uuid
+     WHERE event_id = ${eventoId}
+  `;
 }
 
 const TIPO_DE: Readonly<Record<EstadoDaCobranca, TipoDeEvento>> = {
@@ -228,11 +237,25 @@ export interface Estorno {
  * recusou — é visível e retomável. O contrário (dinheiro devolvido sem
  * lançamento) não é.
  */
+
+const UNIQUE_VIOLATION = '23505';
+
+/** SQLSTATE real quando a consulta crua atravessa o Prisma. */
+function pgCode(erro: unknown): string | null {
+  const meta = (erro as { meta?: { code?: unknown } })?.meta;
+  if (typeof meta?.code === 'string') return meta.code;
+  const code = (erro as { code?: unknown })?.code;
+  if (typeof code === 'string' && !/^P\d+$/.test(code)) return code;
+  return /Code: `(\w+)`/.exec(erro instanceof Error ? erro.message : '')?.[1] ?? null;
+}
+
 export async function estornarCredito(entrada: {
   readonly adminId: string;
   readonly tenantId: string;
   readonly valorCents: number;
   readonly motivo: string;
+  /** Chave da requisição, já escopada pelo admin na borda HTTP. */
+  readonly idempotencyKey: string;
   readonly provider: PspProvider;
 }): Promise<Estorno> {
   const motivo = entrada.motivo.trim();
@@ -241,6 +264,36 @@ export async function estornarCredito(entrada: {
   }
   if (!Number.isInteger(entrada.valorCents) || entrada.valorCents <= 0) {
     throw new PlataformaError('invalid_amount', 'O valor do estorno tem que ser positivo');
+  }
+  if (!entrada.idempotencyKey || entrada.idempotencyKey.length > 200) {
+    throw new PlataformaError('idempotency_key_required', 'Informe uma chave de idempotência válida');
+  }
+  const fingerprint = JSON.stringify([entrada.valorCents, motivo]);
+
+  const repetido = await semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{
+      id: string; tenant_id: string; amount_cents: number; reason: string;
+      status: 'pending' | 'done' | 'failed'; created_at: Date; idempotency_fingerprint: string | null;
+    }[]>`
+      SELECT id, tenant_id, amount_cents, reason, status, created_at, idempotency_fingerprint
+        FROM refunds
+       WHERE tenant_id = ${entrada.tenantId}::uuid
+         AND idempotency_key = ${entrada.idempotencyKey}
+    `;
+    return linhas[0] ?? null;
+  });
+  if (repetido) {
+    if (repetido.idempotency_fingerprint && repetido.idempotency_fingerprint !== fingerprint) {
+      throw new PlataformaError('idempotency_conflict', 'Esta Idempotency-Key já foi usada para outro estorno');
+    }
+    return {
+      id: repetido.id,
+      tenantId: repetido.tenant_id,
+      valorCents: repetido.amount_cents,
+      motivo: repetido.reason,
+      estado: repetido.status,
+      criadoEm: repetido.created_at,
+    };
   }
 
   const conta = await semTenant(async (tx) => {
@@ -283,34 +336,73 @@ export async function estornarCredito(entrada: {
     );
   }
 
-  const lancamento = await semTenant(async (tx) => {
-    const debitadas = await tx.$executeRaw`
-      UPDATE subscriptions
-         SET credit_cents = credit_cents - ${entrada.valorCents}, updated_at = now()
-       WHERE tenant_id = ${entrada.tenantId}::uuid AND credit_cents >= ${entrada.valorCents}
-    `;
-    if (debitadas === 0) {
-      throw new PlataformaError('insufficient_credit', 'O crédito disponível é menor que o pedido');
-    }
+  let lancamento: { id: string; tenant_id: string; amount_cents: number; reason: string; created_at: Date };
+  try {
+    lancamento = await semTenant(async (tx) => {
+      const debitadas = await tx.$executeRaw`
+        UPDATE subscriptions
+           SET credit_cents = credit_cents - ${entrada.valorCents}, updated_at = now()
+         WHERE tenant_id = ${entrada.tenantId}::uuid AND credit_cents >= ${entrada.valorCents}
+      `;
+      if (debitadas === 0) {
+        throw new PlataformaError('insufficient_credit', 'O crédito disponível é menor que o pedido');
+      }
 
-    const criados = await tx.$queryRaw<
-      { id: string; tenant_id: string; amount_cents: number; reason: string; created_at: Date }[]
-    >`
-      INSERT INTO refunds (tenant_id, amount_cents, reason, admin_id)
-      VALUES (${entrada.tenantId}::uuid, ${entrada.valorCents}, ${motivo}, ${entrada.adminId}::uuid)
-      RETURNING id, tenant_id, amount_cents, reason, created_at
-    `;
-    const criado = criados[0];
-    if (!criado) throw new PlataformaError('refund_failed', 'Não foi possível registrar o estorno');
+      const criados = await tx.$queryRaw<
+        { id: string; tenant_id: string; amount_cents: number; reason: string; created_at: Date }[]
+      >`
+        INSERT INTO refunds
+          (tenant_id, amount_cents, reason, admin_id, psp_charge_id, idempotency_key, idempotency_fingerprint)
+        VALUES (
+          ${entrada.tenantId}::uuid, ${entrada.valorCents}, ${motivo},
+          ${entrada.adminId}::uuid, ${cobranca.psp_charge_id}, ${entrada.idempotencyKey}, ${fingerprint}
+        )
+        RETURNING id, tenant_id, amount_cents, reason, created_at
+      `;
+      const criado = criados[0];
+      if (!criado) throw new PlataformaError('refund_failed', 'Não foi possível registrar o estorno');
 
-    await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'credit.refunded', {
-      estornoId: criado.id,
-      valorCents: entrada.valorCents,
-      motivo,
+      await registrarNaTrilha(tx, entrada.adminId, entrada.tenantId, 'credit.refunded', {
+        estornoId: criado.id,
+        valorCents: entrada.valorCents,
+        motivo,
+      });
+
+      return criado;
     });
-
-    return criado;
-  });
+  } catch (erro) {
+    /**
+     * Duas requisições com a mesma Idempotency-Key podem passar juntas pelo
+     * SELECT inicial. O índice único decide a vencedora; a transação perdedora
+     * (inclusive o débito do crédito) é revertida pelo Postgres. Em vez de
+     * transformar a colisão correta em 500, relê o lançamento vencedor.
+     */
+    if (pgCode(erro) !== UNIQUE_VIOLATION) throw erro;
+    const concorrente = await semTenant(async (tx) => {
+      const linhas = await tx.$queryRaw<{
+        id: string; tenant_id: string; amount_cents: number; reason: string;
+        status: 'pending' | 'done' | 'failed'; created_at: Date; idempotency_fingerprint: string | null;
+      }[]>`
+        SELECT id, tenant_id, amount_cents, reason, status, created_at, idempotency_fingerprint
+          FROM refunds
+         WHERE tenant_id = ${entrada.tenantId}::uuid
+           AND idempotency_key = ${entrada.idempotencyKey}
+      `;
+      return linhas[0] ?? null;
+    });
+    if (!concorrente) throw erro;
+    if (concorrente.idempotency_fingerprint && concorrente.idempotency_fingerprint !== fingerprint) {
+      throw new PlataformaError('idempotency_conflict', 'Esta Idempotency-Key já foi usada para outro estorno');
+    }
+    return {
+      id: concorrente.id,
+      tenantId: concorrente.tenant_id,
+      valorCents: concorrente.amount_cents,
+      motivo: concorrente.reason,
+      estado: concorrente.status,
+      criadoEm: concorrente.created_at,
+    };
+  }
 
   let refundId: string;
   try {
@@ -337,14 +429,20 @@ export async function estornarCredito(entrada: {
      */
     if (erro instanceof EstornoRecusado) {
       await semTenant(async (tx) => {
-        await tx.$executeRaw`
-          UPDATE subscriptions
-             SET credit_cents = credit_cents + ${entrada.valorCents}, updated_at = now()
-           WHERE tenant_id = ${entrada.tenantId}::uuid
+        // A transição reivindica a compensação. O reconciliador pode estar
+        // tentando o mesmo estorno ao mesmo tempo; só quem realmente muda
+        // pending -> failed devolve o crédito, evitando crédito em dobro.
+        const falhadas = await tx.$executeRaw`
+          UPDATE refunds SET status = 'failed'
+           WHERE id = ${lancamento.id}::uuid AND status = 'pending'
         `;
-        await tx.$executeRaw`
-          UPDATE refunds SET status = 'failed' WHERE id = ${lancamento.id}::uuid
-        `;
+        if (falhadas > 0) {
+          await tx.$executeRaw`
+            UPDATE subscriptions
+               SET credit_cents = credit_cents + ${entrada.valorCents}, updated_at = now()
+             WHERE tenant_id = ${entrada.tenantId}::uuid
+          `;
+        }
       });
       throw new PlataformaError('refund_refused', 'O adquirente recusou o estorno');
     }
@@ -375,6 +473,80 @@ export async function estornarCredito(entrada: {
     estado: 'done',
     criadoEm: lancamento.created_at,
   };
+}
+
+
+/**
+ * Retoma estornos cuja resposta do adquirente se perdeu.
+ *
+ * A chamada usa o mesmo `estornoId`, e a Stripe transforma esse id na chave de
+ * idempotência. Portanto uma resposta perdida não gera uma segunda devolução:
+ * a repetição reencontra a primeira. `pending` só permanece quando a rede
+ * continua ambígua.
+ */
+export async function conciliarEstornosPendentes(entrada: {
+  readonly provider: PspProvider;
+  readonly limite?: number;
+}): Promise<{ readonly consultados: number; readonly concluidos: number; readonly recusados: number; readonly comFalha: number }> {
+  const limite = Math.min(Math.max(entrada.limite ?? 100, 1), 500);
+  const pendentes = await semTenant((tx) => tx.$queryRaw<{
+    id: string;
+    tenant_id: string;
+    amount_cents: number;
+    psp_charge_id: string;
+    psp_customer_id: string;
+  }[]>`
+    SELECT r.id, r.tenant_id, r.amount_cents, r.psp_charge_id, b.psp_customer_id
+      FROM refunds r
+      JOIN billing_customers b ON b.tenant_id = r.tenant_id
+     WHERE r.status = 'pending'
+       AND r.psp_charge_id IS NOT NULL
+     ORDER BY r.created_at
+     LIMIT ${limite}
+  `);
+
+  const contagem = { consultados: 0, concluidos: 0, recusados: 0, comFalha: 0 };
+  for (const lancamento of pendentes) {
+    contagem.consultados += 1;
+    try {
+      const { refundId } = await entrada.provider.estornar({
+        tenantId: lancamento.tenant_id,
+        pspCustomerId: lancamento.psp_customer_id,
+        pspChargeId: lancamento.psp_charge_id,
+        valorCents: lancamento.amount_cents,
+        estornoId: lancamento.id,
+      });
+      const mexidas = await semTenant((tx) => tx.$executeRaw`
+        UPDATE refunds
+           SET psp_refund_id = ${refundId}, status = 'done', settled_at = now()
+         WHERE id = ${lancamento.id}::uuid AND status = 'pending'
+      `);
+      if (mexidas > 0) contagem.concluidos += 1;
+    } catch (erro) {
+      if (erro instanceof EstornoRecusado) {
+        // O adquirente garantiu que nada saiu. A mudança de `pending` para
+        // `failed` reivindica a compensação: só quem realmente muda a linha
+        // devolve o crédito, então duas conciliações não creditam duas vezes.
+        await semTenant(async (tx) => {
+          const falhadas = await tx.$executeRaw`
+            UPDATE refunds SET status = 'failed'
+             WHERE id = ${lancamento.id}::uuid AND status = 'pending'
+          `;
+          if (falhadas > 0) {
+            await tx.$executeRaw`
+              UPDATE subscriptions
+                 SET credit_cents = credit_cents + ${lancamento.amount_cents}, updated_at = now()
+               WHERE tenant_id = ${lancamento.tenant_id}::uuid
+            `;
+            contagem.recusados += 1;
+          }
+        });
+        continue;
+      }
+      contagem.comFalha += 1;
+    }
+  }
+  return contagem;
 }
 
 export async function estornosDaBarbearia(tenantId: string): Promise<readonly Estorno[]> {

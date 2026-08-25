@@ -64,7 +64,9 @@ export class FakeOperacaoProvider implements OperacaoProvider {
 }
 
 /**
- * Escreve no log em vez de enviar, com o telefone mascarado.
+ * Provedor de desenvolvimento: escreve no log com o telefone mascarado. Em
+ * produção, falha explicitamente para que um alerta não seja marcado como
+ * entregue quando apenas foi escrito no console.
  *
  * Mesma decisão do provedor de cobrança: o e-mail vai inteiro porque é o
  * endereço para onde o alerta tem que ir e confundi-lo é um chamado; telefone em
@@ -73,7 +75,14 @@ export class FakeOperacaoProvider implements OperacaoProvider {
 export class ConsoleOperacaoProvider implements OperacaoProvider {
   constructor(private readonly log: (mensagem: string) => void = console.log) {}
 
+  private assegurarDesenvolvimento(): void {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('console_delivery_forbidden_in_production');
+    }
+  }
+
   async avisarDeOperacao(mensagem: MensagemOperacional): Promise<void> {
+    this.assegurarDesenvolvimento();
     this.log(
       `[operacao] ${mensagem.severidade} — ${mensagem.barbearia}: ${mensagem.titulo} ` +
         `→ ${mensagem.email}`,

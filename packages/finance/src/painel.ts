@@ -1,6 +1,8 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { ticketMedio, variacao } from '@barbearia/core';
 
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
+
 /**
  * O painel do proprietário — SPEC §5.9.
  *
@@ -311,12 +313,12 @@ export async function painelDeDinheiro(params: {
     ]);
 
     const ticketHoje = ticketMedio({
-      faturamentoCents: Number(hoje.faturamento_cents),
+      faturamentoCents: inteiroSeguroDoBanco(hoje.faturamento_cents, 'faturamento do dia'),
       atendimentos: Number(hoje.comandas),
       saiuComHorario: 0,
     });
     const ticketAntes = ticketMedio({
-      faturamentoCents: Number(passado.faturamento_cents),
+      faturamentoCents: inteiroSeguroDoBanco(passado.faturamento_cents, 'faturamento comparativo do dia'),
       atendimentos: Number(passado.comandas),
       saiuComHorario: 0,
     });
@@ -325,8 +327,8 @@ export async function painelDeDinheiro(params: {
       dia: params.dia,
       comparadoCom: antes,
       faturamentoCents: comparar(
-        Number(hoje.faturamento_cents),
-        Number(passado.faturamento_cents),
+        inteiroSeguroDoBanco(hoje.faturamento_cents, 'faturamento do dia'),
+        inteiroSeguroDoBanco(passado.faturamento_cents, 'faturamento comparativo do dia'),
       ),
       ticketMedioCents: comparar(ticketHoje, ticketAntes),
     };
@@ -574,7 +576,10 @@ async function serieDeFaturamento(
      GROUP BY d.dia
      ORDER BY d.dia
   `;
-  return linhas.map((linha) => ({ dia: linha.dia, faturamentoCents: Number(linha.faturamento_cents) }));
+  return linhas.map((linha) => ({
+    dia: linha.dia,
+    faturamentoCents: inteiroSeguroDoBanco(linha.faturamento_cents, `faturamento de ${linha.dia}`),
+  }));
 }
 
 /**
@@ -601,7 +606,7 @@ async function vendidoPelaEquipe(
   fim: string,
 ): Promise<number> {
   const linhas = await tx.$queryRaw<{ total: bigint }[]>`
-    SELECT coalesce(sum(oi.unit_price_cents * oi.quantity), 0)::bigint AS total
+    SELECT coalesce(sum(oi.unit_price_cents::bigint * oi.quantity), 0)::bigint AS total
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
      WHERE o.location_id = ${locationId}::uuid
@@ -610,7 +615,7 @@ async function vendidoPelaEquipe(
        AND o.business_day >= ${inicio}::date
        AND o.business_day <= ${fim}::date
   `;
-  return Number(linhas[0]?.total ?? 0);
+  return inteiroSeguroDoBanco(linhas[0]?.total, 'venda da equipe');
 }
 
 async function metaDaCasa(tx: TransactionClient, locationId: string, dia: string): Promise<number> {
@@ -623,7 +628,7 @@ async function metaDaCasa(tx: TransactionClient, locationId: string, dia: string
        AND p.location_id = ${locationId}::uuid
        AND p.active AND p.kind = 'professional'
   `;
-  return Number(linhas[0]?.total ?? 0);
+  return inteiroSeguroDoBanco(linhas[0]?.total, 'meta da casa');
 }
 
 export async function painelDeDinheiroDoPeriodo(params: {
@@ -641,8 +646,8 @@ export async function painelDeDinheiroDoPeriodo(params: {
       metaDaCasa(tx, params.locationId, params.dia),
       vendidoPelaEquipe(tx, params.locationId, janela.inicio, janela.fim),
     ]);
-    const faturamento = Number(atual.faturamento_cents);
-    const faturamentoAnterior = Number(anterior.faturamento_cents);
+    const faturamento = inteiroSeguroDoBanco(atual.faturamento_cents, 'faturamento do período');
+    const faturamentoAnterior = inteiroSeguroDoBanco(anterior.faturamento_cents, 'faturamento do período anterior');
     const ticketAtual = ticketMedio({ faturamentoCents: faturamento, atendimentos: Number(atual.comandas), saiuComHorario: 0 });
     const ticketAnterior = ticketMedio({ faturamentoCents: faturamentoAnterior, atendimentos: Number(anterior.comandas), saiuComHorario: 0 });
     const diaDoMes = Number(params.dia.slice(8, 10));

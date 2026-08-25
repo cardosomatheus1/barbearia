@@ -30,6 +30,8 @@ interface Chamada {
   metodo: string;
   cabecalhos: Record<string, string>;
   corpo: string | null;
+  redirect?: RequestRedirect;
+  signal?: AbortSignal | null;
 }
 
 function espiao(resposta: { status: number; json: unknown }): {
@@ -43,6 +45,8 @@ function espiao(resposta: { status: number; json: unknown }): {
       metodo: init.method ?? 'GET',
       cabecalhos: (init.headers ?? {}) as Record<string, string>,
       corpo: typeof init.body === 'string' ? init.body : null,
+      redirect: init.redirect,
+      signal: init.signal ?? null,
     });
     return new Response(JSON.stringify(resposta.json), {
       status: resposta.status,
@@ -119,6 +123,8 @@ describe('a chamada à Stripe', () => {
     // "usar a mais nova" é receber uma quebra no dia em que ela publicar.
     expect(chamada?.cabecalhos['stripe-version']).toBe(VERSAO_DA_API_STRIPE);
     expect(chamada?.corpo).toBe('amount=4900&currency=brl');
+    expect(chamada?.redirect).toBe('manual');
+    expect(chamada?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('manda a chave de idempotência quando ela existe', async () => {
@@ -176,6 +182,25 @@ describe('a chamada à Stripe', () => {
     await expect(new StripeCliente(rede).get('/payment_intents/pi_1')).rejects.toBeInstanceOf(
       StripeError,
     );
+  });
+
+  it('falha de rede vira erro de transporte sem repetir detalhe potencialmente sensível', async () => {
+    const rede: Rede = async () => {
+      throw new Error('proxy https://interno/?secret=vaza');
+    };
+    await expect(new StripeCliente(rede).get('/balance')).rejects.toMatchObject({
+      name: 'StripeTransportError',
+      message: 'falha de transporte ao falar com a Stripe',
+    });
+  });
+
+  it('2xx/5xx com corpo que não é JSON falha como resposta inválida', async () => {
+    const rede: Rede = async () => new Response('<html>proxy</html>', { status: 502 });
+    await expect(new StripeCliente(rede).get('/balance')).rejects.toMatchObject({
+      name: 'StripeError',
+      code: 'stripe_invalid_response',
+      status: 502,
+    });
   });
 
   it('sem a chave secreta, falha alto em vez de tentar', async () => {

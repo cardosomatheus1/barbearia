@@ -1,0 +1,23 @@
+.campo { display: grid; gap: .65rem; padding: 1rem 0; border-top: 1px solid var(--color-border, rgba(127,127,127,.22)); }
+.campo:first-child { border-top: 0; }
+.rotulo { font-weight: 700; }
+.corpo { display: grid; grid-template-columns: 112px minmax(0,1fr); gap: 1rem; align-items: center; }
+.preview { width: 112px; height: 84px; object-fit: cover; border-radius: 14px; background: var(--color-surface-muted, rgba(127,127,127,.08)); border: 1px solid var(--color-border, rgba(127,127,127,.2)); }
+.previewQuadrada { height: 112px; }
+.vazia { display: grid; place-items: center; color: var(--color-text-muted, #777); font-size: .75rem; text-align: center; padding: .5rem; }
+.acoes { display: grid; gap: .55rem; min-width: 0; }
+.arquivo { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
+.seletor { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.escolher { cursor: pointer; flex: 0 0 auto; }
+.hint { margin: 0; color: var(--color-text-muted, #777); font-size: .82rem; line-height: 1.45; }
+.estado { min-width: 0; margin: 0; color: var(--color-text-muted, #777); font-size: .82rem; line-height: 1.35; overflow-wrap: anywhere; }
+.botoes { display: flex; flex-wrap: wrap; gap: .5rem; }
+.legado { color: var(--color-warning, #8a6412); }
+.acoes > form + form { justify-self: start; }
+@media (max-width: 520px) {
+  .corpo { grid-template-columns: 82px minmax(0,1fr); gap: .75rem; align-items: start; }
+  .preview { width: 82px; height: 64px; border-radius: 11px; }
+  .previewQuadrada { height: 82px; }
+  .seletor { align-items: flex-start; flex-direction: column; gap: .4rem; }
+  .botoes > * { flex: 1 1 130px; }
+}

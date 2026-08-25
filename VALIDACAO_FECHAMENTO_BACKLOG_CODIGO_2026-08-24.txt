@@ -1,0 +1,23 @@
+Barberdock - validação do fechamento do backlog dependente de código - 2026-08-24
+
+guards_ok=23 guards_fail=0
+ts_tsx=742 parse_errors=0
+js_mjs_cjs_ok=71 syntax_fail=0
+shell_ok=30 shell_fail=0
+json_ok=46 json_fail=0
+yaml_ok=6 yaml_fail=0
+test_scripts_ok=5 unavailable_vitest_mjs=25 fail=0
+internal_import_declarations=2677 runtime_dist_imports=3 missing_paths=0
+sigv4_runtime=OK methods=PUT,GET,DELETE
+deploy_secrets_rerun=OK
+configure_s3=OK
+
+R9_CODE=complete_s3_compatible
+R5_CODE=complete_external_build_measurement_pending
+V8_CODE=complete_manual_visual_acceptance_pending
+R12_CODE=complete_human_field_validation_pending
+
+verify.sh=attempted
+postgres=unavailable_pg_isready_missing
+pnpm=unavailable
+full_stack_gate=not_proven_in_this_environment

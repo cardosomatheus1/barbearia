@@ -1,0 +1,23 @@
+BARBERDOCK — BLOCO 11 OBSERVABILIDADE — 2026-08-24
+
+VEREDITO
+- API request ID / health / readiness existentes: preservados.
+- Worker sem console.* direto: OK.
+- Ciclo por tarefa com tarefaId/tenant/kind/tentativa/duração: OK.
+- Retry separado de falha terminal: OK.
+- Erro de worker sanitizado: OK.
+- jobs.last_error sem erro.message bruto do worker: OK.
+- Meta: fbtrace/códigos preservados, mensagem do provedor fora do log: OK.
+- Cobrança: objeto de erro cru fora do log: OK.
+- Guarda de observabilidade: OK.
+- Negativos: 7/7 detectados.
+- Runtime de sanitização/classificação: 9/9.
+- TypeScript alterado sintático: 9/9.
+- Verificadores diretos: 35/35.
+- Node tests sem Vitest: 12/12.
+- verify.sh bash -n: OK.
+
+LIMITES DO RUNTIME
+- 23 meta-testes/scripts que importam Vitest não executados: dependência ausente.
+- PostgreSQL/RLS/E2E integral: continua externo a este runtime.
+- Agregador/alertas de produção e provedores reais: continuam prova externa.

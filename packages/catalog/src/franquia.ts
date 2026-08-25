@@ -1,6 +1,7 @@
 import { withTenant } from '@barbearia/db';
 import { adotar, distanciaDoPadrao, republicar, type DistanciaDoPadrao } from '@barbearia/core';
 import { CatalogError } from './servicos.js';
+import { travarCatalogoDoTenant } from './concorrencia.js';
 
 /**
  * O cardápio padrão da franquia, dos dois lados (bloco 76).
@@ -192,6 +193,18 @@ export async function publicarItemDoPadrao(
       throw new CatalogError('invalid_catalog', 'Só a franqueadora publica o padrão');
     }
 
+    // O índice do banco é case-insensitive; serializar o namespace permite
+    // devolver conflito de domínio em vez de uma unique violation/500.
+    await travarCatalogoDoTenant(tx, `franchise-service-name:${nome.toLocaleLowerCase('pt-BR')}`);
+    const repetidos = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM franchise_services
+       WHERE franchise_id = ${franquia.id}::uuid
+         AND lower(btrim(name)) = lower(btrim(${nome}))
+         AND (${entrada.id ?? null}::uuid IS NULL OR id <> ${entrada.id ?? null}::uuid)
+       LIMIT 1
+    `;
+    if (repetidos[0]) throw new CatalogError('name_taken', 'Já existe um item com este nome no padrão.');
+
     if (entrada.id) {
       const linhas = await tx.$queryRaw<{ id: string }[]>`
         UPDATE franchise_services
@@ -267,6 +280,9 @@ export async function adotarItemDoPadrao(
   itemId: string,
 ): Promise<{ readonly serviceId: string; readonly novo: boolean }> {
   return withTenant(tenantId, async (tx) => {
+    // Readoção pode alterar duração/nome do serviço já vendido; disputa com
+    // leituras de disponibilidade antes de decidir entre INSERT e UPDATE.
+    await travarCatalogoDoTenant(tx, 'services');
     /**
      * Sem `FOR UPDATE`, e não é economia.
      *
@@ -316,6 +332,7 @@ export async function adotarItemDoPadrao(
         const criadas = await tx.$queryRaw<{ id: string }[]>`
           INSERT INTO service_categories (tenant_id, name)
           VALUES (${tenantId}::uuid, ${item.category_name})
+          ON CONFLICT (tenant_id, name) DO UPDATE SET name = EXCLUDED.name
           RETURNING id
         `;
         categoriaId = criadas[0]?.id ?? null;

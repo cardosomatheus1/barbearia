@@ -179,6 +179,7 @@ describeIfDb('o que uma loja não alcança na outra', () => {
      */
     await expect(
       conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-1',
         tenantId: TENANT,
         locationId: FILIAL,
         professionalId: RUAN,
@@ -201,6 +202,7 @@ describeIfDb('o que uma loja não alcança na outra', () => {
 
   it('a lista de vales é da loja, e o cancelamento não alcança a vizinha', async () => {
     const daMatriz = await conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-2',
       tenantId: TENANT,
       locationId: MATRIZ,
       professionalId: RUAN,
@@ -278,6 +280,7 @@ describeIfDb('o que uma loja não alcança na outra', () => {
      */
     await expect(
       conceberVale({
+        idempotencyKey: 'audit-test-conceberVale-3',
         tenantId: TENANT,
         locationId: FILIAL,
         professionalId: RUAN,

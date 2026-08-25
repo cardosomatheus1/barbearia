@@ -55,7 +55,16 @@ export class StaffError extends Error {
   }
 }
 
-/** Sessão de gestor dura o expediente, não o mês: é acesso a dinheiro e a base. */
+/**
+ * Sessão persistente do gestor: 14 dias.
+ *
+ * Não chamamos isto de "duração do expediente": duas semanas é uma decisão de
+ * conveniência operacional. O risco residual é compensado por revogação por
+ * aparelho, invalidação ao desligar/trocar senha e MFA nas operações de
+ * dinheiro. Reduzir para 24 h é uma decisão de produto/segurança possível, mas
+ * muda deliberadamente a frequência de login e não deve acontecer escondida
+ * dentro de uma refatoração.
+ */
 const SESSION_DAYS = 14;
 const MIN_PASSWORD = 10;
 
@@ -135,7 +144,7 @@ async function freeSlug(tx: TransactionClient, base: string): Promise<string> {
   return `${raiz}-${randomBytes(3).toString('hex')}`;
 }
 
-export interface SignUpRequest {
+interface SignUpRequestBase {
   readonly name: string;
   readonly email: string;
   readonly password: string;
@@ -144,6 +153,22 @@ export interface SignUpRequest {
   readonly userAgent?: string;
   readonly ip?: string;
 }
+
+/** Cadastro que também entrega uma sessão ao chamador. É o comportamento padrão. */
+export type SignUpRequestWithSession = SignUpRequestBase & { readonly issueSession?: true };
+
+/**
+ * Cadastro sem sessão.
+ *
+ * A rota pública responde 202 e manda a pessoa para o login; emitir uma sessão
+ * ali criava um registro vivo cujo token era descartado, aparecendo depois como
+ * aparelho desconhecido na tela de segurança. O literal `false` faz parte do
+ * tipo para o retorno não poder ser confundido, em TypeScript, com o resultado
+ * que contém `session`.
+ */
+export type SignUpRequestWithoutSession = SignUpRequestBase & { readonly issueSession: false };
+
+export type SignUpRequest = SignUpRequestWithSession | SignUpRequestWithoutSession;
 
 export interface StaffSession {
   readonly token: string;
@@ -171,6 +196,13 @@ export type SignUpResult =
   | { readonly created: true; readonly session: StaffSession }
   | { readonly created: false };
 
+export type SignUpResultWithoutSession =
+  | { readonly created: true; readonly tenantId: string; readonly slug: string }
+  | { readonly created: false };
+
+export function signUpOwner(request: SignUpRequestWithoutSession): Promise<SignUpResultWithoutSession>;
+export function signUpOwner(request: SignUpRequestWithSession): Promise<SignUpResult>;
+
 /**
  * Cria a conta e a barbearia, numa transação só.
  *
@@ -182,7 +214,9 @@ export type SignUpResult =
  * A unidade nasce junto. Barbearia sem unidade não tem agenda, e deixar isso
  * para uma etapa seguinte criaria um estado em que o produto não funciona.
  */
-export async function signUpOwner(request: SignUpRequest): Promise<SignUpResult> {
+export async function signUpOwner(
+  request: SignUpRequest,
+): Promise<SignUpResult | SignUpResultWithoutSession> {
   if (request.password.length < MIN_PASSWORD) {
     throw new StaffError(
       'weak_password',
@@ -202,11 +236,18 @@ export async function signUpOwner(request: SignUpRequest): Promise<SignUpResult>
 
   const chave = emailKey(request.email, pepper());
   const tenantId = randomUUID();
-  const { token, hash } = mintToken(tenantId);
+  const sessao = request.issueSession === false ? null : mintToken(tenantId);
   const senha = await hashPassword(request.password);
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
 
   return withTenant(tenantId, async (tx) => {
+    // Cadastro é uma decisão global por e-mail. Sem serializar, duas requisições
+    // simultâneas poderiam ambas observar ausência e a perdedora só descobrir
+    // na PK de `staff_directory`, depois de criar tenant/unidade — virando 500.
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`signup-email:${chave}`}, 0))
+    `;
+
     // O índice é consultado antes de gravar qualquer coisa: e-mail já usado não
     // pode deixar meia barbearia criada para trás.
     const jaExiste = await tx.$queryRaw<{ tenant_id: string }[]>`
@@ -217,7 +258,14 @@ export async function signUpOwner(request: SignUpRequest): Promise<SignUpResult>
     // de fechá-lo: o e-mail já cadastrado passaria a responder mais devagar.
     if (jaExiste.length > 0) return { created: false };
 
-    const slug = await freeSlug(tx, slugify(request.businessName));
+    const raizDoSlug = slugify(request.businessName);
+    // Mesma corrida, outra chave: nomes iguais de barbearias diferentes podem
+    // chegar juntos. A trava por raiz faz o segundo enxergar o slug já
+    // confirmado e escolher o sufixo seguinte, em vez de estourar a UNIQUE.
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`signup-slug:${raizDoSlug}`}, 0))
+    `;
+    const slug = await freeSlug(tx, raizDoSlug);
 
     await tx.$executeRaw`
       INSERT INTO tenants (id, name) VALUES (${tenantId}::uuid, ${request.businessName})
@@ -246,16 +294,21 @@ export async function signUpOwner(request: SignUpRequest): Promise<SignUpResult>
     // Sem isto a barbearia nasce sem permissão nenhuma — inclusive o dono, que
     // não conseguiria nem abrir o próprio painel. O padrão nasce com o tenant.
     await seedRolePermissions(tx, tenantId);
+
+    if (!sessao) {
+      return { created: true, tenantId, slug };
+    }
+
     await tx.$executeRaw`
       INSERT INTO staff_sessions (tenant_id, staff_user_id, token_hash, user_agent, ip, expires_at)
-      VALUES (${tenantId}::uuid, ${staffUserId}::uuid, ${hash},
+      VALUES (${tenantId}::uuid, ${staffUserId}::uuid, ${sessao.hash},
               ${request.userAgent ?? null}, ${request.ip ?? null}::inet, ${expiresAt})
     `;
 
     return {
       created: true,
       session: {
-        token,
+        token: sessao.token,
         expiresAt: expiresAt.toISOString(),
         tenantId,
         slug,
@@ -585,6 +638,7 @@ export async function escolherUnidadeDaSessao(request: {
       UPDATE staff_sessions s
          SET location_id = ${request.locationId}::uuid
        WHERE s.id = ${request.sessionId}::uuid
+         AND s.staff_user_id = ${request.staffUserId}::uuid
          AND s.revoked_at IS NULL
          AND EXISTS (
            SELECT 1 FROM locations l
@@ -614,6 +668,26 @@ export async function revokeStaffSession(tenantId: string, sessionId: string): P
     await tx.$executeRaw`
       UPDATE staff_sessions SET revoked_at = now()
       WHERE id = ${sessionId}::uuid AND revoked_at IS NULL
+    `;
+  });
+}
+
+/**
+ * Revoga uma sessão cujo token acabou sendo descartado antes de chegar ao cliente.
+ *
+ * O caso concreto é o login de uma conta bloqueada: a senha precisa ser
+ * conferida antes de revelar o bloqueio, então `staffLogin` emite a sessão e o
+ * controller só descobre depois que não pode devolvê-la. Sem esta limpeza,
+ * cada tentativa correta deixava uma sessão de 14 dias sem dono no banco.
+ */
+export async function revokeStaffSessionByToken(token: string): Promise<void> {
+  const partes = splitToken(token);
+  if (!partes) throw new StaffError('invalid_session', 'Sessão inválida');
+
+  await withTenant(partes.tenantId, async (tx) => {
+    await tx.$executeRaw`
+      UPDATE staff_sessions SET revoked_at = now()
+       WHERE token_hash = ${partes.hash} AND revoked_at IS NULL
     `;
   });
 }

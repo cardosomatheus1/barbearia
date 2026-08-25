@@ -96,7 +96,7 @@ body {
  * Nunca usar \`outline: none\` sem substituir: quem navega por teclado perde a
  * noção de onde está e o formulário fica inoperável.
  */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
   border-radius: var(--radius-sm);

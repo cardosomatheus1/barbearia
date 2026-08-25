@@ -63,7 +63,7 @@ import { FalhaDaLeitura } from '../falha-da-leitura';
  *
  * ## A célula fria vira formulário preenchido
  *
- * Sem componente de cliente: cada célula fria é um **link** que traz dia e hora
+ * Esta tela continua sem ilha de cliente: cada célula fria é um **link** que traz dia e hora
  * na consulta, e o formulário abaixo nasce com eles. É o mesmo mecanismo do
  * resto do painel, que não manda JavaScript para o navegador.
  *

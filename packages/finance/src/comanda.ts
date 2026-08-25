@@ -13,8 +13,6 @@ import {
   type ItemDaComanda,
   type Pagamento,
   type TipoDeItem,
-  dividirPagamentoDeFiado,
-  type EscopoMultiunidade,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
 import { registrarEventoDeWebhook } from '@barbearia/jobs';
@@ -24,6 +22,21 @@ import { consumirPacote, consumoDisponivel, venderPacote } from './pacote.js';
 import { baixarVendas, consumirFicha } from './estoque.js';
 import { consumirAssinatura, usoDisponivel } from './assinatura.js';
 import { pedirNota } from './fiscal.js';
+import { ComandaError, type Comanda } from './comanda-tipos.js';
+import {
+  exigirPacoteSemDescontoGeral,
+  fingerprintDoFechamento,
+  recusarDescontoEmVendaDePacote,
+} from './comanda-fechamento.js';
+import { carregarComanda as carregar } from './comanda-leitura.js';
+import { saldoTravado, lancarNoExtrato } from './comanda-fiado.js';
+import { itensDePacoteDaComanda, snapshotDePacoteAtivo, type SnapshotDePacote } from './comanda-pacote.js';
+
+export { lancarNoExtrato, receberFiado } from './comanda-fiado.js';
+
+export * from './comanda-tipos.js';
+export { getComanda, comandasAbertas, quemEstaDevendo, faturamentoDoDia } from './comanda-leitura.js';
+export type { ComandaAberta, Devedor, QuemEstaDevendo } from './comanda-leitura.js';
 
 /**
  * A comanda, do banco para a tela e de volta.
@@ -37,281 +50,6 @@ import { pedirNota } from './fiscal.js';
  * `customer_ledger`. Metade disso gravado é caixa que não bate com extrato que
  * não bate com dívida, e nenhum dos três diz qual está certo.
  */
-
-export type ComandaFailure =
-  | 'comanda_nao_encontrada'
-  | 'comanda_fechada'
-  | 'item_invalido'
-  | 'desconto_invalido'
-  | 'desconto_acima_do_teto'
-  | 'pagamento_invalido'
-  | 'caixa_fechado'
-  | 'cliente_nao_encontrado'
-  | 'cobranca_em_curso'
-  | 'servico_desconhecido'
-  | 'profissional_desconhecido';
-
-export class ComandaError extends Error {
-  constructor(
-    readonly code: ComandaFailure,
-    message: string,
-    readonly detail?: unknown,
-  ) {
-    super(message);
-    this.name = 'ComandaError';
-  }
-}
-
-/**
- * A comanda como **esta** conta pode vê-la.
- *
- * Redigir e não recusar. Somar `customers.view` ao `@Exige` das seis rotas que
- * devolvem uma comanda era o conserto óbvio e estava errado: `@Exige` é
- * conjuntivo, e um papel de balcão a quem o dono negasse a permissão para
- * proteger a base perdia o **PDV inteiro** — abrir comanda, lançar item,
- * fechar venda. Estado sem saída na interface (§6 pergunta 3) criado por uma
- * permissão que protege três campos de um objeto de trinta.
- *
- * Os três são os que o comentário da leitura nomeia: `customerName`,
- * `conta.saldoCents` e `conta.limiteCents`. O id vai junto — ele é a chave da
- * ficha, do extrato de fiado e do saldo de fidelidade, e redigir o nome
- * deixando o id passar entrega a mesma pessoa por outra coluna.
- *
- * `conta` inteira e não os dois números: sem saldo e sem teto ela não responde
- * mais nada, e um objeto com zeros diria "pode fiar à vontade" — o número
- * errado com cara de certo.
- *
- * Mora aqui e não no controller porque a varredura que cobra `customers.view`
- * lê o **fonte** e precisa enxergar a redação acontecendo: um método privado
- * do controller ela não alcança, e a saída seria uma isenção por nome de
- * arquivo — a lista que ninguém revisa.
- */
-export function comandaVisivel(params: {
-  readonly comanda: Comanda;
-  readonly podeVerCliente: boolean;
-}): Comanda {
-  if (params.podeVerCliente) return params.comanda;
-  return { ...params.comanda, customerId: null, customerName: null, conta: null };
-}
-
-export interface Comanda {
-  readonly id: string;
-  readonly status: 'open' | 'paid' | 'cancelled';
-  readonly customerId: string | null;
-  readonly customerName: string | null;
-  readonly appointmentId: string | null;
-  readonly openedAt: string;
-  readonly closedAt: string | null;
-  readonly itens: readonly (ItemDaComanda & { readonly professionalName: string | null })[];
-  readonly desconto: DescontoDaComanda | null;
-  readonly gorjetaCents: number;
-  /** De quem é a gorjeta (SPEC §3.6). Nulo é rateada entre quem atendeu. */
-  readonly gorjetaProfessionalId: string | null;
-  readonly subtotalCents: number;
-  readonly descontoCents: number;
-  readonly totalCents: number;
-  readonly trocoCents: number;
-  readonly pagamentos: readonly { readonly forma: FormaDePagamento; readonly valorCents: number }[];
-  /** Saldo e limite de quem vai pagar, para a tela saber se pode fiar. */
-  readonly conta: { readonly saldoCents: number; readonly limiteCents: number } | null;
-}
-
-/**
- * Carrega a comanda. Com `locationId`, ela precisa ser **daquela loja**.
- *
- * `null` significa "a loja já foi conferida por quem chamou" — e só os
- * caminhos internos, depois de `exigirAberta`, o usam. Nenhuma porta de fora
- * do módulo passa `null`.
- */
-async function carregar(
-  tx: TransactionClient,
-  orderId: string,
-  locationId: string | null,
-): Promise<Comanda> {
-  const cabecas = await tx.$queryRaw<
-    {
-      id: string;
-      status: Comanda['status'];
-      customer_id: string | null;
-      customer_name: string | null;
-      balance_cents: number | null;
-      credit_limit_cents: number | null;
-      appointment_id: string | null;
-      opened_at: Date;
-      closed_at: Date | null;
-      discount_cents: number;
-      discount_reason: string | null;
-      tip_cents: number;
-      tip_professional_id: string | null;
-      change_cents: number;
-    }[]
-  >`
-    SELECT o.id, o.status, o.customer_id, c.name AS customer_name,
-           c.balance_cents, c.credit_limit_cents,
-           o.appointment_id, o.opened_at, o.closed_at,
-           o.discount_cents, o.discount_reason, o.tip_cents, o.tip_professional_id,
-           o.change_cents
-      FROM orders o
-      LEFT JOIN customers c ON c.id = o.customer_id
-     WHERE o.id = ${orderId}::uuid
-       AND (${locationId}::uuid IS NULL OR o.location_id = ${locationId}::uuid)
-  `;
-  const cabeca = cabecas[0];
-  if (!cabeca) {
-    throw new ComandaError('comanda_nao_encontrada', 'Esta comanda não existe mais.');
-  }
-
-  const linhas = await tx.$queryRaw<
-    {
-      id: string;
-      kind: TipoDeItem;
-      service_id: string | null;
-      description: string;
-      quantity: number;
-      unit_price_cents: number;
-      professional_id: string | null;
-      professional_name: string | null;
-    }[]
-  >`
-    SELECT i.id, i.kind, i.service_id, i.description, i.quantity, i.unit_price_cents,
-           i.professional_id, p.name AS professional_name
-      FROM order_items i
-      LEFT JOIN professionals p ON p.id = i.professional_id
-     WHERE i.order_id = ${orderId}::uuid
-     ORDER BY i.position, i.created_at
-  `;
-
-  const pagos = await tx.$queryRaw<{ method: FormaDePagamento; amount_cents: number }[]>`
-    SELECT method, amount_cents FROM order_payments
-     WHERE order_id = ${orderId}::uuid ORDER BY created_at
-  `;
-
-  const itens = linhas.map((linha) => ({
-    id: linha.id,
-    tipo: linha.kind,
-    serviceId: linha.service_id,
-    descricao: linha.description,
-    quantidade: linha.quantity,
-    precoUnitarioCents: linha.unit_price_cents,
-    professionalId: linha.professional_id,
-    professionalName: linha.professional_name,
-  }));
-
-  const desconto: DescontoDaComanda | null =
-    cabeca.discount_cents > 0
-      ? { tipo: 'amount', valor: cabeca.discount_cents, motivo: cabeca.discount_reason }
-      : null;
-
-  const totais = somarComanda({ itens, desconto, gorjetaCents: cabeca.tip_cents });
-
-  return {
-    id: cabeca.id,
-    status: cabeca.status,
-    customerId: cabeca.customer_id,
-    customerName: cabeca.customer_name,
-    appointmentId: cabeca.appointment_id,
-    openedAt: cabeca.opened_at.toISOString(),
-    closedAt: cabeca.closed_at?.toISOString() ?? null,
-    itens,
-    desconto,
-    gorjetaCents: totais.gorjetaCents,
-    gorjetaProfessionalId: cabeca.tip_professional_id,
-    subtotalCents: totais.subtotalCents,
-    descontoCents: totais.descontoCents,
-    totalCents: totais.totalCents,
-    trocoCents: cabeca.change_cents,
-    pagamentos: pagos.map((p) => ({ forma: p.method, valorCents: p.amount_cents })),
-    conta:
-      cabeca.customer_id && cabeca.balance_cents !== null
-        ? {
-            saldoCents: cabeca.balance_cents,
-            limiteCents: cabeca.credit_limit_cents ?? 0,
-          }
-        : null,
-  };
-}
-
-export async function getComanda(
-  tenantId: string,
-  orderId: string,
-  locationId: string,
-): Promise<Comanda> {
-  return withTenant(tenantId, (tx) => carregar(tx, orderId, locationId));
-}
-
-export interface ComandaAberta {
-  readonly id: string;
-  readonly abertaEm: string;
-  readonly customerName: string | null;
-  /** Nulo é venda avulsa: ninguém foi atendido, alguém entrou só para comprar. */
-  readonly appointmentId: string | null;
-  readonly itens: number;
-  readonly totalCents: number;
-}
-
-/**
- * As comandas abertas desta unidade.
- *
- * A tela de cobrar listava **os atendimentos do dia** e nada mais, e a comanda
- * avulsa não nasce de atendimento nenhum: aberta, ela existia só na URL para
- * onde o botão redirecionava. Fechar a aba era perder a única porta, e a linha
- * ficava `open` para sempre — invisível no dia, no caixa, no financeiro e no
- * DRE, porque nenhuma daquelas telas pergunta por comanda aberta.
- *
- * O índice que esta consulta usa — `orders_abertas_idx`, parcial em `status =
- * 'open'` — foi criado na migração 0018 **para uma listagem que nunca foi
- * escrita**. Ele estava lá desde o bloco 18, esperando por ela.
- *
- * Sem `tenant_id` no `WHERE` de propósito: quem filtra é a política de RLS. O
- * recorte por unidade é outro assunto — a RLS separa barbearias e **não** separa
- * lojas dentro de uma.
- */
-export async function comandasAbertas(
-  tenantId: string,
-  locationId: string,
-  /**
-   * Quem chama pode ver identidade de cliente (`customers.view`).
-   *
-   * Obrigatório no tipo, e **redigir e não recusar** é a decisão: somar
-   * `customers.view` ao `@Exige` da rota faria o papel de balcão a quem o dono
-   * tirou essa permissão levar 403 na listagem inteira — e a comanda avulsa
-   * voltaria a ser invisível justamente para ele, que é o defeito que esta
-   * listagem existe para fechar. É o precedente do bloco 119, e o mesmo que
-   * `comandaVisivel` já documenta neste arquivo.
-   */
-  podeVerCliente: boolean,
-): Promise<readonly ComandaAberta[]> {
-  return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRaw<
-      {
-        id: string;
-        opened_at: Date;
-        customer_name: string | null;
-        appointment_id: string | null;
-        itens: bigint;
-        total_cents: number;
-      }[]
-    >`
-      SELECT o.id, o.opened_at, c.name AS customer_name, o.appointment_id,
-             count(i.id) AS itens, o.total_cents
-        FROM orders o
-        LEFT JOIN customers c ON c.id = o.customer_id
-        LEFT JOIN order_items i ON i.order_id = o.id
-       WHERE o.location_id = ${locationId}::uuid AND o.status = 'open'
-       GROUP BY o.id, c.name
-       ORDER BY o.opened_at
-    `;
-
-    return linhas.map((l) => ({
-      id: l.id,
-      abertaEm: l.opened_at.toISOString(),
-      customerName: podeVerCliente ? l.customer_name : null,
-      appointmentId: l.appointment_id,
-      itens: Number(l.itens),
-      totalCents: l.total_cents,
-    }));
-  });
-}
 
 /**
  * Cancelar uma comanda aberta.
@@ -370,70 +108,6 @@ export async function cancelarComanda(params: {
 
     return { cancelada: true as const };
   });
-}
-
-/**
- * Saldo e limite do cliente, com a linha travada até o fim da transação.
- *
- * Quem decide sobre dívida precisa ler o saldo **committed**, não o de um
- * instantâneo anterior: em READ COMMITTED, duas transações simultâneas leem o
- * mesmo saldo antigo e as duas concluem que cabe no limite.
- */
-async function saldoTravado(
-  tx: TransactionClient,
-  customerId: string,
-  locationId?: string | null,
-): Promise<{ readonly saldoCents: number; readonly limiteCents: number }> {
-  const linhas = await tx.$queryRaw<
-    {
-      balance_cents: number;
-      credit_limit_cents: number;
-      credit_scope: EscopoMultiunidade;
-    }[]
-  >`
-    SELECT c.balance_cents, c.credit_limit_cents, t.credit_scope
-      FROM customers c
-      JOIN tenants t ON t.id = c.tenant_id
-     WHERE c.id = ${customerId}::uuid
-     FOR UPDATE OF c
-  `;
-  const linha = linhas[0];
-  if (!linha) throw new ComandaError('cliente_nao_encontrado', 'Cliente não encontrado.');
-  if (linha.credit_scope === 'empresa' || !locationId) {
-    return { saldoCents: linha.balance_cents, limiteCents: linha.credit_limit_cents };
-  }
-
-  /**
-   * Com fiado por unidade, a dívida desta loja é **derivada do extrato** (bloco
-   * 59) — `customers.balance_cents` continua sendo o acumulado da barbearia, e é
-   * ele que a lista de cobrança lê.
-   *
-   * A trava continua sendo a da linha de `customers`, e é ela que serializa: em
-   * READ COMMITTED, duas comandas simultâneas leriam a mesma soma antiga e as
-   * duas concluiriam que cabe no limite.
-   *
-   * O limite é o mesmo em cada loja, não dividido: "pode levar R$ 300 sem pagar"
-   * é uma frase sobre a pessoa, e reparti-la entre as lojas faria a barbearia
-   * que abre a segunda loja cortar pela metade o crédito de todo mundo sem
-   * ninguém ter decidido nada.
-   */
-  const daLoja = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(amount_cents)::int AS total FROM customer_ledger
-     WHERE customer_id = ${customerId}::uuid
-       AND (location_id IS NULL OR location_id = ${locationId}::uuid)
-  `;
-  /**
-   * O bolso da loja nunca mostra mais crédito do que a pessoa tem na empresa.
-   *
-   * Segunda camada, e ela existe porque a primeira — abater onde a dívida está —
-   * é uma cláusula perdível numa reescrita. A garantia de que ninguém leva fiado
-   * contra crédito que não existe é grande demais para depender disso.
-   */
-  const derivado = Number(daLoja[0]?.total ?? 0);
-  return {
-    saldoCents: Math.min(derivado, Math.max(linha.balance_cents, 0)),
-    limiteCents: linha.credit_limit_cents,
-  };
 }
 
 /**
@@ -704,7 +378,9 @@ async function exigirSemCobrancaViva(tx: TransactionClient, orderId: string): Pr
    */
   const vivas = await tx.$queryRaw<{ status: string }[]>`
     SELECT status::text FROM order_charges
-     WHERE order_id = ${orderId}::uuid AND status IN ('aguardando', 'pago')
+     WHERE order_id = ${orderId}::uuid
+       AND status IN ('aguardando', 'pago')
+       AND refunded_at IS NULL
   `;
   const viva = vivas[0];
   if (viva) {
@@ -795,9 +471,45 @@ export async function adicionarItem(params: {
    * serem o mesmo dado, e o preço vem do cadastro — não do corpo.
    */
   readonly productId?: string | null;
+  /**
+   * Chave do gesto da tela. O mesmo POST pode chegar de novo se a gravação
+   * confirmar e a resposta cair no caminho de volta.
+   */
+  readonly idempotencyKey?: string;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
-    await exigirAberta(tx, params.orderId, params.locationId);
+    const fingerprint = JSON.stringify([
+      params.tipo,
+      params.serviceId ?? null,
+      params.descricao.trim(),
+      params.quantidade,
+      params.precoUnitarioCents,
+      params.professionalId ?? null,
+      params.packageId ?? null,
+      params.productId ?? null,
+    ]);
+
+    if (params.idempotencyKey) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${params.tenantId}:${params.orderId}:${params.idempotencyKey}`}, 0))`;
+      const anteriores = await tx.$queryRaw<{ idempotency_fingerprint: string | null }[]>`
+        SELECT oi.idempotency_fingerprint
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+         WHERE oi.order_id = ${params.orderId}::uuid
+           AND o.location_id = ${params.locationId}::uuid
+           AND oi.idempotency_key = ${params.idempotencyKey}
+         LIMIT 1
+      `;
+      const anterior = anteriores[0];
+      if (anterior) {
+        if (anterior.idempotency_fingerprint && anterior.idempotency_fingerprint !== fingerprint) {
+          throw new ComandaError('idempotencia_conflitante', 'Esta tentativa já foi usada para outro item.');
+        }
+        return carregar(tx, params.orderId, params.locationId);
+      }
+    }
+
+    const comandaAberta = await exigirAberta(tx, params.orderId, params.locationId, true);
     await exigirSemCobrancaViva(tx, params.orderId);
 
     const falha = validarItem({
@@ -836,18 +548,14 @@ export async function adicionarItem(params: {
      * estrangeira do Postgres ignora row security.
      */
     let precoCents = params.precoUnitarioCents;
+    let snapshotDoPacote: SnapshotDePacote | null = null;
     if (params.packageId) {
+      recusarDescontoEmVendaDePacote(comandaAberta.descontoCents);
       if (params.tipo !== 'package') {
         throw new ComandaError('item_invalido', 'Item inválido.', 'tipo');
       }
-      const pacote = await tx.$queryRaw<{ price_cents: number }[]>`
-        SELECT price_cents FROM packages WHERE id = ${params.packageId}::uuid AND active
-      `;
-      const encontrado = pacote[0];
-      if (!encontrado) {
-        throw new ComandaError('servico_desconhecido', 'Pacote não encontrado.');
-      }
-      precoCents = encontrado.price_cents;
+      snapshotDoPacote = await snapshotDePacoteAtivo(tx, params.packageId);
+      precoCents = snapshotDoPacote.priceCents;
     } else if (params.tipo === 'package') {
       // Item de pacote sem pacote é um item que ninguém sabe o que vende — e o
       // `CHECK` da migração recusaria o contrário.
@@ -880,7 +588,9 @@ export async function adicionarItem(params: {
     await tx.$executeRaw`
       INSERT INTO order_items
         (tenant_id, order_id, kind, service_id, package_id, product_id, description, quantity,
-         unit_price_cents, professional_id, position)
+         unit_price_cents, professional_id, position, idempotency_key, idempotency_fingerprint,
+         package_snapshot_service_id, package_snapshot_quantity,
+         package_snapshot_validity_days, package_snapshot_transferable)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${params.orderId}::uuid, ${params.tipo}::order_item_type,
@@ -888,7 +598,12 @@ export async function adicionarItem(params: {
         ${params.productId ?? null}::uuid, ${params.descricao.trim()},
         ${params.quantidade}, ${precoCents},
         ${params.professionalId ?? null}::uuid,
-        (SELECT COALESCE(max(position) + 1, 0) FROM order_items WHERE order_id = ${params.orderId}::uuid)
+        (SELECT COALESCE(max(position) + 1, 0) FROM order_items WHERE order_id = ${params.orderId}::uuid),
+        ${params.idempotencyKey ?? null}, ${params.idempotencyKey ? fingerprint : null},
+        ${snapshotDoPacote?.serviceId ?? null}::uuid,
+        ${snapshotDoPacote?.quantity ?? null},
+        ${snapshotDoPacote?.validityDays ?? null},
+        ${snapshotDoPacote?.transferable ?? null}
       )
     `;
 
@@ -929,7 +644,7 @@ export async function removerItem(params: {
   readonly ator?: { readonly id: string; readonly name: string };
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
-    await exigirAberta(tx, params.orderId, params.locationId);
+    await exigirAberta(tx, params.orderId, params.locationId, true);
     await exigirSemCobrancaViva(tx, params.orderId);
 
     const alvo = await tx.$queryRaw<
@@ -1008,7 +723,7 @@ export async function ajustarComanda(params: {
   readonly staffName: string;
 }): Promise<Comanda> {
   return withTenant(params.tenantId, async (tx) => {
-    const atual = await exigirAberta(tx, params.orderId, params.locationId);
+    const atual = await exigirAberta(tx, params.orderId, params.locationId, true);
     await exigirSemCobrancaViva(tx, params.orderId);
 
     if (params.desconto) {
@@ -1049,6 +764,8 @@ export async function ajustarComanda(params: {
       desconto: params.desconto ?? null,
       gorjetaCents: params.gorjetaCents ?? atual.gorjetaCents,
     });
+
+    await exigirPacoteSemDescontoGeral(tx, params.orderId, totais.descontoCents);
 
     /**
      * O teto da barbearia, conferido **depois** de converter para centavos.
@@ -1210,6 +927,14 @@ export async function fecharComanda(params: {
   readonly tx?: TransactionClient;
 }): Promise<Comanda> {
   const dentro = async (tx: TransactionClient): Promise<Comanda> => {
+    const fingerprintDaIntencao = fingerprintDoFechamento({
+      orderId: params.orderId,
+      pagamentos: params.pagamentos,
+      ...(params.resgateQuantidade !== undefined ? { resgateQuantidade: params.resgateQuantidade } : {}),
+      ...(params.servicoDoPacote !== undefined ? { servicoDoPacote: params.servicoDoPacote } : {}),
+      ...(params.servicoDaAssinatura !== undefined ? { servicoDaAssinatura: params.servicoDaAssinatura } : {}),
+    });
+
     /**
      * Repetição do mesmo toque devolve a comanda paga, não um erro.
      *
@@ -1219,15 +944,41 @@ export async function fecharComanda(params: {
      * foi fechada", que soa como falha para uma operação que deu certo.
      */
     if (params.idempotencyKey) {
-      const anterior = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM orders
-         WHERE close_idempotency_key = ${params.idempotencyKey}
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(${`${params.tenantId}:${params.locationId}:fechar:${params.idempotencyKey}`}, 0)
+        )
+      `;
+      const anterior = await tx.$queryRaw<
+        { id: string; close_idempotency_fingerprint: string | null }[]
+      >`
+        SELECT id, close_idempotency_fingerprint FROM orders
+         WHERE location_id = ${params.locationId}::uuid
+           AND close_idempotency_key = ${params.idempotencyKey}
       `;
       const jaCobrada = anterior[0];
-      if (jaCobrada) return carregar(tx, jaCobrada.id, params.locationId);
+      if (jaCobrada) {
+        // Linhas anteriores à migração 0111 não têm fingerprint. Nesse caso só
+        // aceitamos replay para a própria comanda; a chave jamais pode apontar
+        // silenciosamente para outra venda.
+        if (
+          (jaCobrada.close_idempotency_fingerprint !== null &&
+            jaCobrada.close_idempotency_fingerprint !== fingerprintDaIntencao) ||
+          (jaCobrada.close_idempotency_fingerprint === null && jaCobrada.id !== params.orderId)
+        ) {
+          throw new ComandaError(
+            'idempotencia_conflitante',
+            'Esta tentativa de fechamento já foi usada para outra cobrança.',
+          );
+        }
+        return carregar(tx, jaCobrada.id, params.locationId);
+      }
     }
 
     const comanda = await exigirAberta(tx, params.orderId, params.locationId, true);
+
+    await exigirPacoteSemDescontoGeral(tx, params.orderId, comanda.descontoCents);
+
     /**
      * O fechamento manual também respeita a cobrança viva — achado HIGH.
      *
@@ -1303,7 +1054,8 @@ export async function fecharComanda(params: {
         session_id = ${sessao.id}::uuid,
         change_cents = ${conferido.trocoCents},
         business_day = ${params.hojeNaUnidade}::date,
-        close_idempotency_key = ${params.idempotencyKey ?? null}
+        close_idempotency_key = ${params.idempotencyKey ?? null},
+        close_idempotency_fingerprint = ${params.idempotencyKey ? fingerprintDaIntencao : null}
       WHERE id = ${params.orderId}::uuid AND status = 'open'
     `;
     if (fechadas === 0) {
@@ -1324,7 +1076,6 @@ export async function fecharComanda(params: {
      * inscrito ela não faz nada e não custa nada além da própria consulta.
      */
     await registrarEventoDeWebhook(tx, {
-      tenantId: params.tenantId,
       evento: 'order.paid',
       objetoId: params.orderId,
       locationId: params.locationId,
@@ -1473,11 +1224,7 @@ export async function fecharComanda(params: {
      *
      * Derivado do item, o que foi cobrado e o que foi entregue são o mesmo dado.
      */
-    const itensDePacote = await tx.$queryRaw<{ package_id: string }[]>`
-      SELECT package_id FROM order_items
-       WHERE order_id = ${params.orderId}::uuid AND package_id IS NOT NULL
-       ORDER BY position
-    `;
+    const itensDePacote = await itensDePacoteDaComanda(tx, params.orderId);
 
     if (pagoComPacote > 0 || itensDePacote.length > 0) {
       if (!comanda.customerId) {
@@ -1488,14 +1235,24 @@ export async function fecharComanda(params: {
       }
     }
 
+    const agoraNoFechamento = params.agora ?? new Date();
     for (const item of itensDePacote) {
-      await venderPacote(tx, {
-        tenantId: params.tenantId,
-        customerId: comanda.customerId as string,
-        packageId: item.package_id,
-        orderId: params.orderId,
-        agora: new Date(),
-      });
+      // A quantidade cobrada e a quantidade entregue são o mesmo fato.
+      // `Pacote × 2` precisa criar dois customer_packages, não um.
+      for (let unidade = 0; unidade < item.quantity; unidade += 1) {
+        await venderPacote(tx, {
+          tenantId: params.tenantId,
+          customerId: comanda.customerId as string,
+          packageId: item.package_id,
+          orderId: params.orderId,
+          serviceId: item.package_snapshot_service_id,
+          quantidade: item.package_snapshot_quantity,
+          precoCents: item.unit_price_cents,
+          validadeDias: item.package_snapshot_validity_days,
+          transferivel: item.package_snapshot_transferable,
+          agora: agoraNoFechamento,
+        });
+      }
     }
 
     if (pagoComPacote > 0) {
@@ -1570,7 +1327,6 @@ export async function fecharComanda(params: {
      * continuaria cheia — corte ilimitado de graça, um por comanda. É o mesmo
      * defeito que o pacote e o resgate de fidelidade teriam, e a mesma solução.
      */
-    const agoraNoFechamento = params.agora ?? new Date();
     const pagoComAssinatura = params.pagamentos
       .filter((p) => p.forma === 'assinatura')
       .reduce((soma, p) => soma + p.valorCents, 0);
@@ -1678,7 +1434,7 @@ export async function fecharComanda(params: {
       prepagoCents: params.pagamentos
         .filter((p) => p.forma === 'pacote' || p.forma === 'assinatura')
         .reduce((soma, p) => soma + p.valorCents, 0),
-      agora: new Date(),
+      agora: agoraNoFechamento,
       // O bolso em que o saldo nasce, congelado com o lançamento (bloco 59).
       locationId: params.locationId,
     });
@@ -1740,352 +1496,3 @@ export async function fecharComanda(params: {
   return params.tx ? dentro(params.tx) : withTenant(params.tenantId, dentro);
 }
 
-/**
- * Lança no extrato e move o saldo, sempre juntos.
- *
- * `customers.balance_cents` é o acumulado; `customer_ledger` é o porquê dele.
- * Mover um sem o outro produz um saldo que ninguém consegue justificar no
- * balcão — e a primeira discussão sobre "quanto eu devo" não tem como terminar.
- *
- * O `balance_after_cents` é gravado junto de propósito: refazer a conta somando
- * o extrato inteiro daria outro número no dia em que uma linha fosse corrigida,
- * e o extrato é append-only justamente para que isso nunca aconteça.
- */
-/**
- * Exportada desde o bloco 42: o reembolso de pacote também lança no razão.
- *
- * Uma cópia lá dentro esqueceria `balance_after_cents` — e foi exatamente o que
- * o teste do reembolso pegou na primeira versão. O saldo depois do lançamento é
- * o que faz o extrato do cliente ser conferível linha a linha.
- */
-export async function lancarNoExtrato(
-  tx: TransactionClient,
-  params: {
-    readonly customerId: string;
-    readonly kind: 'fiado' | 'payment' | 'credit' | 'adjustment';
-    readonly amountCents: number;
-    readonly orderId?: string | null;
-    readonly sessionId?: string | null;
-    readonly note: string;
-    readonly staffId: string;
-    readonly staffName: string;
-    /**
-     * A loja em que a dívida nasceu ou foi paga (bloco 59).
-     *
-     * `customers.balance_cents` continua sendo o acumulado da barbearia — é ele
-     * que a lista de cobrança lê. O recorte por loja é derivado do extrato, como
-     * todo saldo deste produto, e por isso a coluna precisa estar preenchida em
-     * **todos** os caminhos: um preenchido e outro não faz o saldo por loja
-     * mentir com número, que é pior do que estar vazio.
-     */
-    readonly locationId?: string | null;
-    /**
-     * Marca a linha que **reencontra** a operação, quando ela tem chave.
-     *
-     * Opcional porque a maioria dos lançamentos nasce dentro de outra operação
-     * que já tem a própria chave — o fiado de uma comanda é reencontrado pela
-     * comanda. Quem passa é o pagamento de fiado, que não tinha nenhuma.
-     */
-    readonly idempotencyKey?: string;
-  },
-): Promise<number> {
-  const atualizados = await tx.$queryRaw<{ balance_cents: number }[]>`
-    UPDATE customers
-       SET balance_cents = balance_cents + ${params.amountCents}
-     WHERE id = ${params.customerId}::uuid
-    RETURNING balance_cents
-  `;
-  const saldo = atualizados[0]?.balance_cents;
-  if (saldo === undefined) {
-    throw new ComandaError('cliente_nao_encontrado', 'Cliente não encontrado.');
-  }
-
-  await tx.$executeRaw`
-    INSERT INTO customer_ledger
-      (tenant_id, customer_id, kind, amount_cents, balance_after_cents,
-       order_id, session_id, note, created_by, created_by_name, location_id,
-       idempotency_key)
-    VALUES (
-      NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-      ${params.customerId}::uuid, ${params.kind}::customer_ledger_kind,
-      ${params.amountCents}, ${saldo},
-      ${params.orderId ?? null}::uuid, ${params.sessionId ?? null}::uuid,
-      ${params.note}, ${params.staffId}::uuid, ${params.staffName},
-      ${params.locationId ?? null}::uuid,
-      ${params.idempotencyKey ?? null}
-    )
-  `;
-
-  return saldo;
-}
-
-/**
- * O cliente voltou e pagou o que devia.
- *
- * Este é o momento em que fiado vira dinheiro — e por isso entra na gaveta como
- * `debt_payment`, separado de `sale`. Somar aos dois no mesmo balde faria o
- * faturamento do dia contar duas vezes: uma quando o corte foi fiado e outra
- * quando ele foi pago.
- */
-export async function receberFiado(params: {
-  readonly tenantId: string;
-  readonly locationId: string;
-  readonly customerId: string;
-  readonly amountCents: number;
-  readonly forma: FormaDePagamento;
-  /**
-   * Barra o toque duplo (bloco 103), e é chave porque não há estado.
-   *
-   * Pagar a dívida **inteira** já era barrado pelo estado — o segundo toque cai
-   * em "este cliente não tem dívida em aberto". Quem recebe **parcial** é que
-   * perdia: reproduzido antes do conserto, um cliente que devia R$ 200 entregou
-   * R$ 50 e a dívida caiu R$ 100, com duas linhas de `debt_payment` na gaveta
-   * esperando dinheiro que ninguém entregou.
-   *
-   * Dois pagamentos parciais iguais no mesmo dia são caso legítimo, então não
-   * há estado que os distinga da repetição — é a regra do bloco 51.
-   */
-  readonly idempotencyKey?: string;
-  readonly staffId: string;
-  readonly staffName: string;
-}): Promise<{ readonly saldoCents: number }> {
-  if (!Number.isInteger(params.amountCents) || params.amountCents <= 0) {
-    throw new ComandaError('pagamento_invalido', 'Informe um valor maior que zero.');
-  }
-  if (params.forma === 'fiado') {
-    // Pagar fiado com fiado é rolar a dívida sem que nada aconteça, e o extrato
-    // ficaria com duas linhas que se anulam.
-    throw new ComandaError('pagamento_invalido', 'Não se paga fiado com fiado.');
-  }
-
-  return withTenant(params.tenantId, async (tx) => {
-    /**
-     * Antes de qualquer trava, porque a resposta do repetido é o saldo de
-     * agora — e não o que ele era quando o pagamento aconteceu.
-     */
-    if (params.idempotencyKey) {
-      const jaFeito = await tx.$queryRaw<{ customer_id: string }[]>`
-        SELECT customer_id FROM customer_ledger
-         WHERE idempotency_key = ${params.idempotencyKey}
-      `;
-      const anterior = jaFeito[0];
-      if (anterior) {
-        const saldos = await tx.$queryRaw<{ balance_cents: number }[]>`
-          SELECT balance_cents FROM customers WHERE id = ${anterior.customer_id}::uuid
-        `;
-        return { saldoCents: Number(saldos[0]?.balance_cents ?? 0) };
-      }
-    }
-
-    const cliente = await saldoTravado(tx, params.customerId);
-    if (cliente.saldoCents >= 0) {
-      throw new ComandaError('pagamento_invalido', 'Este cliente não tem dívida em aberto.');
-    }
-    if (params.amountCents > -cliente.saldoCents) {
-      throw new ComandaError(
-        'pagamento_invalido',
-        'O valor é maior que a dívida. Receber a mais viraria crédito não combinado.',
-      );
-    }
-
-    const sessoes = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM cash_sessions
-       WHERE location_id = ${params.locationId}::uuid AND status = 'open'
-       FOR UPDATE
-    `;
-    const sessao = sessoes[0];
-    if (!sessao) {
-      throw new ComandaError('caixa_fechado', 'Abra o caixa antes de receber.');
-    }
-
-    /**
-     * O pagamento abate **onde a dívida está**, não onde ele foi feito.
-     *
-     * Pagar no balcão de outra loja é normal: o cliente devia na matriz e passou
-     * na filial. Carimbando a linha com a loja do balcão, o bolso da filial
-     * ficava positivo e o limite lá passava a valer duas vezes — repetindo
-     * pegar-e-pagar, o crédito na filial não tinha teto. O dinheiro continua
-     * entrando na gaveta de onde foi pago; a dívida que ele quita é a de quem a
-     * tem, da mais antiga para a mais nova.
-     *
-     * Achado da `/security-review` do bloco 59.
-     */
-    const dividas = await tx.$queryRaw<{ location_id: string | null; total: number }[]>`
-      SELECT location_id, sum(amount_cents)::int AS total
-        FROM customer_ledger
-       WHERE customer_id = ${params.customerId}::uuid
-       GROUP BY location_id
-       HAVING sum(amount_cents) < 0
-       ORDER BY min(created_at)
-    `;
-
-    const partes = dividirPagamentoDeFiado({
-      pagamentoCents: params.amountCents,
-      dividas: dividas.map((d) => ({ unidadeId: d.location_id, saldoCents: Number(d.total) })),
-    });
-
-    let saldo = cliente.saldoCents;
-    let primeira = true;
-    for (const parte of partes) {
-      saldo = await lancarNoExtrato(tx, {
-        customerId: params.customerId,
-        kind: 'payment',
-        amountCents: parte.valorCents,
-        sessionId: sessao.id,
-        note: `Pagamento de dívida (${params.forma})`,
-        staffId: params.staffId,
-        staffName: params.staffName,
-        locationId: parte.unidadeId,
-        /**
-         * Só a primeira parte carrega a chave.
-         *
-         * Um pagamento vira uma linha por loja onde a dívida está (bloco 59), e
-         * a chave existe para **reencontrar o pagamento**, não para descrever
-         * cada parte dele — no índice único, a segunda parte do mesmo pagamento
-         * seria recusada.
-         */
-        ...(primeira && params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
-      });
-      primeira = false;
-    }
-
-    if (params.forma === 'cash') {
-      await tx.$executeRaw`
-        INSERT INTO cash_movements
-          (tenant_id, session_id, kind, amount_cents, reason, created_by, created_by_name)
-        VALUES (
-          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-          ${sessao.id}::uuid, 'debt_payment', ${params.amountCents},
-          'Pagamento de fiado', ${params.staffId}::uuid, ${params.staffName}
-        )
-      `;
-    }
-
-    await audit(tx, {
-      actorId: params.staffId,
-      actorName: params.staffName,
-      action: 'debt.received',
-      entity: 'customer',
-      entityId: params.customerId,
-      before: { saldoCents: cliente.saldoCents },
-      after: { saldoCents: saldo, amountCents: params.amountCents, forma: params.forma },
-    });
-
-    return { saldoCents: saldo };
-  });
-}
-
-export interface Devedor {
-  readonly id: string;
-  readonly name: string;
-  readonly saldoCents: number;
-}
-
-export interface QuemEstaDevendo {
-  /** Os cem primeiros, do que mais deve para o que menos deve. */
-  readonly devedores: readonly Devedor[];
-  /** Quantos devem no total, e não quantos couberam na lista. */
-  readonly quantos: number;
-  /** Quanto a casa tem a receber ao todo, em centavos positivos. */
-  readonly totalCents: number;
-}
-
-/**
- * Quem está devendo, para a tela de cobrança.
- *
- * ## Por que o total não sai da lista (bloco 103)
- *
- * A tela somava as linhas devolvidas e chamava aquilo de **"Total a receber"**.
- * Como a consulta corta em cem, a partir do 101º devedor o cartão no alto da
- * tela afirmava um total que não é o total, e "N pessoas" travava em cem para
- * sempre — sem paginação e sem aviso de corte, então a lista **parecia**
- * completa.
- *
- * E o que ficava de fora era a cauda: a ordenação é pela maior dívida, então o
- * que some é a ponta de dívidas pequenas — a que ninguém percebe faltando. O
- * caderno atrás do balcão é o concorrente declarado desta tela, e uma barbearia
- * de bairro com anos de fiado passa de cem nomes sem esforço.
- *
- * É a convenção escrita: *"Total que a tela promete e a cobrança usa sai do
- * domínio, sem o teto da leitura"*.
- */
-export async function quemEstaDevendo(tenantId: string): Promise<QuemEstaDevendo> {
-  return withTenant(tenantId, async (tx) => {
-    const [linhas, somas] = await Promise.all([
-      tx.$queryRaw<{ id: string; name: string; balance_cents: number }[]>`
-        SELECT id, name, balance_cents FROM customers
-         WHERE balance_cents < 0
-         ORDER BY balance_cents
-         LIMIT 100
-      `,
-      tx.$queryRaw<{ quantos: bigint; total: number | null }[]>`
-        SELECT count(*)::bigint AS quantos, -sum(balance_cents)::int AS total
-          FROM customers WHERE balance_cents < 0
-      `,
-    ]);
-
-    return {
-      devedores: linhas.map((l) => ({ id: l.id, name: l.name, saldoCents: l.balance_cents })),
-      quantos: Number(somas[0]?.quantos ?? 0),
-      totalCents: Number(somas[0]?.total ?? 0),
-    };
-  });
-}
-
-/**
- * O faturamento do dia — a lacuna declarada desde o bloco 11.
- *
- * Três números separados, e a separação é o ponto: **fiado não é receita
- * agora**. Somá-lo ao faturamento é a barbearia comemorar um mês que não
- * aconteceu; deixá-lo de fora sem registrar é esquecer de cobrar.
- */
-export async function faturamentoDoDia(params: {
-  readonly tenantId: string;
-  readonly locationId: string;
-  readonly de: Date;
-  readonly ate: Date;
-}): Promise<{
-  readonly recebidoCents: number;
-  readonly fiadoCents: number;
-  readonly gorjetaCents: number;
-  readonly porForma: readonly { readonly forma: FormaDePagamento; readonly valorCents: number }[];
-  readonly comandas: number;
-}> {
-  return withTenant(params.tenantId, async (tx) => {
-    const porForma = await tx.$queryRaw<{ method: FormaDePagamento; total: bigint }[]>`
-      SELECT p.method, sum(p.amount_cents)::bigint AS total
-        FROM order_payments p
-        JOIN orders o ON o.id = p.order_id
-       WHERE o.location_id = ${params.locationId}::uuid
-         AND o.status = 'paid'
-         AND o.closed_at >= ${params.de} AND o.closed_at < ${params.ate}
-       GROUP BY p.method
-    `;
-
-    const resumo = await tx.$queryRaw<{ comandas: bigint; troco: bigint; gorjeta: bigint }[]>`
-      SELECT count(*)::bigint AS comandas,
-             COALESCE(sum(change_cents), 0)::bigint AS troco,
-             COALESCE(sum(tip_cents), 0)::bigint AS gorjeta
-        FROM orders
-       WHERE location_id = ${params.locationId}::uuid
-         AND status = 'paid'
-         AND closed_at >= ${params.de} AND closed_at < ${params.ate}
-    `;
-
-    const formas = porForma.map((f) => ({ forma: f.method, valorCents: Number(f.total) }));
-    const fiadoCents = formas
-      .filter((f) => f.forma === 'fiado')
-      .reduce((soma, f) => soma + f.valorCents, 0);
-    const bruto = formas
-      .filter((f) => f.forma !== 'fiado')
-      .reduce((soma, f) => soma + f.valorCents, 0);
-
-    return {
-      recebidoCents: bruto - Number(resumo[0]?.troco ?? 0),
-      fiadoCents,
-      gorjetaCents: Number(resumo[0]?.gorjeta ?? 0),
-      porForma: formas,
-      comandas: Number(resumo[0]?.comandas ?? 0),
-    };
-  });
-}

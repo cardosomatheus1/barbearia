@@ -43,7 +43,7 @@ export interface ClienteSegmentado {
 interface LinhaDoCliente {
   customer_id: string;
   visitas: Date[] | null;
-  gasto: number | null;
+  gasto: bigint | null;
   assina: boolean;
 }
 
@@ -69,23 +69,33 @@ export async function segmentosDaBase(
      * negócio na consulta, onde o teste não alcança.
      */
     const linhas = await t.$queryRaw<LinhaDoCliente[]>`
+      WITH visitas AS (
+        SELECT a.customer_id,
+               array_agg(a.service_starts_at ORDER BY a.service_starts_at) AS visitas
+          FROM appointments a
+         WHERE a.status = 'completed'
+         GROUP BY a.customer_id
+      ),
+      gastos AS (
+        SELECT o.customer_id, sum(o.total_cents)::bigint AS gasto
+          FROM orders o
+         WHERE o.status = 'paid' AND o.customer_id IS NOT NULL
+         GROUP BY o.customer_id
+      ),
+      assinaturas AS (
+        SELECT s.customer_id, true AS assina
+          FROM club_subscriptions s
+         WHERE s.status IN ('ativa', 'inadimplente')
+         GROUP BY s.customer_id
+      )
       SELECT c.id AS customer_id,
-             (SELECT array_agg(a.service_starts_at ORDER BY a.service_starts_at)
-                FROM appointments a
-               WHERE a.customer_id = c.id AND a.status = 'completed') AS visitas,
-             -- O total inteiro, **com** a gorjeta, e aqui e de proposito:
-             -- a pergunta e quanto esta pessoa gastou na barbearia, e a gorjeta
-             -- ela gastou. O faturamento da casa e outra pergunta e por isso a
-             -- desconta — nomear cada numero pelo que ele e vale mais que
-             -- fazer os dois baterem.
-             (SELECT sum(o.total_cents)::int
-                FROM orders o
-               WHERE o.customer_id = c.id AND o.status = 'paid') AS gasto,
-             EXISTS (
-               SELECT 1 FROM club_subscriptions s
-                WHERE s.customer_id = c.id AND s.status IN ('ativa', 'inadimplente')
-             ) AS assina
+             v.visitas,
+             g.gasto,
+             coalesce(a.assina, false) AS assina
         FROM customers c
+        LEFT JOIN visitas v ON v.customer_id = c.id
+        LEFT JOIN gastos g ON g.customer_id = c.id
+        LEFT JOIN assinaturas a ON a.customer_id = c.id
        WHERE c.anonymized_at IS NULL
     `;
 
@@ -107,7 +117,13 @@ export async function segmentosDaBase(
           (maior, v) => (maior === null || v.getTime() > maior.getTime() ? v : maior),
           null,
         ),
-        gastoTotalCents: Number(l.gasto ?? 0),
+        gastoTotalCents: (() => {
+          const gasto = Number(l.gasto ?? 0n);
+          if (!Number.isSafeInteger(gasto)) {
+            throw new Error('Gasto acumulado do cliente ultrapassou o intervalo seguro.');
+          }
+          return gasto;
+        })(),
         assinanteAtivo: l.assina,
       };
     });

@@ -10,6 +10,7 @@ import {
   saldoDeFidelidade,
   catalogoDePacotesNaApi,
   pacotesDoClienteNaApi,
+  assinaturaDoClienteNaApi,
   type Comanda,
   type CobrancaDaComandaNaTela,
   type ItemDaComandaNaTela,
@@ -42,6 +43,7 @@ import {
 import { secao } from '../../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../../falha-da-leitura';
+import { BotaoDeEnvio } from '@/app/admin/botao-de-envio';
 
 /**
  * A comanda: do atendimento ao dinheiro.
@@ -87,6 +89,12 @@ const FALHA: Record<string, string> = {
   cobranca_em_curso: 'Já existe um Pix em aberto para esta comanda.',
   cobranca_encerrada: 'Esta cobrança já foi encerrada.',
   comanda_sem_valor: 'Acrescente o que foi feito antes de cobrar.',
+  estorno_em_curso: 'Já existe um estorno em processamento. Aguarde antes de tentar novamente.',
+  fiado_ja_recebido: 'Parte do fiado desta venda já foi paga. Faça o acerto manual antes de estornar.',
+  caixa_sem_saldo_para_estorno: 'Abra um caixa com saldo suficiente antes de devolver o dinheiro.',
+  pacote_vendido_ja_usado: 'Um pacote vendido nesta comanda já foi usado e impede o estorno integral.',
+  pacote_vendido_ja_reembolsado: 'Um pacote vendido nesta comanda já foi reembolsado separadamente.',
+  ja_estornada: 'Esta venda já foi estornada.',
   mfa_required: 'Confirme o código do segundo fator para continuar.',
   forbidden: 'Sua conta não fecha comanda.',
   request_failed: 'Não deu para salvar. Tente de novo.',
@@ -466,6 +474,36 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   })();
 
   /**
+   * Assinatura disponível para um serviço desta comanda. A tela só sugere; o
+   * domínio reconfere estado, cota, cooldown, janela e unidade dentro da
+   * transação de fechamento.
+   */
+  const assinaturaResp =
+    conta.customerId && veSaldo && !fechada
+      ? await assinaturaDoClienteNaApi(token, conta.customerId)
+      : null;
+  const assinatura = assinaturaResp?.ok ? assinaturaResp.dados.assinatura : null;
+  const usoDaAssinatura = (() => {
+    if (!assinatura || (assinatura.estado !== 'ativa' && assinatura.estado !== 'inadimplente')) {
+      return null;
+    }
+    for (const item of servicosDaConta) {
+      if (!item.serviceId) continue;
+      const beneficio = assinatura.beneficios.find((b) => b.serviceId === item.serviceId);
+      if (!beneficio) continue;
+      if (beneficio.quantidade !== null && beneficio.usados >= beneficio.quantidade) continue;
+      if (beneficio.liberaEm && new Date(beneficio.liberaEm).getTime() > Date.now()) continue;
+      return {
+        serviceId: item.serviceId,
+        servico: item.descricao,
+        plano: assinatura.planoNome,
+        valorCents: item.precoUnitarioCents,
+      };
+    }
+    return null;
+  })();
+
+  /**
    * A mesma pergunta que a API faz — e por um bloco ela **não** era.
    *
    * O bloco 30 separou dar desconto de ver faturamento: a rota passou a exigir
@@ -499,6 +537,52 @@ export default async function ComandaPage({ params, searchParams }: Props) {
   const servicos = catalogo.ok ? catalogo.dados.services : [];
   const produtos = vendaveis.ok ? vendaveis.dados.produtos : [];
   const profissionais = catalogo.ok ? catalogo.dados.professionals : [];
+
+  const linhaDePagamento = (i: 0 | 1 | 2) => (
+    <fieldset className="pagamento-linha" key={i}>
+      <legend className="pagamento-linha__legenda">
+        {i === 0 ? 'Pagamento' : 'Mais uma forma (opcional)'}
+      </legend>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`forma${i}`}>
+          Como
+        </label>
+        <select
+          className="ui-field__input"
+          defaultValue={i === 0 ? 'cash' : ''}
+          id={`forma${i}`}
+          name={`forma${i}`}
+        >
+          {i === 0 ? null : <option value="">—</option>}
+          <option value="cash">Dinheiro</option>
+          <option value="pix">Pix</option>
+          <option value="debit">Débito</option>
+          <option value="credit">Crédito</option>
+          <option value="link">Link de pagamento</option>
+          <option value="transfer">Transferência</option>
+          {podeFiar ? <option value="fiado">Fiado</option> : null}
+          {resgate ? <option value="fidelidade">Saldo de fidelidade</option> : null}
+          {usoDePacote ? <option value="pacote">Pacote do cliente</option> : null}
+          {usoDaAssinatura ? <option value="assinatura">Assinatura do cliente</option> : null}
+        </select>
+      </div>
+
+      <div className="ui-field">
+        <label className="ui-field__label" htmlFor={`valor${i}`}>
+          Quanto
+        </label>
+        <input
+          className="ui-field__input"
+          defaultValue={i === 0 ? reaisDoCampo(conta.totalCents) : ''}
+          id={`valor${i}`}
+          inputMode="decimal"
+          name={`valor${i}`}
+          placeholder="0,00"
+        />
+      </div>
+    </fieldset>
+  );
 
   return (
     <main className="ui-container painel__conteudo" {...secao('comanda')}>
@@ -626,6 +710,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
             <summary className="dobra__titulo">Acrescentar item</summary>
             <form action={acaoAdicionarItem} className="formulario">
               <input name="orderId" type="hidden" value={conta.id} />
+              <input name="idempotencyKey" type="hidden" value={randomUUID()} />
               {/* O catálogo num seletor, e o id viaja junto.
 
                   Era um campo de texto com `datalist` de **nomes**: digitar
@@ -733,9 +818,12 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                 </p>
               </div>
 
-              <button className="ui-button ui-button--ghost ui-button--block" type="submit">
+              <BotaoDeEnvio
+                className="ui-button ui-button--ghost ui-button--block"
+                enviando="Acrescentando…"
+              >
                 Acrescentar
-              </button>
+              </BotaoDeEnvio>
             </form>
           </details>
 
@@ -757,15 +845,16 @@ export default async function ComandaPage({ params, searchParams }: Props) {
               {aVenda.map((pacote) => (
                 <form action={acaoVenderPacote} key={pacote.id}>
                   <input name="orderId" type="hidden" value={conta.id} />
+                  <input name="idempotencyKey" type="hidden" value={randomUUID()} />
                   <input name="packageId" type="hidden" value={pacote.id} />
                   <input name="descricao" type="hidden" value={pacote.nome} />
-                  <button
+                  <BotaoDeEnvio
                     className="ui-button ui-button--ghost ui-button--block cobranca__meio"
-                    type="submit"
+                    enviando="Acrescentando pacote…"
                   >
                     {pacote.nome} · {pacote.quantidade} × {pacote.servicoNome} ·{' '}
                     {reais(pacote.precoCents)}
-                  </button>
+                  </BotaoDeEnvio>
                 </form>
               ))}
             </details>
@@ -919,18 +1008,37 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                       na ação daria chave nova a cada envio, e o duplo toque
                       produziria duas cobranças para a mesma conta. */}
                   <input name="idempotencyKey" type="hidden" value={randomUUID()} />
-                  <button
+                  <BotaoDeEnvio
                     className={`ui-button ui-button--block ${
                       meio.valor === 'pix' ? 'ui-button--secondary' : 'ui-button--ghost'
                     } cobranca__meio`}
-                    type="submit"
+                    enviando={`Gerando ${meio.rotulo.toLowerCase()}…`}
                   >
                     {meio.rotulo} · {reais(conta.totalCents)}
-                  </button>
+                  </BotaoDeEnvio>
                 </form>
               ))}
             </section>
           )}
+
+          {conta.totalCents === 0 && !cobrancaDoMomento ? (
+            <section className="cartao-balcao">
+              <h2 className="cartao-balcao__titulo">Cortesia</h2>
+              <p className="cartao-balcao__texto">
+                O total desta comanda é zero. Conclua o atendimento sem registrar cobrança.
+              </p>
+              <form action={acaoFecharComanda} className="formulario">
+                <input name="orderId" type="hidden" value={conta.id} />
+                <input name="idempotencyKey" type="hidden" value={randomUUID()} />
+                <BotaoDeEnvio
+                  className="ui-button ui-button--primary ui-button--block"
+                  enviando="Concluindo…"
+                >
+                  Concluir sem cobrança
+                </BotaoDeEnvio>
+              </form>
+            </section>
+          ) : null}
 
           {cobrancaDoMomento || conta.totalCents <= 0 ? null : (
           <section className="cartao-balcao">
@@ -953,56 +1061,15 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                   chave nova a cada envio, e o duplo toque cobraria duas vezes. */}
               <input name="idempotencyKey" type="hidden" value={randomUUID()} />
 
-              {[0, 1, 2].map((i) => (
-                <fieldset className="pagamento-linha" key={i}>
-                  <legend className="pagamento-linha__legenda">
-                    {i === 0 ? 'Pagamento' : `Mais uma forma (opcional)`}
-                  </legend>
+              {linhaDePagamento(0)}
 
-                  <div className="ui-field">
-                    <label className="ui-field__label" htmlFor={`forma${i}`}>
-                      Como
-                    </label>
-                    <select
-                      className="ui-field__input"
-                      defaultValue={i === 0 ? 'cash' : ''}
-                      id={`forma${i}`}
-                      name={`forma${i}`}
-                    >
-                      {i === 0 ? null : <option value="">—</option>}
-                      <option value="cash">Dinheiro</option>
-                      <option value="pix">Pix</option>
-                      <option value="debit">Débito</option>
-                      <option value="credit">Crédito</option>
-                      <option value="link">Link de pagamento</option>
-                      <option value="transfer">Transferência</option>
-                      {podeFiar ? <option value="fiado">Fiado</option> : null}
-                      {/* Resgate só aparece quando há saldo de verdade: opção
-                          que só produz erro é pior que opção ausente. */}
-                      {resgate ? (
-                        <option value="fidelidade">Saldo de fidelidade</option>
-                      ) : null}
-                      {/* Só quando existe pacote que cobre um serviço desta
-                          comanda: opção que só produz erro é pior que ausente. */}
-                      {usoDePacote ? <option value="pacote">Pacote do cliente</option> : null}
-                    </select>
-                  </div>
-
-                  <div className="ui-field">
-                    <label className="ui-field__label" htmlFor={`valor${i}`}>
-                      Quanto
-                    </label>
-                    <input
-                      className="ui-field__input"
-                      defaultValue={i === 0 ? reaisDoCampo(conta.totalCents) : ''}
-                      id={`valor${i}`}
-                      inputMode="decimal"
-                      name={`valor${i}`}
-                      placeholder="0,00"
-                    />
-                  </div>
-                </fieldset>
-              ))}
+              <details className="pagamentos-extras">
+                <summary className="pagamentos-extras__titulo">Dividir em mais formas</summary>
+                <p className="pagamentos-extras__ajuda">
+                  Abra só quando o cliente pagar a mesma comanda de duas ou três formas.
+                </p>
+                {([1, 2] as const).map(linhaDePagamento)}
+              </details>
 
               {/*
                 O resgate viaja separado do valor (bloco 41).
@@ -1034,14 +1101,31 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                 </>
               ) : null}
 
+              {usoDaAssinatura ? (
+                <>
+                  <input
+                    name="servicoDaAssinatura"
+                    type="hidden"
+                    value={usoDaAssinatura.serviceId}
+                  />
+                  <p className="ui-field__hint">
+                    {usoDaAssinatura.plano} cobre {usoDaAssinatura.servico}. Escolhendo
+                    “Assinatura do cliente”, digite {reais(usoDaAssinatura.valorCents)}.
+                  </p>
+                </>
+              ) : null}
+
               <p className="ui-field__hint">
                 Em dinheiro, digite o que o cliente entregou: o troco sai da gaveta e fica
                 registrado.
               </p>
 
-              <button className="ui-button ui-button--primary ui-button--block" type="submit">
+              <BotaoDeEnvio
+                className="ui-button ui-button--primary ui-button--block"
+                enviando="Registrando pagamento…"
+              >
                 Receber {reais(conta.totalCents)}
-              </button>
+              </BotaoDeEnvio>
             </form>
           </section>
           )}

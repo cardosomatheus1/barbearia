@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Logger, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import {
   revokeStaffSession,
+  revokeStaffSessionByToken,
   signUpOwner,
   StaffError,
   staffLogin,
@@ -32,7 +33,9 @@ import {
 } from '@barbearia/platform';
 import { DomainError, notFound } from '../common/errors.js';
 import { TenantService } from '../tenant/tenant.service.js';
+import { guardarImagemPublica, tentarApagarImagemPublica, TETO_IMAGEM_PUBLICA } from '../media/storage.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
+import { verificarTurnstile } from '../common/turnstile.js';
 import { contaBloqueada, Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { selecaoDoBalcao, unidadeDoBalcao } from './unidade.js';
@@ -61,6 +64,8 @@ const ONBOARDING_STATUS: Record<string, number> = {
   invalid_catalog: 422,
   nothing_to_publish: 409,
   slug_taken: 409,
+  location_not_found: 404,
+  ja_publicada: 409,
 };
 
 function toHttp(error: unknown): never {
@@ -120,12 +125,36 @@ export class StaffAuthController {
   @HttpCode(202)
   async signup(
     @Body(new ZodValidationPipe(signUpSchema))
-    body: { name: string; email: string; password: string; phone: string; businessName: string },
+    body: {
+      name: string;
+      email: string;
+      password: string;
+      phone: string;
+      businessName: string;
+      turnstileToken?: string;
+    },
     @Req() request: Request,
   ) {
     try {
+      const humano = await verificarTurnstile({
+        token: body.turnstileToken,
+        ...(request.ip ? { ip: request.ip } : {}),
+        action: 'signup',
+      });
+      if (!humano.ok) {
+        throw new DomainError(
+          humano.code === 'provedor_indisponivel' ? 'bot_verification_unavailable' : 'bot_verification_failed',
+          humano.code === 'provedor_indisponivel' ? 503 : 403,
+          humano.code === 'provedor_indisponivel'
+            ? 'Não foi possível validar a proteção anti-bot agora.'
+            : 'Não foi possível validar esta tentativa.',
+        );
+      }
+
+      const { turnstileToken: _turnstileToken, ...dadosDaConta } = body;
       const resultado = await signUpOwner({
-        ...body,
+        ...dadosDaConta,
+        issueSession: false,
         ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
         ...(request.ip ? { ip: request.ip } : {}),
       });
@@ -133,7 +162,7 @@ export class StaffAuthController {
       if (resultado.created) {
         // O slug nasceu agora. Se alguém o consultou antes, o cache guarda a
         // ausência e a página responderia 404 por um minuto.
-        this.tenants.forget(resultado.session.slug);
+        this.tenants.forget(resultado.slug);
       }
 
       return { next: 'login' };
@@ -157,10 +186,25 @@ export class StaffAuthController {
       // Depois de conferir a senha, e de propósito: recusar antes diria "esta
       // barbearia está bloqueada" a quem só chutou um e-mail, o que entrega à
       // internet a lista de quem está inadimplente na plataforma.
-      const bloqueio = await this.tenants.bloqueio(sessao.tenantId);
-      if (bloqueio.bloqueada) throw contaBloqueada(bloqueio.motivo);
-
-      return sessao;
+      try {
+        const bloqueio = await this.tenants.bloqueio(sessao.tenantId);
+        if (bloqueio.bloqueada) {
+          throw contaBloqueada(bloqueio.motivo);
+        }
+        return sessao;
+      } catch (erro) {
+        // `staffLogin` precisou provar a senha e já gravou a sessão. Qualquer
+        // falha depois disso — conta bloqueada **ou** indisponibilidade ao ler o
+        // bloqueio — significa que o token não será entregue. A linha também
+        // não pode ficar viva no banco como aparelho fantasma. A limpeza é
+        // best-effort para não esconder o erro original se o próprio banco caiu.
+        try {
+          await revokeStaffSessionByToken(sessao.token);
+        } catch {
+          // O erro original é a informação útil para a borda HTTP.
+        }
+        throw erro;
+      }
     } catch (error) {
       return toHttp(error);
     }
@@ -177,6 +221,8 @@ export class StaffAuthController {
 @Controller('v1/admin')
 @UseGuards(StaffGuard, PermissaoGuard)
 export class OnboardingController {
+  private readonly logger = new Logger(OnboardingController.name);
+
   constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
 
   /**
@@ -189,7 +235,7 @@ export class OnboardingController {
    */
   private async unidadeOuNada(staff: AuthenticatedStaff): Promise<string | undefined> {
     const selecao = await selecaoDoBalcao(staff);
-    return selecao.atual?.id;
+    return selecao.atual?.id ?? selecao.disponiveis.find((u) => u.ativa)?.id;
   }
 
   @Exige()
@@ -339,11 +385,11 @@ export class OnboardingController {
     @Body(new ZodValidationPipe(professionalsSchema))
     body: { professionals: Parameters<typeof saveProfessionals>[2] },
   ) {
-    const estado = await getOnboardingState(staff.tenantId, await this.unidadeOuNada(staff));
-    if (!estado) throw notFound('unknown_tenant', 'Barbearia não encontrada');
-
     try {
-      return await saveProfessionals(staff.tenantId, estado.locationId, body.professionals);
+      // Esta rota grava: seleção inválida não pode cair silenciosamente na
+      // unidade mais antiga, como o helper tolerante das telas de leitura.
+      const local = await unidadeDoBalcao(staff);
+      return await saveProfessionals(staff.tenantId, local.id, body.professionals);
     } catch (error) {
       return toHttp(error);
     }
@@ -414,18 +460,150 @@ export class OnboardingController {
   @Exige('settings.manage')
   @Get('photos')
   async photos(@Staff() staff: AuthenticatedStaff) {
-    const alvos = await getPhotoTargets(staff.tenantId);
+    const local = await unidadeDoBalcao(staff);
+    const alvos = await getPhotoTargets(staff.tenantId, local.id);
     if (!alvos) throw notFound('unknown_tenant', 'Barbearia não encontrada');
     return alvos;
   }
 
+
   /**
-   * Grava os endereços de foto.
+   * Recebe uma imagem já preparada pelo navegador e a hospeda no Barberdock.
    *
-   * `imagemPublica` decide o que entra: só `https`, e nunca `javascript:` ou
-   * `data:`. O que não passa vira `null` em vez de erro — a foto é opcional, e
-   * uma URL ruim num campo não pode impedir de salvar os outros oito. A tela
-   * mostra o campo vazio de volta, que é a resposta honesta.
+   * O arquivo não viaja em JSON/base64: o corpo é o próprio binário. O teto e
+   * a assinatura são conferidos de novo aqui, porque `accept=image/*` e canvas
+   * são conveniência de interface, nunca fronteira de segurança.
+   */
+  @Exige('settings.manage')
+  @Post('photos/upload')
+  async uploadPhoto(
+    @Staff() staff: AuthenticatedStaff,
+    @Req() requisicao: Request,
+    @Query('target') target: string | undefined,
+    @Query('id') id: string | undefined,
+  ) {
+    if (!['cover', 'logo', 'professional', 'service'].includes(target ?? '')) {
+      throw new DomainError('invalid_photo_target', 400, 'Destino da foto inválido');
+    }
+    if ((target === 'professional' || target === 'service') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id ?? '')) {
+      throw new DomainError('invalid_photo_target', 400, 'Destino da foto inválido');
+    }
+
+    const partes: Buffer[] = [];
+    let total = 0;
+    for await (const parte of requisicao) {
+      const bytes = Buffer.isBuffer(parte) ? parte : Buffer.from(parte as Uint8Array);
+      total += bytes.byteLength;
+      if (total > TETO_IMAGEM_PUBLICA) {
+        throw new DomainError('photo_too_large', 413, 'A imagem preparada passa de 3 MB');
+      }
+      partes.push(bytes);
+    }
+    const corpo = Buffer.concat(partes);
+
+    const local = await unidadeDoBalcao(staff);
+    const atuais = await getPhotoTargets(staff.tenantId, local.id);
+    if (!atuais) throw notFound('unknown_tenant', 'Barbearia não encontrada');
+    if (target === 'professional' && !atuais.professionals.some((p) => p.id === id)) {
+      throw notFound('photo_target_not_found', 'Profissional não encontrado');
+    }
+    if (target === 'service' && !atuais.services.some((s) => s.id === id)) {
+      throw notFound('photo_target_not_found', 'Serviço não encontrado');
+    }
+    const anterior = target === 'cover'
+      ? atuais.coverUrl
+      : target === 'logo'
+        ? atuais.logoUrl
+        : target === 'professional'
+          ? atuais.professionals.find((p) => p.id === id)?.photoUrl ?? null
+          : atuais.services.find((s) => s.id === id)?.photoUrl ?? null;
+
+    let guardada: Awaited<ReturnType<typeof guardarImagemPublica>>;
+    try {
+      guardada = await guardarImagemPublica(staff.tenantId, corpo);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      if (code === 'media_tamanho_invalido') {
+        throw new DomainError('photo_too_large', 413, 'A imagem preparada passa de 3 MB');
+      }
+      if (code === 'media_tipo_invalido') {
+        throw new DomainError('invalid_photo_type', 415, 'Envie uma imagem WebP, JPEG ou PNG');
+      }
+      throw error;
+    }
+
+    try {
+      await savePhotos(staff.tenantId, local.id,
+        target === 'cover' ? { coverUrl: guardada.url }
+          : target === 'logo' ? { logoUrl: guardada.url }
+            : target === 'professional' ? { professionals: [{ id: id!, photoUrl: guardada.url }] }
+              : { services: [{ id: id!, photoUrl: guardada.url }] },
+      );
+    } catch (error) {
+      if (!(await tentarApagarImagemPublica(guardada.url, staff.tenantId))) {
+        this.logger.warn('Falha ao limpar mídia nova após erro ao salvar referência; arquivo ficou órfão para reconciliação.');
+      }
+      throw error;
+    }
+
+    // A referência nova já foi commitada. Falha ao remover o arquivo antigo
+    // pode deixar órfão para reconciliação, mas não pode responder 500 como se
+    // a troca tivesse falhado.
+    if (!(await tentarApagarImagemPublica(anterior, staff.tenantId))) {
+      this.logger.warn('Falha ao limpar mídia substituída; referência nova já está válida e o arquivo antigo ficou órfão para reconciliação.');
+    }
+    return { url: guardada.url, bytes: guardada.bytes, contentType: guardada.tipo };
+  }
+
+  @Exige('settings.manage')
+  @Delete('photos/upload')
+  async removeUploadedPhoto(
+    @Staff() staff: AuthenticatedStaff,
+    @Query('target') target: string | undefined,
+    @Query('id') id: string | undefined,
+  ) {
+    if (!['cover', 'logo', 'professional', 'service'].includes(target ?? '')) {
+      throw new DomainError('invalid_photo_target', 400, 'Destino da foto inválido');
+    }
+    if ((target === 'professional' || target === 'service') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id ?? '')) {
+      throw new DomainError('invalid_photo_target', 400, 'Destino da foto inválido');
+    }
+    const local = await unidadeDoBalcao(staff);
+    const atuais = await getPhotoTargets(staff.tenantId, local.id);
+    if (!atuais) throw notFound('unknown_tenant', 'Barbearia não encontrada');
+    if (target === 'professional' && !atuais.professionals.some((p) => p.id === id)) {
+      throw notFound('photo_target_not_found', 'Profissional não encontrado');
+    }
+    if (target === 'service' && !atuais.services.some((s) => s.id === id)) {
+      throw notFound('photo_target_not_found', 'Serviço não encontrado');
+    }
+    const anterior = target === 'cover'
+      ? atuais.coverUrl
+      : target === 'logo'
+        ? atuais.logoUrl
+        : target === 'professional'
+          ? atuais.professionals.find((p) => p.id === id)?.photoUrl ?? null
+          : atuais.services.find((s) => s.id === id)?.photoUrl ?? null;
+
+    await savePhotos(staff.tenantId, local.id,
+      target === 'cover' ? { coverUrl: null }
+        : target === 'logo' ? { logoUrl: null }
+          : target === 'professional' ? { professionals: [{ id: id!, photoUrl: null }] }
+            : { services: [{ id: id!, photoUrl: null }] },
+    );
+    // Banco já é a fonte de verdade; exclusão física é limpeza best-effort.
+    if (!(await tentarApagarImagemPublica(anterior, staff.tenantId))) {
+      this.logger.warn('Falha ao limpar mídia removida; banco já foi atualizado e o arquivo físico ficou órfão para reconciliação.');
+    }
+    return { removed: true };
+  }
+
+  /**
+   * Compatibilidade para remover/substituir fotos já cadastradas.
+   *
+   * Depois do R9 esta rota só aceita caminhos `/media/...` gerados pelo nosso
+   * armazenamento (ou vazio para remover). URL externa nova é recusada: a página
+   * pública não volta a depender silenciosamente de host de terceiro.
    *
    * Campo **ausente** é diferente de campo **vazio**: ausente não é tocado,
    * vazio apaga. Sem essa distinção, salvar a foto de um barbeiro apagaria a
@@ -444,14 +622,18 @@ export class OnboardingController {
     },
   ) {
     const local = await unidadeDoBalcao(staff);
+    const fotoDaCasa = (valor: string): string | null => {
+      const aceita = imagemPublica(valor);
+      return aceita?.startsWith(`/media/${staff.tenantId}/`) ? aceita : null;
+    };
     const resultado = await savePhotos(staff.tenantId, local.id, {
-      ...(body.coverUrl !== undefined ? { coverUrl: imagemPublica(body.coverUrl) } : {}),
-      ...(body.logoUrl !== undefined ? { logoUrl: imagemPublica(body.logoUrl) } : {}),
+      ...(body.coverUrl !== undefined ? { coverUrl: fotoDaCasa(body.coverUrl) } : {}),
+      ...(body.logoUrl !== undefined ? { logoUrl: fotoDaCasa(body.logoUrl) } : {}),
       ...(body.professionals
         ? {
             professionals: body.professionals.map((p) => ({
               id: p.id,
-              photoUrl: imagemPublica(p.photoUrl),
+              photoUrl: fotoDaCasa(p.photoUrl),
             })),
           }
         : {}),
@@ -459,7 +641,7 @@ export class OnboardingController {
         ? {
             services: body.services.map((s) => ({
               id: s.id,
-              photoUrl: imagemPublica(s.photoUrl),
+              photoUrl: fotoDaCasa(s.photoUrl),
             })),
           }
         : {}),
@@ -467,7 +649,7 @@ export class OnboardingController {
 
     // A barbearia precisa saber que a URL foi recusada. Devolver o estado real
     // deixa a tela comparar com o que foi enviado sem inventar mensagem.
-    return { ...resultado, photos: await getPhotoTargets(staff.tenantId) };
+    return { ...resultado, photos: await getPhotoTargets(staff.tenantId, local.id) };
   }
 
   /**
@@ -480,7 +662,8 @@ export class OnboardingController {
   @Exige('settings.manage')
   @Get('policies')
   async policies(@Staff() staff: AuthenticatedStaff) {
-    const politicas = await getPolicies(staff.tenantId);
+    const local = await unidadeDoBalcao(staff);
+    const politicas = await getPolicies(staff.tenantId, local.id);
     if (!politicas) throw notFound('unknown_tenant', 'Barbearia não encontrada');
     return politicas;
   }

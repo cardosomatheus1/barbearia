@@ -1,0 +1,619 @@
+/* ============================================================================
+   Avisos ao cliente.
+
+   Duas seções na mesma página porque quem abre chega por uma de duas perguntas:
+   desligar um aviso, ou descobrir se o cliente foi avisado.
+
+   O histórico é lista, não tabela, e é escolha: as colunas seriam tipo, quem,
+   quando e motivo — quatro, e a última é uma frase. Tabela de quatro colunas com
+   frase na última só cabe em 360px rolando de lado, que é justamente o que não
+   pode acontecer.
+   ============================================================================ */
+
+.avisos__opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.avisos__prazo { display: block; margin-top: var(--space-4); }
+/* Campo de três dígitos não precisa da largura da tela; largura que não
+   corresponde ao conteúdo faz o formulário parecer montado às pressas. */
+.avisos__dias { max-width: 8rem; }
+
+.avisos__titulo {
+  margin: var(--space-8) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.envios { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.envios__item {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.envios__linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.envios__tipo { font-weight: var(--font-weight-medium); }
+.envios__quem {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  /* Nome composto com telefone mascarado estoura 360px; quebrar é melhor que
+     cortar, porque o telefone é o que identifica a linha. */
+  overflow-wrap: anywhere;
+}
+.envios__meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* O estado vem do texto também, nunca só da cor: quem não distingue verde de
+   vermelho lê "Enviado" e "Falhou" do mesmo jeito. */
+.envios__status { font-size: var(--font-size-xs); white-space: nowrap; }
+.envios__status--sent { color: var(--color-success); }
+.envios__status--failed { color: var(--color-danger); }
+.envios__status--skipped { color: var(--color-text-muted); }
+
+.envios__item:has(.envios__status--sent) { border-left-color: var(--color-success); }
+.envios__item:has(.envios__status--failed) { border-left-color: var(--color-danger); }
+
+/* A saída de um estado de erro é ação, não link no meio da frase.
+   Ela existia como `<a>` cru em nove telas — 16px de altura, contra o piso de
+   44. Nenhuma medição pegava, porque o ramo de erro nunca renderiza no caminho
+   feliz; a tela de avisos foi a primeira cujo erro apareceu na régua. */
+.painel__saida { margin-top: var(--space-3); }
+
+/* ============================================================================
+   O dia do barbeiro — a quarta superfície.
+
+   A mais estreita das quatro, e a única que se usa de pé. A recepção precisa de
+   trinta linhas na tela; o barbeiro precisa de **uma pessoa por vez**, legível
+   de relance, com a máquina na outra mão. Densidade aqui seria ruído: ele não
+   decide nada com o que acontece na cadeira do colega.
+
+   Por isso o cartão, e não a tabela. E por isso o intervalo até o próximo é
+   tipografia grande antes de qualquer nome — é o número que decide se dá para
+   sair, e ele é lido de longe.
+   ============================================================================ */
+
+.meu-dia { padding: var(--space-4) var(--space-4) var(--space-8); max-width: 34rem; }
+
+/* A frase do intervalo é o que esta tela existe para dizer — "faltam 20 min
+   para o próximo" —, e por isso ela sempre foi maior que o título. Quando o
+   título do painel subiu para a condensada em 3xl, os dois empataram e a tela
+   passou a ter dois títulos. Ela volta a ser a maior, e ganha a condensada:
+   é número, e número grande aqui é da mesma família do placar. */
+.meu-dia__intervalo {
+  margin: 0 0 var(--space-6);
+  font-family: var(--font-display);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.005em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.meu-dia__bloco { margin-bottom: var(--space-6); }
+.meu-dia__rotulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+
+.atende {
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+/* Uma barra, não um fundo colorido: o destaque precisa sobreviver a quem não
+   distingue as duas cores, e a hierarquia já vem do tamanho e da posição. */
+.atende--agora { border-left: 4px solid var(--color-accent); }
+
+.atende__hora { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.atende__nome {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.atende__servico { margin: var(--space-1) 0 0; color: var(--color-text-muted); }
+.atende__estado {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.atende__acoes { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+
+/* O resto do dia: lista curta, uma linha por pessoa. Rola dentro dela mesma se
+   precisar — nunca leva a página junto. */
+.depois { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.depois__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+.depois__hora { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.depois__nome { font-weight: var(--font-weight-medium); min-width: 0; overflow-wrap: anywhere; }
+/* O serviço passa para a segunda linha no celular: o nome é o que identifica. */
+.depois__servico {
+  grid-column: 2 / -1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+.depois__ficha {
+  grid-row: 1;
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-touch);
+  min-width: var(--size-touch);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
+.meu-dia__resumo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin: var(--space-8) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+.meu-dia__resumo dt {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.meu-dia__resumo dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (min-width: 768px) {
+  /* No notebook a mesma tela ganha o dia inteiro ao lado, em vez de virar
+     outra página: o barbeiro que fica na estação com o laptop vê o próximo e a
+     fila da tarde de uma vez. */
+  .meu-dia { max-width: 60rem; }
+  .meu-dia__intervalo { font-size: var(--font-size-4xl); }
+}
+
+/* ============================================================================
+   A ficha do cliente.
+
+   "A tela que o barbeiro abre antes de atender" (SPEC §4.1). O que evitar vem
+   primeiro apesar de ser o campo menos preenchido: é o único cuja falha
+   machuca.
+   ============================================================================ */
+
+.como-corta {
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-5);
+  min-width: 0;
+}
+.como-corta__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.como-corta__item { display: grid; gap: var(--space-1); min-width: 0; }
+.como-corta__rotulo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.como-corta__valor {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+/* O primeiro item é "o que evitar" quando existe, e é o que precisa ser lido
+   antes de a navalha sair da gaveta. */
+.como-corta__lista li:first-child .como-corta__valor { color: var(--color-danger); }
+
+.como-corta__conversa {
+  margin: var(--space-4) 0 0;
+  font-weight: var(--font-weight-medium);
+}
+.como-corta__nota { margin: var(--space-3) 0 0; overflow-wrap: anywhere; }
+.como-corta__autor {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Recipiente para o que vive dentro dela — a lista de consentimentos pergunta
+   a largura **daqui**, não da janela. E é aqui e não na lista porque um
+   elemento não casa a própria `@container`: com o `container-type` na lista, a
+   consulta nunca acerta e as colunas ficam empilhadas em 1280px. */
+.anotar { margin-bottom: var(--space-6); container-type: inline-size; }
+.anotar__abrir {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.anotar__forma { margin-top: var(--space-4); }
+.anotar__dupla { display: grid; gap: var(--space-4); }
+.anotar__conversa { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+
+.ficha__titulo {
+  margin: var(--space-8) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.visitas { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.visita {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+.visita__quando { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.visita__servico { min-width: 0; overflow-wrap: anywhere; }
+/* Quem faltou entra na lista em texto secundário: a informação é útil, o
+   destaque não. */
+.visita--falhou .visita__servico { color: var(--color-text-muted); }
+.visita__quem {
+  grid-column: 2 / -1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.visita__valor { grid-row: 1; grid-column: 3; font-size: var(--font-size-sm); }
+
+@media (min-width: 480px) {
+  /* Quatro campos curtos em duas colunas assim que houver largura: eles são
+     lidos juntos ("laterais 1, degradê médio"), então ficam juntos. */
+  .anotar__dupla { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============================================================================
+   O convite do barbeiro.
+   ============================================================================ */
+
+.convite { display: grid; gap: var(--space-4); padding-top: var(--space-3); }
+.convite--pronto {
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+.convite__titulo { margin: 0; font-weight: var(--font-weight-semibold); }
+.convite__senha {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  /* Senha lida em voz alta ou copiada de um papel: ela precisa quebrar em vez
+     de estourar a caixa em 360px. */
+  overflow-wrap: anywhere;
+}
+.convite__sobre { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.convite__ja {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.convite__ja a { color: var(--color-accent); }
+
+/* ============================================================================
+   Os números do barbeiro.
+
+   A meta vem antes dos indicadores porque é a única coisa aqui que muda o que
+   ele faz hoje; o resto é leitura. E não há nome de colega em lugar nenhum —
+   a comparação é com o próprio passado, que é decisão da SPEC §4.21 e não
+   omissão de tela.
+   ============================================================================ */
+
+.meta {
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-6);
+  min-width: 0;
+}
+.meta--sem { color: var(--color-text-muted); }
+
+.meta__frase {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  text-wrap: balance;
+}
+.meta__valores { margin: var(--space-4) 0 0; font-size: var(--font-size-xl); }
+.meta__de { color: var(--color-text-muted); font-size: var(--font-size-base); }
+
+/* A barra é decoração do número, nunca o número: o valor e a porcentagem estão
+   escritos acima e abaixo dela, para quem não distingue as cores e para quem
+   usa leitor de tela. */
+.meta__barra {
+  /* Declarado aqui com padrão, e não só no `style` do componente: token que só
+     existe inline invalida a declaração que o usa se o inline faltar — e o
+     `width` da barra viraria `auto`, que é a barra cheia. */
+  --parte: 0%;
+  margin-top: var(--space-3);
+  height: 0.5rem;
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.meta__parte {
+  display: block;
+  width: var(--parte);
+  height: 100%;
+  background: var(--color-success);
+  border-radius: var(--radius-full);
+}
+.meta__parte--atras { background: var(--color-warning); }
+.meta__pe { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.numeros {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+.numero {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.numero__rotulo {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.numero__valor {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  /* Faturamento de cinco dígitos em 360px quebra em vez de estourar a caixa. */
+  overflow-wrap: anywhere;
+}
+.numero__nota {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Três colunas fixas deixavam o quarto cartão sozinho numa linha, com dois
+   terços de vazio ao lado — e o grupo de hoje tem exatamente quatro números.
+   `auto-fit` acomoda os dois grupos: quatro viram 2×2 no tablet e 4×1 no
+   notebook, três continuam em linha. */
+@media (min-width: 768px) {
+  .numeros { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+}
+
+/* ============================================================================
+   Painel, diagnóstico do catálogo e trilha (bloco 21)
+   ============================================================================ */
+
+/* A seta da comparação. Verde e vermelho são reforço, nunca a informação: a
+   frase ao lado ("+12% que na semana passada") diz o mesmo em texto, porque
+   um em doze homens não distingue as duas cores — e barbearia é público de
+   homem. */
+.numero__nota--bom { color: var(--color-success); }
+.numero__nota--ruim { color: var(--color-danger); }
+
+/* O alerta do cardápio vem antes dos números e é um link inteiro, não um texto
+   com "clique aqui": o alvo é a faixa toda, que é o que se acerta com o polegar
+   em pé na rua. */
+.alerta-catalogo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.alerta-catalogo--grave { border-left-color: var(--color-danger); }
+.alerta-catalogo__contagem {
+  flex: none;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+.alerta-catalogo__texto { min-width: 0; font-size: var(--font-size-sm); }
+.alerta-catalogo__seta { margin-left: auto; flex: none; color: var(--color-text-muted); }
+
+.defeitos {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.defeito {
+  /* Declarado com padrão porque o modificador é que troca a cor: sem isto, uma
+     severidade nova sem regra própria apagaria a borda inteira em vez de cair
+     numa cor neutra. */
+  --severidade: var(--color-border-strong);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--severidade);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.defeito--bloqueia { --severidade: var(--color-danger); }
+.defeito--publicacao { --severidade: var(--color-warning); }
+.defeito--aviso { --severidade: var(--color-border-strong); }
+
+.defeito__selo {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.defeito__titulo {
+  margin: var(--space-2) 0 0;
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+.defeito__conserto {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+.defeito__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin-top: var(--space-1);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+/* A trilha é leitura, não tabela: em 360px uma grade de quatro colunas viraria
+   rolagem lateral, e o que a pessoa procura é uma frase — "Ana mudou o papel de
+   Bruno" — não uma linha de planilha. */
+.eventos {
+  list-style: none;
+  margin: var(--space-4) 0 var(--space-5);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.evento {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+.evento__quando {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.evento__frase {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+.evento__mudou {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.evento__mudou li { overflow-wrap: anywhere; }
+
+@media (min-width: 768px) {
+  /* Com espaço, a hora sai da frente da frase e vira coluna — a leitura
+     cronológica fica em uma varredura só. */
+  .evento {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    column-gap: var(--space-4);
+  }
+  .evento__quando { grid-row: 1 / span 2; }
+  .evento__frase { margin-top: 0; }
+}
+
+/* ============================================================================
+   Trazer a base do sistema antigo (bloco 22)
+   ============================================================================ */
+
+/* A tela é uma sequência — enviar, conferir, aplicar —, e o espaço entre os
+   blocos é o que faz a sequência ser lida como sequência em vez de como um
+   formulário longo. */
+.importar__bloco {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+}
+.importar__bloco:first-of-type { border-top: none; padding-top: 0; }
+
+.importar__form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  max-width: 32rem;
+}
+
+/* O seletor de arquivo do navegador tem altura própria e ignora `min-height`
+   no input. O toque é o botão que ele desenha, então a folga vem do padding —
+   sem isso o alvo fica em 32px no Android.
+
+   A largura é o outro problema, e foi a medição que pegou: `input[type=file]`
+   dimensiona pelo **nome do arquivo escolhido**, e um nome real
+   ("clientes-agenda-antiga-exportacao-final.csv") estoura os 360px levando a
+   página junto. `width` fixo em 100% e `min-width: 0` no item da grade — sem o
+   segundo, o item de grid recusa encolher abaixo do conteúdo e o primeiro não
+   adianta. */
+.importar__form .ui-field { min-width: 0; }
+.importar__form input[type='file'] {
+  padding: var(--space-3);
+  line-height: 1.6;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+/* O botão nativo do navegador, vestido (bloco 104).
+
+   Sem esta regra o Chromium desenha "Choose File" ao lado de "No file chosen" —
+   cinza claro, quadrado, em inglês — no meio de um painel escuro inteiramente
+   em português. É o momento em que a tela deixa de parecer produto, e o único
+   controle assim que restava.
+
+   Os 44px vêm do alvo de toque: o botão é o que a pessoa aperta, não o campo. */
+.importar__form input[type='file']::file-selector-button {
+  min-height: var(--size-touch);
+  margin-inline-end: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+

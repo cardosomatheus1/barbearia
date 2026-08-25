@@ -87,9 +87,11 @@ export class RecadoController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       await assumirRecado({
         tenantId: staff.tenantId,
+        locationId: local.id,
         recadoId: id,
         responsavelId: staff.staffUserId,
         ator: { id: staff.staffUserId, name: staff.name },
@@ -107,9 +109,11 @@ export class RecadoController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       await assumirRecado({
         tenantId: staff.tenantId,
+        locationId: local.id,
         recadoId: id,
         responsavelId: null,
         ator: { id: staff.staffUserId, name: staff.name },
@@ -127,9 +131,11 @@ export class RecadoController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(respostaAoRecadoSchema)) body: { resposta: string },
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       return await responderRecado({
         tenantId: staff.tenantId,
+        locationId: local.id,
         recadoId: id,
         resposta: body.resposta,
         ator: { id: staff.staffUserId, name: staff.name },
@@ -145,9 +151,11 @@ export class RecadoController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       await encerrarRecado({
         tenantId: staff.tenantId,
+        locationId: local.id,
         recadoId: id,
         ator: { id: staff.staffUserId, name: staff.name },
       });

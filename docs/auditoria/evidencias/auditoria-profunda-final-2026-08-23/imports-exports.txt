@@ -1,0 +1,9 @@
+{
+  "files": 739,
+  "internalImportDeclarations": 2423,
+  "namedOrDefaultImports": 7257,
+  "missingPaths": 0,
+  "missingSymbols": 0,
+  "pathsMissing": [],
+  "symbolsMissing": []
+}

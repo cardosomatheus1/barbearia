@@ -13,6 +13,7 @@ import {
 import { AuthController, SessionController } from './auth/auth.controller.js';
 import { OnboardingController, StaffAuthController } from './admin/admin.controller.js';
 import { BoardController } from './admin/board.controller.js';
+import { ClientesController } from './admin/clientes.controller.js';
 import { CatalogoController } from './admin/catalogo.controller.js';
 import { AgendaController } from './admin/agenda.controller.js';
 import { FilaController } from './admin/fila.controller.js';
@@ -79,17 +80,19 @@ import { PermissaoGuard } from './admin/permissao.guard.js';
 import { StaffGuard } from './admin/staff.guard.js';
 import { CustomerGuard } from './auth/customer.guard.js';
 import { MESSAGING_PROVIDER } from './auth/messaging.token.js';
-import { ConsoleMessagingProvider } from '@barbearia/identity';
+import { identityMessagingProviderFromEnv } from '@barbearia/identity';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { HealthController } from './common/health.controller.js';
 import { LogInterceptor } from './common/log.interceptor.js';
 import { SuporteInterceptor } from './admin/suporte.interceptor.js';
 import { TenantService } from './tenant/tenant.service.js';
+import { MediaController } from './media/media.controller.js';
 
 @Module({
   imports: [ThrottlerModule.forRoot(throttlerConfig())],
   controllers: [
     HealthController,
+    MediaController,
     BookingController,
     AgenteController,
     AgenteDoClienteController,
@@ -99,6 +102,7 @@ import { TenantService } from './tenant/tenant.service.js';
     StaffAuthController,
     OnboardingController,
     BoardController,
+    ClientesController,
     CatalogoController,
     FilaController,
     AgendaController,
@@ -166,9 +170,10 @@ import { TenantService } from './tenant/tenant.service.js';
     CustomerGuard,
     PlataformaGuard,
     ChaveGuard,
-    // Provedor real do WhatsApp entra no bloco 55. Até lá, o de console — que
-    // nunca imprime o código.
-    { provide: MESSAGING_PROVIDER, useClass: ConsoleMessagingProvider },
+    // Identidade usa um canal próprio da plataforma: em desenvolvimento o
+    // console não revela credenciais; em produção o factory exige a WABA Meta
+    // central e falha no startup se ela não estiver configurada.
+    { provide: MESSAGING_PROVIDER, useFactory: () => identityMessagingProviderFromEnv() },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: LogInterceptor },

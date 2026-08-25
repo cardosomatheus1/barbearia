@@ -361,6 +361,20 @@ describeIfDb('agenda e exceções', () => {
     expect(entrada).toMatchObject({ start: '10:00', end: '10:30', occupiedEnd: '10:40' });
     expect(entrada?.customerName).toBe('Carlos Souza');
     expect(entrada?.services).toEqual(['Cabelo']);
+    expect(days[0]?.workingDays.find((j) => j.professionalId === RUAN)).toMatchObject({
+      working: [{ start: '09:00', end: '18:00' }],
+      breaks: [],
+      closedBy: null,
+    });
+  });
+
+  it('a jornada visual recorta o bloqueio com a mesma regra da disponibilidade', async () => {
+    await bloquear();
+    const { days } = await agenda();
+    expect(days[0]?.workingDays.find((j) => j.professionalId === RUAN)?.working).toEqual([
+      { start: '09:00', end: '14:00' },
+      { start: '15:00', end: '18:00' },
+    ]);
   });
 
   it('a semana traz sete dias, com e sem movimento', async () => {
@@ -444,6 +458,27 @@ describeIfDb('agenda e exceções', () => {
 
     const { days } = await agenda();
     expect(days[0]?.entries).toEqual([]);
+  });
+
+  it('bloqueio e nova reserva concorrentes não ignoram um ao outro', async () => {
+    const resultados = await Promise.allSettled([
+      marcar('14:00'),
+      bloquear({ confirmarConflitos: false }),
+    ]);
+
+    const reserva = resultados[0];
+    const excecao = resultados[1];
+    if (reserva.status === 'fulfilled') {
+      expect(excecao.status).toBe('fulfilled');
+      if (excecao.status === 'fulfilled') {
+        expect(excecao.value.saved).toBe(false);
+        expect(excecao.value.conflitos).toHaveLength(1);
+      }
+    } else {
+      expect(reserva.reason).toMatchObject({ code: 'slot_not_available' });
+      expect(excecao.status).toBe('fulfilled');
+      if (excecao.status === 'fulfilled') expect(excecao.value.saved).toBe(true);
+    }
   });
 
   // -- remover ----------------------------------------------------------------

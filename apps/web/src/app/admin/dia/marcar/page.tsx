@@ -108,6 +108,7 @@ export default async function MarcarPage({ searchParams }: Props) {
   const profissional = first(query['p']);
   const data = first(query['d']) ?? hoje;
   const hora = first(query['h']);
+  const horaSugerida = first(query['ah']);
   const busca = (first(query['q']) ?? '').trim();
   const escolhido = first(query['c']);
   const nomeEscolhido = first(query['cn']);
@@ -123,6 +124,7 @@ export default async function MarcarPage({ searchParams }: Props) {
       p: profissional,
       d: data === hoje ? undefined : data,
       h: hora,
+      ah: horaSugerida,
       q: busca || undefined,
       c: escolhido,
       cn: nomeEscolhido,
@@ -212,7 +214,7 @@ export default async function MarcarPage({ searchParams }: Props) {
 
           {escolhidos.length > 0 ? (
             <div className="ui-sticky-action">
-              <a className="ui-button ui-button--primary ui-button--block" href={link({ e: 'b' })}>
+              <a className="ui-button ui-button--primary ui-button--block" href={link({ e: profissional ? 'c' : 'b' })}>
                 Continuar · {duracao} min · R$ {dinheiro(total)}
               </a>
             </div>
@@ -253,11 +255,20 @@ export default async function MarcarPage({ searchParams }: Props) {
           <h2 className="marcar__pergunta">Que horas?</h2>
           <Dias base={hoje} atual={data} href={(d) => link({ d, e: 'c', h: undefined })} />
 
+          {horaSugerida ? (
+            <p className="marcar__sugestao">
+              Você veio da agenda em <strong className="tabular">{horaSugerida}</strong>.
+              {doDia?.slots.some((slot) => slot.start === horaSugerida && (!profissional || slot.professionalId === profissional))
+                ? ' Esse horário comporta o serviço escolhido.'
+                : ' O serviço escolhido não cabe exatamente ali; escolha um dos horários disponíveis.'}
+            </p>
+          ) : null}
+
           {doDia && doDia.slots.length > 0 ? (
             <ul className="horas">
               {doDia.slots.map((slot) => (
                 <li key={`${slot.professionalId}-${slot.start}`}>
-                  <a className="hora" href={link({ h: slot.start, p: slot.professionalId, e: 'd' })}>
+                  <a className={`hora ${horaSugerida === slot.start ? 'hora--sugerida' : ''}`} href={link({ h: slot.start, p: slot.professionalId, e: 'd' })}>
                     <span className="hora__valor tabular">{slot.start}</span>
                     {/* O preço daquele horário, como na tela do cliente.
 

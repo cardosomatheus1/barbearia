@@ -453,7 +453,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
               <p className="dar-nota__quem">
                 {atendimento.servico ?? 'Atendimento'}
                 {atendimento.profissional ? ` com ${atendimento.profissional}` : ''} ·{' '}
-                {new Date(atendimento.quando).toLocaleDateString('pt-BR')}
+                {new Date(atendimento.quando).toLocaleDateString('pt-BR', { timeZone: profile.location.timezone })}
               </p>
 
               <fieldset className="dar-nota__estrelas">
@@ -641,7 +641,7 @@ export default async function MeusAgendamentosPage({ params, searchParams }: Pro
                 </div>
                 {pacote.venceEm ? (
                   <p className="pacote-cliente__frase">
-                    Vale até {new Date(pacote.venceEm).toLocaleDateString('pt-BR')}.
+                    Vale até {new Date(pacote.venceEm).toLocaleDateString('pt-BR', { timeZone: profile.location.timezone })}.
                   </p>
                 ) : null}
               </div>

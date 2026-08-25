@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   chaveDoAdquirente,
+  chaveDoClube,
   chaveDoEstorno,
+  FakeCobrancaDoClubeProvider,
   FakePaymentProvider,
   type PedidoDePagamento,
+  type PedidoDoClube,
 } from './pagamento.js';
 
 /**
@@ -110,5 +113,36 @@ describe('o provedor de mentira', () => {
     expect(pix.url).toBeUndefined();
     expect(link.url).toContain('pay.exemplo');
     expect(link.pixCopiaECola).toBeUndefined();
+  });
+});
+
+
+const PEDIDO_CLUBE: PedidoDoClube = {
+  tenantId: '11111111-1111-1111-1111-111111111111',
+  faturaId: '44444444-4444-4444-4444-444444444444',
+  token: 'tok_fake',
+  valorCents: 9900,
+  tentativa: 1,
+  descricao: 'Plano mensal',
+  idempotencyKey: 'clube:11111111-1111-1111-1111-111111111111:44444444-4444-4444-4444-444444444444:1',
+};
+
+describe('idempotência da cobrança do clube', () => {
+  it('escopa a tentativa por tenant, fatura e número da tentativa', () => {
+    expect(chaveDoClube(PEDIDO_CLUBE)).toBe(PEDIDO_CLUBE.idempotencyKey);
+    expect(chaveDoClube({ ...PEDIDO_CLUBE, tentativa: 2 })).not.toBe(PEDIDO_CLUBE.idempotencyKey);
+    expect(chaveDoClube({ ...PEDIDO_CLUBE, tenantId: '99999999-9999-9999-9999-999999999999' }))
+      .not.toBe(PEDIDO_CLUBE.idempotencyKey);
+  });
+
+  it('o fake deduplica a mesma tentativa como o provider real deve fazer', async () => {
+    const fake = new FakeCobrancaDoClubeProvider();
+    fake.proximoResultado = { pago: true, cobrancaId: 'charge_1' };
+    const primeira = await fake.cobrar(PEDIDO_CLUBE);
+    fake.proximoResultado = { pago: true, cobrancaId: 'charge_2' };
+    const segunda = await fake.cobrar({ ...PEDIDO_CLUBE });
+
+    expect(segunda).toEqual(primeira);
+    expect(fake.pedidos).toHaveLength(1);
   });
 });

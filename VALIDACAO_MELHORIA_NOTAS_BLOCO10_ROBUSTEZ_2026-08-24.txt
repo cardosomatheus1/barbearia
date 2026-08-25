@@ -1,0 +1,26 @@
+BARBERDOCK — BLOCO 10 — ROBUSTEZ OPERACIONAL — 2026-08-24
+
+VEREDITO
+- Feedback/bloqueio de submit em fluxos críticos do admin: OK.
+- R5 preservado: superfície pública continua server-only.
+- Item da comanda idempotente ponta a ponta: IMPLEMENTADO.
+- Migração nova: 0109_item_da_comanda_idempotente.sql.
+- Replay/conflito de item: testes de integração ADICIONADOS; runtime PostgreSQL PENDENTE.
+- Cliente admin: timeout + indisponibilidade recuperáveis.
+- Cliente público: degradação uniforme por fetchPublicoSeguro.
+- Proxy de mídia: 503 transporte / 504 timeout.
+- Error boundary admin com orientação contra repetição cega.
+
+VALIDAÇÃO
+- verificar-*.mjs: 43 PASS / 0 FAIL / 1 SKIP (Vitest ausente).
+- scripts/*.test.mjs executáveis sem Vitest: 11 PASS / 0 FAIL.
+- robustez — mutações negativas: 8/8.
+- runtime transporte admin: 2/2.
+- runtime API pública: 2/2.
+- BotaoDeEnvio typecheck isolado: OK.
+- sintaxe TS ampla Web/API/Finance: 379/379.
+- R5 estrutural: OK.
+- total de migrações agora: 109.
+
+PENDÊNCIA
+- PostgreSQL real para executar a 0109 e os novos testes de idempotência, além do portão DB/RLS/E2E já pendente.

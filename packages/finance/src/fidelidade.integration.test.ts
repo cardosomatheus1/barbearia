@@ -238,6 +238,7 @@ describeIfDb('fidelidade', () => {
 
   async function comSaldo(quantidade: number): Promise<void> {
     await ajustarSaldo({
+        idempotencyKey: 'audit-test-ajustarSaldo-1',
       tenantId: TENANT,
       customerId: CARLOS,
       quantidade,
@@ -397,7 +398,8 @@ describeIfDb('fidelidade', () => {
     // perguntar — e ele cria valor gastável no balcão.
     await ligar({ modo: 'pontos' });
     await expect(
-      ajustarSaldo({ tenantId: TENANT, customerId: CARLOS, quantidade: 100, motivo: 'oi', ator }),
+      ajustarSaldo({
+        idempotencyKey: 'audit-test-ajustarSaldo-2', tenantId: TENANT, customerId: CARLOS, quantidade: 100, motivo: 'oi', ator }),
     ).rejects.toMatchObject({ code: 'motivo_curto' });
   });
 
@@ -408,6 +410,7 @@ describeIfDb('fidelidade', () => {
     await comSaldo(50);
     await expect(
       ajustarSaldo({
+        idempotencyKey: 'audit-test-ajustarSaldo-3',
         tenantId: TENANT, customerId: CARLOS, quantidade: -100,
         motivo: 'correcao de lancamento duplicado', ator, agora: AGORA,
       }),

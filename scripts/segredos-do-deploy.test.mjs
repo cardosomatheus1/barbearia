@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
  * ## Por que executar, e não ler o texto
  *
  * Uma guarda que procurasse `|| true` no fonte estaria conferindo a **forma do
- * conserto**, não a propriedade. A propriedade é: *num arquivo vazio, os oito
+ * conserto**, não a propriedade. A propriedade é: *num arquivo vazio, os obrigatórios
  * saem preenchidos; numa segunda passada, saem idênticos*. Só rodando dá para
  * afirmar isso — e é rodando que se pega o próximo pipeline frágil, que não vai
  * se parecer com este.
@@ -41,6 +41,8 @@ const OBRIGATORIOS = [
   'MFA_SECRET_KEY',
   'WEBHOOK_SECRET_KEY',
   'WHATSAPP_TOKEN_KEY',
+  'KYC_INTENT_HMAC_SECRET',
+  'BACKUP_ENCRYPTION_KEY',
 ];
 
 function rodar(arquivo, dominio = 'barbearia.example', email = 'dono@barbearia.example') {
@@ -58,7 +60,7 @@ function lerEnv(arquivo) {
 }
 
 describe('os segredos do deploy', () => {
-  it('num .env vazio, gera os oito — e é este o caso que quebrava', () => {
+  it('num .env vazio, gera todos os segredos obrigatórios — e é este o caso que quebrava', () => {
     const pasta = mkdtempSync(join(tmpdir(), 'segredos-'));
     const arquivo = join(pasta, '.env');
     writeFileSync(arquivo, '');
@@ -93,6 +95,7 @@ describe('os segredos do deploy', () => {
     expect(Buffer.from(env['MFA_SECRET_KEY'], 'base64')).toHaveLength(32);
     expect(Buffer.from(env['WEBHOOK_SECRET_KEY'], 'base64')).toHaveLength(32);
     expect(Buffer.from(env['WHATSAPP_TOKEN_KEY'], 'base64')).toHaveLength(32);
+    expect(Buffer.from(env['BACKUP_ENCRYPTION_KEY'], 'base64')).toHaveLength(32);
   });
 
   it('rodar de novo preserva tudo — trocar um deles tranca a barbearia para fora', () => {

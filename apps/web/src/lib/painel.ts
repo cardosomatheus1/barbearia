@@ -59,6 +59,43 @@ export function exigirRecurso(estado: EstadoOnboarding, recurso: string): void {
   if (!recursoNaTela(estado, recurso)) notFound();
 }
 
+
+/**
+ * Porta inicial depois do login.
+ *
+ * O cadastro incompleto continua tendo precedência: mandar um dono que ainda
+ * não publicou a casa para um painel vazio seria trocar orientação por um
+ * atalho. Depois disso, o destino é o trabalho do papel — barbeiro no próprio
+ * dia, recepção/gerência em Hoje, e quem tem escopo de dono no Painel.
+ *
+ * O papel é o sinal principal, mas permissões entram na decisão porque elas são
+ * editáveis. Um gerente que recebeu explicitamente o mesmo escopo de gestão do
+ * dono não deve ser forçado para uma casa operacional que já não representa o
+ * trabalho dele.
+ */
+export function destinoInicialDoPainel(estado: {
+  readonly publishedAt: string | null;
+  readonly staff: { readonly role: string; readonly permissions: readonly string[] };
+}): string {
+  if (estado.staff.role === 'professional') return '/admin/meu-dia';
+
+  if (estado.publishedAt === null && estado.staff.permissions.includes('settings.manage')) {
+    return '/admin/onboarding';
+  }
+
+  const temEscopoDeDono =
+    estado.staff.role === 'owner' ||
+    ['reports.operational', 'finance.view_profit', 'team.manage'].every((p) =>
+      estado.staff.permissions.includes(p),
+    );
+
+  if (temEscopoDeDono && estado.staff.permissions.includes('reports.operational')) {
+    return '/admin/painel';
+  }
+
+  return '/admin/dia';
+}
+
 /**
  * Onde cada papel começa o dia.
  *

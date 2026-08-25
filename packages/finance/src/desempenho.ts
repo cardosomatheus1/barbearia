@@ -7,6 +7,8 @@ import {
   type ProgressoDaMeta,
 } from '@barbearia/core';
 
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
+
 /**
  * Os números do barbeiro, do banco para a tela — SPEC §4.21.
  *
@@ -188,7 +190,7 @@ async function totais(
 
 function daLinha(linha: LinhaDeTotais): DesempenhoDoMes {
   const contados = {
-    faturamentoCents: Number(linha.faturamento_cents ?? 0),
+    faturamentoCents: inteiroSeguroDoBanco(linha.faturamento_cents, 'faturamento do profissional'),
     atendimentos: Number(linha.atendimentos),
     saiuComHorario: Number(linha.saiu_com_horario),
   };
@@ -199,7 +201,7 @@ function daLinha(linha: LinhaDeTotais): DesempenhoDoMes {
     ticketMedioCents: ticketMedio(contados),
     taxaDeRetorno: taxaDeRetorno(contados),
     produtosVendidos: Number(linha.produtos),
-    gorjetaCents: Number(linha.gorjeta_cents ?? 0n),
+    gorjetaCents: inteiroSeguroDoBanco(linha.gorjeta_cents, 'gorjeta do profissional'),
   };
 }
 

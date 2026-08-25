@@ -1,0 +1,28 @@
+BARBERDOCK — AUDITORIA POR BLOCOS — BLOCO 1 IDENTIDADE — 2026-08-24
+
+ACHADOS CORRIGIDOS
+- OTP 6 dígitos: SHA-256 puro -> HMAC-SHA256 + OTP_PEPPER.
+- Cadastro público: não cria mais sessão cujo token é descartado.
+- Login recusado após autenticação: sessão emitida é revogada best-effort.
+- Concorrência de signup: advisory lock por e-mail e raiz de slug.
+- Troca de unidade: session_id + staff_user_id.
+- MFA de sessão: session_id + staff_user_id.
+- Autorização admin: guarda global, só signup/login públicos.
+
+VALIDAÇÃO
+- Guardas diretos aplicáveis: 40/40 PASS.
+- Testes Node autônomos: 95/95 PASS.
+- Identidade guard: PASS.
+- Identidade regressões artificiais: todas detectadas.
+- Preflight produção: 17/17 PASS.
+- TS sintático alterado: 5/5 PASS.
+- Shell: OK.
+- YAML: 2/2 OK.
+- Secret scan snapshot: limpo.
+- SQL raw-unsafe produção: 0.
+
+PENDÊNCIA EXTERNA
+- Testes PostgreSQL/RLS/concorrência real não executam neste runtime.
+
+POLÍTICA EXPLÍCITA
+- Sessão de gestor continua 14 dias; documentação corrigida. Reduzir TTL é decisão de produto/segurança, não correção escondida.

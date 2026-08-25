@@ -30,12 +30,13 @@ function semComentarios(fonte: string): string {
   return fonte.replace(/\{?\/\*[\s\S]*?\*\/\}?/g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
-const acoes = semComentarios(readFileSync(join(RAIZ, 'acoes.ts'), 'utf8'));
+const CAMINHO_DAS_ACOES = 'acoes/crescimento-plataforma.ts';
+const acoes = semComentarios(readFileSync(join(RAIZ, CAMINHO_DAS_ACOES), 'utf8'));
 
 /** Os campos que uma ação guarda, lidos da própria constante. */
 function camposDaAcao(constante: string): readonly string[] {
   const bloco = new RegExp(`const ${constante} = \\[([\\s\\S]*?)\\] as const;`).exec(acoes);
-  if (!bloco?.[1]) throw new Error(`não achei ${constante} em acoes.ts`);
+  if (!bloco?.[1]) throw new Error(`não achei ${constante} em ${CAMINHO_DAS_ACOES}`);
   return [...bloco[1].matchAll(/'([^']+)'/g)].map((m) => m[1] as string);
 }
 

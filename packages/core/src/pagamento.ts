@@ -117,6 +117,13 @@ export interface PaymentProvider {
    */
   cancelar(pagamentoId: string): Promise<void>;
   /** Devolve o dinheiro. Total quando `valorCents` não vem. */
+  /**
+   * Deve ser idempotente para o par `pagamentoId + valorCents`.
+   *
+   * Uma queda pode acontecer depois de o adquirente mover o dinheiro e antes
+   * de o Barberdock persistir a resposta. Repetir a mesma chamada precisa
+   * reencontrar o mesmo refund, nunca criar uma segunda devolução.
+   */
   estornar(pagamentoId: string, valorCents?: number): Promise<{ readonly estornoId: string }>;
 }
 
@@ -130,7 +137,7 @@ export interface PaymentProvider {
  */
 export class FakePaymentProvider implements PaymentProvider {
   readonly cobrancas: PedidoDePagamento[] = [];
-  readonly estornos: { pagamentoId: string; valorCents?: number | undefined }[] = [];
+  readonly estornos: { pagamentoId: string; valorCents?: number | undefined; estornoId: string }[] = [];
   proximoEstado: EstadoDoPagamento = 'aguardando';
   /**
    * O vencimento que este fake devolve, **posto por quem o usa**.
@@ -190,8 +197,17 @@ export class FakePaymentProvider implements PaymentProvider {
     pagamentoId: string,
     valorCents?: number,
   ): Promise<{ readonly estornoId: string }> {
-    this.estornos.push({ pagamentoId, valorCents });
-    return { estornoId: `fake_refund_${this.estornos.length}` };
+    // O fake preserva a mesma idempotência exigida do adquirente real. Uma
+    // resposta perdida não pode transformar a repetição do mesmo estorno em
+    // uma segunda devolução de dinheiro.
+    const anterior = this.estornos.find(
+      (e) => e.pagamentoId === pagamentoId && e.valorCents === valorCents,
+    );
+    if (anterior) return { estornoId: anterior.estornoId };
+
+    const estornoId = `fake_refund_${this.estornos.length + 1}`;
+    this.estornos.push({ pagamentoId, valorCents, estornoId });
+    return { estornoId };
   }
 
   clear(): void {
@@ -247,6 +263,8 @@ export interface PedidoDoClube {
   /** Cobranças já feitas nesta fatura, contando a do vencimento. */
   readonly tentativa: number;
   readonly descricao: string;
+  /** Chave final que o provider DEVE repassar ao adquirente para deduplicar a tentativa. */
+  readonly idempotencyKey: string;
 }
 
 export type ResultadoDoClube =
@@ -275,7 +293,9 @@ export type ResultadoDoClube =
  * a régua veria o cartão falhar para sempre, mesmo depois de o cliente pagar a
  * fatura dele.
  */
-export function chaveDoClube(pedido: PedidoDoClube): string {
+export function chaveDoClube(
+  pedido: Pick<PedidoDoClube, 'tenantId' | 'faturaId' | 'tentativa'>,
+): string {
   return `clube:${pedido.tenantId}:${pedido.faturaId}:${pedido.tentativa}`;
 }
 
@@ -290,6 +310,7 @@ export function chaveDoClube(pedido: PedidoDoClube): string {
  */
 export class FakeCobrancaDoClubeProvider implements CobrancaDoClubeProvider {
   readonly pedidos: PedidoDoClube[] = [];
+  private readonly respostasPorChave = new Map<string, ResultadoDoClube>();
   proximoResultado: ResultadoDoClube = {
     pago: false,
     motivo: 'sem adquirente configurado',
@@ -297,12 +318,16 @@ export class FakeCobrancaDoClubeProvider implements CobrancaDoClubeProvider {
   };
 
   async cobrar(pedido: PedidoDoClube): Promise<ResultadoDoClube> {
+    const anterior = this.respostasPorChave.get(pedido.idempotencyKey);
+    if (anterior) return anterior;
     this.pedidos.push(pedido);
+    this.respostasPorChave.set(pedido.idempotencyKey, this.proximoResultado);
     return this.proximoResultado;
   }
 
   clear(): void {
     this.pedidos.length = 0;
+    this.respostasPorChave.clear();
     this.proximoResultado = {
       pago: false,
       motivo: 'sem adquirente configurado',
@@ -346,6 +371,12 @@ export interface PedidoDeRecebedor {
   readonly professionalId: string;
   readonly nome: string;
   /**
+   * Obrigatória no contrato externo: se o adquirente criar o recebedor e a
+   * resposta se perder, repetir a mesma intenção precisa devolver o mesmo id,
+   * nunca abrir um segundo cadastro/KYC para os mesmos dados.
+   */
+  readonly idempotencyKey: string;
+  /**
    * O documento e a conta viajam para o adquirente e **não** são guardados aqui.
    *
    * Quem tem obrigação regulatória de guardá-los é ele. Deste lado fica a
@@ -386,7 +417,7 @@ export interface PedidoDeRepasse {
 
 export type ResultadoDoRepasse =
   | { readonly ok: true; readonly transferenciaId: string }
-  | { readonly ok: false; readonly codigo: string; readonly motivo: string };
+  | { readonly ok: false; readonly codigo: string; readonly motivo: string; readonly definitiva: boolean };
 
 /**
  * A chave que vai ao adquirente, escopada aqui como as outras três.
@@ -418,21 +449,28 @@ export function chaveDoRepasse(pedido: PedidoDeRepasse): string {
 export class FakeSplitProvider implements SplitProvider {
   readonly recebedores: PedidoDeRecebedor[] = [];
   readonly repasses: PedidoDeRepasse[] = [];
+  private readonly recebedoresPorChave = new Map<string, RecebedorCriado>();
   proximoEstadoDoRecebedor: EstadoDoRecebedor = 'pendente';
   proximoResultado: ResultadoDoRepasse = {
     ok: false,
     codigo: 'sem_adquirente',
     motivo: 'sem adquirente configurado',
+    definitiva: true,
   };
+  private readonly repassesPorChave = new Map<string, ResultadoDoRepasse>();
   private contador = 0;
 
   async cadastrarRecebedor(pedido: PedidoDeRecebedor): Promise<RecebedorCriado> {
+    const existente = this.recebedoresPorChave.get(pedido.idempotencyKey);
+    if (existente) return existente;
     this.recebedores.push(pedido);
     this.contador += 1;
-    return {
+    const criado: RecebedorCriado = {
       recebedorId: `fake_rec_${this.contador}`,
       estado: this.proximoEstadoDoRecebedor,
     };
+    this.recebedoresPorChave.set(pedido.idempotencyKey, criado);
+    return criado;
   }
 
   async consultarRecebedor(): Promise<EstadoDoRecebedor> {
@@ -440,7 +478,10 @@ export class FakeSplitProvider implements SplitProvider {
   }
 
   async transferir(pedido: PedidoDeRepasse): Promise<ResultadoDoRepasse> {
+    const anterior = this.repassesPorChave.get(pedido.idempotencyKey);
+    if (anterior) return anterior;
     this.repasses.push(pedido);
+    this.repassesPorChave.set(pedido.idempotencyKey, this.proximoResultado);
     return this.proximoResultado;
   }
 
@@ -448,11 +489,14 @@ export class FakeSplitProvider implements SplitProvider {
     this.recebedores.length = 0;
     this.repasses.length = 0;
     this.contador = 0;
+    this.recebedoresPorChave.clear();
+    this.repassesPorChave.clear();
     this.proximoEstadoDoRecebedor = 'pendente';
     this.proximoResultado = {
       ok: false,
       codigo: 'sem_adquirente',
       motivo: 'sem adquirente configurado',
+      definitiva: true,
     };
   }
 }

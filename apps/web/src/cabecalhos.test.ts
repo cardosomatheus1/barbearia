@@ -53,20 +53,32 @@ describe('a política de conteúdo da tela', () => {
     expect(csp).toContain("frame-ancestors 'none'");
   });
 
-  it('nenhuma rota abre exceção para terceiro — nem a da Meta', () => {
+  it('terceiros ficam fechados nas rotas normais — inclusive a Meta', () => {
     /**
-     * A licença da Meta existiu entre os blocos 83 e 86, para o SDK que a tela
-     * de conexão rodava no navegador. O SDK não funcionava no celular e foi
-     * trocado por redirecionamento, que é navegação comum — e a exceção saiu
-     * junto.
-     *
-     * Este teste é o que impede alguém de reabri-la sem perceber: hoje não há
-     * script de terceiro em rota nenhuma, e é assim que se quer.
+     * A conexão da Meta é redirecionamento comum e não precisa executar SDK no
+     * navegador. Turnstile é a única licença de terceiro e existe somente na
+     * porta anônima de criação de conta, testada separadamente abaixo.
      */
     for (const caminho of ['/domari', '/admin/dia', '/admin/whatsapp', '/admin/campanhas']) {
       const csp = pedir(caminho).headers.get('content-security-policy') ?? '';
       expect(csp, caminho).not.toContain('facebook');
+      expect(csp, caminho).not.toContain('challenges.cloudflare.com');
       expect(csp, caminho).toContain("connect-src 'self'");
+      expect(csp, caminho).toContain("frame-src 'self'");
+    }
+  });
+
+  it('Turnstile ganha uma licença estreita só na criação de conta', () => {
+    const csp = pedir('/admin/criar-conta').headers.get('content-security-policy') ?? '';
+    const scripts = csp.split('; ').find((d) => d.startsWith('script-src')) ?? '';
+    expect(scripts).toContain('https://challenges.cloudflare.com');
+    expect(scripts).not.toContain('unsafe-inline');
+    expect(csp).toContain("connect-src 'self' https://challenges.cloudflare.com");
+    expect(csp).toContain('frame-src https://challenges.cloudflare.com');
+
+    for (const caminho of ['/domari', '/admin/dia', '/admin/entrar']) {
+      expect(pedir(caminho).headers.get('content-security-policy') ?? '', caminho)
+        .not.toContain('challenges.cloudflare.com');
     }
   });
 

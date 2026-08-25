@@ -1,3 +1,4 @@
+import { ApiTimeoutError, fetchComTimeout } from './fetch-com-timeout';
 /**
  * Cliente da API pública.
  *
@@ -7,6 +8,37 @@
  */
 
 const BASE = process.env['API_URL'] ?? 'http://127.0.0.1:3000';
+
+/**
+ * A API pública não pode transformar uma queda de rede em exceção de render.
+ *
+ * Todas as funções deste arquivo já sabem tratar HTTP não-2xx. A borda converte
+ * timeout/recusa de conexão num Response sintético com o mesmo contrato de erro
+ * da API; assim leitura vira estado indisponível e mutação volta com um código
+ * que a tela consegue explicar, sem repetir a operação automaticamente.
+ */
+async function fetchPublicoSeguro(
+  input: Parameters<typeof fetchComTimeout>[0],
+  init?: Parameters<typeof fetchComTimeout>[1],
+  timeoutMs?: number,
+): Promise<Response> {
+  try {
+    return await fetchComTimeout(input, init, timeoutMs);
+  } catch (erro) {
+    const timeout = erro instanceof ApiTimeoutError;
+    return Response.json(
+      {
+        error: {
+          code: timeout ? 'api_timeout' : 'api_indisponivel',
+          message: timeout
+            ? 'O servidor demorou mais do que o esperado. Tente novamente.'
+            : 'Não foi possível falar com o servidor. Confira a conexão e tente novamente.',
+        },
+      },
+      { status: timeout ? 504 : 503 },
+    );
+  }
+}
 
 export interface PublicService {
   id: string;
@@ -66,9 +98,13 @@ export interface DayAvailability {
 }
 
 async function get<T>(path: string, revalidate: number): Promise<T | null> {
-  const response = await fetch(`${BASE}${path}`, { next: { revalidate } });
-  if (!response.ok) return null;
-  return (await response.json()) as T;
+  try {
+    const response = await fetchPublicoSeguro(`${BASE}${path}`, { next: { revalidate } });
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -190,29 +226,34 @@ export async function criarAgendamentoNaApi(
     professionalId = slot.professionalId;
   }
 
-  const response = await fetch(`${BASE}/v1/b/${slug}/appointments`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      // Deriva da escolha, não do relógio: reenvio do mesmo formulário — o
-      // duplo toque clássico em rede lenta — devolve o mesmo agendamento.
-      'idempotency-key': `${dados.phone}|${dados.date}|${dados.start}|${dados.serviceIds.join(',')}`,
-    },
-    body: JSON.stringify({
-      locationId: dados.locationId,
-      professionalId,
-      serviceIds: dados.serviceIds,
-      date: dados.date,
-      start: dados.start,
-      name: dados.name,
-      phone: dados.phone,
-      // Só quando o carimbo existe: mandar `undefined` seria o mesmo, mas
-      // mandar a chave sempre faria a borda validar um campo que a página
-      // pública normal não tem por que enviar.
-      ...(dados.origem ? { origem: dados.origem } : {}),
-    }),
-    cache: 'no-store',
-  });
+  let response: Response;
+  try {
+    response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/appointments`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        // Deriva da escolha, não do relógio: reenvio do mesmo formulário — o
+        // duplo toque clássico em rede lenta — devolve o mesmo agendamento.
+        'idempotency-key': `${dados.phone}|${dados.date}|${dados.start}|${dados.serviceIds.join(',')}`,
+      },
+      body: JSON.stringify({
+        locationId: dados.locationId,
+        professionalId,
+        serviceIds: dados.serviceIds,
+        date: dados.date,
+        start: dados.start,
+        name: dados.name,
+        phone: dados.phone,
+        // Só quando o carimbo existe: mandar `undefined` seria o mesmo, mas
+        // mandar a chave sempre faria a borda validar um campo que a página
+        // pública normal não tem por que enviar.
+        ...(dados.origem ? { origem: dados.origem } : {}),
+      }),
+      cache: 'no-store',
+    });
+  } catch (erro) {
+    return { ok: false, code: erro instanceof ApiTimeoutError ? 'api_timeout' : 'api_indisponivel' };
+  }
 
   if (!response.ok) {
     const corpo = (await response.json().catch(() => null)) as
@@ -268,35 +309,40 @@ export async function entrarNaEsperaNaApi(
   slug: string,
   dados: EntrarNaEspera,
 ): Promise<{ ok: true } | { ok: false; code: string }> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      /**
-       * Derivada da escolha, não do relógio.
-       *
-       * Reenvio do mesmo formulário — o duplo toque clássico em rede lenta —
-       * devolve a mesma entrada em vez de criar a segunda. Mesma construção da
-       * criação de agendamento, e pelo mesmo motivo: a chave precisa ser
-       * estável para o **mesmo pedido**, e diferente para pedidos diferentes.
-       */
-      'idempotency-key': `${dados.phone}|${dados.de}|${dados.ate}|${dados.inicio}|${dados.fim}|${dados.professionalId}`,
-    },
-    body: JSON.stringify({
-      locationId: dados.locationId,
-      serviceIds: dados.serviceIds,
-      ...(dados.professionalId && dados.professionalId !== 'any'
-        ? { professionalId: dados.professionalId }
-        : {}),
-      de: dados.de,
-      ate: dados.ate,
-      inicio: dados.inicio,
-      fim: dados.fim,
-      name: dados.name,
-      phone: dados.phone,
-    }),
-    cache: 'no-store',
-  });
+  let response: Response;
+  try {
+    response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/waitlist`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        /**
+         * Derivada da escolha, não do relógio.
+         *
+         * Reenvio do mesmo formulário — o duplo toque clássico em rede lenta —
+         * devolve a mesma entrada em vez de criar a segunda. Mesma construção da
+         * criação de agendamento, e pelo mesmo motivo: a chave precisa ser
+         * estável para o **mesmo pedido**, e diferente para pedidos diferentes.
+         */
+        'idempotency-key': `${dados.phone}|${dados.de}|${dados.ate}|${dados.inicio}|${dados.fim}|${dados.professionalId}`,
+      },
+      body: JSON.stringify({
+        locationId: dados.locationId,
+        serviceIds: dados.serviceIds,
+        ...(dados.professionalId && dados.professionalId !== 'any'
+          ? { professionalId: dados.professionalId }
+          : {}),
+        de: dados.de,
+        ate: dados.ate,
+        inicio: dados.inicio,
+        fim: dados.fim,
+        name: dados.name,
+        phone: dados.phone,
+      }),
+      cache: 'no-store',
+    });
+  } catch (erro) {
+    return { ok: false, code: erro instanceof ApiTimeoutError ? 'api_timeout' : 'api_indisponivel' };
+  }
 
   if (!response.ok) {
     const corpo = (await response.json().catch(() => null)) as
@@ -328,7 +374,7 @@ export async function mandarRecadoNaApi(
     token?: string;
   },
 ): Promise<{ ok: true } | { ok: false; code: string }> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/feedback`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/feedback`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -383,7 +429,7 @@ export async function meuSaldoDeFidelidade(
   slug: string,
   token: string,
 ): Promise<MeuSaldoDeFidelidade | null> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/loyalty`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/loyalty`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -402,7 +448,7 @@ export async function meusPacotes(
   slug: string,
   token: string,
 ): Promise<MeuPacote[]> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/packages`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/packages`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -437,7 +483,7 @@ export async function meusAtendimentosAAvaliar(
   slug: string,
   token: string,
 ): Promise<AtendimentoAAvaliar[]> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/reviews/pendentes`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/reviews/pendentes`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -462,7 +508,7 @@ export async function avaliarNaApi(
     comentario?: string;
   },
 ): Promise<{ ok: true } | { ok: false; code: string }> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/reviews`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/reviews`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(dados),
@@ -477,7 +523,7 @@ export async function listarEsperas(
   slug: string,
   token: string,
 ): Promise<EsperaDoCliente[]> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/waitlist`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -500,7 +546,7 @@ export async function aceitarConviteDaEspera(
   token: string,
   entryId: string,
 ): Promise<{ ok: boolean; code?: string }> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist/${entryId}/accept`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/waitlist/${entryId}/accept`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
@@ -517,7 +563,7 @@ export async function sairDaEsperaNaApi(
   token: string,
   entryId: string,
 ): Promise<{ ok: boolean; code?: string }> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/waitlist/${entryId}`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/waitlist/${entryId}`, {
     method: 'DELETE',
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
@@ -538,7 +584,7 @@ async function post<T>(
   token?: string,
   metodo: 'POST' | 'PUT' = 'POST',
 ): Promise<Resultado<T>> {
-  const response = await fetch(`${BASE}${path}`, {
+  const response = await fetchPublicoSeguro(`${BASE}${path}`, {
     method: metodo,
     headers: {
       'content-type': 'application/json',
@@ -609,7 +655,7 @@ export async function lerConsentimento(
   slug: string,
   token: string,
 ): Promise<ConsentimentoDoTitular | null> {
-  const resposta = await fetch(`${BASE}/v1/b/${slug}/auth/consentimento`, {
+  const resposta = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/auth/consentimento`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -676,7 +722,7 @@ export async function listarAgendamentos(
   slug: string,
   token: string,
 ): Promise<AgendamentoDoCliente[] | null> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/appointments`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/appointments`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -715,7 +761,7 @@ export async function opcoesDeRemarcacao(
   const busca = new URLSearchParams({ dateFrom });
   if (professionalId) busca.set('professionalId', professionalId);
 
-  const response = await fetch(
+  const response = await fetchPublicoSeguro(
     `${BASE}/v1/b/${slug}/appointments/${id}/availability?${busca.toString()}`,
     { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
   );
@@ -827,7 +873,7 @@ export interface MeuPlano {
 }
 
 export async function meuPlano(slug: string, token: string): Promise<MeuPlano | null> {
-  const response = await fetch(`${BASE}/v1/b/${slug}/plano`, {
+  const response = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/plano`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
@@ -893,7 +939,7 @@ export interface BuscaDeBarbearias {
 }
 
 export async function cidadesDaVitrine(): Promise<readonly CidadeNaVitrine[]> {
-  const resposta = await fetch(`${BASE}/v1/marketplace/cidades`, { cache: 'no-store' });
+  const resposta = await fetchPublicoSeguro(`${BASE}/v1/marketplace/cidades`, { cache: 'no-store' });
   if (!resposta.ok) return [];
   const corpo = (await resposta.json()) as { cidades: CidadeNaVitrine[] };
   return corpo.cidades;
@@ -914,7 +960,7 @@ export async function buscarBarbearias(
     for (const item of Array.isArray(valor) ? valor : [valor]) busca.append(chave, item);
   }
   const query = busca.toString();
-  const resposta = await fetch(`${BASE}/v1/marketplace/busca?${query}`, { cache: 'no-store' });
+  const resposta = await fetchPublicoSeguro(`${BASE}/v1/marketplace/busca?${query}`, { cache: 'no-store' });
   if (!resposta.ok) return { resultados: [], analisadas: 0, truncada: false };
   return (await resposta.json()) as BuscaDeBarbearias;
 }
@@ -972,7 +1018,7 @@ export async function conversarComOAgente(
   slug: string,
   texto: string,
 ): Promise<RespostaDoAgente | null> {
-  const resposta = await fetch(`${BASE}/v1/b/${slug}/agente`, {
+  const resposta = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/agente`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ texto }),
@@ -1008,7 +1054,7 @@ export async function perfilDoBarbeiro(
   slug: string,
   barbeiro: string,
 ): Promise<PerfilDoBarbeiroNaApi | null> {
-  const resposta = await fetch(`${BASE}/v1/b/${slug}/b/${barbeiro}`, { cache: 'no-store' });
+  const resposta = await fetchPublicoSeguro(`${BASE}/v1/b/${slug}/b/${barbeiro}`, { cache: 'no-store' });
   if (!resposta.ok) return null;
   return (await resposta.json()) as PerfilDoBarbeiroNaApi;
 }

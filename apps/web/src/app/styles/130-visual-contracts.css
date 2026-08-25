@@ -1,0 +1,126 @@
+/* ============================================================================
+   V7 + V8 + V9 · moldes, hierarquia e semântica visual
+   ============================================================================
+
+   V7 não cria quatro "temas": cria quatro contratos de composição. Toda seção
+   chega aqui com `data-molde`, derivado de `secoes.ts`.
+   V8 usa espaço/tipografia/alinhamento antes de caixa, borda e brilho.
+   V9 reserva o azul para ação/navegação/foco; estado usa sucesso/atenção/
+   problema/neutro e nunca depende só da cor.
+   ========================================================================== */
+
+/* V7 · largura coerente por intenção, sem obrigar páginas especiais a caberem
+   num molde errado. A página ainda pode declarar uma largura mais estreita. */
+.casco .trabalho [data-molde='operacional'].painel__conteudo,
+.casco .trabalho [data-molde='operacional'].balcao { max-width: 96rem; }
+.casco .trabalho [data-molde='cadastro'].painel__conteudo { max-width: 76rem; }
+.casco .trabalho [data-molde='gestao'].painel__conteudo { max-width: 74rem; }
+.casco .trabalho [data-molde='configuracao'].painel__conteudo { max-width: 64rem; }
+
+/* O acabamento antigo usava o accent também como ornamento. Depois do V9,
+   ornamentação é neutra: azul quer dizer "posso agir/navegar aqui". */
+.trabalho [data-molde] .painel__titulo::after {
+  background: linear-gradient(90deg, var(--color-border-strong), transparent);
+}
+.trabalho [data-molde] .rotulo::before { background: var(--color-border-strong); }
+
+/* V8 · os três níveis são visíveis sem exigir mais um componente. */
+.trabalho [data-nivel='primario'] { position: relative; }
+.trabalho [data-nivel='contexto'] { color: var(--color-text-primary); }
+.trabalho [data-nivel='detalhe'] { color: inherit; }
+
+/* A casa operacional não é um conjunto de cartões. O próximo cliente é
+   tipografia + ritmo; as quatro leituras são agrupadas por espaço e régua. */
+.hoje-proximo {
+  border: 0;
+  border-top: 2px solid var(--color-border-strong);
+  border-bottom: 1px solid var(--color-border);
+  border-left: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.hoje-proximo__quando { color: var(--color-text-muted); }
+.hoje-leituras { gap: var(--space-4); }
+.hoje-leitura {
+  padding: var(--space-3) 0;
+  background: none;
+  border-top-color: var(--color-border);
+}
+
+
+/* Gestão é narrativa, não dashboard decorativo. Barras de ocupação são dado,
+   não ação; portanto são neutras. Links e botões continuam com accent. */
+.painel-v6__ocupacao > span,
+.painel-v6__mini-barra > i { background: var(--color-text-muted); }
+
+/* Cadastro se comporta como lista/detalhe. O fundo não precisa criar uma caixa
+   em cada linha; a separação vem de alinhamento e régua. */
+.trabalho [data-molde='cadastro'] .item-cadastro,
+.trabalho [data-molde='cadastro'] .pessoa-equipe {
+  background: none;
+  box-shadow: none;
+}
+
+/* Configuração é uma sequência de decisões. Painéis continuam agrupando campos,
+   mas sem painel dentro de painel nem degradê em cada decisão. */
+.trabalho [data-molde='configuracao'] .painel__grupo,
+.trabalho [data-molde='configuracao'] > form.formulario {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  border-width: 1px 0 0;
+  padding-inline: 0;
+}
+
+/* V9 · vocabulário fechado de estado. Texto sempre permanece no selo. */
+.selo--neutral {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  background: transparent;
+}
+.selo--success {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
+  background: color-mix(in srgb, var(--color-success) 9%, transparent);
+}
+.selo--warning {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 9%, transparent);
+}
+.selo--danger {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 28%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 9%, transparent);
+}
+
+/* Compatibilidade: componentes antigos podem continuar usando os nomes
+   históricos até serem tocados, mas todos apontam para o mesmo significado. */
+.selo--feito { color: var(--color-success); }
+.selo--espera { color: var(--color-warning); }
+.selo--fora { color: var(--color-danger); }
+.selo--agora {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+  background: transparent;
+}
+
+/* "Na cadeira" não usa mais azul como estado. A linha continua distinta por
+   texto e posição; atraso/falta/concluído mantêm seus tons semânticos. */
+.atendimento--agora { border-left-color: var(--color-border-strong); }
+
+@media (min-width: 0px) and (max-width: 640px) {
+  .hoje-leituras { gap: var(--space-3); }
+  .trabalho [data-molde='configuracao'] .painel__grupo,
+  .trabalho [data-molde='configuracao'] > form.formulario { padding-block: var(--space-4); }
+}
+
+/* V8 · listas de cadastro são listas, não uma pilha de cartões. A área inteira
+   já dá o contexto; cada linha só precisa de separação e alvo de toque. */
+.trabalho [data-molde='cadastro'] .lista-cadastro { gap: 0; }
+.trabalho [data-molde='cadastro'] .item-cadastro {
+  padding-inline: 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+}

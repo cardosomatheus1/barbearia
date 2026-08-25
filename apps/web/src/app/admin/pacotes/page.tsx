@@ -339,6 +339,11 @@ export default async function PacotesPage({ searchParams }: Props) {
               <dd className="tabular">{dinheiro(receita.reconhecidoCents)}</dd>
               <p className="pacotes__nota">O que foi atendido hoje com pacote.</p>
             </div>
+            <div className="pacotes__numero">
+              <dt>Venceu e virou receita</dt>
+              <dd className="tabular">{dinheiro(receita.vencidoCents)}</dd>
+              <p className="pacotes__nota">Saldo cuja obrigação terminou hoje sem uso.</p>
+            </div>
             <div className="pacotes__numero pacotes__numero--peso">
               <dt>A receber em serviço</dt>
               <dd className="tabular">{dinheiro(receita.diferidoCents)}</dd>

@@ -12,6 +12,9 @@ import {
 } from '@barbearia/core';
 import { agendarVencimentoDaOferta } from '@barbearia/jobs';
 import { candidatosDaVaga, vagaDoCancelamento } from './espera.js';
+import { travarConfiguracaoDeRecursos, travarConfiguracaoDeServicos, travarConfiguracaoDoProfissional, travarDiaDaAgenda } from './concorrencia.js';
+import { loadDayContext } from './repository.js';
+import { computeFromContext } from './service.js';
 
 /**
  * A oferta de vaga com janela exclusiva (bloco 39, SPEC §2.9).
@@ -89,6 +92,122 @@ export interface OfertaCriada {
  * Como em todo o resto. A janela de dez minutos precisa ser provável sem
  * esperar dez minutos.
  */
+async function recursosDaEntrada(
+  tx: TransactionClient,
+  entryId: string,
+): Promise<readonly { resourceType: string; quantity: number }[]> {
+  const linhas = await tx.$queryRaw<{ resource_type: string; quantity: number }[]>`
+    SELECT rr.resource_type, max(rr.quantity)::int AS quantity
+      FROM waitlist_entry_services es
+      JOIN service_resource_requirements rr ON rr.service_id = es.service_id
+     WHERE es.entry_id = ${entryId}::uuid
+     GROUP BY rr.resource_type
+  `;
+  return linhas.map((r) => ({ resourceType: r.resource_type, quantity: r.quantity }));
+}
+
+async function recursosCabem(
+  tx: TransactionClient,
+  params: {
+    readonly locationId: string;
+    readonly inicio: Date;
+    readonly fim: Date;
+    readonly recursos: readonly { resourceType: string; quantity: number }[];
+  },
+): Promise<boolean> {
+  if (params.recursos.length === 0) return true;
+  const tipos = params.recursos.map((r) => r.resourceType);
+  const linhas = await tx.$queryRaw<{ resource_type: string; capacity: number; usadas: bigint }[]>`
+    SELECT rp.resource_type, rp.capacity,
+           (COALESCE((
+              SELECT sum(ar.quantity)
+                FROM appointment_resources ar
+                JOIN appointments a ON a.id = ar.appointment_id
+               WHERE a.location_id = ${params.locationId}::uuid
+                 AND ar.resource_type = rp.resource_type
+                 AND a.starts_at < ${params.fim}
+                 AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${params.inicio}
+                 AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
+                 AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+            ), 0)
+            + COALESCE((
+              SELECT sum(shr.quantity)
+                FROM slot_hold_resources shr
+                JOIN slot_holds h ON h.id = shr.hold_id
+                JOIN professionals p ON p.id = h.professional_id
+               WHERE p.location_id = ${params.locationId}::uuid
+                 AND shr.resource_type = rp.resource_type
+                 AND h.starts_at < ${params.fim}
+                 AND h.ends_at > ${params.inicio}
+                 AND h.expires_at > now()
+            ), 0))::bigint AS usadas
+      FROM resource_pools rp
+     WHERE rp.location_id = ${params.locationId}::uuid
+       AND rp.resource_type = ANY(${tipos}::text[])
+  `;
+  const porTipo = new Map(linhas.map((l) => [l.resource_type, l]));
+  return params.recursos.every((r) => {
+    const pool = porTipo.get(r.resourceType);
+    return Boolean(pool) && Number(pool!.usadas) + r.quantity <= pool!.capacity;
+  });
+}
+
+async function profissionalAindaLivre(
+  tx: TransactionClient,
+  params: {
+    readonly locationId: string;
+    readonly professionalId: string;
+    readonly inicio: Date;
+    readonly fim: Date;
+  },
+): Promise<boolean> {
+  const linhas = await tx.$queryRaw<{ livre: boolean }[]>`
+    SELECT p.active
+           AND p.kind IN ('professional', 'external')
+           AND NOT EXISTS (
+      SELECT 1 FROM appointments a
+       WHERE a.professional_id = ${params.professionalId}::uuid
+         AND a.starts_at < ${params.fim}
+         AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${params.inicio}
+         AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
+         AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+      UNION ALL
+      SELECT 1 FROM slot_holds h
+       WHERE h.professional_id = ${params.professionalId}::uuid
+         AND h.starts_at < ${params.fim}
+         AND h.ends_at > ${params.inicio}
+         AND h.expires_at > now()
+           ) AS livre
+      FROM professionals p
+     WHERE p.id = ${params.professionalId}::uuid
+       AND p.location_id = ${params.locationId}::uuid
+  `;
+  return linhas[0]?.livre ?? false;
+}
+
+async function profissionalTemCotaNoDia(
+  tx: TransactionClient,
+  params: { readonly professionalId: string; readonly timezone: string; readonly dia: string },
+): Promise<boolean> {
+  const linhas = await tx.$queryRaw<{ daily_limit: number | null; usados: bigint }[]>`
+    SELECT p.daily_limit,
+           (SELECT count(*) FROM (
+             SELECT 1 FROM appointments a
+              WHERE a.professional_id = p.id
+                AND (a.service_starts_at AT TIME ZONE ${params.timezone})::date = ${params.dia}::date
+                AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+             UNION ALL
+             SELECT 1 FROM slot_holds h
+              WHERE h.professional_id = p.id
+                AND (h.starts_at AT TIME ZONE ${params.timezone})::date = ${params.dia}::date
+                AND h.expires_at > now()
+           ) AS compromissos)::bigint AS usados
+      FROM professionals p WHERE p.id = ${params.professionalId}::uuid
+  `;
+  const pro = linhas[0];
+  return Boolean(pro) && (pro!.daily_limit === null || Number(pro!.usados) < pro!.daily_limit);
+}
+
 export async function oferecerVaga(
   tx: TransactionClient,
   params: {
@@ -103,6 +222,18 @@ export async function oferecerVaga(
     readonly exceto?: readonly string[];
   },
 ): Promise<OfertaCriada | null> {
+  const diaDaVaga = instantToLocal(params.timezone, params.inicio).date;
+  await travarDiaDaAgenda(tx, params.locationId, diaDaVaga);
+  await travarConfiguracaoDoProfissional(tx, params.professionalId);
+  await travarConfiguracaoDeRecursos(tx);
+  await travarConfiguracaoDeServicos(tx);
+  if (!(await profissionalAindaLivre(tx, params))) return null;
+  if (!(await profissionalTemCotaNoDia(tx, {
+    professionalId: params.professionalId,
+    timezone: params.timezone,
+    dia: diaDaVaga,
+  }))) return null;
+
   const vaga = vagaDoCancelamento({
     timezone: params.timezone,
     inicio: params.inicio,
@@ -133,25 +264,6 @@ export async function oferecerVaga(
   const venceEm = fimDaJanelaExclusiva(params.agora);
 
   /**
-   * O horário é segurado **antes** da oferta existir.
-   *
-   * A ordem importa: com a oferta gravada primeiro, um processo que caísse no
-   * meio deixaria uma pessoa com convite exclusivo para um horário que ninguém
-   * está segurando. É o mesmo raciocínio da cobrança online do bloco 37, em que
-   * a linha nasce antes da chamada ao adquirente.
-   *
-   * O hold vence junto com a oferta: quem não responde devolve o horário à
-   * grade sozinho, sem depender de a varredura ter rodado.
-   */
-  const holds = await tx.$queryRaw<{ id: string }[]>`
-    INSERT INTO slot_holds (tenant_id, professional_id, starts_at, ends_at, expires_at)
-    VALUES (${params.tenantId}::uuid, ${params.professionalId}::uuid,
-            ${params.inicio}, ${params.fim}, ${venceEm})
-    RETURNING id
-  `;
-  const holdId = holds[0]?.id ?? null;
-
-  /**
    * Desce a fila até alguém aceitar a gravação.
    *
    * O `ON CONFLICT DO NOTHING` não distingue os dois índices parciais, e eles
@@ -169,6 +281,40 @@ export async function oferecerVaga(
     const inicioDoServico = new Date(
       params.inicio.getTime() + (await bufferDeEntrada(tx, escolhido.id)) * 60_000,
     );
+    if (!(await vagaAindaExisteParaEntrada(tx, {
+      entryId: escolhido.id,
+      locationId: params.locationId,
+      professionalId: params.professionalId,
+      timezone: params.timezone,
+      dia: diaDaVaga,
+      inicioDoServico,
+      agora: params.agora,
+    }))) continue;
+
+    const recursos = await recursosDaEntrada(tx, escolhido.id);
+    if (!(await recursosCabem(tx, {
+      locationId: params.locationId,
+      inicio: params.inicio,
+      fim: params.fim,
+      recursos,
+    }))) continue;
+
+    const holds = await tx.$queryRaw<{ id: string }[]>`
+      INSERT INTO slot_holds (tenant_id, professional_id, starts_at, ends_at, expires_at)
+      VALUES (${params.tenantId}::uuid, ${params.professionalId}::uuid,
+              ${params.inicio}, ${params.fim}, ${venceEm})
+      RETURNING id
+    `;
+    const holdId = holds[0]?.id;
+    if (!holdId) continue;
+    for (const recurso of recursos) {
+      await tx.$executeRaw`
+        INSERT INTO slot_hold_resources (hold_id, tenant_id, resource_type, quantity)
+        VALUES (${holdId}::uuid, ${params.tenantId}::uuid,
+                ${recurso.resourceType}, ${recurso.quantity})
+      `;
+    }
+
     const { token, hash } = novoToken();
 
     const criadas = await tx.$queryRaw<{ id: string }[]>`
@@ -186,6 +332,7 @@ export async function oferecerVaga(
 
     const id = criadas[0]?.id;
     if (!id) {
+      await tx.$executeRaw`DELETE FROM slot_holds WHERE id = ${holdId}::uuid`;
       if (await vagaJaOferecida(tx, params.professionalId, params.inicio)) break;
       continue;
     }
@@ -204,9 +351,6 @@ export async function oferecerVaga(
     };
   }
 
-  // Ninguém ficou com a vaga. O hold recém-criado sai junto: sem isto ele
-  // seguraria por dez minutos um horário que ninguém está oferecendo.
-  if (holdId) await tx.$executeRaw`DELETE FROM slot_holds WHERE id = ${holdId}::uuid`;
   return null;
 }
 
@@ -266,6 +410,64 @@ async function bufferDeEntrada(tx: TransactionClient, entryId: string): Promise<
   const linha = linhas[0];
   if (!linha) return 0;
   return linha.policy === 'per_service' ? linha.soma : linha.maior;
+}
+
+async function idsDeServicosDaEntrada(
+  tx: TransactionClient,
+  entryId: string,
+): Promise<readonly string[]> {
+  const linhas = await tx.$queryRaw<{ service_id: string }[]>`
+    SELECT service_id::text AS service_id
+      FROM waitlist_entry_services
+     WHERE entry_id = ${entryId}::uuid
+     ORDER BY position
+  `;
+  return linhas.map((linha) => linha.service_id);
+}
+
+/**
+ * A vaga nasceu de um cancelamento, mas o mundo pode ter mudado até o worker
+ * oferecê-la: jornada, bloqueio, skill, recurso e até o catálogo do candidato.
+ * Recalcular a grade sob as mesmas travas impede oferecer um horário que a
+ * gravação da própria oferta/aceite recusaria logo depois.
+ */
+async function vagaAindaExisteParaEntrada(
+  tx: TransactionClient,
+  params: {
+    readonly entryId: string;
+    readonly locationId: string;
+    readonly professionalId: string;
+    readonly timezone: string;
+    readonly dia: string;
+    readonly inicioDoServico: Date;
+    readonly agora: Date;
+  },
+): Promise<boolean> {
+  const serviceIds = await idsDeServicosDaEntrada(tx, params.entryId);
+  if (serviceIds.length === 0) return false;
+
+  const context = await loadDayContext(tx, {
+    locationId: params.locationId,
+    serviceIds,
+    date: params.dia,
+    professionalId: params.professionalId,
+    // Lista de espera pode recuperar cancelamento de última hora; antecedência
+    // mínima é regra do autoatendimento, não deve matar a vaga transacional.
+    atCounter: true,
+  });
+  if (!context) return false;
+
+  const grade = computeFromContext(context, {
+    date: params.dia,
+    now: params.agora,
+    atCounter: true,
+  });
+  const local = instantToLocal(params.timezone, params.inicioDoServico);
+  if (local.date !== params.dia) return false;
+  const inicio = formatHHMM(local.minutes);
+  return grade.slots.some(
+    (slot) => slot.professionalId === params.professionalId && slot.start === inicio,
+  );
 }
 
 /**

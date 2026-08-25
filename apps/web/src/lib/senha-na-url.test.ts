@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -21,10 +21,12 @@ import { describe, expect, it } from 'vitest';
  * de uma ação, é que **nenhuma** delas adquira o hábito.
  */
 
-const ACOES = readFileSync(
-  join(import.meta.dirname, '../app/admin/acoes.ts'),
-  'utf8',
-);
+const PASTA_DAS_ACOES = join(import.meta.dirname, '../app/admin/acoes');
+const ACOES = readdirSync(PASTA_DAS_ACOES)
+  .filter((nome) => nome.endsWith('.ts'))
+  .sort()
+  .map((nome) => readFileSync(join(PASTA_DAS_ACOES, nome), 'utf8'))
+  .join('\n');
 
 /**
  * Código sem comentário, partido por instrução.

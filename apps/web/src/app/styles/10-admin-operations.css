@@ -1,0 +1,932 @@
+/* ============================================================================
+   Painel do gestor.
+   Densidade diferente da página do cliente: a recepção passa o dia aqui, e
+   rolagem custa tempo. Continua começando em 360px — o dono cadastra do celular.
+   ========================================================================== */
+
+.painel__entrada { padding: var(--space-6) var(--space-4) var(--space-8); max-width: 26rem; }
+.painel__conteudo { padding: var(--space-4) var(--space-4) var(--space-8); max-width: 46rem; }
+
+.painel__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+/* Serve de título e, no painel de configuração, de link para voltar. Como pode
+   ser clicável, respeita o alvo mínimo sempre — não dá para o mesmo elemento
+   valer 44px numa tela e 24px na outra. */
+.painel__marca {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+.painel__sair { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+
+.painel__etapa {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+}
+.painel__titulo { margin: 0 0 var(--space-2); font-size: var(--font-size-2xl); }
+.painel__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.painel__aviso { margin-bottom: var(--space-5); }
+/*
+  O aviso da vaga que abriu, com quem ligar (bloco 110).
+
+  A janela pedida fica **abaixo** do nome no celular e ao lado no notebook: em
+  360px ela é a terceira informação da linha e empurraria o telefone para fora;
+  a partir de 768 sobra largura e a linha inteira vira uma frase que se lê de
+  uma vez. `min-width: 0` porque nome composto de cliente é o conteúdo que
+  decide a largura da coluna quando ninguém a segura.
+*/
+.vaga__titulo { margin: 0 0 var(--space-2); font-weight: 600; }
+.vaga__lista { margin: 0; padding: 0; list-style: none; }
+.vaga__quem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  padding: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--color-border);
+}
+.vaga__quem:first-child { border-top: 0; }
+.vaga__nome { min-width: 0; }
+.vaga__fone { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.vaga__janela { flex-basis: 100%; color: var(--color-text-muted); }
+/* De quem é a vez: a oferta é exclusiva e uma de cada vez, e a tela diz isso. */
+.vaga__vez {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.vaga__resto { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.vaga__lista-inteira {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  min-width: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+@media (min-width: 768px) {
+  .vaga__janela { flex-basis: auto; }
+}
+
+.painel__nota { margin: var(--space-6) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.painel__nota a, .painel__sub a { color: var(--color-accent); }
+
+/* Régua de etapas: rola na horizontal dentro de si, nunca leva a página junto. */
+.passos {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0 calc(var(--space-4) * -1) var(--space-5);
+  padding: 0 var(--space-4);
+  list-style: none;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.passo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.passo__numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  font-size: var(--font-size-xs);
+}
+.passo--feito { color: var(--color-text-primary); }
+.passo--feito .passo__numero { background: var(--color-success); color: var(--color-surface); }
+.passo--atual { border-color: var(--color-accent); color: var(--color-text-primary); }
+.passo--atual .passo__numero { background: var(--color-accent); color: var(--color-text-on-accent); }
+
+.painel__dupla { display: grid; gap: var(--space-4); }
+.painel__grupo { border: 0; margin: 0; padding: 0; }
+.painel__marcas { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+
+/* Alvo de toque inteiro, não só a caixinha: marcar dia da semana com o polegar
+   numa caixa de 16px é o que faz o dono errar e desistir. */
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.marca:has(input:checked) {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.cardapio { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.cardapio__item {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.cardapio__item--erro { border-color: var(--color-danger); }
+.cardapio__escolha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  cursor: pointer;
+}
+.cardapio__nome { font-weight: var(--font-weight-medium); }
+.cardapio__campos { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-2); }
+.cardapio__campo { display: grid; gap: var(--space-1); font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.publicar { margin-bottom: var(--space-5); padding: var(--space-4); }
+.publicar__rotulo {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.publicar__link {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  word-break: break-all;
+}
+.publicar__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.painel__resumo { margin-bottom: var(--space-5); }
+.painel__acoes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+@media (min-width: 768px) {
+  .painel__dupla { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============================================================================
+   O balcão.
+
+   A terceira superfície: aberta de manhã, fechada à noite, e a única em que
+   quem olha está em pé com um cliente na frente. Duas consequências no CSS:
+
+   - **Densidade máxima que ainda respeita 44px de toque.** A recepção rola a
+     lista o dia inteiro; cada linha desperdiçada é um cliente que sai de vista.
+   - **Estado é forma antes de ser cor.** A tarja à esquerda muda de cor, mas o
+     que diz o estado é o texto do selo. Cor sozinha não serve para quem tem
+     baixa visão, e o balcão é onde o erro custa o horário de alguém.
+
+   Continua começando em 360px: o dono confere o dia do celular quando sai.
+   ========================================================================== */
+
+.balcao { padding: var(--space-4) var(--space-4) var(--space-8); }
+
+.balcao__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.balcao__titulo { margin-bottom: var(--space-1); }
+.balcao__data { color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.balcao__sub { margin-bottom: var(--space-4); }
+.balcao__sub a { color: var(--color-accent); }
+
+.balcao__dias { display: flex; gap: var(--space-2); }
+/* 44px nas **duas** medidas: a seta é um caractere só, e `padding` lateral não
+   chegava lá. Saía com 39×44 em todas as larguras — e ela é o controle mais
+   tocado do dia a dia, o que troca o dia no painel e na agenda. A medição só
+   olhava a altura, então passava verde; a guarda foi corrigida junto. */
+.balcao__seta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-touch);
+  padding: 0 var(--space-3);
+}
+.balcao__hoje { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+
+/* Faixa de números: rola dentro de si, nunca leva a página junto. */
+.balcao__totais { min-width: 0;
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-1);
+}
+.totalzinho {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 2px;
+  min-width: 4.5rem;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.totalzinho__valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.totalzinho__nome { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.balcao__equipe, .balcao__regua { min-width: 0; min-width: 0; display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
+.filtro {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.filtro--ativo {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.balcao__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+
+/* Elemento assinatura: a linha do agora. Ela responde à pergunta que a recepção
+   faz à tela o dia inteiro — o que já era para ter acontecido e o que ainda vem. */
+.agora {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-3);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.agora__hora { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); letter-spacing: 0; }
+.agora::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-accent);
+}
+
+.atendimento {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  /* A tarja é o estado; a borda fina é a moldura. Separar as duas evita que a
+     linha inteira mude de peso só porque alguém chegou atrasado. */
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+.atendimento--agora { border-left-color: var(--color-accent); }
+.atendimento--atrasado { border-left-color: var(--color-warning); }
+.atendimento--falta { border-left-color: var(--color-danger); }
+.atendimento--feito { border-left-color: var(--color-success); }
+.atendimento--fora { opacity: 0.6; }
+
+.atendimento__hora { display: flex; flex-direction: column; gap: 2px; }
+.atendimento__hora time { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.atendimento__fim { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.atendimento__quem { min-width: 0; }
+.atendimento__nome { margin: 0; font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+.atendimento__fone { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.atendimento__servico { margin: 2px 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.atendimento__estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+}
+/* A pílula do estado virou `.selo`, compartilhada com o resto do produto. Esta
+   regra só acrescenta o que é do balcão: caixa alta e o espaçamento da faixa. */
+.atendimento__estado .selo {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.atendimento__frase { color: var(--color-text-muted); }
+
+.atendimento__acoes {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.atendimento__botao { padding: 0 var(--space-5); }
+.atendimento__outras { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.atendimento__menor { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+
+.balcao__fixo { margin-top: var(--space-5); }
+
+/* -- Marcar pelo balcão ---------------------------------------------------- */
+
+.marcar__pergunta { margin: 0 0 var(--space-4); font-size: var(--font-size-lg); }
+.marcar__lista { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.escolha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.escolha--dentro { border-color: var(--color-accent); }
+.escolha__nome { font-weight: var(--font-weight-medium); }
+.escolha__lado { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.marcar__resumo { margin: 0 0 var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.marcar__resumo strong { color: var(--color-text-primary); }
+.marcar__resumo a, .marcar__cliente a { color: var(--color-accent); }
+
+.marcar__busca { margin-bottom: var(--space-4); }
+.marcar__busca-linha { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.marcar__busca-linha .ui-field__input { flex: 1; min-width: 0; }
+
+.achados { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-2); }
+.achado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+}
+.achado--ativo { border-color: var(--color-accent); }
+.achado__nome { font-weight: var(--font-weight-medium); }
+.achado__fone { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.achado__faltas { margin-left: auto; font-size: var(--font-size-xs); color: var(--color-warning); }
+
+.marcar__nenhum { margin: 0 0 var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.marcar__cliente { margin: 0 0 var(--space-2); }
+
+@media (min-width: 768px) {
+  /* No notebook do balcão a hora ganha coluna própria e as ações vão para a
+     direita: a lista rende mais linhas por tela sem apertar o toque. */
+  .atendimento {
+    grid-template-columns: 4rem 1fr auto;
+    align-items: center;
+  }
+  .atendimento__acoes { grid-column: auto; margin-top: 0; justify-content: flex-end; }
+}
+
+/* O tema claro do painel é aplicado num `div`, não no `html` — a página pública
+   continua escura no mesmo navegador. Sem pintar o fundo aqui, o `body` do
+   documento (escuro) apareceria por baixo em tela alta. */
+.painel {
+  min-height: 100dvh;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+/* Faltar e cancelar tiram dinheiro da casa. Não podem ter o mesmo peso visual
+   de "confirmar", que é o botão vizinho e o que a recepção aperta o dia todo. */
+.atendimento__risco { color: var(--color-danger); }
+.marcar__dica { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* -- Equipe ----------------------------------------------------------------- */
+
+/* Quebra em vez de estourar: o topo do balcão ganhou um quarto atalho no
+   bloco 14 e passou de 360px. Cabeçalho que rola de lado esconde o botão de
+   sair; cabeçalho que cresce uma linha, não. */
+.painel__atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.equipe-lista { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-2); }
+.pessoa-equipe {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+/* Conta desligada continua visível: sumir esconderia quem teve acesso ontem. */
+.pessoa-equipe--fora { opacity: 0.65; }
+.pessoa-equipe__nome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+.pessoa-equipe__selo {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.pessoa-equipe__email { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.pessoa-equipe__pode { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+/* Vira link para a tela de permissões, e por isso precisa do alvo de toque:
+   é o único caminho do painel até ela a partir daqui (bloco 104). */
+.pessoa-equipe__contagem {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+}
+.pessoa-equipe__dono { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.pessoa-equipe__acoes { display: grid; gap: var(--space-2); }
+.pessoa-equipe__papel { display: flex; gap: var(--space-2); }
+.pessoa-equipe__papel .ui-field__input { flex: 1; min-width: 0; }
+.pessoa-equipe__miudas { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pessoa-equipe__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+/* Desligar tira alguém de dentro do sistema agora. Não pode ter o mesmo peso
+   de "nova senha", que é o botão ao lado. */
+.pessoa-equipe__risco { color: var(--color-danger); }
+
+.papeis { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.papel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.papel:has(input:checked) { border-color: var(--color-accent); }
+.papel input { grid-row: 1 / span 3; }
+.permissao__nome { font-weight: var(--font-weight-medium); }
+.permissao__sobre { grid-column: 2; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.permissao__contagem { grid-column: 2; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* A senha aparece uma vez. Grande e espaçada porque vai ser copiada à mão. */
+.senha-nova__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.senha-nova__valor {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  word-break: break-all;
+}
+.senha-nova__nota { margin: 0; font-size: var(--font-size-sm); }
+
+/* A tela de fotos ficou sem CSS no bloco anterior: as classes existiam no
+   markup e nenhuma regra as alcançava. */
+.foto-campo__linha { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.foto-campo__linha .ui-field__input { flex: 1; min-width: 0; }
+.foto-campo__mini {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+.foto-campo__mini--vazia { background: var(--color-surface-hover); border: 1px dashed var(--color-border); }
+
+@media (min-width: 768px) {
+  .pessoa-equipe { grid-template-columns: 1fr auto; align-items: center; }
+  .papel { grid-template-columns: auto 1fr auto; }
+  .permissao__contagem { grid-column: 3; grid-row: 1 / span 2; text-align: right; }
+}
+
+/* ---------------------------------------------------------------------------
+   Cadastro: serviços, equipe e jornadas, recursos (bloco 13)
+
+   Densidade de admin, não de página pública: a recepção passa o dia aqui e
+   rolagem custa tempo. Por isso o item vem fechado, com o essencial na linha —
+   nome, o que muda a decisão, e uma ação — e o formulário atrás de `<details>`.
+   --------------------------------------------------------------------------- */
+
+.cadastro-nav { min-width: 0; margin: 0 calc(var(--space-4) * -1) var(--space-5); padding: 0 var(--space-4); }
+.cadastro-nav__lista {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cadastro-nav__aba {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+.cadastro-nav__aba:hover { border-color: var(--color-accent); color: var(--color-text-primary); }
+.cadastro-nav__aba--atual {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.lista-cadastro { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-2); }
+/* Item de grade nasce com `min-width: auto`: a faixa cresce até caber o
+   min-content do conteúdo, e dois campos lado a lado dentro da dobra empurravam
+   o cartão a 375px numa tela de 360. Só a medição no navegador pega isso — o
+   CSS lido em teste não sabe qual é a largura intrínseca de um `<input>`. */
+.lista-cadastro > li { min-width: 0; }
+.item-cadastro {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.item-cadastro--fora { opacity: 0.65; }
+.item-cadastro__cabeca { display: grid; gap: var(--space-3); }
+.item-cadastro__quem { min-width: 0; }
+.item-cadastro__nome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.item-cadastro__selo {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  text-transform: lowercase;
+}
+.item-cadastro__linha { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.item-cadastro__falta { color: var(--color-warning); font-weight: var(--font-weight-medium); }
+.item-cadastro__aviso { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-warning); }
+.item-cadastro__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+.item-cadastro__risco { color: var(--color-danger); }
+/* Flex com quebra porque a nota fiscal pôs dois botões lado a lado aqui: em
+   360px eles não cabem na mesma linha, e sem a quebra o segundo empurra a
+   página para o lado. */
+/*
+   Caixa de seleção com alvo de toque de verdade.
+   
+   O padrão do navegador dá 13px, e a regra dos 44px vale **em qualquer
+   largura** — mouse impreciso e limitação motora não são exclusividade do
+   aparelho pequeno. A medição pegou isto na primeira tela do produto a usar
+   uma caixa de seleção; sem esta regra, toda tela nova que usar uma repete o
+   defeito.
+
+   O `accent-color` é o que faz a caixa marcada usar o acento do tema em vez do
+   azul do sistema — sem ele, o único elemento fora da paleta seria justamente o
+   que confirma uma escolha.
+
+   A promessa acima — "toda tela nova que usar uma repete o defeito" — falhou,
+   e o motivo foi o **seletor**: ancorada em `.ui-field__label`, a regra não
+   alcançava `.opcao-simples`, que é o rótulo usado por seis telas. A caixa que
+   liga o repasse direto do dinheiro do barbeiro saía com os 13px do sistema, em
+   cinza, no tema escuro, e a medição não reprovava porque o rótulo em volta
+   tem 44px — isenção correta pela WCAG 2.5.8, que cobre o **alvo** e não a
+   aparência.
+
+   Regra ancorada em nome de classe alcança as telas que já existiam. Ancorar
+   nos dois rótulos foi o conserto do bloco 92, e ele **falhou pela terceira
+   vez**: a tela de recado do cliente usa `.falar__tipo`, que não é nenhum dos
+   dois. Os três rádios saíam com 13px e em azul de Chrome, na única tela do
+   cliente que ficou de fora — e a medição não reprovava, porque o rótulo em
+   volta tem 44px.
+
+   A lição foi aprendida na direção errada duas vezes. O seletor não é uma lista
+   de rótulos que se estende quando alguém lembra: é `input[type='checkbox']` e
+   `input[type='radio']`, todos, e a tela que quiser outra aparência **declara**
+   isso (`.ui-marca-propria`). Assim a próxima tela nasce certa em vez de nascer
+   errada e esperar por uma medição.
+
+   A isenção existe porque há um caso legítimo: a nota por estrelas esconde o
+   rádio (`position: absolute; opacity: 0`) e usa o rótulo inteiro como alvo. Ali
+   dimensionar o `input` não desenha nada e só cria uma caixa invisível de 44px
+   dentro da estrela. */
+input[type='checkbox']:not(.ui-marca-propria),
+input[type='radio']:not(.ui-marca-propria) {
+  inline-size: var(--size-touch);
+  block-size: var(--size-touch);
+  margin-inline-end: var(--space-2);
+  vertical-align: middle;
+  accent-color: var(--color-accent);
+}
+
+/* A caixa nativa esticada para 44px vira um bloco cinza do tamanho de uma foto,
+   e no tema escuro ela é lida como imagem quebrada — foi assim que a tela de
+   unidades saiu na primeira medição: seis quadrados vazios ao lado de nomes.
+
+   O alvo continua com 44px; o que muda é a **aparência**. A marca é uma imagem
+   de fundo e não um `::after`, porque pseudo-elemento em `input` depende do
+   navegador, e esta caixa decide em quais lojas alguém trabalha. */
+input[type='checkbox']:not(.ui-marca-propria) {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 60% 60%;
+  cursor: pointer;
+}
+input[type='checkbox']:not(.ui-marca-propria):checked {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23111' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.5 3.5L13 4.5'/%3E%3C/svg%3E");
+}
+input[type='checkbox']:not(.ui-marca-propria):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.item-cadastro__acao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+}
+
+/* `<details>` é o único jeito de esconder e revelar sem JavaScript, e este
+   produto não manda JavaScript de painel para o navegador. */
+/*
+  Confirmacao antes de um envio em massa (bloco 98).
+
+  `<details>` porque o painel nao manda JavaScript proprio: o resumo e o botao,
+  e o corpo so aparece depois do toque. O `list-style: none` tira o triangulo
+  do navegador, que num botao le como enfeite quebrado.
+
+  Alvo de 44px como todo alvo de toque, em qualquer largura — `summary` nasce
+  com a altura do texto.
+*/
+/*
+  Os botoes de uma linha de cadastro, lado a lado e quebrando quando nao cabem.
+
+  No celular "Editar" e "Desligar" nao cabem numa linha ao lado do texto; sem o
+  `wrap` um deles fica fora do alcance de quem usa o aparelho pequeno.
+*/
+/*
+  O contador de segmento, quando ele vira o comeco de uma campanha (bloco 99).
+
+  Ocupa o cartao inteiro para o alvo de toque ser o cartao e nao o numero — 44px
+  em qualquer largura, como todo alvo autonomo.
+*/
+.segmentos__link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+.segmentos__link:hover .segmentos__rotulo,
+.segmentos__link:focus-visible .segmentos__rotulo { text-decoration: underline; }
+
+.item-cadastro__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.confirmar { position: relative; }
+.confirmar__abrir {
+  list-style: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.confirmar__abrir::-webkit-details-marker { display: none; }
+.confirmar__corpo {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* O piso de uma coluna e o min-content dela: sem isto o nome do texto decide
+     a largura da tela. */
+  min-width: 0;
+}
+.confirmar__texto { font-size: var(--font-size-sm); }
+
+.dobra { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.dobra__titulo {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+.dobra[open] .dobra__titulo { margin-bottom: var(--space-3); }
+
+/* A ação principal de uma tela cujo trabalho é lançar conta (bloco 103).
+
+   `/admin/financeiro` não tinha **nenhuma** ação primária em repouso: as três
+   dobras eram texto em acento, e o único destaque da tela era o cartão vermelho
+   da sobra projetada. Uma tela sem ação primária é uma tela sem resposta para
+   "e agora?" — e §5 pede exatamente uma.
+
+   Modificador e não regra em `.dobra__titulo`: as outras dobras da mesma tela
+   continuam secundárias de propósito, senão volta a não haver hierarquia. */
+.dobra__titulo--principal {
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  font-size: var(--font-size-base);
+}
+.dobra__ajuda { margin: 0 0 var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.campos-lado { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.campos-lado > * { min-width: 0; }
+.campos-lado .ui-field__input { width: 100%; min-width: 0; }
+
+.marcas-lista { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.opcao-simples {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+.opcao-simples__nome { display: block; font-weight: var(--font-weight-medium); }
+.opcao-simples__sobre { display: block; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* A semana inteira numa tabela: sete linhas, quatro colunas. Larga por
+   natureza — rola dentro de `.ui-scroll-x`, nunca leva a página junto. */
+.jornada { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.jornada th, .jornada td { padding: var(--space-1) var(--space-2) var(--space-1) 0; text-align: left; }
+.jornada thead th { font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+.jornada tbody tr + tr th, .jornada tbody tr + tr td { border-top: 1px solid var(--color-border); }
+.jornada__dia {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jornada__hora { min-width: 6.5rem; font-variant-numeric: tabular-nums; }
+.jornada__pausa { display: flex; gap: var(--space-2); }
+
+.conflito__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.conflito__lista { margin: 0 0 var(--space-2); padding-left: var(--space-5); font-size: var(--font-size-sm); }
+.conflito__nota { margin: 0; font-size: var(--font-size-sm); }
+.conflito__nota a { color: inherit; font-weight: var(--font-weight-semibold); }
+
+.recursos { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.recursos th, .recursos td { padding: var(--space-1) var(--space-2) var(--space-1) 0; text-align: left; }
+.recursos thead th { font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+.recursos tbody tr + tr th, .recursos tbody tr + tr td { border-top: 1px solid var(--color-border); }
+.recursos__numero { max-width: 6rem; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 768px) {
+  /* Só a partir daqui a linha do item cabe em duas colunas. Abaixo disso a
+     ação desce, que é o que mantém o alvo de toque inteiro no piso de 360px. */
+  .item-cadastro__cabeca { grid-template-columns: 1fr auto; align-items: start; }
+  .campos-lado { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* ---------------------------------------------------------------------------
+   Fila presencial (bloco 14)
+
+   Densidade de balcão: a recepção olha esta tela de pé, entre um cliente e
+   outro, e o que ela procura é sempre a mesma coisa — quem é o próximo e qual
+   cadeira comporta.
+   --------------------------------------------------------------------------- */
+
+.cadeiras { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.cadeira {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.cadeira--livre { border-left-color: var(--color-success); }
+.cadeira__nome { margin: 0; font-weight: var(--font-weight-semibold); }
+.cadeira__estado { margin: 2px 0 0; font-size: var(--font-size-sm); }
+.cadeira__proximo { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+.esperas { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: grid; gap: var(--space-2); }
+.espera {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.espera--chamada { border-color: var(--color-accent); }
+.espera__posicao {
+  align-self: start;
+  min-width: 2rem;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+.espera__quem { min-width: 0; }
+.espera__nome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.espera__fone { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.espera__selo {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+.espera__servico { margin: 2px 0 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.espera__tempo { margin: 2px 0 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.espera__frase { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.espera__aviso { margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--color-warning); }
+/* `min-width: 0` em todos: item de grade nasce com `min-width: auto`, e o
+   `<select>` com "Maria Aparecida do Nascimento — livre em 12 min" tem largura
+   intrínseca maior que a tela de 360px. Sem isto ele empurra o cartão inteiro. */
+.espera__acoes { grid-column: 1 / -1; display: grid; gap: var(--space-2); min-width: 0; }
+.espera__sentar { display: flex; gap: var(--space-2); min-width: 0; }
+.espera__sentar .ui-field__input { flex: 1; min-width: 0; }
+.espera__miudas { min-width: 0; }
+.espera__miudas { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.espera__miuda { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
+.espera__risco { color: var(--color-danger); }
+
+.link-fila__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.link-fila__valor {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--font-weight-medium);
+  /* O token é longo e não tem espaços: sem isto ele estoura o cartão em 360px. */
+  word-break: break-all;
+}
+.link-fila__nota { margin: 0; font-size: var(--font-size-sm); }
+

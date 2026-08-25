@@ -22,7 +22,6 @@ export const createAppointmentSchema = z.object({
   serviceIds: z.array(z.string().uuid()).min(1).max(10),
   date: diaISO,
   start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-  holdId: z.string().uuid().optional(),
   // Teto explícito: campo livre sem limite vira armazenamento gratuito.
   notes: z.string().max(500).optional(),
   /**

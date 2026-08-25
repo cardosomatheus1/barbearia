@@ -31,6 +31,7 @@ const describeIfDb = SEED_URL && APP_URL ? describe : describe.skip;
 const TENANT = '40404040-1111-1111-1111-111111111111';
 const RIVAL = '40404040-2222-2222-2222-222222222222';
 const LOCAL = 'a0404040-0000-0000-0000-000000000001';
+const FILIAL = 'a0404040-0000-0000-0000-000000000003';
 const LOCAL_RIVAL = 'a0404040-0000-0000-0000-000000000002';
 const CARLOS = 'c0404040-0000-0000-0000-000000000001';
 const BRUNO = 'c0404040-0000-0000-0000-000000000002';
@@ -65,6 +66,7 @@ describeIfDb('recados do cliente', () => {
 
       INSERT INTO locations (id, tenant_id, name, timezone) VALUES
         ('${LOCAL}', '${TENANT}', 'Matriz', 'America/Bahia'),
+        ('${FILIAL}', '${TENANT}', 'Filial', 'America/Bahia'),
         ('${LOCAL_RIVAL}', '${RIVAL}', 'Filial da vizinha', 'America/Bahia');
 
       INSERT INTO customers (id, tenant_id, name, phone_e164) VALUES
@@ -100,7 +102,7 @@ describeIfDb('recados do cliente', () => {
      * apagaria justamente quem mais tem o que contar.
      */
     const { id } = await mandar();
-    const recado = await recadoPorId(TENANT, id, AGORA);
+    const recado = await recadoPorId(TENANT, LOCAL, id, AGORA);
 
     expect(recado).toMatchObject({
       tipo: 'reclamacao',
@@ -132,6 +134,16 @@ describeIfDb('recados do cliente', () => {
     });
   });
 
+  it('UUID de recado de outra unidade da mesma barbearia não autoriza leitura nem escrita', async () => {
+    const { id } = await mandar({ locationId: FILIAL });
+
+    expect(await recadoPorId(TENANT, LOCAL, id, AGORA)).toBeNull();
+    await expect(
+      assumirRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, responsavelId: RUAN, ator }),
+    ).rejects.toMatchObject({ code: 'recado_nao_encontrado' });
+    expect(await recadoPorId(TENANT, FILIAL, id, AGORA)).toMatchObject({ estado: 'aberto' });
+  });
+
   it('atendimento de outra pessoa não gruda no recado', async () => {
     /**
      * A checagem de integridade referencial do Postgres ignora row security, e
@@ -155,7 +167,7 @@ describeIfDb('recados do cliente', () => {
       customerId: CARLOS,
       appointmentId: 'e0404040-0000-0000-0000-000000000001',
     });
-    expect((await recadoPorId(TENANT, id, AGORA))?.agendamentoId).toBeNull();
+    expect((await recadoPorId(TENANT, LOCAL, id, AGORA))?.agendamentoId).toBeNull();
   });
 
   // -- a fila de triagem -------------------------------------------------------
@@ -176,7 +188,7 @@ describeIfDb('recados do cliente', () => {
 
   it('encerrado sai da fila, mas continua existindo', async () => {
     const { id } = await mandar();
-    await encerrarRecado({ tenantId: TENANT, recadoId: id, ator, agora: AGORA });
+    await encerrarRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, ator, agora: AGORA });
 
     expect(await recadosDaCasa(TENANT, { locationId: LOCAL, agora: AGORA })).toHaveLength(0);
     expect(
@@ -188,9 +200,9 @@ describeIfDb('recados do cliente', () => {
 
   it('assumir tira o recado da triagem e registra na trilha', async () => {
     const { id } = await mandar();
-    await assumirRecado({ tenantId: TENANT, recadoId: id, responsavelId: RUAN, ator });
+    await assumirRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, responsavelId: RUAN, ator });
 
-    const recado = await recadoPorId(TENANT, id, AGORA);
+    const recado = await recadoPorId(TENANT, LOCAL, id, AGORA);
     expect(recado).toMatchObject({ estado: 'em_analise', responsavelNome: 'Ruan' });
 
     const trilha = await withTenant(TENANT, (tx) =>
@@ -204,6 +216,7 @@ describeIfDb('recados do cliente', () => {
     await expect(
       assumirRecado({
         tenantId: TENANT,
+        locationId: LOCAL,
         recadoId: id,
         responsavelId: 'd0404040-0000-0000-0000-00000000dead',
         ator,
@@ -213,9 +226,9 @@ describeIfDb('recados do cliente', () => {
 
   it('recado encerrado não volta a ser assumido', async () => {
     const { id } = await mandar();
-    await encerrarRecado({ tenantId: TENANT, recadoId: id, ator, agora: AGORA });
+    await encerrarRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, ator, agora: AGORA });
     await expect(
-      assumirRecado({ tenantId: TENANT, recadoId: id, responsavelId: RUAN, ator }),
+      assumirRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, responsavelId: RUAN, ator }),
     ).rejects.toMatchObject({ code: 'transicao_invalida' });
   });
 
@@ -230,13 +243,14 @@ describeIfDb('recados do cliente', () => {
     const { id } = await mandar({ customerId: CARLOS });
     await responderRecado({
       tenantId: TENANT,
+      locationId: LOCAL,
       recadoId: id,
       resposta: 'Desculpe pela espera. Reforçamos a escala de sábado.',
       ator,
       agora: AGORA,
     });
 
-    const recado = await recadoPorId(TENANT, id, AGORA);
+    const recado = await recadoPorId(TENANT, LOCAL, id, AGORA);
     expect(recado).toMatchObject({ estado: 'respondido' });
     expect(recado?.resposta).toContain('Reforçamos');
 
@@ -255,10 +269,10 @@ describeIfDb('recados do cliente', () => {
      */
     const { id } = await mandar();
     await expect(
-      responderRecado({ tenantId: TENANT, recadoId: id, resposta: 'Obrigado!', ator }),
+      responderRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, resposta: 'Obrigado!', ator }),
     ).rejects.toMatchObject({ code: 'sem_contato' });
 
-    expect((await recadoPorId(TENANT, id, AGORA))?.estado).toBe('aberto');
+    expect((await recadoPorId(TENANT, LOCAL, id, AGORA))?.estado).toBe('aberto');
   });
 
   it('quem pediu exclusão deixa de ter para onde responder', async () => {
@@ -274,14 +288,14 @@ describeIfDb('recados do cliente', () => {
     });
 
     await expect(
-      responderRecado({ tenantId: TENANT, recadoId: id, resposta: 'Obrigado!', ator }),
+      responderRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, resposta: 'Obrigado!', ator }),
     ).rejects.toMatchObject({ code: 'sem_contato' });
   });
 
   it('resposta em branco é recusada', async () => {
     const { id } = await mandar({ customerId: CARLOS });
     await expect(
-      responderRecado({ tenantId: TENANT, recadoId: id, resposta: '   ', ator }),
+      responderRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, resposta: '   ', ator }),
     ).rejects.toMatchObject({ code: 'resposta_vazia' });
   });
 
@@ -289,6 +303,7 @@ describeIfDb('recados do cliente', () => {
     const { id } = await mandar({ customerId: CARLOS });
     await responderRecado({
       tenantId: TENANT,
+      locationId: LOCAL,
       recadoId: id,
       resposta: 'Já trocamos a cadeira.',
       ator,
@@ -304,9 +319,9 @@ describeIfDb('recados do cliente', () => {
 
   it('responder de novo depois de encerrado é recusado', async () => {
     const { id } = await mandar({ customerId: CARLOS });
-    await encerrarRecado({ tenantId: TENANT, recadoId: id, ator, agora: AGORA });
+    await encerrarRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, ator, agora: AGORA });
     await expect(
-      responderRecado({ tenantId: TENANT, recadoId: id, resposta: 'Oi', ator }),
+      responderRecado({ tenantId: TENANT, locationId: LOCAL, recadoId: id, resposta: 'Oi', ator }),
     ).rejects.toMatchObject({ code: 'transicao_invalida' });
   });
 
@@ -323,7 +338,7 @@ describeIfDb('recados do cliente', () => {
       withTenant(TENANT, (tx) => tx.$executeRaw`DELETE FROM feedbacks WHERE id = ${id}::uuid`),
     ).rejects.toThrow();
 
-    expect(await recadoPorId(TENANT, id, AGORA)).not.toBeNull();
+    expect(await recadoPorId(TENANT, LOCAL, id, AGORA)).not.toBeNull();
   });
 
   it('anonimizar solta o vínculo e mantém a melhoria', async () => {
@@ -336,7 +351,7 @@ describeIfDb('recados do cliente', () => {
 
     await anonimizarCliente({ tenantId: TENANT, customerId: CARLOS, motivo: 'pedido do titular', ator });
 
-    const recado = await recadoPorId(TENANT, id, AGORA);
+    const recado = await recadoPorId(TENANT, LOCAL, id, AGORA);
     expect(recado?.clienteId).toBeNull();
     expect(recado?.texto).toContain('cadeira do fundo');
   });
@@ -346,7 +361,7 @@ describeIfDb('recados do cliente', () => {
     // novo no momento de enviar, e a resposta é "não há para quem".
     const { id } = await mandar({ customerId: CARLOS });
     await responderRecado({
-      tenantId: TENANT, recadoId: id, resposta: 'Obrigado pelo aviso.', ator, agora: AGORA,
+      tenantId: TENANT, locationId: LOCAL, recadoId: id, resposta: 'Obrigado pelo aviso.', ator, agora: AGORA,
     });
     await anonimizarCliente({ tenantId: TENANT, customerId: CARLOS, motivo: 'pedido do titular', ator });
 

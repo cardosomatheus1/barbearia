@@ -75,6 +75,153 @@ colher() {
   done
 }
 
+# A prontidão vem antes das suítes pelo mesmo motivo das lacunas: é barata e
+# responde se o repositório está dizendo a verdade sobre o que pode ser vendido.
+printf '\n\033[1m==> matriz de prontidão\033[0m\n'
+if node scripts/verificar-prontidao.mjs >"$SAIDA/prontidao.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/prontidao.log" | tail -25
+  failures+=("matriz de prontidão")
+fi
+
+# R8 mantém a linguagem comercial abaixo da matriz de prontidão.
+printf '\n\033[1m==> verdade comercial R8\033[0m\n'
+if node scripts/verificar-r8-comercial.mjs >"$SAIDA/r8.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r8.log" | tail -25
+  failures+=("verdade comercial R8")
+fi
+
+# V0 é barato e estrutural: garante que renomear/reagrupar não apague uma porta
+# antiga e que o login passe pela decisão de casa por perfil.
+printf '
+\033[1m==> vocabulário e navegação V0\033[0m
+'
+if node scripts/verificar-v0-navegacao.mjs >"$SAIDA/v0.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v0.log" | tail -25
+  failures+=("vocabulário e navegação V0")
+fi
+
+# As correções críticas de auditoria viram contrato cumulativo: uma branch futura
+# não pode ficar verde removendo junto o bug e a asserção que o detectava.
+printf '\n\033[1m==> invariantes da auditoria\033[0m\n'
+if node scripts/verificar-invariantes-auditoria.mjs >"$SAIDA/invariantes-auditoria.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/invariantes-auditoria.log" | tail -40
+  failures+=("invariantes da auditoria")
+fi
+
+# A terceira camada de auditoria cruza semântica financeira, timezone e falhas
+# externas. É separada da guarda de regressão visual porque esses bugs podem
+# manter rota, tipo e tela corretos enquanto o número econômico fica errado.
+printf '\n\033[1m==> auditoria profunda de invariantes\033[0m\n'
+if node scripts/verificar-auditoria-profunda.mjs >"$SAIDA/auditoria-profunda.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/auditoria-profunda.log" | tail -40
+  failures+=("auditoria profunda de invariantes")
+fi
+
+# A quarta camada protege os achados ofensivos: dinheiro externo, slugs/rotas
+# públicas e a janela temporal da apuração da plataforma.
+printf '\n\033[1m==> auditoria ofensiva de invariantes\033[0m\n'
+if node scripts/verificar-auditoria-ofensiva.mjs >"$SAIDA/auditoria-ofensiva.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/auditoria-ofensiva.log" | tail -40
+  failures+=("auditoria ofensiva de invariantes")
+fi
+
+# A auditoria de rotas pega links literais quebrados antes do build do Next.
+printf '\n\033[1m==> rotas internas web\033[0m\n'
+if node scripts/verificar-rotas-web.mjs >"$SAIDA/rotas-web.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/rotas-web.log" | tail -25
+  failures+=("rotas internas web")
+fi
+
+# V1 abre a entidade central do produto. É barato conferir aqui porque uma
+# regressão de permissão ou navegação não precisa esperar build ou Postgres.
+printf '\n\033[1m==> porta de clientes V1\033[0m\n'
+if node scripts/verificar-v1-clientes.mjs >"$SAIDA/v1.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v1.log" | tail -25
+  failures+=("porta de clientes V1")
+fi
+
+# V3 fecha a orientação: uma única navegação vertical, migalha derivada e abas
+# horizontais. É barato e precisa falhar antes do build se alguém recriar uma
+# segunda lista de navegação.
+printf '\n\033[1m==> orientação V3\033[0m\n'
+if node scripts/verificar-v3-orientacao.mjs >"$SAIDA/v3.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v3.log" | tail -25
+  failures+=("orientação V3")
+fi
+
+# V4 separa o que é operação diária do que é configuração por exceção. A
+# guarda cobra dois grupos reais, peso secundário e o comportamento de tablet
+# que mantém as áreas do dia visíveis sem rolagem.
+printf '\n\033[1m==> operação x configuração V4\033[0m\n'
+if node scripts/verificar-v4-separacao.mjs >"$SAIDA/v4.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v4.log" | tail -25
+  failures+=("operação x configuração V4")
+fi
+
+# V5 transforma Hoje na casa da operação. A guarda cobra a primeira dobra,
+# separação de permissão financeira e ausência de gráfico antes do build.
+printf '\n\033[1m==> centro operacional V5\033[0m\n'
+if node scripts/verificar-v5-hoje.mjs >"$SAIDA/v5.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v5.log" | tail -25
+  failures+=("centro operacional V5")
+fi
+
+# R5 abre a primeira ilha de JavaScript do produto. A guarda barata cobra que
+# ela exista somente no admin, tenha estado por linha e não puxe domínio/banco
+# para o navegador. O tamanho real dos chunks é medido depois do Next build.
+printf '\n\033[1m==> primeira ilha de cliente R5\033[0m\n'
+if node scripts/verificar-r5-ilha.mjs >"$SAIDA/r5.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r5.log" | tail -25
+  failures+=("primeira ilha de cliente R5")
+fi
+
+# R6 impede que título histórico ✅ volte a prometer a parte que uma lacuna
+# aberta ainda declara ausente.
+printf '\n\033[1m==> promessas históricas R6\033[0m\n'
+if node scripts/verificar-r6-promessas.mjs >"$SAIDA/r6.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r6.log" | tail -25
+  failures+=("promessas históricas R6")
+fi
+
 # Etapa serial e sozinha: é a mais barata e é a que responde "o que ficou para
 # trás". Enterrada no meio de uma saída longa, ela deixaria de ser lida.
 printf '\n\033[1m==> lacunas declaradas\033[0m\n'
@@ -84,6 +231,209 @@ else
   printf '\033[31m    FALHOU\033[0m\n'
   sed 's/^/    /' "$SAIDA/lacunas.log" | tail -25
   failures+=("lacunas declaradas")
+fi
+
+# V10 troca a lista visual pela régua proporcional. A guarda confere que a
+# jornada vem do domínio, o buraco usa buffer e o alvo de marcação continua
+# contido/operável no mobile.
+printf '\n\033[1m==> agenda proporcional V10\033[0m\n'
+if node scripts/verificar-v10-agenda.mjs >"$SAIDA/v10.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v10.log" | tail -25
+  failures+=("agenda proporcional V10")
+fi
+
+# V11 é a válvula de escape da arquitetura de navegação: função vem do
+# registro já recortado; pessoa e horário vêm das rotas que já aplicam tenant
+# e permissão. Ações no contexto impedem procurar o mesmo objeto uma segunda vez.
+printf '\n\033[1m==> busca global e ações V11\033[0m\n'
+if node scripts/verificar-v11-busca.mjs >"$SAIDA/v11.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/v11.log" | tail -25
+  failures+=("busca global e ações V11")
+fi
+
+if node scripts/verificar-v2-ficha.mjs >"$SAIDA/v2.log" 2>&1; then
+  echo "  ✓ V2: ficha do cliente organizada"
+else
+  echo "  ✗ V2: ficha do cliente"
+  cat "$SAIDA/v2.log"
+  exit 1
+fi
+
+if node scripts/verificar-v6-painel.mjs >"$SAIDA/v6.log" 2>&1; then
+  echo "  ✓ V6: painel do dono narrativo"
+else
+  echo "  ✗ V6: painel do dono"
+  cat "$SAIDA/v6.log"
+  exit 1
+fi
+
+
+# V7/V8/V9 consolidam o desenho depois das jornadas estarem no lugar: molde
+# declarado, hierarquia em três níveis e cor com significado fechado.
+if node scripts/verificar-v789-visual.mjs >"$SAIDA/v789.log" 2>&1; then
+  echo "  ✓ V7/V8/V9: moldes, hierarquia e semântica visual"
+else
+  echo "  ✗ V7/V8/V9: consolidação visual"
+  cat "$SAIDA/v789.log"
+  exit 1
+fi
+
+# V8 global estático percorre todas as superfícies TSX e fecha anti-padrões que
+# não dependem de banco/navegador: mídia sem alt, target externo inseguro,
+# tabindex positivo, clique sem semântica, botão fora do design system, summary
+# sem contrato e tabela de dados sem recipiente horizontal.
+printf '
+[1m==> V8 técnico global estático[0m
+'
+if node scripts/verificar-v8-estatico-global.mjs >"$SAIDA/v8-global.log" 2>&1 \
+  && node scripts/verificar-v8-estatico-global.test.mjs >>"$SAIDA/v8-global.log" 2>&1; then
+  printf '[32m    ok[0m
+'
+else
+  printf '[31m    FALHOU[0m
+'
+  sed 's/^/    /' "$SAIDA/v8-global.log" | tail -25
+  failures+=("V8 técnico global estático")
+fi
+
+# A11Y/UX fecha regressões que a revisão visual estrutural não enxerga: pular
+# navegação, foco seguro da busca modal, indicação de foco e revelação
+# progressiva do pagamento dividido na Comanda.
+printf '
+[1m==> acessibilidade e densidade operacional[0m
+'
+if node scripts/verificar-a11y-ux.mjs >"$SAIDA/a11y-ux.log" 2>&1 \
+  && node scripts/verificar-a11y-ux.test.mjs >>"$SAIDA/a11y-ux.log" 2>&1; then
+  printf '[32m    ok[0m
+'
+else
+  printf '[31m    FALHOU[0m
+'
+  sed 's/^/    /' "$SAIDA/a11y-ux.log" | tail -25
+  failures+=("acessibilidade e densidade operacional")
+fi
+
+# O percurso financeiro precisa provar uma venda, não apenas abrir a tela. Esta
+# guarda prende os marcos mínimos do E2E (caixa → comanda → item → pagamento →
+# troco → movimento → fechamento) antes de o Playwright/DB rodar na medição.
+printf '\n\033[1m==> honestidade do percurso financeiro E2E\033[0m\n'
+if node scripts/verificar-percurso-venda-e2e.mjs >"$SAIDA/percurso-venda-e2e.log" 2>&1 \
+  && node scripts/verificar-percurso-venda-e2e.test.mjs >>"$SAIDA/percurso-venda-e2e.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/percurso-venda-e2e.log" | tail -25
+  failures+=("honestidade do percurso financeiro E2E")
+fi
+
+# R12 aqui é só o smoke estrutural e a integridade do instrumento. A medição
+# humana não pode virar teste automatizado sem perder o que ela mede.
+printf '\n\033[1m==> percursos de usabilidade R12\033[0m\n'
+if node scripts/verificar-r12-percursos.mjs >"$SAIDA/r12.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r12.log" | tail -25
+  failures+=("percursos de usabilidade R12")
+fi
+
+# R9 tira a página pública de hosts externos e transforma imagem em dado
+# persistente do produto. A guarda também cobra backup e preserva o consentimento
+# específico das fotos de cliente.
+printf '\n\033[1m==> armazenamento próprio de mídia R9\033[0m\n'
+if node scripts/verificar-r9-midia.mjs >"$SAIDA/r9.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r9.log" | tail -25
+  failures+=("armazenamento próprio de mídia R9")
+fi
+
+# R10 parte o CSS por superfície sem mudar a cascata. A guarda cobra que o
+# índice continue sendo só índice, que todos os fragmentos estejam importados
+# uma vez e que cópia idêntica de regra não volte a crescer em silêncio.
+printf '\n\033[1m==> CSS por superfície R10\033[0m\n'
+if node scripts/verificar-r10-css.mjs >"$SAIDA/r10.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r10.log" | tail -25
+  failures+=("CSS por superfície R10")
+fi
+
+# R11 parte os dois maiores monólitos internos do admin por domínio, mantendo
+# fachadas estáveis para que a UI não conheça a topologia da implementação.
+printf '\n\033[1m==> módulos do admin R11\033[0m\n'
+if node scripts/verificar-r11-modulos.mjs >"$SAIDA/r11.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/r11.log" | tail -25
+  failures+=("módulos do admin R11")
+fi
+
+# A comanda financeira era o maior hotspot de domínio do backend. A guarda
+# mantém leitura, fiado e tipos fora da fachada e preserva as travas críticas
+# que justificam a separação.
+printf '\n\033[1m==> módulos financeiros da comanda\033[0m\n'
+if node scripts/verificar-finance-comanda-modulos.mjs >"$SAIDA/finance-comanda-modulos.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/finance-comanda-modulos.log" | tail -25
+  failures+=("módulos financeiros da comanda")
+fi
+
+# O booking era o maior hotspot do motor de agenda. A guarda mantém consultas
+# do cliente e contratos/SQLSTATE fora da fachada transacional sem deslocar as
+# defesas de concorrência que impedem overbooking.
+printf '\n\033[1m==> módulos do motor de booking\033[0m\n'
+if node scripts/verificar-scheduling-booking-modulos.mjs >"$SAIDA/scheduling-booking-modulos.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/scheduling-booking-modulos.log" | tail -25
+  failures+=("módulos do motor de booking")
+fi
+
+# O canal WhatsApp era o próximo hotspot do CRM: credencial, templates,
+# mensagens, webhook e roteamento público agora têm fronteiras próprias.
+printf '\n\033[1m==> módulos do CRM/WhatsApp\033[0m\n'
+if node scripts/verificar-crm-whatsapp-modulos.mjs >"$SAIDA/crm-whatsapp-modulos.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/crm-whatsapp-modulos.log" | tail -25
+  failures+=("módulos do CRM/WhatsApp")
+fi
+
+# Comissão é uma fronteira de dinheiro: a modularização só vale se fechamento,
+# estorno, vales e limites defensivos continuarem no mesmo contrato.
+printf '\n\033[1m==> módulos financeiros de comissão\033[0m\n'
+if node scripts/verificar-finance-comissao-modulos.mjs >"$SAIDA/finance-comissao-modulos.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/finance-comissao-modulos.log" | tail -25
+  failures+=("módulos financeiros de comissão")
+fi
+
+# Fiscal é uma integração externa sensível: a modularização só vale se o código
+# continuar dizendo a verdade sobre o que existe (nenhum/fake), preservando
+# idempotência, estados em voo, recorte da unidade e entrega no máximo uma vez.
+printf '\n\033[1m==> módulos financeiros fiscais\033[0m\n'
+if node scripts/verificar-finance-fiscal-modulos.mjs >"$SAIDA/finance-fiscal-modulos.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/finance-fiscal-modulos.log" | tail -25
+  failures+=("módulos financeiros fiscais")
 fi
 
 # ---------------------------------------------------------------------------
@@ -162,7 +512,7 @@ else
 fi
 
 precisa "@barbearia/web" && lancar "build do web + typecheck" \
-  sh -c 'pnpm --filter @barbearia/web build && pnpm --filter @barbearia/web typecheck'
+  sh -c 'pnpm --filter @barbearia/web build && node scripts/medir-bundle-r5.mjs && pnpm --filter @barbearia/web typecheck'
 precisa "@barbearia/api" && lancar "build da api" pnpm --filter @barbearia/api build
 precisa "@barbearia/core" && lancar "core — unitários" pnpm --filter @barbearia/core test
 precisa "@barbearia/ui" && lancar "ui — tokens e componentes" pnpm --filter @barbearia/ui test
@@ -173,6 +523,9 @@ precisa "@barbearia/web" && lancar "web — lógica de tela" pnpm --filter @barb
 # O resolvedor tem teste próprio: ele decide o que vai ser conferido, e errar
 # para menos ali devolveria verde sobre código que ninguém rodou.
 lancar "resolvedor de afetados" npx vitest run scripts/afetados.test.mjs
+lancar "guarda da matriz de prontidão" node --test scripts/verificar-prontidao.test.mjs
+lancar "guarda CSS R10 — negativos" node --test scripts/verificar-r10-css.test.mjs
+lancar "guarda R11 — módulos por domínio" npx vitest run scripts/verificar-r11-modulos.test.mjs
 # Crase dentro de consulta fecha o tagged template e o erro sai como sintaxe em
 # cima de uma linha de prosa. Custou três voltas de build em três blocos.
 lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
@@ -214,6 +567,45 @@ lancar "summary com classe" npx vitest run scripts/summary-com-classe.test.mjs
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.
 lancar "rota de primeiro nível × slug reservado" npx vitest run scripts/rotas-reservadas.test.mjs
 lancar "segredos do deploy" npx vitest run scripts/segredos-do-deploy.test.mjs
+lancar "configuração de produção" node --test scripts/verificar-configuracao-producao.test.mjs
+# Segurança de lançamento: nenhuma função raw-unsafe em produção, nenhum segredo
+# no snapshot e proteção anti-bot não pode ser removida só de um lado do fluxo.
+lancar "SQL seguro" node scripts/verificar-sql-seguro.mjs
+lancar "SQL seguro — negativos" node --test scripts/verificar-sql-seguro.test.mjs
+lancar "segredos no snapshot" node scripts/verificar-segredos.mjs
+lancar "secret scan — negativos" node --test scripts/verificar-segredos.test.mjs
+lancar "proteção anti-bot" node scripts/verificar-bot-protection.mjs
+lancar "proteção anti-bot — negativos" node --test scripts/verificar-bot-protection.test.mjs
+lancar "portão de segurança" node scripts/verificar-portao-seguranca.mjs
+lancar "portão de segurança — negativos" node --test scripts/verificar-portao-seguranca.test.mjs
+lancar "identidade/tenant — segurança" node scripts/verificar-identidade-seguranca.mjs
+lancar "identidade/tenant — negativos" node --test scripts/verificar-identidade-seguranca.test.mjs
+lancar "auditoria Scheduling" node scripts/verificar-auditoria-scheduling.mjs
+lancar "auditoria Scheduling — negativos" node --test scripts/verificar-auditoria-scheduling.test.mjs
+lancar "auditoria Financeiro" node scripts/verificar-auditoria-financeiro.mjs
+lancar "auditoria Financeiro — negativos" node --test scripts/verificar-auditoria-financeiro.test.mjs
+lancar "auditoria CRM/WhatsApp" node scripts/verificar-auditoria-crm-whatsapp.mjs
+lancar "auditoria CRM/WhatsApp — negativos" node --test scripts/verificar-auditoria-crm-whatsapp.test.mjs
+lancar "auditoria Catálogo/Onboarding" node scripts/verificar-auditoria-catalogo-onboarding.mjs
+lancar "auditoria Catálogo/Onboarding — negativos" node --test scripts/verificar-auditoria-catalogo-onboarding.test.mjs
+lancar "auditoria Platform/Jobs" node scripts/verificar-auditoria-platform-jobs.mjs
+lancar "auditoria Platform/Jobs — negativos" node --test scripts/verificar-auditoria-platform-jobs.test.mjs
+lancar "auditoria Final Cross-Domain" node scripts/verificar-auditoria-final-cross-domain.mjs
+lancar "auditoria Final Cross-Domain — negativos" node --test scripts/verificar-auditoria-final-cross-domain.test.mjs
+lancar "auditoria Recheck Final" node scripts/verificar-recheck-final.mjs
+lancar "auditoria Recheck Final — negativos" node --test scripts/verificar-recheck-final.test.mjs
+lancar "certificação prática da pilha" node scripts/verificar-certificacao-pratica.mjs
+lancar "certificação prática da pilha — negativos" node --test scripts/verificar-certificacao-pratica.test.mjs
+lancar "carga concorrente — contrato do ensaio" node --test scripts/carga-concorrencia-reserva.test.mjs
+lancar "criptografia de backup" node scripts/verificar-criptografia-backup.mjs
+lancar "criptografia de backup — runtime" node --test scripts/backup-crypto.test.mjs
+lancar "backup shell criptografado" node --test scripts/backup-shell.test.mjs
+lancar "criptografia de backup — negativos" node --test scripts/verificar-criptografia-backup.test.mjs
+lancar "hardening de integrações" node --test scripts/verificar-hardening-integracoes.test.mjs
+lancar "robustez operacional" node scripts/verificar-robustez-operacional.mjs
+lancar "robustez operacional — negativos" node scripts/verificar-robustez-operacional.test.mjs
+lancar "observabilidade e diagnóstico" node scripts/verificar-observabilidade.mjs
+lancar "observabilidade — negativos" node scripts/verificar-observabilidade.test.mjs
 # Máquina recém-instalada não tem crontab, e era esse o caso que instalava um
 # crontab vazio e deixava o backup diário — a única cópia dos dados — sem existir.
 lancar "cron do backup" npx vitest run scripts/cron-do-backup.test.mjs

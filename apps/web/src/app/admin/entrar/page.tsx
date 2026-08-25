@@ -16,7 +16,7 @@ const FALHA: Record<string, string> = {
 };
 
 export default async function EntrarGestorPage({ searchParams }: Props) {
-  if (await lerSessaoGestor()) redirect('/admin/onboarding');
+  if (await lerSessaoGestor()) redirect('/admin');
 
   const query = await searchParams;
   const erro = typeof query['erro'] === 'string' ? query['erro'] : undefined;

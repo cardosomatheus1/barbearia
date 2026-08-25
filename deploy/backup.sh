@@ -31,12 +31,46 @@ COMPOSE="docker compose -f $DESTINO/deploy/compose.yml --env-file $DESTINO/.env"
 mkdir -p "$PASTA"
 carimbo="$(date -u +%Y%m%dT%H%M%SZ)"
 arquivo="$PASTA/barbearia-$carimbo.dump"
+midia="$PASTA/barbearia-$carimbo-media.tar.gz"
+arquivo_enc="$arquivo.enc"
+midia_enc="$midia.enc"
+MEDIA_STORAGE="$(grep -E '^MEDIA_STORAGE=' "$DESTINO/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+MEDIA_STORAGE="${MEDIA_STORAGE:-local}"
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-$(grep -E '^BACKUP_ENCRYPTION_KEY=' "$DESTINO/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)}"
+if [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+  printf '\033[31mBACKUP_ENCRYPTION_KEY ausente: backup não será gravado em claro\033[0m\n' >&2
+  exit 1
+fi
+export BACKUP_ENCRYPTION_KEY
+
+# Plaintext existe só durante a criação/validação local. Qualquer saída — erro de
+# pg_dump, criptografia ou upload — apaga os temporários legíveis. Em falha,
+# artefato criptografado parcial também é removido para não entrar na rotação.
+limpar_temporarios() {
+  local rc=$?
+  trap - EXIT
+  rm -f "$arquivo" "$midia"
+  if [ "$rc" -ne 0 ]; then rm -f "$arquivo_enc" "$midia_enc"; fi
+  exit "$rc"
+}
+trap limpar_temporarios EXIT
 
 # `pg_dump` de dentro do contêiner do banco: o cliente e o servidor têm a mesma
 # versão, e uma incompatibilidade de versão só aparece na hora de restaurar.
 $COMPOSE exec -T db pg_dump --format=custom --username postgres barbearia > "$arquivo"
+# No modo local as imagens vivem fora do Postgres, no volume da API, e entram
+# no backup. Em S3/R2/MinIO elas já vivem fora do VPS; copiar `/data/media`
+# produziria um tar vazio e daria falsa sensação de proteção. Nesse modo a
+# retenção/versionamento do bucket é uma configuração do provedor.
+if [ "$MEDIA_STORAGE" = "local" ]; then
+  $COMPOSE exec -T api sh -c 'mkdir -p /data/media && tar -C /data/media -czf - .' > "$midia"
+fi
 
 tamanho="$(du -h "$arquivo" | cut -f1 || true)"
+tamanho_midia=""
+if [ "$MEDIA_STORAGE" = "local" ]; then
+  tamanho_midia="$(du -h "$midia" | cut -f1 || true)"
+fi
 
 # Um dump vazio é o pior desfecho possível: o cron fica verde por meses e a
 # descoberta acontece no dia da restauração. O piso é grosseiro de propósito —
@@ -50,18 +84,45 @@ fi
 # Confere que o arquivo é legível **antes** de apagar os antigos: um dump
 # corrompido que passe do piso de tamanho ainda derrubaria a rotação.
 $COMPOSE exec -T db pg_restore --list < "$arquivo" > /dev/null
+# A segunda metade do backup local também é testada antes da rotação.
+# `tar -tzf` detecta arquivo truncado/corrompido sem extrair nada.
+if [ "$MEDIA_STORAGE" = "local" ]; then
+  tar -tzf "$midia" > /dev/null
+fi
+
+# O dump e a mídia não permanecem legíveis nem no VPS nem no destino remoto.
+# A chave é independente das demais chaves da aplicação: girar MFA/WhatsApp
+# não deve tornar backup antigo ilegível. O GCM autentica o arquivo inteiro;
+# `check` lê e valida a tag antes de aceitarmos o artefato criptografado.
+node "$DESTINO/scripts/backup-crypto.mjs" encrypt "$arquivo" "$arquivo_enc"
+node "$DESTINO/scripts/backup-crypto.mjs" check "$arquivo_enc"
+if [ "$MEDIA_STORAGE" = "local" ]; then
+  node "$DESTINO/scripts/backup-crypto.mjs" encrypt "$midia" "$midia_enc"
+  node "$DESTINO/scripts/backup-crypto.mjs" check "$midia_enc"
+fi
+rm -f "$arquivo" "$midia"
 
 if [ -n "${BACKUP_REMOTO:-}" ]; then
   if command -v rclone > /dev/null; then
-    rclone copy "$arquivo" "$BACKUP_REMOTO" --quiet
-    printf 'backup %s (%s) enviado para %s\n' "$carimbo" "$tamanho" "$BACKUP_REMOTO"
+    rclone copy "$arquivo_enc" "$BACKUP_REMOTO" --quiet
+    if [ "$MEDIA_STORAGE" = "local" ]; then
+      rclone copy "$midia_enc" "$BACKUP_REMOTO" --quiet
+      printf 'backup criptografado %s (banco %s + mídia %s) enviado para %s\n' "$carimbo" "$tamanho" "$tamanho_midia" "$BACKUP_REMOTO"
+    else
+      printf 'backup criptografado %s (banco %s) enviado para %s; mídia está em object storage\n' "$carimbo" "$tamanho" "$BACKUP_REMOTO"
+    fi
   else
     printf '\033[33mBACKUP_REMOTO definido e rclone ausente: o backup ficou só nesta máquina\033[0m\n' >&2
   fi
 else
-  printf '\033[33mbackup %s (%s) só nesta máquina — configure BACKUP_REMOTO\033[0m\n' "$carimbo" "$tamanho" >&2
+  if [ "$MEDIA_STORAGE" = "local" ]; then
+    printf '\033[33mbackup criptografado %s (banco %s + mídia %s) só nesta máquina — configure BACKUP_REMOTO\033[0m\n' "$carimbo" "$tamanho" "$tamanho_midia" >&2
+  else
+    printf '\033[33mbackup criptografado %s (banco %s) só nesta máquina; mídia está em object storage — configure BACKUP_REMOTO para o banco e versionamento/retention no bucket\033[0m\n' "$carimbo" "$tamanho" >&2
+  fi
 fi
 
 # A rotação vem depois de tudo dar certo. Antes, um erro no dump de hoje
 # apagaria o de ontem e deixaria a barbearia sem nenhum.
-find "$PASTA" -name 'barbearia-*.dump' -mtime "+$GUARDAR_DIAS" -delete
+find "$PASTA" -name 'barbearia-*.dump.enc' -mtime "+$GUARDAR_DIAS" -delete
+find "$PASTA" -name 'barbearia-*-media.tar.gz.enc' -mtime "+$GUARDAR_DIAS" -delete

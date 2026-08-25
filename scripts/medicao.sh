@@ -21,8 +21,10 @@
 #
 # ## O que ele faz
 #
-# Sobe tudo do zero num banco descartável, mede e derruba. É seguro rodar em
-# cima de um ambiente já de pé: ele mata o que estiver nas portas que usa.
+# Sobe tudo do zero num banco descartável, mede e derruba. API, Web e Worker
+# convivem durante todos os percursos: medir só as superfícies HTTP deixaria de
+# fora justamente os efeitos assíncronos. É seguro rodar em cima de um ambiente
+# já de pé: ele mata o que estiver nas portas que usa.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -35,7 +37,14 @@ export WEB_URL="${WEB_URL:-http://127.0.0.1:3001}"
 
 export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
 export STAFF_EMAIL_PEPPER="${STAFF_EMAIL_PEPPER:-pepper-da-medicao}"
+export OTP_PEPPER="${OTP_PEPPER:-otp-pepper-da-medicao-0123456789abcdef}"
 export MARKETPLACE_ORIGIN_SECRET="${MARKETPLACE_ORIGIN_SECRET:-origem-da-medicao-0123456789abcdef}"
+# Chaves efêmeras da medição. O Worker percorre também webhook, WhatsApp e KYC;
+# deixar uma delas ausente faria a pilha integrada falhar por configuração.
+export API_KEY_PEPPER="${API_KEY_PEPPER:-api-key-da-medicao-0123456789abcdef}"
+export WEBHOOK_SECRET_KEY="${WEBHOOK_SECRET_KEY:-$(openssl rand -base64 32)}"
+export WHATSAPP_TOKEN_KEY="${WHATSAPP_TOKEN_KEY:-$(openssl rand -base64 32)}"
+export KYC_INTENT_HMAC_SECRET="${KYC_INTENT_HMAC_SECRET:-kyc-da-medicao-0123456789abcdef}"
 # Sorteada por execução: o banco é descartável e nada aqui sobrevive.
 export MFA_SECRET_KEY="${MFA_SECRET_KEY:-$(openssl rand -base64 32)}"
 
@@ -50,6 +59,7 @@ export FISCAL_MODO="${FISCAL_MODO:-fake}"
 
 export RATE_LIMIT_SHORT="${RATE_LIMIT_SHORT:-1000000}"
 export RATE_LIMIT_LONG="${RATE_LIMIT_LONG:-1000000}"
+export WORKER_INTERVALO_MS="${WORKER_INTERVALO_MS:-250}"
 
 # As contas que a medição cria, num lugar só.
 #
@@ -69,19 +79,66 @@ PORTA_API="${API_URL##*:}"
 PORTA_WEB="${WEB_URL##*:}"
 LOG_API="$(mktemp -t medicao-api-XXXXXX.log)"
 LOG_WEB="$(mktemp -t medicao-web-XXXXXX.log)"
+LOG_WORKER="$(mktemp -t medicao-worker-XXXXXX.log)"
+PID_WORKER=""
+
+parar_worker() {
+  [ -n "$PID_WORKER" ] || return 0
+  if kill -0 "$PID_WORKER" >/dev/null 2>&1; then
+    kill -TERM "$PID_WORKER" >/dev/null 2>&1 || true
+    for _ in $(seq 1 50); do
+      kill -0 "$PID_WORKER" >/dev/null 2>&1 || break
+      sleep 0.1
+    done
+    kill -KILL "$PID_WORKER" >/dev/null 2>&1 || true
+  fi
+  wait "$PID_WORKER" >/dev/null 2>&1 || true
+  PID_WORKER=""
+}
+
+iniciar_worker() {
+  local antes atual
+  antes="$(grep -c '"evento":"worker.iniciado"' "$LOG_WORKER" 2>/dev/null || true)"
+  nohup node apps/worker/dist/main.js >> "$LOG_WORKER" 2>&1 &
+  PID_WORKER=$!
+
+  for _ in $(seq 1 100); do
+    if ! kill -0 "$PID_WORKER" >/dev/null 2>&1; then
+      echo "Worker encerrou durante a partida" >&2
+      tail -60 "$LOG_WORKER" >&2 || true
+      return 1
+    fi
+    atual="$(grep -c '"evento":"worker.iniciado"' "$LOG_WORKER" 2>/dev/null || true)"
+    if [ "$atual" -gt "$antes" ]; then return 0; fi
+    sleep 0.1
+  done
+
+  echo "Worker não confirmou a partida" >&2
+  tail -60 "$LOG_WORKER" >&2 || true
+  return 1
+}
+
+exigir_worker_vivo() {
+  if [ -n "$PID_WORKER" ] && kill -0 "$PID_WORKER" >/dev/null 2>&1; then return 0; fi
+  echo "Worker não permaneceu vivo durante a medição" >&2
+  tail -60 "$LOG_WORKER" >&2 || true
+  return 1
+}
 
 derrubar() {
   local saida=$?
   if [ "$saida" -ne 0 ]; then
     printf '\n\033[1m--- log da API ---\033[0m\n'; tail -60 "$LOG_API" || true
     printf '\n\033[1m--- log do web ---\033[0m\n'; tail -60 "$LOG_WEB" || true
+    printf '\n\033[1m--- log do Worker ---\033[0m\n'; tail -60 "$LOG_WORKER" || true
   fi
+  parar_worker
   fuser -k "$PORTA_API/tcp" >/dev/null 2>&1 || true
   fuser -k "$PORTA_WEB/tcp" >/dev/null 2>&1 || true
   if [ -z "${MEDICAO_MANTER_BANCO:-}" ]; then
     psql "$ADMIN_URL" -q -c "DROP DATABASE IF EXISTS $DEMO_DB WITH (FORCE);" >/dev/null 2>&1 || true
   fi
-  rm -f "$LOG_API" "$LOG_WEB"
+  rm -f "$LOG_API" "$LOG_WEB" "$LOG_WORKER"
   exit "$saida"
 }
 trap derrubar EXIT
@@ -103,7 +160,7 @@ if [ -z "${MEDICAO_PULAR_BUILD:-}" ]; then
   printf '    ok\n'
 fi
 
-printf '\n\033[1m==> subir API e web\033[0m\n'
+printf '\n\033[1m==> subir API, Web e Worker\033[0m\n'
 DATABASE_URL="$(scripts/url-do-app.sh "$ADMIN_URL" "$APP_DB_PASSWORD" "$DEMO_DB")"
 export DATABASE_URL
 export APP_DATABASE_URL="$DATABASE_URL"
@@ -115,6 +172,8 @@ nohup pnpm --filter @barbearia/web exec next start -p "$PORTA_WEB" > "$LOG_WEB" 
 # Sem isto o shell imprime "Killed" ao derrubar os dois no fim, e a última
 # linha da execução vira um susto em cima de uma medição que passou.
 disown -a 2>/dev/null || true
+iniciar_worker
+printf '    Worker pronto\n'
 
 # A espera é pela **sonda de pronto**, não por um `sleep`: ela só responde ok
 # com o banco respondendo e a conexão sem BYPASSRLS. Um `sleep` esconderia
@@ -132,13 +191,30 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
+# SIGKILL não executa o encerramento gracioso. A suíte de jobs prova que uma
+# claim órfã volta à fila e que o token antigo não conclui a retomada; aqui a
+# pilha prova a outra metade: o processo real volta e permanece vivo junto da
+# API e Web.
+printf '\n\033[1m==> queda abrupta e retomada do Worker\033[0m\n'
+kill -KILL "$PID_WORKER"
+wait "$PID_WORKER" >/dev/null 2>&1 || true
+PID_WORKER=""
+iniciar_worker
+printf '    Worker retomado após SIGKILL\n'
+
 printf '\n\033[1m==> responsividade em 360, 390, 768 e 1280\033[0m\n'
 node scripts/medir-responsividade.js
 
 printf '\n\033[1m==> percursos: do clique ao banco\033[0m\n'
 node scripts/percorrer.mjs
+exigir_worker_vivo
 
 printf '\n\033[1m==> carga em /availability\033[0m\n'
 node scripts/carga-availability.mjs
+exigir_worker_vivo
+
+printf '\n\033[1m==> 100 reservas concorrentes no mesmo slot\033[0m\n'
+node scripts/carga-concorrencia-reserva.mjs
+exigir_worker_vivo
 
 printf '\n\033[32mmedição: tudo dentro do esperado.\033[0m\n'

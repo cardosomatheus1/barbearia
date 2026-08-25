@@ -7,7 +7,10 @@ import {
   disparosAEnviar,
   enviarPeloWhatsApp,
   executarResposta,
-  marcarDisparoEnviado,
+  confirmarDisparoDaAutomacao,
+  liberarDisparoDaAutomacao,
+  marcarDisparoDaAutomacaoIncerto,
+  reservarDisparoDaAutomacao,
   conciliarWhatsAppDaUnidade,
   provedorDoWhatsApp,
   respostaParaEnviar,
@@ -44,6 +47,7 @@ import {
   type SplitProvider,
   type TipoDeNotificacao,
   VARIAVEIS_DO_AVISO,
+  WhatsAppDeliveryUnknownError,
 } from '@barbearia/core';
 import {
   avisarDaOperacao,
@@ -68,7 +72,9 @@ import {
   type MensagemDoClube,
   type NotificationProvider,
   type ResultadoDaRodada,
+  type EventoDaTarefa,
 } from '@barbearia/jobs';
+import { erroSeguro, logWorker } from './log.js';
 
 import { emissorFiscal, enviarNota } from '@barbearia/finance';
 
@@ -108,6 +114,7 @@ import {
   adquirenteDaPlataforma,
   aplicarRegua,
   conciliarPendentes,
+  conciliarEstornosPendentes,
   executarAvisoDeCobranca,
   recursoLigado,
   type AssuntoDoAviso,
@@ -169,11 +176,11 @@ const { psp, cobranca } = ligarAdquirente();
 /**
  * O provedor de mensagem do processo, **um só**.
  *
- * Instanciar `ConsoleNotificationProvider` dentro de um caminho específico faz
- * daquele caminho o único que não troca junto: no dia em que o WhatsApp de
- * verdade for ligado na linha de baixo, o convite de vaga continuaria sendo
- * impresso no log — e ele carrega o token em claro, que é credencial. Achado da
- * revisão de segurança do bloco 39.
+ * `ConsoleNotificationProvider` existe apenas como instrumento de desenvolvimento.
+ * Em produção ele falha explicitamente: ausência de canal real precisa virar retry/
+ * erro observável, nunca um falso sucesso registrado como mensagem entregue.
+ * Mantê-lo centralizado aqui também evita que um caminho fique preso ao console
+ * quando o canal real for trocado.
  */
 /**
  * O canal da casa por cima do canal de reserva (bloco 82).
@@ -384,13 +391,13 @@ async function main(): Promise<void> {
     // de terminar a que está em curso. Matar no meio deixaria `running`
     // pendurado até a varredura de órfãs — que existe, mas é a rede, não o
     // plano.
-    console.log(`[worker] ${sinal} recebido; terminando a tarefa em curso`);
+    logWorker('worker.sinal', { sinal, acao: 'terminar_tarefa_em_curso' });
   };
 
   process.on('SIGTERM', () => parar('SIGTERM'));
   process.on('SIGINT', () => parar('SIGINT'));
 
-  console.log(`[worker] ouvindo a fila a cada ${INTERVALO_MS}ms`);
+  logWorker('worker.iniciado', { intervaloMs: INTERVALO_MS });
 
   await rodarWorker(
     {
@@ -471,10 +478,9 @@ async function main(): Promise<void> {
       /**
        * Uma volta do motor de automação (bloco 56).
        *
-       * Marca os disparos e manda o que já venceu, na mesma volta. O carimbo vem
-       * **antes** da mensagem — precedente do bloco 54 —, e a mensagem sai pelo
-       * mesmo `provider` de todo o resto: instanciar um aqui faria deste o único
-       * caminho que não troca junto quando o WhatsApp oficial entrar.
+       * Reserva a vaga promocional antes da chamada externa e só confirma
+       * `sent_at` depois do sucesso do provider. Resultado externo incerto fica
+       * bloqueado para conciliação; falha explícita libera uma nova tentativa.
        */
       /**
        * O que a Meta ainda não respondeu desta barbearia (bloco 90).
@@ -498,22 +504,41 @@ async function main(): Promise<void> {
 
         let enviados = 0;
         for (const disparo of fila) {
-          const nossa = await marcarDisparoEnviado({ tenantId, disparoId: disparo.id });
-          if (!nossa) continue;
-          // Quem escolhe o canal é o provedor. Decidir aqui faria deste o único
-          // caminho que não troca junto no dia em que o canal mudar.
-          await provider.enviarDeAutomacao({
+          const nossa = await reservarDisparoDaAutomacao({
             tenantId,
-            locationId: local.id,
-            phoneE164: disparo.telefone,
-            clienteNome: disparo.clienteNome,
-            barbearia: disparo.barbearia,
-            tipo: disparo.tipo,
-            // O texto que esta automação escolheu. Sem ele, as onze automações
-            // possíveis saíam todas com a mesma frase.
-            templateId: disparo.templateId,
+            disparoId: disparo.id,
+            agora,
+            timeZone: local.timezone,
           });
-          enviados += 1;
+          if (!nossa) continue;
+
+          try {
+            // Quem escolhe o canal é o provedor. A vaga promocional já existe,
+            // mas `sent_at` ainda não: recusa explícita não pode virar sucesso.
+            await provider.enviarDeAutomacao({
+              tenantId,
+              locationId: local.id,
+              phoneE164: disparo.telefone,
+              clienteNome: disparo.clienteNome,
+              barbearia: disparo.barbearia,
+              tipo: disparo.tipo,
+              templateId: disparo.templateId,
+            });
+          } catch (erro) {
+            if (erro instanceof WhatsAppDeliveryUnknownError) {
+              await marcarDisparoDaAutomacaoIncerto({ tenantId, disparoId: disparo.id, agora });
+              continue;
+            }
+            await liberarDisparoDaAutomacao({ tenantId, disparoId: disparo.id });
+            throw erro;
+          }
+
+          const confirmou = await confirmarDisparoDaAutomacao({
+            tenantId,
+            disparoId: disparo.id,
+            agora,
+          });
+          if (confirmou) enviados += 1;
         }
 
         await atribuirObjetivos({ tenantId, agora });
@@ -559,7 +584,7 @@ async function main(): Promise<void> {
 
         if (varrida.marcados > 0 || enviados > 0) {
           // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.
-          console.log('[automacao]', { tenantId, marcados: varrida.marcados, enviados });
+          logWorker('automacao.varrida', { tenantId, marcados: varrida.marcados, enviados });
         }
       },
 
@@ -609,7 +634,7 @@ async function main(): Promise<void> {
         const atribuidos = await atribuirReceita({ tenantId, agora });
 
         // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.
-        console.log('[campanha]', {
+        logWorker('campanha.despachada', {
           tenantId,
           enviados: resultado.enviados,
           pulados: resultado.pulados,
@@ -626,7 +651,7 @@ async function main(): Promise<void> {
         if (resultado.enviadas > 0) {
           // Só a contagem: o link é documento público, mas o que ele identifica
           // é uma pessoa e o que ela comprou.
-          console.log('[fiscal] notas entregues', { tenantId, enviadas: resultado.enviadas });
+          logWorker('fiscal.notas_entregues', { tenantId, enviadas: resultado.enviadas });
         }
       },
 
@@ -644,7 +669,7 @@ async function main(): Promise<void> {
           provider: exigirEmissorFiscal(),
         });
         if (conciliadas > 0) {
-          console.log('[fiscal] notas reperguntadas', { tenantId, conciliadas });
+          logWorker('fiscal.notas_conciliadas', { tenantId, conciliadas });
         }
       },
       /**
@@ -679,7 +704,11 @@ async function main(): Promise<void> {
        * 110 — enquanto o cabeçalho da migração 0067 afirmava o contrário. Quem
        * achou foi a guarda do bloco 108.
        */
-      varrerVitrine: async (agora) => varrerVitrine(agora),
+      varrerVitrine: async (agora) => {
+        const refeitos = await varrerVitrine(agora);
+        if (refeitos > 0) logWorker('vitrine.refeita', { refeitos });
+        return refeitos;
+      },
       varrerRetencao: async (tenantId, agora) => {
         /**
          * O texto cru das perguntas anônimas vence junto (bloco 66).
@@ -701,14 +730,14 @@ async function main(): Promise<void> {
          */
         const desafios = await expirarDesafiosDeOtp({ tenantId, agora });
         if (desafios > 0) {
-          console.log('[lgpd] desafios de OTP expirados', { tenantId, linhas: desafios });
+          logWorker('lgpd.otp_expirado', { tenantId, linhas: desafios });
         }
 
         const expirados = await expirarTextoDaRecepcao({ tenantId, agora });
         if (expirados > 0) {
           // Só a contagem: o texto que está sendo apagado por ser possivelmente
           // pessoal não pode sair no log ao ser apagado.
-          console.log('[lgpd] texto da recepção expirado', { tenantId, linhas: expirados });
+          logWorker('lgpd.texto_recepcao_expirado', { tenantId, linhas: expirados });
         }
 
         /**
@@ -722,12 +751,12 @@ async function main(): Promise<void> {
          */
         const previews = await varrerPreviewsVencidos(tenantId, agora);
         if (previews > 0) {
-          console.log('[lgpd] preview de importação expirado', { tenantId, linhas: previews });
+          logWorker('lgpd.preview_importacao_expirado', { tenantId, linhas: previews });
         }
 
         const resultado = await varrerRetencao({ tenantId, agora });
         if (resultado.avisados.length > 0 || resultado.anonimizados > 0) {
-          console.log('[lgpd] retenção', {
+          logWorker('lgpd.retencao', {
             tenantId,
             // Só a contagem: nome de cliente prestes a ser anonimizado no log
             // seria dado pessoal sobrevivendo à própria anonimização.
@@ -882,12 +911,12 @@ async function main(): Promise<void> {
         const provider = adquirenteDoSplit();
         const cadastros = await conciliarRecebedores({ tenantId, provider, agora });
         if (cadastros.aprovados > 0) {
-          console.log('[split] cadastros aprovados', { tenantId, ...cadastros });
+          logWorker('split.cadastros_aprovados', { tenantId, ...cadastros });
         }
 
         const resultado = await liquidarRepasses({ tenantId, provider, agora });
         const mexeu = Object.values(resultado).some((n) => n > 0);
-        if (mexeu) console.log('[split] liquidação do dia', { tenantId, ...resultado });
+        if (mexeu) logWorker('split.liquidacao', { tenantId, ...resultado });
         return { repassados: resultado.repassados, retidos: resultado.retidos };
       },
 
@@ -898,7 +927,7 @@ async function main(): Promise<void> {
           agora,
         });
         const mexeu = Object.values(resultado).some((n) => n > 0);
-        if (mexeu) console.log('[clube] régua do dia', { tenantId, ...resultado });
+        if (mexeu) logWorker('clube.regua', { tenantId, ...resultado });
         return { cobradas: resultado.cobradas, suspensas: resultado.suspensas };
       },
 
@@ -932,7 +961,7 @@ async function main(): Promise<void> {
         const quantas = await expirarEsperas(tenantId, agora);
         // Só a contagem: quem estava esperando é dado de cliente, e log não é
         // lugar dele.
-        if (quantas > 0) console.log('[espera] expiradas', { tenantId, quantas });
+        if (quantas > 0) logWorker('espera.expirada', { tenantId, quantas });
         return quantas;
       },
       /**
@@ -948,7 +977,7 @@ async function main(): Promise<void> {
           provider: new ConsoleOperacaoProvider(),
         });
         if (resultado.enviados > 0) {
-          console.log('[operacao] alerta', { tenantId, enviados: resultado.enviados });
+          logWorker('operacao.alerta_enviado', { tenantId, enviados: resultado.enviados });
         }
       },
       /**
@@ -971,7 +1000,7 @@ async function main(): Promise<void> {
           agora,
         });
         if (resultado.pagas > 0 || resultado.encerradas > 0) {
-          console.log('[cobranca] conciliação', { tenantId, ...resultado });
+          logWorker('cobranca.conciliacao_tenant', { tenantId, ...resultado });
         }
         return resultado;
       },
@@ -985,35 +1014,59 @@ async function main(): Promise<void> {
          * causa de um webhook perdido.
          */
         if (psp) {
+          const estornos = await conciliarEstornosPendentes({ provider: psp });
+          if (estornos.consultados > 0) logWorker('cobranca.estornos_pendentes', { ...estornos });
+
           const conciliadas = await conciliarPendentes({ provider: psp });
-          if (conciliadas.consultadas > 0) console.log('[cobranca] conciliação', conciliadas);
+          if (conciliadas.consultadas > 0) logWorker('cobranca.conciliacao_global', { ...conciliadas });
         }
 
         const resultado = await aplicarRegua({ agora, provider: cobranca });
         const mexeu = Object.values(resultado).some((n) => n > 0);
-        if (mexeu) console.log('[cobranca] régua do dia', resultado);
+        if (mexeu) logWorker('cobranca.regua', { ...resultado });
       },
     },
     {
       intervaloMs: INTERVALO_MS,
       parar: () => parando,
+      aoErroGlobal: (evento) => {
+        logWorker('worker.global_falhou', {
+          operacao: evento.operacao,
+          erroTipo: evento.erroTipo,
+          ...(evento.erroCodigo ? { erroCodigo: evento.erroCodigo } : {}),
+        }, 'erro');
+      },
+      aoEvento: (evento: EventoDaTarefa) => {
+        logWorker(`tarefa.${evento.fase}`, {
+          tarefaId: evento.tarefaId,
+          tenantId: evento.tenantId,
+          kind: evento.kind,
+          tentativa: evento.tentativa,
+          maxTentativas: evento.maxTentativas,
+          ...('duracaoMs' in evento ? { duracaoMs: evento.duracaoMs } : {}),
+          ...('erroTipo' in evento ? { erroTipo: evento.erroTipo } : {}),
+          ...('erroCodigo' in evento && evento.erroCodigo ? { erroCodigo: evento.erroCodigo } : {}),
+        }, evento.fase === 'falhou' ? 'erro' : evento.fase === 'reagendada' ? 'aviso' : 'info');
+      },
       aoRodar: (resultado: ResultadoDaRodada) => {
         // Rodada vazia é a maioria e não vira linha de log: um worker que
         // escreve a cada cinco segundos enterra o dia em que algo falhou.
         if (resultado.tomadas === 0) return;
-        console.log(
-          `[worker] ${resultado.tomadas} tarefa(s): ${resultado.concluidas} ok, ` +
-            `${resultado.reagendadas} para tentar de novo, ${resultado.falhadas} falha(s)`,
-        );
+        logWorker('worker.rodada', {
+          tomadas: resultado.tomadas,
+          concluidas: resultado.concluidas,
+          reagendadas: resultado.reagendadas,
+          falhadas: resultado.falhadas,
+        });
       },
     },
   );
 
   await disconnect();
-  console.log('[worker] encerrado');
+  logWorker('worker.encerrado');
 }
 
 void main().catch((erro: unknown) => {
-  console.error('[worker] parou com erro', erro);
+  logWorker('worker.fatal', erroSeguro(erro), 'erro');
   process.exitCode = 1;
 });

@@ -40,6 +40,7 @@ export const SLUGS_RESERVADOS: ReadonlySet<string> = new Set([
   'admin',
   'buscar',
   'ir',
+  'media',
   'pagamento',
   'plataforma',
   'privacidade',

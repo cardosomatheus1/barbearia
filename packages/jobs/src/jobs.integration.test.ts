@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { WhatsAppDeliveryUnknownError } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import {
   cancelarTarefas,
@@ -390,11 +391,29 @@ describeIfDb('fila de trabalho', () => {
     expect(tarefa?.attempts).toBe(2);
   });
 
+  it('claim antiga não conclui tarefa que outro worker retomou', async () => {
+    await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'fencing' });
+    const umaHoraAntes = new Date(AGORA.getTime() - 60 * 60_000);
+    const [antiga] = await tomarTarefas(1, 'worker-a', umaHoraAntes);
+    if (!antiga) throw new Error('nada na fila');
+
+    await soltarOrfas(15, AGORA);
+    const [atual] = await tomarTarefas(1, 'worker-b', AGORA);
+    if (!atual) throw new Error('tarefa não foi retomada');
+    expect(atual.claimToken).not.toBe(antiga.claimToken);
+
+    await concluirTarefa(antiga);
+    expect(await quantasNaFila('running')).toBe(1);
+
+    await concluirTarefa(atual);
+    expect(await quantasNaFila('done')).toBe(1);
+  });
+
   it('concluir tira da fila', async () => {
     await enfileirarNoTenant({ kind: 'x', idempotencyKey: 'k' });
     const [tarefa] = await tomarTarefas(1, 'w', AGORA);
     if (!tarefa) throw new Error('nada na fila');
-    await concluirTarefa(tarefa.id);
+    await concluirTarefa(tarefa);
     expect(await quantasNaFila('done')).toBe(1);
   });
 
@@ -536,6 +555,38 @@ describeIfDb('fila de trabalho', () => {
 
     expect(segunda.motivo).toBe('ja_enviada');
     expect(provider.agendamentos).toHaveLength(1);
+  });
+
+
+  it('resposta ambígua do WhatsApp não repete o lembrete automático', async () => {
+    const ambiguo = new FakeNotificationProvider();
+    ambiguo.enviarDeAgendamento = async (mensagem) => {
+      // Simula a pior janela: a Meta aceitou, mas a resposta se perdeu.
+      ambiguo.agendamentos.push(mensagem);
+      throw new WhatsAppDeliveryUnknownError('Meta pode ter recebido');
+    };
+    const quando = new Date(COMECA_EM.getTime() - 24 * 60 * 60_000);
+    const entrada = {
+      tenantId: TENANT,
+      appointmentId: AGENDAMENTO,
+      tipo: 'lembrete_24h' as const,
+      provider: ambiguo,
+      agora: quando,
+    };
+
+    const primeira = await executarAvisoDeAgendamento(entrada);
+    const segunda = await executarAvisoDeAgendamento(entrada);
+
+    expect(primeira).toEqual({ enviado: false, motivo: 'entrega_incerta' });
+    expect(segunda).toEqual({ enviado: false, motivo: 'entrega_incerta' });
+    expect(ambiguo.agendamentos).toHaveLength(1);
+
+    const linhas = await withTenant(TENANT, (tx) => tx.$queryRaw<{ status: string; reason: string | null }[]>`
+      SELECT status::text AS status, reason
+        FROM notifications
+       WHERE appointment_id = ${AGENDAMENTO}::uuid AND kind = 'lembrete_24h'
+    `);
+    expect(linhas).toEqual([{ status: 'failed', reason: 'entrega_incerta' }]);
   });
 
   // -- o worker ---------------------------------------------------------------
@@ -1170,6 +1221,41 @@ describeIfDb('fila de trabalho', () => {
     expect(provider.agendamentos[0]?.tipo).toBe('retorno');
   });
 
+  it('resposta ambígua da Meta não repete o convite de retorno', async () => {
+    await ligarRetorno(45);
+    await aceitaPromocao();
+    await marcarVisita(SUMIU_HA(60));
+
+    const incerto = new FakeNotificationProvider();
+    let chamadas = 0;
+    incerto.enviarDeAgendamento = async (mensagem) => {
+      chamadas += 1;
+      incerto.agendamentos.push(mensagem);
+      throw new WhatsAppDeliveryUnknownError('Meta pode ter aceitado');
+    };
+
+    const primeira = await varrerRetornos({ tenantId: TENANT, provider: incerto, agora: AGORA });
+    expect(primeira.enviados).toBe(0);
+    expect(chamadas).toBe(1);
+
+    // A tarefa roda de novo no dia seguinte. A mensagem não pode sair de novo:
+    // a intenção ambígua da mesma ausência é a trava conservadora.
+    const amanha = new Date(AGORA.getTime() + 24 * 60 * 60_000);
+    const segunda = await varrerRetornos({ tenantId: TENANT, provider: incerto, agora: amanha });
+    expect(segunda.enviados).toBe(0);
+    expect(chamadas).toBe(1);
+
+    const linhas = await admin.$queryRawUnsafe<{ status: string; reason: string | null }[]>(
+      `SELECT status, reason FROM notifications WHERE customer_id = '${CARLOS}' AND kind = 'retorno'`,
+    );
+    expect(linhas).toEqual([{ status: 'failed', reason: 'entrega_incerta' }]);
+
+    const intencoes = await admin.$queryRawUnsafe<{ status: string }[]>(
+      `SELECT status FROM notification_send_intents WHERE tenant_id = '${TENANT}' AND intent_key LIKE 'retorno:${CARLOS}:%'`,
+    );
+    expect(intencoes).toEqual([{ status: 'uncertain' }]);
+  });
+
   it('quem não aceitou promoção nunca recebe o convite', async () => {
     // Consentimento de marketing é separado do necessário para o serviço: esta
     // pessoa continua recebendo o lembrete do próprio corte.
@@ -1382,6 +1468,21 @@ describeIfDb('alertas de negócio, com os números vindos do banco', () => {
     const volume = alertas.find((a) => a.regra === 'agendamento.volume_caiu');
 
     expect(volume?.severidade).toBe('critico');
+    expect(volume?.valor).toBe(6);
+    expect(volume?.referencia).toBe(20);
+  });
+
+  it('recorta hoje pelo fuso da unidade, inclusive antes da meia-noite UTC virar no balcão', async () => {
+    // 01:00Z ainda é 22:00 do dia 9 na Bahia. O coletor antigo por UTC chamava
+    // o dia 10 de "hoje" três horas cedo e podia disparar/sumir com o alerta.
+    const agoraLocal = new Date('2026-09-10T01:00:00Z');
+    await marcarEm(new Date('2026-09-03T00:30:00Z'), 20); // 02/09 21:30 local
+    await marcarEm(new Date('2026-09-10T00:30:00Z'), 6);  // 09/09 21:30 local
+    await marcarEm(new Date('2026-09-10T03:30:00Z'), 30); // 10/09 00:30 local: outro dia
+
+    const alertas = await alertasDaBarbearia(TENANT, agoraLocal);
+    const volume = alertas.find((a) => a.regra === 'agendamento.volume_caiu');
+
     expect(volume?.valor).toBe(6);
     expect(volume?.referencia).toBe(20);
   });

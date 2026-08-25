@@ -1,0 +1,55 @@
+BARBERDOCK — MELHORIA DE NOTAS — BLOCO 5 — 2026-08-24
+
+FOCO
+- Finance / Fiscal: modularizacao + hardening de ambiente/provider.
+
+RESULTADO ESTRUTURAL
+- fiscal.ts: 1266 -> 17 linhas (fachada).
+- fiscal-emissor.ts: 38.
+- fiscal-erros.ts: 56.
+- fiscal-configuracao.ts: 133.
+- fiscal-notas.ts: 352.
+- fiscal-emissao.ts: 371.
+- fiscal-entrega.ts: 255.
+- Maior modulo resultante: 371 linhas.
+
+COMPATIBILIDADE
+- API publica antes/depois: 26/26 exports preservados.
+- Removidos: 0.
+- Adicionados acidentalmente: 0.
+- Grafo interno fiscal: sem ciclos.
+
+HARDENING
+- FISCAL_MODO continua limitado a nenhum/fake.
+- Padrao continua nenhum.
+- Valor desconhecido falha alto.
+- fake permitido em teste/desenvolvimento.
+- fake proibido em NODE_ENV=production.
+- emissorFiscal('fake') tambem nao contorna a trava de producao.
+- Matriz continua marcando NFS-e real/E2E/producao como nao pronta.
+
+VALIDACAO EXECUTADA
+- TypeScript semantico isolado dos modulos fiscais: OK.
+- Finance TS: 62/62 arquivos transpilaram sem erro sintatico.
+- Runtime do seletor fiscal: 10/10 cenarios.
+- Guardas verificar-*.mjs sem Vitest: 32/32.
+- Auditoria ofensiva: OK.
+- Auditoria profunda: OK.
+- Invariantes: OK.
+- Prontidao: 8/8 funcionalidades/evidencias coerentes.
+- verify.sh: sintaxe OK.
+
+NOVOS CONTROLES
+- scripts/verificar-finance-fiscal-modulos.mjs integrado ao verify.sh.
+- Tetos de crescimento por modulo e grafo aciclico.
+- FakeFiscalProvider confinado ao modulo emissor.
+- Configuracao recortada sob RLS e auditada.
+- Criacao fiscal preserva nao bloqueio automatico + idempotencia da fila.
+- Emissao/cancelamento preservam FOR UPDATE e estados em voo.
+- Documento do cliente nao vaza para audit_log.
+- Entrega preserva carimbo condicional para no maximo uma notificacao.
+
+LIMITACOES
+- Vitest/node_modules/pnpm completos ausentes neste runtime.
+- PostgreSQL 16 ausente.
+- Typecheck/build/Vitest completos do workspace nao repetidos aqui.

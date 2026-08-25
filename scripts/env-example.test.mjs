@@ -213,10 +213,12 @@ describe('o compose entrega ao contêiner o que o código lê', () => {
    */
   const OBRIGATORIAS = [
     'STAFF_EMAIL_PEPPER',
+    'OTP_PEPPER',
     'MFA_SECRET_KEY',
     'API_KEY_PEPPER',
     'WEBHOOK_SECRET_KEY',
     'WHATSAPP_TOKEN_KEY',
+    'KYC_INTENT_HMAC_SECRET',
     'MARKETPLACE_ORIGIN_SECRET',
   ];
 

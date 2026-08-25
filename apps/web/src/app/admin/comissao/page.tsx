@@ -361,6 +361,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
   const ligado = configuracao?.ligado ?? false;
   const plataformaPercent = (configuracao?.plataformaBps ?? 0) / 100;
   const listaDeRepasses: readonly RepasseNaTela[] = dadosDoSplit?.repasses ?? [];
+  const repassesTruncados = dadosDoSplit?.hasMore ?? false;
   const listaDeContas = contas?.ok ? contas.dados.recebedores : [];
   const listaDeVales = vales?.ok ? vales.dados.vales : [];
   const podeAdiantarVale = podeNaTela(estado, 'finance.advance');
@@ -565,7 +566,14 @@ export default async function ComissaoPage({ searchParams }: Props) {
             aparece quando o cliente pagar pelo Pix ou pelo link.
           </p>
         ) : (
-          <div className="ui-scroll-x">
+          <>
+            {repassesTruncados ? (
+              <p className="painel__nota" role="status">
+                Este período tem mais de 300 lançamentos de repasse. A tabela abaixo mostra os 300
+                mais recentes; reduza o período para conferir o histórico completo sem truncamento.
+              </p>
+            ) : null}
+            <div className="ui-scroll-x">
             <table className="repasses">
               <thead>
                 <tr>
@@ -586,7 +594,8 @@ export default async function ComissaoPage({ searchParams }: Props) {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         {/*
@@ -615,7 +624,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
                     <p className="recebedor__frase">{EXPLICACAO_DO_KYC[conta.kyc]}</p>
                     {conta.retidoCents > 0 ? (
                       <p className="recebedor__retido">
-                        R$ {reaisDoCampo(conta.retidoCents)} passaram pela casa neste período por
+                        R$ {reaisDoCampo(conta.retidoCents)} estão retidos agora por
                         falta de cadastro. A comissão dele sai no fechamento, como sempre.
                       </p>
                     ) : null}
@@ -635,6 +644,7 @@ export default async function ComissaoPage({ searchParams }: Props) {
                           type="hidden"
                           value={conta.professionalId}
                         />
+                        <input name="idempotencyKey" type="hidden" value={randomUUID()} />
                         <div className="ui-field">
                           <label
                             className="ui-field__label"

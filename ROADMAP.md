@@ -3,9 +3,63 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Status: 129 de 129 blocos.**
+**Prontidão do produto:** use a matriz abaixo. Os 129 blocos continuam registrados
+como histórico de execução; bloco concluído não é sinônimo de integração real nem
+de funcionalidade pronta para produção.
 
 ---
+
+## Matriz de prontidão
+
+Esta é a leitura de conjunto que decide o que pode ser tratado como pronto. Cada
+linha separa cinco perguntas que o antigo contador misturava: existe motor, existe
+tela, há integração real, o caminho foi provado de ponta a ponta e pode ser usado
+em produção.
+
+**Legenda:** ✅ provado · ⚠️ parcial ou ainda não provado contra o mundo real ·
+❌ ausente · — não se aplica. A coluna **Evidência** usa `arquivo::trecho`; o
+`pnpm verify` confere que o arquivo e o trecho continuam existindo.
+
+| Funcionalidade | Motor | Tela | Integração real | E2E real | Produção | Evidência |
+|---|---|---|---|---|---|---|
+| Agenda | ✅ | ✅ | — | ⚠️ | ✅ | `packages/scheduling/src/booking.ts::createAppointment` · `apps/web/src/app/admin/agenda/page.tsx::Agenda` · `apps/api/test/agenda.e2e.test.ts::describe` · `ROADMAP.md::Teste que usa a tela como o usuário usa` |
+| Comanda / caixa / comissão | ✅ | ✅ | — | ⚠️ | ✅ | `packages/finance/src/comanda.ts::fecharComanda` · `apps/web/src/app/admin/comanda/[id]/page.tsx::Comanda` · `apps/api/test/caixa.e2e.test.ts::describe` · `ROADMAP.md::Teste que usa a tela como o usuário usa` |
+| WhatsApp (Meta Cloud) | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | `packages/crm/src/whatsapp-meta.ts::MetaWhatsAppProvider` · `apps/web/src/app/admin/whatsapp/page.tsx::WhatsApp` · `ROADMAP.md::Provar o Embedded Signup contra a Meta` |
+| Stripe (cobrança da plataforma) | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | `packages/platform/src/stripe-pagamento.ts::StripePaymentProvider` · `packages/platform/src/stripe.ts::https://api.stripe.com/v1` · `ROADMAP.md::Pix pela Stripe` |
+| Split de pagamento | ✅ | ✅ | ❌ | ❌ | ❌ | `packages/finance/src/split.ts::splitDaVenda` · `apps/web/src/app/admin/comissao/page.tsx::podeMexerNoSplit` · `packages/platform/src/adquirente.ts::FakeSplitProvider` |
+| Fiscal (NFS-e) | ✅ | ✅ | ❌ | ❌ | ❌ | `packages/finance/src/fiscal-emissor.ts::modoFiscal` · `apps/web/src/app/admin/fiscal/page.tsx::emissorDisponivel` · `packages/finance/src/fiscal-emissor.ts::Use nenhum ou fake` |
+| Sinal cobrado online | ✅ | ⚠️ | ⚠️ | ❌ | ❌ | `packages/scheduling/src/confianca.ts::deposit_mode` · `apps/web/src/app/[slug]/agendado/[id]/page.tsx::Fale com a barbearia` · `ROADMAP.md::Cobrar o sinal pelo produto, e devolvê-lo sozinho` |
+| Foto por envio de arquivo | ✅ | ✅ | ✅ | ⚠️ | ✅ | `apps/api/src/media/storage.ts::guardarImagemPublica` · `apps/web/src/app/admin/fotos/upload-de-foto.tsx::canvas.toBlob` · `apps/api/src/media/storage.ts::AWS4-HMAC-SHA256` · `deploy/configurar-midia-s3.sh::setar MEDIA_STORAGE s3` · `apps/api/test/admin.e2e.test.ts::recebe o arquivo, hospeda e a imagem chega na página pública` |
+
+### Regra da matriz
+
+- Um ✅ de **Produção** exige motor e tela ✅, integração ✅ ou — e não pode ter E2E ❌. E2E ⚠️ é permitido quando o fluxo existe e opera, mas ainda falta prova automatizada pela interface — exatamente a lacuna declarada de teste que clica.
+- Integração ❌ nunca pode coexistir com Produção ✅ ou ⚠️.
+- A matriz descreve o **estado atual**. SPEC e documentos de direção podem
+  descrever o produto-alvo, mas não podem ser usados como prova de prontidão.
+- Uma capacidade com integração ou produção ❌ não pode ser descrita, nas
+  superfícies de estado atual, como *pronta*, *em produção*, *integração real* ou
+  equivalente. `scripts/verificar-prontidao.mjs` é a guarda dessa regra.
+
+---
+
+## R8 — verdade comercial
+
+A matriz acima também limita o material de venda. O resumo de linguagem permitida
+fica em [`docs/comercial/prontidao.md`](docs/comercial/prontidao.md), e
+`scripts/verificar-r8-comercial.mjs` impede que uma superfície comercial venda
+como disponível o que a matriz marca ❌. O recurso de perguntas chama-se
+**Assistente de gestão**: ele interpreta um catálogo fechado de métricas e nunca
+é descrito como “IA que entende o negócio”.
+
+## R12 — validação de usabilidade em campo
+
+O protocolo e o cronômetro estão em [`docs/usabilidade/r12.md`](docs/usabilidade/r12.md)
+e `scripts/r12-usabilidade.mjs`. O repositório **não** finge a linha de base que
+não foi coletada antes de V1/V5/V11: o primeiro checkpoint válido será a rodada
+pós-reorganização com pessoas novas. `scripts/verificar-r12-percursos.mjs` prova
+apenas que as cinco tarefas têm caminho no produto; tempo, hesitação e pedido de
+ajuda continuam sendo dados de campo, a coletar em 3–5 barbearias.
 
 ## O que é um bloco
 
@@ -73,11 +127,11 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 
 | Lacuna | Pronto | Falta | Bloco |
 |---|---|---|---|
+| Fallback SMS do OTP de identidade | o canal principal da SPEC está implementado: OTP e senha de primeiro acesso usam a WABA central da plataforma via Cloud API da Meta, com template `AUTHENTICATION`, timeout tratado como entrega incerta e console proibido em produção | o **canal secundário SMS** citado na SPEC §1.6. Hoje uma indisponibilidade definitiva da Meta faz a solicitação falhar/compensar; não existe `SmsProvider` contratado para tentar uma segunda rede | sem bloco definido: depende de contratar um provedor de SMS e obter credenciais/preço por mensagem. O caminho principal de autenticação está operacional por WhatsApp; o fallback entra junto da primeira contratação de SMS, sem criar fake que finja redundância |
 | O agente de conversa não responde pelo WhatsApp | a porta do site está no ar desde o bloco 106: `/[slug]/conversar`, com a resposta em cookie de dois minutos, os horários levando ao passo 4 do agendamento de sempre, medição e percurso de navegador do texto livre até a linha no banco. As rotas `POST /v1/b/:slug/agente` e `/agente/meu` continuam sendo o único caminho de leitura, e nenhuma delas grava | o **encaminhamento da mensagem recebida**: hoje o webhook da Meta manda tudo para `registrarResposta`, e uma mensagem que não responde a nada nenhum caminho lê. Precisa decidir o que é conversa e o que é resposta a um aviso, e o que fazer com quem escreve dentro da janela de silêncio | sem bloco definido: depende de a barbearia ter número próprio verificado, que é o estado que o bloco 88 tornou explícito e que nenhuma barbearia da base tem ainda. Entra junto do primeiro bloco que ligue o número de verdade |
 | Conciliação com a Meta só na unidade principal | a varredura de hora em hora (bloco 90) promove o número a `ativo` quando a Meta confirma a posse, e tira os textos de "Na Meta" — pela `primaryLocation` de cada barbearia | cobrir **todas** as unidades: `whatsapp_settings` é por unidade desde o bloco 55, e uma rede com número próprio por loja concilia só o da matriz | sem bloco definido: nenhuma barbearia deste produto tem hoje número por filial, e um laço sobre unidades seria caminho que nada exercita — o defeito de `blocks` outra vez. O que segura a decisão é dado, não código: entra quando existir a primeira rede com dois números. Enquanto isso o sintoma é conhecido e limitado — a filial fica em "falta confirmar" com o canal funcionando, que é o estado de antes do bloco 90 |
-| Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. E seria o **primeiro componente de cliente do produto**, que hoje é 100% renderizado no servidor: essa decisão merece bloco próprio e medição de pacote, não entrar de carona. Entra quando houver uma segunda razão para mandar JavaScript ao navegador do admin |
+| Arrastar o cartão na agenda para remarcar | mover está entregue e é o caminho principal: formulário com dia, hora e profissional, no cartão de cada compromisso, passando pelo mesmo motor e recusando choque | o arraste em si | sem bloco: **a WCAG 2.5.7 exige alternativa de um ponteiro para qualquer arraste**, então mover teria que existir de qualquer jeito — arrastar é acabamento sobre ele, não a funcionalidade. O **R5 já abriu a primeira ilha de cliente e mediu sua separação de pacote**; o arraste continua sem entrar de carona porque é acabamento sobre o caminho acessível de mover que já existe. Entra num bloco próprio de interação da agenda |
 | Painel como aplicação separada | rota `/admin` própria; o pacote da página pública continua em 102 kB depois de quatro telas novas de cadastro | extrair `apps/admin` quando o painel tiver dependência que a página pública não usa | sem bloco: o 13 era o candidato e passou sem criar essa dependência — o painel inteiro é renderizado no servidor e não manda JavaScript próprio. Extrair agora seria custo de build sem ganho medido. Entra quando o número subir |
-| Enviar a foto em vez de colar o endereço | as colunas de foto são preenchidas por tela própria (`/admin/fotos`), validadas (`https` só) e exibidas na página pública | envio de arquivo, com recorte, redimensionamento e servido do nosso domínio | sem bloco definido: a dependência real é **armazenamento de objeto**, que o projeto ainda não tem — e o 13 passou sem criá-lo, porque infraestrutura de arquivo não é CRUD. Colar o endereço é v1 reversível — a barbearia já publicou as fotos em algum lugar, e esperar por infraestrutura deixaria a página como cardápio de texto por mais oito blocos. Foto **de cliente** é outra coisa, exige consentimento específico e fica no 74 |
 | A taxa que o adquirente cobrou **de fato** | a alíquota é cadastrada por meio de pagamento, congelada em cada venda (`orders.fee_cents`) e descontada da base quando o rateio está ligado — a terceira escolha da SPEC §3.4, entregue no bloco 36 | usar o valor **real** do extrato no lugar do calculado. Quem sabe o número exato é o adquirente, que o informa na transação de saldo | sem bloco definido: depende de conta contratada, como a própria integração. **Não há coluna esperando por ele** — criá-la agora seria campo que ninguém preenche, e a revisão deste bloco cobrou exatamente isso. O calculado erra por centavos e na direção conhecida (a alíquota é a contratada), o que basta para a comissão; o valor real importa para conciliação bancária, que é outro assunto e não existe no produto |
 | Cartão de garantia (cobrado só na falta) | o sinal antecipado inteiro: Pix, cartão e link pelo adquirente, com reembolso por política | a modalidade "cartão de garantia" da SPEC §2.12, em que o cartão fica registrado e só é cobrado se a pessoa faltar | sem bloco definido: exige tokenizar cartão e **capturar depois**, que é outro contrato com o adquirente — e a convenção deste código é que só existe token do provedor, marca e os quatro últimos, com invariante que reprova quem criar coluna para PAN. A modalidade entra quando houver conta contratada e captura postergada, junto da lacuna do contrato com a Stripe |
 | Cobrar o sinal pelo produto, e devolvê-lo sozinho | a decisão inteira: quem paga sinal, quanto, por quê, e se o dinheiro volta num cancelamento — com a política por unidade, o serviço que sempre exige, o ajuste do gerente e o registro do recebido pelo balcão, auditado | a **cobrança pelo adquirente**: QR Code na tela de agendamento, webhook confirmando e devolução automática. Hoje o sinal é o Pix que o cliente manda para o número da barbearia e alguém confere — que é como a esmagadora maioria das barbearias do país cobra, mas deixa a recepção digitando "recebi" | sem bloco definido, junto da lacuna do contrato com a Stripe: é o mecanismo dos blocos 35 e 36 aplicado ao **agendamento** em vez da comanda, e a diferença não é pequena — a cobrança nasce dias antes de existir comanda, sem caixa aberto, e a devolução é estorno de uma cobrança que pode ter sido paga num ciclo de faturamento anterior. O registro manual não é becos sem saída: ele preenche `deposit_paid_cents` e é o que a política de reembolso lê |
@@ -86,15 +140,14 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | Nota de produto (NF-e / NFC-e) | a NFS-e inteira: contrato do emissor, emissão que não bloqueia a venda, cancelamento com estado em voo, Salão-Parceiro, CPF do tomador e a nota chegando ao cliente. A base da nota é **só serviço**, por decisão escrita, e a tela diz por quê quando a comanda só tem produto | o **segundo documento**. Produto é NF-e ou NFC-e: outro modelo fiscal, outra numeração, outro credenciamento estadual — e a SPEC §3.11 diz "quando aplicável", não "junto". Somá-lo à NFS-e recolheria ISS sobre mercadoria, que é imposto errado sobre base errada | sem bloco definido: a dependência é a mesma da NFS-e — **conta contratada com o emissor** —, e é ela que decide se o mesmo contrato cobre os dois documentos ou se são duas integrações. Enquanto a barbearia média vende pomada como acessório do corte, a nota que o cliente pede é a do serviço; a de produto vira obrigatória quando a revenda deixa de ser acessório, e aí é o volume dela que paga a integração |
 | Indicação com link e anti-fraude | nada — a SPEC §4.9 descreve `barber.app/ref/CARLOS92`, crédito para os dois lados e cinco regras anti-fraude | o mecanismo inteiro: link por cliente, vínculo do indicado, crédito só depois de atendimento concluído e pago, teto por período e bloqueio de autoindicação por telefone e por aparelho | sem bloco definido. Ele **depende** da fidelidade, que agora existe: o crédito da indicação é um lançamento em `loyalty_entries`, com o mesmo extrato e a mesma validade. Entra quando houver demanda — e o anti-fraude é o bloco inteiro, não um detalhe: sem ele a indicação é a porta mais barata para fabricar crédito |
 | Passar um recado para outra pessoa da equipe | assumir para si e devolver à fila, os dois gestos que a tela do balcão oferece | "manda esse para o Ruan, é da cadeira dele". O domínio já aceita qualquer id da equipe em `assumirRecado`; o que não existe é a rota e o seletor — e a rota de assumir foi deliberadamente fechada para não aceitar responsável do corpo | sem bloco definido: é conveniência, não lacuna de regra. Entra quando uma barbearia com equipe grande pedir. Hoje, quem quer passar adiante devolve à fila e a outra pessoa assume |
-| Tokenizar o cartão do assinante | a régua de cobrança inteira: fatura por ciclo com valor congelado, escada D+1/D+3/D+7, suspensão gradual avisada aos quinze dias, cancelamento self-service e a coluna `payment_token` com a rota que a preenche — mais o contrato `CobrancaDoClubeProvider`, que separa recusa definitiva de indisponibilidade | a **origem do token**: a tela em que o assinante digita o cartão e o adquirente devolve a referência. Sem ela nenhuma assinatura tem cartão salvo, e a régua pula a cobrança sem gastar degrau — o que quita a mensalidade é o balcão registrando o Pix que viu no extrato, que é como a esmagadora maioria das barbearias do país cobra hoje | sem bloco: a dependência não é de código, e três blocos seguidos a empurraram para frente sem que nada a destravasse. Faltam **duas coisas de fora**: uma conta de adquirente por barbearia — a mesma dependência comercial do split — e o primeiro componente de cliente do produto, com PCI a reboque, num app que hoje não tem nenhum. Nenhum bloco do roadmap entrega qualquer uma das duas, e apontar para o próximo a cada fechamento é adiamento com data falsa. Ela entra quando houver contrato assinado, e o mecanismo já está inteiro esperando: a régua de cobrança roda hoje sobre o provedor de mentira, que recusa por padrão justamente para que escada, inadimplência e suspensão sejam percorridas pelo caminho real |
+| Tokenizar o cartão do assinante | a régua de cobrança inteira: fatura por ciclo com valor congelado, escada D+1/D+3/D+7, suspensão gradual avisada aos quinze dias, cancelamento self-service e a coluna `payment_token` com a rota que a preenche — mais o contrato `CobrancaDoClubeProvider`, que separa recusa definitiva de indisponibilidade | a **origem do token**: a tela em que o assinante digita o cartão e o adquirente devolve a referência. Sem ela nenhuma assinatura tem cartão salvo, e a régua pula a cobrança sem gastar degrau — o que quita a mensalidade é o balcão registrando o Pix que viu no extrato, que é como a esmagadora maioria das barbearias do país cobra hoje | sem bloco: a dependência não é de código, e três blocos seguidos a empurraram para frente sem que nada a destravasse. Faltam **duas coisas de fora**: uma conta de adquirente por barbearia — a mesma dependência comercial do split — e uma integração de cartão client-side compatível com PCI. O R5 já provou a arquitetura de ilha; o que continua faltando aqui é a dependência comercial e de PCI. Nenhum bloco do roadmap entrega a conta contratada, e apontar para o próximo a cada fechamento é adiamento com data falsa. Ela entra quando houver contrato assinado, e o mecanismo já está inteiro esperando: a régua de cobrança roda hoje sobre o provedor de mentira, que recusa por padrão justamente para que escada, inadimplência e suspensão sejam percorridas pelo caminho real |
 | Ranking entre barbeiros (gamificação) | cada barbeiro vê os próprios números, a meta do mês com ritmo, o `rebooking rate` e a comissão do período — tudo comparado com o **próprio** passado | os rankings de faturamento, vendas, avaliações e retenção da SPEC §4.21, com o interruptor por barbearia e a escolha de quais são visíveis para a equipe | sem bloco: a própria SPEC manda vir **desligado por padrão** e explica por quê — ranking público produz disputa por cliente bom, empurra produto e faz recusar atendimento rápido. Entregar o motor de ranking antes de existir demanda real seria construir o que a SPEC pede para manter desligado. Entra quando uma barbearia pedir, junto do interruptor |
 | Teste que usa a tela como o usuário usa | e2e da API cobrindo o caminho inteiro (`apps/api/test/caminho-inteiro.e2e.test.ts` e mais quinze arquivos), a medição de responsividade abrindo **toda** tela em quatro larguras num navegador de verdade, e a leitura de fluxo do §6 feita à mão a cada bloco | o teste que **clica**: navegar, preencher, submeter e conferir o efeito no banco. A medição abre as telas e mede o layout; ela não usa o produto. Um unitário passa com a funcionalidade quebrada, e três defeitos deste repositório — o botão que levava a lugar nenhum, o estado sem saída na interface, o indicador sempre `—` — só apareceram na leitura manual | sem bloco definido: a dependência é **infraestrutura de teste**, não produto. O Playwright já está montado para medir, então o custo não é o navegador — é a suíte de fixtures (sessão de gestor, sessão de cliente, banco semeado por caso) e o tempo dela dentro do portão, que hoje fecha em ~90s. Entra quando o custo do §6 manual passar do custo da suíte, e o sinal disso é um defeito de fluxo escapar da leitura |
-| Tela do balcão que se atualiza sozinha | recarga manual e recarga a cada ação; a tela sempre reflete o banco no instante em que foi montada — vale para o painel do dia e, desde o bloco 35, para a comanda com Pix em curso | atualização sem toque: hoje, quem cobra por Pix recarrega a comanda para ver que o cliente pagou | sem bloco (movida do 20): o 20 entregou processo fora de requisição — que é trabalho de fundo, não canal do servidor para o navegador. Empurrar mudança para uma aba aberta exige SSE ou WebSocket, e portanto o **primeiro componente de cliente do produto**, hoje 100% renderizado no servidor. É a mesma decisão que segura o arraste na agenda, e as duas devem entrar juntas, com medição de pacote. A alternativa sem JavaScript é `meta refresh`, que é pesquisa em laço com o custo da página inteira e apaga o que a recepção estiver digitando — pior que recarregar quando ela quiser |
+| Tela do balcão que se atualiza sozinha | recarga manual e recarga a cada ação; a tela sempre reflete o banco no instante em que foi montada — vale para o painel do dia e, desde o bloco 35, para a comanda com Pix em curso | atualização sem toque: hoje, quem cobra por Pix recarrega a comanda para ver que o cliente pagou | sem bloco (movida do 20): o 20 entregou processo fora de requisição — que é trabalho de fundo, não canal do servidor para o navegador. Empurrar mudança para uma aba aberta exige SSE ou WebSocket. O **R5 já abriu a primeira ilha client-side sem contaminar o pacote público**; o que continua faltando aqui é o canal em tempo real e seu ciclo de reconexão, não a arquitetura básica de componente de cliente. A alternativa sem JavaScript é `meta refresh`, que é pesquisa em laço com o custo da página inteira e apaga o que a recepção estiver digitando — pior que recarregar quando ela quiser |
 | Varredura diária do validador de catálogo | a conferência roda sob demanda, a cada carga do painel e da tela de diagnóstico, sempre sobre o cadastro do instante | a varredura em segundo plano que a SPEC §5.7 também pede | sem bloco: sob demanda é **mais fresco** que diário, então a varredura não melhora o que a tela mostra. O que ela acrescentaria é alertar quem não abriu o painel — e isso é canal de aviso **para o dono**, que o produto não tem (o bloco 20 entregou aviso para o cliente). Entra junto com o primeiro aviso dirigido ao gestor, não antes |
 | Importar agendamentos futuros e histórico | a base de clientes entra inteira, com deduplicação por telefone, preview, reversão e idempotência | as duas outras linhas do escopo mínimo da SPEC §5.8: a agenda futura e o histórico de atendimento | sem bloco definido: as duas dependem de **casar nome de profissional e de serviço** entre dois cadastros que não se conhecem, e de decidir o que fazer quando o horário importado bate com um existente — a constraint de exclusão recusa, e recusar em silêncio perderia o agendamento que a SPEC diz que não pode se perder. É outro importador, com outras telas de conferência. Enquanto isso vale a mitigação que a própria SPEC §5.8 prescreve: **operação paralela por uma ou duas semanas**, com a agenda velha em leitura — são umas trinta marcações a redigitar, não mil e duzentas |
-| Resolver o conflito de telefone pela tela | o conflito é detectado, mostrado com o número da linha e os dois nomes, e a linha fica de fora em vez de escolher sozinha | escolher na tela qual nome fica, sem editar o arquivo | sem bloco: resolver linha a linha exige estado por linha no navegador, e portanto o **primeiro componente de cliente do produto** — a mesma decisão que segura o arraste na agenda e a atualização automática do balcão, e as três devem entrar juntas com medição de pacote. O caminho de hoje não é becos sem saída: corrigir no arquivo e reenviar cria uma importação nova, porque a idempotência é pelo conteúdo |
 | Conversão da página e proporção de erro como alerta | duas das quatro regras da SPEC §5.12 entregues **com coletor**: queda de volume por barbearia e fila de trabalho travada, com teste puro da decisão e teste de integração da coleta | as outras duas: conversão da página pública e proporção de erro na gravação | sem bloco definido: as regras seriam triviais de escrever e **não têm origem de dado**. Conversão exige contar visita — que é rastreamento de visitante anônimo, com implicação de LGPD que merece decisão própria, não carona. Proporção de erro exige ler o log agregado de volta para dentro do produto, e não há agregador. Escrevê-las agora deixaria duas funções que ninguém chama, que é o defeito de `blocks` — aceito por oito blocos e sempre vazio |
-| Publicação automática e ambiente de staging | o **deploy existe e é um comando**: `deploy/instalar.sh` leva um VPS Ubuntu vazio ao produto no ar — Docker, os oito segredos gerados, as 83 migrações, cinco serviços, TLS automático pelo Caddy e backup diário agendado —, com `deploy/atualizar.sh` fazendo backup antes de migrar e `deploy/voltar.sh` subindo a versão anterior sem tocar no banco. A esteira roda o portão, a medição e a carga a cada push | o **gatilho**: publicar sozinho quando o portão fica verde, e um segundo ambiente para exercitar a subida antes da produção | sem bloco definido: agora falta uma coisa só, e ela é comercial — **a máquina contratada**. Com um VPS e um domínio, o comando roda; a publicação automática vem depois, e o que ela faria é chamar o mesmo `deploy/atualizar.sh` que uma pessoa chama hoje |
+| Publicação automática e ambiente de staging | o **deploy existe e é um comando**: `deploy/instalar.sh` leva um VPS Ubuntu vazio ao produto no ar — Docker, segredos obrigatórios gerados, as 116 migrações, cinco serviços, TLS automático pelo Caddy e backup diário agendado —, com `deploy/atualizar.sh` fazendo backup antes de migrar e `deploy/voltar.sh` subindo a versão anterior sem tocar no banco. A esteira roda o portão, API + Web + Worker, os percursos e as duas cargas (disponibilidade e 100 reservas concorrentes) a cada push | o **gatilho**: publicar sozinho quando o portão fica verde, e um segundo ambiente para exercitar a subida antes da produção | sem bloco definido: agora falta uma coisa só, e ela é comercial — **a máquina contratada**. Com um VPS e um domínio, o comando roda; a publicação automática vem depois, e o que ela faria é chamar o mesmo `deploy/atualizar.sh` que uma pessoa chama hoje |
 | Tracing distribuído | log estruturado por requisição, com `x-request-id` aceito do proxy, devolvido na resposta e presente em toda linha — que é correlação ponta a ponta dentro do processo | spans com duração por camada, e propagação para fora | sem bloco definido: o produto é um monólito modular com um processo e um banco. Span entre camadas do mesmo processo responde o que o perfil de CPU responde melhor, e foi o perfil que achou o gargalo de fuso deste bloco. Entra quando houver um segundo serviço em jogo |
 | `stock_movements.location_id` obrigatória no banco | a migração 0092 preenche toda linha antiga — a 0061 já tinha atribuído a barbearia de uma loja só, e esta atribui o resto à mais antiga — e o **tipo** passou a exigi-la: `moverEstoque` recebe `locationId: string`, então o compilador cobra o caminho que esquecer | o `SET NOT NULL`, que é o que impede a coluna de voltar a ficar nula por um caminho que não passe pelo TypeScript — SQL cru numa importação, por exemplo | sem bloco definido, e a dependência é **de deploy**: `SET NOT NULL` numa tabela que já existe quebra o rollback, porque a versão anterior da aplicação volta a escrever nulo e passa a falhar. É operação de duas fases em dois deploys, e a guarda de migração aditiva reprova a primeira que tentar fazer as duas juntas. Entra no primeiro deploy depois de o 117 estar em produção |
 | Guarda para o mecanismo exportado que ninguém oferece | `varredura-com-chamador.test.mjs` cobra chamador de toda função com prefixo `varrer`, `atribuir` ou `expirar`, e foi ela que achou a varredura da vitrine no bloco 108 | a guarda para a classe que o bloco 129 encontrou: `TODAS_AS_UNIDADES` era **constante** exportada de `core`, com teste próprio, e o cabeçalho do arquivo prometia o consolidado que nenhuma tela oferecia | sem bloco definido, e o corte **foi medido e reprovado**: "todo símbolo exportado de `core` referenciado fora do próprio arquivo" acusa 429 de 1014 — tipo consumido estruturalmente e reexportado pelo barril parecem órfãos. Estreitando para constante em CAIXA_ALTA e contando referências de dentro de `core`, ainda são 78 de 182, e a maioria é legítima: parâmetro de calibragem exportado para o próprio teste (os sete `PESO_*` de `churn.ts`) não é defeito. O corte que faltaria é "constante que representa uma **opção de leitura** e nenhuma rota a oferece", e ele não é derivável sem inventar uma convenção. Guarda que acusa o certo é guarda que alguém desliga |
@@ -111,7 +164,7 @@ porque a tela ainda não existe — é o que produz motor que finge aceitar
 | CAC e payback | GMV, MRR e churn saem de dado que o produto tem | as duas métricas da SPEC §8 que dependem de **custo de aquisição** | sem bloco definido: não existe origem de dado. Quanto se gastou para trazer uma barbearia mora em ferramenta de marketing, não aqui, e inventar um campo "custo" que ninguém preenche é o defeito de `blocks` outra vez |
 | Exportação do titular em PDF | o arquivo sai em JSON, completo, com nove consultas nomeadas e teste que reprova quando uma tabela com dado de cliente fica de fora | o PDF que a SPEC §1.8 regra 4 cita ao lado do JSON | sem bloco definido: exigiria a primeira dependência de geração de documento do produto, e a mesma decisão volta nos blocos 53 e 54 (nota fiscal) e na fatura em PDF da plataforma. As três devem escolher o mesmo caminho de uma vez, não três vezes. O JSON já é legível e é o formato que a ANPD aceita para portabilidade; o PDF é conforto de leitura, não o direito |
 | Teto de requisição compartilhado entre processos | teto por IP em duas janelas, e — desde o bloco 33 — escada de espera **por conta** no login, esta guardada no banco e portanto compartilhada por todos os processos | o teto por IP num armazenamento comum: hoje ele é a memória do processo, então dois servidores dobram o limite efetivo | sem bloco definido: exigiria Redis, que é a primeira dependência de infraestrutura fora do Postgres, e a decisão de tê-lo vale junto com o CD e o ambiente que ainda não existem. O que protegia senha era a escada por conta, e essa **já** é compartilhada; o teto por IP protege custo de endpoint, e dobrá-lo com dois processos não abre nada |
-| "Perto de mim" com a coordenada do aparelho | a busca inteira: vitrine sem RLS, raio, caixa de coordenada indexada, filtros de nota, preço, comodidade e clube, e a cidade escolhida com o centro derivado das próprias barbearias listadas | ler a **geolocalização do navegador**, que é o que a SPEC §5.2 chama de "perto de mim" | sem bloco definido: exige o **primeiro componente de cliente do produto**, hoje 100% renderizado no servidor — a mesma dependência do arraste na agenda, da atualização automática do balcão e da resolução de conflito de telefone, e as quatro devem entrar juntas com medição de pacote. Escolher a cidade não é consolo: ela resolve o caso de quem busca do computador, e o centro sai do cadastro em vez de uma tabela de municípios que alguém teria que manter |
+| "Perto de mim" com a coordenada do aparelho | a busca inteira: vitrine sem RLS, raio, caixa de coordenada indexada, filtros de nota, preço, comodidade e clube, e a cidade escolhida com o centro derivado das próprias barbearias listadas | ler a **geolocalização do navegador**, que é o que a SPEC §5.2 chama de "perto de mim" | sem bloco definido: exige geolocalização no navegador. O **R5 já abriu a primeira ilha client-side e deixou a página pública fora dela**; falta agora uma ilha pública específica, com consentimento e medição própria, para não transformar a busca anônima no bundle do ERP. Escolher a cidade não é consolo: ela resolve o caso de quem busca do computador, e o centro sai do cadastro em vez de uma tabela de municípios que alguém teria que manter |
 | Filtro por **serviço** na busca do marketplace | os outros sete filtros da SPEC §5.2, o motor rodando em lote, e — desde o bloco 73 — a dimensão "profissional", que entrou como **página pública do barbeiro**: é assim que ela existe num marketplace, porque ninguém busca por um barbeiro que ainda não conhece | escolher o serviço na busca. Hoje o horário do card é o do **serviço de entrada** da casa, o mesmo do "a partir de", e a tela diz isso em letras — a casa cujo serviço mais barato está lotado some do filtro com a tarde livre para o resto do cardápio | sem bloco definido: cada barbearia nomeia os serviços como quer ("Corte", "Corte masculino", "Cabelo"), e um filtro que atravessa casas exige uma **taxonomia compartilhada** que ainda não existe. Inventá-la dentro deste bloco seria decidir por todo mundo a partir de um cadastro só; ela vale junto com o primeiro cliente real que tenha catálogo grande o bastante para justificá-la |
 | Saída de webhook por proxy de egresso | a recusa de destino interno em duas camadas — o nome no cadastro e **cada IP resolvido** antes de conectar —, `redirect: 'manual'` para o `3xx` não virar o segundo salto sem guarda, e `https://` por `CHECK` | fechar a janela entre a resolução e a do `fetch` (religação de DNS). Hoje ela é estreita e de baixo impacto: o esquema é `https:` e o certificado é conferido, então uma religação para IP interno falha no aperto de mão antes de qualquer corpo sair ou voltar — e o erro registrado é o genérico da biblioteca, sem servir de oráculo de porta | sem bloco definido: o conserto de verdade é a saída da rede passar por um proxy de egresso com lista de destinos, e isso é decisão de infraestrutura, não de código. Entra junto do primeiro deploy de verdade |
 | Tabela de versão do schema | o ensaio de restauração confere que o banco restaurado tem as colunas da última migração | uma tabela que registre qual migração foi aplicada e quando | sem bloco definido: as migrações são aplicadas em ordem por script, e o marcador de coluna responde a pergunta que importa hoje ("este dump é velho?"). Uma tabela de versões vale a partir do primeiro deploy de verdade, junto do CD |
@@ -126,6 +179,25 @@ commit que a fechou; manter linha morta aqui faria a lista virar ruído e
 esconder o que ainda falta.
 
 ---
+
+## R6 — títulos históricos limitados por lacunas abertas
+
+Bloco fechado registra **o que o código entregou**, não a promessa mais ampla do
+título original. A tabela abaixo liga os casos em que uma lacuna aberta limita
+explicitamente um título histórico. `scripts/verificar-r6-promessas.mjs` impede
+que a palavra que promete demais volte enquanto a lacuna continuar aberta.
+
+| Bloco | Lacuna aberta que limita o título | Texto que não pode voltar ao título |
+|---|---|---|
+| 15 | Arrastar o cartão na agenda para remarcar | `arrastar` |
+| 23 | Publicação automática e ambiente de staging | `CI/CD` · `staging` |
+| 33 | Teto de requisição compartilhado entre processos | `rate limit global` |
+| 35 | Pix pela Stripe, e o prazo do QR Code | `Pix pela Stripe` |
+| 50 | Contrato de split exercido pelo adquirente | título sem ressalva de provider fake |
+| 53 | Fatura em PDF e nota fiscal | `integração` sem dizer que o provider é fake |
+| 54 | Fatura em PDF e nota fiscal | título sem dizer que o emissor real está pendente |
+| 57 | Campanha por e-mail, push e SMS | `canais` como se todos estivessem entregues |
+| 70 | Filtro por **serviço** na busca do marketplace | `filtros` sem limitar aos implementados |
 
 ## R1 — MVP (23 blocos)
 
@@ -148,7 +220,7 @@ atual sem perder nenhuma capacidade que usava.
 | 12 | RBAC mínimo: papéis, permissões e contas de equipe | ✅ |
 | 13 | Admin: CRUD de catálogo, equipe, jornadas, recursos | ✅ |
 | 14 | Balcão: fila de walk-in, encaixe com custo visível, posição pelo celular | ✅ |
-| 15 | Agenda: dia/semana/lista, arrastar, bloqueio pontual | ✅ |
+| 15 | Agenda: dia/semana/lista, mover por formulário, bloqueio pontual | ✅ |
 | 16 | `app-pro`: agenda do barbeiro, próximo cliente, preferências | ✅ |
 | 17 | `app-pro`: check-in, iniciar/finalizar, comissão, metas | ✅ |
 | 18 | Comanda + checkout + caixa + **fiado** | ✅ |
@@ -156,7 +228,7 @@ atual sem perder nenhuma capacidade que usava.
 | 20 | Notificações: confirmação, lembrete 24h/2h, retorno (fila + worker) | ✅ |
 | 21 | Dashboard básico + validador de catálogo | ✅ |
 | 22 | Importador de base + deduplicação por telefone | ✅ |
-| 23 | CI/CD, staging, observabilidade, e2e, carga em `/availability` | ✅ |
+| 23 | Portão local de qualidade: observabilidade, e2e e carga em `/availability` | ✅ |
 
 ---
 
@@ -208,9 +280,11 @@ espaço. Nada de "versão de celular" reduzida — a recepção atende pelo tele
 sempre que o notebook está ocupado com outra coisa, e é justamente aí, com
 cliente esperando em pé na frente dela, que a tela não pode faltar.
 
-Vale para todo o produto e está no CLAUDE.md §5: alvo de toque de 44px em
-qualquer largura, `min-width` sempre, e conferência medida em 360 · 390 · 768 ·
-1280 por `scripts/medir-responsividade.js` — não no olho.
+Vale para todo o produto e está no CLAUDE.md §5: todo **alvo autônomo** tem
+44px em qualquer largura, `min-width` sempre, e conferência medida em 360 · 390 ·
+768 · 1280 por `scripts/medir-responsividade.js` — não no olho. Elemento que não
+pode receber 44px sem sobrepor outro conteúdo deixa de ser alvo e permanece
+informativo; é o caso de buracos muito curtos na régua proporcional da Agenda V10.
 
 ---
 
@@ -230,7 +304,7 @@ não é vendável.
 | 30 | RBAC: telas de gestão de papéis e permissões editáveis pelo dono | ✅ |
 | 31 | LGPD: consentimentos, exportação de dados | ✅ |
 | 32 | LGPD: anonimização, retenção, pipeline de exclusão | ✅ |
-| 33 | Segurança: hardening, rate limit global, auditoria de acesso | ✅ |
+| 33 | Segurança: hardening, rate limit por processo + escada por conta, auditoria de acesso | ✅ |
 
 ---
 
@@ -239,7 +313,7 @@ não é vendável.
 | # | Bloco |
 |---|---|
 | 34 | `PaymentProvider`: abstração, fake e o cliente Stripe compartilhado | ✅ |
-| 35 | Pix pela Stripe: QR Code, webhook, conciliação | ✅ |
+| 35 | Motor de Pix no adquirente: QR Code, webhook e conciliação; ativação na conta pendente | ✅ |
 | 36 | Cartão e link de pagamento pela Stripe | ✅ |
 | 37 | Sinal seletivo + política de reembolso | ✅ |
 | 38 | Lista de espera: entradas, expiração, gatilho de cancelamento | ✅ |
@@ -292,14 +366,14 @@ igual — o produto não oferece apagar reclamação.
 | 47 | Cobrança recorrente: régua, suspensão gradual, cancelamento self-service | ✅ |
 | 48 | Rentabilidade da assinatura (simulação dos três modelos de comissão) | ✅ |
 | 49 | Split: modelagem derivada da comissão | ✅ |
-| 50 | Split: KYC do profissional, liquidação, estorno | ✅ |
+| 50 | Split: contrato de KYC, liquidação e estorno exercitado pelo provider fake | ✅ |
 | 51 | Financeiro: contas a pagar/receber, transferências, conciliação | ✅ |
 | 52 | Financeiro: vale, DRE gerencial | ✅ |
-| 53 | `FiscalProvider`: abstração e integração | ✅ |
-| 54 | Fiscal: NFS-e, cancelamento, Salão-Parceiro | ✅ |
+| 53 | `FiscalProvider`: abstração, contrato e provider fake | ✅ |
+| 54 | Fiscal: fluxo de NFS-e, cancelamento e Salão-Parceiro; emissor real pendente | ✅ |
 | 55 | WhatsApp oficial: templates, webhooks, botões | ✅ |
 | 56 | Marketing automation: motor de eventos, teto de mensagens, janela de silêncio | ✅ |
-| 57 | Campanhas: filtros, canais, receita atribuída | ✅ |
+| 57 | Campanhas: filtros, WhatsApp e receita atribuída | ✅ |
 | 58 | Multiunidade: seleção, consolidação, transferência de estoque | ✅ |
 | 59 | Multiunidade: cliente e fidelidade compartilhados | ✅ |
 
@@ -337,7 +411,7 @@ Só faz sentido com centenas de barbearias na base.
 
 | # | Bloco |
 |---|---|
-| 70 | Marketplace: busca geográfica e filtros | ✅ |
+| 70 | Marketplace: busca geográfica e filtros implementados | ✅ |
 | 71 | Marketplace: "próximo horário" em lote (exige `/availability` rápido) | ✅ |
 | 72 | Marketplace: atribuição de cliente novo e comissão | ✅ |
 | 73 | Perfil público do barbeiro | ✅ |

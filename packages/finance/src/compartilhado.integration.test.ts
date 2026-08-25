@@ -311,10 +311,12 @@ describeIfDb('fidelidade e fiado entre unidades', () => {
       tenantId: TENANT, customerId: CARLOS, locationId: MATRIZ,
       motivo: 'lançado por engano na comanda errada', ator, agora: AGORA,
     };
-    await ajustarSaldo({ ...tirar, quantidade: -1000 });
+    await ajustarSaldo({
+        idempotencyKey: 'audit-test-ajustarSaldo-1', ...tirar, quantidade: -1000 });
     expect((await saldoDoCliente(TENANT, CARLOS, AGORA, MATRIZ)).saldo).toBe(0);
 
-    await ajustarSaldo({ ...tirar, quantidade: 1000 });
+    await ajustarSaldo({
+        idempotencyKey: 'audit-test-ajustarSaldo-2', ...tirar, quantidade: 1000 });
     expect((await saldoDoCliente(TENANT, CARLOS, AGORA, MATRIZ)).saldo).toBe(1000);
   });
 
@@ -433,6 +435,7 @@ describeIfDb('fidelidade e fiado entre unidades', () => {
 
     // Paga tudo na filial.
     await receberFiado({
+        idempotencyKey: 'audit-test-receberFiado-1',
       tenantId: TENANT, locationId: FILIAL, customerId: CARLOS,
       amountCents: 30_000, forma: 'cash', ...operador,
     });

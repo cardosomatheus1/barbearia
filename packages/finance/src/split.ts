@@ -1,6 +1,8 @@
+import { createHmac } from 'node:crypto';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   calcularSplit,
+  diaNaUnidade,
   chaveDoRepasse,
   comissaoPorItem,
   desfechoDoEstornoDeRepasse,
@@ -294,6 +296,7 @@ const paraTela = (l: LinhaDeSplit): FatiaNaTela => ({
 export async function splitDaVenda(
   tenantId: string,
   orderId: string,
+  locationId: string | null = null,
 ): Promise<SplitDaVenda | null> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<(LinhaDeSplit & { pagamento: number })[]>`
@@ -302,8 +305,10 @@ export async function splitDaVenda(
              s.settled_at, s.last_error, c.amount_cents AS pagamento
         FROM payment_splits s
         JOIN order_charges c ON c.id = s.charge_id
+        JOIN orders o ON o.id = s.order_id
         LEFT JOIN professionals p ON p.id = s.professional_id
        WHERE s.order_id = ${orderId}::uuid
+         AND (${locationId}::uuid IS NULL OR o.location_id = ${locationId}::uuid)
        ORDER BY s.party, s.created_at
     `;
     const primeira = linhas[0];
@@ -336,8 +341,13 @@ export async function repassesDoPeriodo(params: {
   readonly de: string;
   readonly ate: string;
   readonly somenteProfessionalId?: string | null;
+  readonly locationId?: string | null;
+  /** Busca no máximo 301 para o controller conseguir sinalizar truncamento. */
+  readonly limite?: number;
 }): Promise<readonly RepasseNaTela[]> {
   const recorte = params.somenteProfessionalId ?? null;
+  const locationId = params.locationId ?? null;
+  const limite = Math.max(1, Math.min(params.limite ?? 301, 1001));
 
   return withTenant(params.tenantId, async (tx) => {
     /**
@@ -362,8 +372,9 @@ export async function repassesDoPeriodo(params: {
        WHERE o.business_day >= ${params.de}::date
          AND o.business_day <= ${params.ate}::date
          AND (${recorte}::uuid IS NULL OR s.professional_id = ${recorte}::uuid)
+         AND (${locationId}::uuid IS NULL OR o.location_id = ${locationId}::uuid)
        ORDER BY o.business_day DESC, s.created_at DESC
-       LIMIT 300
+       LIMIT ${limite}
     `;
 
     return linhas.map((l) => ({
@@ -435,9 +446,11 @@ export async function salvarConfiguracaoDoSplit(params: {
 
 export type SplitFailureNaBorda =
   | 'aliquota_invalida'
+  | 'idempotencia_conflitante'
   | 'profissional_nao_encontrado'
   | 'ja_aprovado'
-  | 'dados_invalidos';
+  | 'dados_invalidos'
+  | 'configuracao_invalida';
 
 export class SplitError extends Error {
   constructor(readonly code: SplitFailureNaBorda, message: string) {
@@ -468,7 +481,10 @@ export interface RecebedorNaTela {
  * faz por gosto: a coluna que mostra "R$ 1.240 do Ruan passaram pela casa este
  * mês porque ele não terminou o cadastro" é o que faz o cadastro acontecer.
  */
-export async function recebedores(tenantId: string): Promise<readonly RecebedorNaTela[]> {
+export async function recebedores(
+  tenantId: string,
+  locationId: string | null = null,
+): Promise<readonly RecebedorNaTela[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
       {
@@ -490,6 +506,7 @@ export async function recebedores(tenantId: string): Promise<readonly RecebedorN
              ), 0)::bigint AS retido
         FROM professionals p
        WHERE p.active
+         AND (${locationId}::uuid IS NULL OR p.location_id = ${locationId}::uuid)
        ORDER BY p.name
     `;
 
@@ -516,26 +533,97 @@ export async function recebedores(tenantId: string): Promise<readonly RecebedorN
  * A chamada acontece **fora** da transação: é rede, e o adquirente responde em
  * segundos ou em dezenas deles.
  */
-export async function cadastrarRecebedor(entrada: {
+function fingerprintKyc(entrada: {
   readonly tenantId: string;
+  readonly locationId: string;
   readonly professionalId: string;
   readonly documento: string;
   readonly banco: string;
   readonly agencia: string;
   readonly conta: string;
+}): string {
+  const segredo = process.env['KYC_INTENT_HMAC_SECRET']
+    ?? (process.env['NODE_ENV'] === 'production' ? null : 'barberdock-dev-only-kyc-intent');
+  if (!segredo) {
+    throw new SplitError('configuracao_invalida', 'KYC_INTENT_HMAC_SECRET é obrigatória em produção.');
+  }
+  const canonico = JSON.stringify([
+    entrada.tenantId, entrada.locationId, entrada.professionalId,
+    entrada.documento, entrada.banco, entrada.agencia, entrada.conta,
+  ]);
+  return createHmac('sha256', segredo).update(canonico).digest('hex');
+}
+
+export async function cadastrarRecebedor(entrada: {
+  readonly tenantId: string;
+  readonly locationId: string;
+  readonly professionalId: string;
+  readonly documento: string;
+  readonly banco: string;
+  readonly agencia: string;
+  readonly conta: string;
+  readonly idempotencyKey: string;
   readonly provider: SplitProvider;
   readonly staffId: string;
   readonly staffName: string;
   readonly agora?: Date;
 }): Promise<{ readonly estado: EstadoDoRecebedor }> {
   const agora = entrada.agora ?? new Date();
+  const fingerprint = fingerprintKyc(entrada);
 
-  const [profissional] = await withTenant(entrada.tenantId, (tx) =>
-    tx.$queryRaw<{ id: string; name: string; psp_kyc_status: EstadoDoKyc }[]>`
-      SELECT id, name, psp_kyc_status FROM professionals
-       WHERE id = ${entrada.professionalId}::uuid AND active
-    `,
-  );
+  /**
+   * Reivindica a intenção **antes da rede** e a solta somente depois de um
+   * desfecho persistido.
+   *
+   * Se o adquirente criou o recebedor e a resposta se perdeu, esta chave fica
+   * no profissional. Uma página recarregada pode mandar outra chave HTTP, mas
+   * o domínio reapresenta a chave original ao provider — que é obrigado pelo
+   * contrato a devolvê-la idempotentemente.
+   */
+  const profissional = await withTenant(entrada.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{
+      id: string;
+      name: string;
+      psp_kyc_status: EstadoDoKyc;
+      psp_kyc_request_key: string | null;
+      psp_kyc_request_fingerprint: string | null;
+    }[]>`
+      SELECT id, name, psp_kyc_status, psp_kyc_request_key, psp_kyc_request_fingerprint
+        FROM professionals
+       WHERE id = ${entrada.professionalId}::uuid
+         AND location_id = ${entrada.locationId}::uuid AND active
+       FOR UPDATE
+    `;
+    const atual = linhas[0];
+    if (!atual) return null;
+    if (atual.psp_kyc_status === 'aprovado') return atual;
+    if (
+      atual.psp_kyc_request_key &&
+      atual.psp_kyc_request_fingerprint &&
+      atual.psp_kyc_request_fingerprint !== fingerprint
+    ) {
+      throw new SplitError(
+        'idempotencia_conflitante',
+        'O cadastro em andamento foi iniciado com outros dados. Use uma nova intenção após concluir ou reconciliar a anterior.',
+      );
+    }
+    const chaveAtiva = atual.psp_kyc_request_key ?? entrada.idempotencyKey;
+    if (!atual.psp_kyc_request_key || !atual.psp_kyc_request_fingerprint) {
+      // Upgrade de 0105 -> 0108: pode existir uma chave em voo sem fingerprint.
+      // A primeira retomada pós-migração sela a intenção com o payload que será
+      // reapresentado; depois disso, qualquer mudança passa a ser conflito.
+      await tx.$executeRaw`
+        UPDATE professionals
+           SET psp_kyc_request_key = ${chaveAtiva},
+               psp_kyc_request_fingerprint = ${fingerprint},
+               psp_kyc_updated_at = ${agora},
+               updated_at = now()
+         WHERE id = ${entrada.professionalId}::uuid
+           AND location_id = ${entrada.locationId}::uuid
+      `;
+    }
+    return { ...atual, psp_kyc_request_key: chaveAtiva };
+  });
   if (!profissional) {
     throw new SplitError('profissional_nao_encontrado', 'Este profissional não existe.');
   }
@@ -547,6 +635,7 @@ export async function cadastrarRecebedor(entrada: {
     tenantId: entrada.tenantId,
     professionalId: entrada.professionalId,
     nome: profissional.name,
+    idempotencyKey: profissional.psp_kyc_request_key ?? entrada.idempotencyKey,
     documento: entrada.documento,
     banco: entrada.banco,
     agencia: entrada.agencia,
@@ -560,8 +649,11 @@ export async function cadastrarRecebedor(entrada: {
              psp_kyc_status = ${resposta.estado}::psp_kyc_status,
              psp_kyc_updated_at = ${agora},
              psp_kyc_reason = ${resposta.motivo ?? null},
+             psp_kyc_request_key = NULL,
+             psp_kyc_request_fingerprint = NULL,
              updated_at = now()
        WHERE id = ${entrada.professionalId}::uuid
+         AND location_id = ${entrada.locationId}::uuid
     `;
     await audit(tx, {
       actorId: entrada.staffId,
@@ -633,6 +725,8 @@ export interface ResultadoDaLiquidacao {
    * que alguém precisa ver.
    */
   readonly divergentes: number;
+  /** Dívidas provisórias desfeitas quando o adquirente provou que nada saiu. */
+  readonly compensados: number;
 }
 
 interface ParteNaFila {
@@ -646,6 +740,149 @@ interface ParteNaFila {
   kyc: EstadoDoKyc | null;
   recebedor: string | null;
   pagamento: string | null;
+  transfer_recipient_id: string | null;
+  transfer_payment_id: string | null;
+}
+
+
+/**
+ * Desfaz a dívida **provisória** quando o adquirente prova que a transferência
+ * em voo nunca aconteceu.
+ *
+ * Não apagamos o lançamento negativo: comissão é ledger. A correção é outro
+ * lançamento positivo, ligado de volta à fatia. Se o negativo já caiu num
+ * fechamento, a compensação entra no dia local atual; caso contrário usa o
+ * mesmo dia e os dois se anulam antes do fechamento.
+ */
+async function compensarClawbackProvisorio(
+  tx: TransactionClient,
+  splitId: string,
+  agora: Date,
+): Promise<boolean> {
+  const linhas = await tx.$queryRaw<{
+    clawback_entry_id: string | null;
+    clawback_reversal_entry_id: string | null;
+    professional_id: string;
+    order_id: string;
+    earned_on: string;
+    value: number;
+    closure_id: string | null;
+    timezone: string;
+  }[]>`
+    SELECT s.clawback_entry_id, s.clawback_reversal_entry_id,
+           ce.professional_id, ce.order_id, ce.earned_on::text AS earned_on,
+           ce.value, ce.closure_id, l.timezone
+      FROM payment_splits s
+      JOIN commission_entries ce ON ce.id = s.clawback_entry_id
+      JOIN orders o ON o.id = s.order_id
+      JOIN locations l ON l.id = o.location_id
+     WHERE s.id = ${splitId}::uuid AND s.status = 'estornado'
+     FOR UPDATE OF s
+  `;
+  const linha = linhas[0];
+  if (!linha || !linha.clawback_entry_id || linha.clawback_reversal_entry_id) return false;
+
+  const earnedOn = linha.closure_id
+    ? diaNaUnidade(null, linha.timezone, agora).dia
+    : linha.earned_on;
+  const [reversao] = await tx.$queryRaw<{ id: string }[]>`
+    INSERT INTO commission_entries
+      (tenant_id, professional_id, order_id, earned_on, mode, value, base_cents, sign)
+    VALUES (
+      NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+      ${linha.professional_id}::uuid, ${linha.order_id}::uuid,
+      ${earnedOn}::date, 'fixed'::commission_mode, ${linha.value}, 0, 1
+    )
+    RETURNING id
+  `;
+  await tx.$executeRaw`
+    UPDATE payment_splits
+       SET clawback_reversal_entry_id = ${reversao?.id ?? null}::uuid,
+           recovery_pending = false,
+           last_error = 'repasse em voo confirmado como não executado; clawback compensado',
+           updated_at = now()
+     WHERE id = ${splitId}::uuid
+  `;
+  return true;
+}
+
+/**
+ * Resolve fatias estornadas enquanto a transferência estava em voo.
+ *
+ * O provider é chamado de novo com **a mesma chave e os mesmos parâmetros
+ * congelados**. Idempotência externa transforma a nova chamada numa consulta
+ * do resultado original: sucesso mantém a dívida; recusa definitiva a desfaz;
+ * indisponibilidade continua pendente para a próxima volta diária.
+ */
+async function recuperarEstornosEmVoo(entrada: {
+  readonly tenantId: string;
+  readonly provider: SplitProvider;
+  readonly agora: Date;
+}): Promise<{ confirmados: number; compensados: number; ambiguos: number }> {
+  const pendentes = await withTenant(entrada.tenantId, (tx) => tx.$queryRaw<{
+    id: string;
+    amount_cents: number;
+    transfer_recipient_id: string | null;
+    transfer_payment_id: string | null;
+  }[]>`
+    SELECT id, amount_cents, transfer_recipient_id, transfer_payment_id
+      FROM payment_splits
+     WHERE status = 'estornado' AND recovery_pending
+       AND clawback_entry_id IS NOT NULL AND clawback_reversal_entry_id IS NULL
+     ORDER BY updated_at
+     LIMIT 200
+  `);
+
+  let confirmados = 0;
+  let compensados = 0;
+  let ambiguos = 0;
+  for (const parte of pendentes) {
+    const pedido = {
+      tenantId: entrada.tenantId,
+      fatiaId: parte.id,
+      recebedorId: parte.transfer_recipient_id ?? '',
+      valorCents: parte.amount_cents,
+      pagamentoId: parte.transfer_payment_id ?? '',
+      idempotencyKey: '',
+    };
+    const resultado = await entrada.provider
+      .transferir({ ...pedido, idempotencyKey: chaveDoRepasse(pedido) })
+      .catch((erro: unknown): ResultadoDoRepasse => ({
+        ok: false,
+        codigo: 'indisponivel',
+        motivo: erro instanceof Error ? erro.message : 'o adquirente não respondeu',
+        definitiva: false,
+      }));
+
+    await withTenant(entrada.tenantId, async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO split_transfers
+          (tenant_id, split_id, amount_cents, ok, psp_transfer_id, error_code, error_message)
+        VALUES (
+          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+          ${parte.id}::uuid, ${parte.amount_cents}, ${resultado.ok},
+          ${resultado.ok ? resultado.transferenciaId : null},
+          ${resultado.ok ? null : resultado.codigo},
+          ${resultado.ok ? null : resultado.motivo}
+        )
+      `;
+      if (resultado.ok) {
+        await tx.$executeRaw`
+          UPDATE payment_splits
+             SET recovery_pending = false, psp_transfer_id = ${resultado.transferenciaId}, updated_at = now()
+           WHERE id = ${parte.id}::uuid AND status = 'estornado'
+        `;
+        confirmados += 1;
+        return;
+      }
+      if (resultado.definitiva) {
+        if (await compensarClawbackProvisorio(tx, parte.id, entrada.agora)) compensados += 1;
+      } else {
+        ambiguos += 1;
+      }
+    });
+  }
+  return { confirmados, compensados, ambiguos };
 }
 
 /**
@@ -672,7 +909,7 @@ export async function liquidarRepasses(entrada: {
   readonly agora?: Date;
 }): Promise<ResultadoDaLiquidacao> {
   const agora = entrada.agora ?? new Date();
-  const contagem = { repassados: 0, retidos: 0, falhados: 0, desistidos: 0, divergentes: 0 };
+  const contagem = { repassados: 0, retidos: 0, falhados: 0, desistidos: 0, divergentes: 0, compensados: 0 };
 
   /**
    * Quem ficou preso em `liquidando` volta para `falhou` antes da volta.
@@ -692,12 +929,22 @@ export async function liquidarRepasses(entrada: {
     `,
   );
 
+  const recuperacao = await recuperarEstornosEmVoo({
+    tenantId: entrada.tenantId,
+    provider: entrada.provider,
+    agora,
+  });
+  contagem.divergentes += recuperacao.confirmados;
+  contagem.compensados += recuperacao.compensados;
+  contagem.falhados += recuperacao.ambiguos;
+
   const fila = await withTenant(entrada.tenantId, (tx) =>
     tx.$queryRaw<ParteNaFila[]>`
       SELECT s.id, s.order_id, s.amount_cents, s.status::text AS status, s.attempts,
              s.party, s.professional_id,
              p.psp_kyc_status AS kyc, p.psp_recipient_id AS recebedor,
-             c.psp_payment_id AS pagamento
+             c.psp_payment_id AS pagamento,
+             s.transfer_recipient_id, s.transfer_payment_id
         FROM payment_splits s
         LEFT JOIN professionals p ON p.id = s.professional_id
         JOIN order_charges c ON c.id = s.charge_id
@@ -754,7 +1001,10 @@ export async function liquidarRepasses(entrada: {
     const reivindicadas = await withTenant(entrada.tenantId, (tx) =>
       tx.$executeRaw`
         UPDATE payment_splits
-           SET attempts = attempts + 1, status = 'liquidando', updated_at = now()
+           SET attempts = attempts + 1, status = 'liquidando',
+               transfer_recipient_id = coalesce(transfer_recipient_id, ${parte.recebedor ?? ''}),
+               transfer_payment_id = coalesce(transfer_payment_id, ${parte.pagamento ?? ''}),
+               updated_at = now()
          WHERE id = ${parte.id}::uuid AND attempts = ${parte.attempts}
            AND status IN ('pendente', 'falhou')
       `,
@@ -775,9 +1025,9 @@ export async function liquidarRepasses(entrada: {
       fatiaId: parte.id,
       // A casa e a plataforma não têm recebedor: o adquirente já sabe para onde
       // mandar a parte de cada uma.
-      recebedorId: parte.recebedor ?? '',
+      recebedorId: parte.transfer_recipient_id ?? parte.recebedor ?? '',
       valorCents: parte.amount_cents,
-      pagamentoId: parte.pagamento ?? '',
+      pagamentoId: parte.transfer_payment_id ?? parte.pagamento ?? '',
       idempotencyKey: '',
     };
     const resultado = await entrada.provider
@@ -787,6 +1037,7 @@ export async function liquidarRepasses(entrada: {
           ok: false,
           codigo: 'indisponivel',
           motivo: erro instanceof Error ? erro.message : 'o adquirente não respondeu',
+          definitiva: false,
         }),
       );
 
@@ -821,6 +1072,15 @@ export async function liquidarRepasses(entrada: {
            WHERE id = ${parte.id}::uuid AND status = 'liquidando'
         `;
         if (baixadas === 0) {
+          // A venda foi estornada enquanto a transferência estava em voo. O
+          // sucesso externo confirma que a dívida provisória é real; só
+          // encerramos a necessidade de reconciliação, sem desfazer o clawback.
+          await tx.$executeRaw`
+            UPDATE payment_splits
+               SET recovery_pending = false, psp_transfer_id = ${resultado.transferenciaId},
+                   updated_at = now()
+             WHERE id = ${parte.id}::uuid AND status = 'estornado'
+          `;
           contagem.divergentes += 1;
           return;
         }
@@ -828,12 +1088,17 @@ export async function liquidarRepasses(entrada: {
         return;
       }
 
-      await tx.$executeRaw`
+      const falhadas = await tx.$executeRaw`
         UPDATE payment_splits
            SET status = 'falhou', last_error = ${resultado.motivo.slice(0, 200)},
                updated_at = now()
          WHERE id = ${parte.id}::uuid AND status = 'liquidando'
       `;
+      if (falhadas === 0 && resultado.definitiva) {
+        if (await compensarClawbackProvisorio(tx, parte.id, agora)) contagem.compensados += 1;
+      }
+      // Falha ambígua com a venda já estornada mantém `recovery_pending`: a
+      // próxima volta reapresenta **a mesma** transferência pela mesma chave.
       contagem.falhados += 1;
     });
   }
@@ -924,7 +1189,7 @@ export async function estornarSplitDaVenda(
     const marcadas = await tx.$executeRaw`
       UPDATE payment_splits
          SET status = 'estornado', clawback_entry_id = ${lancamento?.id ?? null}::uuid,
-             updated_at = now()
+             recovery_pending = ${parte.status === 'liquidando'}, updated_at = now()
        WHERE id = ${parte.id}::uuid AND status <> 'estornado'
     `;
     if (marcadas > 0) cobrados += 1;

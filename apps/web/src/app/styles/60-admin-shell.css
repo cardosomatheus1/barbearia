@@ -1,0 +1,655 @@
+/* ============================================================================
+   O casco do painel — operação à frente, configuração em segundo plano
+   ============================================================================
+
+   Trilho de **áreas de trabalho**, orientação horizontal e área de trabalho.
+   V4 separa o que se usa todos os dias do que se configura por exceção: a
+   configuração continua acessível, mas deixa de disputar o mesmo peso visual.
+
+   O que decide o que aparece é CSS, não JavaScript: cada tela declara
+   `data-secao` no próprio `<main>`, e `:has()` acende o módulo e revela o bloco
+   de contexto dele. Trocar isso por um componente de cliente custaria o primeiro
+   JavaScript do produto só para saber em que página estamos.
+   ============================================================================ */
+
+.casco {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  min-height: 100dvh;
+  min-width: 0;
+}
+
+/* -- o trilho de módulos ----------------------------------------------------- */
+
+.trilho {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface));
+  min-width: 0;
+}
+.trilho__grupo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  min-width: 0;
+}
+.trilho__selo {
+  display: grid;
+  place-items: center;
+  width: var(--size-touch);
+  height: var(--size-touch);
+  border-radius: var(--radius-md);
+}
+.trilho__selo img {
+  width: 2.25rem;
+  height: 2.25rem;
+  aspect-ratio: 1;
+  max-width: 100%;
+  object-fit: contain;
+}
+.trilho__botao {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-decoration: none;
+  white-space: nowrap;
+  min-width: 0;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+.trilho__botao:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.trilho__botao svg { flex: none; opacity: 0.8; }
+.trilho__legenda {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: var(--font-weight-bold);
+}
+
+.trilho__separador {
+  align-self: stretch;
+  width: 1px;
+  min-height: 1.5rem;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+.trilho__grupo--configuracao {
+  color: var(--color-text-muted);
+}
+.trilho__botao--configuracao {
+  color: color-mix(in srgb, var(--color-text-muted) 72%, transparent);
+  font-weight: var(--font-weight-normal);
+}
+.trilho__botao--configuracao svg { opacity: 0.62; }
+.trilho__botao--configuracao:hover {
+  color: var(--color-text-primary);
+}
+
+/* O módulo aberto: fundo em degradê e o filete creme→vermelho. É o estado ativo
+   do mock, e a única peça da moldura que usa as duas cores da marca juntas. */
+.casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje'],
+.casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda'],
+.casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes'],
+.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'],
+.casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'],
+.casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento'],
+.casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao'],
+.casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes'] {
+  color: var(--color-accent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent) 10%, transparent),
+    color-mix(in srgb, var(--color-accent) 6%, transparent)
+  );
+  border-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje'] svg,
+.casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda'] svg,
+.casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes'] svg,
+.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'] svg,
+.casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'] svg,
+.casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento'] svg,
+.casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao'] svg,
+.casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes'] svg { opacity: 1; }
+.casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje']::after,
+.casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda']::after,
+.casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes']::after,
+.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
+.casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
+.casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento']::after,
+.casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao']::after,
+.casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes']::after {
+  content: '';
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 35%, transparent));
+}
+
+/* -- orientação e abas da área (V3) ----------------------------------------- */
+
+.contexto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "casa acoes"
+    "orientacao orientacao"
+    "lista lista";
+  min-width: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-raised) 94%, transparent);
+}
+.contexto__casa-bloco {
+  grid-area: casa;
+  align-self: center;
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+}
+.contexto__casa {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-base);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contexto__unidade {
+  margin: 1px 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contexto__acoes {
+  grid-area: acoes;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+}
+.contexto__atalho {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.contexto__atalho:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+.casco:has([data-secao='assistente']) .contexto__atalho[data-para='assistente'] {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.contexto__orientacoes {
+  grid-area: orientacao;
+  min-width: 0;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+.contexto__orientacao { display: none; min-width: 0; }
+.casco:has([data-secao='dia']) .contexto__orientacao[data-para='dia'],
+.casco:has([data-secao='meu-dia']) .contexto__orientacao[data-para='meu-dia'],
+.casco:has([data-secao='agenda']) .contexto__orientacao[data-para='agenda'],
+.casco:has([data-secao='clientes']) .contexto__orientacao[data-para='clientes'],
+.casco:has([data-secao='cliente']) .contexto__orientacao[data-para='cliente'],
+.casco:has([data-secao='fila']) .contexto__orientacao[data-para='fila'],
+.casco:has([data-secao='comanda']) .contexto__orientacao[data-para='comanda'],
+.casco:has([data-secao='recados']) .contexto__orientacao[data-para='recados'],
+.casco:has([data-secao='recepcao']) .contexto__orientacao[data-para='recepcao'],
+.casco:has([data-secao='avaliacoes']) .contexto__orientacao[data-para='avaliacoes'],
+.casco:has([data-secao='caixa']) .contexto__orientacao[data-para='caixa'],
+.casco:has([data-secao='fiado']) .contexto__orientacao[data-para='fiado'],
+.casco:has([data-secao='financeiro']) .contexto__orientacao[data-para='financeiro'],
+.casco:has([data-secao='comissao']) .contexto__orientacao[data-para='comissao'],
+.casco:has([data-secao='dre']) .contexto__orientacao[data-para='dre'],
+.casco:has([data-secao='meus-numeros']) .contexto__orientacao[data-para='meus-numeros'],
+.casco:has([data-secao='whatsapp']) .contexto__orientacao[data-para='whatsapp'],
+.casco:has([data-secao='campanhas']) .contexto__orientacao[data-para='campanhas'],
+.casco:has([data-secao='automacoes']) .contexto__orientacao[data-para='automacoes'],
+.casco:has([data-secao='avisos']) .contexto__orientacao[data-para='avisos'],
+.casco:has([data-secao='retencao']) .contexto__orientacao[data-para='retencao'],
+.casco:has([data-secao='fidelidade']) .contexto__orientacao[data-para='fidelidade'],
+.casco:has([data-secao='clube']) .contexto__orientacao[data-para='clube'],
+.casco:has([data-secao='painel']) .contexto__orientacao[data-para='painel'],
+.casco:has([data-secao='assistente']) .contexto__orientacao[data-para='assistente'],
+.casco:has([data-secao='servicos']) .contexto__orientacao[data-para='servicos'],
+.casco:has([data-secao='precos']) .contexto__orientacao[data-para='precos'],
+.casco:has([data-secao='pacotes']) .contexto__orientacao[data-para='pacotes'],
+.casco:has([data-secao='profissionais']) .contexto__orientacao[data-para='profissionais'],
+.casco:has([data-secao='recursos']) .contexto__orientacao[data-para='recursos'],
+.casco:has([data-secao='estoque']) .contexto__orientacao[data-para='estoque'],
+.casco:has([data-secao='fotos']) .contexto__orientacao[data-para='fotos'],
+.casco:has([data-secao='franquia']) .contexto__orientacao[data-para='franquia'],
+.casco:has([data-secao='unidades']) .contexto__orientacao[data-para='unidades'],
+.casco:has([data-secao='fiscal']) .contexto__orientacao[data-para='fiscal'],
+.casco:has([data-secao='equipe']) .contexto__orientacao[data-para='equipe'],
+.casco:has([data-secao='seguranca']) .contexto__orientacao[data-para='seguranca'],
+.casco:has([data-secao='chaves']) .contexto__orientacao[data-para='chaves'],
+.casco:has([data-secao='webhooks']) .contexto__orientacao[data-para='webhooks'],
+.casco:has([data-secao='lgpd']) .contexto__orientacao[data-para='lgpd'],
+.casco:has([data-secao='trilha']) .contexto__orientacao[data-para='trilha'],
+.casco:has([data-secao='importar']) .contexto__orientacao[data-para='importar'],
+.casco:has([data-secao='plano']) .contexto__orientacao[data-para='plano'],
+.casco:has([data-secao='configuracoes']) .contexto__orientacao[data-para='configuracoes'],
+.casco:has([data-secao='onboarding']) .contexto__orientacao[data-para='onboarding'] { display: grid; gap: 2px; }
+.migalha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.migalha a { color: var(--color-text-muted); text-decoration: none; }
+.migalha a:hover { color: var(--color-accent); }
+.migalha [aria-current='page'] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.migalha__separador { color: var(--color-text-muted); }
+.contexto__nota {
+  margin: 0;
+  max-width: 58rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.35;
+}
+
+.contexto__lista { grid-area: lista; min-width: 0; border-top: 1px solid var(--color-border); }
+.contexto__bloco { display: none; min-width: 0; }
+.casco:has([data-modulo-atual='hoje']) .contexto__bloco[data-modulo='hoje'],
+.casco:has([data-modulo-atual='agenda']) .contexto__bloco[data-modulo='agenda'],
+.casco:has([data-modulo-atual='clientes']) .contexto__bloco[data-modulo='clientes'],
+.casco:has([data-modulo-atual='atendimento']) .contexto__bloco[data-modulo='atendimento'],
+.casco:has([data-modulo-atual='financeiro']) .contexto__bloco[data-modulo='financeiro'],
+.casco:has([data-modulo-atual='crescimento']) .contexto__bloco[data-modulo='crescimento'],
+.casco:has([data-modulo-atual='gestao']) .contexto__bloco[data-modulo='gestao'],
+.casco:has([data-modulo-atual='configuracoes']) .contexto__bloco[data-modulo='configuracoes'] { display: block; }
+.contexto__faixa {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  min-width: 0;
+  padding: 0 var(--space-3);
+}
+.contexto__secao {
+  flex: none;
+  align-self: center;
+  margin: 0 var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--color-border);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.contexto__secao:first-child { border-left: 0; padding-left: 0; }
+.contexto__link {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.contexto__link::after {
+  content: '';
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+.contexto__link:hover { color: var(--color-text-primary); background: color-mix(in srgb, var(--color-surface-hover) 70%, transparent); }
+.contexto__link-nome { font-size: var(--font-size-sm); }
+.contexto__link-nota { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.casco:has([data-secao='dia']) .contexto__link[data-para='dia'],
+.casco:has([data-secao='agenda']) .contexto__link[data-para='agenda'],
+.casco:has([data-secao='clientes']) .contexto__link[data-para='clientes'],
+.casco:has([data-secao='fila']) .contexto__link[data-para='fila'],
+.casco:has([data-secao='comanda']) .contexto__link[data-para='comanda'],
+.casco:has([data-secao='recados']) .contexto__link[data-para='recados'],
+.casco:has([data-secao='recepcao']) .contexto__link[data-para='recepcao'],
+.casco:has([data-secao='avaliacoes']) .contexto__link[data-para='avaliacoes'],
+.casco:has([data-secao='caixa']) .contexto__link[data-para='caixa'],
+.casco:has([data-secao='fiado']) .contexto__link[data-para='fiado'],
+.casco:has([data-secao='financeiro']) .contexto__link[data-para='financeiro'],
+.casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
+.casco:has([data-secao='dre']) .contexto__link[data-para='dre'],
+.casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp'],
+.casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas'],
+.casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes'],
+.casco:has([data-secao='avisos']) .contexto__link[data-para='avisos'],
+.casco:has([data-secao='retencao']) .contexto__link[data-para='retencao'],
+.casco:has([data-secao='fidelidade']) .contexto__link[data-para='fidelidade'],
+.casco:has([data-secao='clube']) .contexto__link[data-para='clube'],
+.casco:has([data-secao='painel']) .contexto__link[data-para='painel'],
+.casco:has([data-secao='servicos']) .contexto__link[data-para='servicos'],
+.casco:has([data-secao='precos']) .contexto__link[data-para='precos'],
+.casco:has([data-secao='pacotes']) .contexto__link[data-para='pacotes'],
+.casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais'],
+.casco:has([data-secao='recursos']) .contexto__link[data-para='recursos'],
+.casco:has([data-secao='estoque']) .contexto__link[data-para='estoque'],
+.casco:has([data-secao='fotos']) .contexto__link[data-para='fotos'],
+.casco:has([data-secao='franquia']) .contexto__link[data-para='franquia'],
+.casco:has([data-secao='unidades']) .contexto__link[data-para='unidades'],
+.casco:has([data-secao='fiscal']) .contexto__link[data-para='fiscal'],
+.casco:has([data-secao='equipe']) .contexto__link[data-para='equipe'],
+.casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca'],
+.casco:has([data-secao='chaves']) .contexto__link[data-para='chaves'],
+.casco:has([data-secao='webhooks']) .contexto__link[data-para='webhooks'],
+.casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd'],
+.casco:has([data-secao='trilha']) .contexto__link[data-para='trilha'],
+.casco:has([data-secao='importar']) .contexto__link[data-para='importar'],
+.casco:has([data-secao='plano']) .contexto__link[data-para='plano'],
+.casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes'],
+.casco:has([data-secao='meu-dia']) .contexto__link[data-para='dia'],
+.casco:has([data-secao='cliente']) .contexto__link[data-para='clientes'],
+.casco:has([data-secao='meus-numeros']) .contexto__link[data-para='comissao'] { color: var(--color-accent); font-weight: var(--font-weight-semibold); }
+.casco:has([data-secao='dia']) .contexto__link[data-para='dia']::after,
+.casco:has([data-secao='agenda']) .contexto__link[data-para='agenda']::after,
+.casco:has([data-secao='clientes']) .contexto__link[data-para='clientes']::after,
+.casco:has([data-secao='fila']) .contexto__link[data-para='fila']::after,
+.casco:has([data-secao='comanda']) .contexto__link[data-para='comanda']::after,
+.casco:has([data-secao='recados']) .contexto__link[data-para='recados']::after,
+.casco:has([data-secao='recepcao']) .contexto__link[data-para='recepcao']::after,
+.casco:has([data-secao='avaliacoes']) .contexto__link[data-para='avaliacoes']::after,
+.casco:has([data-secao='caixa']) .contexto__link[data-para='caixa']::after,
+.casco:has([data-secao='fiado']) .contexto__link[data-para='fiado']::after,
+.casco:has([data-secao='financeiro']) .contexto__link[data-para='financeiro']::after,
+.casco:has([data-secao='comissao']) .contexto__link[data-para='comissao']::after,
+.casco:has([data-secao='dre']) .contexto__link[data-para='dre']::after,
+.casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp']::after,
+.casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas']::after,
+.casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes']::after,
+.casco:has([data-secao='avisos']) .contexto__link[data-para='avisos']::after,
+.casco:has([data-secao='retencao']) .contexto__link[data-para='retencao']::after,
+.casco:has([data-secao='fidelidade']) .contexto__link[data-para='fidelidade']::after,
+.casco:has([data-secao='clube']) .contexto__link[data-para='clube']::after,
+.casco:has([data-secao='painel']) .contexto__link[data-para='painel']::after,
+.casco:has([data-secao='servicos']) .contexto__link[data-para='servicos']::after,
+.casco:has([data-secao='precos']) .contexto__link[data-para='precos']::after,
+.casco:has([data-secao='pacotes']) .contexto__link[data-para='pacotes']::after,
+.casco:has([data-secao='profissionais']) .contexto__link[data-para='profissionais']::after,
+.casco:has([data-secao='recursos']) .contexto__link[data-para='recursos']::after,
+.casco:has([data-secao='estoque']) .contexto__link[data-para='estoque']::after,
+.casco:has([data-secao='fotos']) .contexto__link[data-para='fotos']::after,
+.casco:has([data-secao='franquia']) .contexto__link[data-para='franquia']::after,
+.casco:has([data-secao='unidades']) .contexto__link[data-para='unidades']::after,
+.casco:has([data-secao='fiscal']) .contexto__link[data-para='fiscal']::after,
+.casco:has([data-secao='equipe']) .contexto__link[data-para='equipe']::after,
+.casco:has([data-secao='seguranca']) .contexto__link[data-para='seguranca']::after,
+.casco:has([data-secao='chaves']) .contexto__link[data-para='chaves']::after,
+.casco:has([data-secao='webhooks']) .contexto__link[data-para='webhooks']::after,
+.casco:has([data-secao='lgpd']) .contexto__link[data-para='lgpd']::after,
+.casco:has([data-secao='trilha']) .contexto__link[data-para='trilha']::after,
+.casco:has([data-secao='importar']) .contexto__link[data-para='importar']::after,
+.casco:has([data-secao='plano']) .contexto__link[data-para='plano']::after,
+.casco:has([data-secao='configuracoes']) .contexto__link[data-para='configuracoes']::after,
+.casco:has([data-secao='meu-dia']) .contexto__link[data-para='dia']::after,
+.casco:has([data-secao='cliente']) .contexto__link[data-para='clientes']::after,
+.casco:has([data-secao='meus-numeros']) .contexto__link[data-para='comissao']::after { background: linear-gradient(90deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 35%, transparent)); }
+
+/* V4 — em tablet, as sete áreas de trabalho cabem sem rolagem.
+   Configurações desce para uma segunda faixa curta e deliberadamente secundária.
+   Em celular a barra continua rolável; em desktop ela vira o bloco inferior do
+   trilho vertical. */
+@media (min-width: 720px) and (max-width: 1023px) {
+  .trilho {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow-x: visible;
+    gap: var(--space-1) var(--space-2);
+  }
+  .trilho__selo { grid-column: 1; grid-row: 1; }
+  .trilho__grupo--principal {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0;
+  }
+  .trilho__grupo--principal .trilho__botao {
+    gap: var(--space-1);
+    padding-inline: var(--space-1);
+    font-size: 0.6875rem;
+  }
+  .trilho__grupo--principal .trilho__botao svg { width: 18px; height: 18px; }
+  .trilho__grupo--configuracao {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-end;
+    padding-top: var(--space-1);
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  }
+  .trilho__grupo--configuracao .trilho__separador { display: none; }
+}
+
+@supports (animation-timeline: scroll(self inline)) {
+  .trilho,
+  .contexto__faixa {
+    mask-image: linear-gradient(to right, #000 0 calc(100% - 2rem), transparent 100%);
+    animation: ui-fim-da-rolagem linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: contain;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .trilho,
+    .contexto__faixa { animation: none; }
+  }
+}
+
+.contexto__quem { display: flex; align-items: center; gap: var(--space-2); margin: 0; min-width: 0; }
+.contexto__iniciais {
+  flex: none; display: grid; place-items: center; width: 2.25rem; height: 2.25rem;
+  border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-text-on-accent);
+  font-weight: var(--font-weight-bold); font-size: var(--font-size-xs);
+}
+.contexto__identidade {
+  max-width: 9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--font-size-xs); line-height: 1.2;
+}
+.contexto__identidade small { display: block; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; }
+
+/* -- a área de trabalho ------------------------------------------------------ */
+
+.trabalho {
+  position: relative;
+  min-width: 0;
+  overflow-x: clip;
+}
+.trabalho::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-accent) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 3%, transparent) 1px, transparent 1px);
+  background-size: 4.5rem 4.5rem;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
+}
+.trabalho > * { position: relative; z-index: 1; }
+
+/* A barra de cada tela vira a barra do mock: gruda no topo, fundo translúcido e
+   a linha embaixo. Antes era um cabeçalho solto no meio do conteúdo. */
+/*
+  Ancora de `#` nao para atras da barra fixa (bloco 101).
+
+  O botao "Editar" de uma automacao leva a `#nova-automacao`, e o titulo
+  "Editando <nome>" parava em y=17 com a barra fixa terminando em y=69: as duas
+  unicas frases que dizem que aquilo **substitui** em vez de criar ficavam 52px
+  atras dela. O que sobrava era um formulario visualmente igual ao de criacao,
+  com o mesmo botao.
+
+  Vale para todo alvo de ancora do painel — o `#nova-campanha` do heatmap e o
+  `#pulados` da campanha tinham o mesmo problema, e o proximo nasce coberto.
+*/
+.casco [id] { scroll-margin-top: 4.5rem; }
+
+.casco .painel__topo {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+/* A partir do notebook o casco fica de pé: um único eixo vertical para as
+   áreas, orientação e abas no topo, e o trabalho rolando sozinho. V3 elimina
+   a antiga segunda coluna vertical — era ela que fazia a pessoa decidir entre
+   dois menus antes de chegar ao conteúdo. */
+@media (min-width: 1024px) {
+  .casco {
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .trilho {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    overflow: hidden;
+    padding: var(--space-3) var(--space-2);
+    border-bottom: 0;
+    border-right: 1px solid var(--color-border);
+  }
+  .trilho__grupo {
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .trilho__grupo--configuracao {
+    margin-top: auto;
+    padding-top: var(--space-3);
+  }
+  .trilho__selo { width: 3rem; height: 3rem; margin-bottom: var(--space-3); }
+  .trilho__selo img { width: 2.75rem; height: 2.75rem; }
+  .trilho__botao {
+    width: 3rem;
+    height: 3rem;
+    min-height: 3rem;
+    padding: 0;
+    border-radius: var(--radius-lg);
+  }
+  .trilho__legenda {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .trilho__separador {
+    width: 2.25rem;
+    height: 1px;
+    min-height: 0;
+    margin: 0 0 var(--space-1);
+  }
+  .trilho__botao--configuracao {
+    width: 2.75rem;
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+  .casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje']::after,
+  .casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda']::after,
+  .casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes']::after,
+  .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
+  .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
+  .casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento']::after,
+  .casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao']::after,
+  .casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes']::after {
+    left: calc(var(--space-3) * -1);
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    width: 3px;
+    height: 1.375rem;
+    transform: translateY(-50%);
+    background: linear-gradient(180deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 35%, transparent));
+  }
+
+  .contexto {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "casa orientacao acoes"
+      "lista lista lista";
+    align-items: stretch;
+    overflow: hidden;
+  }
+  .contexto__casa-bloco {
+    display: grid;
+    align-content: center;
+    padding: var(--space-2) var(--space-4);
+    border-right: 1px solid var(--color-border);
+  }
+  .contexto__orientacoes {
+    display: grid;
+    align-content: center;
+    padding: var(--space-2) var(--space-4);
+    border-top: 0;
+  }
+  .contexto__acoes { padding-right: var(--space-4); }
+  .contexto__lista { overflow: hidden; }
+  .contexto__faixa { overflow-x: auto; }
+
+  .trabalho { grid-column: 2; grid-row: 2; overflow: auto; }
+  .casco .painel__conteudo { max-width: 68rem; }
+  .casco .painel__entrada { max-width: 30rem; }
+}
+

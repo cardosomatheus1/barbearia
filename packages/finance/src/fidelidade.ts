@@ -46,7 +46,8 @@ export type FidelidadeFailure =
   | 'premio_incompleto'
   | 'resgate_acima_do_teto'
   | 'motivo_curto'
-  | 'programa_invalido';
+  | 'programa_invalido'
+  | 'idempotencia_conflitante';
 
 export class FidelidadeError extends Error {
   constructor(readonly code: FidelidadeFailure, message: string) {
@@ -66,6 +67,7 @@ const MENSAGEM: Readonly<Record<FidelidadeFailure, string>> = {
   resgate_acima_do_teto: 'Esta conta não usa tudo isso. Resgate só o que ela cobre.',
   motivo_curto: 'Escreva por que o saldo está sendo ajustado.',
   programa_invalido: 'Confira os números do programa.',
+  idempotencia_conflitante: 'Esta Idempotency-Key já foi usada para outro ajuste.',
 };
 
 function recusar(code: FidelidadeFailure): never {
@@ -607,6 +609,7 @@ export async function ajustarSaldo(entrada: {
   readonly customerId: string;
   readonly quantidade: number;
   readonly motivo: string;
+  readonly idempotencyKey: string;
   /** A unidade do balcão: é ela que decide de qual bolso o ajuste sai (bloco 59). */
   readonly locationId?: string | null;
   readonly ator: { readonly id: string; readonly name: string };
@@ -619,8 +622,28 @@ export async function ajustarSaldo(entrada: {
   }
 
   const agora = entrada.agora ?? new Date();
+  const fingerprint = JSON.stringify([entrada.customerId, entrada.locationId ?? null, entrada.quantidade, motivo]);
 
   await withTenant(entrada.tenantId, async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${entrada.tenantId}:${entrada.idempotencyKey}`}, 0))`;
+    // A trava da própria pessoa lineariza dois débitos simultâneos sobre o mesmo saldo.
+    const clientes = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM customers WHERE id = ${entrada.customerId}::uuid FOR UPDATE
+    `;
+    if (!clientes[0]) recusar('sem_cliente');
+
+    const anteriores = await tx.$queryRaw<{ idempotency_fingerprint: string | null }[]>`
+      SELECT idempotency_fingerprint FROM loyalty_entries
+       WHERE idempotency_key = ${entrada.idempotencyKey}
+       LIMIT 1
+    `;
+    if (anteriores[0]) {
+      if (anteriores[0].idempotency_fingerprint && anteriores[0].idempotency_fingerprint !== fingerprint) {
+        recusar('idempotencia_conflitante');
+      }
+      return;
+    }
+
     const p = await programaDaCasa(tx);
     if (p.modo === 'nenhum') recusar('sem_programa');
 
@@ -676,6 +699,7 @@ export async function ajustarSaldo(entrada: {
             ];
           })();
 
+    let primeira = true;
     for (const linha of linhas) {
       // Linha de zero não entra: extrato com movimento nulo é extrato que
       // ninguém consegue ler.
@@ -683,15 +707,17 @@ export async function ajustarSaldo(entrada: {
       await tx.$executeRaw`
         INSERT INTO loyalty_entries
           (tenant_id, customer_id, kind, mode, amount, note, created_by, expires_at,
-           scope, location_id)
+           scope, location_id, idempotency_key, idempotency_fingerprint)
         VALUES (
           ${entrada.tenantId}::uuid, ${entrada.customerId}::uuid, 'ajuste',
           ${p.modo}::loyalty_mode, ${linha.quantidade}, ${motivo},
           ${entrada.ator.id}::uuid,
           ${linha.quantidade > 0 ? vencimentoDoAcumulo(p, agora) : null},
-          ${linha.escopo}::escopo_multiunidade, ${linha.unidade}::uuid
+          ${linha.escopo}::escopo_multiunidade, ${linha.unidade}::uuid,
+          ${primeira ? entrada.idempotencyKey : null}, ${primeira ? fingerprint : null}
         )
       `;
+      primeira = false;
     }
 
     await audit(tx, {

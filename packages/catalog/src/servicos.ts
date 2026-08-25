@@ -1,5 +1,6 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { validateCombos } from '@barbearia/core';
+import { travarCatalogoDoTenant } from './concorrencia.js';
 
 /**
  * Catálogo, no dia a dia.
@@ -152,9 +153,9 @@ export async function listServices(
              (SELECT array_agg(scc.service_id::text)
                 FROM service_combos sc
                 JOIN service_combo_components scc ON scc.combo_id = sc.id
-               WHERE sc.name = s.name) AS component_ids,
+               WHERE sc.sold_as_service_id = s.id) AS component_ids,
              (SELECT sc.tolerance_minutes FROM service_combos sc
-               WHERE sc.name = s.name) AS combo_tolerance_minutes,
+               WHERE sc.sold_as_service_id = s.id) AS combo_tolerance_minutes,
              (SELECT count(*) FROM appointment_services aps
                 JOIN appointments a ON a.id = aps.appointment_id
                WHERE aps.service_id = s.id
@@ -250,7 +251,7 @@ async function exigirCombosCoerentes(
            (SELECT array_agg(scc.service_id::text)
               FROM service_combos sc
               JOIN service_combo_components scc ON scc.combo_id = sc.id
-             WHERE sc.name = s.name) AS component_ids
+             WHERE sc.sold_as_service_id = s.id) AS component_ids
     FROM services s WHERE s.active
   `;
 
@@ -326,23 +327,24 @@ export async function exigirServicosDoTenant(
 /** Grava o vínculo de combo, sempre reescrevendo o conjunto de componentes. */
 async function gravarCombo(
   tx: TransactionClient,
+  serviceId: string,
   nome: string,
   duracao: number,
   componentIds: readonly string[] | undefined,
   toleranciaMinutos = 0,
 ): Promise<void> {
   await tx.$executeRaw`
-    DELETE FROM service_combos WHERE name = ${nome}
+    DELETE FROM service_combos WHERE sold_as_service_id = ${serviceId}::uuid
   `;
   if (!componentIds || componentIds.length < 2) return;
   await exigirServicosDoTenant(tx, componentIds);
 
   const criado = await tx.$queryRaw<{ id: string }[]>`
     INSERT INTO service_combos
-      (tenant_id, name, declared_duration_minutes, tolerance_minutes)
+      (tenant_id, name, declared_duration_minutes, tolerance_minutes, sold_as_service_id)
     VALUES (
       NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-      ${nome}, ${duracao}, ${toleranciaMinutos}
+      ${nome}, ${duracao}, ${toleranciaMinutos}, ${serviceId}::uuid
     )
     RETURNING id
   `;
@@ -363,6 +365,9 @@ export async function createService(
   tenantId: string,
   input: ServiceInput,
 ): Promise<{ readonly id: string }> {
+  if (input.componentIds?.length === 1 || (input.componentIds && new Set(input.componentIds).size !== input.componentIds.length)) {
+    throw new CatalogError('invalid_catalog', 'Combo precisa de pelo menos dois componentes diferentes.');
+  }
   return withTenant(tenantId, async (tx) => {
     // Antes da coerência, não depois: a validação de combo rejeitaria um
     // componente invisível de tabela, mas por ser incoerente — e depender disso
@@ -391,6 +396,7 @@ export async function createService(
 
     await gravarCombo(
       tx,
+      id,
       input.name,
       input.durationMinutes,
       input.componentIds,
@@ -442,9 +448,16 @@ export async function updateService(
   serviceId: string,
   input: ServiceInput,
 ): Promise<void> {
+  if (input.componentIds?.includes(serviceId)) {
+    throw new CatalogError('invalid_catalog', 'Um combo não pode conter ele mesmo.');
+  }
+  if (input.componentIds?.length === 1 || (input.componentIds && new Set(input.componentIds).size !== input.componentIds.length)) {
+    throw new CatalogError('invalid_catalog', 'Combo precisa de pelo menos dois componentes diferentes.');
+  }
   await withTenant(tenantId, async (tx) => {
-    const existe = await tx.$queryRaw<{ name: string }[]>`
-      SELECT name FROM services WHERE id = ${serviceId}::uuid
+    await travarCatalogoDoTenant(tx, 'services');
+    const existe = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM services WHERE id = ${serviceId}::uuid
     `;
     const anterior = existe[0];
     if (!anterior) throw new CatalogError('service_not_found', 'Serviço não encontrado.');
@@ -479,13 +492,10 @@ export async function updateService(
       WHERE id = ${serviceId}::uuid
     `;
 
-    // O combo é ligado ao serviço pelo **nome**; renomear precisa levar o
-    // vínculo junto, senão o combo antigo fica órfão e o novo nunca existe.
-    if (anterior.name !== input.name) {
-      await tx.$executeRaw`DELETE FROM service_combos WHERE name = ${anterior.name}`;
-    }
+    // Combo é identidade do serviço, não do rótulo: renomear mantém o mesmo id.
     await gravarCombo(
       tx,
+      serviceId,
       input.name,
       input.durationMinutes,
       input.componentIds,
@@ -508,6 +518,7 @@ export async function setServiceActive(
   now: Date = new Date(),
 ): Promise<{ readonly futureAppointments: number }> {
   return withTenant(tenantId, async (tx) => {
+    await travarCatalogoDoTenant(tx, 'services');
     const afetadas = await tx.$executeRaw`
       UPDATE services SET active = ${active}, updated_at = now()
       WHERE id = ${serviceId}::uuid

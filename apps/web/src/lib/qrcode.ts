@@ -18,9 +18,9 @@ import qrcode from 'qrcode-generator';
  *
  * ## Por que SVG e por que no servidor
  *
- * O produto não manda JavaScript ao navegador do admin, e gerar o código no
- * cliente exigiria o primeiro componente de cliente — decisão que tem bloco
- * próprio. SVG também é o formato certo aqui: ele escala sem borrar, e um QR
+ * O QR é gerado no servidor para não adicionar JavaScript a toda tela que o usa.
+ * O R5 abriu ilhas locais no admin, mas isso não muda a decisão daqui. SVG também
+ * é o formato certo: ele escala sem borrar, e um QR
  * Code borrado é um QR Code que não lê.
  */
 

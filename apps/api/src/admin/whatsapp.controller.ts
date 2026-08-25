@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   WhatsAppError,
   WhatsAppMetaError,
@@ -289,7 +289,15 @@ export class WhatsAppController {
       tipo?: TipoDeNotificacao;
       templateId?: string;
     },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError(
+        'idempotency_key_obrigatoria',
+        400,
+        'Mande um Idempotency-Key de até 128 caracteres para este envio.',
+      );
+    }
     const local = await this.unidade(staff);
     const zap = await provedorDoWhatsApp(staff.tenantId, local.id);
     if (!zap) {
@@ -311,6 +319,7 @@ export class WhatsAppController {
         timeZone: local.timezone,
         staffId: staff.staffUserId,
         staffName: staff.name,
+        idempotencyKey,
         enviar: async (destino) => {
           const saiu = await enviarPeloWhatsApp({
             tenantId: staff.tenantId,

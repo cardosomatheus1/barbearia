@@ -272,7 +272,6 @@ async function chamar(
       status: resposta.status,
       codigo: erro?.code ?? null,
       fbtrace: erro?.fbtrace_id ?? null,
-      mensagem: erro?.error_user_msg ?? erro?.message ?? null,
     });
     throw new SignupError(
       'meta_recusou',
@@ -528,6 +527,8 @@ export async function conectarPeloSignup(params: {
   readonly staffName: string;
   readonly credenciais?: CredenciaisDaPlataforma | null;
   readonly buscar?: typeof fetch;
+  /** Porta injetável para provar a repetição sem abrir banco no teste unitário. */
+  readonly carregarCadastro?: typeof cadastroDoWhatsApp;
 }): Promise<CadastroDoWhatsApp> {
   const credenciais = params.credenciais ?? credenciaisDaPlataforma();
   if (!credenciais) {
@@ -563,7 +564,8 @@ export async function conectarPeloSignup(params: {
       erro instanceof SignupError && /already been used|has been used/i.test(erro.message);
     if (!jaUsado) throw erro;
 
-    const gravado = await cadastroDoWhatsApp(params.tenantId, params.locationId);
+    const carregarCadastro = params.carregarCadastro ?? cadastroDoWhatsApp;
+    const gravado = await carregarCadastro(params.tenantId, params.locationId);
     if (gravado === null) throw erro;
     return gravado;
   }

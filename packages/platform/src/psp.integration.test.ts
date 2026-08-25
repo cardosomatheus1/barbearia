@@ -6,6 +6,7 @@ import {
   aplicarRegua,
   assinarWebhook,
   conciliarPendentes,
+  conciliarEstornosPendentes,
   conferirAssinaturaDoWebhook,
   emitirFatura,
   estornarCredito,
@@ -455,6 +456,25 @@ describeIfDb('adquirente e conciliação', () => {
     ).toThrow(WebhookInvalido);
   });
 
+  it('rotação de segredo aceita qualquer assinatura v1 válida do cabeçalho', () => {
+    const corpoCru = '{"id":"evt_rotacao"}';
+    const agora = new Date('2026-06-10T10:00:00Z');
+    const instante = Math.floor(agora.getTime() / 1000);
+    const valida = assinarWebhook({ corpoCru, segredo: SEGREDO, instante });
+    const antiga = assinarWebhook({ corpoCru, segredo: 'segredo-em-rotacao', instante });
+
+    // A assinatura válida não é a última de propósito: a versão que colocava o
+    // cabeçalho num Map descartava exatamente este caso.
+    expect(() =>
+      conferirAssinaturaDoWebhook({
+        corpoCru,
+        cabecalho: `t=${instante},v1=${valida},v1=${antiga}`,
+        segredo: SEGREDO,
+        agora,
+      }),
+    ).not.toThrow();
+  });
+
   it('assinatura capturada não vale para sempre', () => {
     const corpoCru = '{"id":"evt_1"}';
     const agora = new Date('2026-06-10T10:00:00Z');
@@ -532,6 +552,7 @@ describeIfDb('adquirente e conciliação', () => {
       tenantId: DOMARI,
       valorCents: 5000,
       motivo: 'desceu de plano e pediu de volta',
+      idempotencyKey: 'teste-estorno-1',
       provider: psp,
     });
 
@@ -563,6 +584,7 @@ describeIfDb('adquirente e conciliação', () => {
         tenantId: DOMARI,
         valorCents: 5000,
         motivo: 'tentativa',
+        idempotencyKey: 'teste-estorno-2',
         provider: new FakePspProvider(),
       }),
     ).rejects.toMatchObject({ code: 'insufficient_credit' });
@@ -592,6 +614,7 @@ describeIfDb('adquirente e conciliação', () => {
         tenantId: DOMARI,
         valorCents: 5000,
         motivo: 'sem cobrança para estornar',
+        idempotencyKey: 'teste-estorno-3',
         provider: new FakePspProvider(),
       }),
     ).rejects.toMatchObject({ code: 'no_charge_to_refund' });
@@ -603,6 +626,90 @@ describeIfDb('adquirente e conciliação', () => {
     );
     expect(saldo[0]?.credit_cents).toBe(7500);
     expect(await estornosDaBarbearia(DOMARI)).toHaveLength(0);
+  });
+
+  it('falha ambígua deixa o estorno pendente e a conciliação o retoma com a mesma origem', async () => {
+    await exec(`UPDATE subscriptions SET credit_cents = 7500 WHERE tenant_id = '${DOMARI}'`);
+    await faturaPagaComCobranca('ch_origem_estorno');
+    const psp = new FakePspProvider();
+    const estornarReal = psp.estornar.bind(psp);
+    let primeira = true;
+    psp.estornar = async (pedido) => {
+      const resposta = await estornarReal(pedido);
+      if (primeira) {
+        primeira = false;
+        throw new Error('resposta do refund se perdeu');
+      }
+      return resposta;
+    };
+
+    await expect(estornarCredito({
+      adminId: ADMIN,
+      tenantId: DOMARI,
+      valorCents: 5000,
+      motivo: 'resposta perdida',
+      idempotencyKey: 'teste-estorno-4',
+      provider: psp,
+    })).rejects.toThrow(/resposta do refund/);
+
+    const [pendente] = await semTenant((tx) => tx.$queryRaw<{
+      id: string; status: string; psp_charge_id: string | null;
+    }[]>`SELECT id, status, psp_charge_id FROM refunds WHERE tenant_id = ${DOMARI}::uuid`);
+    expect(pendente).toMatchObject({ status: 'pending', psp_charge_id: 'ch_origem_estorno' });
+    expect(psp.estornos).toHaveLength(1);
+
+    const retomada = await conciliarEstornosPendentes({ provider: psp });
+    expect(retomada).toMatchObject({ consultados: 1, concluidos: 1, comFalha: 0 });
+    // A chamada foi repetida, mas o fake usa `estornoId` como a Stripe e não
+    // executa uma segunda devolução externa.
+    expect(psp.estornos).toHaveLength(1);
+    expect((await estornosDaBarbearia(DOMARI))[0]?.estado).toBe('done');
+  });
+
+  it('repetir o mesmo estorno administrativo não debita nem devolve duas vezes', async () => {
+    await exec(`UPDATE subscriptions SET credit_cents = 7500 WHERE tenant_id = '${DOMARI}'`);
+    await faturaPagaComCobranca('ch_idempotente');
+    const psp = new FakePspProvider();
+    const entrada = {
+      adminId: ADMIN,
+      tenantId: DOMARI,
+      valorCents: 5000,
+      motivo: 'mesma ação repetida',
+      idempotencyKey: 'admin:mesma-chave',
+      provider: psp,
+    };
+
+    const primeiro = await estornarCredito(entrada);
+    const segundo = await estornarCredito(entrada);
+    expect(segundo.id).toBe(primeiro.id);
+    expect(psp.estornos).toHaveLength(1);
+    const [saldo] = await semTenant((tx) => tx.$queryRaw<{ credit_cents: number }[]>`
+      SELECT credit_cents FROM subscriptions WHERE tenant_id = ${DOMARI}::uuid
+    `);
+    expect(saldo?.credit_cents).toBe(2500);
+  });
+
+
+  it('duas requisições simultâneas com a mesma chave viram um único estorno', async () => {
+    await exec(`UPDATE subscriptions SET credit_cents = 7500 WHERE tenant_id = '${DOMARI}'`);
+    await faturaPagaComCobranca('ch_corrida_idempotente');
+    const psp = new FakePspProvider();
+    const entrada = {
+      adminId: ADMIN,
+      tenantId: DOMARI,
+      valorCents: 5000,
+      motivo: 'duplo clique concorrente',
+      idempotencyKey: 'admin:corrida-mesma-chave',
+      provider: psp,
+    };
+
+    const [a, b] = await Promise.all([estornarCredito(entrada), estornarCredito(entrada)]);
+    expect(a.id).toBe(b.id);
+    expect(psp.estornos).toHaveLength(1);
+    const [saldo] = await semTenant((tx) => tx.$queryRaw<{ credit_cents: number }[]>`
+      SELECT credit_cents FROM subscriptions WHERE tenant_id = ${DOMARI}::uuid
+    `);
+    expect(saldo?.credit_cents).toBe(2500);
   });
 
   it('recusa definitiva do adquirente devolve o crédito debitado', async () => {
@@ -627,6 +734,7 @@ describeIfDb('adquirente e conciliação', () => {
         tenantId: DOMARI,
         valorCents: 5000,
         motivo: 'adquirente recusou',
+        idempotencyKey: 'teste-estorno-5',
         provider: psp,
       }),
     ).rejects.toMatchObject({ code: 'refund_refused' });
@@ -650,10 +758,24 @@ describeIfDb('adquirente e conciliação', () => {
     const psp = new FakePspProvider();
 
     await expect(
-      estornarCredito({ adminId: ADMIN, tenantId: DOMARI, valorCents: 100, motivo: ' ', provider: psp }),
+      estornarCredito({
+        adminId: ADMIN,
+        tenantId: DOMARI,
+        valorCents: 100,
+        motivo: ' ',
+        idempotencyKey: 'teste-estorno-6a',
+        provider: psp,
+      }),
     ).rejects.toBeInstanceOf(PlataformaError);
     await expect(
-      estornarCredito({ adminId: ADMIN, tenantId: DOMARI, valorCents: 0, motivo: 'nada', provider: psp }),
+      estornarCredito({
+        adminId: ADMIN,
+        tenantId: DOMARI,
+        valorCents: 0,
+        motivo: 'nada',
+        idempotencyKey: 'teste-estorno-6b',
+        provider: psp,
+      }),
     ).rejects.toMatchObject({ code: 'invalid_amount' });
   });
 
@@ -667,6 +789,7 @@ describeIfDb('adquirente e conciliação', () => {
         tenantId: DOMARI,
         valorCents: 5000,
         motivo: 'devolução',
+        idempotencyKey: 'teste-estorno-7',
         provider: new FakePspProvider(),
       }),
     ).rejects.toMatchObject({ code: 'no_payment_method' });

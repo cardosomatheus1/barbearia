@@ -286,6 +286,7 @@ export type AuditAction =
   // mudam a base inteira de uma vez, que é o tipo de ação cuja pergunta do dia
   // seguinte é "quem fez isso?".
   | 'import.applied'
+  | 'import.conflict_resolved'
   | 'import.reverted'
   // LGPD (bloco 31). A SPEC §1.2 já listava exportação de clientes entre os
   // eventos de auditoria obrigatória; o pedido do titular entra junto porque a
@@ -481,6 +482,7 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'mfa.policy_enabled',
   'mfa.policy_disabled',
   'import.applied',
+  'import.conflict_resolved',
   'import.reverted',
   'slug.added',
   'fiscal.settings_changed',

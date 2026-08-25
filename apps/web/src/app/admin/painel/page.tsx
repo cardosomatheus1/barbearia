@@ -47,7 +47,7 @@ const ROTULO_PERIODO: Readonly<Record<PeriodoPainel, string>> = {
 };
 
 function periodoSeguro(valor: string | undefined): PeriodoPainel {
-  return valor === 'dia' || valor === '7d' || valor === 'mes' ? valor : 'mes';
+  return valor === 'dia' || valor === '7d' || valor === 'mes' ? valor : 'dia';
 }
 
 /**
@@ -199,6 +199,12 @@ export default async function PainelPage({ searchParams }: Props) {
   const estado = await painelOuDesvio(token);
   const podeVerDinheiro = podeNaTela(estado, 'finance.view');
   const podeCadastro = podeNaTela(estado, 'settings.manage');
+  const podeVerInsights =
+    podeNaTela(estado, 'appointments.view_all_professionals') &&
+    podeNaTela(estado, 'customers.view') &&
+    podeNaTela(estado, 'customers.view_notes') &&
+    podeNaTela(estado, 'finance.view') &&
+    podeNaTela(estado, 'inventory.view');
   const query = await searchParams;
   const periodo = periodoSeguro(primeiro(query['periodo']));
   const dias = diasPedidos(primeiro(query['dias']));
@@ -212,18 +218,17 @@ export default async function PainelPage({ searchParams }: Props) {
   const pedido: PeriodoPedido = dias === null ? periodo : { dias };
 
   /**
-   * Os insights entram sob a mesma condição do faturamento (bloco 67).
+   * Os insights entram somente quando a tela possui todas as permissões que a rota agrega (bloco 67).
    *
-   * A rota exige `finance.view` porque o cartão traz dinheiro; pedi-la sem a
-   * permissão devolveria 403 em toda abertura do painel da recepção, e o bloco
+   * A rota cruza agenda da equipe, clientes/segmentos, dinheiro e estoque; pedi-la sem
+   * qualquer uma dessas permissões devolveria 403 em toda abertura do painel da recepção, e o bloco
    * "O que fazer primeiro" apareceria vazio para quem nunca poderá vê-lo.
    */
-  const [operacao, hoje, dinheiro, diagnostico, insights] = await Promise.all([
+  const [operacao, dinheiro, diagnostico, insights] = await Promise.all([
     painelOperacional(token, undefined, pedido),
-    periodo === 'dia' ? Promise.resolve(null) : painelOperacional(token, undefined, 'dia'),
     podeVerDinheiro ? painelDeDinheiro(token, undefined, pedido) : Promise.resolve(null),
     podeCadastro ? diagnosticoDoCatalogo(token) : Promise.resolve(null),
-    podeVerDinheiro ? insightsDoPainel(token) : Promise.resolve(null),
+    podeVerInsights ? insightsDoPainel(token) : Promise.resolve(null),
   ]);
 
   const topo = (
@@ -276,7 +281,6 @@ export default async function PainelPage({ searchParams }: Props) {
     );
   }
 
-  const operacaoHoje = hoje?.ok ? hoje.dados : operacao.dados;
   const dadosDinheiro = dinheiro?.ok ? dinheiro.dados : null;
   const ocupacaoComp = comparacaoOcupacao(operacao.dados.ocupacao);
   const faturamentoComp = dadosDinheiro ? comparacao(dadosDinheiro.faturamentoCents) : null;
@@ -296,6 +300,9 @@ export default async function PainelPage({ searchParams }: Props) {
    * não sabe qual dos dois responder primeiro.
    */
   const alertas: Array<{ selo: string; titulo: string; texto: string; href: string; acao: string; tom: 'aviso' | 'grave' | 'ok' }> = [];
+  const referenciaDoPeriodo = dias !== null
+    ? dias === 1 ? 'hoje' : `nos últimos ${dias} dias`
+    : periodo === 'dia' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : 'no mês, até hoje';
   /**
    * O número **do período**, sob um título que diz "de hoje" (bloco 114).
    *
@@ -310,7 +317,7 @@ export default async function PainelPage({ searchParams }: Props) {
   if (operacao.dados.noShow.valor >= 7) {
     alertas.push({
       selo: 'Atenção',
-      titulo: `Faltas ${periodo === 'dia' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : 'no mês, até hoje'}: ${operacao.dados.noShow.valor}%`,
+      titulo: `Faltas ${referenciaDoPeriodo}: ${operacao.dados.noShow.valor}%`,
       texto: 'Revise confirmações e lembretes dos próximos horários para proteger a ocupação.',
       href: '/admin/avisos',
       acao: 'Ver lembretes',
@@ -326,6 +333,21 @@ export default async function PainelPage({ searchParams }: Props) {
       acao: 'Abrir diagnóstico',
       tom: 'grave',
     });
+  }
+  const equipeOrdenada = [...(operacao.dados.equipe ?? [])].sort((a, b) => b.ocupacao - a.ocupacao);
+  if (equipeOrdenada.length >= 2) {
+    const mediaEquipe = equipeOrdenada.reduce((soma, pessoa) => soma + pessoa.ocupacao, 0) / equipeOrdenada.length;
+    const menor = equipeOrdenada[equipeOrdenada.length - 1];
+    if (menor && mediaEquipe - menor.ocupacao >= 15) {
+      alertas.push({
+        selo: 'Equipe',
+        titulo: `${menor.professionalName} está ${Math.round(mediaEquipe - menor.ocupacao)} p.p. abaixo da ocupação média`,
+        texto: 'Vale conferir a distribuição da agenda e a jornada antes de mexer em meta ou comissão.',
+        href: `/admin/profissionais?pessoa=${encodeURIComponent(menor.professionalId)}`,
+        acao: 'Ver profissional',
+        tom: 'aviso',
+      });
+    }
   }
   if (alertas.length === 0) {
     alertas.push({
@@ -345,9 +367,7 @@ export default async function PainelPage({ searchParams }: Props) {
          "Operação sem alerta crítico agora" ao lado do bloco Hoje mostrando 33%
          de faltas. As duas estavam certas sobre janelas diferentes, e nenhuma
          dizia qual. */
-      texto: `Faltas e cadastro ${
-        periodo === 'dia' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : 'no mês, até hoje'
-      } não apresentam um desvio que peça ação imediata.`,
+      texto: `Faltas e cadastro ${referenciaDoPeriodo} não apresentam um desvio que peça ação imediata.`,
       href: '/admin/dia',
       acao: 'Ver o dia',
       tom: 'ok',
@@ -356,219 +376,159 @@ export default async function PainelPage({ searchParams }: Props) {
 
   const meta = dadosDinheiro?.metaCents ?? 0;
   const percentualMeta = dadosDinheiro?.percentualMeta ?? 0;
-  const periodoTexto = periodo === 'dia'
-    ? DIA.format(new Date(`${operacao.dados.dia}T12:00:00Z`))
-    : periodo === '7d'
-      ? 'Últimos 7 dias'
-      : `${MES.format(new Date(`${operacao.dados.dia}T12:00:00Z`))} · até hoje`;
+  const periodoTexto = dias !== null
+    ? dias === 1 ? 'Hoje' : `Últimos ${dias} dias`
+    : periodo === 'dia'
+      ? DIA.format(new Date(`${operacao.dados.dia}T12:00:00Z`))
+      : periodo === '7d'
+        ? 'Últimos 7 dias'
+        : `${MES.format(new Date(`${operacao.dados.dia}T12:00:00Z`))} · até hoje`;
+
+  const ocupacao = operacao.dados.ocupacao.valor;
+  const folga = Math.max(0, 100 - ocupacao);
+  const tituloPeriodo = dias !== null
+    ? dias === 1 ? 'Como estamos hoje' : `Como estamos nos últimos ${dias} dias`
+    : periodo === 'dia'
+      ? 'Como estamos hoje'
+      : periodo === '7d'
+        ? 'Como estamos nos últimos 7 dias'
+        : 'Como estamos no mês';
 
   return (
-    <main className="ui-container painel__conteudo painel-negocio" {...secao('painel')}>
+    <main className="ui-container painel__conteudo painel-negocio painel-v6" {...secao('painel')}>
       {topo}
 
-      <h1 className="painel__titulo">Painel</h1>
-      <p className="painel__sub">{periodoTexto}. Veja o resultado da casa e o que merece ação agora.</p>
+      <div className="painel-v6__cabeca">
+        <div>
+          <h1 className="painel__titulo">Painel</h1>
+          <p className="painel__sub">{periodoTexto}. Resultado, capacidade, equipe e o que merece decisão.</p>
+        </div>
+        <nav aria-label="Período do painel" className="balcao__regua painel-periodos">
+          {(Object.keys(ROTULO_PERIODO) as PeriodoPainel[]).map((item) => (
+            <a
+              aria-current={dias === null && periodo === item ? 'page' : undefined}
+              className={dias === null && periodo === item ? 'filtro filtro--ativo' : 'filtro'}
+              href={`/admin/painel?periodo=${item}`}
+              key={item}
+            >
+              {ROTULO_PERIODO[item]}
+            </a>
+          ))}
+          {dias !== null ? (
+            <a aria-current="page" className="filtro filtro--ativo" href={`/admin/painel?dias=${dias}`}>
+              {dias === 1 ? 'Hoje' : `Últimos ${dias} dias`}
+            </a>
+          ) : null}
+        </nav>
+      </div>
 
-      <nav aria-label="Período do painel" className="balcao__regua painel-periodos">
-        {(Object.keys(ROTULO_PERIODO) as PeriodoPainel[]).map((item) => (
-          <a
-            aria-current={dias === null && periodo === item ? 'page' : undefined}
-            className={dias === null && periodo === item ? 'filtro filtro--ativo' : 'filtro'}
-            href={`/admin/painel?periodo=${item}`}
-            key={item}
-          >
-            {ROTULO_PERIODO[item]}
-          </a>
-        ))}
-        {/*
-          A janela do assistente entra como um quarto item, e só quando ela veio.
-
-          Sem ele a tela mostraria trinta dias com "Mês" aceso — o trilho dizendo
-          uma coisa e o número sendo de outra (§6, pergunta 6), que é a mesma
-          família do defeito que este bloco veio consertar. Com ele, a pessoa vê
-          o que está olhando e tem como sair: os três de sempre continuam ao lado.
-        */}
-        {dias !== null ? (
-          <a
-            aria-current="page"
-            className="filtro filtro--ativo"
-            href={`/admin/painel?dias=${dias}`}
-          >
-            {dias === 1 ? 'Últimas 24 horas' : `Últimos ${dias} dias`}
-          </a>
-        ) : null}
-      </nav>
-
-      <section className="painel-resumo" aria-label="Resultado principal">
+      <section className="painel-v6__resultado" data-nivel="primario" aria-labelledby="painel-como-estamos">
+        <p className="painel-v6__rotulo" id="painel-como-estamos">{tituloPeriodo}</p>
         {dadosDinheiro ? (
-          <article className="quadro painel-faturamento">
-            <div className="quadro__topo">
-              <div>
-                <p className="quadro__titulo">Faturamento {periodo === 'dia' ? 'de hoje' : periodo === '7d' ? 'dos últimos 7 dias' : 'do mês'}</p>
-                <p className="quadro__sub">Resultado realizado no período selecionado</p>
-              </div>
-              {periodo === 'mes' && dadosDinheiro.projecaoCents ? (
-                <span className="selo selo--agora tabular">Projeção {reais(dadosDinheiro.projecaoCents)}</span>
-              ) : null}
-            </div>
-            <div className="quadro__corpo">
-              <p className="painel-faturamento__valor tabular">{reais(dadosDinheiro.faturamentoCents.valor)}</p>
-              {faturamentoComp ? <p className={`numero__nota${faturamentoComp.classe}`}>{faturamentoComp.texto}</p> : null}
-              {periodo === 'mes' && meta > 0 ? (
-                <div className="painel-meta">
-                  <div className="meta__barra" aria-hidden="true">
-                    <span
-                      className={`meta__parte${percentualMeta < 70 ? ' meta__parte--atras' : ''}`}
-                      style={{ '--parte': `${Math.min(100, percentualMeta)}%` } as CSSProperties}
-                    />
-                  </div>
-                  <p className="meta__pe tabular">{percentualMeta}% da meta de {reais(meta)}</p>
-                </div>
-              ) : null}
-            </div>
-          </article>
+          <div className="painel-v6__numero-principal">
+            <strong className="tabular">{reais(dadosDinheiro.faturamentoCents.valor)}</strong>
+            <span>faturados</span>
+            {faturamentoComp ? <small className={faturamentoComp.classe}>{faturamentoComp.texto}</small> : null}
+          </div>
         ) : (
-          <article className="quadro painel-faturamento">
-            <div className="quadro__topo">
-              <div>
-                <p className="quadro__titulo">Faturamento</p>
-                <p className="quadro__sub">Informação financeira protegida</p>
-              </div>
-            </div>
-            <div className="quadro__corpo">
-              <p className="painel-faturamento__valor painel-faturamento__valor--protegido">Protegido</p>
-              <p className="numero__nota">Confirme o segundo fator para visualizar os valores.</p>
-              <a className="defeito__link" href="/admin/seguranca?de=painel">Confirmar agora →</a>
-            </div>
-          </article>
+          <div className="painel-v6__numero-principal painel-v6__numero-principal--protegido">
+            <strong>Protegido</strong>
+            <span>faturamento exige segundo fator</span>
+            <a href="/admin/seguranca?de=painel">Confirmar agora →</a>
+          </div>
         )}
+        <div className="painel-v6__secundarios">
+          <span><strong className="tabular">{operacao.dados.atendidos.valor}</strong> atendimentos</span>
+          <span><strong className="tabular">{operacao.dados.noShow.valor}%</strong> faltas</span>
+          {dadosDinheiro ? <span><strong className="tabular">{reais(dadosDinheiro.ticketMedioCents.valor)}</strong> ticket médio</span> : null}
+        </div>
+      </section>
 
-        <dl className="numeros painel-kpis">
-          <Numero
-            rotulo="Ocupação"
-            valor={`${operacao.dados.ocupacao.valor}%`}
-            nota={ocupacaoComp.texto}
-            classe={ocupacaoComp.classe}
-          />
-          <Numero
-            rotulo="Ticket médio"
-            valor={dadosDinheiro ? reais(dadosDinheiro.ticketMedioCents.valor) : '—'}
-            nota={ticketComp?.texto ?? 'Disponível após confirmar o segundo fator'}
-            classe={ticketComp?.classe ?? ''}
-          />
-        </dl>
+      <section className="painel-v6__secao" data-nivel="contexto" aria-labelledby="painel-agenda">
+        <div className="painel-v6__secao-cabeca">
+          <div>
+            <p className="painel-v6__rotulo">Agenda</p>
+            <h2 id="painel-agenda">{ocupacao}% ocupada</h2>
+          </div>
+          <a href="/admin/agenda">Abrir agenda →</a>
+        </div>
+        <div className="painel-v6__ocupacao" aria-label={`${ocupacao}% da agenda ocupada`}>
+          <span style={{ '--parte': `${Math.min(100, ocupacao)}%` } as CSSProperties} />
+        </div>
+        <p className="painel-v6__agenda-nota">
+          <strong className="tabular">{operacao.dados.agendamentos.valor}</strong> agendamentos no período ·{' '}
+          <strong className="tabular">{folga}%</strong> da jornada ainda está livre.
+        </p>
+      </section>
+
+      {equipeOrdenada.length > 0 ? (
+        <section className="painel-v6__secao" data-nivel="contexto" aria-labelledby="painel-equipe">
+          <div className="painel-v6__secao-cabeca">
+            <div>
+              <p className="painel-v6__rotulo">Equipe</p>
+              <h2 id="painel-equipe">Ocupação por profissional</h2>
+            </div>
+            <a href="/admin/profissionais">Ver equipe →</a>
+          </div>
+          <div className="painel-v6__equipe">
+            {equipeOrdenada.map((pessoa) => (
+              <a className="painel-v6__pessoa" href={`/admin/profissionais?pessoa=${encodeURIComponent(pessoa.professionalId)}`} key={pessoa.professionalId}>
+                <span>{pessoa.professionalName}</span>
+                <strong className="tabular">{pessoa.ocupacao}%</strong>
+                <span className="painel-v6__mini-barra" aria-hidden="true">
+                  <i style={{ '--parte': `${Math.min(100, pessoa.ocupacao)}%` } as CSSProperties} />
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="painel-v6__secao" data-nivel="detalhe" aria-labelledby="painel-atencao">
+        <div className="painel-v6__secao-cabeca">
+          <div>
+            <p className="painel-v6__rotulo">O que merece atenção</p>
+            <h2 id="painel-atencao">Sinais que pedem decisão</h2>
+          </div>
+        </div>
+        <ul className="painel-v6__atencao">
+          {alertas.slice(0, 3).map((alerta) => (
+            <li key={`${alerta.href}-${alerta.titulo}`}>
+              <a href={alerta.href}>
+                <span className={`painel-v6__sinal painel-v6__sinal--${alerta.tom}`}>{alerta.selo}</span>
+                <strong>{alerta.titulo}</strong>
+                <span>{alerta.texto}</span>
+                <em>{alerta.acao} →</em>
+              </a>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {podeVerDinheiro ? (
-        <>
-          <div className="painel-secao__cabeca">
-            <h2 className="avisos__titulo">O que fazer primeiro</h2>
-            {/* O limite de três é regra da SPEC §4.19, e a tela diz por quê:
-                sem a frase, "só três?" parece falta de dado. */}
-            <span className="painel-secao__nota">no máximo três, do mais caro</span>
+        <section className="painel-v6__secao painel-v6__acoes" data-nivel="detalhe" aria-labelledby="painel-acoes">
+          <div className="painel-v6__secao-cabeca">
+            <div>
+              <p className="painel-v6__rotulo">O que dá para fazer</p>
+              <h2 id="painel-acoes">Ações com maior impacto agora</h2>
+            </div>
+            <span className="painel-v6__limite">até três, do maior impacto</span>
           </div>
           {oportunidades.length === 0 ? (
-            /* Estado vazio desenhado, e aqui vazio é boa notícia. */
-            <p className="painel-insights__vazio">
-              Nada com dinheiro parado agora: a agenda de amanhã e a ocupação da equipe não
-              apontam nenhuma oportunidade que valha interromper o dia.
-            </p>
+            <p className="painel-insights__vazio">Nada com dinheiro parado que justifique interromper o dia agora.</p>
           ) : (
             <ul className="painel-insights">
               {oportunidades.map((insight) => (
-                <li key={`${insight.tipo}-${insight.titulo}`}>
-                  <Oportunidade insight={insight} />
-                </li>
+                <li key={`${insight.tipo}-${insight.titulo}`}><Oportunidade insight={insight} /></li>
               ))}
             </ul>
           )}
-        </>
-      ) : null}
-
-      <div className="painel-secao__cabeca">
-        <h2 className="avisos__titulo">Hoje</h2>
-        <a className="quadro__acao" href="/admin/dia">Ver operação →</a>
-      </div>
-      <section className="balcao__totais painel-hoje" aria-label="Resumo de hoje">
-        <div className="totalzinho"><strong className="totalzinho__valor tabular">{operacaoHoje.agendamentos.valor}</strong><span className="totalzinho__nome">Marcados</span></div>
-        <div className="totalzinho"><strong className="totalzinho__valor tabular">{operacaoHoje.atendidos.valor}</strong><span className="totalzinho__nome">Atendidos</span></div>
-        <div className="totalzinho"><strong className="totalzinho__valor tabular">{operacaoHoje.noShow.valor}%</strong><span className="totalzinho__nome">Faltas</span></div>
-        <div className="totalzinho"><strong className="totalzinho__valor tabular">{operacaoHoje.novosClientes.valor}</strong><span className="totalzinho__nome">Clientes novos</span></div>
-      </section>
-
-      <div className="painel-secao__cabeca">
-        <h2 className="avisos__titulo">Sinais de hoje</h2>
-        <a className="quadro__acao" href="/admin/dia">Ver operação →</a>
-      </div>
-      <ul className="defeitos painel-alertas">
-        {alertas.slice(0, 3).map((alerta) => (
-          <li className={`defeito painel-alerta painel-alerta--${alerta.tom}`} key={`${alerta.href}-${alerta.titulo}`}>
-            <a className="painel-alerta__link" href={alerta.href}>
-              <p className="defeito__selo">{alerta.selo}</p>
-              <p className="defeito__titulo">{alerta.titulo}</p>
-              <p className="defeito__conserto">{alerta.texto}</p>
-              <span className="defeito__link">{alerta.acao} →</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-
-      {(dadosDinheiro?.serie?.length ?? 0) > 1 || (operacao.dados.equipe?.length ?? 0) > 0 ? (
-        <>
-          <div className="painel-secao__cabeca">
-            <h2 className="avisos__titulo">Desempenho</h2>
-            <a className="quadro__acao" href="/admin/profissionais">Ver profissionais →</a>
-          </div>
-          <section className="painel-desempenho">
-            {dadosDinheiro && (dadosDinheiro.serie?.length ?? 0) > 1 ? (
-              <article className="quadro">
-                <div className="quadro__topo">
-                  <div>
-                    <p className="quadro__titulo">Faturamento acumulado</p>
-                    <p className="quadro__sub">{periodo === 'mes' && meta > 0 ? 'Realizado x ritmo da meta' : 'Evolução no período'}</p>
-                  </div>
-                  <span className="selo tabular">{reais(dadosDinheiro.faturamentoCents.valor)}</span>
-                </div>
-                <div className="quadro__corpo">
-                  <GraficoFaturamento dinheiro={dadosDinheiro} periodo={periodo} />
-                  <div className="dashboard-legenda"><span>— Realizado</span>{periodo === 'mes' && meta > 0 ? <span>┄ Ritmo da meta</span> : null}</div>
-                </div>
-              </article>
-            ) : null}
-
-            {(operacao.dados.equipe?.length ?? 0) > 0 ? (
-              <article className="quadro">
-                <div className="quadro__topo">
-                  <div>
-                    <p className="quadro__titulo">Ocupação da equipe</p>
-                    <p className="quadro__sub">Uso da agenda por profissional</p>
-                  </div>
-                </div>
-                <div className="quadro__corpo painel-equipe">
-                  {operacao.dados.equipe?.map((pessoa) => (
-                    <div className="painel-equipe__linha" key={pessoa.professionalId}>
-                      <div className="painel-equipe__nome">
-                        <span>{pessoa.professionalName}</span>
-                        <strong className="tabular">{pessoa.ocupacao}%</strong>
-                      </div>
-                      <div className="meta__barra" aria-hidden="true">
-                        <span
-                          className={`meta__parte${pessoa.ocupacao < 65 ? ' meta__parte--atras' : ''}`}
-                          style={{ '--parte': `${Math.min(100, pessoa.ocupacao)}%` } as CSSProperties}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            ) : null}
-          </section>
-        </>
+        </section>
       ) : null}
 
       {dinheiro && !dinheiro.ok && (dinheiro.code === 'mfa_required' || dinheiro.code === 'mfa_setup_required') ? (
         <div className="ui-alert ui-alert--warning painel__aviso painel-negocio__mfa" role="status">
-          O faturamento continua protegido pelo segundo fator. A operação acima permanece disponível normalmente.
+          O faturamento continua protegido pelo segundo fator. Os números operacionais permanecem disponíveis normalmente.
         </div>
       ) : null}
     </main>

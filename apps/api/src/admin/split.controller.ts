@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Put, Query, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import {
   SplitError,
@@ -17,6 +17,7 @@ import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
 import { diaISO } from '../common/data.js';
+import { unidadeDoBalcao } from './unidade.js';
 
 /**
  * Split de pagamento (bloco 49, SPEC §3.5).
@@ -63,6 +64,8 @@ const STATUS: Record<string, number> = {
   profissional_nao_encontrado: 404,
   ja_aprovado: 409,
   dados_invalidos: 400,
+  configuracao_invalida: 503,
+  idempotencia_conflitante: 409,
   aliquota_invalida: 400,
 };
 
@@ -87,11 +90,14 @@ export class SplitController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoSchema)) query: { de: string; ate: string },
   ) {
-    const [configuracao, repasses] = await Promise.all([
+    const local = await unidadeDoBalcao(staff);
+    const [configuracao, amostra] = await Promise.all([
       configuracaoDoSplit(staff.tenantId),
-      repassesDoPeriodo({ tenantId: staff.tenantId, de: query.de, ate: query.ate }),
+      repassesDoPeriodo({
+        tenantId: staff.tenantId, de: query.de, ate: query.ate, locationId: local.id, limite: 301,
+      }),
     ]);
-    return { configuracao, repasses };
+    return { configuracao, repasses: amostra.slice(0, 300), hasMore: amostra.length > 300 };
   }
 
   /**
@@ -108,15 +114,17 @@ export class SplitController {
     @Staff() staff: AuthenticatedStaff,
     @Query(new ZodValidationPipe(periodoSchema)) query: { de: string; ate: string },
   ) {
-    if (!staff.professionalId) return { repasses: [] };
-    return {
-      repasses: await repassesDoPeriodo({
+    if (!staff.professionalId) return { repasses: [], hasMore: false };
+    const local = await unidadeDoBalcao(staff);
+    const amostra = await repassesDoPeriodo({
         tenantId: staff.tenantId,
         de: query.de,
         ate: query.ate,
         somenteProfessionalId: staff.professionalId,
-      }),
-    };
+        locationId: local.id,
+        limite: 301,
+      });
+    return { repasses: amostra.slice(0, 300), hasMore: amostra.length > 300 };
   }
 
   @Exige('commission.view_all')
@@ -127,7 +135,8 @@ export class SplitController {
     // chegaria indefinido e a consulta responderia sobre venda nenhuma.
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
-    return { split: await splitDaVenda(staff.tenantId, id) };
+    const local = await unidadeDoBalcao(staff);
+    return { split: await splitDaVenda(staff.tenantId, id, local.id) };
   }
 
   /**
@@ -141,7 +150,8 @@ export class SplitController {
   @Exige('commission.view_all')
   @Get('recebedores')
   async listaDeRecebedores(@Staff() staff: AuthenticatedStaff) {
-    return { recebedores: await recebedores(staff.tenantId) };
+    const local = await unidadeDoBalcao(staff);
+    return { recebedores: await recebedores(staff.tenantId, local.id) };
   }
 
   /**
@@ -158,12 +168,23 @@ export class SplitController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Body(new ZodValidationPipe(recebedorSchema))
     body: { documento: string; banco: string; agencia: string; conta: string },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError(
+        'idempotency_key_obrigatoria',
+        400,
+        'Mande um Idempotency-Key de até 128 caracteres para o cadastro do recebedor.',
+      );
+    }
+    const local = await unidadeDoBalcao(staff);
     try {
       return await cadastrarRecebedor({
         tenantId: staff.tenantId,
+        locationId: local.id,
         professionalId: id,
         ...body,
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         provider: adquirenteDoSplit(),
         staffId: staff.staffUserId,
         staffName: staff.name,

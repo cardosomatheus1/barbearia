@@ -39,6 +39,8 @@ export const criarUnidadeSchema = z.object({
   nome: z.string().trim().min(2).max(120),
   timezone: z.string().refine(fusoConhecido, 'fuso desconhecido'),
   cidade: z.string().trim().max(80).nullable().optional(),
+  estado: z.string().trim().length(2, 'UF tem duas letras').nullable().optional(),
+  linkDoMapa: z.string().trim().max(500).nullable().optional(),
 });
 
 export const unidadeAtivaSchema = z.object({

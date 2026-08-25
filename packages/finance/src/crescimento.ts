@@ -6,6 +6,8 @@ import {
   type SerieNaTela,
 } from '@barbearia/core';
 
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
+
 /**
  * As métricas de série longa e a linha de faturamento (bloco 62).
  *
@@ -175,7 +177,7 @@ export async function crescimentoDaCasa(params: {
      */
     const pontos = serie.map((l) => ({
       dia: l.dia.toISOString().slice(0, 10),
-      valorCents: Number(l.total),
+      valorCents: inteiroSeguroDoBanco(l.total, 'receita diária do crescimento'),
     }));
     const naTela = serieParaTela(pontos, de, ate);
     const primeira = retencao[0];

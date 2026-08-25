@@ -30,6 +30,8 @@ export interface Tarefa {
   readonly payload: Record<string, unknown>;
   readonly attempts: number;
   readonly maxAttempts: number;
+  /** Token da claim atual; impede worker antigo de finalizar uma execução nova. */
+  readonly claimToken: string;
 }
 
 /**
@@ -99,7 +101,9 @@ export async function cancelarTarefas(
   if (params.chaves.length === 0) return 0;
   return tx.$executeRaw`
     DELETE FROM jobs
-     WHERE status = 'pending' AND idempotency_key = ANY(${[...params.chaves]}::text[])
+     WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
+       AND status = 'pending'
+       AND idempotency_key = ANY(${[...params.chaves]}::text[])
   `;
 }
 
@@ -125,21 +129,24 @@ export async function tomarTarefas(
         payload: Record<string, unknown>;
         attempts: number;
         max_attempts: number;
+        claim_token: string;
       }[]
     >`
       UPDATE jobs SET
         status = 'running',
         locked_at = ${agora},
         locked_by = ${quem},
+        claim_token = gen_random_uuid(),
         attempts = attempts + 1
       WHERE id IN (
         SELECT id FROM jobs
          WHERE status = 'pending' AND run_after <= ${agora}
+           AND attempts < max_attempts
          ORDER BY run_after, id
          FOR UPDATE SKIP LOCKED
          LIMIT ${quantas}
       )
-      RETURNING id, tenant_id, kind, payload, attempts, max_attempts
+      RETURNING id, tenant_id, kind, payload, attempts, max_attempts, claim_token
     `;
 
     return linhas.map((linha) => ({
@@ -149,15 +156,41 @@ export async function tomarTarefas(
       payload: linha.payload,
       attempts: linha.attempts,
       maxAttempts: linha.max_attempts,
+      claimToken: linha.claim_token,
     }));
   });
 }
 
-export async function concluirTarefa(id: string): Promise<void> {
+/**
+ * Renova o lease da claim atual enquanto um handler legítimo continua vivo.
+ *
+ * Sem heartbeat, um handler que demora mais que a janela do reaper pode ser
+ * devolvido para `pending` e executado por outro processo enquanto o primeiro
+ * ainda conversa com um provedor externo. O `claim_token` impede o worker velho
+ * de finalizar a linha nova, mas não desfaz efeitos que já saíram pela rede.
+ */
+export async function renovarTarefa(
+  tarefa: Tarefa,
+  agora: Date = new Date(),
+): Promise<boolean> {
+  return semTenant(async (tx) => {
+    const renovadas = await tx.$executeRaw`
+      UPDATE jobs SET locked_at = ${agora}
+       WHERE id = ${tarefa.id}::uuid
+         AND status = 'running'
+         AND claim_token = ${tarefa.claimToken}::uuid
+    `;
+    return renovadas === 1;
+  });
+}
+
+export async function concluirTarefa(tarefa: Tarefa): Promise<void> {
   await semTenant(async (tx) => {
     await tx.$executeRaw`
-      UPDATE jobs SET status = 'done', finished_at = now(), locked_at = NULL, locked_by = NULL
-       WHERE id = ${id}::uuid
+      UPDATE jobs SET status = 'done', finished_at = now(), locked_at = NULL, locked_by = NULL,
+                      claim_token = NULL
+       WHERE id = ${tarefa.id}::uuid AND status = 'running'
+         AND claim_token = ${tarefa.claimToken}::uuid
     `;
   });
 }
@@ -175,21 +208,25 @@ export async function falharTarefa(
 ): Promise<'retry' | 'failed'> {
   const desiste = tarefa.attempts >= tarefa.maxAttempts;
   const proxima = new Date(agora.getTime() + esperaDaTentativa(tarefa.attempts));
-  // O detalhe do erro fica no banco para quem investiga; o cliente nunca o vê.
+  // O chamador do worker passa apenas tipo/código técnico sanitizado. A função
+  // continua aceitando string para testes e chamadas administrativas explícitas.
+  // Nunca monte este valor com payload ou mensagem bruta de provedor.
   const resumo = erro.slice(0, 500);
 
   await semTenant(async (tx) => {
     if (desiste) {
       await tx.$executeRaw`
         UPDATE jobs SET status = 'failed', last_error = ${resumo},
-               finished_at = now(), locked_at = NULL, locked_by = NULL
-         WHERE id = ${tarefa.id}::uuid
+               finished_at = now(), locked_at = NULL, locked_by = NULL, claim_token = NULL
+         WHERE id = ${tarefa.id}::uuid AND status = 'running'
+           AND claim_token = ${tarefa.claimToken}::uuid
       `;
     } else {
       await tx.$executeRaw`
         UPDATE jobs SET status = 'pending', last_error = ${resumo},
-               run_after = ${proxima}, locked_at = NULL, locked_by = NULL
-         WHERE id = ${tarefa.id}::uuid
+               run_after = ${proxima}, locked_at = NULL, locked_by = NULL, claim_token = NULL
+         WHERE id = ${tarefa.id}::uuid AND status = 'running'
+           AND claim_token = ${tarefa.claimToken}::uuid
       `;
     }
   });
@@ -213,12 +250,38 @@ export async function soltarOrfas(
   agora: Date = new Date(),
 ): Promise<number> {
   const corte = new Date(agora.getTime() - limiteMinutos * 60_000);
-  return semTenant(async (tx) =>
-    tx.$executeRaw`
-      UPDATE jobs SET status = 'pending', locked_at = NULL, locked_by = NULL
+  return semTenant(async (tx) => {
+    // Corrige também resíduos históricos que a implementação antiga podia
+    // deixar `pending` já depois do teto. Eles não podem ficar invisíveis para
+    // sempre nem ganhar uma tentativa extra.
+    const esgotadas = await tx.$executeRaw`
+      UPDATE jobs
+         SET status = 'failed', last_error = COALESCE(last_error, 'max_attempts_exhausted'),
+             finished_at = ${agora}, locked_at = NULL, locked_by = NULL, claim_token = NULL
+       WHERE status = 'pending' AND attempts >= max_attempts
+    `;
+
+    // A tentativa é contada no claim. Se o processo morreu já no último degrau,
+    // reabrir a linha faria o teto de `max_attempts` deixar de existir justamente
+    // para a classe de falha mais dura: crash do processo.
+    const falhadas = await tx.$executeRaw`
+      UPDATE jobs
+         SET status = 'failed', last_error = 'worker_orphaned', finished_at = ${agora},
+             locked_at = NULL, locked_by = NULL, claim_token = NULL
        WHERE status = 'running' AND locked_at < ${corte}
-    `,
-  );
+         AND attempts >= max_attempts
+    `;
+
+    const reabertas = await tx.$executeRaw`
+      UPDATE jobs
+         SET status = 'pending', run_after = ${agora}, last_error = 'worker_orphaned',
+             locked_at = NULL, locked_by = NULL, claim_token = NULL
+       WHERE status = 'running' AND locked_at < ${corte}
+         AND attempts < max_attempts
+    `;
+
+    return esgotadas + falhadas + reabertas;
+  });
 }
 
 /**
@@ -350,7 +413,8 @@ export async function saudeDaFila(
       { atrasadas: bigint; agendadas: bigint; falhadas: bigint; ultima: Date | null }[]
     >`
       SELECT
-        count(*) FILTER (WHERE status = 'pending' AND run_after <= ${agora}) AS atrasadas,
+        count(*) FILTER (WHERE status = 'pending' AND run_after <= ${agora}
+           AND attempts < max_attempts) AS atrasadas,
         count(*) FILTER (WHERE status = 'pending' AND run_after > ${agora}) AS agendadas,
         -- Só as recentes: a tarefa que falhou no mês passado e nunca mais foi
         -- tentada é um fato encerrado, e contá-la deixaria o aviso aceso para

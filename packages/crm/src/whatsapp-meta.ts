@@ -36,6 +36,7 @@ import {
   type RespostaDoTemplate,
   type TemplateParaAprovar,
   type WhatsAppProvider,
+  WhatsAppDeliveryUnknownError,
 } from '@barbearia/core';
 import { decifrarCom } from '@barbearia/identity';
 import {
@@ -87,6 +88,13 @@ const CHAVE_DO_TOKEN = 'WHATSAPP_TOKEN_KEY';
 
 function mascarar(telefone: string): string {
   return telefone.length <= 4 ? '***' : `***${telefone.slice(-4)}`;
+}
+
+class WhatsAppMetaTransportError extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = 'WhatsAppMetaTransportError';
+  }
 }
 
 export class WhatsAppMetaError extends Error {
@@ -225,17 +233,27 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
       });
     });
 
-    const corpo = await this.chamar(`${this.credenciais.phoneNumberId}/messages`, {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: mensagem.para,
-      type: 'template',
-      template: {
-        name: mensagem.template,
-        language: { code: mensagem.idioma },
-        ...(componentes.length > 0 ? { components: componentes } : {}),
-      },
-    });
+    let corpo: unknown;
+    try {
+      corpo = await this.chamar(`${this.credenciais.phoneNumberId}/messages`, {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: mensagem.para,
+        type: 'template',
+        template: {
+          name: mensagem.template,
+          language: { code: mensagem.idioma },
+          ...(componentes.length > 0 ? { components: componentes } : {}),
+        },
+      });
+    } catch (erro) {
+      if (erro instanceof WhatsAppMetaTransportError) {
+        throw new WhatsAppDeliveryUnknownError(
+          'a conexão com a Meta terminou antes de confirmar se a mensagem foi aceita',
+        );
+      }
+      throw erro;
+    }
 
     const aceita = (corpo as { messages?: { id?: string; message_status?: string }[] }).messages?.[0];
 
@@ -266,9 +284,8 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
     if (!wamid) {
       // Resposta 2xx sem id é o pior desfecho possível: a mensagem pode ter
       // saído e não haveria como conciliar o webhook depois. Falha alto.
-      throw new WhatsAppMetaError(
-        null,
-        `a Meta aceitou a mensagem para ${mascarar(mensagem.para)} e não devolveu wamid`,
+      throw new WhatsAppDeliveryUnknownError(
+        `a Meta respondeu sucesso para ${mascarar(mensagem.para)}, mas não devolveu wamid`,
       );
     }
     return { wamid };
@@ -407,17 +424,28 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
   private async chamar(caminho: string | URL, corpo: unknown): Promise<unknown> {
     const url = caminho instanceof URL ? caminho : new URL(`${BASE}/${caminho}`);
 
-    const resposta = await this.buscar(url, {
-      method: corpo === null ? 'GET' : 'POST',
-      headers: {
-        authorization: `Bearer ${this.credenciais.token}`,
-        ...(corpo === null ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(corpo === null ? {} : { body: JSON.stringify(corpo) }),
-      // Um `302` para um endereço qualquer faria a credencial ser apresentada a
-      // quem não é a Meta. É a mesma guarda do webhook de saída do bloco 79.
-      redirect: 'manual',
-    });
+    let resposta: Response;
+    try {
+      resposta = await this.buscar(url, {
+        method: corpo === null ? 'GET' : 'POST',
+        headers: {
+          authorization: `Bearer ${this.credenciais.token}`,
+          ...(corpo === null ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(corpo === null ? {} : { body: JSON.stringify(corpo) }),
+        // Sem timeout uma Meta degradada prende o worker/API e cria justamente
+        // o desfecho ambíguo que o envio manual precisa tratar. Quinze segundos
+        // são suficientes para uma chamada de API; depois disso, a verdade é
+        // "não sabemos se aceitou", nunca "falhou".
+        signal: AbortSignal.timeout(15_000),
+        // Um `302` para um endereço qualquer faria a credencial ser apresentada a
+        // quem não é a Meta. É a mesma guarda do webhook de saída do bloco 79.
+        redirect: 'manual',
+      });
+    } catch (erro) {
+      const nome = erro instanceof Error ? erro.name : 'erro de rede';
+      throw new WhatsAppMetaTransportError(`falha de transporte ao falar com a Meta (${nome})`);
+    }
 
     const texto = await resposta.text();
     let json: unknown = null;
@@ -449,7 +477,6 @@ export class MetaWhatsAppProvider implements WhatsAppProvider {
         subcodigo: erro?.error_subcode ?? null,
         tipo: erro?.type ?? null,
         fbtrace: erro?.fbtrace_id ?? null,
-        mensagem: erro?.error_user_msg ?? erro?.message ?? null,
       });
       throw new WhatsAppMetaError(
         erro?.code ?? null,
@@ -553,7 +580,7 @@ export async function conciliarWhatsAppDaUnidade(
    * o que ela ainda não indexou, e deixar isso subir faria um texto recém-criado
    * impedir a conciliação de todos os outros — e do número junto.
    */
-  const pendentes = await templatesEmCurso(tenantId);
+  const pendentes = await templatesEmCurso(tenantId, locationId);
   let conciliados = 0;
   for (const t of pendentes) {
     try {

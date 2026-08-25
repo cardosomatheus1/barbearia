@@ -1,0 +1,35 @@
+BARBERDOCK — RECHECK FINAL GERAL — 2026-08-25
+
+ACHADOS NOVOS CORRIGIDOS
+- Cache público de slugs/bloqueios agora tem teto duro de 10.000 entradas.
+- OTP/primeiro acesso deixou de usar ConsoleMessagingProvider em produção.
+- MetaIdentityMessagingProvider usa WABA central + templates AUTHENTICATION.
+- Entrega Meta incerta não invalida OTP potencialmente já aceito.
+- Preflight de produção exige a configuração real da mensageria de identidade.
+- tenant_platform protege também plan_id e blocked_reason em contexto de tenant.
+- Migração 0116 + prova SQL preparadas.
+- Fallback SMS registrado como lacuna externa declarada, não como funcionalidade fictícia.
+
+VALIDAÇÃO EXECUTADA
+- Guardas diretas: 47/47 PASS.
+- Testes Node autônomos: 27/27 arquivos PASS.
+- Asserções Node: 227/227 PASS.
+- Recheck negativo: 11/11 mutações detectadas.
+- TS/TSX: 780/780 PASS.
+- Smoke provider Meta identidade: PASS.
+- Shell: 30/30 PASS.
+- YAML: 7/7 PASS.
+- Migrações: 116, 0001 -> 0116, zero duplicadas.
+- Lacunas: 41 declaradas, todas válidas.
+- Matriz de prontidão: coerente.
+
+NÃO CERTIFICADO NESTE RUNTIME
+- PostgreSQL 16 / aplicação real das 116 migrações / testes SQL.
+- pnpm / node_modules / Vitest completo / typecheck / build / E2E.
+- WABA central real e templates AUTHENTICATION aprovados.
+- Smokes dos demais providers externos de go-live.
+
+CLASSIFICAÇÃO
+- bloqueador conhecido de código após recheck: nenhum.
+- certificação de produção: pendente dos portões externos acima.
+- este pacote substitui a Auditoria Final Cumulativa como base canônica.

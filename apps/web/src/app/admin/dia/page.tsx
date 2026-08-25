@@ -5,13 +5,16 @@ import {
   ACOES_PESADAS,
   ESTADOS_COBRAVEIS,
   ROTULO_DO_ESTADO,
+  TOM_SEMANTICO_DO_ESTADO,
   VERBO_DA_ACAO,
 } from '@barbearia/core';
 
 import type { Metadata } from 'next';
 import {
+  caixaDaUnidade,
+  comandasAbertasDaCasa,
+  faturamentoDeHoje,
   painelDoDia,
-  type AcaoAtendimento,
   type LinhaDoDia,
   type PainelDoDia,
 } from '@/lib/admin-api';
@@ -25,10 +28,11 @@ import {
   acaoRegistrarSinal,
   acaoSair,
 } from '../acoes';
-import { reaisDoCampo } from '@/lib/dinheiro';
+import { reais, reaisDoCampo } from '@/lib/dinheiro';
 import { secao } from '../secoes';
 import { QuemQueriaAVaga } from '../quem-queria-a-vaga';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { fraseDoProximo, resumoDoHoje, saudacaoDoBalcao, type ResumoDoHoje } from './hoje';
 
 /**
  * O balcão: o dia da barbearia.
@@ -151,24 +155,13 @@ function situacao(linha: LinhaDoDia, toleranciaMinutos: number): string | null {
 }
 
 /**
- * A cor do selo de estado, no vocabulário do mock.
- *
- * Cor **e** texto, nunca cor sozinha: um em doze homens não distingue verde de
- * vermelho, e barbearia é público de homem. O rótulo continua escrito dentro da
- * pílula — o que a cor faz é acelerar a leitura de relance, não substituí-la.
+ * V9: o tom do estado vem do mesmo vocabulário semântico usado pela agenda e
+ * pela tela do barbeiro. O texto continua dizendo o estado; a cor só acelera a
+ * leitura.
  */
-const TOM_DO_SELO: Record<LinhaDoDia['status'], string> = {
-  pending: '',
-  confirmed: '',
-  checked_in: 'selo--espera',
-  waiting: 'selo--espera',
-  in_progress: 'selo--agora',
-  completed: 'selo--feito',
-  cancelled_customer: 'selo--fora',
-  cancelled_business: 'selo--fora',
-  no_show: 'selo--fora',
-  rescheduled: '',
-};
+const TOM_DO_SELO: Record<LinhaDoDia['status'], string> = Object.fromEntries(
+  Object.entries(TOM_SEMANTICO_DO_ESTADO).map(([estado, tom]) => [estado, `selo--${tom}`]),
+) as Record<LinhaDoDia['status'], string>;
 
 /** Classe de ênfase da linha. Cor é o último recurso — sempre acompanha texto. */
 function tom(linha: LinhaDoDia): string {
@@ -191,10 +184,10 @@ function tom(linha: LinhaDoDia): string {
  * ordem do relógio, então um walk-in que sentou às 14h37 aparecia no meio da
  * manhã, e nenhuma delas dizia há quanto tempo.
  *
- * **O número não anda.** Sem componente de cliente ele é o instantâneo da
- * carga, e a faixa diz isso em vez de fingir um cronômetro — um contador que
- * parece contar e não conta é pior que nenhum. Um que conta de verdade é o
- * primeiro JavaScript do admin, e essa decisão tem bloco próprio.
+ * **O número não anda.** Esta tela continua server-first: ele é o instantâneo
+ * da carga, e a faixa diz isso em vez de fingir um cronômetro — um contador que
+ * parece contar e não conta é pior que nenhum. Atualização realmente viva exige
+ * uma ilha própria e um desenho de reconexão, que continuam em bloco separado.
  */
 function NasCadeiras({
   linhas,
@@ -269,6 +262,117 @@ function Totais({ totals }: { readonly totals: PainelDoDia['totals'] }) {
   );
 }
 
+function ProximoCliente({
+  resumo,
+}: {
+  readonly resumo: ResumoDoHoje;
+}) {
+  const linha = resumo.proximo;
+
+  return (
+    <section className="hoje-proximo" data-nivel="primario" aria-labelledby="hoje-proximo-titulo">
+      <div className="hoje-proximo__topo">
+        <p className="rotulo">Próximo</p>
+        <span className="hoje-proximo__quando">{fraseDoProximo(linha)}</span>
+      </div>
+      {linha ? (
+        <div className="hoje-proximo__corpo">
+          <time className="hoje-proximo__hora tabular" dateTime={linha.startsAt}>{linha.start}</time>
+          <div className="hoje-proximo__pessoa">
+            <h2 className="hoje-proximo__nome" id="hoje-proximo-titulo">
+              {linha.customerName ?? 'Sem cadastro'}
+            </h2>
+            <p className="hoje-proximo__servico">
+              {linha.services.join(' + ')} · {linha.professionalName}
+            </p>
+          </div>
+          <span className={`selo ${TOM_DO_SELO[linha.status]}`}>{RÓTULO[linha.status]}</span>
+        </div>
+      ) : (
+        <div className="hoje-proximo__vazio">
+          <h2 id="hoje-proximo-titulo">Agenda livre daqui para frente</h2>
+          <p>Não há outro atendimento aberto neste dia.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LeiturasDoHoje({
+  resumo,
+  caixaAberto,
+  comandasAbertas,
+  faturamentoCents,
+  comandasFechadas,
+  podeOperarCaixa,
+  podeVerDinheiro,
+}: {
+  readonly resumo: ResumoDoHoje;
+  readonly caixaAberto: boolean | null;
+  readonly comandasAbertas: number | null;
+  readonly faturamentoCents: number | null;
+  readonly comandasFechadas: number | null;
+  readonly podeOperarCaixa: boolean;
+  readonly podeVerDinheiro: boolean;
+}) {
+  const proximo = resumo.proximo;
+  const piorAtraso = proximo?.punctuality?.kind === 'late' || proximo?.punctuality?.kind === 'no_show_due'
+    ? `${proximo.customerName ?? 'Cliente'} · ${proximo.punctuality.minutesLate} min de atraso`
+    : resumo.atrasados > 0
+      ? `${resumo.atrasados} ${resumo.atrasados === 1 ? 'cliente atrasado' : 'clientes atrasados'}`
+      : null;
+
+  return (
+    <aside className="hoje-leituras" data-nivel="contexto" aria-label="Leituras rápidas de hoje">
+      <section className="hoje-leitura">
+        <h2 className="hoje-leitura__titulo">Agora</h2>
+        <strong>{resumo.esperando} esperando</strong>
+        <span>{resumo.atendendo} {resumo.atendendo === 1 ? 'na cadeira' : 'nas cadeiras'}</span>
+        <span>{fraseDoProximo(resumo.proximo)}</span>
+      </section>
+
+      <section className="hoje-leitura">
+        <h2 className="hoje-leitura__titulo">Hoje</h2>
+        <strong>{resumo.marcados} marcados</strong>
+        <span>{resumo.confirmados} confirmados</span>
+        <span>{resumo.aguardandoConfirmacao} aguardando confirmação</span>
+      </section>
+
+      <section className="hoje-leitura">
+        <h2 className="hoje-leitura__titulo">Caixa</h2>
+        {podeOperarCaixa ? (
+          <>
+            {podeVerDinheiro && faturamentoCents !== null ? (
+              <strong className="tabular">{reais(faturamentoCents)} hoje</strong>
+            ) : (
+              <strong>{caixaAberto === null ? 'Caixa indisponível' : caixaAberto ? 'Caixa aberto' : 'Caixa fechado'}</strong>
+            )}
+            {comandasFechadas !== null && podeVerDinheiro ? <span>{comandasFechadas} comandas fechadas</span> : null}
+            {comandasAbertas !== null ? <span>{comandasAbertas} abertas</span> : null}
+          </>
+        ) : (
+          <>
+            <strong>Sem acesso ao caixa</strong>
+            <span>Seu perfil acompanha apenas a operação.</span>
+          </>
+        )}
+      </section>
+
+      <section className={`hoje-leitura ${piorAtraso || resumo.sinaisPendentes > 0 || (comandasAbertas ?? 0) > 0 ? 'hoje-leitura--atencao' : ''}`}>
+        <h2 className="hoje-leitura__titulo">Atenção</h2>
+        {piorAtraso ? <strong>{piorAtraso}</strong> : <strong>Nada urgente agora</strong>}
+        {resumo.sinaisPendentes > 0 ? (
+          <span>{resumo.sinaisPendentes} {resumo.sinaisPendentes === 1 ? 'sinal pendente' : 'sinais pendentes'}</span>
+        ) : null}
+        {(comandasAbertas ?? 0) > 0 ? <span>{comandasAbertas} pagamentos em aberto</span> : null}
+        {!piorAtraso && resumo.sinaisPendentes === 0 && (comandasAbertas ?? 0) === 0 ? (
+          <span>A operação não tem alerta imediato.</span>
+        ) : null}
+      </section>
+    </aside>
+  );
+}
+
 function Atendimento({
   linha,
   tolerancia,
@@ -303,7 +407,7 @@ function Atendimento({
   const cobrar = podeCobrar && ESTADOS_COBRAVEIS.has(linha.status);
 
   return (
-    <article className={`atendimento ${tom(linha)}`}>
+    <article className={`atendimento ${tom(linha)}`} id={`atendimento-${linha.id}`} tabIndex={-1}>
       <div className="atendimento__hora">
         <time className="tabular" dateTime={linha.startsAt}>{linha.start}</time>
         <span className="atendimento__fim tabular">{linha.end}</span>
@@ -467,6 +571,8 @@ export default async function DiaPage({ searchParams }: Props) {
   // A tela esconde o que a guarda recusaria: o barbeiro que abre esta página
   // por engano não vê um botão que só dá erro. A recusa de verdade é na API.
   const podeCobrar = podeNaTela(estado, 'cashier.open');
+  const podeOperarCaixa = podeCobrar;
+  const podeVerDinheiro = podeNaTela(estado, 'finance.view');
   // A mesma função que a API aplica: um botão que responde 403 é pior que
   // botão nenhum, porque a recepção aprende a desconfiar da tela.
   const podeSinal = podeNaTela(estado, 'finance.deposit');
@@ -494,6 +600,26 @@ export default async function DiaPage({ searchParams }: Props) {
   const dia = painel.dados;
   const éHoje = dia.date === dia.today;
   const agora = localTime(dia.timezone, new Date().toISOString());
+  const resumo = resumoDoHoje(dia.entries, dia.totals);
+
+  /**
+   * Caixa é uma leitura **separada** da agenda porque as permissões são
+   * separadas. A recepção pode operar `cashier.open` e continuar sem
+   * `finance.view`; nesse caso ela vê estado e pendências, nunca faturamento.
+   *
+   * Só consultamos estas rotas no Hoje. Ao navegar para ontem/amanhã, a tela
+   * volta a ser agenda histórica e não mistura o caixa corrente com outro dia.
+   */
+  const [caixa, abertas, faturamento] = await Promise.all([
+    éHoje && podeOperarCaixa ? caixaDaUnidade(token) : Promise.resolve(null),
+    éHoje && podeOperarCaixa ? comandasAbertasDaCasa(token) : Promise.resolve(null),
+    éHoje && podeVerDinheiro ? faturamentoDeHoje(token, dia.date) : Promise.resolve(null),
+  ]);
+
+  const caixaAberto = caixa?.ok ? caixa.dados.aberto !== null : null;
+  const comandasAbertas = abertas?.ok ? abertas.dados.comandas.length : null;
+  const faturamentoCents = faturamento?.ok ? faturamento.dados.recebidoCents : null;
+  const comandasFechadas = faturamento?.ok ? faturamento.dados.comandas : null;
 
   const link = (novo: Record<string, string | undefined>): string => {
     const busca = new URLSearchParams();
@@ -519,27 +645,18 @@ export default async function DiaPage({ searchParams }: Props) {
 
   return (
     <main className="ui-container balcao" {...secao('dia')}>
-      <header className="painel__topo">
-        <a className="painel__marca" href="/admin/onboarding">
-          ← {estado.businessName}
-        </a>
-        <nav className="painel__atalhos">
-          {/* Só sair. Painel, equipe, agenda, fila e cadastro moram no trilho
-              do casco desde que ele existe — repetir aqui é o mesmo link duas
-              vezes na mesma tela. */}
-          <form action={acaoSair}>
-            <button className="ui-button ui-button--ghost painel__sair" type="submit">
-              Sair
-            </button>
-          </form>
-        </nav>
-      </header>
-
-      <div className="balcao__cabeca">
-        <div>
+      <header className="hoje-cabeca painel__topo">
+        <div className="hoje-cabeca__texto">
+          <p className="rotulo">{éHoje ? 'Operação de hoje' : 'Agenda do dia'}</p>
           <h1 className="painel__titulo balcao__titulo">
-            {éHoje ? 'Hoje' : weekdayShort(dia.timezone, dia.date)}
-            <span className="balcao__data tabular"> {dia.date.split('-').reverse().join('/')}</span>
+            {éHoje ? (
+              <>{saudacaoDoBalcao(agora)}. Hoje você tem {resumo.marcados} atendimentos.</>
+            ) : (
+              <>
+                {weekdayShort(dia.timezone, dia.date)}
+                <span className="balcao__data tabular"> {dia.date.split('-').reverse().join('/')}</span>
+              </>
+            )}
           </h1>
           <p className="painel__sub balcao__sub">
             {éHoje ? `São ${agora} na barbearia.` : 'Você está vendo outro dia.'}{' '}
@@ -547,32 +664,62 @@ export default async function DiaPage({ searchParams }: Props) {
           </p>
         </div>
 
-        <nav className="balcao__dias" aria-label="Trocar de dia">
-          <a className="ui-button ui-button--ghost balcao__seta" href={link({ d: addDays(dia.date, -1) })}>
-            <span aria-hidden="true">←</span>
-            <span className="ui-visually-hidden">Dia anterior</span>
-          </a>
-          {!éHoje ? (
-            <a className="ui-button ui-button--ghost balcao__hoje" href={link({ d: dia.today })}>
-              Hoje
+        <div className="hoje-cabeca__acoes">
+          <nav className="balcao__dias" aria-label="Trocar de dia">
+            <a className="ui-button ui-button--ghost balcao__seta" href={link({ d: addDays(dia.date, -1) })}>
+              <span aria-hidden="true">←</span>
+              <span className="ui-visually-hidden">Dia anterior</span>
             </a>
-          ) : null}
-          <a className="ui-button ui-button--ghost balcao__seta" href={link({ d: addDays(dia.date, 1) })}>
-            <span aria-hidden="true">→</span>
-            <span className="ui-visually-hidden">Próximo dia</span>
-          </a>
-        </nav>
-      </div>
+            {!éHoje ? (
+              <a className="ui-button ui-button--ghost balcao__hoje" href={link({ d: dia.today })}>
+                Hoje
+              </a>
+            ) : null}
+            <a className="ui-button ui-button--ghost balcao__seta" href={link({ d: addDays(dia.date, 1) })}>
+              <span aria-hidden="true">→</span>
+              <span className="ui-visually-hidden">Próximo dia</span>
+            </a>
+          </nav>
+          <form action={acaoSair}>
+            <button className="ui-button ui-button--ghost painel__sair" type="submit">Sair</button>
+          </form>
+        </div>
+      </header>
 
       {erro ? (
         <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
       ) : null}
 
+      {éHoje ? (
+        <section className="hoje-resumo" aria-label="Resumo operacional">
+          <ProximoCliente resumo={resumo} />
+          <LeiturasDoHoje
+            resumo={resumo}
+            caixaAberto={caixaAberto}
+            comandasAbertas={comandasAbertas}
+            faturamentoCents={faturamentoCents}
+            comandasFechadas={comandasFechadas}
+            podeOperarCaixa={podeOperarCaixa}
+            podeVerDinheiro={podeVerDinheiro}
+          />
+        </section>
+      ) : (
+        <Totais totals={dia.totals} />
+      )}
+
       <QuemQueriaAVaga />
 
-      <NasCadeiras hora={agora} linhas={dia.entries} />
+      {éHoje ? <NasCadeiras hora={agora} linhas={dia.entries} /> : null}
 
-      <Totais totals={dia.totals} />
+      <div className="hoje-timeline__topo" data-nivel="detalhe">
+        <div>
+          <p className="rotulo">Linha do tempo</p>
+          <h2 className="hoje-timeline__titulo">{éHoje ? 'O restante do dia' : 'Atendimentos'}</h2>
+        </div>
+        <a className="ui-button ui-button--secondary hoje-timeline__marcar" href={`/admin/dia/marcar?d=${dia.date}`}>
+          Marcar alguém
+        </a>
+      </div>
 
       {dia.professionals.length > 1 ? (
         <div className="ui-scroll-x balcao__equipe" role="group" aria-label="Filtrar por profissional">

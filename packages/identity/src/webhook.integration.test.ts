@@ -102,6 +102,23 @@ describeIfDb('webhook para terceiros', () => {
     return linha?.id ?? '';
   }
 
+  it('claim ativa impede segunda réplica de entregar a mesma linha', async () => {
+    const { id: endpointId } = await cadastrar();
+    const entregaId = await pendencia(endpointId);
+    await exec(`
+      UPDATE webhook_deliveries
+         SET claim_token = '79797979-cccc-0000-0000-000000000001',
+             claim_expires_at = '${new Date(AGORA.getTime() + 60_000).toISOString()}'
+       WHERE id = '${entregaId}'
+    `);
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await entregarWebhook(entregaId, AGORA)).toBe('sumiu');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await varrerEntregasPendentes(AGORA)).not.toContain(entregaId);
+  });
+
   it('o segredo sai uma vez, e o banco guarda só o cifrado', async () => {
     const { id, segredo } = await cadastrar();
     expect(segredo.length).toBeGreaterThan(30);

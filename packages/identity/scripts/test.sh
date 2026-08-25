@@ -8,6 +8,7 @@ DB_NAME="${TEST_DB_NAME:-barbearia_identity_test}"
 BASE="${ADMIN_URL%/*}"
 # Senha efêmera por execução: nenhuma credencial previsível, nenhuma no repositório.
 export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
+export OTP_PEPPER="${OTP_PEPPER:-otp-pepper-de-teste-0123456789abcdef}"
 
 cleanup() { psql "$ADMIN_URL" -q -c "DROP DATABASE IF EXISTS $DB_NAME WITH (FORCE);" >/dev/null 2>&1 || true; }
 trap cleanup EXIT

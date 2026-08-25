@@ -1,0 +1,727 @@
+/* A tela do cliente: uma coisa só, grande, lida de relance na rua. */
+.fila-cliente {
+  padding: var(--space-7) var(--space-4) var(--space-8);
+  max-width: 30rem;
+  text-align: center;
+}
+.fila-cliente__casa {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.fila-cliente__rotulo { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fila-cliente__numero {
+  margin: 0;
+  font-size: 5rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--color-accent);
+}
+.fila-cliente__frase { margin: var(--space-4) 0 var(--space-6); font-size: var(--font-size-lg); }
+.fila-cliente__frase--grande { font-size: var(--font-size-xl); margin-top: var(--space-4); }
+.fila-cliente__titulo { margin: 0 0 var(--space-3); font-size: var(--font-size-xl); }
+.fila-cliente__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); }
+.fila-cliente__dados {
+  margin: 0 0 var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.fila-cliente__dados > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.fila-cliente__dados dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fila-cliente__dados dd { margin: 0; font-weight: var(--font-weight-medium); }
+.fila-cliente__nota { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+
+/* O convite de vaga (bloco 39): o horário, o prazo e um botão. Nada mais — a
+   escolha já foi feita quando a pessoa entrou na lista de espera. */
+.convite {
+  padding: var(--space-7) var(--space-4) var(--space-8);
+  max-width: 30rem;
+  text-align: center;
+}
+.convite__casa {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.convite__rotulo { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.convite__hora {
+  margin: 0;
+  font-size: 4rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--color-accent);
+}
+.convite__dia { margin: var(--space-2) 0 var(--space-6); font-size: var(--font-size-lg); }
+.convite__titulo { margin: 0 0 var(--space-3); font-size: var(--font-size-xl); }
+.convite__sub { margin: 0 0 var(--space-5); color: var(--color-text-muted); }
+.convite__dados {
+  margin: 0 0 var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.convite__dados > div { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--space-3); }
+.convite__dados dt { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.convite__dados dd { margin: 0; font-weight: var(--font-weight-medium); }
+.convite__prazo { margin: 0 0 var(--space-5); font-size: var(--font-size-sm); }
+.convite__erro {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  text-align: left;
+}
+.convite__acao { margin: 0 0 var(--space-5); }
+.convite__nota { margin: 0; font-size: var(--font-size-xs); color: var(--color-text-muted); }
+/* Alvo de toque de 44px também no caminho triste: quem chega com o convite
+   vencido continua precisando alcançar a saída. */
+.convite__alternativa { min-height: 44px; }
+
+/* Fale com a gente (bloco 40): uma escolha, um campo, um botão. */
+.falar {
+  padding: var(--space-7) var(--space-4) var(--space-8);
+  max-width: 34rem;
+}
+.falar__casa {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.falar__titulo { margin: 0 0 var(--space-3); font-size: var(--font-size-xl); }
+.falar__sub { margin: 0 0 var(--space-6); color: var(--color-text-muted); }
+.falar__erro {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+.falar__form { display: grid; gap: var(--space-5); }
+.falar__rotulo {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+.falar__tipos, .falar__contato {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.falar__tipos { display: grid; gap: var(--space-2); }
+/* Alvo de toque inteiro, e não só o círculo do rádio: escolher o tipo é o
+   primeiro gesto da tela, feito em pé e com uma mão. */
+.falar__tipo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.falar__tipo:hover { background: var(--color-surface-hover); }
+.falar__campo { display: grid; gap: var(--space-2); }
+.falar__contato .falar__campo { margin-bottom: var(--space-3); }
+.falar__texto {
+  width: 100%;
+  min-height: 8rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  resize: vertical;
+}
+.falar__texto:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.falar__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.falar__voltar { min-height: 44px; }
+/* Alvo de toque de 44px: link de navegação sozinho no topo não é link dentro de
+   frase, e a WCAG 2.5.8 só isenta o segundo. Foi assim que `← Voltar` ficou com
+   21px em quatro telas até a medição pegar. */
+.falar__voltar-topo {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: var(--space-2);
+}
+
+@container (min-width: 30rem) {
+  .falar__tipos { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* O programa de fidelidade (bloco 41): uma escolha, e ela é a tela inteira. */
+.fidelidade__topo { margin-bottom: var(--space-5); }
+.fidelidade__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.fidelidade__aviso { margin-bottom: var(--space-4); }
+.fidelidade__form { display: grid; gap: var(--space-5); max-width: 42rem; }
+.fidelidade__modos, .fidelidade__numeros {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+.fidelidade__modos { display: grid; gap: var(--space-2); }
+/* Alvo de toque inteiro: escolher o modelo é o gesto que a tela existe para
+   receber, e o balcao faz isso no celular tanto quanto no notebook. */
+.fidelidade__modo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.fidelidade__modo:hover { background: var(--color-surface-hover); }
+.fidelidade__modo > span { display: grid; gap: var(--space-1); }
+.fidelidade__exemplo { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fidelidade__numeros { display: grid; gap: var(--space-4); }
+.fidelidade__campo { display: grid; gap: var(--space-2); font-size: var(--font-size-sm); }
+.fidelidade__dica { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.fidelidade__nota { margin-top: var(--space-6); max-width: 42rem; }
+.fidelidade__nota p { color: var(--color-text-muted); }
+
+/* O saldo do cliente, na ficha e no balcão. */
+.saldo-fidelidade {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.saldo-fidelidade__numero {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent);
+}
+.saldo-fidelidade__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.saldo-fidelidade__ajuste { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+
+/*
+ * Os bolsos por loja, quando o programa vale só onde foi ganho.
+ *
+ * Lista e nao tabela: sao duas ou tres linhas, e uma tabela de duas colunas com
+ * cabecalho ocupa a altura que o celular nao tem. O nome cresce e o numero fica
+ * grudado nele -- `min-width: 0` no primeiro para o nome comprido nao empurrar o
+ * numero para fora, que e o piso `min-content` do bloco 82.
+ */
+.saldo-fidelidade__lojas {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+}
+.saldo-fidelidade__lojas li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+.saldo-fidelidade__loja { min-width: 0; color: var(--color-text-muted); }
+
+@container (min-width: 34rem) {
+  .fidelidade__numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A fila de recados (bloco 40). Densa: a recepção passa o dia aqui. */
+.recados { padding-bottom: var(--space-8); }
+.recados__topo { margin-bottom: var(--space-5); }
+.recados__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.recados__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+.recados__filtro { margin: var(--space-5) 0 0; font-size: var(--font-size-sm); }
+.recados__aviso { margin-bottom: var(--space-4); }
+/* Alvo de toque no filtro: link de navegação sozinho não é link dentro de frase. */
+.recados__filtro a { display: inline-flex; align-items: center; min-height: 44px; }
+
+.recado {
+  /* O recipiente da `@container` deste cartão: um elemento não responde sobre
+     si mesmo, ele pergunta ao ancestral. */
+  container-type: inline-size;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-lg);
+}
+/* A cor separa o que a triagem precisa distinguir de relance, e a hierarquia
+   verdadeira vem do rótulo escrito — cor é o último recurso, não o primeiro. */
+.recado--reclamacao { border-left-color: var(--color-danger); }
+.recado--sugestao { border-left-color: var(--color-accent); }
+.recado--elogio { border-left-color: var(--color-success); }
+
+.recado__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.recado__tipo { font-weight: var(--font-weight-semibold); }
+.recado__estado, .recado__idade {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.recado__idade { margin-left: auto; }
+.recado__texto { margin: 0 0 var(--space-3); white-space: pre-wrap; }
+.recado__quem { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.recado__resposta {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+}
+.recado__acoes { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.recado__responder { display: grid; gap: var(--space-2); }
+.recado__campo { display: grid; gap: var(--space-2); font-size: var(--font-size-sm); }
+.recado__acao { min-height: 44px; }
+.recado__nota { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* Espaço sobra: as ações deixam de empilhar e o cartão para de crescer. */
+@container (min-width: 34rem) {
+  .recado__acoes { grid-template-columns: auto 1fr auto; align-items: end; }
+  .recado__responder { grid-column: 2; }
+}
+
+.vitrine-config { margin-bottom: var(--space-5); }
+/* `quadro__topo` é uma linha, e aqui os dois lados são longos: no celular o
+   botão sobrava numa coluna de 60px e "Sair da busca" quebrava em três linhas.
+   Empilha por padrão e vira linha quando há largura — `min-width`, nunca
+   `max-width`. */
+.vitrine-config .quadro__topo { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.vitrine-config__acao { min-height: 44px; width: 100%; }
+
+@media (min-width: 40em) {
+  .vitrine-config .quadro__topo {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .vitrine-config__acao { width: auto; }
+}
+/* A seção que vem depois da vitrine precisa de ar: sem isso ela encosta no
+   quadro e as duas leem como uma coisa só. */
+.configuracoes__secao { margin-top: var(--space-6); }
+
+/* -- Conversar com a barbearia (bloco 106) --------------------------------- */
+
+/* A entrada da conversa, colada na agenda. Ar em cima para não encostar nos
+   chips de horário e ler como parte deles. */
+.agenda__conversa { margin-top: var(--space-4); }
+
+.conversar { padding-bottom: var(--space-8); max-width: 40rem; }
+.conversar__titulo {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+.conversar__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+
+/* Os exemplos só aparecem antes da primeira pergunta: depois dela o espaço é da
+   resposta. Sem eles a caixa vazia é a pergunta "o que eu escrevo aqui?", e quem
+   não sabe fecha a tela. */
+.conversar__exemplos {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.conversar__troca { display: grid; gap: var(--space-3); margin-top: var(--space-5); }
+
+/* O que a pessoa escreveu, à direita e com fundo próprio: sem essa distinção a
+   tela vira dois parágrafos e some qual deles é a pergunta. */
+.conversar__voce {
+  justify-self: end;
+  max-width: 85%;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-radius: var(--radius-lg);
+}
+.conversar__resposta {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  max-width: 85%;
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.conversar__resposta p { margin: 0; }
+.conversar__nota { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* Os horários usam o mesmo chip da grade — é o mesmo objeto, e dois desenhos
+   para a mesma coisa fazem a pessoa hesitar antes de tocar. */
+.conversar__horarios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversar__form { display: grid; gap: var(--space-3); margin-top: var(--space-5); }
+.conversar__campo { display: grid; gap: var(--space-2); }
+.conversar__texto { resize: vertical; min-height: 5rem; font-family: inherit; }
+.conversar__saida {
+  margin: var(--space-5) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* -- Busca do marketplace (bloco 70) --------------------------------------- */
+
+.buscar { padding-bottom: var(--space-8); }
+.buscar__topo { margin-bottom: var(--space-5); }
+.buscar__titulo { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); }
+.buscar__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+
+.buscar__form {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+}
+.buscar__campo { margin: 0; min-width: 0; }
+
+/* As três comodidades, empilhadas — `fieldset` não herda o grid do formulário,
+   e sem isto os rótulos ficam em linha e estouram a coluna em 360px. */
+/* As comodidades ocupam a **linha inteira** do formulário.
+
+   Numa célula só, o `fieldset` empilha três rótulos, fica três vezes mais alto
+   que os vizinhos e abre um buraco nas outras colunas — foi o que o print de
+   1280 mostrou. Ocupando a linha, os três ficam lado a lado onde cabe e
+   empilhados onde não cabe. O `<legend>` fica fora do grid por conta do
+   navegador, que é o que mantém "A barbearia tem" acima das caixas. */
+.buscar__comodidades {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-1) var(--space-4);
+  padding: 0;
+  border: 0;
+}
+.buscar__clube { grid-column: 1 / -1; }
+@media (min-width: 40em) {
+  .buscar__comodidades { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+}
+/* Caixa de selecao com 44px, como todo alvo de toque: o padrao do navegador da
+   13px, e a medicao reprova. */
+.buscar__marca { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
+.buscar__acao { min-height: 44px; justify-self: start; }
+
+.buscar__pendente {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.buscar__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+/* O recipiente e o **ancestral**, nunca o proprio cartao: um elemento nao
+   responde sobre si mesmo, e sem esta linha a regra abaixo nunca casa — o card
+   fica na versao estreita em 1280px, com a foto virando uma tira no topo. */
+.buscar__lista > li { container-type: inline-size; }
+
+.casa {
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.casa__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+.casa__foto--vazia {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+}
+.casa__inicial {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+.casa__corpo { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.casa__topo { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.casa__nome { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.casa__nota { margin: 0 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
+.casa__nota--sem { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.casa__avaliacoes { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.casa__linha { margin: 0; color: var(--color-text-muted); }
+/* O próximo horário é o elemento principal do card (SPEC §5.2): hierarquia por
+   tamanho e peso, antes de cor. */
+.casa__horario { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.casa__horario-rotulo { font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.casa__horario-valor { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.casa__horario--sem { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.casa__acao { min-height: 44px; justify-self: start; }
+
+/* Espaco sobra: a foto vai para o lado e o card para de ser uma coluna. */
+@container (min-width: 34rem) {
+  .casa { display: grid; grid-template-columns: 15rem 1fr; align-items: stretch; }
+  .casa__foto { height: 100%; aspect-ratio: auto; }
+}
+@media (min-width: 768px) {
+  /* Duas colunas no tablet, seis só quando há espaço de verdade.
+     `minmax(0, …)` e não `2fr 1fr`: o piso de uma coluna de grade é o
+     `min-content` do que ela guarda, e o `min-content` de um `<select>` é a
+     opção mais comprida. Sem o zero explícito, o nome de uma cidade decidia a
+     largura da busca e ela estourava 200px para fora da tela em 768px. Com o
+     zero e seis colunas, o problema virou o oposto: "Qualquer dia" aparecia
+     como "Qualquer d". As duas coisas se resolvem com menos colunas aqui e um
+     piso legível lá embaixo. */
+  .buscar__form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+}
+@media (min-width: 64em) {
+  /* Os quatro seletores numa linha, o filtro de assinatura e o botão na de
+     baixo — e **não** os seis lado a lado. Com seis colunas, "Disponível hoje"
+     saía como "Disponível h": um seletor cortado responde outra pergunta, e a
+     pessoa escolhe sem saber o que escolheu. O piso de `10rem` é o rótulo mais
+     comprido inteiro. */
+  .buscar__form { grid-template-columns: repeat(4, minmax(10rem, 1fr)); }
+}
+
+/* -- Preço por faixa de horário (bloco 68) --------------------------------- */
+
+.precos { padding-bottom: var(--space-8); }
+.precos__topo { margin-bottom: var(--space-5); }
+.precos__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.precos__aviso { margin-bottom: var(--space-4); }
+.precos__interruptor { margin-bottom: var(--space-5); }
+.precos__acao, .faixa__acao, .sugestao__acao, .precos__salvar { min-height: 44px; }
+.precos__vazio { margin: 0; color: var(--color-text-muted); }
+.precos__lista, .precos__sugestoes {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.faixa {
+  /* Recipiente da `@container`: um elemento não responde sobre si mesmo. */
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.faixa__quando { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.faixa__dia { margin: 0; font-weight: var(--font-weight-semibold); }
+.faixa__hora { margin: 0; color: var(--color-text-muted); }
+.faixa__delta {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+/* Cor é o último recurso: o sinal do número já diz a direção, e a cor só
+   confirma para quem lê de relance. */
+.faixa__delta--desconto { color: var(--color-success); }
+.faixa__aparada { font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+
+.sugestao {
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+.sugestao__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.sugestao__texto { margin: 0 0 var(--space-3); color: var(--color-text-muted); }
+.sugestao__acoes { display: flex; }
+
+.precos__form { display: grid; gap: var(--space-3); }
+.precos__campos { display: grid; gap: var(--space-3); }
+/* O campo já vem do `ui-field`; aqui só o encaixe na grade. */
+.precos__campo { margin: 0; }
+.precos__dica { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+/* Espaço sobra: a faixa vira uma linha só e os campos dividem a largura. */
+@container (min-width: 30rem) {
+  .faixa { grid-template-columns: 1fr auto auto; align-items: center; }
+}
+@media (min-width: 768px) {
+  .precos__campos { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* -- Insights proativos no painel (bloco 67) ------------------------------- */
+
+/**
+ * A nota do cabeçalho começa **embaixo** do título.
+ *
+ * O `space-between` do cabeçalho põe as duas na mesma linha, e no celular o
+ * print mostrou "O que fazer / primeiro" ao lado de "no máximo três, do mais /
+ * caro" — quatro linhas quebradas se disputando. Ela sobe para a linha do título
+ * quando há largura para as duas.
+ */
+.painel-secao__nota {
+  flex-basis: 100%;
+  order: 2;
+  margin-top: calc(var(--space-2) * -1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.painel-secao__cabeca:has(.painel-secao__nota) { flex-wrap: wrap; }
+
+@media (min-width: 480px) {
+  .painel-secao__nota { flex-basis: auto; order: 0; margin-top: 0; }
+}
+.painel-insights { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-3); }
+.painel-insights__vazio {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+}
+
+.painel-insight {
+  /* Recipiente da `@container`: a declaração mora no ancestral, senão a regra
+     nunca casa e o cartão fica na versão estreita em qualquer largura. */
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+.painel-insight__titulo { margin: 0 0 var(--space-2); font-weight: var(--font-weight-semibold); }
+.painel-insight__texto { margin: 0; color: var(--color-text-muted); }
+.painel-insight__pe { display: grid; gap: var(--space-3); align-items: center; }
+.painel-insight__impacto {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+.painel-insight__impacto-nota {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.painel-insight__acao { min-height: 44px; }
+
+/* Espaço sobra: o valor e o botão dividem a linha em vez de empilhar. */
+@container (min-width: 30rem) {
+  .painel-insight__pe { grid-template-columns: 1fr auto; }
+}
+
+/* -- Recepção: as perguntas sem resposta (bloco 66) ------------------------ */
+
+.recepcao { padding-bottom: var(--space-8); }
+.recepcao__topo { margin-bottom: var(--space-5); }
+.recepcao__sub { margin: var(--space-2) 0 0; color: var(--color-text-muted); }
+.recepcao__aviso { margin-bottom: var(--space-4); }
+.recepcao__resumo { margin: 0 0 var(--space-4); color: var(--color-text-muted); }
+.recepcao__resumo strong { color: var(--color-text-primary); font-size: var(--font-size-lg); }
+.recepcao__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+
+.lacuna {
+  /* Recipiente da `@container` deste cartão — a declaração mora no ancestral,
+     senão a regra nunca casa e o cartão fica estreito em qualquer largura. */
+  container-type: inline-size;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.lacuna__topo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* O contador é o que decide o que arrumar primeiro: hierarquia por tamanho e
+   peso, antes de cor. */
+.lacuna__vezes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  min-width: 3rem;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+}
+.lacuna__vezes-rotulo {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.lacuna__pergunta { margin: 0; font-size: var(--font-size-lg); }
+.lacuna__onde { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); }
+.lacuna__quando { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+/* Link de navegação dentro da frase que diz onde cadastrar: é a isenção da
+   WCAG 2.5.8, e esticá-lo abriria buraco no meio do texto. */
+.lacuna__link { text-decoration: underline; }
+.lacuna__acoes { margin-top: var(--space-4); }
+.lacuna__acao { min-height: 44px; }
+
+@container (min-width: 34rem) {
+  .lacuna__acoes { display: flex; justify-content: flex-end; }
+}
+
+@media (min-width: 768px) {
+  .cadeiras { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .espera { grid-template-columns: auto 1fr auto; align-items: start; }
+  .espera__acoes { grid-column: auto; }
+}
+

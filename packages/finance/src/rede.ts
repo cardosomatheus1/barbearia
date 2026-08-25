@@ -7,6 +7,8 @@ import {
   type UnidadeDaRede,
 } from '@barbearia/core';
 
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
+
 /**
  * Indicadores consolidados e metas da rede (bloco 77).
  *
@@ -65,10 +67,10 @@ async function carregar(tenantId: string, periodo: Periodo): Promise<readonly Un
       tenantId: l.tenant_id,
       nome: l.nome,
       eu: l.eu,
-      receitaCents: Number(l.receita_cents),
+      receitaCents: inteiroSeguroDoBanco(l.receita_cents, 'receita da unidade na rede'),
       vendas: Number(l.vendas),
       atendimentos: Number(l.atendimentos),
-      metaCents: l.meta_cents === null ? null : Number(l.meta_cents),
+      metaCents: l.meta_cents === null ? null : inteiroSeguroDoBanco(l.meta_cents, 'meta da unidade'),
     }));
   });
 }
@@ -178,8 +180,8 @@ export async function metasDaRede(tenantId: string, mes: string): Promise<readon
       tenantId: l.tenant_id,
       nome: l.nome,
       mes: primeiro,
-      metaCents: l.meta_cents === null ? null : Number(l.meta_cents),
-      anteriorCents: l.anterior_cents === null ? null : Number(l.anterior_cents),
+      metaCents: l.meta_cents === null ? null : inteiroSeguroDoBanco(l.meta_cents, 'meta da unidade'),
+      anteriorCents: l.anterior_cents === null ? null : inteiroSeguroDoBanco(l.anterior_cents, 'meta anterior da unidade'),
     }));
   });
 }

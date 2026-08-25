@@ -1,3 +1,5 @@
+import type { EstadoDaAssinaturaDaPlataforma } from '@barbearia/core';
+import { ApiTimeoutError, fetchComTimeout } from './fetch-com-timeout';
 /**
  * Cliente da API da plataforma.
  *
@@ -15,7 +17,6 @@ export type Resposta<T> =
   | { ok: true; dados: T }
   | { ok: false; code: string; message: string };
 
-import type { EstadoDaAssinaturaDaPlataforma } from '@barbearia/core';
 
 async function chamar<T>(
   metodo: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -23,15 +24,27 @@ async function chamar<T>(
   body?: unknown,
   token?: string,
 ): Promise<Resposta<T>> {
-  const resposta = await fetch(`${BASE}${path}`, {
-    method: metodo,
-    headers: {
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    cache: 'no-store',
-  });
+  let resposta: Response;
+  try {
+    resposta = await fetchComTimeout(`${BASE}${path}`, {
+      method: metodo,
+      headers: {
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      cache: 'no-store',
+    });
+  } catch (erro) {
+    if (erro instanceof ApiTimeoutError) {
+      return { ok: false, code: 'api_timeout', message: 'A API demorou mais do que o esperado. Tente novamente.' };
+    }
+    return {
+      ok: false,
+      code: 'api_indisponivel',
+      message: 'Não foi possível falar com o servidor. Confira a conexão e tente novamente.',
+    };
+  }
 
   if (!resposta.ok) {
     const corpo = (await resposta.json().catch(() => null)) as {

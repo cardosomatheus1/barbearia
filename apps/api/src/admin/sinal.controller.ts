@@ -15,6 +15,7 @@ import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard } from './permissao.guard.js';
 import { uuidSchema } from './caixa.schemas.js';
+import { unidadeDoBalcao } from './unidade.js';
 import { confiancaSchema, sinalRecebidoSchema } from './sinal.schemas.js';
 
 /**
@@ -71,8 +72,9 @@ export class SinalController {
     @Staff() staff: AuthenticatedStaff,
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
-      return await sinalDoAgendamento(staff.tenantId, id);
+      return await sinalDoAgendamento(staff.tenantId, local.id, id);
     } catch (erro) {
       return toHttp(erro);
     }
@@ -86,9 +88,11 @@ export class SinalController {
     @Body(new ZodValidationPipe(sinalRecebidoSchema)) body: { valorCents: number },
     @Req() req: Request,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       return await registrarSinalRecebido({
         tenantId: staff.tenantId,
+        locationId: local.id,
         appointmentId: id,
         valorCents: body.valorCents,
         staffId: staff.staffUserId,
@@ -107,9 +111,11 @@ export class SinalController {
     @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
     @Req() req: Request,
   ) {
+    const local = await unidadeDoBalcao(staff);
     try {
       return await devolverSinal({
         tenantId: staff.tenantId,
+        locationId: local.id,
         appointmentId: id,
         // A devolução é do valor que está registrado; o domínio o lê e zera.
         valorCents: 0,

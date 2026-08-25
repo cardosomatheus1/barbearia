@@ -78,6 +78,37 @@ export const ROTULO_DO_ESTADO: Readonly<Record<AppointmentStatus, string>> = {
 };
 
 /**
+ * V9 · significado visual dos estados.
+ *
+ * Cor não nomeia o estado; o rótulo continua sendo `ROTULO_DO_ESTADO`. Este
+ * mapa só fecha o significado semântico para que a mesma situação não fique
+ * verde numa tela, azul em outra e vermelha numa terceira.
+ *
+ * - success: concluído/confirmado/recebido;
+ * - warning: pede atenção agora;
+ * - danger: problema ou perda;
+ * - neutral: estado informativo/inativo, sem urgência.
+ *
+ * Azul (`--color-accent`) fica reservado a ação, foco e navegação — não a
+ * "estado bonito".
+ */
+export type TomSemantico = 'neutral' | 'success' | 'warning' | 'danger';
+
+export const TOM_SEMANTICO_DO_ESTADO: Readonly<Record<AppointmentStatus, TomSemantico>> = {
+  pending: 'neutral',
+  confirmed: 'success',
+  checked_in: 'warning',
+  waiting: 'warning',
+  in_progress: 'neutral',
+  completed: 'success',
+  cancelled_customer: 'danger',
+  cancelled_business: 'danger',
+  no_show: 'danger',
+  rescheduled: 'neutral',
+};
+
+
+/**
  * `checked_in` e `waiting` compartilham o rótulo, e é decisão.
  *
  * Para quem opera são a mesma situação: a pessoa está no salão e ainda não

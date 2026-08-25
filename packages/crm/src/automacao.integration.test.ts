@@ -320,7 +320,7 @@ describeIfDb('automação', () => {
 
   // -- o envio ---------------------------------------------------------------
 
-  it('o carimbo vem antes da mensagem, e não carimba duas vezes', async () => {
+  it('a reserva/confirmacao do disparo e idempotente', async () => {
     await automacao({ limiar: 30 });
     await atendimento(CARLOS, 35, '16565656-0000-4000-8000-000000000007');
     await varrer();

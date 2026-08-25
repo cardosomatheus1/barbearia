@@ -38,10 +38,11 @@ export interface CasaDaFranquia {
  * Nunca vazia: uma franquia sem franqueadora é um cardápio que ninguém pode
  * publicar, e a tela mostraria uma linha inerte que alguém tentaria usar.
  *
- * A permissão `franchise.manage` é concedida ao dono da franqueadora **aqui**,
- * na mesma transação — é o único instante em que se sabe que aquela barbearia é
- * uma franqueadora. Concedê-la na migração seria dar a toda a base uma
- * permissão que ninguém decidiu dar.
+ * A permissão `franchise.manage` é concedida ao dono da franqueadora **aqui**.
+ * O vínculo cross-tenant e `role_permissions` usam escopos de RLS diferentes,
+ * então a concessão acontece logo após o commit e o retry abaixo é reparador:
+ * se o processo cair entre os dois, repetir a mesma criação recompõe a permissão.
+ * Concedê-la por padrão seria dar a toda a base uma permissão que ninguém decidiu dar.
  */
 export async function criarFranquia(entrada: {
   readonly adminId: string;
@@ -51,11 +52,23 @@ export async function criarFranquia(entrada: {
   const nome = entrada.nome.trim();
   if (nome.length < 2) throw new PlataformaError('invalid_name', 'A franquia precisa de nome');
 
-  const id = await semTenant(async (tx) => {
-    const jaEsta = await tx.$queryRaw<{ franchise_id: string }[]>`
-      SELECT franchise_id FROM franchise_tenants WHERE tenant_id = ${entrada.franqueadoraTenantId}::uuid
+  const resultado = await semTenant(async (tx) => {
+    const jaEsta = await tx.$queryRaw<{ franchise_id: string; role: string; name: string }[]>`
+      SELECT ft.franchise_id, ft.role::text AS role, f.name
+        FROM franchise_tenants ft
+        JOIN franchises f ON f.id = ft.franchise_id
+       WHERE ft.tenant_id = ${entrada.franqueadoraTenantId}::uuid
     `;
     if (jaEsta[0]) {
+      // Retry recuperável: só a MESMA criação é idempotente. Um nome diferente
+      // continua sendo conflito, mas a permissão será reparada antes da recusa.
+      if (jaEsta[0].role === 'franqueadora') {
+        return {
+          id: jaEsta[0].franchise_id,
+          repararPermissao: true as const,
+          mesmoPedido: jaEsta[0].name === nome,
+        };
+      }
       throw new PlataformaError('already_in_franchise', 'Esta barbearia já é de uma franquia');
     }
 
@@ -74,11 +87,14 @@ export async function criarFranquia(entrada: {
       franquia: nome,
     });
 
-    return franquia.id;
+    return { id: franquia.id, repararPermissao: true as const, mesmoPedido: true as const };
   });
 
-  await concederPublicacao(entrada.franqueadoraTenantId);
-  return { id };
+  if (resultado.repararPermissao) await concederPublicacao(entrada.franqueadoraTenantId);
+  if (!resultado.mesmoPedido) {
+    throw new PlataformaError('already_in_franchise', 'Esta barbearia já é de uma franquia');
+  }
+  return { id: resultado.id };
 }
 
 /**

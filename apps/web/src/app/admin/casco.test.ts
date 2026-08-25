@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 import { PERMISSOES } from '@barbearia/core';
 
+import { lerCssGlobal } from '../css-test-helper';
+
 import {
   DESTINOS_GATEADOS,
   MODULOS,
@@ -12,6 +14,7 @@ import {
   moduloDaSecao,
   modulosVisiveis,
   secao,
+  telasDoMenu,
   type Secao,
 } from './secoes';
 
@@ -137,8 +140,9 @@ describe('os subgrupos do menu', () => {
      */
     const colisoes: string[] = [];
     for (const modulo of TODOS) {
-      const nomes = new Set(modulo.telas.map((t) => t.nome.toLowerCase()));
-      for (const tela of modulo.telas) {
+      const telas = telasDoMenu(modulo);
+      const nomes = new Set(telas.map((t) => t.nome.toLowerCase()));
+      for (const tela of telas) {
         if (tela.grupo && nomes.has(tela.grupo.toLowerCase())) {
           colisoes.push(`${modulo.id}: grupo "${tela.grupo}" tem o nome de uma tela`);
         }
@@ -157,7 +161,7 @@ describe('os subgrupos do menu', () => {
     for (const modulo of TODOS) {
       const vistos = new Set<string>();
       let anterior: string | undefined;
-      for (const tela of modulo.telas) {
+      for (const tela of telasDoMenu(modulo)) {
         const grupo = tela.grupo;
         if (grupo !== anterior && grupo !== undefined) {
           if (vistos.has(grupo)) repetidos.push(`${modulo.id}: "${grupo}" volta depois de outro grupo`);
@@ -173,14 +177,15 @@ describe('os subgrupos do menu', () => {
     // Metade agrupada e metade solta produz telas órfãs boiando abaixo do
     // último subgrupo, que a pessoa lê como se pertencessem a ele.
     for (const modulo of TODOS) {
-      const comGrupo = modulo.telas.filter((t) => t.grupo).length;
-      expect([0, modulo.telas.length], `${modulo.id} agrupa pela metade`).toContain(comGrupo);
+      const telas = telasDoMenu(modulo);
+      const comGrupo = telas.filter((t) => t.grupo).length;
+      expect([0, telas.length], `${modulo.id} agrupa pela metade`).toContain(comGrupo);
     }
   });
 });
 
 describe('o CSS acompanha o casco', () => {
-  const css = readFileSync(join(AQUI, '..', 'globals.css'), 'utf8');
+  const css = lerCssGlobal();
 
   it('cada tela de navegação tem a regra que acende o próprio link', () => {
     // Esta é a única lista que o CSS ainda precisa enumerar: casar
@@ -203,7 +208,9 @@ describe('o CSS acompanha o casco', () => {
      * Só as telas **listadas** viram link; as de `dentro` (ficha do cliente,
      * comanda aberta) não aparecem na barra e não têm link para acender.
      */
-    const listadas = new Set<string>(MODULOS.flatMap((m) => m.telas.map((t) => t.secao)));
+    const listadas = new Set<string>(
+      MODULOS.flatMap((m) => telasDoMenu(m).map((t) => t.secao)),
+    );
 
     expect(semRegra.filter((s) => listadas.has(s))).toEqual([]);
   });
@@ -244,7 +251,7 @@ describe('o CSS acompanha o casco', () => {
      * forma nova, num lugar novo, nasce cobrada em todos eles.
      */
     const quantas = (agulha: string) => css.split(agulha).length - 1;
-    const referencia = formas(MODULOS[0]?.id ?? 'inicio').map(quantas);
+    const referencia = formas(MODULOS[0]?.id ?? 'hoje').map(quantas);
     expect(referencia.every((n) => n > 0), 'o módulo de referência não tem regra nenhuma').toBe(true);
 
     const divergentes: string[] = [];
@@ -280,8 +287,8 @@ describe('o CSS acompanha o casco', () => {
 
 describe('secao()', () => {
   it('devolve a seção e o módulo dono dela', () => {
-    expect(secao('caixa')).toEqual({ 'data-secao': 'caixa', 'data-modulo-atual': 'financeiro' });
-    expect(secao('cliente')).toEqual({ 'data-secao': 'cliente', 'data-modulo-atual': 'atendimento' });
+    expect(secao('caixa')).toEqual({ 'data-secao': 'caixa', 'data-modulo-atual': 'financeiro', 'data-molde': 'operacional' });
+    expect(secao('cliente')).toEqual({ 'data-secao': 'cliente', 'data-modulo-atual': 'clientes', 'data-molde': 'cadastro' });
   });
 
   it('recusa seção fora do casco', () => {
@@ -330,7 +337,10 @@ describe('a navegação não é reescrita à mão', () => {
     // Módulo sem tela é um ícone no trilho que abre uma lista vazia: a pessoa
     // toca e não acontece nada.
     for (const modulo of MODULOS) {
-      expect(modulo.telas.length, modulo.id).toBeGreaterThan(0);
+      expect(
+        telasDoMenu(modulo).length,
+        modulo.id,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -346,7 +356,7 @@ describe('a navegação não é reescrita à mão', () => {
         expect(moduloDaSecao(tela.secao), tela.secao).toBe(modulo.id);
       }
       for (const dentro of modulo.dentro) {
-        expect(moduloDaSecao(dentro), dentro).toBe(modulo.id);
+        expect(moduloDaSecao(dentro.secao), dentro.secao).toBe(modulo.id);
       }
     }
   });

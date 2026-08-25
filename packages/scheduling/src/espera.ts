@@ -1,4 +1,4 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   DIAS_MAXIMOS_DE_ESPERA,
   LIMITE_DE_ESPERAS_ATIVAS,
@@ -33,6 +33,7 @@ export type EsperaFailure =
   | 'unidade_desconhecida'
   | 'servico_desconhecido'
   | 'profissional_desconhecido'
+  | 'idempotencia_conflitante'
   | RecusaDeEspera;
 
 export class EsperaError extends Error {
@@ -96,7 +97,7 @@ function daLinha(linha: LinhaDaEspera): EntradaDeEspera {
   };
 }
 
-const SELECT_DA_ESPERA = `
+const SELECT_DA_ESPERA = sql`
   SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
          e.window_start_minute, e.window_end_minute, e.duration_minutes,
          e.professional_id, p.name AS professional_name, e.joined_at,
@@ -130,9 +131,18 @@ export interface PedidoDeEntrada {
  * reserva: aceitar duração do cliente deixaria alguém pedir "quero ser avisado
  * de qualquer buraco de 5 minutos" e ganhar prioridade sobre a agenda inteira.
  */
+function fingerprintDaEspera(pedido: PedidoDeEntrada): string {
+  return JSON.stringify([
+    pedido.locationId, pedido.customerId, [...pedido.serviceIds].sort(),
+    pedido.professionalId ?? null, pedido.de, pedido.ate,
+    pedido.inicioMinuto, pedido.fimMinuto,
+  ]);
+}
+
 export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDeEspera> {
   return withTenant(pedido.tenantId, async (tx) => {
     const agora = pedido.now ?? new Date();
+    const fingerprint = fingerprintDaEspera(pedido);
 
     const unidades = await tx.$queryRaw<{ timezone: string }[]>`
       SELECT timezone FROM locations WHERE id = ${pedido.locationId}::uuid
@@ -142,9 +152,32 @@ export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDe
       throw new EsperaError('unidade_desconhecida', 'Unidade não encontrada.');
     }
 
+    // O teto de esperas é por cliente. Duas intenções diferentes simultâneas
+    // também precisam ver a contagem em série, não apenas retries idempotentes.
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${`barberdock:espera:${pedido.tenantId}:${pedido.customerId}`}, 0)
+      )
+    `;
+
     if (pedido.idempotencyKey) {
-      const anterior = await porChave(tx, pedido.idempotencyKey);
-      if (anterior) return anterior;
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtextextended(${`${pedido.tenantId}:${pedido.locationId}:${pedido.customerId}:${pedido.idempotencyKey}`}, 0))
+      `;
+      const anteriores = await tx.$queryRaw<{ id: string; request_fingerprint: string | null }[]>`
+        SELECT id, request_fingerprint FROM waitlist_entries
+         WHERE location_id = ${pedido.locationId}::uuid
+           AND customer_id = ${pedido.customerId}::uuid
+           AND idempotency_key = ${pedido.idempotencyKey}
+      `;
+      const anterior = anteriores[0];
+      if (anterior) {
+        if (anterior.request_fingerprint && anterior.request_fingerprint !== fingerprint) {
+          throw new EsperaError('idempotencia_conflitante', 'Esta Idempotency-Key já foi usada para outro pedido.');
+        }
+        const existente = await porId(tx, anterior.id);
+        if (existente) return existente;
+      }
     }
 
     /**
@@ -162,7 +195,10 @@ export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDe
     const servicos = await tx.$queryRaw<{ total: number | null; quantos: bigint }[]>`
       SELECT sum(duration_minutes + buffer_before_minutes + buffer_after_minutes)::int AS total,
              count(*) AS quantos
-        FROM services WHERE id = ANY(${[...pedido.serviceIds]}::uuid[]) AND active
+        FROM services
+       WHERE id = ANY(${[...pedido.serviceIds]}::uuid[])
+         AND active
+         AND bookable_online
     `;
     const duracaoMinutos = servicos[0]?.total ?? 0;
     if (Number(servicos[0]?.quantos ?? 0) !== pedido.serviceIds.length) {
@@ -183,6 +219,8 @@ export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDe
          WHERE id = ${pedido.professionalId}::uuid
            AND location_id = ${pedido.locationId}::uuid
            AND active
+           AND bookable_online
+           AND kind IN ('professional', 'external')
       `;
       if (!existe[0]) {
         throw new EsperaError('profissional_desconhecido', 'Profissional não encontrado.');
@@ -219,13 +257,13 @@ export async function entrarNaEspera(pedido: PedidoDeEntrada): Promise<EntradaDe
       INSERT INTO waitlist_entries
         (tenant_id, location_id, customer_id, professional_id,
          wanted_from, wanted_to, window_start_minute, window_end_minute,
-         duration_minutes, idempotency_key)
+         duration_minutes, idempotency_key, request_fingerprint)
       VALUES (
         ${pedido.tenantId}::uuid, ${pedido.locationId}::uuid,
         ${pedido.customerId}::uuid, ${pedido.professionalId ?? null}::uuid,
         ${pedido.de}::date, ${pedido.ate}::date,
         ${pedido.inicioMinuto}, ${pedido.fimMinuto},
-        ${duracaoMinutos}, ${pedido.idempotencyKey ?? null}
+        ${duracaoMinutos}, ${pedido.idempotencyKey ?? null}, ${fingerprint}
       )
       ON CONFLICT DO NOTHING
       RETURNING id
@@ -264,22 +302,9 @@ const MENSAGEM: Readonly<Record<RecusaDeEspera, string>> = {
 };
 
 async function porId(tx: TransactionClient, id: string): Promise<EntradaDeEspera | null> {
-  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
-    `${SELECT_DA_ESPERA} WHERE e.id = $1::uuid GROUP BY e.id, p.name`,
-    id,
-  );
-  const linha = linhas[0];
-  return linha ? daLinha(linha) : null;
-}
-
-async function porChave(
-  tx: TransactionClient,
-  chave: string,
-): Promise<EntradaDeEspera | null> {
-  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
-    `${SELECT_DA_ESPERA} WHERE e.idempotency_key = $1 GROUP BY e.id, p.name`,
-    chave,
-  );
+  const linhas = await tx.$queryRaw<LinhaDaEspera[]>(sql`
+    ${SELECT_DA_ESPERA} WHERE e.id = ${id}::uuid GROUP BY e.id, p.name
+  `);
   const linha = linhas[0];
   return linha ? daLinha(linha) : null;
 }
@@ -289,20 +314,19 @@ async function mesmoPedido(
   tx: TransactionClient,
   pedido: PedidoDeEntrada,
 ): Promise<EntradaDeEspera | null> {
-  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
-    `${SELECT_DA_ESPERA}
-      WHERE e.customer_id = $1::uuid AND e.status = 'waiting'
-        AND e.wanted_from = $2::date AND e.wanted_to = $3::date
-        AND e.window_start_minute = $4 AND e.window_end_minute = $5
-        AND e.professional_id IS NOT DISTINCT FROM $6::uuid
-      GROUP BY e.id, p.name`,
-    pedido.customerId,
-    pedido.de,
-    pedido.ate,
-    pedido.inicioMinuto,
-    pedido.fimMinuto,
-    pedido.professionalId ?? null,
-  );
+  const linhas = await tx.$queryRaw<LinhaDaEspera[]>(sql`
+    ${SELECT_DA_ESPERA}
+     WHERE e.customer_id = ${pedido.customerId}::uuid
+       AND e.location_id = ${pedido.locationId}::uuid
+       AND e.status = 'waiting'
+       AND e.wanted_from = ${pedido.de}::date
+       AND e.wanted_to = ${pedido.ate}::date
+       AND e.window_start_minute = ${pedido.inicioMinuto}
+       AND e.window_end_minute = ${pedido.fimMinuto}
+       AND e.professional_id IS NOT DISTINCT FROM ${pedido.professionalId ?? null}::uuid
+       AND e.request_fingerprint = ${fingerprintDaEspera(pedido)}
+     GROUP BY e.id, p.name
+  `);
   const linha = linhas[0];
   return linha ? daLinha(linha) : null;
 }
@@ -320,41 +344,30 @@ export async function esperasDoCliente(
   agora: Date = new Date(),
 ): Promise<readonly (EntradaDeEspera & { readonly convite: ConviteVivo | null })[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<
+    const linhas = await tx.$queryRaw<
       (LinhaDaEspera & {
         convite_em: Date | null;
         convite_vence: Date | null;
         timezone: string;
       })[]
-    >(
-      /**
-       * O convite vivo vem junto, e é o que dá **saída** a este estado na tela.
-       *
-       * O convite chega por mensagem, e o token existe em claro uma única vez,
-       * dentro dela. Se a mensagem não chega — janela de silêncio, provedor fora
-       * do ar, ou o provedor de console, que é o que roda até o WhatsApp oficial
-       * entrar no bloco 55 —, a pessoa fica com um horário guardado para ela e
-       * nenhum caminho até ele. Aqui ela vê e aceita pela própria sessão, sem
-       * token nenhum.
-       */
-      `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
-              e.window_start_minute, e.window_end_minute, e.duration_minutes,
-              e.professional_id, p.name AS professional_name, e.joined_at,
-              l.timezone,
-              o.service_starts_at AS convite_em, o.expires_at AS convite_vence,
-              array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
-         FROM waitlist_entries e
-         JOIN locations l ON l.id = e.location_id
-         LEFT JOIN professionals p ON p.id = e.professional_id
-         LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
-         LEFT JOIN services s ON s.id = es.service_id
-         LEFT JOIN waitlist_offers o
-                ON o.entry_id = e.id AND o.status = 'aberta' AND o.expires_at > now()
-        WHERE e.customer_id = $1::uuid AND e.status = 'waiting'
-        GROUP BY e.id, p.name, l.timezone, o.service_starts_at, o.expires_at
-        ORDER BY e.wanted_from, e.window_start_minute`,
-      customerId,
-    );
+    >(sql`
+      SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+             e.window_start_minute, e.window_end_minute, e.duration_minutes,
+             e.professional_id, p.name AS professional_name, e.joined_at,
+             l.timezone,
+             o.service_starts_at AS convite_em, o.expires_at AS convite_vence,
+             array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+        FROM waitlist_entries e
+        JOIN locations l ON l.id = e.location_id
+        LEFT JOIN professionals p ON p.id = e.professional_id
+        LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+        LEFT JOIN services s ON s.id = es.service_id
+        LEFT JOIN waitlist_offers o
+               ON o.entry_id = e.id AND o.status = 'aberta' AND o.expires_at > now()
+       WHERE e.customer_id = ${customerId}::uuid AND e.status = 'waiting'
+       GROUP BY e.id, p.name, l.timezone, o.service_starts_at, o.expires_at
+       ORDER BY e.wanted_from, e.window_start_minute
+    `);
     return linhas.map((linha) => ({
       ...daLinha(linha),
       convite: conviteDaLinha(linha, agora),
@@ -521,32 +534,30 @@ export async function candidatosDaVaga(
     readonly agora?: Date;
   },
 ): Promise<readonly CandidatoDaVaga[]> {
-  const linhas = await tx.$queryRawUnsafe<
+  const linhas = await tx.$queryRaw<
     (LinhaDaEspera & {
       customer_id: string;
       customer_name: string;
       customer_phone: string | null;
     })[]
-  >(
-    `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
-            e.window_start_minute, e.window_end_minute, e.duration_minutes,
-            e.professional_id, p.name AS professional_name, e.joined_at,
-            e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
-            array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
-       FROM waitlist_entries e
-       JOIN customers c ON c.id = e.customer_id
-       LEFT JOIN professionals p ON p.id = e.professional_id
-       LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
-       LEFT JOIN services s ON s.id = es.service_id
-      WHERE e.location_id = $1::uuid
-        AND e.status = 'waiting'
-        AND e.wanted_from <= $2::date
-        AND e.wanted_to >= $2::date
-      GROUP BY e.id, p.name, c.name, c.phone_e164
-      ORDER BY e.joined_at`,
-    params.locationId,
-    params.vaga.dia,
-  );
+  >(sql`
+    SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+           e.window_start_minute, e.window_end_minute, e.duration_minutes,
+           e.professional_id, p.name AS professional_name, e.joined_at,
+           e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
+           array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+      FROM waitlist_entries e
+      JOIN customers c ON c.id = e.customer_id
+      LEFT JOIN professionals p ON p.id = e.professional_id
+      LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+      LEFT JOIN services s ON s.id = es.service_id
+     WHERE e.location_id = ${params.locationId}::uuid
+       AND e.status = 'waiting'
+       AND e.wanted_from <= ${params.vaga.dia}::date
+       AND e.wanted_to >= ${params.vaga.dia}::date
+     GROUP BY e.id, p.name, c.name, c.phone_e164
+     ORDER BY e.joined_at
+  `);
 
   /** O casamento fino vem **antes** da ordem: quem não cabe não é ordenado. */
   const cabem = linhas.filter((linha) =>
@@ -622,18 +633,15 @@ export async function fecharEsperasAtendidas(
     readonly vaga: VagaAberta;
   },
 ): Promise<number> {
-  const linhas = await tx.$queryRawUnsafe<LinhaDaEspera[]>(
-    `${SELECT_DA_ESPERA}
-      WHERE e.customer_id = $1::uuid
-        AND e.location_id = $2::uuid
-        AND e.status = 'waiting'
-        AND e.wanted_from <= $3::date
-        AND e.wanted_to >= $3::date
-      GROUP BY e.id, p.name`,
-    params.customerId,
-    params.locationId,
-    params.vaga.dia,
-  );
+  const linhas = await tx.$queryRaw<LinhaDaEspera[]>(sql`
+    ${SELECT_DA_ESPERA}
+     WHERE e.customer_id = ${params.customerId}::uuid
+       AND e.location_id = ${params.locationId}::uuid
+       AND e.status = 'waiting'
+       AND e.wanted_from <= ${params.vaga.dia}::date
+       AND e.wanted_to >= ${params.vaga.dia}::date
+     GROUP BY e.id, p.name
+  `);
 
   const atendidas = linhas.filter((linha) =>
     vagaServe(
@@ -774,7 +782,7 @@ export async function quemEstaEsperando(
   agora: Date = new Date(),
 ): Promise<readonly QuemEspera[]> {
   return withTenant(tenantId, async (tx) => {
-    const linhas = await tx.$queryRawUnsafe<
+    const linhas = await tx.$queryRaw<
       (LinhaDaEspera & {
         customer_id: string;
         customer_name: string;
@@ -783,34 +791,30 @@ export async function quemEstaEsperando(
         convite_vence: Date | null;
         timezone: string;
       })[]
-    >(
-      `SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
-              e.window_start_minute, e.window_end_minute, e.duration_minutes,
-              e.professional_id, p.name AS professional_name, e.joined_at,
-              e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
-              l.timezone,
-              o.service_starts_at AS convite_em, o.expires_at AS convite_vence,
-              array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
-         FROM waitlist_entries e
-         JOIN customers c ON c.id = e.customer_id
-         JOIN locations l ON l.id = e.location_id
-         LEFT JOIN professionals p ON p.id = e.professional_id
-         LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
-         LEFT JOIN services s ON s.id = es.service_id
-         -- O convite vivo entra na mesma consulta: uma ida ao banco por pessoa
-         -- seria N+1 numa tela que o dono abre para decidir o sábado.
-         LEFT JOIN waitlist_offers o
-                ON o.entry_id = e.id AND o.status IN ('aberta', 'aceitando')
-        WHERE e.location_id = $1::uuid AND e.status = 'waiting'
-          AND ($2::uuid IS NULL
-               OR e.professional_id IS NULL
-               OR e.professional_id = $2::uuid)
-        GROUP BY e.id, p.name, c.name, c.phone_e164, l.timezone,
-                 o.service_starts_at, o.expires_at
-        ORDER BY e.wanted_from, e.window_start_minute, e.joined_at`,
-      locationId,
-      onlyProfessionalId,
-    );
+    >(sql`
+      SELECT e.id, e.status::text AS status, e.wanted_from, e.wanted_to,
+             e.window_start_minute, e.window_end_minute, e.duration_minutes,
+             e.professional_id, p.name AS professional_name, e.joined_at,
+             e.customer_id, c.name AS customer_name, c.phone_e164 AS customer_phone,
+             l.timezone,
+             o.service_starts_at AS convite_em, o.expires_at AS convite_vence,
+             array_remove(array_agg(s.name ORDER BY es.position), NULL) AS services
+        FROM waitlist_entries e
+        JOIN customers c ON c.id = e.customer_id
+        JOIN locations l ON l.id = e.location_id
+        LEFT JOIN professionals p ON p.id = e.professional_id
+        LEFT JOIN waitlist_entry_services es ON es.entry_id = e.id
+        LEFT JOIN services s ON s.id = es.service_id
+        LEFT JOIN waitlist_offers o
+               ON o.entry_id = e.id AND o.status IN ('aberta', 'aceitando')
+       WHERE e.location_id = ${locationId}::uuid AND e.status = 'waiting'
+         AND (${onlyProfessionalId}::uuid IS NULL
+              OR e.professional_id IS NULL
+              OR e.professional_id = ${onlyProfessionalId}::uuid)
+       GROUP BY e.id, p.name, c.name, c.phone_e164, l.timezone,
+                o.service_starts_at, o.expires_at
+       ORDER BY e.wanted_from, e.window_start_minute, e.joined_at
+    `);
 
     return linhas.map((linha) => ({
       ...daLinha(linha),

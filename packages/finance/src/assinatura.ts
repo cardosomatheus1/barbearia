@@ -1,4 +1,4 @@
-import { withTenant, type TransactionClient } from '@barbearia/db';
+import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   assinaturaVale,
   cicloDaAssinatura,
@@ -135,7 +135,7 @@ export async function planos(
      * para decidir preço — e são três ou quatro planos, cada um com dois ou três
      * serviços.
      */
-    const linhas = await tx.$queryRawUnsafe<
+    const linhas = await tx.$queryRaw<
       {
         id: string;
         name: string;
@@ -149,33 +149,31 @@ export async function planos(
         bloqueios: unknown;
         scope: EscopoMultiunidade;
       }[]
-    >(
-      `SELECT p.id, p.name, p.description, p.price_cents, p.product_discount_bps, p.active,
-              p.booking_window_days, p.scope,
-              (SELECT jsonb_agg(jsonb_build_object(
-                        'diaDaSemana', bl.weekday,
-                        'inicio', bl.start_minute,
-                        'fim', bl.end_minute) ORDER BY bl.weekday, bl.start_minute)
-                 FROM club_plan_blackouts bl WHERE bl.plan_id = p.id) AS bloqueios,
-              CASE WHEN $2::boolean THEN
-                (SELECT count(*) FROM club_subscriptions s
-                  WHERE s.plan_id = p.id AND s.status IN ('ativa', 'inadimplente'))
-              ELSE 0 END AS assinantes,
-              (SELECT jsonb_agg(jsonb_build_object(
-                        'serviceId', b.service_id::text,
-                        'servicoNome', sv.name,
-                        'precoAvulsoCents', sv.price_cents,
-                        'quantidade', b.quantity,
-                        'cooldownDias', b.cooldown_days) ORDER BY sv.name)
-                 FROM club_plan_benefits b
-                 JOIN services sv ON sv.id = b.service_id
-                WHERE b.plan_id = p.id) AS beneficios
-         FROM club_plans p
-        WHERE ($1::boolean OR p.active)
-        ORDER BY p.position, p.name`,
-      incluirInativos,
-      comContagem,
-    );
+    >(sql`
+      SELECT p.id, p.name, p.description, p.price_cents, p.product_discount_bps, p.active,
+             p.booking_window_days, p.scope,
+             (SELECT jsonb_agg(jsonb_build_object(
+                       'diaDaSemana', bl.weekday,
+                       'inicio', bl.start_minute,
+                       'fim', bl.end_minute) ORDER BY bl.weekday, bl.start_minute)
+                FROM club_plan_blackouts bl WHERE bl.plan_id = p.id) AS bloqueios,
+             CASE WHEN ${comContagem}::boolean THEN
+               (SELECT count(*) FROM club_subscriptions s
+                 WHERE s.plan_id = p.id AND s.status IN ('ativa', 'inadimplente'))
+             ELSE 0 END AS assinantes,
+             (SELECT jsonb_agg(jsonb_build_object(
+                       'serviceId', b.service_id::text,
+                       'servicoNome', sv.name,
+                       'precoAvulsoCents', sv.price_cents,
+                       'quantidade', b.quantity,
+                       'cooldownDias', b.cooldown_days) ORDER BY sv.name)
+                FROM club_plan_benefits b
+                JOIN services sv ON sv.id = b.service_id
+               WHERE b.plan_id = p.id) AS beneficios
+        FROM club_plans p
+       WHERE (${incluirInativos}::boolean OR p.active)
+       ORDER BY p.position, p.name
+    `);
 
     return linhas.map((l) => ({
       id: l.id,
@@ -402,7 +400,7 @@ interface LinhaDaAssinatura {
   unidade_da_adesao: string | null;
 }
 
-const SELECT_DA_ASSINATURA = `
+const SELECT_DA_ASSINATURA = sql`
   SELECT s.id, s.status, s.price_cents, s.started_at,
          p.name AS plano, p.product_discount_bps AS desconto,
          p.booking_window_days AS janela,
@@ -430,10 +428,11 @@ export async function assinaturaDoCliente(
   tx?: TransactionClient,
 ): Promise<AssinaturaNaTela | null> {
   const dentro = async (t: TransactionClient): Promise<AssinaturaNaTela | null> => {
-    const linhas = await t.$queryRawUnsafe<LinhaDaAssinatura[]>(
-      `${SELECT_DA_ASSINATURA} WHERE s.customer_id = $1::uuid AND s.status <> 'cancelada' LIMIT 1`,
-      customerId,
-    );
+    const linhas = await t.$queryRaw<LinhaDaAssinatura[]>(sql`
+      ${SELECT_DA_ASSINATURA}
+       WHERE s.customer_id = ${customerId}::uuid AND s.status <> 'cancelada'
+       LIMIT 1
+    `);
     const assinatura = linhas[0];
     if (!assinatura) return null;
 

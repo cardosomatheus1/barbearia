@@ -1,0 +1,31 @@
+BARBERDOCK — MELHORIA DE MANUTENIBILIDADE — BLOCO 1 — 2026-08-24
+
+ESCOPO
+- Refatoração conservadora do maior hotspot de domínio: packages/finance/src/comanda.ts.
+- Sem feature nova e sem alteração intencional de contrato público.
+
+ALTERAÇÕES
+- comanda.ts: 2102 -> 1414 linhas (-688; -32,7%).
+- Novo comanda-tipos.ts: erros, tipos e redação de dados de cliente.
+- Novo comanda-leitura.ts: carga/listagens/relatórios de leitura.
+- Novo comanda-fiado.ts: saldo travado, extrato e recebimento de fiado.
+- Fachada pública mantida por reexports explícitos.
+- Nova guarda scripts/verificar-finance-comanda-modulos.mjs integrada a scripts/verify.sh.
+
+VALIDAÇÕES EXECUTADAS NESTE RUNTIME
+- Comparação automatizada da superfície pública antes/depois: sem export faltante e sem export público novo.
+- Transpilação/sintaxe TypeScript dos 4 módulos alterados: 4/4 OK.
+- bash -n scripts/verify.sh: OK.
+- Guardas Node puras verificar-*.mjs: 24/24 OK.
+- Entre elas: auditoria ofensiva, auditoria profunda, invariantes, prontidão, R5, R8, R9, R10, R11, V0-V11 aplicáveis e rotas web.
+- A lógica da guarda multiunidade id-com-unidade passou no smoke de fonte com os novos arquivos incluídos.
+
+LIMITAÇÃO DESTA RODADA
+- O ZIP não contém node_modules e o runtime não possui pnpm disponível localmente.
+- Corepack tentou obter pnpm 10.33.0, mas a rede do runtime para registry.npmjs.org não está disponível.
+- Portanto o typecheck/build/Vitest completo não foi repetido depois desta refatoração neste ambiente.
+- A base anterior já tinha 14/14 typechecks, builds e suítes verdes; esta rodada adiciona validação estrutural forte, mas não substitui a repetição integral do portão quando o toolchain estiver disponível.
+
+RESULTADO
+- Bloco 1 aprovado no escopo executável deste ambiente.
+- Próximo hotspot recomendado: packages/scheduling/src/booking.ts (1731 linhas), seguido de packages/crm/src/whatsapp.ts e packages/finance/src/comissao.ts.

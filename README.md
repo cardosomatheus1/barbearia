@@ -198,6 +198,11 @@ fraco em silêncio subiria o sistema funcionando com a proteção desligada.
 | `PSP_WEBHOOK_SECRET` | HMAC do webhook do adquirente, que é a única rota sem sessão com efeito sobre dinheiro | o provedor gera, no painel dele |
 | `STRIPE_SECRET_KEY` | falar com a Stripe. Só exigida quando `PSP_MODO=stripe` | o painel da Stripe |
 | `STRIPE_WEBHOOK_SECRET` | HMAC do webhook da Stripe, que é a **segunda** rota sem sessão com efeito sobre dinheiro | a Stripe gera um por endereço cadastrado |
+| `IDENTITY_MESSAGING_MODO` | canal de OTP/senha de primeiro acesso; `console` só em dev, `meta` em produção | `meta` no deploy |
+| `IDENTITY_WHATSAPP_PHONE_NUMBER_ID` | número central da Barberdock usado para autenticação, separado do CRM das barbearias | painel da Meta |
+| `IDENTITY_WHATSAPP_ACCESS_TOKEN` | token da WABA central de autenticação | painel/cofre da Meta |
+| `IDENTITY_WHATSAPP_OTP_TEMPLATE` | template `AUTHENTICATION` aprovado para OTP | nome aprovado na Meta |
+| `IDENTITY_WHATSAPP_STAFF_TEMPLATE` | template `AUTHENTICATION` aprovado para primeiro acesso | nome aprovado na Meta |
 
 Os dois segredos de webhook ausentes **recusam** todo webhook — nunca liberam. É
 o que separa "a rota está fechada" de "a rota está aberta e ninguém percebeu":
@@ -343,8 +348,11 @@ nem permite cancelar o que já existe.
 A sessão dura 90 dias, então quem já validou o número não repete o código.
 
 O código nunca vai para log: `ConsoleMessagingProvider` imprime telefone
-mascarado e mais nada. Log com código de uso único transforma acesso ao log em
-acesso à conta.
+mascarado e mais nada e **recusa produção**. Em produção, o AppModule exige o
+`MetaIdentityMessagingProvider`, que usa o número central da Barberdock e
+templates `AUTHENTICATION`; assim o login não depende de cada barbearia ter
+conectado o próprio WhatsApp de CRM. Log com código de uso único transforma
+acesso ao log em acesso à conta.
 
 ### Isolamento tem dois níveis, não um
 
@@ -671,27 +679,28 @@ existiam desde a primeira migração e o perfil público já as devolvia — fal
 **por onde preenchê-las**. É o mesmo defeito que `blocks` teve por oito blocos,
 com o agravante de estar à vista de qualquer visitante.
 
-`/admin/fotos` fecha a origem do dado. Enquanto não há armazenamento próprio, o
-endereço é colado: a barbearia já publicou essas fotos em algum lugar, e esperar
-por infraestrutura de upload deixaria a página como cardápio de texto por mais
-oito blocos. A lacuna está declarada com a dependência real, que é armazenamento
-de objeto.
+`/admin/fotos` fecha a origem do dado com arquivo, não endereço. O navegador
+faz o trabalho que economiza banda — recorte pela proporção do papel,
+redimensionamento e WebP — e a API confere de novo assinatura e tamanho antes de
+gravar. O nome é UUID e `/media/...` sai pelo mesmo domínio da página pública. O backend
+de armazenamento é selecionável: disco persistente para desenvolvimento/instalação
+simples ou **S3 compatível** (AWS S3, Cloudflare R2 e MinIO) com bucket privado.
+Trocar uma foto apaga o objeto anterior quando ele já era nosso.
 
-### `https` e mais nada
+### Arquivo nosso na escrita; compatibilidade na leitura
 
-`imagemPublica` (em `packages/core`) decide o que entra. Só `https`, por três
-motivos em ordem: `javascript:` não executa num `src` de `<img>`, mas a mesma
-coluna alimenta `og:image` e uma lista fechada custa menos que rastrear
-consumidor; `data:` transformaria a coluna em depósito de arquivo; e `http:`
-simples é bloqueado como conteúdo misto, então aceitar seria prometer uma imagem
-que nunca aparece.
+`imagemPublica` (em `packages/core`) aceita o caminho fechado `/media/...` e
+continua entendendo `https` na **leitura** por duas razões: dados históricos não
+somem numa atualização e as fotos de cliente têm ciclo de consentimento próprio.
+A tela de Fotos e a API de escrita da barbearia, porém, não aceitam mais host
+externo novo. `javascript:`, `data:`, `http:` e caminho relativo fora de
+`/media/...` continuam recusados.
 
-Escrito com expressão regular, não com `new URL()` — `URL` vem do DOM ou do
-`@types/node`, e `packages/core` não depende de nenhum dos dois. Há teste que
-falha se alguém der dependência a este pacote.
-
-URL recusada vira `null`, não erro: a foto é opcional, e um endereço ruim num
-campo não pode impedir de salvar os outros oito.
+O armazenamento não confia na extensão nem no `Content-Type`: WebP, JPEG e PNG
+são identificados pelos primeiros bytes e o arquivo preparado tem teto de 3 MB.
+No fallback local o caminho nunca vira acesso arbitrário ao filesystem; no modo
+S3 a API assina PUT/GET/DELETE com AWS Signature V4 e endpoint, bucket e
+credenciais nunca chegam ao navegador.
 
 ### Toda imagem declara o próprio tamanho
 

@@ -1,0 +1,44 @@
+Barberdock - validação da correção da auditoria profunda - 2026-08-24
+
+== Guardas estáticas ==
+guards_ok=23 guards_fail=0
+
+== Scripts de teste ==
+test_scripts_ok=5 unavailable_vitest=23 fail=0
+
+== Sintaxe ==
+ts_tsx=742 parse_errors=0
+js_mjs_cjs_ok=71 syntax_fail=0
+shell_ok=29 shell_fail=0
+json_ok=46 json_fail=0
+yaml_ok=6 yaml_fail=0
+
+== Imports internos (checagem AST focada) ==
+internal_import_declarations=2062
+named_default_imports_checked=5452
+missing_paths=0
+missing_symbols=0
+
+== Higiene do diff ==
+git_diff_check=OK
+observacao=warning LF/CRLF no RODAR-NO-WINDOWS.cmd; sem erro de whitespace
+
+== Segredos de deploy ==
+required=9 missing=0 short=0 changed_on_rerun=0
+KYC_INTENT_HMAC_SECRET=64 hex chars
+
+== Portão oficial ==
+verify.sh executado na árvore final.
+portoes_estaticos=verdes
+postgres=indisponivel (pg_isready ausente)
+build=bloqueado (pnpm ausente)
+verify_exit=1 esperado pelo bloqueio ambiental
+
+== Não provado ==
+- pnpm install --frozen-lockfile
+- typecheck oficial completo
+- build/next build
+- Vitest completo
+- migrations em PostgreSQL real
+- concorrência/RLS reais
+- E2E full-stack

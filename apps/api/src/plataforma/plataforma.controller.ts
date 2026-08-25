@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Inject,
   Param,
   Post,
@@ -13,6 +14,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ultimoDiaApurado } from '@barbearia/core';
 import {
   abrirSuporte,
   bloquearBarbearia,
@@ -44,6 +46,7 @@ import {
   linhaDoTempoDaPlataforma,
   resumoDaPlataforma,
   saudeDasBarbearias,
+  ultimoDiaComMetricas,
   provaDaSessao,
   sairDaPlataforma,
   trilhaDaPlataforma,
@@ -102,16 +105,6 @@ import {
   type TrocaDePlano,
 } from './plataforma.schemas.js';
 
-/**
- * O último dia que a apuração garante fechado.
- *
- * O dia anterior em UTC, que é o mesmo critério de `apuracaoPendente`. Mostrar
- * hoje pela metade faria toda comparação parecer queda logo depois do almoço.
- */
-const ultimoDiaFechado = (agora = new Date()): string =>
-  new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate() - 1))
-    .toISOString()
-    .slice(0, 10);
 
 const STATUS: Record<string, number> = {
   invalid_credentials: 401,
@@ -141,6 +134,7 @@ const STATUS: Record<string, number> = {
   refund_refused: 409,
   insufficient_credit: 409,
   invalid_amount: 400,
+  idempotency_conflict: 409,
   refund_failed: 500,
   email_taken: 409,
   weak_password: 400,
@@ -666,6 +660,7 @@ export class PlataformaController {
   async estornar(
     @Param('tenantId', new ZodValidationPipe(tenantIdSchema)) tenantId: string,
     @Body(new ZodValidationPipe(estornoSchema)) corpo: EntradaDeEstorno,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Admin() admin: AdminDaPlataforma,
   ) {
     try {
@@ -676,11 +671,15 @@ export class PlataformaController {
         // saldo dela e não chega em lugar algum.
         throw new PlataformaError('no_acquirer', 'Não há adquirente configurado');
       }
+      if (!idempotencyKey || idempotencyKey.length > 128) {
+        throw new PlataformaError('idempotency_key_required', 'Envie Idempotency-Key');
+      }
       const estorno = await estornarCredito({
         adminId: admin.id,
         tenantId,
         valorCents: corpo.valorCents,
         motivo: corpo.motivo,
+        idempotencyKey: `${admin.id}:${idempotencyKey}`,
         provider,
       });
       return { id: estorno.id, valorCents: estorno.valorCents, estado: estorno.estado };
@@ -724,7 +723,7 @@ export class PlataformaController {
 
   @Get('metricas')
   async metricas(@Query(new ZodValidationPipe(janelaSchema)) query: Janela) {
-    const ate = query.ate ?? ultimoDiaFechado();
+    const ate = query.ate ?? await ultimoDiaComMetricas(ultimoDiaApurado(new Date()));
     return { ate, resumo: await resumoDaPlataforma({ ate, dias: query.dias }) };
   }
 
@@ -742,7 +741,7 @@ export class PlataformaController {
 
   @Get('saude')
   async saude(@Query(new ZodValidationPipe(janelaSchema)) query: Janela) {
-    const ate = query.ate ?? ultimoDiaFechado();
+    const ate = query.ate ?? await ultimoDiaComMetricas(ultimoDiaApurado(new Date()));
     return { ate, barbearias: await saudeDasBarbearias({ ate, dias: query.dias }) };
   }
 

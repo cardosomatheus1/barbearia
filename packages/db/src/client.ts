@@ -13,6 +13,9 @@ import { PrismaClient, Prisma } from '@prisma/client';
  */
 
 export type TransactionClient = Prisma.TransactionClient;
+export type Sql = Prisma.Sql;
+/** SQL composto pelo Prisma: valores interpolados viram parâmetros, nunca texto executável. */
+export const sql = Prisma.sql;
 
 let singleton: PrismaClient | undefined;
 

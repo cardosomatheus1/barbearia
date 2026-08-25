@@ -156,6 +156,20 @@ describeIfDb('fila presencial', () => {
     expect(repetida.token).toBe('');
   });
 
+  it('a mesma chave em duas unidades cria duas intenções independentes', async () => {
+    const matriz = await joinQueue({
+      tenantId: TENANT, locationId: LOCATION, customerId: CARLOS,
+      serviceIds: [CABELO], idempotencyKey: 'mesma-chave', now: AGORA,
+    });
+    const filial = await joinQueue({
+      tenantId: TENANT, locationId: FILIAL, customerId: CARLOS,
+      serviceIds: [CABELO], professionalId: BRUNO, idempotencyKey: 'mesma-chave', now: AGORA,
+    });
+
+    expect(filial.id).not.toBe(matriz.id);
+    expect((await getQueue({ podeVerCliente: true, tenantId: TENANT, locationId: FILIAL, timezone: TZ, now: AGORA })).entries.map((e) => e.id)).toContain(filial.id);
+  });
+
   it('serviço de outra barbearia não entra na fila desta', async () => {
     await exec(admin, `
       INSERT INTO services (id, tenant_id, name, price_cents, duration_minutes)

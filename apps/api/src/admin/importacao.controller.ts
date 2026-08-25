@@ -10,6 +10,7 @@ import {
   listarImportacoes,
   listarSlugs,
   reverterImportacao,
+  resolverConflitoDaImportacao,
 } from '@barbearia/crm';
 import { diaNaUnidade } from '@barbearia/core';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -17,7 +18,12 @@ import { DomainError, notFound } from '../common/errors.js';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
 import { Staff, StaffGuard } from './staff.guard.js';
 import { Exige, PermissaoGuard, Recurso } from './permissao.guard.js';
-import { importIdSchema, importacaoSchema, slugLegadoSchema } from './importacao.schemas.js';
+import {
+  importIdSchema,
+  importacaoSchema,
+  resolverConflitoSchema,
+  slugLegadoSchema,
+} from './importacao.schemas.js';
 import { unidadeDoBalcao } from './unidade.js';
 
 /**
@@ -48,6 +54,7 @@ const STATUS: Record<string, number> = {
   ja_aplicada: 409,
   nao_aplicada: 409,
   tem_movimento: 409,
+  conflito_nao_encontrado: 409,
   formato_invalido: 400,
   reservado: 400,
   ja_usado: 409,
@@ -122,6 +129,32 @@ export class ImportacaoController {
         // parâmetro como em todo o resto — nunca `now()` dentro da consulta.
         agora: new Date(),
         ...(body.separador ? { separador: body.separador } : {}),
+      });
+    } catch (error) {
+      return toHttp(error);
+    }
+  }
+
+  @Exige('customers.edit')
+  @Recurso('importacao')
+  @Post('imports/:id/conflicts')
+  async resolverConflito(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(importIdSchema)) id: string,
+    @Body(new ZodValidationPipe(resolverConflitoSchema))
+    body: { linha: number; escolha: 'anterior' | 'linha' },
+    @Req() req: Request,
+  ) {
+    try {
+      return await resolverConflitoDaImportacao({
+        tenantId: staff.tenantId,
+        importId: id,
+        linha: body.linha,
+        escolha: body.escolha,
+        staffId: staff.staffUserId,
+        staffName: staff.name,
+        agora: new Date(),
+        ...(req.ip ? { ip: req.ip } : {}),
       });
     } catch (error) {
       return toHttp(error);

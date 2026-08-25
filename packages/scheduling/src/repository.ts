@@ -145,6 +145,8 @@ export async function loadRangeContext(
     readonly serviceIds: readonly string[];
     readonly dates: readonly string[];
     readonly professionalId?: string;
+    /** Fluxo autenticado do balcão: `bookable_online` controla autoatendimento. */
+    readonly atCounter?: boolean;
     /**
      * Agendamento a ignorar na ocupação. Usado pelo reagendamento: o horário
      * que está sendo liberado não pode bloquear a si mesmo.
@@ -249,7 +251,9 @@ export async function loadRangeContext(
   >`
     SELECT id, name, duration_minutes, buffer_before_minutes, buffer_after_minutes, price_cents
     FROM services
-    WHERE id = ANY(${ids}::uuid[]) AND active AND bookable_online
+    WHERE id = ANY(${ids}::uuid[])
+      AND active
+      AND (${params.atCounter === true} OR bookable_online)
   `;
   // Serviço inexistente, inativo ou não agendável online derruba a consulta
   // inteira: melhor recusar do que oferecer horário para algo que não existe.
@@ -294,7 +298,7 @@ export async function loadRangeContext(
     JOIN professional_services ps ON ps.professional_id = p.id
     WHERE p.location_id = ${locationId}::uuid
       AND p.active
-      AND p.bookable_online
+      AND (${params.atCounter === true} OR p.bookable_online)
       AND p.kind IN ('professional', 'external')
       AND ps.service_id = ANY(${ids}::uuid[])
       AND (${params.professionalId ?? null}::uuid IS NULL
@@ -489,15 +493,29 @@ export async function loadRangeContext(
   const countRows = await tx.$queryRaw<
     { professional_id: string; local_date: Date; total: bigint }[]
   >`
-    SELECT professional_id,
-           (starts_at AT TIME ZONE ${location.timezone})::date AS local_date,
-           count(*) AS total
-    FROM appointments
-    WHERE professional_id = ANY(${professionalIds}::uuid[])
-      AND starts_at >= ${rangeStart}
-      AND starts_at < ${rangeEnd}
-      AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
-    GROUP BY professional_id, local_date
+    SELECT agenda.professional_id, agenda.local_date, count(*) AS total
+      FROM (
+        SELECT professional_id,
+               (starts_at AT TIME ZONE ${location.timezone})::date AS local_date
+          FROM appointments
+         WHERE professional_id = ANY(${professionalIds}::uuid[])
+           AND starts_at >= ${rangeStart}
+           AND starts_at < ${rangeEnd}
+           AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+           AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
+                OR id <> ${params.ignoreAppointmentId ?? null}::uuid)
+        UNION ALL
+        SELECT professional_id,
+               (starts_at AT TIME ZONE ${location.timezone})::date AS local_date
+          FROM slot_holds
+         WHERE professional_id = ANY(${professionalIds}::uuid[])
+           AND starts_at >= ${rangeStart}
+           AND starts_at < ${rangeEnd}
+           AND expires_at > now()
+           AND (${params.ignoreHoldId ?? null}::uuid IS NULL
+                OR id <> ${params.ignoreHoldId ?? null}::uuid)
+      ) AS agenda
+     GROUP BY agenda.professional_id, agenda.local_date
   `;
 
   const countsByDate = new Map<string, Map<string, number>>();
@@ -516,13 +534,35 @@ export async function loadRangeContext(
   const resourceUsageRows = await tx.$queryRaw<
     { resource_type: string; starts_at: Date; ends_at: Date }[]
   >`
-    SELECT ar.resource_type, a.starts_at, a.ends_at
-    FROM appointment_resources ar
-    JOIN appointments a ON a.id = ar.appointment_id
-    WHERE a.location_id = ${locationId}::uuid
-      AND a.starts_at < ${rangeEnd}
-      AND a.ends_at > ${rangeStart}
-      AND a.status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+    -- Cada unidade consumida vira uma faixa: quantity=2 ocupa duas unidades.
+    SELECT uso.resource_type, uso.starts_at, uso.ends_at
+      FROM (
+        SELECT ar.resource_type,
+               lower(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) AS starts_at,
+               upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) AS ends_at
+          FROM appointment_resources ar
+          JOIN appointments a ON a.id = ar.appointment_id
+          CROSS JOIN LATERAL generate_series(1, ar.quantity) AS unidade(n)
+         WHERE a.location_id = ${locationId}::uuid
+           AND a.starts_at < ${rangeEnd}
+           AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${rangeStart}
+           AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
+           AND a.status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+           AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
+                OR a.id <> ${params.ignoreAppointmentId ?? null}::uuid)
+        UNION ALL
+        SELECT shr.resource_type, h.starts_at, h.ends_at
+          FROM slot_hold_resources shr
+          JOIN slot_holds h ON h.id = shr.hold_id
+          JOIN professionals p ON p.id = h.professional_id
+          CROSS JOIN LATERAL generate_series(1, shr.quantity) AS unidade(n)
+         WHERE p.location_id = ${locationId}::uuid
+           AND h.starts_at < ${rangeEnd}
+           AND h.ends_at > ${rangeStart}
+           AND h.expires_at > now()
+           AND (${params.ignoreHoldId ?? null}::uuid IS NULL
+                OR h.id <> ${params.ignoreHoldId ?? null}::uuid)
+      ) AS uso
   `;
 
   // ---- Combos que casam exatamente com a seleção --------------------------
@@ -612,6 +652,7 @@ export async function loadDayContext(
     readonly serviceIds: readonly string[];
     readonly date: string;
     readonly professionalId?: string;
+    readonly atCounter?: boolean;
     readonly ignoreAppointmentId?: string;
     readonly ignoreHoldId?: string;
   },
@@ -621,6 +662,7 @@ export async function loadDayContext(
     serviceIds: params.serviceIds,
     dates: [params.date],
     ...(params.professionalId ? { professionalId: params.professionalId } : {}),
+    ...(params.atCounter ? { atCounter: true } : {}),
     ...(params.ignoreAppointmentId ? { ignoreAppointmentId: params.ignoreAppointmentId } : {}),
     ...(params.ignoreHoldId ? { ignoreHoldId: params.ignoreHoldId } : {}),
   });

@@ -1,4 +1,5 @@
 import { semTenant } from '@barbearia/db';
+import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
 /**
  * As métricas globais da plataforma (bloco 25, SPEC §8 e Parte 1 §1.2).
@@ -116,6 +117,25 @@ export function inicioDaJanela(ate: string, dias: number): string {
   return inicio.toISOString().slice(0, 10);
 }
 
+/**
+ * Último dia que realmente existe no agregado diário da plataforma.
+ *
+ * O corte das 09:00 UTC diz qual dia **já deveria** ter sido apurado, mas o
+ * worker pode atrasar ou ficar indisponível. Usar apenas o relógio faria o
+ * painel apontar para um dia ainda inexistente e mostrar zeros falsos.
+ * Quando a plataforma ainda não possui métrica alguma, preservamos o fallback
+ * calculado pelo core para que o estado inicial continue determinístico.
+ */
+export async function ultimoDiaComMetricas(fallback: string): Promise<string> {
+  return semTenant(async (tx) => {
+    const [linha] = await tx.$queryRaw<{ ultimo_dia: Date | null }[]>`
+      SELECT max(business_day) AS ultimo_dia
+      FROM tenant_metrics_daily
+    `;
+    return linha?.ultimo_dia?.toISOString().slice(0, 10) ?? fallback;
+  });
+}
+
 export async function resumoDaPlataforma(params: {
   /** Último dia da janela, YYYY-MM-DD. Parâmetro, não `now()`: o mesmo pedido tem que dar o mesmo número. */
   readonly ate: string;
@@ -175,11 +195,11 @@ export async function resumoDaPlataforma(params: {
       WHERE m.business_day BETWEEN ${de}::date AND ${params.ate}::date
     `;
 
-    const agendamentos = Number(operacao?.agendamentos ?? 0);
-    const baseInicial = Number(ciclo?.base_inicial ?? 0);
+    const agendamentos = inteiroSeguroDoBanco(operacao?.agendamentos, 'agendamentos da plataforma');
+    const baseInicial = inteiroSeguroDoBanco(ciclo?.base_inicial, 'base inicial da plataforma');
 
     return {
-      mrrCents: Number(assinatura?.mrr_cents ?? 0),
+      mrrCents: inteiroSeguroDoBanco(assinatura?.mrr_cents, 'MRR da plataforma'),
       barbeariasAtivas: Number(assinatura?.ativas ?? 0),
       barbeariasBloqueadas: Number(assinatura?.bloqueadas ?? 0),
       semPlano: Number(assinatura?.sem_plano ?? 0),
@@ -196,11 +216,11 @@ export async function resumoDaPlataforma(params: {
         Number(operacao?.minutos_disponiveis ?? 0),
       ),
       faltasEmPontos: emPontos(Number(operacao?.faltas ?? 0), agendamentos),
-      receitaCents: Number(operacao?.receita_cents ?? 0),
-      recebidoPixCents: Number(operacao?.pix_cents ?? 0),
-      recebidoCartaoCents: Number(operacao?.cartao_cents ?? 0),
-      recebidoDinheiroCents: Number(operacao?.dinheiro_cents ?? 0),
-      recebidoOutrosCents: Number(operacao?.outros_cents ?? 0),
+      receitaCents: inteiroSeguroDoBanco(operacao?.receita_cents, 'receita da plataforma'),
+      recebidoPixCents: inteiroSeguroDoBanco(operacao?.pix_cents, 'receita Pix da plataforma'),
+      recebidoCartaoCents: inteiroSeguroDoBanco(operacao?.cartao_cents, 'receita cartão da plataforma'),
+      recebidoDinheiroCents: inteiroSeguroDoBanco(operacao?.dinheiro_cents, 'receita em dinheiro da plataforma'),
+      recebidoOutrosCents: inteiroSeguroDoBanco(operacao?.outros_cents, 'outras receitas da plataforma'),
       barbeariasComMovimento: Number(operacao?.com_movimento ?? 0),
     };
   });
@@ -279,7 +299,7 @@ export async function saudeDasBarbearias(params: {
         adocaoOnlineEmPontos: emPontos(Number(l.online), agendamentos),
         ocupacaoEmPontos: emPontos(Number(l.minutos_vendidos), Number(l.minutos_disponiveis)),
         faltasEmPontos: emPontos(Number(l.faltas), agendamentos),
-        receitaCents: Number(l.receita_cents),
+        receitaCents: inteiroSeguroDoBanco(l.receita_cents, `receita de ${l.name}`),
         ultimoDia: l.ultimo_dia ? l.ultimo_dia.toISOString().slice(0, 10) : null,
       };
     });

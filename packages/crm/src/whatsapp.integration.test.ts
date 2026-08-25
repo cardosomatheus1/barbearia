@@ -716,6 +716,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       customerId: CARLOS,
       tipo: 'retorno',
+      idempotencyKey: 'avulsa-optout',
       agora: new Date('2026-09-20T15:00:00Z'),
       timeZone: 'America/Bahia',
       ...operador,
@@ -742,6 +743,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       customerId: CARLOS,
       tipo: 'retorno',
+      idempotencyKey: 'avulsa-conta',
       agora: new Date('2026-09-20T15:00:00Z'),
       timeZone: 'America/Bahia',
       ...operador,
@@ -786,6 +788,7 @@ describeIfDb('WhatsApp oficial', () => {
       locationId: LOCAL,
       customerId: CARLOS,
       templateId: segundo.id,
+      idempotencyKey: 'avulsa-escolhido',
       agora: new Date('2026-09-20T15:00:00Z'),
       timeZone: 'America/Bahia',
       ...operador,
@@ -829,6 +832,7 @@ describeIfDb('WhatsApp oficial', () => {
         locationId: LOCAL,
         customerId: CARLOS,
         templateId: 'b5555555-0000-4000-8000-0000000000ff',
+        idempotencyKey: 'avulsa-rival',
         agora: new Date('2026-09-20T15:00:00Z'),
         timeZone: 'America/Bahia',
         ...operador,
@@ -868,6 +872,7 @@ describeIfDb('WhatsApp oficial', () => {
         locationId: LOCAL,
         customerId: CARLOS,
         templateId: 'b5555555-0000-4000-8000-0000000000fe',
+        idempotencyKey: 'avulsa-filial',
         // Recusado antes de qualquer envio: se a conferência sumir, esta
         // chamada acontece e o caso fica vermelho por não ter lançado.
         agora: new Date('2026-09-20T15:00:00Z'),
@@ -886,6 +891,7 @@ describeIfDb('WhatsApp oficial', () => {
         locationId: LOCAL,
         customerId: CARLOS,
         tipo: 'lembrete_24h',
+        idempotencyKey: 'avulsa-tipo-invalido',
         agora: new Date('2026-09-20T15:00:00Z'),
         timeZone: 'America/Bahia',
         ...operador,
@@ -1042,6 +1048,13 @@ describeIfDb('WhatsApp oficial', () => {
     expect(await registrarEstadoDaMensagem({ tenantId: TENANT, wamid: enviada!.wamid, estado: 'entregue' })).toBe(
       false,
     );
+
+    // Nem um `failed` atrasado/contraditório: depois de lida existe prova
+    // positiva de entrega, então a falha só pode ser aceita enquanto estava
+    // apenas em `enviada`.
+    expect(
+      await registrarEstadoDaMensagem({ tenantId: TENANT, wamid: enviada!.wamid, estado: 'falhou' }),
+    ).toBe(false);
 
     const linha = await admin.$queryRawUnsafe<{ status: string }[]>(
       `SELECT status::text AS status FROM whatsapp_messages WHERE wamid = '${enviada!.wamid}'`,

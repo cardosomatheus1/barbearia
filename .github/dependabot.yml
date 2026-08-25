@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # pnpm usa o ecossistema npm no Dependabot; o lockfile continua sendo pnpm.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/Bahia
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - security
+
+  # Actions também são dependências executáveis do portão.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:30'
+      timezone: America/Bahia
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security

@@ -28,6 +28,16 @@ import { StripePaymentProvider, StripePspProvider } from './stripe-pagamento.js'
 
 export type ModoDoAdquirente = 'nenhum' | 'fake' | 'stripe';
 
+function modoSeguroParaOAmbiente(modo: ModoDoAdquirente): ModoDoAdquirente {
+  if (modo === 'fake' && process.env['NODE_ENV'] === 'production') {
+    throw new Error(
+      'PSP_MODO=fake não pode ser usado em produção. ' +
+        'Use nenhum enquanto a cobrança for manual ou stripe com credenciais reais.',
+    );
+  }
+  return modo;
+}
+
 /**
  * Lê o modo, e **recusa o que não conhece**.
  *
@@ -38,7 +48,7 @@ export type ModoDoAdquirente = 'nenhum' | 'fake' | 'stripe';
  */
 export function modoDoAdquirente(bruto = process.env['PSP_MODO']): ModoDoAdquirente {
   if (bruto === undefined || bruto === '') return 'nenhum';
-  if (bruto === 'nenhum' || bruto === 'fake' || bruto === 'stripe') return bruto;
+  if (bruto === 'nenhum' || bruto === 'fake' || bruto === 'stripe') return modoSeguroParaOAmbiente(bruto);
   throw new Error(`PSP_MODO inválido: ${bruto}. Use nenhum, fake ou stripe.`);
 }
 
@@ -49,7 +59,7 @@ export function modoDoAdquirente(bruto = process.env['PSP_MODO']): ModoDoAdquire
  * debitar, que é o comportamento do bloco 28.
  */
 export function adquirenteDaPlataforma(modo = modoDoAdquirente()): PspProvider | null {
-  switch (modo) {
+  switch (modoSeguroParaOAmbiente(modo)) {
     case 'nenhum':
       return null;
     case 'fake':
@@ -73,8 +83,16 @@ export function adquirenteDaPlataforma(modo = modoDoAdquirente()): PspProvider |
  * desenvolvimento e impossível de confundir com dinheiro de verdade — o
  * copia-e-cola sai literalmente com `fake` no meio.
  */
+
+/** Cobrança da comanda só existe quando o modo foi escolhido explicitamente. */
+export function cobrancaDaComandaDisponivel(modo = modoDoAdquirente()): boolean {
+  const seguro = modoSeguroParaOAmbiente(modo);
+  return seguro === 'fake' || seguro === 'stripe';
+}
+
 export function adquirenteDaComanda(modo = modoDoAdquirente()): PaymentProvider {
-  return modo === 'stripe'
+  const seguro = modoSeguroParaOAmbiente(modo);
+  return seguro === 'stripe'
     ? new StripePaymentProvider(new StripeCliente())
     : new FakePaymentProvider();
 }

@@ -3,10 +3,13 @@ import type { Request } from 'express';
 import {
   AssinaturaDoWhatsAppInvalida,
   conferirAssinaturaDaMeta,
-  desconectarNumero,
   registrarEstadoDaMensagem,
   registrarResposta,
+  numeroVisivelDaUnidadeConfere,
+  prepararReconciliacaoDaUnidade,
+  suspenderUnidadeWhatsApp,
   tenantDoNumero,
+  tenantsDaWaba,
   type EstadoDaMensagem,
 } from '@barbearia/crm';
 import { z } from 'zod';
@@ -33,11 +36,10 @@ import { badRequest, DomainError } from '../common/errors.js';
  *
  * ## Como o evento reencontra a barbearia
  *
- * Pelo `phone_number_id`, que é o número **dela** — e a busca é em
- * `whatsapp_numbers`, a única tabela deste bloco sem RLS. É a mesma razão de
- * `tenant_slugs`: o webhook chega antes de existir tenant no contexto, e
- * procurar numa tabela com row security sem tenant devolve zero linhas, sempre
- * e em silêncio.
+ * Eventos de mensagem usam o `phone_number_id` opaco em `whatsapp_numbers`.
+ * Eventos de ciclo de vida usam a WABA opaca de `entry.id` em
+ * `whatsapp_wabas`. As duas tabelas existem só para resolver tenant + unidade
+ * antes da RLS; número visível, token e conversa continuam fora delas.
  *
  * Assinatura prova origem, não intenção: um evento legítimo apontando para um
  * número que não é nosso não encontra barbearia nenhuma e vira `ignorado`.
@@ -62,6 +64,8 @@ interface RequisicaoComCorpoCru extends Request {
 const eventoDaMeta = z.object({
   entry: z.array(
     z.object({
+      /** WABA opaca; necessária para eventos de ciclo de vida sem metadata. */
+      id: z.string().optional(),
       changes: z.array(
         z.object({
           /**
@@ -75,11 +79,9 @@ const eventoDaMeta = z.object({
           value: z.object({
             metadata: z.object({ phone_number_id: z.string() }).optional(),
             /**
-             * O que aconteceu com a conta, e o número a que se refere.
-             *
-             * O número vem aqui e **não** em `metadata` neste evento, então a
-             * leitura precisa dos dois caminhos — foi o que quase fez a
-             * desconexão ser descartada por falta de `metadata`.
+             * O que aconteceu com a conta e, quando presente, o número
+             * **visível** a que se refere. Ele serve apenas para desambiguar
+             * unidades depois do roteamento por WABA; nunca é phone_number_id.
              */
             event: z.string().optional(),
             phone_number: z.string().optional(),
@@ -190,32 +192,65 @@ export class WhatsAppWebhookController {
     let tratados = 0;
     for (const entrada of analisado.data.entry) {
       for (const mudanca of entrada.changes) {
-        const numero = mudanca.value.metadata?.phone_number_id ?? mudanca.value.phone_number;
-        if (!numero) continue;
-
-        // O número abre a barbearia; nada com RLS é lido antes disto.
-        const dono = await tenantDoNumero(numero);
-        if (!dono) continue;
-
         /**
-         * A Meta desfez o pareamento do número (bloco 85).
-         *
-         * Acontece quando o cliente registra o aplicativo WhatsApp Business em
-         * outro aparelho: o número volta a ser só do aplicativo e o produto
-         * para de conseguir mandar. Sem tratar isto, a tela continuaria dizendo
-         * "Ativo" com toda mensagem caindo no canal de reserva — e a barbearia
-         * descobriria pela falta que os clientes não confirmam mais.
+         * Eventos de ciclo de vida não são eventos de mensagem. Neles,
+         * `entry.id` identifica a WABA; `phone_number`, quando existe, é o
+         * número visível e não pode ser usado como `phone_number_id`.
          */
-        if (mudanca.value.event === 'ACCOUNT_OFFBOARDED') {
-          const mudou = await desconectarNumero({
-            tenantId: dono.tenantId,
-            phoneNumberId: numero,
-            motivo:
-              'A Meta desconectou este número porque o WhatsApp Business foi registrado em outro aparelho. Conecte de novo para os avisos voltarem a sair por ele.',
-          });
-          if (mudou) tratados += 1;
+        if (mudanca.value.event) {
+          if (!entrada.id) continue;
+          let destinos = [...(await tenantsDaWaba(entrada.id))];
+
+          // Uma WABA pode ter várias unidades. O número visível só participa
+          // depois que os ids opacos resolveram tenant + unidade e a RLS existe.
+          if (mudanca.value.phone_number && destinos.length > 1) {
+            const conferidos = await Promise.all(
+              destinos.map(async (destino) => ({
+                destino,
+                confere: await numeroVisivelDaUnidadeConfere({
+                  tenantId: destino.tenantId,
+                  locationId: destino.locationId,
+                  numeroVisivel: mudanca.value.phone_number!,
+                }),
+              })),
+            );
+            destinos = conferidos.filter((item) => item.confere).map((item) => item.destino);
+          }
+
+          for (const destino of destinos) {
+            if (mudanca.value.event === 'ACCOUNT_OFFBOARDED') {
+              const mudou = await suspenderUnidadeWhatsApp({
+                tenantId: destino.tenantId,
+                locationId: destino.locationId,
+                motivo:
+                  'A Meta desconectou este número porque o WhatsApp Business foi registrado em outro aparelho. Conecte de novo para os avisos voltarem a sair por ele.',
+              });
+              if (mudou) tratados += 1;
+            } else if (mudanca.value.event === 'PARTNER_REMOVED') {
+              const mudou = await suspenderUnidadeWhatsApp({
+                tenantId: destino.tenantId,
+                locationId: destino.locationId,
+                motivo:
+                  'A Meta removeu a parceria desta conta do WhatsApp. Reconecte a conta para restabelecer os avisos.',
+              });
+              if (mudou) tratados += 1;
+            } else if (mudanca.value.event === 'ACCOUNT_RECONNECTED') {
+              const mudou = await prepararReconciliacaoDaUnidade({
+                tenantId: destino.tenantId,
+                locationId: destino.locationId,
+              });
+              if (mudou) tratados += 1;
+            }
+          }
           continue;
         }
+
+        const numero = mudanca.value.metadata?.phone_number_id;
+        if (!numero) continue;
+
+        // Mensagens/estados abrem a barbearia exclusivamente pelo id opaco.
+        const dono = await tenantDoNumero(numero);
+        if (!dono) continue;
 
         for (const estado of mudanca.value.statuses ?? []) {
           const traduzido = ESTADO[estado.status];

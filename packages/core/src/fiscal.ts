@@ -382,9 +382,22 @@ export interface NotaEmitida {
 }
 
 export interface FiscalProvider {
-  /** `issueServiceInvoice(order, taxpayer) -> Invoice` da SPEC §3.11. */
+  /**
+   * `issueServiceInvoice(order, taxpayer) -> Invoice` da SPEC §3.11.
+   *
+   * **Obrigatoriamente idempotente por `chaveDaNota(pedido)`.** A resposta da
+   * rede pode se perder depois de a prefeitura aceitar a nota; nesse caso o
+   * worker reenvia o mesmo `invoiceId`, e o provider precisa devolver a mesma
+   * emissão em vez de criar outra NFS-e.
+   */
   emitir(pedido: PedidoDeNota): Promise<NotaEmitida>;
-  /** `cancelInvoice(invoice_id, reason) -> void`. */
+  /**
+   * `cancelInvoice(invoice_id, reason) -> void`.
+   *
+   * Exceção/timeout é desfecho **ambíguo**, não recusa: quem chama mantém a nota
+   * em `cancelando` e consulta depois. O provider deve aceitar consulta do mesmo
+   * `notaId` após uma tentativa de cancelamento cuja resposta se perdeu.
+   */
   cancelar(notaId: string, motivo: string): Promise<void>;
   /** `getStatus(invoice_id) -> InvoiceStatus`. A rede de segurança da conciliação. */
   consultar(notaId: string): Promise<NotaEmitida>;

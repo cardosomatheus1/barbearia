@@ -477,8 +477,8 @@ export async function varrerVitrine(agora: Date = new Date()): Promise<number> {
  * ## Por que a busca começa por cidade, e não por "perto de mim"
  *
  * *"Barbearias perto de mim"* precisa da coordenada do aparelho, e lê-la exige
- * JavaScript no navegador — o primeiro componente de cliente deste produto, que
- * é uma decisão de arquitetura com medição de pacote e não uma linha de código.
+ * JavaScript no navegador público — uma ilha própria que precisa de medição de
+ * pacote e não deve herdar o JavaScript das ilhas administrativas abertas no R5.
  * Ela está declarada como lacuna.
  *
  * O que dá para entregar sem isso, e não é um consolo: a pessoa escolhe a

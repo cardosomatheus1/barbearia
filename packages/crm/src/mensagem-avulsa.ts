@@ -3,11 +3,19 @@ import {
   decidirDisparo,
   maskPhone,
   tipoDeCampanhaValido,
+  TIPOS_PROMOCIONAIS,
   type TipoDeCampanha,
   type TipoDeNotificacao,
+  WhatsAppDeliveryUnknownError,
 } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
+import {
+  confirmarDisparoPromocional,
+  liberarDisparoPromocional,
+  marcarDisparoPromocionalIncerto,
+  reservarDisparoPromocional,
+} from './disparo-promocional.js';
 
 /**
  * Mandar uma mensagem para **uma** pessoa, do balcão (bloco 92).
@@ -53,7 +61,10 @@ export type FalhaDoEnvioAvulso =
   | 'sem_texto_aprovado'
   | 'tipo_invalido'
   | 'cliente_nao_encontrado'
-  | 'recusado';
+  | 'recusado'
+  | 'envio_em_andamento'
+  | 'envio_incerto'
+  | 'idempotency_key_reutilizada';
 
 export class EnvioAvulsoError extends Error {
   constructor(
@@ -77,8 +88,9 @@ export interface ResultadoDoEnvioAvulso {
  *
  * `enviar` é injetado pelo mesmo motivo de `despacharCampanha`: quem sabe falar
  * com a Meta é a camada de cima, e o domínio não tem provedor. Ele devolve o
- * `wamid` quando saiu pelo canal de verdade e `null` quando caiu no de reserva
- * — e as duas coisas são envio, não falha.
+ * `wamid` quando a Meta confirmou o envio. Nesta entrada administrativa não
+ * existe canal de reserva: `null` significa que nada foi confirmado e portanto
+ * nunca pode ser carimbado como sucesso.
  */
 export async function enviarMensagemAvulsa(params: {
   readonly tenantId: string;
@@ -105,6 +117,14 @@ export async function enviarMensagemAvulsa(params: {
   readonly timeZone: string;
   readonly staffId: string;
   readonly staffName: string;
+  /**
+   * Identifica **esta intenção**, não o cliente para sempre.
+   *
+   * A mesma página reutiliza a chave em duplo clique/reenvio; uma nova renderização
+   * recebe outra. A tabela também trava uma segunda chave enquanto o primeiro envio
+   * estiver em voo ou incerto, que é o que fecha o buraco do refresh após timeout.
+   */
+  readonly idempotencyKey: string;
   readonly enviar: (destino: {
     readonly telefone: string;
     readonly clienteNome: string;
@@ -179,10 +199,12 @@ export async function enviarMensagemAvulsa(params: {
              (SELECT name FROM tenants LIMIT 1) AS barbearia,
              (SELECT count(*) FROM notifications n
                WHERE n.customer_id = c.id AND n.status = 'sent'
-                 AND (n.sent_at AT TIME ZONE 'UTC')::date
-                   = (${params.agora}::timestamptz AT TIME ZONE 'UTC')::date) AS hoje,
+                 AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
+                 AND (n.sent_at AT TIME ZONE ${params.timeZone})::date
+                   = (${params.agora}::timestamptz AT TIME ZONE ${params.timeZone})::date) AS hoje,
              (SELECT count(*) FROM notifications n
                WHERE n.customer_id = c.id AND n.status = 'sent'
+                 AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
                  AND n.sent_at > ${params.agora}::timestamptz - interval '30 days') AS no_mes,
              EXISTS (SELECT 1 FROM whatsapp_templates t
                       WHERE t.location_id = ${params.locationId}::uuid
@@ -245,27 +267,208 @@ export async function enviarMensagemAvulsa(params: {
   }
 
   const telefone = dados.telefone ?? '';
-  const wamid = await params.enviar({
-    telefone,
-    clienteNome: dados.nome ?? 'cliente',
-    barbearia: dados.barbearia,
-    templateId: params.templateId ?? null,
-    tipo,
-  });
+  const fingerprint = `${params.customerId}:${params.templateId ?? `tipo:${tipo}`}`;
 
   /**
-   * A linha em `notifications` é o que faz esta mensagem **contar** no teto.
+   * A intenção nasce **antes da rede**.
    *
-   * Sem ela o envio avulso seria o furo do teto do mês: quatro pelo motor e
-   * quantas quisessem pelo balcão, com a Meta somando todas do lado dela.
+   * `wamid` só existe depois que a Meta responde, portanto ele não pode proteger
+   * "aceitou e a resposta sumiu". Além da chave da requisição, o fingerprint
+   * bloqueia uma chave nova para o mesmo cliente+texto enquanto o desfecho estiver
+   * em voo/incerto — refresh da ficha não vira um segundo disparo.
+   */
+  const intencao = await withTenant(params.tenantId, async (tx) => {
+    const novas = await tx.$queryRaw<{
+      id: string;
+      customer_id: string;
+      template_id: string | null;
+      kind: TipoDeNotificacao;
+      intent_fingerprint: string;
+      status: 'enviando' | 'incerto' | 'enviado';
+      wamid: string | null;
+    }[]>`
+      INSERT INTO whatsapp_manual_send_intents
+        (tenant_id, location_id, customer_id, template_id, kind,
+         idempotency_key, intent_fingerprint, status)
+      VALUES (
+        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
+        ${params.locationId}::uuid, ${params.customerId}::uuid,
+        ${params.templateId ?? null}::uuid, ${tipo}::notification_kind,
+        ${params.idempotencyKey}, ${fingerprint}, 'enviando'
+      )
+      ON CONFLICT DO NOTHING
+      RETURNING id, customer_id, template_id, kind::text AS kind,
+                intent_fingerprint, status, wamid
+    `;
+    if (novas[0]) {
+      return { linha: novas[0], mesmaChave: true, nossa: true } as const;
+    }
+
+    const porChave = await tx.$queryRaw<{
+      id: string;
+      customer_id: string;
+      template_id: string | null;
+      kind: TipoDeNotificacao;
+      intent_fingerprint: string;
+      status: 'enviando' | 'incerto' | 'enviado';
+      wamid: string | null;
+    }[]>`
+      SELECT id, customer_id, template_id, kind::text AS kind,
+             intent_fingerprint, status, wamid
+        FROM whatsapp_manual_send_intents
+       WHERE location_id = ${params.locationId}::uuid
+         AND idempotency_key = ${params.idempotencyKey}
+       LIMIT 1
+    `;
+    if (porChave[0]) return { linha: porChave[0], mesmaChave: true, nossa: false } as const;
+
+    const ativa = await tx.$queryRaw<{
+      id: string;
+      customer_id: string;
+      template_id: string | null;
+      kind: TipoDeNotificacao;
+      intent_fingerprint: string;
+      status: 'enviando' | 'incerto' | 'enviado';
+      wamid: string | null;
+    }[]>`
+      SELECT id, customer_id, template_id, kind::text AS kind,
+             intent_fingerprint, status, wamid
+        FROM whatsapp_manual_send_intents
+       WHERE location_id = ${params.locationId}::uuid
+         AND intent_fingerprint = ${fingerprint}
+         AND status IN ('enviando', 'incerto')
+       ORDER BY created_at DESC
+       LIMIT 1
+    `;
+    return { linha: ativa[0] ?? null, mesmaChave: false, nossa: false } as const;
+  });
+
+  if (!intencao.linha) {
+    throw new EnvioAvulsoError('envio_em_andamento', 'Já existe um envio deste texto sendo processado.');
+  }
+  if (
+    intencao.mesmaChave &&
+    (intencao.linha.customer_id !== params.customerId ||
+      intencao.linha.template_id !== (params.templateId ?? null) ||
+      intencao.linha.kind !== tipo ||
+      intencao.linha.intent_fingerprint !== fingerprint)
+  ) {
+    throw new EnvioAvulsoError(
+      'idempotency_key_reutilizada',
+      'Esta chave de envio já foi usada para outra mensagem.',
+    );
+  }
+  if (intencao.linha.status === 'enviado') {
+    return { enviado: true, wamid: intencao.linha.wamid, motivo: null };
+  }
+  if (!intencao.nossa) {
+    throw new EnvioAvulsoError(
+      intencao.linha.status === 'incerto' ? 'envio_incerto' : 'envio_em_andamento',
+      intencao.linha.status === 'incerto'
+        ? 'A Meta pode ter recebido esta mensagem, mas o Barberdock não conseguiu confirmar. Não envie novamente agora.'
+        : 'Este mesmo texto já está sendo enviado para o cliente. Aguarde antes de tentar de novo.',
+    );
+  }
+
+  const promoIntentKey = `promo:manual:${intencao.linha.id}`;
+  const reserva = await withTenant(params.tenantId, (tx) =>
+    reservarDisparoPromocional(tx, {
+      tenantId: params.tenantId,
+      customerId: params.customerId,
+      intentKey: promoIntentKey,
+      tipo,
+      agora: params.agora,
+      timeZone: params.timeZone,
+    }),
+  );
+  if (!reserva.nossa) {
+    await withTenant(params.tenantId, async (tx) => {
+      await tx.$executeRaw`
+        DELETE FROM whatsapp_manual_send_intents
+         WHERE id = ${intencao.linha.id}::uuid AND status = 'enviando'
+      `;
+    });
+
+    if (reserva.motivo === 'ja_recebeu_hoje' || reserva.motivo === 'teto_do_mes') {
+      return {
+        enviado: false,
+        wamid: null,
+        motivo: EXPLICACAO_DE_NAO_DISPARAR[reserva.motivo],
+      };
+    }
+    throw new EnvioAvulsoError(
+      reserva.motivo === 'entrega_incerta' ? 'envio_incerto' : 'envio_em_andamento',
+      reserva.motivo === 'entrega_incerta'
+        ? 'Já existe uma mensagem deste cliente cujo desfecho não pôde ser confirmado.'
+        : 'Já existe outra mensagem promocional sendo processada para este cliente.',
+    );
+  }
+
+  let wamid: string | null;
+  try {
+    wamid = await params.enviar({
+      telefone,
+      clienteNome: dados.nome ?? 'cliente',
+      barbearia: dados.barbearia,
+      templateId: params.templateId ?? null,
+      tipo,
+    });
+    if (!wamid) {
+      throw new EnvioAvulsoError(
+        'sem_canal',
+        'O WhatsApp ficou indisponível antes de confirmar o envio. Nada foi marcado como enviado.',
+      );
+    }
+  } catch (erro) {
+    if (erro instanceof WhatsAppDeliveryUnknownError) {
+      await withTenant(params.tenantId, async (tx) => {
+        await tx.$executeRaw`
+          UPDATE whatsapp_manual_send_intents
+             SET status = 'incerto', updated_at = ${params.agora}
+           WHERE id = ${intencao.linha.id}::uuid AND status = 'enviando'
+        `;
+        await marcarDisparoPromocionalIncerto(tx, promoIntentKey, params.agora);
+      });
+      throw new EnvioAvulsoError(
+        'envio_incerto',
+        'A Meta pode ter recebido esta mensagem, mas o Barberdock não conseguiu confirmar. Não envie novamente agora.',
+      );
+    }
+
+    // Recusa explícita é segura para nova tentativa: nenhuma das duas intenções
+    // fica ocupando a cota quando sabemos que o provedor não aceitou o envio.
+    await withTenant(params.tenantId, async (tx) => {
+      await liberarDisparoPromocional(tx, promoIntentKey);
+      await tx.$executeRaw`
+        DELETE FROM whatsapp_manual_send_intents
+         WHERE id = ${intencao.linha.id}::uuid AND status = 'enviando'
+      `;
+    });
+    throw erro;
+  }
+
+  /**
+   * Sucesso externo e histórico entram juntos. Se esta transação falhar, as
+   * intenções continuam `sending` e um retry não manda de novo: o desfecho vira
+   * conservadoramente ambíguo em vez de duplicar a mensagem.
    */
   await withTenant(params.tenantId, async (tx) => {
-    await tx.$executeRaw`
-      INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
-      VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-              ${tipo}::notification_kind, ${params.customerId}::uuid,
-              'sent', ${maskPhone(telefone)})
+    const atualizadas = await tx.$executeRaw`
+      UPDATE whatsapp_manual_send_intents
+         SET status = 'enviado', wamid = ${wamid}, updated_at = ${params.agora}
+       WHERE id = ${intencao.linha.id}::uuid AND status = 'enviando'
     `;
+    if (atualizadas !== 1) throw new Error('intenção avulsa deixou de pertencer a este envio');
+
+    const confirmou = await confirmarDisparoPromocional(tx, {
+      intentKey: promoIntentKey,
+      tipo,
+      customerId: params.customerId,
+      phoneMasked: maskPhone(telefone),
+      wamid,
+      enviadoEm: params.agora,
+    });
+    if (!confirmou) throw new Error('reserva promocional não pôde ser confirmada');
 
     await audit(tx, {
       actorId: params.staffId,

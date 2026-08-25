@@ -31,6 +31,7 @@ const STATUS: Record<string, number> = {
   // 409, não 403: quem pede tem permissão. O que mudou foi o estado da fila.
   transition_not_allowed: 409,
   already_in_queue: 409,
+  idempotencia_conflitante: 409,
   slot_taken: 409,
 };
 

@@ -38,9 +38,9 @@ import { lerModeloDaAssinatura, paraLancamento } from './comissao.js';
  * adesão aconteceu**, congelado. Não é inventar o dado; é gravar o que se sabe
  * no momento em que se sabe.
  *
- * A assinatura anterior ao bloco 58 tem unidade nula, e ela conta para **todas**
- * as leituras: o dinheiro é da barbearia, e somir de todas seria pior que
- * aparecer em cada uma.
+ * A assinatura anterior ao bloco 58 tem unidade nula. Ela entra no consolidado,
+ * mas **não** é atribuída a cada loja: repetir o mesmo dinheiro em Matriz e
+ * Filial faria a soma das unidades ser maior que a rede.
  *
  * A inconsistência era achado da `/security-review` deste bloco: metade das
  * consultas filtrava e a outra metade não, o que produziria um DRE "da Matriz"
@@ -78,14 +78,17 @@ export async function dreDoPeriodo(params: {
   readonly unidade: EscolhaDeUnidade;
   readonly de: string;
   readonly ate: string;
+  /** Relógio injetável para não reconhecer vencimento futuro dentro do dia corrente. */
+  readonly agora?: Date;
 }): Promise<DreDoPeriodo> {
+  const agora = params.agora ?? new Date();
   const anterior = periodoAnterior(params.de, params.ate);
   const locationId = ehConsolidado(params.unidade) ? null : params.unidade;
 
   return withTenant(params.tenantId, async (tx) => {
     const [atual, passado] = await Promise.all([
-      fatosDoPeriodo(tx, { locationId, de: params.de, ate: params.ate }),
-      fatosDoPeriodo(tx, { locationId, ...anterior }),
+      fatosDoPeriodo(tx, { locationId, de: params.de, ate: params.ate, agora }),
+      fatosDoPeriodo(tx, { locationId, ...anterior, agora }),
     ]);
 
     return {
@@ -107,14 +110,20 @@ export async function dreDoPeriodo(params: {
  */
 async function fatosDoPeriodo(
   tx: TransactionClient,
-  params: { readonly locationId: string | null; readonly de: string; readonly ate: string },
+  params: {
+    readonly locationId: string | null;
+    readonly de: string;
+    readonly ate: string;
+    readonly agora: Date;
+  },
 ): Promise<FatosDoDre> {
   const receitas = await tx.$queryRaw<
-    { tipo: string | null; total: number | null }[]
+    { tipo: string | null; total: bigint | null }[]
   >`
-    -- O total do item e o preco unitario vezes a quantidade: order_items guarda
-    -- os dois separados. E a mesma conta que a margem por servico ja faz.
-    SELECT i.kind::text AS tipo, sum(i.quantity * i.unit_price_cents)::int AS total
+    -- O item continua com o preço congelado porque ele é também a base da
+    -- comissão. Para o DRE, porém, a forma de pagamento decide se esse preço
+    -- representa receita nova ou consumo de uma obrigação já reconhecida.
+    SELECT i.kind::text AS tipo, sum(i.quantity::bigint * i.unit_price_cents)::bigint AS total
       FROM order_items i
       JOIN orders o ON o.id = i.order_id
      WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
@@ -125,41 +134,74 @@ async function fatosDoPeriodo(
 
   const servicoCents = somaDe(receitas, 'service');
   const produtoCents = somaDe(receitas, 'product');
+
   /**
-   * A venda de pacote **não** é receita do dia em que foi vendida.
-   *
-   * Ela é caixa; a receita é reconhecida no consumo, e é `package_uses` que
-   * carrega o quando. Contá-la aqui mostraria um mês excelente seguido de meses
-   * falsamente ruins — o defeito que a SPEC §4.7 nomeia em uma linha.
+   * Uso do clube não é uma segunda receita. A mensalidade já entra por
+   * `club_invoices`; `order_items` mantém o preço do serviço só para comissão e
+   * rentabilidade. Subtrair exatamente o que foi quitado por `assinatura` evita
+   * contar mensalidade + benefício como duas vendas. Complemento em dinheiro
+   * continua na receita do serviço porque não aparece nesta soma.
    */
-  const pacotesReconhecidos = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(u.value_cents)::int AS total
-      FROM package_uses u
-      JOIN orders o ON o.id = u.order_id
+  const cobertoPelaAssinatura = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(p.amount_cents)::bigint AS total
+      FROM order_payments p
+      JOIN orders o ON o.id = p.order_id
      WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
-       AND u.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
+       AND o.status = 'paid'
+       AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
+       AND p.method = 'assinatura'
   `;
 
   /**
-   * A mensalidade do clube reconhecida no período.
+   * Saldo de pacote que vence é receita no dia em que a obrigação acaba.
    *
-   * Sai da fatura **paga**, com o valor congelado na emissão. `club_invoices` é
-   * o que o cliente paga à barbearia; `subscriptions` é o que a barbearia paga à
-   * plataforma, e confundi-las aqui somaria o custo do produto como receita da
-   * casa.
+   * Não precisa de varredura nem de linha mutável: `expires_at` é congelado na
+   * compra e pacote vencido não pode ser reembolsado. O saldo é preço pago menos
+   * tudo que `package_uses` já reconheceu; assim o centavo de resto também fecha.
+   * A unidade é a da venda original do pacote e o dia é calculado no fuso dela.
    */
-  const assinaturas = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(f.amount_cents)::int AS total
+  const pacotesVencidos = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(
+             GREATEST(
+               cp.price_cents - COALESCE((
+                 SELECT sum(u.value_cents)::bigint
+                   FROM package_uses u
+                  WHERE u.customer_package_id = cp.id
+               ), 0),
+               0
+             )
+           )::bigint AS total
+      FROM customer_packages cp
+      JOIN orders venda ON venda.id = cp.order_id
+      JOIN locations l ON l.id = venda.location_id
+     WHERE cp.refunded_at IS NULL
+       AND cp.expires_at IS NOT NULL
+       -- O dia sozinho não basta no período corrente: antes do horário exato do
+       -- vencimento o saldo ainda é obrigação e não pode ser receita também.
+       AND cp.expires_at <= ${params.agora}
+       AND (${params.locationId}::uuid IS NULL OR venda.location_id = ${params.locationId}::uuid)
+       AND (cp.expires_at AT TIME ZONE l.timezone)::date
+             BETWEEN ${params.de}::date AND ${params.ate}::date
+  `;
+
+  /**
+   * A mensalidade do clube é reconhecida quando a fatura é paga.
+   *
+   * Para assinatura com unidade, o dia é o da própria unidade. As assinaturas
+   * históricas sem `location_id` entram apenas no consolidado; não são atribuídas
+   * retroativamente a cada loja. Como o fuso histórico delas é desconhecido,
+   * somente esse legado usa UTC como fallback explícito.
+   */
+  const assinaturas = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(f.amount_cents)::bigint AS total
       FROM club_invoices f
       JOIN club_subscriptions s ON s.id = f.subscription_id
+      LEFT JOIN locations l ON l.id = s.location_id
      WHERE f.status = 'paga'
        AND f.paid_at IS NOT NULL
-       AND (f.paid_at AT TIME ZONE 'UTC')::date
+       AND (f.paid_at AT TIME ZONE COALESCE(l.timezone, 'UTC'))::date
              BETWEEN ${params.de}::date AND ${params.ate}::date
-       -- Assinatura anterior ao bloco 58 não tem unidade, e o dinheiro é da
-       -- barbearia: ela entra em toda leitura em vez de sumir de todas. Um
-       -- rateio retroativo seria inventar de qual loja veio.
-       AND (${params.locationId}::uuid IS NULL OR s.location_id IS NULL OR s.location_id = ${params.locationId}::uuid)
+       AND (${params.locationId}::uuid IS NULL OR s.location_id = ${params.locationId}::uuid)
   `;
 
   const comissoesCents = await comissaoDoIntervalo(tx, params);
@@ -182,8 +224,8 @@ async function fatosDoPeriodo(
    * Pelo `order_id` e não por data, porque a devolução tem `business_day` de
    * outro mês: quem casa é a venda.
    */
-  const cmv = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(abs(m.quantity) * m.unit_cost_cents)::int AS total
+  const cmv = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(abs(m.quantity)::bigint * m.unit_cost_cents)::bigint AS total
       FROM stock_movements m
       LEFT JOIN orders o ON o.id = m.order_id
      WHERE m.kind IN ('venda', 'consumo')
@@ -204,16 +246,16 @@ async function fatosDoPeriodo(
    * exato do que foi concedido. A comissão sempre soube — `base_cents` é o
    * total descontado —, e era só o relatório do dono que não.
    */
-  const descontos = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(o.discount_cents)::int AS total
+  const descontos = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(o.discount_cents)::bigint AS total
       FROM orders o
      WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
        AND o.business_day BETWEEN ${params.de}::date AND ${params.ate}::date
   `;
 
-  const taxas = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(o.fee_cents)::int AS total
+  const taxas = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(o.fee_cents)::bigint AS total
       FROM orders o
      WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
@@ -228,8 +270,8 @@ async function fatosDoPeriodo(
    * **reais** o crédito abateu. Somar pontos como se fossem centavos daria um
    * número sem unidade num relatório de dinheiro.
    */
-  const fidelidade = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(p.amount_cents)::int AS total
+  const fidelidade = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(p.amount_cents)::bigint AS total
       FROM order_payments p
       JOIN orders o ON o.id = p.order_id
      WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
@@ -245,8 +287,8 @@ async function fatosDoPeriodo(
    * conta que vence em agosto e é paga em setembro é despesa de setembro para
    * quem administra caixa, que é para quem este relatório existe.
    */
-  const despesas = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(b.paid_cents)::int AS total
+  const despesas = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(b.paid_cents)::bigint AS total
       FROM bills b
      WHERE (${params.locationId}::uuid IS NULL OR b.location_id = ${params.locationId}::uuid)
        AND b.direction = 'pagar'
@@ -261,8 +303,8 @@ async function fatosDoPeriodo(
    * saído e não saiu. Não entra em conta nenhuma — é a ressalva que a tela
    * escreve ao lado da linha de despesa.
    */
-  const emAberto = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(b.amount_cents)::int AS total
+  const emAberto = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(b.amount_cents)::bigint AS total
       FROM bills b
      WHERE (${params.locationId}::uuid IS NULL OR b.location_id = ${params.locationId}::uuid)
        AND b.direction = 'pagar'
@@ -275,8 +317,8 @@ async function fatosDoPeriodo(
    *
    * Pelo `business_day` da venda, como todo o resto deste relatório.
    */
-  const gorjetas = await tx.$queryRaw<{ total: number | null }[]>`
-    SELECT sum(o.tip_cents)::int AS total
+  const gorjetas = await tx.$queryRaw<{ total: bigint | null }[]>`
+    SELECT sum(o.tip_cents)::bigint AS total
       FROM orders o
      WHERE (${params.locationId}::uuid IS NULL OR o.location_id = ${params.locationId}::uuid)
        AND o.status = 'paid'
@@ -284,25 +326,36 @@ async function fatosDoPeriodo(
   `;
 
   return {
-    receitaServicosCents: servicoCents + (pacotesReconhecidos[0]?.total ?? 0),
+    receitaServicosCents:
+      servicoCents
+      - centavos(cobertoPelaAssinatura[0]?.total)
+      + centavos(pacotesVencidos[0]?.total),
     receitaProdutosCents: produtoCents,
-    receitaAssinaturasCents: assinaturas[0]?.total ?? 0,
-    descontosCents: descontos[0]?.total ?? 0,
+    receitaAssinaturasCents: centavos(assinaturas[0]?.total),
+    descontosCents: centavos(descontos[0]?.total),
     comissoesCents,
-    cmvCents: cmv[0]?.total ?? 0,
-    taxasCents: taxas[0]?.total ?? 0,
-    fidelidadeCents: fidelidade[0]?.total ?? 0,
-    despesasCents: despesas[0]?.total ?? 0,
-    despesasEmAbertoCents: emAberto[0]?.total ?? 0,
-    gorjetasCents: gorjetas[0]?.total ?? 0,
+    cmvCents: centavos(cmv[0]?.total),
+    taxasCents: centavos(taxas[0]?.total),
+    fidelidadeCents: centavos(fidelidade[0]?.total),
+    despesasCents: centavos(despesas[0]?.total),
+    despesasEmAbertoCents: centavos(emAberto[0]?.total),
+    gorjetasCents: centavos(gorjetas[0]?.total),
   };
 }
 
+function centavos(valor: bigint | null | undefined): number {
+  const numero = Number(valor ?? 0n);
+  if (!Number.isSafeInteger(numero)) {
+    throw new Error('Soma monetária ultrapassou o intervalo seguro do JavaScript.');
+  }
+  return numero;
+}
+
 function somaDe(
-  linhas: readonly { tipo: string | null; total: number | null }[],
+  linhas: readonly { tipo: string | null; total: bigint | null }[],
   tipo: string,
 ): number {
-  return linhas.find((l) => l.tipo === tipo)?.total ?? 0;
+  return centavos(linhas.find((l) => l.tipo === tipo)?.total);
 }
 
 /**
@@ -315,7 +368,12 @@ function somaDe(
  */
 async function comissaoDoIntervalo(
   tx: TransactionClient,
-  params: { readonly locationId: string | null; readonly de: string; readonly ate: string },
+  params: {
+    readonly locationId: string | null;
+    readonly de: string;
+    readonly ate: string;
+    readonly agora: Date;
+  },
 ): Promise<number> {
   const linhas = await tx.$queryRaw<
     {

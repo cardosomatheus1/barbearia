@@ -1,0 +1,24 @@
+BARBERDOCK — BLOCO 8 HARDENING — 2026-08-24
+
+VEREDITO
+- PSP fake proibido em produção.
+- Stripe: timeout 15s + redirect manual + transporte sanitizado + resposta inválida tipada.
+- S3: HTTP bloqueado por padrão em produção; opt-in explícito; endpoint sem credencial/query; erro sanitizado.
+- Preflight de produção executado antes das migrações.
+- Meta/WhatsApp parcial/incoerente detectado no preflight.
+
+VALIDAÇÃO
+- Preflight: 13/13.
+- Runtime Stripe/S3: 8/8.
+- Guarda de hardening: 6/6.
+- Verificadores diretos: 32/32.
+- Testes verificar-* executáveis por node --test: 8/8.
+- 1 teste dependente de Vitest não executou por ausência da dependência no runtime.
+- TS alterado: transpilação sintática OK.
+- Shell alterado: bash -n OK.
+- deploy/compose.yml: YAML OK.
+
+LIMITES EXTERNOS
+- PostgreSQL/RLS/E2E integral ainda não executados.
+- S3/Meta/Stripe reais ainda exigem credenciais/provedores reais.
+- V8 humano e R12 continuam externos.

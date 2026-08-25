@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { saldoDoCliente } from './fidelidade.js';
+import { dreDoPeriodo } from './dre.js';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
 import {
@@ -210,6 +211,80 @@ describeIfDb('pacotes', () => {
     });
   });
 
+
+  it('a comanda congela os termos do pacote antes de o catálogo mudar', async () => {
+    /**
+     * O preço sempre foi congelado no item da comanda, mas antes o fechamento
+     * relia do catálogo serviço, quantidade, validade e transferibilidade. Uma
+     * edição feita enquanto o cliente estava no caixa podia cobrar o contrato
+     * antigo e entregar um benefício novo. O `order_item` agora é o snapshot
+     * completo da oferta aceita.
+     */
+    const { id } = await noCatalogo();
+    const aberta = await abrirComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      customerId: CARLOS,
+      staffId: STAFF,
+    });
+    await adicionarItem({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId: aberta.id,
+      tipo: 'package',
+      descricao: '5 cortes',
+      quantidade: 1,
+      precoUnitarioCents: 0,
+      packageId: id,
+      ...operador,
+    });
+
+    await withTenant(TENANT, (tx) =>
+      tx.$executeRaw`
+        UPDATE packages
+           SET service_id = ${BARBA}::uuid,
+               quantity = 8,
+               price_cents = 40_000,
+               validity_days = 30,
+               transferable = true,
+               active = false
+         WHERE id = ${id}::uuid
+      `,
+    );
+
+    await fecharComanda({
+      tenantId: TENANT,
+      locationId: LOCATION,
+      orderId: aberta.id,
+      pagamentos: [{ forma: 'pix', valorCents: 25_000 }],
+      agora: AGORA,
+      ...fecha,
+    });
+
+    const comprado = await withTenant(TENANT, async (tx) => {
+      const linhas = await tx.$queryRaw<{
+        service_id: string;
+        quantity: number;
+        price_cents: number;
+        transferable: boolean;
+        expires_at: Date | null;
+      }[]>`
+        SELECT service_id, quantity, price_cents, transferable, expires_at
+          FROM customer_packages
+         WHERE order_id = ${aberta.id}::uuid
+      `;
+      return linhas[0];
+    });
+
+    expect(comprado).toMatchObject({
+      service_id: CORTE,
+      quantity: 5,
+      price_cents: 25_000,
+      transferable: false,
+      expires_at: null,
+    });
+  });
+
   it('vender sem cliente identificado é recusado', async () => {
     const { id } = await noCatalogo();
     const aberta = await abrirComanda({
@@ -276,7 +351,7 @@ describeIfDb('pacotes', () => {
     const { id } = await noCatalogo({ validadeDias: 30 });
     await comprar(id);
     await withTenant(TENANT, (tx) =>
-      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-10-01T12:00:00Z'`,
+      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-11-02T12:00:00Z'`,
     );
 
     expect(
@@ -365,11 +440,40 @@ describeIfDb('pacotes', () => {
     const { id } = await noCatalogo();
     await comprar(id);
 
-    expect(await receitaDePacotes(TENANT, HOJE, AGORA)).toEqual({
+    expect(await receitaDePacotes({ tenantId: TENANT, locationId: LOCATION, dia: HOJE, agora: AGORA })).toEqual({
       vendidoCents: 25_000,
       reconhecidoCents: 0,
+      vencidoCents: 0,
       diferidoCents: 25_000,
     });
+  });
+
+  it('o primeiro uso recebe o resto da divisão e nenhum centavo desaparece', async () => {
+    const { id } = await noCatalogo({ precoCents: 5001 });
+    await comprar(id, 5001);
+
+    const disponivel = await consumoDisponivel({
+      tenantId: TENANT, customerId: CARLOS, serviceId: CORTE, agora: AGORA,
+    });
+    expect(disponivel?.valorCents).toBe(1001);
+
+    await usar(1001);
+    const receita = await receitaDePacotes({
+      tenantId: TENANT, locationId: LOCATION, dia: HOJE, agora: AGORA,
+    });
+    expect(receita.reconhecidoCents).toBe(1001);
+    expect(receita.diferidoCents).toBe(4000);
+  });
+
+  it('o DRE não conta consumo de pacote duas vezes', async () => {
+    const { id } = await noCatalogo();
+    await comprar(id);
+    await usar();
+
+    const dre = await dreDoPeriodo({
+      tenantId: TENANT, unidade: LOCATION, de: HOJE, ate: HOJE,
+    });
+    expect(dre.atual.receitaServicosCents).toBe(5000);
   });
 
   it('cada uso reconhece a sua unidade e reduz o diferido', async () => {
@@ -378,9 +482,10 @@ describeIfDb('pacotes', () => {
     await usar();
     await usar();
 
-    expect(await receitaDePacotes(TENANT, HOJE, AGORA)).toEqual({
+    expect(await receitaDePacotes({ tenantId: TENANT, locationId: LOCATION, dia: HOJE, agora: AGORA })).toEqual({
       vendidoCents: 25_000,
       reconhecidoCents: 10_000,
+      vencidoCents: 0,
       diferidoCents: 15_000,
     });
   });
@@ -391,10 +496,40 @@ describeIfDb('pacotes', () => {
     const { id } = await noCatalogo({ validadeDias: 30 });
     await comprar(id);
     await withTenant(TENANT, (tx) =>
-      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-10-01T12:00:00Z'`,
+      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-11-02T12:00:00Z'`,
     );
 
-    expect((await receitaDePacotes(TENANT, HOJE, AGORA)).diferidoCents).toBe(0);
+    const noVencimento = await receitaDePacotes({
+      tenantId: TENANT, locationId: LOCATION, dia: '2026-11-02', agora: new Date('2026-11-03T12:00:00Z'),
+    });
+    expect(noVencimento.diferidoCents).toBe(0);
+    expect(noVencimento.vencidoCents).toBe(25_000);
+
+    const dre = await dreDoPeriodo({
+      tenantId: TENANT, unidade: LOCATION, de: '2026-11-02', ate: '2026-11-02',
+      agora: new Date('2026-11-03T12:00:00Z'),
+    });
+    expect(dre.atual.receitaServicosCents).toBe(25_000);
+  });
+
+  it('no dia do vencimento não reconhece o saldo antes do horário exato', async () => {
+    const { id } = await noCatalogo({ validadeDias: 30 });
+    await comprar(id);
+    await withTenant(TENANT, (tx) =>
+      tx.$executeRaw`UPDATE customer_packages SET expires_at = '2026-11-02T18:00:00Z'`,
+    );
+
+    const antes = new Date('2026-11-02T15:00:00Z');
+    const receita = await receitaDePacotes({
+      tenantId: TENANT, locationId: LOCATION, dia: '2026-11-02', agora: antes,
+    });
+    expect(receita.vencidoCents).toBe(0);
+    expect(receita.diferidoCents).toBe(25_000);
+
+    const dre = await dreDoPeriodo({
+      tenantId: TENANT, unidade: LOCATION, de: '2026-11-02', ate: '2026-11-02', agora: antes,
+    });
+    expect(dre.atual.receitaServicosCents).toBe(0);
   });
 
   // -- o reembolso -------------------------------------------------------------

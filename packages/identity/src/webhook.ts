@@ -301,22 +301,44 @@ export async function entregarWebhook(
    * uma pendência que estava lá. Abrir aquela política entregaria o
    * `secret_cipher` de toda a base a qualquer caminho sem tenant.
    */
-  const pendente = await semTenant(async (tx) => {
+  const reivindicada = await semTenant(async (tx) => {
+    const claims = await tx.$queryRaw<{ claim_token: string }[]>`
+      UPDATE webhook_deliveries
+         SET claim_token = gen_random_uuid(),
+             claim_expires_at = ${new Date(agora.getTime() + 2 * 60_000)}
+       WHERE id = ${entregaId}::uuid
+         AND status = 'pendente'
+         AND next_attempt_at <= ${agora}
+         AND (claim_token IS NULL OR claim_expires_at <= ${agora})
+      RETURNING claim_token
+    `;
+    const claim = claims[0];
+    if (!claim) return null;
+
     const linhas = await tx.$queryRaw<
       { payload: unknown; attempts: number; url: string; segredo: string; ativo: boolean }[]
     >`
       SELECT payload, attempts, url, segredo, ativo FROM entrega_de_webhook(${entregaId}::uuid)
     `;
-    return linhas[0] ?? null;
+    const pendente = linhas[0];
+    if (!pendente) {
+      await tx.$executeRaw`
+        UPDATE webhook_deliveries SET claim_token = NULL, claim_expires_at = NULL
+         WHERE id = ${entregaId}::uuid AND claim_token = ${claim.claim_token}::uuid
+      `;
+      return null;
+    }
+    return { pendente, claimToken: claim.claim_token };
   });
-  if (!pendente) return 'sumiu';
+  if (!reivindicada) return 'sumiu';
+  const { pendente, claimToken } = reivindicada;
 
   /**
    * Endereço desligado depois de a entrega nascer não é falha: é a barbearia
    * tendo mudado de ideia. Desiste sem erro, e a tela mostra o motivo.
    */
   if (!pendente.ativo) {
-    await gravar(entregaId, {
+    await gravar(entregaId, claimToken, {
       status: 'desistiu',
       attempts: pendente.attempts + 1,
       erro: 'endereço desligado antes da entrega',
@@ -344,7 +366,7 @@ export async function entregarWebhook(
   try {
     assinatura = assinarEntrega({ corpo, segredo: decifrar(pendente.segredo), instante });
   } catch {
-    await gravar(entregaId, {
+    await gravar(entregaId, claimToken, {
       status: 'desistiu',
       attempts: pendente.attempts + 1,
       erro: 'segredo ilegível — a chave de cifragem mudou',
@@ -404,7 +426,7 @@ export async function entregarWebhook(
   const desfecho = desfechoDaEntrega(status, tentativas);
 
   if (desfecho === 'entregue') {
-    await gravar(entregaId, { status: 'entregue', attempts: tentativas, respostaHttp: status });
+    await gravar(entregaId, claimToken, { status: 'entregue', attempts: tentativas, respostaHttp: status });
     return 'entregue';
   }
   /**
@@ -417,7 +439,7 @@ export async function entregarWebhook(
   const motivo = erro ?? (status === null ? 'sem resposta' : null);
 
   if (desfecho === 'desistir') {
-    await gravar(entregaId, {
+    await gravar(entregaId, claimToken, {
       status: 'desistiu',
       attempts: tentativas,
       respostaHttp: status,
@@ -427,7 +449,7 @@ export async function entregarWebhook(
   }
 
   const espera = proximaTentativaEmSegundos(tentativas) ?? 0;
-  await gravar(entregaId, {
+  await gravar(entregaId, claimToken, {
     status: 'pendente',
     attempts: tentativas,
     respostaHttp: status,
@@ -439,6 +461,7 @@ export async function entregarWebhook(
 
 async function gravar(
   entregaId: string,
+  claimToken: string,
   o: {
     readonly status: 'entregue' | 'desistiu' | 'pendente';
     readonly attempts: number;
@@ -455,8 +478,11 @@ async function gravar(
              response_status = ${o.respostaHttp ?? null},
              last_error = ${o.erro ?? null},
              delivered_at = CASE WHEN ${o.status} = 'entregue' THEN now() ELSE NULL END,
-             next_attempt_at = ${o.proxima ?? new Date()}
+             next_attempt_at = ${o.proxima ?? new Date()},
+             claim_token = NULL,
+             claim_expires_at = NULL
        WHERE id = ${entregaId}::uuid
+         AND claim_token = ${claimToken}::uuid
     `;
   });
 }
@@ -473,6 +499,7 @@ export async function varrerEntregasPendentes(agora: Date, teto = 200): Promise<
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM webhook_deliveries
        WHERE status = 'pendente' AND next_attempt_at <= ${agora}
+         AND (claim_token IS NULL OR claim_expires_at <= ${agora})
        ORDER BY next_attempt_at
        LIMIT ${teto}
     `;

@@ -23,6 +23,7 @@ import {
   fiadoDoCliente,
   lancarSaldoInicialDeFiado,
   quitarContaDoFinanceiro,
+  resumoFinanceiroDoCliente,
   transferenciasRecentes,
   transferirEntreContas,
 } from '@barbearia/finance';
@@ -88,6 +89,7 @@ const STATUS: Record<string, number> = {
   nome_repetido: 409,
   ja_tem_extrato: 409,
   gaveta_ja_existe: 409,
+  idempotencia_conflitante: 409,
 };
 
 function toHttp(erro: unknown): never {
@@ -297,8 +299,8 @@ export class FinanceiroController {
     },
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    if (idempotencyKey !== undefined && (idempotencyKey === '' || idempotencyKey.length > 128)) {
-      throw new DomainError('invalid_request', 400, 'Idempotency-Key com tamanho inválido');
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      throw new DomainError('idempotency_key_obrigatoria', 400, 'Mande um Idempotency-Key de até 128 caracteres.');
     }
 
     const local = await this.unidade(staff);
@@ -310,7 +312,7 @@ export class FinanceiroController {
         // Escopada por operador: a chave vem do cliente e é livre, e duas
         // recepcionistas mandando "1" fariam a segunda receber a transferência
         // da primeira de volta em vez de fazer a dela.
-        ...(idempotencyKey ? { idempotencyKey: `${staff.staffUserId}:${idempotencyKey}` } : {}),
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         staffId: staff.staffUserId,
         staffName: staff.name,
       });
@@ -320,20 +322,27 @@ export class FinanceiroController {
   }
 
   /**
-   * O teto de crédito de um cliente.
-   *
-   * `finance.credit_limit` e não `customers.edit`: com a segunda, autorizar
-   * alguém a levar R$ 500 em serviço sem pagar seria edição de cadastro
-   * qualquer, sem passar por dinheiro e portanto sem segundo fator. É o mesmo
-   * defeito que a revisão do bloco 37 achou no override do score.
+   * LTV/acumulado pago do cliente. Separado de CRM e protegido pelas duas
+   * permissões do dado que agrega: identidade + dinheiro.
    */
+  @Exige('customers.view', 'finance.view')
+  @Get('clientes/:id/resumo')
+  async resumoDoCliente(
+    @Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+  ) {
+    try {
+      return await resumoFinanceiroDoCliente(staff.tenantId, id);
+    } catch (erro) {
+      return toHttp(erro);
+    }
+  }
+
   /**
    * Saldo e limite de um cliente, para a ficha dele.
    *
-   * Declara as **duas** permissões do que devolve: é dinheiro de uma pessoa
-   * identificada. Rota que agrega declara todas as permissões do que entrega, e
-   * só `customers.view` faria dela o caminho mais curto para o que
-   * `finance.view` guarda.
+   * Declara as duas permissões do que devolve: é dinheiro de uma pessoa
+   * identificada.
    */
   @Exige('customers.view', 'finance.view')
   @Get('clientes/:id/fiado')
@@ -348,6 +357,12 @@ export class FinanceiroController {
     }
   }
 
+  /**
+   * O teto de crédito de um cliente.
+   *
+   * `finance.credit_limit` e não `customers.edit`: autorizar alguém a consumir
+   * sem pagar é decisão financeira e passa pelo segundo fator.
+   */
   @Exige('finance.credit_limit')
   @Put('clientes/:id/limite')
   async limite(

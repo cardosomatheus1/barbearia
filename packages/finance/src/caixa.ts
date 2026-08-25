@@ -19,7 +19,8 @@ export type CaixaFailure =
   | 'nenhum_aberto'
   | 'sessao_nao_encontrada'
   | 'valor_invalido'
-  | 'sangria_maior_que_a_gaveta';
+  | 'sangria_maior_que_a_gaveta'
+  | 'idempotencia_conflitante';
 
 export class CaixaError extends Error {
   constructor(
@@ -146,6 +147,14 @@ export async function abrirCaixa(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    // Serializa a decisão "há caixa aberto?" por unidade. Sem isto, duas
+    // aberturas simultâneas podem ambas ler zero linhas e uma delas explodir
+    // apenas na constraint, virando 500 em vez de `ja_aberto`.
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${`${params.tenantId}:${params.locationId}:cash-open`}, 0)
+      )
+    `;
     const jaAberto = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM cash_sessions
        WHERE location_id = ${params.locationId}::uuid AND status = 'open'
@@ -218,7 +227,7 @@ export async function movimentarCaixa(params: {
    * append-only por REVOKE, então a segunda não tinha como ser desfeita — ela
    * virava divergência do fechamento cego com o nome do operador e sem causa.
    */
-  readonly idempotencyKey?: string;
+  readonly idempotencyKey: string;
 }): Promise<void> {
   if (!Number.isInteger(params.amountCents) || params.amountCents <= 0) {
     throw new CaixaError('valor_invalido', 'Informe um valor maior que zero.');
@@ -226,13 +235,23 @@ export async function movimentarCaixa(params: {
   if (!params.reason.trim()) {
     throw new CaixaError('valor_invalido', 'Sangria e suprimento precisam de motivo.');
   }
+  const fingerprint = JSON.stringify([
+    params.locationId, params.kind, params.amountCents, params.reason.trim(),
+  ]);
 
   await withTenant(params.tenantId, async (tx) => {
-    if (params.idempotencyKey) {
-      const jaFeito = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM cash_movements WHERE idempotency_key = ${params.idempotencyKey}
-      `;
-      if (jaFeito[0]) return;
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`${params.tenantId}:${params.idempotencyKey}`}, 0))
+    `;
+    const jaFeito = await tx.$queryRaw<{ id: string; idempotency_fingerprint: string | null }[]>`
+      SELECT id, idempotency_fingerprint FROM cash_movements
+       WHERE idempotency_key = ${params.idempotencyKey}
+    `;
+    if (jaFeito[0]) {
+      if (jaFeito[0].idempotency_fingerprint && jaFeito[0].idempotency_fingerprint !== fingerprint) {
+        throw new CaixaError('idempotencia_conflitante', 'Esta Idempotency-Key já foi usada para outro movimento.');
+      }
+      return;
     }
 
     const sessao = await sessaoAbertaOuErro(tx, params.locationId);
@@ -252,12 +271,12 @@ export async function movimentarCaixa(params: {
     await tx.$executeRaw`
       INSERT INTO cash_movements
         (tenant_id, session_id, kind, amount_cents, reason, created_by, created_by_name,
-         idempotency_key)
+         idempotency_key, idempotency_fingerprint)
       VALUES (
         NULLIF(current_setting('app.tenant_id', true), '')::uuid,
         ${sessao.id}::uuid, ${params.kind}::cash_movement_type, ${valor},
         ${params.reason.trim()}, ${params.staffId}::uuid, ${params.staffName},
-        ${params.idempotencyKey ?? null}
+        ${params.idempotencyKey}, ${fingerprint}
       )
     `;
 

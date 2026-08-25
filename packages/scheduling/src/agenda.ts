@@ -1,12 +1,17 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
+import { travarDiaDaAgenda } from './concorrencia.js';
 import {
   conflitaComExcecao,
   formatHHMM,
   instantToLocal,
   localToInstant,
+  resolveWorkingDay,
   validarExcecao,
   type AppointmentStatus,
   type TipoDeExcecao,
+  type ScheduleException,
+  type TimeRange,
+  type WeeklyPlan,
 } from '@barbearia/core';
 
 /**
@@ -75,11 +80,22 @@ export interface AgendaException {
   readonly reason: string | null;
 }
 
+export interface AgendaWorkingDay {
+  readonly professionalId: string;
+  /** Jornada efetiva depois de folga/feriado/horário especial e bloqueios. */
+  readonly working: readonly { readonly start: string; readonly end: string }[];
+  /** Pausas cadastradas, recortadas para dentro da jornada efetiva. */
+  readonly breaks: readonly { readonly start: string; readonly end: string }[];
+  readonly closedBy: 'custom_hours' | 'day_off' | 'holiday' | 'vacation' | 'no_weekly_plan' | null;
+}
+
 export interface AgendaDay {
   readonly date: string;
   readonly weekday: number;
   readonly entries: readonly AgendaEntry[];
   readonly exceptions: readonly AgendaException[];
+  /** A régua visual da agenda usa esta jornada; nunca adivinha abertura pela primeira reserva. */
+  readonly workingDays: readonly AgendaWorkingDay[];
 }
 
 export interface Agenda {
@@ -187,6 +203,25 @@ export async function getAgenda(params: {
        ORDER BY name
     `;
 
+    const professionalIds = profissionais.map((p) => p.id);
+    const weekdays = [...new Set(dias.map((date) => new Date(`${date}T12:00:00Z`).getUTCDay()))];
+    const jornadas = professionalIds.length === 0
+      ? []
+      : await tx.$queryRaw<
+          {
+            professional_id: string;
+            weekday: number;
+            start_minute: number;
+            end_minute: number;
+            breaks: unknown;
+          }[]
+        >`
+          SELECT professional_id, weekday, start_minute, end_minute, breaks
+            FROM work_schedules
+           WHERE professional_id = ANY(${professionalIds}::uuid[])
+             AND weekday = ANY(${weekdays}::smallint[])
+        `;
+
     const linhas = await tx.$queryRaw<
       {
         id: string;
@@ -262,6 +297,34 @@ export async function getAgenda(params: {
     }
 
     const excecoesPorDia = new Map<string, AgendaException[]>();
+    const planosPorProfissional = new Map<string, WeeklyPlan[]>();
+    for (const linha of jornadas) {
+      const pausas = Array.isArray(linha.breaks)
+        ? (linha.breaks as TimeRange[]).filter(
+            (item) => typeof item?.start === 'number' && typeof item?.end === 'number',
+          )
+        : [];
+      const planos = planosPorProfissional.get(linha.professional_id) ?? [];
+      planos.push({
+        weekday: linha.weekday,
+        start: linha.start_minute,
+        end: linha.end_minute,
+        breaks: pausas,
+      });
+      planosPorProfissional.set(linha.professional_id, planos);
+    }
+
+    const regrasDaUnidade = new Map<string, ScheduleException[]>();
+    const regrasDoProfissional = new Map<string, ScheduleException[]>();
+    const bloqueiosDaUnidade = new Map<string, TimeRange[]>();
+    const bloqueiosDoProfissional = new Map<string, TimeRange[]>();
+
+    const adicionar = <T,>(mapa: Map<string, T[]>, chave: string, item: T) => {
+      const lista = mapa.get(chave) ?? [];
+      lista.push(item);
+      mapa.set(chave, lista);
+    };
+
     for (const linha of excecoes) {
       const data = linha.on_date.toISOString().slice(0, 10);
       const doDia = excecoesPorDia.get(data) ?? [];
@@ -274,19 +337,69 @@ export async function getAgenda(params: {
         reason: linha.reason,
       });
       excecoesPorDia.set(data, doDia);
+
+      if (linha.kind === 'block') {
+        if (linha.start_minute === null || linha.end_minute === null) continue;
+        const faixa = { start: linha.start_minute, end: linha.end_minute };
+        if (linha.professional_id)
+          adicionar(bloqueiosDoProfissional, `${data}|${linha.professional_id}`, faixa);
+        else adicionar(bloqueiosDaUnidade, data, faixa);
+        continue;
+      }
+
+      const regra: ScheduleException = {
+        kind: linha.kind,
+        scope: linha.professional_id ? 'professional' : 'location',
+        ...(linha.start_minute !== null ? { start: linha.start_minute } : {}),
+        ...(linha.end_minute !== null ? { end: linha.end_minute } : {}),
+        ...(linha.reason !== null ? { reason: linha.reason } : {}),
+      };
+      if (linha.professional_id)
+        adicionar(regrasDoProfissional, `${data}|${linha.professional_id}`, regra);
+      else adicionar(regrasDaUnidade, data, regra);
     }
+
+    const jornadaDoDia = (date: string, weekday: number): AgendaWorkingDay[] =>
+      profissionais.map((profissional) => {
+        const resolvida = resolveWorkingDay({
+          weekday,
+          weeklyPlans: planosPorProfissional.get(profissional.id) ?? [],
+          exceptions: [
+            ...(regrasDaUnidade.get(date) ?? []),
+            ...(regrasDoProfissional.get(`${date}|${profissional.id}`) ?? []),
+          ],
+          blocks: [
+            ...(bloqueiosDaUnidade.get(date) ?? []),
+            ...(bloqueiosDoProfissional.get(`${date}|${profissional.id}`) ?? []),
+          ],
+        });
+        const texto = (faixa: TimeRange) => ({
+          start: formatHHMM(faixa.start),
+          end: formatHHMM(faixa.end),
+        });
+        return {
+          professionalId: profissional.id,
+          working: resolvida.working.map(texto),
+          breaks: resolvida.breaks.map(texto),
+          closedBy: resolvida.closedBy,
+        };
+      });
 
     return {
       timezone: params.timezone,
       from: primeiro,
       to: ultimo,
       professionals: profissionais,
-      days: dias.map((date) => ({
-        date,
-        weekday: new Date(`${date}T12:00:00Z`).getUTCDay(),
-        entries: porDia.get(date) ?? [],
-        exceptions: excecoesPorDia.get(date) ?? [],
-      })),
+      days: dias.map((date) => {
+        const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+        return {
+          date,
+          weekday,
+          entries: porDia.get(date) ?? [],
+          exceptions: excecoesPorDia.get(date) ?? [],
+          workingDays: jornadaDoDia(date, weekday),
+        };
+      }),
     };
   });
 }
@@ -481,6 +594,7 @@ export async function createException(
   if (falha) throw new AgendaError('invalid_exception', 'Exceção inválida.', falha);
 
   return withTenant(params.tenantId, async (tx) => {
+    await travarDiaDaAgenda(tx, params.locationId, params.date);
     if (alvoProfissional) {
       // A chave estrangeira do Postgres ignora row security por definição — sem
       // esta conferência, um id de outra barbearia entraria sem erro.

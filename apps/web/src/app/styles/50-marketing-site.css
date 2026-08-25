@@ -1,0 +1,1093 @@
+/* ============================================================================
+   Barber Dock — a página do produto
+   ============================================================================
+
+   A landing é a única tela do produto que não pertence a nenhuma barbearia: é
+   a do próprio sistema. Ela usa os mesmos tokens que o resto — se a marca mudar
+   num arquivo, ela muda junto — e acrescenta só o que é dela: o cordame, o
+   feixe de luz e a janela do balcão desenhada em HTML.
+
+   Prefixo `lp-` em tudo. A tela nasceu de um mock com nomes genéricos (`.card`,
+   `.btn`, `.section`) e adotá-los colidiria com `.achado`, `.evento` e
+   `.numero`, que já são de outras telas — foi o que quase quebrou o diagnóstico
+   do catálogo no bloco 21.
+   ============================================================================ */
+
+@property --lp-angulo {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.lp {
+  --lp-linha: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  --lp-linha-forte: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  position: relative;
+  overflow-x: clip;
+}
+
+/* O fundo tem matiz e profundidade: dois halos e a malha fina do estaleiro.
+   Fora do fluxo e sem eventos — é atmosfera, não conteúdo. */
+.lp-ambiente {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 32rem at 84% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 65%),
+    radial-gradient(52rem 32rem at 4% 18%, color-mix(in srgb, var(--color-focus) 8%, transparent), transparent 68%);
+}
+.lp-ambiente::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--lp-linha) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lp-linha) 1px, transparent 1px);
+  background-size: 4.75rem 4.75rem;
+  opacity: 0.25;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+.lp-feixe {
+  position: absolute;
+  top: -25%;
+  width: 1px;
+  height: 145%;
+  opacity: 0.4;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--lp-linha-forte),
+    color-mix(in srgb, var(--color-accent) 20%, transparent),
+    transparent
+  );
+  animation: lp-boiar 10s linear infinite;
+}
+.lp-feixe--1 { left: 18%; animation-delay: -2s; }
+.lp-feixe--2 { left: 49%; animation-delay: -7s; }
+.lp-feixe--3 { left: 78%; animation-delay: -4s; }
+@keyframes lp-boiar {
+  0%, 100% { transform: translateY(-18%); }
+  50% { transform: translateY(14%); }
+}
+
+.lp-container {
+  width: min(var(--size-container), 100% - var(--space-5));
+  margin-inline: auto;
+}
+
+/* -- barra do topo ---------------------------------------------------------- */
+
+.lp-nav {
+  position: relative;
+  z-index: var(--z-sticky);
+  border-bottom: 1px solid var(--lp-linha);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(20px);
+}
+.lp-nav__interno {
+  width: min(var(--size-container), 100% - var(--space-5));
+  margin-inline: auto;
+  min-height: var(--size-touch);
+  padding-block: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.lp-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--size-touch);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.lp-marca__selo {
+  width: 2.75rem;
+  height: 2.75rem;
+  aspect-ratio: 1;
+  max-width: 100%;
+  object-fit: contain;
+  flex: none;
+}
+.lp-marca__nome {
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.05;
+  color: var(--color-accent);
+  min-width: 0;
+}
+.lp-marca__nome small {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+/* As âncoras rolam dentro da própria faixa no celular e viram uma linha só
+   quando há espaço. Nunca somem: conteúdo escondido no aparelho pequeno é
+   decisão de que ele não importava. */
+.lp-nav__links {
+  order: 3;
+  flex-basis: 100%;
+  display: flex;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.lp-nav__acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* -- herói ------------------------------------------------------------------ */
+
+.lp-heroi {
+  position: relative;
+  z-index: 1;
+  padding-block: var(--space-8) var(--space-9);
+}
+/* O selo em tamanho de vitral atrás do herói. É a marca virando atmosfera —
+   e não custa uma requisição a terceiro, porque é o mesmo arquivo do topo. */
+.lp-heroi::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -30%;
+  top: -6%;
+  width: min(46rem, 130%);
+  aspect-ratio: 1;
+  background: url('/barber-dock.png') center/contain no-repeat;
+  opacity: 0.05;
+  mask-image: radial-gradient(circle at 50% 50%, black 30%, transparent 68%);
+}
+/* O halo que levanta o texto do fundo. */
+.lp-heroi::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: -10%;
+  top: 10%;
+  width: 34rem;
+  height: 34rem;
+  border-radius: var(--radius-full);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-accent) 12%, transparent),
+    color-mix(in srgb, var(--color-accent) 6%, transparent) 34%,
+    transparent 70%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+}
+.lp-heroi__grade {
+  display: grid;
+  gap: var(--space-6);
+  align-items: center;
+}
+
+.lp-selo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--lp-linha);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.lp-selo__ponto {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success) 12%, transparent);
+  animation: lp-pulsar 2s infinite;
+}
+@keyframes lp-pulsar {
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-success) 0%, transparent); }
+}
+
+.lp-heroi__titulo {
+  margin: var(--space-4) 0 var(--space-4);
+  font-family: var(--font-display);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  font-size: clamp(2.875rem, 12vw, var(--font-size-4xl));
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  color: var(--color-accent);
+  text-wrap: balance;
+}
+/* O traço do herói é acento de marca. Vermelho fica reservado a problema/erro. */
+.lp-heroi__titulo em {
+  font-style: normal;
+  color: var(--color-text-primary);
+  background-image: linear-gradient(90deg, var(--color-accent), transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 0.375rem;
+  background-position: 0 92%;
+}
+.lp-heroi__texto {
+  margin: 0;
+  max-width: var(--size-readable);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
+  line-height: 1.7;
+}
+.lp-heroi__acoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+.lp-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.lp-provas {
+  list-style: none;
+  margin: var(--space-6) 0 0;
+  padding: var(--space-5) 0 0;
+  border-top: 1px solid var(--lp-linha);
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.lp-provas li::before {
+  content: '⚓';
+  margin-right: var(--space-2);
+  color: var(--color-accent);
+}
+
+/* -- o palco: a janela do produto em perspectiva ---------------------------- */
+
+.lp-palco {
+  position: relative;
+  perspective: 100rem;
+  min-width: 0;
+  /* Espaço para os cartões de vidro passarem da borda sem cortar. */
+  padding: var(--space-5) var(--space-2) var(--space-6);
+}
+
+.lp-janela {
+  border: 1px solid var(--lp-linha-forte);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+  transform: rotateY(-5deg) rotateX(2deg);
+  transform-origin: left center;
+  transition: transform var(--motion-base) var(--motion-ease);
+}
+.lp-palco:hover .lp-janela { transform: rotateY(-2deg) rotateX(1deg); }
+/* O brilho que varre a tela de tempos em tempos, como reflexo de vidro. */
+.lp-janela::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 0 28%,
+    color-mix(in srgb, var(--color-text-primary) 6%, transparent) 29%,
+    transparent 30% 100%
+  );
+  animation: lp-reflexo 8s ease-in-out infinite;
+}
+@keyframes lp-reflexo {
+  0%, 70%, 100% { transform: translateX(-30%); }
+  85% { transform: translateX(30%); }
+}
+.lp-janela__barra {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--lp-linha);
+  background: var(--color-surface);
+}
+.lp-janela__sinais { display: flex; gap: var(--space-1); flex: none; }
+.lp-janela__sinais i {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+}
+.lp-janela__url {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.lp-janela__corpo { padding: var(--space-4); }
+.lp-janela__dia {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-primary);
+}
+
+.lp-agenda { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.lp-agenda__linha {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
+  min-width: 0;
+}
+.lp-agenda__hora { color: var(--color-text-muted); }
+.lp-agenda__quem { color: var(--color-text-primary); overflow-wrap: anywhere; }
+.lp-agenda__estado {
+  grid-column: 2;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.lp-agenda__linha--feito { border-left-color: var(--color-success); }
+.lp-agenda__linha--agora { border-left-color: var(--color-accent); }
+.lp-agenda__linha--atrasado { border-left-color: var(--color-warning); }
+.lp-agenda__linha--atrasado .lp-agenda__estado { color: var(--color-warning); }
+
+/* Os cartões de vidro que flutuam sobre a janela.
+   No celular eles não flutuam: viram uma linha abaixo da janela, porque em
+   360px "flutuando por cima" é o mesmo que "tapando o conteúdo". */
+.lp-flutuante {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 20%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface-raised) 86%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-lg);
+  min-width: 0;
+}
+.lp-flutuante__rotulo {
+  display: block;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-muted);
+}
+.lp-flutuante__valor {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  line-height: 1;
+  color: var(--color-accent);
+}
+.lp-flutuante__delta {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-success);
+}
+
+/* -- faixa que corre -------------------------------------------------------- */
+
+/* `ui-sangra` declara o que a medição não tem como adivinhar (bloco 104).
+
+   A faixa que corre é `max-content` por definição: o trilho é mais largo que a
+   tela de propósito, duplicado e animado, e o `overflow: hidden` recorta o que
+   sobra. Para a varredura de conteúdo cortado isso é indistinguível de uma
+   tabela que perdeu duas colunas — a diferença é **intenção**, e intenção não
+   se deduz do layout.
+
+   O marcador é o par de `.ui-scroll-x`: um diz "isto rola, a pessoa alcança", o
+   outro diz "isto sangra, e não há o que alcançar". Os dois moram no CSS, ao
+   lado da regra que os justifica, e não numa lista de nomes dentro do teste. */
+.ui-sangra {}
+
+.lp-faixa {
+  position: relative;
+  z-index: 1;
+  border-block: 1px solid var(--lp-linha);
+  overflow: hidden;
+  /* Sem a máscara, a primeira e a última palavra nascem cortadas na borda da
+     tela e a faixa parece defeito em vez de movimento. */
+  mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+}
+.lp-faixa__trilho {
+  display: flex;
+  width: max-content;
+  padding-block: var(--space-3);
+  animation: lp-correr 42s linear infinite;
+}
+.lp-faixa__grupo { display: flex; }
+.lp-faixa__grupo span {
+  padding-inline: var(--space-4);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.lp-faixa__grupo span::after {
+  content: '•';
+  margin-left: var(--space-4);
+  color: var(--color-accent);
+}
+@keyframes lp-correr { to { transform: translateX(-50%); } }
+
+/* -- telas do sistema -------------------------------------------------------- */
+
+.lp-telas__atalhos {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-bottom: var(--space-2);
+  /* Sem isto o recipiente se recusa a encolher dentro da grade e estoura a
+     página em vez de rolar dentro de si. */
+  min-width: 0;
+}
+.lp-telas__atalho {
+  display: inline-flex;
+  align-items: center;
+  /* Alvo autônomo: 44px em qualquer largura, não só no celular. */
+  min-height: var(--size-touch);
+  padding-inline: var(--space-4);
+  border: 1px solid var(--lp-linha);
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.lp-telas__atalho:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+
+/* A tira. Rola dentro de si e nunca leva a página junto; o `scroll-snap` faz a
+   foto parar alinhada, que é o que uma aba faria com JavaScript. */
+.lp-telas {
+  list-style: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(88vw, 46rem);
+  gap: var(--space-4);
+  margin: var(--space-5) 0 0;
+  padding: 0 var(--space-4) var(--space-4);
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--space-4);
+  min-width: 0;
+}
+.lp-telas__item { scroll-snap-align: start; min-width: 0; }
+.lp-telas__figura {
+  margin: 0;
+  border: 1px solid var(--lp-linha);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface-raised);
+}
+.lp-telas__foto {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  /* Casa com o `width`/`height` do elemento: o espaço fica reservado antes de
+     a imagem chegar, e o texto abaixo não pula. */
+  aspect-ratio: 1200 / 750;
+  object-fit: cover;
+  object-position: top left;
+  border-bottom: 1px solid var(--lp-linha);
+}
+.lp-telas__legenda {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.lp-telas__ordem {
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  flex: none;
+}
+.lp-telas__nome {
+  display: block;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-primary);
+}
+.lp-telas__nota {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* -- placar ----------------------------------------------------------------- */
+
+.lp-secao--placar { padding-block: var(--space-7); }
+.lp-placar {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--lp-linha);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--lp-linha);
+}
+.lp-placar__item {
+  padding: var(--space-5);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.lp-placar__item dt {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.lp-placar__item dd {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-4xl);
+  line-height: 1;
+  color: var(--color-accent);
+}
+
+/* -- seções ----------------------------------------------------------------- */
+
+.lp-secao {
+  position: relative;
+  z-index: 1;
+  padding-block: var(--space-9);
+}
+.lp-sobrancelha {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.lp-titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  font-size: clamp(2rem, 8.5vw, var(--font-size-3xl));
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  color: var(--color-accent);
+  text-wrap: balance;
+}
+.lp-titulo em {
+  font-style: normal;
+  color: var(--color-text-primary);
+}
+.lp-intro {
+  margin: var(--space-4) 0 var(--space-6);
+  max-width: var(--size-readable);
+  color: var(--color-text-muted);
+  line-height: 1.75;
+}
+
+/* O cordame do selo, deitado. É o elemento assinatura da página: sai do
+   desenho da marca, não de uma paleta — e é desenhado, não é imagem. */
+.lp-corda {
+  position: relative;
+  z-index: 1;
+  height: 0.5rem;
+  border: 0;
+  margin: 0;
+  background-image:
+    repeating-linear-gradient(
+      66deg,
+      var(--lp-linha-forte) 0 0.1875rem,
+      transparent 0.1875rem 0.5rem
+    );
+  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+
+/* -- bento ------------------------------------------------------------------ */
+
+.lp-bento { display: grid; gap: var(--space-3); }
+.lp-bento__item {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(
+    180deg,
+    var(--color-surface-hover),
+    var(--color-surface-raised)
+  );
+  transition:
+    border-color var(--motion-base) var(--motion-ease),
+    transform var(--motion-base) var(--motion-ease);
+  min-width: 0;
+}
+/* O clarão vermelho no canto — o mesmo do poste, desfocado. É o que impede o
+   cartão de ser um retângulo com texto. */
+.lp-bento__item::after {
+  content: '';
+  position: absolute;
+  right: -20%;
+  bottom: -50%;
+  width: 70%;
+  height: 80%;
+  transform: rotate(-12deg);
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--color-accent) 14%, transparent),
+    transparent 60%
+  );
+  filter: blur(12px);
+  pointer-events: none;
+}
+.lp-bento__item:hover {
+  border-color: var(--lp-linha-forte);
+  transform: translateY(-4px);
+}
+.lp-bento__kicker {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+}
+.lp-bento__titulo {
+  position: relative;
+  margin: var(--space-2) 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--color-text-primary);
+}
+.lp-bento__texto {
+  position: relative;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.65;
+}
+
+/* -- os achados de campo ---------------------------------------------------- */
+
+.lp-achados { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.lp-achado {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.lp-achado__codigo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  color: var(--color-danger);
+  line-height: 1.1;
+}
+.lp-achado__corpo { min-width: 0; }
+.lp-achado__problema {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.lp-achado__efeito {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+.lp-achado__resposta {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+/* -- superfícies ------------------------------------------------------------ */
+
+.lp-superficies { display: grid; gap: var(--space-3); }
+.lp-superficie {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  min-width: 0;
+}
+.lp-superficie__nome {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.lp-superficie__aparelho {
+  margin: var(--space-1) 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.lp-superficie__texto {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.65;
+}
+
+/* -- chamada final ---------------------------------------------------------- */
+
+.lp-secao--final { padding-block: var(--space-6) var(--space-8); }
+.lp-chamada {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: var(--space-6) var(--space-5);
+  border: 1px solid var(--lp-linha-forte);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.lp-chamada::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-bg) 96%, transparent) 0%,
+      color-mix(in srgb, var(--color-bg) 92%, transparent) 24%,
+      color-mix(in srgb, var(--color-bg) 78%, transparent) 48%,
+      color-mix(in srgb, var(--color-bg) 48%, transparent) 68%,
+      color-mix(in srgb, var(--color-bg) 14%, transparent) 100%
+    ),
+    radial-gradient(36rem 16rem at 24% 12%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 64%);
+}
+.lp-chamada > * { position: relative; z-index: 1; }
+.lp-chamada__visual {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.lp-chamada__imagem {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 72% center;
+}
+.lp-chamada__conteudo {
+  display: grid;
+  gap: var(--space-2);
+  max-width: min(40rem, 100%);
+}
+.lp-chamada__kicker {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--color-text-muted) 72%, white 28%);
+}
+.lp-chamada__titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(1.875rem, 7vw, 2.75rem);
+  line-height: 1;
+  color: color-mix(in srgb, var(--color-accent) 88%, white 12%);
+  text-wrap: balance;
+}
+.lp-chamada__texto {
+  margin: var(--space-2) 0 0;
+  color: color-mix(in srgb, var(--color-text-muted) 82%, white 18%);
+  line-height: 1.7;
+  max-width: 38rem;
+}
+.lp-chamada__acoes { display: grid; gap: var(--space-3); }
+@media (max-width: 767.98px) {
+  .lp-chamada { min-height: 26rem; align-content: end; }
+  .lp-chamada::after {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 8%, transparent) 0%, color-mix(in srgb, var(--color-bg) 48%, transparent) 34%, color-mix(in srgb, var(--color-bg) 90%, transparent) 72%, color-mix(in srgb, var(--color-bg) 96%, transparent) 100%),
+      radial-gradient(28rem 14rem at 20% 16%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 66%);
+  }
+  .lp-chamada__imagem { object-position: 68% center; }
+}
+
+/* -- rodapé ----------------------------------------------------------------- */
+
+.lp-rodape {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--lp-linha);
+  padding-block: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.lp-rodape__interno {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.lp-rodape__links { display: flex; gap: var(--space-5); }
+/* 44px nas **duas** medidas, e a segunda foi o achado.
+
+   Só `min-height` deixava `Telas` com 37×44 e `Entrar` com 34×44 — em 390 e
+   também em 1280. A altura passava e a largura não, e a regra do projeto é
+   sobre o alvo, não sobre uma das dimensões dele. Não é link dentro de frase:
+   a isenção da WCAG 2.5.8 cobre a âncora no meio de um parágrafo, não a
+   navegação do topo. */
+.lp-rodape__links a,
+.lp-nav__links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-touch);
+  min-width: var(--size-touch);
+  color: var(--color-text-muted);
+}
+.lp-rodape__links a:hover,
+.lp-nav__links a:hover { color: var(--color-accent); }
+
+/* O filete que percorre a borda do botão principal. É o farol do porto, e é o
+   único enfeite animado que fica em cima de um elemento interativo. */
+.lp-beam { position: relative; overflow: hidden; }
+.lp-beam::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--lp-angulo),
+    transparent 0 72%,
+    var(--color-accent) 80%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 88%,
+    transparent 94%
+  );
+  animation: lp-farol 3.2s linear infinite;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+@keyframes lp-farol { to { --lp-angulo: 360deg; } }
+
+@media (min-width: 480px) {
+  .lp-heroi__acoes { flex-direction: row; align-items: center; }
+  .lp-chamada__acoes { grid-auto-flow: column; justify-content: start; }
+  .lp-rodape__interno { flex-direction: row; justify-content: space-between; align-items: center; }
+}
+
+@media (min-width: 768px) {
+  .lp-marca__selo { width: 3.25rem; height: 3.25rem; }
+  .lp-heroi { padding-block: var(--space-9) var(--space-10); }
+  .lp-placar { grid-template-columns: repeat(4, 1fr); }
+  .lp-telas { padding-inline: var(--space-6); scroll-padding-inline: var(--space-6); }
+  .lp-provas { grid-auto-flow: column; justify-content: start; gap: var(--space-6); }
+  .lp-bento { grid-template-columns: repeat(6, 1fr); }
+  .lp-bento__item--grande { grid-column: span 4; }
+  .lp-bento__item--alto { grid-column: span 2; }
+  .lp-bento__item--largo { grid-column: span 3; }
+  .lp-bento__item--pequeno { grid-column: span 3; }
+  .lp-superficies { grid-template-columns: 1fr 1fr; }
+  .lp-achados { grid-template-columns: 1fr 1fr; }
+  .lp-chamada { grid-template-columns: minmax(0, 1fr) auto; align-items: end; min-height: 25rem; }
+  .lp-chamada__acoes { align-self: end; }
+}
+
+@media (min-width: 1024px) {
+  .lp-nav__links {
+    order: 2;
+    flex-basis: auto;
+    gap: var(--space-5);
+    margin-inline: auto;
+  }
+  .lp-nav__acoes { order: 3; margin-left: 0; }
+
+  .lp-heroi__grade { grid-template-columns: 1.04fr 0.96fr; gap: var(--space-8); }
+  .lp-heroi__titulo { font-size: clamp(var(--font-size-4xl), 6vw, var(--font-size-6xl)); }
+  .lp-heroi__texto { font-size: var(--font-size-lg); }
+  .lp-titulo { font-size: clamp(var(--font-size-3xl), 4.6vw, var(--font-size-5xl)); }
+  .lp-intro { font-size: var(--font-size-lg); }
+
+  /* Os cartões ganham **coluna própria** ao lado da janela, em vez de flutuar
+     por cima dela. Foi tentado por cima primeiro, como no mock — mas lá dentro
+     da janela há um print, e aqui há conteúdo legível: os cartões tapavam a
+     barra de endereço e a linha das 11:00. Cartão que esconde o produto é o
+     contrário do que ele existe para fazer.
+
+     O escalonamento é o que mantém a sensação de flutuar: eles não se alinham
+     entre si, e cada um boia num compasso diferente. A janela, em troca, sangra
+     para fora do container à direita — é o que dá a impressão de tela grande
+     demais para caber na página. */
+  .lp-palco {
+    display: grid;
+    grid-template-columns: 11.5rem 1fr;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-7) 0 var(--space-8);
+    /* A sangria nunca pode passar da vala entre o container e a borda da tela.
+       Fixa em `--space-8` ela funcionava só a partir de ~1300px: em 1280 — uma
+       das quatro larguras de conferência — a janela era cortada no meio da
+       linha das 09:00, e entre 1024 e 1100 sumiam 56px dela. Nada disso
+       aparecia na medição, porque `overflow-x: clip` no herói corta em silêncio:
+       a página não rola de lado, e o conteúdo simplesmente não está lá.
+       O efeito continua igual onde há vala para ele; onde não há, ele some. */
+    margin-right: calc(
+      -1 *
+        min(
+          var(--space-8),
+          max(0px, calc((100vw - var(--size-container)) / 2 - var(--space-4)))
+        )
+    );
+  }
+  .lp-palco__pilha {
+    display: grid;
+    gap: var(--space-4);
+    justify-items: start;
+  }
+  .lp-flutuante {
+    width: 100%;
+    animation: lp-boiar-cartao 5s ease-in-out infinite;
+  }
+  .lp-flutuante--1 { margin-left: var(--space-4); }
+  .lp-flutuante--2 { animation-delay: -2s; }
+  .lp-flutuante--3 { margin-left: var(--space-5); animation-delay: -3.5s; }
+  @keyframes lp-boiar-cartao { 50% { transform: translateY(-10px); } }
+
+  .lp-superficies { grid-template-columns: repeat(4, 1fr); }
+  .lp-chamada { padding: var(--space-8); min-height: 28rem; }
+}
+
+/* ============================================================================
+   A marca dentro do produto (bloco visual Barber Dock)
+   ============================================================================ */
+
+/* O selo nas portas do sistema. `aspect-ratio` no CSS e `width`/`height` no
+   `<img>`: sem os dois o navegador não reserva o espaço e o formulário pula
+   quando a imagem chega — bem na hora em que a pessoa mira o campo. */
+.selo-produto {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-6);
+  min-width: 0;
+}
+.selo-produto__img {
+  width: 3rem;
+  height: 3rem;
+  aspect-ratio: 1;
+  max-width: 100%;
+  object-fit: contain;
+  flex: none;
+}
+.selo-produto__nome {
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.05;
+  color: var(--color-text-primary);
+  min-width: 0;
+}
+.selo-produto__nome small {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* -- a voz da marca nas telas do cliente ------------------------------------
+   A página pública e a landing são a mesma família: condensada em caixa alta
+   para o nome da casa. O admin fica de fora de propósito — ali a tela é densa e
+   o título compete com quinze outras coisas, então ele segue na sans, com o
+   tracking fechado do mock interno.
+   -------------------------------------------------------------------------- */
+
+.topo__nome {
+  font-family: var(--font-display);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-2xl);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+
+.painel__titulo {
+  letter-spacing: -0.03em;
+  font-weight: var(--font-weight-bold);
+}
+
+/* Número grande é da condensada: é assim que o selo escreve, e é o que faz
+   "87%" e "R$ 5.820" lerem como placar em vez de como parágrafo. */
+.numero__valor,
+.totalzinho__valor,
+.meta__valores,
+.micro__valor {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* A malha fina do estaleiro atrás do trabalho. É o fundo do mock interno, e no
+   tema claro ela some quase por completo — o suficiente para a tela não ser um
+   retângulo chapado, longe de competir com o conteúdo. */
+.painel__conteudo,
+.balcao {
+  position: relative;
+}
+.painel__conteudo::before,
+.balcao::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-border) 55%, transparent) 1px, transparent 1px);
+  background-size: 4.5rem 4.5rem;
+  mask-image: linear-gradient(to bottom, black, transparent 60%);
+}
+
+
+

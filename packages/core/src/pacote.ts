@@ -47,6 +47,8 @@ export interface PacoteDoCliente {
   readonly usados: number;
   readonly venceEm: Date | null;
   readonly valorDaUnidadeCents: number;
+  /** Preço total congelado na compra; necessário para preservar o resto da divisão. */
+  readonly precoCents: number;
   readonly compradoEm: Date;
   readonly transferivel: boolean;
   readonly reembolsadoEm: Date | null;
@@ -145,6 +147,25 @@ export function restoDaPrimeiraUnidade(precoCents: number, quantidade: number): 
   return precoCents - valorDaUnidade(precoCents, quantidade) * quantidade;
 }
 
+/** Quanto já foi reconhecido pelos usos, preservando o centavo de resto na primeira unidade. */
+export function reconhecidoDoPacote(
+  pacote: Pick<PacoteDoCliente, 'precoCents' | 'total' | 'usados' | 'valorDaUnidadeCents'>,
+): number {
+  const usados = Math.min(Math.max(0, pacote.usados), Math.max(0, pacote.total));
+  if (usados === 0 || pacote.total <= 0) return 0;
+  const resto = restoDaPrimeiraUnidade(pacote.precoCents, pacote.total);
+  return usados * pacote.valorDaUnidadeCents + resto;
+}
+
+/** Valor da próxima unidade a ser reconhecida. A primeira carrega o resto da divisão inteira. */
+export function valorDoProximoConsumo(
+  pacote: Pick<PacoteDoCliente, 'precoCents' | 'total' | 'usados' | 'valorDaUnidadeCents'>,
+): number {
+  if (pacote.total <= 0 || pacote.usados >= pacote.total) return 0;
+  return pacote.valorDaUnidadeCents
+    + (pacote.usados === 0 ? restoDaPrimeiraUnidade(pacote.precoCents, pacote.total) : 0);
+}
+
 /**
  * Quanto ainda está diferido neste pacote.
  *
@@ -155,7 +176,7 @@ export function restoDaPrimeiraUnidade(precoCents: number, quantidade: number): 
 export function diferidoDoPacote(pacote: PacoteDoCliente, agora: Date): number {
   const estado = estadoDoPacote(pacote, agora);
   if (estado !== 'ativo') return 0;
-  return restamNoPacote(pacote) * pacote.valorDaUnidadeCents;
+  return Math.max(0, pacote.precoCents - reconhecidoDoPacote(pacote));
 }
 
 export type RecusaDoReembolso =
@@ -183,7 +204,7 @@ export function reembolsoProporcional(
   if (restam === 0) return { recusa: 'nada_a_devolver' };
   if (pacote.venceEm && pacote.venceEm <= agora) return { recusa: 'nada_a_devolver' };
 
-  return { valorCents: restam * pacote.valorDaUnidadeCents };
+  return { valorCents: Math.max(0, pacote.precoCents - reconhecidoDoPacote(pacote)) };
 }
 
 /**
