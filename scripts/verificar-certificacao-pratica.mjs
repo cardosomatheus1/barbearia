@@ -72,7 +72,7 @@ exigir(
     && roadmap.includes(`as ${totalMigracoes} migrações`),
   'deploy/ROADMAP estão defasados em relação ao head de migração',
 );
-exigir(head === '0116', 'head inesperado durante a correção da certificação prática');
+exigir(head === '0117', 'head inesperado durante a correção da certificação prática');
 
 exigir(
   verify.includes('certificação prática da pilha')

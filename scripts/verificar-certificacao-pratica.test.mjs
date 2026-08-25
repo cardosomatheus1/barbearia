@@ -76,7 +76,7 @@ test('detecta idempotência removida da carga', () => mutacao(
 
 test('detecta documentação voltando a 83 migrações', () => mutacao(
   'docs/deploy.md',
-  'aplica as 116 migrações',
+  'aplica as 117 migrações',
   'aplica as 83 migrações',
 ));
 

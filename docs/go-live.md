@@ -78,7 +78,7 @@ Nenhum deles falhou por acaso, e nenhum dos três achados aparecia no portão:
 ### 1.2 As integrações reais — certificação atual
 
 O código contém providers reais para identidade Meta, WhatsApp CRM e Stripe. O
-ROADMAP registra exercício histórico da Stripe em test mode, mas o head `0116`
+ROADMAP registra exercício histórico da Stripe em test mode, mas o head `0117`
 ainda precisa de uma evidência reproduzível com as contas atuais. Fiscal e split
 não possuem provider real; nesses dois casos não basta preencher credenciais.
 
@@ -117,7 +117,7 @@ existe** para o outro lado — é a mesma razão de a guarda responder 404 e nã
 
 | Ensaio | Resultado | Medido em |
 |---|---|---|
-| Restauração de backup — medição histórica | **14s** para 8.000 clientes / dump de 2,1 MB. Naquele head, conferiu 123 tabelas por contagem, 147 políticas de RLS, `FORCE` em 121, constraints de exclusão, gatilhos, checks e a versão do schema | `scripts/ensaio-de-restauracao.sh`; precisa ser repetido no head `0116` antes do go-live |
+| Restauração de backup — medição histórica | **14s** para 8.000 clientes / dump de 2,1 MB. Naquele head, conferiu 123 tabelas por contagem, 147 políticas de RLS, `FORCE` em 121, constraints de exclusão, gatilhos, checks e a versão do schema | `scripts/ensaio-de-restauracao.sh`; precisa ser repetido no head `0117` antes do go-live |
 | Migrações 0079–0081 sobre volume | **153 ms, 131 ms, 48 ms** com 400 mil linhas nas tabelas que elas alteram (troca de chave estrangeira e de constraint) | banco descartável com volume gerado |
 
 O ensaio de restauração pergunta ao **banco restaurado**, não ao código de saída
@@ -276,7 +276,7 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 ## 4. Go / no-go
 
 - [x] Os 10 percursos definidos estão ligados à medição
-- [ ] Os 10 percursos executados e verdes no head `0116`
+- [ ] Os 10 percursos executados e verdes no head `0117`
 - [ ] Percursos críticos complementares: cancelar/remarcar, espera, walk-in,
       pacote/assinatura, multiunidade, estorno e WhatsApp real
 - [ ] Carga destrutiva: 100 reservas no mesmo slot, 1 sucesso, 99 conflitos e zero 500

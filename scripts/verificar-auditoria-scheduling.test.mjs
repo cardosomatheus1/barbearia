@@ -47,7 +47,9 @@ test('detecta remoção da trava diária', () =>
 test('detecta remoção do fingerprint', () =>
   mutacao('packages/scheduling/src/booking-idempotencia.ts', 'fingerprintDaIntencao', 'fingerprint_removido'));
 test('detecta hold sem recursos', () =>
-  mutacao('packages/db/migrations/0110_scheduling_concorrencia_recursos.sql', 'CREATE TABLE slot_hold_resources', 'CREATE TABLE hold_resources_removido'));
+  mutacao('packages/db/migrations/0110_scheduling_concorrencia_recursos.sql',
+    'CREATE TABLE IF NOT EXISTS slot_hold_resources',
+    'CREATE TABLE IF NOT EXISTS hold_resources_removido'));
 test('detecta quantity ignorada', () =>
   mutacao('packages/scheduling/src/repository.ts', 'generate_series(1, ar.quantity)', 'generate_series(1, 1)'));
 test('detecta walk-in sem recursos', () =>

@@ -66,7 +66,7 @@ const migracoes = fs.readdirSync('packages/db/migrations')
   .sort();
 const versoes = migracoes.map((nome) => nome.slice(0, 4));
 exigir(new Set(versoes).size === versoes.length, 'existem versões duplicadas de migração');
-exigir(versoes.at(-1) === '0116', 'head de migração do recheck não é 0116');
+exigir(versoes.at(-1) === '0117', 'head de migração do recheck não é 0117');
 
 exigir(
   verify.includes('auditoria Recheck Final')

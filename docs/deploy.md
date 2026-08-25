@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/cardosomatheus1/barbearia/claude/ba
 > lista paralela de sempre, e quebraria no dia em que alguém renomeasse.
 
 Ele instala o Docker se faltar, clona o repositório em `/opt/barbearia`, **gera
-os segredos obrigatórios**, aplica as 116 migrações, sobe os cinco serviços, espera o
+os segredos obrigatórios**, aplica as 117 migrações, sobe os cinco serviços, espera o
 site responder e agenda o backup diário.
 
 Roda de novo sem estragar nada: os segredos já gerados são preservados. Não é
