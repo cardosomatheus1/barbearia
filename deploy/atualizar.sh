@@ -36,6 +36,26 @@ ANTERIOR="$(git rev-parse HEAD)"
 echo "$ANTERIOR" > "$DESTINO/.versao-anterior"
 verde "  $(git rev-parse --short "$ANTERIOR")"
 
+titulo "segredos que a versão nova exige"
+# Uma atualização pode introduzir um segredo obrigatório — e foi o que aconteceu
+# com `BACKUP_ENCRYPTION_KEY`: o `.env` de quem já rodava não o tinha, o backup
+# se recusou a gravar em claro, e a atualização parou antes de migrar. O
+# instalador sabe gerar; quem atualizava, não, e o segredo não tinha por onde
+# nascer.
+#
+# `segredos.sh` é idempotente por desenho: `manter` nunca sobrescreve o que já
+# existe. Só o domínio e o e-mail vêm por argumento e são reescritos, então eles
+# são lidos de volta do próprio `.env` — atualizar não é lugar de mudar domínio.
+DOMINIO_ATUAL="$(grep -E '^DOMINIO=' "$DESTINO/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+EMAIL_ATUAL="$(grep -E '^ACME_EMAIL=' "$DESTINO/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+if [ -n "$DOMINIO_ATUAL" ] && [ -n "$EMAIL_ATUAL" ]; then
+  "$DESTINO/deploy/segredos.sh" "$DESTINO/.env" "$DOMINIO_ATUAL" "$EMAIL_ATUAL" >/dev/null \
+    || morrer "não consegui completar os segredos do .env"
+  verde "  conferidos; os que faltavam foram gerados"
+else
+  verde "  .env sem DOMINIO/ACME_EMAIL — pulando (instalação antiga)"
+fi
+
 titulo "backup antes de migrar"
 DESTINO="$DESTINO" "$DESTINO/deploy/backup.sh" || morrer "o backup falhou: nada foi migrado e nada subiu"
 
