@@ -638,7 +638,21 @@ await percurso('balcão fecha uma venda', async (page) => {
        FROM cash_sessions WHERE id = '${sessionId}'`,
   );
   if (fechamento !== 'closed:0') {
-    throw new Error(`o caixa não fechou batendo: ${fechamento}`);
+    /**
+     * A recusa da tela entra na mensagem.
+     *
+     * Sem isso o percurso dizia so "o caixa nao fechou batendo: open:999999" —
+     * o estado final, sem o motivo. E o motivo esta escrito na tela, porque a
+     * acao redireciona com o erro; ler dali transforma um sintoma num
+     * diagnostico.
+     */
+    const recusa = await page.locator('[role="alert"], .ui-erro, [data-erro]').first()
+      .innerText().catch(() => '');
+    const naUrl = new URL(page.url()).searchParams.get('erro') ?? '';
+    throw new Error(
+      `o caixa não fechou batendo: ${fechamento}` +
+        (recusa || naUrl ? ` — a tela disse: "${(recusa || naUrl).trim()}"` : ''),
+    );
   }
 
   const mensagem = await page.locator('[role="status"]').first().innerText().catch(() => '');
@@ -684,7 +698,22 @@ await percurso('dono abre a barbearia e publica', async (page) => {
    * quem abre a barbearia passa.
    */
   await entrarNoPainel(page, email, senha);
-  await clicar(page, 'a[href="/admin/onboarding"]', 'a volta para o cadastro');
+  /**
+   * O que importa e **chegar** no cadastro, nao o caminho.
+   *
+   * O destino depois do login passou a ser derivado do que a conta alcanca, e
+   * uma conta recem-criada cai direto na etapa em aberto do onboarding. O
+   * percurso procurava a volta que existia quando o login levava ao painel, e
+   * morria sobre uma tela que ja era a certa. Clica se houver; senao, confere
+   * que esta no lugar.
+   */
+  const voltaAoCadastro = page.locator('a[href="/admin/onboarding"]').first();
+  if (await voltaAoCadastro.count() > 0 && await voltaAoCadastro.isVisible().catch(() => false)) {
+    await voltaAoCadastro.click();
+    await page.waitForLoadState('networkidle');
+  } else if (!page.url().includes('/admin/onboarding')) {
+    await page.goto(`${WEB}/admin/onboarding`, { waitUntil: 'networkidle' });
+  }
 
   // Etapa 2 — onde fica. O nome já vem preenchido do passo anterior.
   await page.fill('input[name="street"]', 'Rua da Paciência, 240');
@@ -1141,6 +1170,11 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
   const problemas = [];
 
   for (const papel of ['manager', 'receptionist', 'professional']) {
+    // Qual passo estourou: sem isto, um `Timeout` de 30s nao diz se foi criar a
+    // conta, entrar, trocar a senha ou percorrer o menu — e sao quatro coisas
+    // diferentes, com quatro causas diferentes.
+    let passo = 'inicio';
+    try {
     /**
      * A conta é criada **imediatamente antes** de ser usada.
      *
@@ -1149,6 +1183,7 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
      * expirar, e o sintoma era "E-mail ou senha incorretos" sobre uma conta que
      * tinha acabado de nascer.
      */
+    passo = 'o dono entrar e abrir a equipe';
     await entrarNoPainel(page, DONO, SENHA_DO_DONO);
     await page.goto(`${WEB}/admin/equipe`, { waitUntil: 'networkidle' });
     const email = `${papel}-${Date.now()}@percurso.teste`;
@@ -1168,7 +1203,17 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
      * que funcionou — e é o segundo formulário da página que ele encontra
      * incompleto enquanto espera.
      */
-    await botao(criar, 'Criar conta').click();
+    /**
+     * O botao mora numa barra `ui-sticky-action`: rola ate ele antes de clicar.
+     *
+     * A conta de `professional` e a terceira do laco, e a essa altura a pagina
+     * ja cresceu com os blocos de senha das duas anteriores — o botao ficava
+     * fora da janela e o clique esperava trinta segundos por um elemento que
+     * estava la, so nao alcancavel.
+     */
+    passo = 'criar a conta';
+    await botao(criar, 'Criar conta').scrollIntoViewIfNeeded();
+    await botao(criar, 'Criar conta').click({ timeout: 15000 });
     /**
      * E a espera é pelo bloco **desta** conta, pelo nome.
      *
@@ -1187,12 +1232,15 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
     await page.goto(`${WEB}/admin/entrar`, { waitUntil: 'networkidle' });
     await page.fill('input[name="email"]', email);
     await page.fill('input[name="password"]', senha);
+    passo = 'entrar pela primeira vez';
     await submeter(page, `${papel} entrar pela primeira vez`);
     await page.fill('input[name="currentPassword"]', senha);
     await page.fill('input[name="newPassword"]', `${senha}-nova`);
     await page.fill('input[name="confirmPassword"]', `${senha}-nova`);
+    passo = 'trocar a senha de primeiro acesso';
     await submeter(page, `${papel} trocar a senha de primeiro acesso`);
 
+    passo = 'ler e percorrer o menu';
     const visiveis = await doMenu();
     const escondidos = universo.filter((h) => !visiveis.includes(h));
 
@@ -1210,7 +1258,21 @@ await percurso('o menu não oferece o que a conta não abre', async (page) => {
     }
 
     console.log(`      ${papel}: ${visiveis.length} no menu, ${escondidos.length} escondidos`);
+    /**
+     * Voltar para uma tela que este papel abre, antes de sair.
+     *
+     * O laco acima termina numa tela **recusada** — a ultima da lista de
+     * escondidos —, e o "Sair" e desenhado por pagina, nao pelo casco: numa
+     * recusa ele nao existe. A saida de la e o "Voltar ao dia" do proprio
+     * componente de recusa, e nao o logout. Sair nao e o que este percurso
+     * prova, entao ele volta ao que a conta abre e sai de la.
+     */
+    passo = 'sair';
+    await page.goto(WEB + (visiveis[0] ?? '/admin/dia'), { waitUntil: 'networkidle' });
     await submeter(page, `${papel} sair`, botao(page, 'Sair'));
+    } catch (erro) {
+      throw new Error(`${papel} parou em "${passo}": ${erro instanceof Error ? erro.message : erro}`);
+    }
   }
 
   if (problemas.length > 0) throw new Error(problemas.join('\n          '));

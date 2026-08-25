@@ -46,3 +46,25 @@ describe('preço do formulário', () => {
     }
   });
 });
+
+describe('o separador de milhar que a própria tela mostra', () => {
+  it('aceita o valor copiado do fechamento cego', () => {
+    // A tela do caixa exibe `R$ 1.848,00`; o operador digita o que lê. Recusar
+    // isso tornava o fechamento impossível de completar pela interface.
+    expect(centavosDoCampo('1.848,00')).toBe(184_800);
+    expect(centavosDoCampo('12.345,67')).toBe(1_234_567);
+    expect(centavosDoCampo('1.848')).toBe(184_800);
+  });
+
+  it('não confunde o ponto decimal do notebook com milhar', () => {
+    expect(centavosDoCampo('49.90')).toBe(4990);
+    expect(centavosDoCampo('49,90')).toBe(4990);
+    expect(centavosDoCampo('1234,56')).toBe(123_456);
+  });
+
+  it('continua recusando o que não é número', () => {
+    expect(centavosDoCampo('1.84.8,00')).toBeNull();
+    expect(centavosDoCampo('mil')).toBeNull();
+    expect(centavosDoCampo('1.8480,00')).toBeNull();
+  });
+});
