@@ -319,7 +319,10 @@ export class WhatsAppController {
         timeZone: local.timezone,
         staffId: staff.staffUserId,
         staffName: staff.name,
-        idempotencyKey,
+        // Escopada pelo operador, como toda chave deste produto: ela vem do
+        // cliente e é livre, e duas recepcionistas no mesmo balcão mandando
+        // "1" fariam a segunda ser recusada pelo envio da primeira.
+        idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         enviar: async (destino) => {
           const saiu = await enviarPeloWhatsApp({
             tenantId: staff.tenantId,

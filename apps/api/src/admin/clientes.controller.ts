@@ -38,6 +38,19 @@ export class ClientesController {
     // tem `appointments.view`.
     const podeVerAgenda = pode(staff.permissions, 'appointments.view_all_professionals');
     const podeVerSegmento = pode(staff.permissions, 'customers.view_notes');
+    /**
+     * `cashier.open` **ou** `finance.view`, e a decisão é escrita.
+     *
+     * O que sai aqui é um booleano — "esta pessoa deve" —, nunca o valor. Quem
+     * abre a gaveta precisa dele: é a recepção que ouve "põe na minha conta" e
+     * precisa saber, antes de aceitar, se aquela pessoa já está devendo. Exigir
+     * `finance.view` trancaria o balcão para fora de uma decisão que é dele, e
+     * a alternativa que a recepção usaria é pior: aceitar e descobrir depois.
+     *
+     * O **valor** continua atrás de `finance.view`, e conceder crédito continua
+     * exigindo `finance.credit_limit` — as duas permissões que a convenção
+     * separa. Este booleano não é nenhuma das duas.
+     */
     const podeVerFiado =
       pode(staff.permissions, 'cashier.open') || pode(staff.permissions, 'finance.view');
 
