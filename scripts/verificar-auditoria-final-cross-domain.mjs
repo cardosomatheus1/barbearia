@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { HEAD_AUDITADO, MIGRACOES_AUDITADAS } from './head-auditado.mjs';
 
 const ler = (p) => fs.readFileSync(p, 'utf8');
 const falhas = [];
@@ -130,8 +131,8 @@ const migracoes = fs.readdirSync('packages/db/migrations')
   .sort();
 const versoes = migracoes.map((nome) => nome.slice(0, 4));
 exigir(new Set(versoes).size === versoes.length, 'existem versões duplicadas de migração SQL');
-exigir(versoes.at(-1) === '0117', 'head de migração mudou sem passar pela auditoria final/recheck');
-for (const v of ['0110', '0111', '0112', '0113', '0114', '0115', '0116', '0117']) {
+exigir(versoes.at(-1) === HEAD_AUDITADO, 'head de migração mudou sem passar pela auditoria final/recheck');
+for (const v of MIGRACOES_AUDITADAS) {
   exigir(versoes.includes(v), `migração cumulativa ${v} desapareceu`);
 }
 

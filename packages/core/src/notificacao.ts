@@ -35,6 +35,7 @@ export const TIPOS_DE_NOTIFICACAO = [
   'sua_vez',
   'senha_de_acesso',
   'retorno',
+  'link_atualizado',
 ] as const;
 export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
 
@@ -98,6 +99,7 @@ export const NOME_DO_AVISO: Readonly<Record<TipoDeNotificacao, string>> = {
   sua_vez: 'Sua vez na fila',
   senha_de_acesso: 'Senha de primeiro acesso',
   retorno: 'Convite de retorno',
+  link_atualizado: 'Novo link de agendamento',
 };
 
 /**
@@ -239,6 +241,19 @@ export const VARIAVEIS_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly str
   senha_de_acesso: ['o nome do cliente', 'o nome da barbearia'],
   // Campanha e automação falam com quem não tem horário marcado.
   retorno: ['o nome do cliente', 'o nome da barbearia'],
+  /**
+   * O link **não** é variável, e é decisão.
+   *
+   * Ele é o mesmo para todo mundo — é o endereço da barbearia, não algo por
+   * pessoa —, então entra literal no corpo do template. Como variável ele
+   * custaria uma posição a mais em toda mensagem para carregar sempre o mesmo
+   * valor, e a Meta recusa quando a quantidade não bate.
+   *
+   * O custo é que trocar o endereço de novo exige um texto novo aprovado. É o
+   * certo: este aviso existe para um endereço que mudou uma vez, e um template
+   * cujo conteúdo muda sozinho é o que a Meta pausa.
+   */
+  link_atualizado: ['o nome do cliente', 'o nome da barbearia'],
 };
 
 export type NaturezaDaMensagem = 'transacional' | 'promocional';
@@ -339,7 +354,31 @@ export function categoriaDoAviso(tipo: TipoDeNotificacao): CategoriaDoTemplate {
  * limitação escondida: existe um template de campanha. Quando houver um
  * segundo, ele entra aqui **e** em `naturezaDe`, junto.
  */
-export const TIPOS_DE_CAMPANHA = ['retorno'] as const;
+/**
+ * `link_atualizado` entra aqui, e **não** entra em `naturezaDe`.
+ *
+ * A distinção decide duas coisas diferentes, e é o que torna este aviso barato
+ * sem afrouxar nada:
+ *
+ * - **Categoria na Meta** sai de `naturezaDe`. Transacional vira `UTILITY`, que
+ *   custa cerca de um oitavo de `MARKETING` — mandar "seu link mudou" como
+ *   convite de retorno seria pagar preço de promoção por um recado operacional.
+ * - **Quem pode recusar** também sai de `naturezaDe`, e por isso o disparo de
+ *   campanha **não** o consulta: ele fixa `natureza: 'promocional'`, de propósito
+ *   e por achado de revisão de segurança. Este aviso continua passando por
+ *   consentimento de marketing e pelo teto do mês.
+ *
+ * É deliberadamente conservador. Um recado sobre o endereço de agendamento tem
+ * argumento para ser operacional — mas quem revogou marketing e não tem horário
+ * marcado não pediu para receber nada, e afrouxar a trava que a revisão instalou
+ * para ganhar alcance numa campanha é a troca errada. Se a barbearia precisar
+ * alcançar quem optou por não receber, o caminho é o aviso transacional que ela
+ * já manda para quem tem horário — não a campanha.
+ *
+ * A ordem importa: `TIPO_PADRAO_DE_CAMPANHA` é `[0]`, e `retorno` continua sendo
+ * o padrão de quem não escolhe.
+ */
+export const TIPOS_DE_CAMPANHA = ['retorno', 'link_atualizado'] as const;
 export type TipoDeCampanha = (typeof TIPOS_DE_CAMPANHA)[number];
 
 /**

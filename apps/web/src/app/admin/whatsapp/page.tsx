@@ -117,23 +117,39 @@ const FALHA: Record<string, string> = {
  * Os avisos que não aceitam botão nenhum não viram grupo: `sua_vez` é a pessoa
  * já esperando dentro da barbearia, e `senha_de_acesso` é credencial.
  */
-const GRUPOS_DE_BOTAO = [
-  { titulo: 'Para confirmação e lembretes', tipo: 'lembrete_24h' as const },
-  { titulo: 'Para campanha e automação', tipo: 'retorno' as const },
-].map((g) => ({
-  titulo: g.titulo,
-  botoes: BOTOES_POSSIVEIS[g.tipo],
-  /**
-   * As ressalvas do aviso mais restritivo do grupo.
-   *
-   * O lembrete de 2 horas aceita "Remarcar" e desaconselha: duas horas antes
-   * não costuma haver grade para remanejar no mesmo dia. Aviso e não recusa —
-   * proibir seria o produto opinando sobre a agenda de quem opera.
-   */
-  ressalvas: (RESSALVA_DO_BOTAO[g.tipo] ?? RESSALVA_DO_BOTAO['lembrete_2h'] ?? {}) as Partial<
-    Record<string, string>
-  >,
-}));
+const GRUPOS_DE_BOTAO = TIPOS_DE_NOTIFICACAO.reduce<
+  { chave: string; titulo: string; botoes: readonly BotaoDaMensagem[];
+    ressalvas: Partial<Record<string, string>> }[]
+>((grupos, tipo) => {
+  const botoes = BOTOES_POSSIVEIS[tipo];
+  // Aviso sem botão possível não vira grupo: `sua_vez` é a pessoa já esperando
+  // dentro da barbearia e `senha_de_acesso` é credencial.
+  if (botoes.length === 0) return grupos;
+
+  // A chave é o **conjunto** de botões: confirmação e os dois lembretes aceitam
+  // os mesmos três e formam um grupo só, sem ninguém dizer que formam.
+  const chave = [...botoes].sort().join('|');
+  const existente = grupos.find((g) => g.chave === chave);
+  if (existente) {
+    existente.titulo = `${existente.titulo}, ${nomeDoAviso(tipo).toLowerCase()}`;
+    /**
+     * As ressalvas se acumulam do aviso mais restritivo do grupo.
+     *
+     * O lembrete de 2 horas aceita "Remarcar" e desaconselha: duas horas antes
+     * não costuma haver grade para remanejar no mesmo dia. Aviso e não recusa —
+     * proibir seria o produto opinando sobre a agenda de quem opera.
+     */
+    existente.ressalvas = { ...existente.ressalvas, ...(RESSALVA_DO_BOTAO[tipo] ?? {}) };
+    return grupos;
+  }
+  grupos.push({
+    chave,
+    titulo: `Para ${nomeDoAviso(tipo).toLowerCase()}`,
+    botoes,
+    ressalvas: { ...(RESSALVA_DO_BOTAO[tipo] ?? {}) },
+  });
+  return grupos;
+}, []);
 
 function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
   return (

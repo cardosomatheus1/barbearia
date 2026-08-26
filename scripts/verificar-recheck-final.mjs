@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { HEAD_AUDITADO } from './head-auditado.mjs';
 
 const ler = (p) => fs.readFileSync(p, 'utf8');
 const falhas = [];
@@ -66,7 +67,7 @@ const migracoes = fs.readdirSync('packages/db/migrations')
   .sort();
 const versoes = migracoes.map((nome) => nome.slice(0, 4));
 exigir(new Set(versoes).size === versoes.length, 'existem versões duplicadas de migração');
-exigir(versoes.at(-1) === '0117', 'head de migração do recheck não é 0117');
+exigir(versoes.at(-1) === HEAD_AUDITADO, `head de migração do recheck não é ${HEAD_AUDITADO}`);
 
 exigir(
   verify.includes('auditoria Recheck Final')

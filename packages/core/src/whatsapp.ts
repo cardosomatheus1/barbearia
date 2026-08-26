@@ -364,6 +364,18 @@ export const BOTOES_POSSIVEIS: Readonly<Record<TipoDeNotificacao, readonly Botao
   sua_vez: [],
   senha_de_acesso: [],
   retorno: ['agendar_novamente', 'parar_de_receber'],
+  /**
+   * Só a saída, e nunca `agendar_novamente`.
+   *
+   * O motivo de `agendar_novamente` estar fora é o mesmo de `BOTOES_DO_AVISO`:
+   * ele abre o agendamento pela conversa, e este aviso existe justamente porque
+   * o caminho antigo mudou. Oferecê-lo seria a mensagem se contradizendo.
+   *
+   * `parar_de_receber` fica disponível — não por padrão, como em `retorno` —
+   * porque este aviso sai por campanha, e campanha aqui passa por consentimento
+   * de marketing: quem recebe precisa poder sair pela própria mensagem.
+   */
+  link_atualizado: ['parar_de_receber'],
 };
 
 /**
@@ -479,6 +491,19 @@ export const BOTOES_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly BotaoD
   sua_vez: [],
   senha_de_acesso: [],
   retorno: ['agendar_novamente'],
+  /**
+   * Nenhum, e o link vai no corpo.
+   *
+   * Os botões desta lista são **respostas rápidas**: o cliente aperta, a Meta
+   * devolve o texto, e o motor casa com uma ação. Não existe botão de URL aqui,
+   * e é o que este aviso pediria — então o endereço vai escrito no corpo, onde
+   * o WhatsApp o transforma em link tocável de qualquer forma.
+   *
+   * `agendar_novamente` seria o candidato óbvio e está errado: ele abre o fluxo
+   * de agendamento pela conversa, que passa pelo endereço **antigo** guardado no
+   * histórico da pessoa — exatamente o que este aviso existe para substituir.
+   */
+  link_atualizado: [],
 };
 
 // ---------------------------------------------------------------------------

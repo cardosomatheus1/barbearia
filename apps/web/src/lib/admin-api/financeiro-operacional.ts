@@ -18,6 +18,7 @@ import type {
   TipoDeCadeira,
   TipoDeExcecao,
   TipoDeMovimentoDeEstoque,
+  TipoDeNotificacao,
   TipoDeProduto,
   TipoDeRecado,
   TratamentoDaTaxa,
@@ -516,9 +517,19 @@ export interface PreferenciasDeAviso {
   diasParaRetorno: number;
 }
 
-export type TipoDeAviso =
-  | 'confirmacao' | 'lembrete_24h' | 'lembrete_2h'
-  | 'sua_vez' | 'senha_de_acesso' | 'retorno';
+/**
+ * Uma declaração só, reexportada — não uma cópia.
+ *
+ * Ela era escrita à mão aqui, com os seis tipos de então. `link_atualizado`
+ * entrou no domínio e esta lista teria ficado com seis: a tela receberia da API
+ * um `tipo` que o próprio tipo dela diz não existir, e um `Record<TipoDeAviso,
+ * …>` seria confirmado completo pelo `tsc` **porque o tipo mente**. O sintoma
+ * chega tarde e por outro caminho — um valor cru na tela, uma caixa em branco.
+ *
+ * É a convenção do tipo com o mesmo nome nos dois lados, e a lista de uniões
+ * redeclaradas em `admin-api.ts` é o precedente de como isso envelhece.
+ */
+export type TipoDeAviso = TipoDeNotificacao;
 
 export interface EnvioRegistrado {
   id: string;

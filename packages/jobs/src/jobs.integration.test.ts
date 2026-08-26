@@ -438,6 +438,7 @@ describeIfDb('fila de trabalho', () => {
     sua_vez: false,
     senha_de_acesso: false,
     retorno: false,
+    link_atualizado: false,
   } as const;
 
   it('um agendamento programa confirmação e os dois lembretes', async () => {

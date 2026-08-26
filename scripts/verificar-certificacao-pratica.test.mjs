@@ -74,9 +74,21 @@ test('detecta idempotência removida da carga', () => mutacao(
   'false && replay.body?.id !== appointmentId',
 ));
 
-test('detecta documentação voltando a 83 migrações', () => mutacao(
+/**
+ * A contagem sai do disco, não escrita aqui.
+ *
+ * Ela era `'aplica as 117 migrações'` à mão, e a migração seguinte deixou este
+ * teste procurando um texto que já não existia: ele reprovava com "fixture não
+ * contém mutação" — falha que **parece** defeito da documentação e é do próprio
+ * teste. A guarda que ele prova já conta as migrações; contar de novo aqui era a
+ * mesma lista escrita duas vezes, e a segunda envelheceu primeiro.
+ */
+const QUANTAS_MIGRACOES = fs.readdirSync(path.join(raiz, 'packages/db/migrations'))
+  .filter((nome) => /^\d{4}_.+\.sql$/.test(nome)).length;
+
+test('detecta documentação voltando a uma contagem antiga de migrações', () => mutacao(
   'docs/deploy.md',
-  'aplica as 117 migrações',
+  `aplica as ${QUANTAS_MIGRACOES} migrações`,
   'aplica as 83 migrações',
 ));
 

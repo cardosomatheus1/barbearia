@@ -266,6 +266,9 @@ async function programarTarefas(
       sua_vez: false,
       senha_de_acesso: false,
       retorno: false,
+      // Não fala de um agendamento: é o recado de que o endereço mudou, e sai
+      // por campanha para a base, não por horário marcado.
+      link_atualizado: false,
     },
   });
 

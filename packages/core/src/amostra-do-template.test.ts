@@ -3,6 +3,8 @@ import {
   EXEMPLO_DA_VARIAVEL,
   NOME_DO_AVISO,
   NOME_DO_QUE_O_BANCO_CONHECE,
+  TIPOS_DE_CAMPANHA,
+  TIPO_PADRAO_DE_CAMPANHA,
   VARIAVEIS_DO_AVISO,
   categoriaDoAviso,
   corpoComExemplos,
@@ -10,7 +12,7 @@ import {
   naturezaDe,
   nomeDoAviso,
 } from './notificacao.js';
-import { BOTOES_DO_AVISO } from './whatsapp.js';
+import { BOTOES_DO_AVISO, BOTOES_POSSIVEIS } from './whatsapp.js';
 import { TIPOS_DE_NOTIFICACAO } from './notificacao.js';
 
 /**
@@ -192,5 +194,55 @@ describe('a categoria que vai para a Meta', () => {
       const esperada = naturezaDe(tipo) === 'promocional' ? 'MARKETING' : 'UTILITY';
       expect(categoriaDoAviso(tipo), tipo).toBe(esperada);
     }
+  });
+});
+
+describe('o aviso de link atualizado', () => {
+  /**
+   * O motivo de o tipo existir: `retorno` é MARKETING e custa cerca de oito
+   * vezes mais que UTILITY. Mandar "seu endereço de agendamento mudou" como
+   * convite de retorno seria pagar preço de promoção por recado operacional.
+   */
+  it('sai como UTILITY, e é o que o torna barato', () => {
+    expect(categoriaDoAviso('link_atualizado')).toBe('UTILITY');
+  });
+
+  /**
+   * A trava que a `/security-review` instalou continua de pé.
+   *
+   * O disparo de campanha fixa `natureza: 'promocional'` e **não** consulta
+   * `naturezaDe` — é o que impede um tipo transacional na lista de campanha de
+   * contornar o consentimento de marketing. Este teste prende a metade que mora
+   * em `core`: o tipo é transacional para efeito de categoria, e isso não pode
+   * ser lido como "pode ir para quem revogou".
+   */
+  it('é transacional para a Meta e mesmo assim entra na lista de campanha', () => {
+    expect(naturezaDe('link_atualizado')).toBe('transacional');
+    expect(TIPOS_DE_CAMPANHA).toContain('link_atualizado');
+  });
+
+  /**
+   * `retorno` continua sendo o padrão de quem não escolhe. `TIPO_PADRAO_DE_CAMPANHA`
+   * é `TIPOS_DE_CAMPANHA[0]`: pôr o tipo novo na frente trocaria em silêncio o que
+   * a automação criada sem seletor manda.
+   */
+  it('não rouba o padrão da campanha', () => {
+    expect(TIPO_PADRAO_DE_CAMPANHA).toBe('retorno');
+  });
+
+  /**
+   * `agendar_novamente` abre o agendamento pela conversa, que passa pelo endereço
+   * antigo guardado no histórico da pessoa — exatamente o que este aviso existe
+   * para substituir. A mensagem se contradiria.
+   */
+  it('nunca oferece agendar pela conversa, que é o caminho que mudou', () => {
+    expect(BOTOES_DO_AVISO['link_atualizado']).toEqual([]);
+    expect(BOTOES_POSSIVEIS['link_atualizado']).not.toContain('agendar_novamente');
+  });
+
+  it('pede as mesmas duas variáveis de quem não tem horário marcado', () => {
+    expect(VARIAVEIS_DO_AVISO['link_atualizado']).toEqual(
+      VARIAVEIS_DO_AVISO['retorno'],
+    );
   });
 });

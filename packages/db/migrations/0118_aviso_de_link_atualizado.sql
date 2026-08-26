@@ -1,0 +1,19 @@
+-- Um aviso para quando o endereço de agendamento muda.
+--
+-- A barbearia troca de slug, sai de um sistema anterior, ou passa a usar o
+-- domínio próprio. Quem já é cliente tem o link antigo salvo no navegador e
+-- numa conversa de meses atrás — e não existia caminho no produto para contar
+-- isso a ele.
+--
+-- O que existia era `retorno`, e usá-lo estaria errado duas vezes: ele é
+-- MARKETING na Meta, que custa cerca de oito vezes mais que UTILITY, e o texto
+-- aprovado é convite de retorno, não recado sobre endereço. `link_atualizado`
+-- nasce transacional em `naturezaDe`, então sai como UTILITY.
+--
+-- Reaplicável, como toda migração depois da baseline do livro-caixa:
+-- `ADD VALUE IF NOT EXISTS` reencontra o valor que ela mesma criou sem falhar.
+--
+-- Sozinha no arquivo de propósito: no Postgres o valor novo de um enum não pode
+-- ser **usado** na mesma transação em que é criado. É o mesmo motivo pelo qual
+-- 0042, 0043 e 0046 fizeram só isto.
+ALTER TYPE notification_kind ADD VALUE IF NOT EXISTS 'link_atualizado';

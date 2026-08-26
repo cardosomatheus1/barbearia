@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { HEAD_AUDITADO } from './head-auditado.mjs';
 
 const ler = (arquivo) => fs.readFileSync(arquivo, 'utf8');
 const falhas = [];
@@ -72,7 +73,7 @@ exigir(
     && roadmap.includes(`as ${totalMigracoes} migrações`),
   'deploy/ROADMAP estão defasados em relação ao head de migração',
 );
-exigir(head === '0117', 'head inesperado durante a correção da certificação prática');
+exigir(head === HEAD_AUDITADO, 'head inesperado durante a correção da certificação prática');
 
 exigir(
   verify.includes('certificação prática da pilha')
