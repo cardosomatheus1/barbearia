@@ -13,6 +13,25 @@ const FALHA: Record<string, string> = {
   invalid_credentials: 'E-mail ou senha incorretos.',
   invalid_request: 'Confira os dados e tente de novo.',
   rate_limited: 'Muitas tentativas. Aguarde um instante.',
+  /**
+   * O bloqueio **não** é oráculo, e por isso tem frase própria.
+   *
+   * O argumento acima — mensagem única para não revelar quais e-mails têm conta
+   * — não se aplica aqui: `staff.guard.ts` confere o bloqueio **depois** de a
+   * senha ser provada, exatamente para que dizê-lo não conte nada a quem está
+   * adivinhando. Quem lê esta frase já provou ser dono da conta.
+   *
+   * Sem ela, o código caía na rede genérica e o dono da barbearia bloqueada
+   * digitava a senha certa e lia "Não foi possível entrar. Tente de novo." — e
+   * tentava de novo. O comentário do próprio guard diz o contrário sobre esta
+   * mesma situação: "Esconder dele seria transformar um bloqueio administrativo
+   * em 'o sistema parou'."
+   */
+  tenant_blocked:
+    'Esta conta está bloqueada. Fale com o suporte para reativá-la — seus dados continuam aqui.',
+  // A API não respondeu. Diferente de recusa: aqui repetir de fato adianta.
+  api_timeout: 'A conexão demorou demais. Tente de novo.',
+  api_indisponivel: 'Não conseguimos falar com o servidor agora. Tente de novo em instantes.',
 };
 
 export default async function EntrarGestorPage({ searchParams }: Props) {

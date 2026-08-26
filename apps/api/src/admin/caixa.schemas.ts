@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   BASES_DE_COMISSAO,
   FORMAS_DE_PAGAMENTO,
+  FORMAS_DO_CLIENTE,
   MODOS_DE_COMISSAO,
   TIPOS_DE_ITEM,
   TRATAMENTOS_DA_TAXA,
@@ -141,8 +142,22 @@ export const fecharComandaSchema = z.object({
 export const receberFiadoSchema = z.object({
   customerId: uuidSchema,
   amountCents: centavosPositivos,
-  // Fiado não paga fiado; o domínio também recusa, e aqui já nem chega.
-  forma: z.enum(['cash', 'debit', 'credit', 'pix']),
+  /**
+   * As formas que o **cliente** apresenta, do catálogo — nunca escritas aqui.
+   *
+   * Eram quatro literais, e o produto tem dez: `link` e `transfer` ficaram de
+   * fora, então a mesma barbearia aceitava link de pagamento na venda e não
+   * aceitava na dívida. A lista curta carregava duas regras ao mesmo tempo sem
+   * dizer isso — "fiado não paga fiado", que o domínio também aplica, e "crédito
+   * do próprio cliente não quita dívida", que só ela segurava.
+   *
+   * `FORMAS_DO_CLIENTE` é exatamente esse conjunto e existia no `core` **sem
+   * nenhum consumidor** — a constante do domínio que a borda tinha reescrito.
+   * Com ela, `fidelidade`, `pacote` e `assinatura` continuam recusados (o
+   * cliente não paga o que deve com crédito que a casa lhe deu) e a forma nova
+   * que entrar no catálogo do cliente nasce aceita aqui.
+   */
+  forma: z.enum(FORMAS_DO_CLIENTE as unknown as [string, ...string[]]),
 });
 
 export const diaSchema = z.object({

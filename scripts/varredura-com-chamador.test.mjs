@@ -50,8 +50,27 @@ const DISPARADORES = [
   readFileSync(join(RAIZ, 'packages/jobs/src/worker.ts'), 'utf8'),
 ].join('\n');
 
-/** Os prefixos que nomeiam trabalho de fundo neste código. */
-const PREFIXOS = ['varrer', 'atribuir', 'expirar'];
+/**
+ * Os prefixos que nomeiam trabalho de fundo, e o que **não** basta o prefixo.
+ *
+ * Eram três, e faltava `limpar`: `limparUsoAntigo` — que poda o contador de
+ * vazão da API pública — ficou sem chamador nenhum desde o bloco 78, com o
+ * comentário dizendo "roda na varredura" e esta guarda passando verde ao lado.
+ * Lista paralela dentro da guarda que existe para pegar lista paralela.
+ *
+ * Acrescentar o verbo sozinho, porém, fez a guarda acusar `limparFalhasDeLogin`
+ * — que tem dois chamadores e **não é** trabalho de fundo: ela roda no login
+ * bem-sucedido, para quem provou saber a senha não continuar de castigo. É o
+ * caso que o cabeçalho deste arquivo adverte: guarda que acusa o certo é guarda
+ * que alguém desliga.
+ *
+ * O que separa os dois não é o verbo, é a **assinatura**. Varredura recebe um
+ * instante (`agora`, `antesDe`, um `Date`) e nenhum id de entidade: ela age
+ * sobre o que o relógio deixou para trás. `limparFalhasDeLogin(emailKey)` age
+ * sobre uma conta, a pedido de alguém. Por isso o prefixo é o primeiro filtro e
+ * o `Date` na assinatura é o segundo.
+ */
+const PREFIXOS = ['varrer', 'atribuir', 'expirar', 'limpar', 'vencer', 'apurar'];
 
 function fontes(pasta) {
   const achados = [];
@@ -71,9 +90,13 @@ function exportadas() {
   const nomes = new Set();
   for (const caminho of fontes(join(RAIZ, 'packages'))) {
     const fonte = readFileSync(caminho, 'utf8');
-    for (const achado of fonte.matchAll(/export async function (\w+)/g)) {
+    for (const achado of fonte.matchAll(/export async function (\w+)\s*\(([^)]*)\)/g)) {
       const nome = achado[1];
-      if (PREFIXOS.some((p) => nome.startsWith(p))) nomes.add(nome);
+      const parametros = achado[2] ?? '';
+      if (!PREFIXOS.some((p) => nome.startsWith(p))) continue;
+      // O segundo filtro: recebe um instante, e não um id de entidade.
+      if (!/\bDate\b|\bagora\b|\bantesDe\b/.test(parametros)) continue;
+      nomes.add(nome);
     }
   }
   return [...nomes].sort();

@@ -113,9 +113,9 @@ describe('comodidades e clube', () => {
   it('exige **todas** as comodidades pedidas, não qualquer uma', () => {
     // Quem filtrou por acessibilidade e estacionamento precisa das duas — uma
     // busca que devolve só metade do pedido é a que faz a pessoa ir até a porta.
-    const so = casa({ slug: 'so-um', comodidades: ['acessivel'] });
-    const ambos = casa({ slug: 'ambos', comodidades: ['acessivel', 'estacionamento'] });
-    const achadas = filtrarBusca([so, ambos], filtro({ comodidades: ['acessivel', 'estacionamento'] }));
+    const so = casa({ slug: 'so-um', comodidades: ['accessible'] });
+    const ambos = casa({ slug: 'ambos', comodidades: ['accessible', 'parking'] });
+    const achadas = filtrarBusca([so, ambos], filtro({ comodidades: ['accessible', 'parking'] }));
     expect(achadas.map((r) => r.slug)).toEqual(['ambos']);
   });
 

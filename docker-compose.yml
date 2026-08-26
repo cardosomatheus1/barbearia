@@ -46,6 +46,23 @@ x-ambiente: &ambiente
   IDENTITY_WHATSAPP_OTP_TEMPLATE: ${IDENTITY_WHATSAPP_OTP_TEMPLATE:-}
   IDENTITY_WHATSAPP_STAFF_TEMPLATE: ${IDENTITY_WHATSAPP_STAFF_TEMPLATE:-}
   IDENTITY_WHATSAPP_LANGUAGE: ${IDENTITY_WHATSAPP_LANGUAGE:-pt_BR}
+  # As sete que ainda faltavam depois do bloco 112, e o motivo de terem passado
+  # despercebido: a guarda geral do `.env.example` confere só o
+  # `deploy/compose.yml`, e este arquivo era conferido contra uma lista de oito
+  # nomes escrita à mão. Lista paralela guardando lista paralela.
+  #
+  # Estas não falham alto, e é aí que dói: `nenhum` é padrão legítimo — quem não
+  # contratou adquirente nem emissor opera assim de propósito. Então preencher
+  # `PSP_MODO=stripe` no `.env`, subir por aqui e **não cobrar** era indistinguível
+  # de ter escolhido não cobrar. Sem erro, sem log, sem tela vermelha: só a
+  # cobrança que nunca acontece e a nota que nunca sai.
+  PSP_MODO: ${PSP_MODO:-nenhum}
+  FISCAL_MODO: ${FISCAL_MODO:-nenhum}
+  WHATSAPP_MODO: ${WHATSAPP_MODO:-nenhum}
+  META_APP_ID: ${META_APP_ID:-}
+  META_CONFIG_ID: ${META_CONFIG_ID:-}
+  META_APP_SECRET: ${META_APP_SECRET:-}
+  WHATSAPP_ONBOARDING: ${WHATSAPP_ONBOARDING:-padrao}
   DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
   ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?falta no .env}@db:5432/postgres
   API_URL: http://api:3000

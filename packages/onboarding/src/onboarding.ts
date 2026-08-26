@@ -1,5 +1,6 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
+  COMODIDADES,
   MEIOS_ACEITOS,
   resolverCoordenada,
   SERVICE_TEMPLATES,
@@ -60,7 +61,14 @@ export class OnboardingError extends Error {
 export const PAYMENT_METHODS = MEIOS_ACEITOS;
 export type PaymentMethod = MeioAceito;
 
-export const AMENITIES = ['wifi', 'card', 'pix', 'cash', 'parking', 'accessible'] as const;
+/**
+ * Reexportada de `core`, como `PAYMENT_METHODS` acima.
+ *
+ * Escrita à mão aqui, ela era a lista longa contra a lista curta de
+ * `COMODIDADES` — a borda aceitava seis e o formulário desenhava três, e como a
+ * gravação é absoluta, salvar a etapa 2 apagava `card`, `pix` e `cash`.
+ */
+export const AMENITIES = COMODIDADES;
 
 export interface OnboardingState {
   readonly tenantId: string;

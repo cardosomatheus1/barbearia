@@ -297,8 +297,10 @@ export default async function OnboardingPage({ searchParams }: Props) {
                     único campo que o domínio grava de forma absoluta — a tela
                     manda a lista inteira das caixas, e desmarcar todas é uma
                     decisão. Sem o `defaultChecked`, abrir a tela já era
-                    desmarcar tudo, e "Continuar" apagava as cinco comodidades
-                    que a página pública mostra.
+                    desmarcar tudo, e "Continuar" apagava as comodidades
+                    que a página pública mostra — e apagava mesmo, até o bloco
+                    que unificou a lista: a tela desenhava três caixas e a
+                    coluna guardava seis.
                   */}
                   <input type="checkbox" name="amenities" value={valor}
                          defaultChecked={empresa.amenities.includes(valor)} />

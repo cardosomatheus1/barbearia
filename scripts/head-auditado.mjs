@@ -26,8 +26,12 @@
  *   sem chave estrangeira e sem dado pessoal. Nada do que as três protegem é
  *   tocado, e `notifications` já guarda telefone **mascarado** por decisão do
  *   bloco 20 — o aviso novo não muda isso.
+ * - `0119` — `CHECK NOT VALID` em `locations.amenities`. Restringe, não amplia:
+ *   nenhuma política, nenhuma cascata, nenhuma coluna nova, nenhum dado pessoal.
+ *   `NOT VALID` de propósito, para a criação não varrer a tabela e travar o
+ *   deploy contra uma linha legada — o motivo está escrito na migração.
  */
-export const HEAD_AUDITADO = '0118';
+export const HEAD_AUDITADO = '0119';
 
 /** As migrações que a auditoria cumulativa exige que continuem existindo. */
 export const MIGRACOES_AUDITADAS = [

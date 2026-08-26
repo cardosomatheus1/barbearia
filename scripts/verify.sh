@@ -598,6 +598,19 @@ lancar "certificação prática da pilha" node scripts/verificar-certificacao-pr
 lancar "certificação prática da pilha — negativos" node --test scripts/verificar-certificacao-pratica.test.mjs
 lancar "carga concorrente — contrato do ensaio" node --test scripts/carga-concorrencia-reserva.test.mjs
 lancar "404 por superfície" node scripts/verificar-404-por-superficie.mjs
+# Quatro guardas que existiam, passavam e **não rodavam** — nenhuma estava aqui.
+# Duas delas são os testes negativos de guardas que o portão já executava, então
+# a prova de que aquelas conseguem ficar vermelhas nunca era exercitada: guarda
+# cuja prova negativa não roda é guarda em que se confia sem motivo.
+#
+# Runners diferentes de propósito: `varredura-com-chamador` é suíte `vitest`; os
+# outros três são scripts que lançam em regressão e saem diferente de zero. Rodar
+# um com o runner do outro dá verde sobre nada — `node --test` conta o arquivo e
+# o `vitest` diz "No test suite found".
+lancar "varredura com chamador" npx vitest run scripts/varredura-com-chamador.test.mjs
+lancar "R12 usabilidade — negativos" node scripts/r12-usabilidade.test.mjs
+lancar "R6 promessas — negativos" node scripts/verificar-r6-promessas.test.mjs
+lancar "R8 comercial — negativos" node scripts/verificar-r8-comercial.test.mjs
 lancar "movimento reduzido" node scripts/verificar-movimento-reduzido.mjs
 lancar "movimento reduzido — negativos" node --test scripts/verificar-movimento-reduzido.test.mjs
 lancar "404 por superfície — negativos" node --test scripts/verificar-404-por-superficie.test.mjs

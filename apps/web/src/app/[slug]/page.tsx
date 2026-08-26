@@ -6,6 +6,8 @@ import {
   imagemPublica,
   PROPORCAO,
   notaExibida,
+  ROTULO_DA_COMODIDADE,
+  type Comodidade,
 } from '@barbearia/core';
 import { getAvaliacoesPublicas, getProfile, getToday, type PublicProfile } from '@/lib/api';
 import { localDate } from '@/lib/date';
@@ -420,7 +422,7 @@ export default async function BarbershopPage({ params }: Params) {
                 <ul className="tags">
                   {profile.location.amenities.map((item) => (
                     <li className="tag" key={item}>
-                      {AMENITY_LABEL[item] ?? item}
+                      {ROTULO_DA_COMODIDADE[item as Comodidade] ?? item}
                     </li>
                   ))}
                 </ul>
@@ -527,14 +529,6 @@ export default async function BarbershopPage({ params }: Params) {
   );
 }
 
-const AMENITY_LABEL: Record<string, string> = {
-  wifi: 'Wi-Fi',
-  card: 'Cartão',
-  pix: 'Pix',
-  cash: 'Dinheiro',
-  parking: 'Estacionamento',
-  accessible: 'Acessível',
-};
 
 /**
  * A página inteira revalida a cada minuto, não a cada cinco.

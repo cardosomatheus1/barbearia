@@ -1,4 +1,9 @@
-import { entregarWebhook, expirarDesafiosDeOtp, varrerEntregasPendentes } from '@barbearia/identity';
+import {
+  entregarWebhook,
+  expirarDesafiosDeOtp,
+  limparUsoAntigo,
+  varrerEntregasPendentes,
+} from '@barbearia/identity';
 import { assertRlsEnforced, disconnect } from '@barbearia/db';
 import {
   atribuirObjetivos,
@@ -689,6 +694,7 @@ async function main(): Promise<void> {
       },
       entregarWebhook: async (entregaId, agora) => entregarWebhook(entregaId, agora),
       varrerWebhooks: async (agora) => varrerEntregasPendentes(agora),
+      limparUsoDaApi: async (antesDe) => limparUsoAntigo(antesDe),
 
       /**
        * A vitrine do marketplace, refeita de hora em hora (bloco 110).

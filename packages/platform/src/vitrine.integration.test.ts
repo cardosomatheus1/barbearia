@@ -76,7 +76,7 @@ describeIfDb('a vitrine do marketplace', () => {
       INSERT INTO locations (id, tenant_id, name, timezone, city, state, latitude, longitude, amenities)
       VALUES
         ('${LOCAL_DOMARI}', '${DOMARI}', 'Matriz', 'America/Bahia', 'Salvador', 'BA',
-         ${AQUI.latitude}, ${AQUI.longitude}, ARRAY['acessivel']),
+         ${AQUI.latitude}, ${AQUI.longitude}, ARRAY['accessible']),
         ('${LOCAL_VIZINHA}', '${VIZINHA}', 'Única', 'America/Bahia', 'Salvador', 'BA',
          ${AQUI.latitude + 0.009}, ${AQUI.longitude}, ARRAY[]::text[]);
 
@@ -225,7 +225,7 @@ describeIfDb('a vitrine do marketplace', () => {
   it('a busca respeita o raio e a comodidade pedida', async () => {
     await atualizarAmbas();
 
-    const acessiveis = await buscarNaVitrine(filtro({ comodidades: ['acessivel'] }));
+    const acessiveis = await buscarNaVitrine(filtro({ comodidades: ['accessible'] }));
     expect(acessiveis.map((r) => r.slug)).toEqual(['domari-barber-club']);
 
     // A vizinha está a ~1 km ao norte; um raio de 500 m deixa só a daqui.

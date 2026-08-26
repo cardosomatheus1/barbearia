@@ -266,6 +266,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     };
   });
@@ -606,6 +607,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -635,6 +637,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
         ...ligacoesDaPlataforma(),
       });
 
@@ -661,6 +664,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -691,6 +695,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
         ...ligacoesDaPlataforma(),
       });
       expect(resultado).toMatchObject({ tomadas: 1, concluidas: 1, falhadas: 0 });
@@ -715,6 +720,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -748,6 +754,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
         ...ligacoesDaPlataforma(),
       });
       expect(resultado).toMatchObject({ tomadas: 2, concluidas: 2, falhadas: 0 });
@@ -774,6 +781,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -802,6 +810,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -831,6 +840,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -862,6 +872,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -900,6 +911,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -923,6 +935,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
 
@@ -1172,6 +1185,7 @@ describeIfDb('fila de trabalho', () => {
       entregarWebhook: async () => 'entregue' as const,
       varrerWebhooks: async () => [],
       varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
       ...ligacoesDaPlataforma(),
     });
     expect(resultado.concluidas).toBe(1);

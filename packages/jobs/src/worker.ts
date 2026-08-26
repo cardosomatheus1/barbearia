@@ -201,6 +201,21 @@ export interface Contexto {
   /** As entregas vencidas, para a varredura. Injetada pelo mesmo motivo. */
   readonly varrerWebhooks: (agora: Date) => Promise<readonly string[]>;
   /**
+   * Poda o contador de vazão da API pública.
+   *
+   * `api_key_usage` é uma linha por chave e por minuto, e o teto do bloco 78 lê
+   * só o minuto corrente — o passado fica na tabela para sempre. A função que a
+   * limpa existia em `identity` desde então, com o comentário *"Roda na
+   * varredura, como `login_attempts`"* e **nenhum chamador em todo o
+   * repositório**. É o defeito de `varrerVitrine` do bloco 70 repetido:
+   * varredura prometida num comentário tem chamador e tem teste, ou é
+   * comentário.
+   *
+   * Obrigatória e não opcional, como as outras: opcional, ela nasce esquecida
+   * no primeiro worker novo e a poda deixa de acontecer sem nada ficar vermelho.
+   */
+  readonly limparUsoDaApi: (antesDe: Date) => Promise<number>;
+  /**
    * Refaz a vitrine do marketplace — preço e nota de cada card.
    *
    * Obrigatória no `Contexto` e não opcional, pelo motivo de sempre: opcional,
@@ -1047,6 +1062,10 @@ export async function rodarWorker(
       const agora = contexto.relogio.agora();
       const ok = await executarGlobal('integracoes.varredura_global', async () => {
         await contexto.varrerVitrine(agora);
+        // Duas horas para trás, e não "o minuto anterior": o teto lê o minuto
+        // corrente, então tudo antes disso é histórico — e a folga cobre o
+        // relógio do banco andar diferente do relógio do processo.
+        await contexto.limparUsoDaApi(new Date(agora.getTime() - 2 * 60 * 60 * 1000));
         for (const entregaId of await contexto.varrerWebhooks(agora)) {
           await contexto.entregarWebhook(entregaId, agora);
         }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import { FORMAS_DO_CLIENTE, ROTULO_DA_FORMA } from '@barbearia/core';
 import { quemDeve, type Devedor } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
@@ -95,10 +96,15 @@ function Devendo({ devedor }: { readonly devedor: Devedor }) {
               id={`forma-${devedor.id}`}
               name="forma"
             >
-              <option value="cash">Dinheiro</option>
-              <option value="pix">Pix</option>
-              <option value="debit">Débito</option>
-              <option value="credit">Crédito</option>
+              {/* Valores e rótulos do domínio. Escritos à mão, eram quatro
+                  contra as seis que a borda aceita — e "Crédito" aqui contra o
+                  rótulo do catálogo ali é como a mesma forma ganha dois nomes
+                  em duas telas. */}
+              {FORMAS_DO_CLIENTE.map((forma) => (
+                <option key={forma} value={forma}>
+                  {ROTULO_DA_FORMA[forma]}
+                </option>
+              ))}
             </select>
           </div>
 
