@@ -28,8 +28,20 @@ const erros = (mais = {}) => errosDaConfiguracaoDeProducao({ ...BASE, ...mais })
 
 test('configuração mínima segura passa', () => assert.deepEqual(erros(), []));
 
-test('mensageria de identidade por console é recusada em produção', () =>
-  assert.match(erros({ IDENTITY_MESSAGING_MODO: 'console' }).join('\n'), /console.*proibido/i));
+/**
+ * `console` não é mais recusado **aqui**, e isso não é afrouxamento: a recusa
+ * mudou de dono. Ela era cega e bloqueava todo deploy até alguém contratar
+ * WABA; agora `verificar-otp-entregavel.mjs` pergunta ao banco quantas unidades
+ * exigem OTP e recusa só quando alguém de fato depende da entrega.
+ *
+ * O que este teste guarda é que o preflight continua **puro** — ele valida o
+ * `.env` e não inventa uma segunda opinião sobre o mesmo assunto.
+ */
+test('console não é recusado pelo preflight; quem decide é a guarda de entrega', () =>
+  assert.deepEqual(erros({ IDENTITY_MESSAGING_MODO: 'console' }), []));
+
+test('modo de mensageria desconhecido continua sendo recusado no .env', () =>
+  assert.match(erros({ IDENTITY_MESSAGING_MODO: 'consoel' }).join('\n'), /inválido/i));
 
 test('mensageria Meta de identidade exige credenciais e templates', () => {
   const e = erros({

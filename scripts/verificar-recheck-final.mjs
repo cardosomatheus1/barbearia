@@ -12,6 +12,8 @@ const app = ler('apps/api/src/app.module.ts');
 const config = ler('scripts/verificar-configuracao-producao.mjs');
 const mig = ler('packages/db/migrations/0116_recheck_final_hardening.sql');
 const verify = ler('scripts/verify.sh');
+const entrega = ler('scripts/verificar-otp-entregavel.mjs');
+const compose = ler('deploy/compose.yml');
 
 // Cache público: TTL não é limite de memória. Tem que existir teto duro pós-expiração.
 exigir(
@@ -45,13 +47,34 @@ exigir(
     && otp.includes('resendAfterSeconds: cooldownFor(code.sendCount)'),
   'OTP voltou a invalidar código quando o desfecho externo é incerto',
 );
+/**
+ * A exigência de mensageria real continua existindo — ela mudou de forma.
+ *
+ * Antes: `console` recusado no `.env`, cego, bloqueando todo deploy até alguém
+ * contratar WABA. Agora: o preflight continua cobrando as quatro credenciais
+ * quando o modo é `meta`, e a recusa de `console` passou para uma guarda que
+ * pergunta ao banco quantas unidades exigem OTP.
+ *
+ * As duas metades são cobradas aqui, e é o ponto: só a primeira deixaria o modo
+ * `meta` mal configurado passar; só a segunda deixaria `console` liberado para
+ * quem depende do OTP.
+ */
 exigir(
-  config.includes("IDENTITY_MESSAGING_MODO=console é proibido em produção")
-    && config.includes("'IDENTITY_WHATSAPP_PHONE_NUMBER_ID'")
+  config.includes("'IDENTITY_WHATSAPP_PHONE_NUMBER_ID'")
     && config.includes("'IDENTITY_WHATSAPP_ACCESS_TOKEN'")
     && config.includes("'IDENTITY_WHATSAPP_OTP_TEMPLATE'")
     && config.includes("'IDENTITY_WHATSAPP_STAFF_TEMPLATE'"),
-  'preflight de produção deixou de exigir mensageria real de identidade',
+  'preflight de produção deixou de exigir as credenciais de IDENTITY_MESSAGING_MODO=meta',
+);
+exigir(
+  entrega.includes('require_otp_for_booking')
+    && /unidades === null/.test(entrega)
+    && /unidades > 0/.test(entrega),
+  'a guarda de entrega de OTP deixou de recusar console para quem depende dele',
+);
+exigir(
+  compose.includes('verificar-otp-entregavel.mjs'),
+  'o deploy deixou de rodar a guarda de entrega de OTP',
 );
 
 // Plataforma: plano e motivo de bloqueio são termos da plataforma, mesmo sob RLS permissiva da tabela.

@@ -86,7 +86,7 @@ O padrão seguro continua sendo **não ligar o que não foi certificado**:
 
 | Integração | Interruptor | Padrão | O que falta |
 |---|---|---|---|
-| OTP/primeiro acesso | `IDENTITY_MESSAGING_MODO` | `console` apenas fora de produção | WABA central, número, dois templates aprovados e entrega real em aparelho |
+| OTP/primeiro acesso | `IDENTITY_MESSAGING_MODO` | `console` é aceito em produção **enquanto nenhuma unidade exigir OTP** — `verificar-otp-entregavel.mjs` pergunta ao banco depois das migrações e recusa o deploy no dia em que alguém ligar a exigência | WABA central, número, dois templates aprovados e entrega real em aparelho. A senha de primeiro acesso não depende disso: ela aparece na tela |
 | Proteção anti-bot | `BOT_PROTECTION_MODO` | `turnstile` — exige as três chaves | conta na Cloudflare e as chaves no `.env`. `nenhum` assume a pendência por escrito e deixa `POST /admin/signup` sem proteção |
 | Adquirente | `PSP_MODO` | `nenhum` | conta contratada na Stripe e smoke atual de cobrança/webhook/estorno |
 | Fiscal | **recurso da plataforma** + `FISCAL_MODO` | desligado | implementar e contratar emissor real (a regra municipal **não** entra no código, SPEC §5.11) |

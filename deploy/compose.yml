@@ -157,6 +157,7 @@ services:
           || psql "$$ADMIN_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE barbearia"
         scripts/bootstrap-role.sh > /dev/null
         DATABASE_URL="postgres://postgres:$$POSTGRES_PASSWORD@db:5432/barbearia" packages/db/scripts/migrate.sh
+        DATABASE_URL="postgres://postgres:$$POSTGRES_PASSWORD@db:5432/barbearia" node scripts/verificar-otp-entregavel.mjs
       '
 
   api:

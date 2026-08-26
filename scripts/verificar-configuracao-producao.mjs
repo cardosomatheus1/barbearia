@@ -75,9 +75,19 @@ export function errosDaConfiguracaoDeProducao(env = process.env) {
   if (!['console', 'meta'].includes(identityMessaging)) {
     erros.push(`IDENTITY_MESSAGING_MODO inválido: ${identityMessaging}`);
   }
-  if (identityMessaging === 'console') {
-    erros.push('IDENTITY_MESSAGING_MODO=console é proibido em produção');
-  }
+  /**
+   * `console` não é recusado aqui, e quem decide é `verificar-otp-entregavel`.
+   *
+   * A recusa cega bloqueava todo deploy — inclusive commits sem relação com
+   * mensageria — até alguém contratar WABA e esperar a Meta aprovar dois
+   * templates. O que de fato quebra em modo console é o **OTP do agendamento**:
+   * a senha de primeiro acesso tem saída pela tela (`criarConta` devolve
+   * `senhaInicial`), o OTP não tem.
+   *
+   * Então a pergunta virou "alguém depende do OTP?", derivada de
+   * `locations.require_otp_for_booking` depois das migrações. Esta função
+   * continua pura — ela valida o `.env` e nada mais.
+   */
   if (identityMessaging === 'meta') {
     for (const nome of [
       'IDENTITY_WHATSAPP_PHONE_NUMBER_ID',

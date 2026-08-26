@@ -18,6 +18,8 @@ const arquivos = [
     .map((nome) => `packages/db/migrations/${nome}`),
   'scripts/verify.sh',
   'scripts/verificar-recheck-final.mjs',
+  'scripts/verificar-otp-entregavel.mjs',
+  'deploy/compose.yml',
 ];
 
 function preparar() {
@@ -75,10 +77,34 @@ test('detecta OTP revertendo entrega incerta', () => mutacao(
   'erro instanceof MessagingDeliveryUnknownError',
   'false && erro instanceof MessagingDeliveryUnknownError',
 ));
-test('detecta preflight permitindo console', () => mutacao(
+/**
+ * A mutação mudou de alvo junto com a regra.
+ *
+ * Ela apontava para `console é proibido em produção`, que saiu do preflight
+ * quando a recusa passou a ser derivada do banco. Um teste negativo que mira uma
+ * linha inexistente não fica vermelho por regressão — ele fica vermelho por
+ * fixture, que é ruído, e é como um negativo deixa de guardar o que dizia
+ * guardar.
+ */
+test('detecta guarda de entrega deixando de recusar quem depende do OTP', () => mutacao(
+  'scripts/verificar-otp-entregavel.mjs',
+  'if (unidades > 0) {',
+  'if (false) {',
+));
+test('detecta guarda de entrega liberando quando o banco não responde', () => mutacao(
+  'scripts/verificar-otp-entregavel.mjs',
+  'if (unidades === null) {',
+  'if (false) {',
+));
+test('detecta deploy que para de rodar a guarda de entrega', () => mutacao(
+  'deploy/compose.yml',
+  'node scripts/verificar-otp-entregavel.mjs',
+  'true # guarda removida',
+));
+test('detecta preflight deixando de exigir as credenciais do modo meta', () => mutacao(
   'scripts/verificar-configuracao-producao.mjs',
-  "erros.push('IDENTITY_MESSAGING_MODO=console é proibido em produção');",
-  "void identityMessaging;",
+  "'IDENTITY_WHATSAPP_ACCESS_TOKEN',",
+  "'REMOVIDO',",
 ));
 test('detecta plan_id fora do gatilho comercial', () => mutacao(
   'packages/db/migrations/0116_recheck_final_hardening.sql',

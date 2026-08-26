@@ -618,6 +618,7 @@ lancar "movimento reduzido — negativos" node --test scripts/verificar-moviment
 lancar "404 por superfície — negativos" node --test scripts/verificar-404-por-superficie.test.mjs
 lancar "alvo do bloqueio e regra de comissão" node scripts/verificar-alvo-e-comissao.mjs
 lancar "alvo do bloqueio e regra de comissão — negativos" node --test scripts/verificar-alvo-e-comissao.test.mjs
+lancar "entrega de OTP — negativos" node --test scripts/verificar-otp-entregavel.test.mjs
 lancar "criptografia de backup" node scripts/verificar-criptografia-backup.mjs
 lancar "criptografia de backup — runtime" node --test scripts/backup-crypto.test.mjs
 lancar "backup shell criptografado" node --test scripts/backup-shell.test.mjs
