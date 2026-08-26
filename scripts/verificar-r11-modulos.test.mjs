@@ -27,7 +27,21 @@ const roda = (mutacao) => {
   } catch { return false; } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 
-describe('R11 — módulos por domínio', () => {
+/**
+ * Folga no gancho, e não é tolerância a lentidão.
+ *
+ * Cada caso copia `apps/` e `scripts/` para um diretório descartável e roda a
+ * guarda lá — trabalho de disco de verdade, quatro vezes. Sozinho isso cabe
+ * folgado nos 5s do padrão; **dentro do portão**, com dez suítes disputando o
+ * mesmo disco, o primeiro caso mediu 5.167ms e o arquivo inteiro 14,2s. A falha
+ * lê como defeito de partição e não tem nada a ver com partição.
+ *
+ * É o precedente do `hookTimeout` da semente que limpa o banco: o número existe
+ * para o teste falhar **pelo que ele mede**, e não pela máquina em que roda. O
+ * filtro de `node_modules` acima já cortou o que dava para cortar — o que sobra
+ * é o custo legítimo.
+ */
+describe('R11 — módulos por domínio', { timeout: 30_000 }, () => {
   it('aceita a partição atual', () => expect(roda()).toBe(true));
   it('reprova lógica voltando à fachada', () => expect(roda((d) => {
     const p=join(d,'apps/web/src/lib/admin-api.ts');

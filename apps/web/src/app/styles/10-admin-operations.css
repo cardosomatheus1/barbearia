@@ -930,3 +930,38 @@ input[type='checkbox']:not(.ui-marca-propria):focus-visible {
 }
 .link-fila__nota { margin: 0; font-size: var(--font-size-sm); }
 
+
+/* -- a tela de permissões, um papel de cada vez -------------------------------
+   O rótulo da dobra carrega o nome do papel e quanto ele tem marcado. `h2`
+   dentro de `summary` para a hierarquia do documento continuar de pé — a tela
+   tinha três `h2` antes e continua tendo —, e o tamanho vem do próprio `h2`. */
+/* A seta, e por que ela precisa ser escrita à mão.
+
+   `summary` em `display: flex` perde o `::marker` do navegador, e `.dobra__titulo`
+   é flex desde sempre. No catálogo isso não custava nada: o rótulo é "Editar" em
+   acento e lê como link. Aqui o rótulo é o nome do papel em `h2`, que lê como
+   título — e o print mostrou três linhas que ninguém adivinharia que abrem.
+
+   `::after` e não `::before` para a seta ficar depois da contagem, na margem, que
+   é onde o dedo já está indo. Ela gira ao abrir, e a transição respeita quem pede
+   menos movimento pela regra global de `prefers-reduced-motion`. */
+.permissao__papel { margin: 0; }
+.permissoes-do-papel .dobra__titulo::after {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: var(--space-3);
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+.permissoes-do-papel .dobra[open] .dobra__titulo::after { transform: rotate(45deg); }
+.permissao__conta {
+  margin-left: auto;
+  padding-left: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+}

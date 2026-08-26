@@ -331,11 +331,41 @@ export default async function PermissoesPage({ searchParams }: Props) {
         não pode ficar trancada para fora do próprio negócio.
       </div>
 
+      {/*
+        Um papel de cada vez.
+        
+        Os três papéis renderizavam a matriz inteira um embaixo do outro: cento e
+        trinta e cinco caixas e 13.853px em 390px, quinze telas de rolagem para
+        editar um papel. Quem abre esta tela vem editar **um** — e para chegar no
+        Barbeiro passava por noventa caixas do Gerente e da Recepção, todas
+        marcáveis por engano no caminho.
+        
+        Dobradas e fechadas, e é de propósito que nenhuma nasça aberta: a
+        primeira aberta economizaria dois terços e ainda faria a tela abrir no
+        papel que ninguém escolheu. Fechadas, ela vira o que de fato é — escolha
+        de papel —, e o formulário continua inteiro no DOM, então o `submit` de
+        dentro de uma dobra funciona como sempre.
+        
+        A contagem no rótulo é dado, não enfeite: "23 de 45" responde a pergunta
+        que traz alguém aqui (este papel tem muito ou pouco?) sem precisar abrir
+        os três.
+      */}
       {EDITAVEIS.map((papel) => {
         const atuais = new Set(porPapel[papel] ?? []);
+        const total = GRUPOS.reduce((soma, grupo) => soma + grupo.permissoes.length, 0);
+        const marcadas = GRUPOS.reduce(
+          (soma, grupo) => soma + grupo.permissoes.filter((p) => atuais.has(p)).length,
+          0,
+        );
         return (
           <section className="painel__grupo permissoes-do-papel" key={papel}>
-            <h2 className="painel__secao">{PAPEL[papel]}</h2>
+            <details className="dobra">
+              <summary className="dobra__titulo">
+                <h2 className="painel__secao permissao__papel">{PAPEL[papel]}</h2>
+                <span className="permissao__conta tabular">
+                  {marcadas} de {total}
+                </span>
+              </summary>
             <form action={acaoPermissoesDoPapel}>
               <input name="papel" type="hidden" value={papel} />
 
@@ -375,6 +405,7 @@ export default async function PermissoesPage({ searchParams }: Props) {
                 Salvar as permissões de {PAPEL[papel].toLowerCase()}
               </button>
             </form>
+            </details>
           </section>
         );
       })}

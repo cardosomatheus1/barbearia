@@ -3368,7 +3368,13 @@ async function main() {
       // a coisa mais larga do painel. Medir só o que está aberto seria aprovar
       // a tela pelo que ela esconde.
       await page.evaluate(() => {
-        for (const dobra of document.querySelectorAll('details')) dobra.open = true;
+        for (const dobra of document.querySelectorAll('details')) {
+          // Marca o estado **entregue** antes de abrir tudo: há dobra que nasce
+          // aberta de propósito (o combo do catálogo é uma), e o print precisa
+          // devolvê-la ao que era, não fechá-la junto com as outras.
+          if (dobra.open) dobra.dataset.abertaNaEntrega = '1';
+          dobra.open = true;
+        }
       });
 
       const medida = await page.evaluate(() => {
@@ -3661,6 +3667,32 @@ async function main() {
        */
       if (PRINTS) {
         await page.setViewportSize({ width: largura, height: 2400 });
+
+        /**
+         * As dobras voltam a fechar **antes** do print.
+         *
+         * A medição abre todo `<details>` para conferir transbordo e alvo de
+         * toque lá dentro, e está certa. O print herdava esse estado, e com isso
+         * toda tela com dobra era fotografada num estado que ninguém vê: o
+         * catálogo saía com os nove formulários de edição escancarados, 22.507px
+         * de altura.
+         *
+         * O custo não foi teórico. Foi desses prints que saiu o diagnóstico de
+         * que "nada colapsa neste produto" — e ele virou prioridade escrita antes
+         * de alguém conferir de onde a imagem vinha. O que o Definition of Done
+         * pede do print é julgar se a tela ficou boa; uma foto do estado errado
+         * responde a pergunta errada com a autoridade de uma imagem.
+         *
+         * Terceira e última forma do mesmo defeito nesta medição: a régua de
+         * altura media depois, o print fotografava depois, e só a conferência de
+         * transbordo precisava do depois.
+         */
+        await page.evaluate(() => {
+          for (const dobra of document.querySelectorAll('details')) {
+            if (dobra.dataset.abertaNaEntrega !== '1') dobra.open = false;
+          }
+        });
+
         const arquivo = `${tela.nome.replace(/[^\p{L}\p{N}]+/gu, '-')}-${largura}.png`;
         await page.screenshot({ path: `${PRINTS}/${arquivo}`, fullPage: true });
       }

@@ -1,0 +1,33 @@
+/* -- quem pede menos movimento recebe menos movimento -------------------------
+
+   O §5 do CLAUDE.md manda: "Movimento com propósito e curto. Transição existe
+   para explicar de onde algo veio. Acima de 200 ms vira espera, e
+   `prefers-reduced-motion` desliga."
+
+   As duas primeiras metades estavam cumpridas — as transições do produto usam
+   `--motion-fast`, e nenhuma passa de 200 ms. A terceira não: havia **uma**
+   regra de `prefers-reduced-motion` em todo o produto, escopada ao trilho e à
+   faixa de abas, e as outras doze transições e oito animações a ignoravam. A
+   promessa estava escrita e valia para dois seletores.
+
+   Vem por último na cascata de propósito: ela precisa vencer qualquer declaração
+   anterior, e a especificidade aqui é deliberadamente baixa (`*`) porque o que
+   decide é a ordem, não o peso — assim uma regra nova escrita em qualquer
+   arquivo anterior nasce coberta, sem ninguém lembrar deste arquivo.
+
+   `0.01ms` e não `none`: com `none` o evento `transitionend` nunca dispara, e
+   quem escrever um dia uma sequência que espere por ele trava sem sintoma. Um
+   centésimo de milissegundo é instantâneo para os olhos e continua disparando.
+
+   `scroll-behavior: auto` está junto porque rolagem suave é movimento pelo mesmo
+   motivo, e é a que mais incomoda quem tem sensibilidade vestibular. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

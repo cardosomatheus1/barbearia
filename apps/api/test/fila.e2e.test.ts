@@ -59,6 +59,57 @@ const JORNADA = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
   endMinute: 1439,
 }));
 
+/**
+ * A unidade fica no fuso brasileiro **mais longe da meia-noite** agora.
+ *
+ * `sentar` cria o atendimento agora, e o domínio exige que ele comece e termine
+ * na mesma data local — quem fecha à meia-noite não cabe um corte às 23h46, e a
+ * recusa está certa. O que não pode é o teste depender da hora em que o portão
+ * roda: com `America/Bahia` fixo, os dois casos de `sentar` ficam vermelhos na
+ * última meia hora do dia local e a falha lê como defeito de fila. Aconteceu:
+ * verde às 22h33 e vermelho às 23h46, no mesmo commit.
+ *
+ * Duas tentativas antes desta, e as duas erradas por um motivo que vale anotar:
+ *
+ * - **Encolher a duração do serviço** para caber no que resta do dia. Não fecha
+ *   o buraco — às 23h59 nem um serviço de um minuto termina hoje —, e um portão
+ *   vermelho cinco minutos por dia continua sendo um portão quebrado.
+ * - **Escolher um fuso onde agora é 9h–17h.** Exigiria fusos fora do Brasil, e
+ *   `FUSOS_DO_BRASIL` é lista fechada de propósito. Alargar o catálogo do
+ *   produto para um teste passar é deixar o teste decidir o produto.
+ *
+ * O que funciona usa só o que o produto já oferece: os fusos brasileiros vão de
+ * UTC−2 a UTC−5, então em qualquer instante os relógios locais se espalham por
+ * três horas. Pegando o que tem mais minutos até a meia-noite, a folga nunca é
+ * menor que uma hora e meia — de sobra para os trinta minutos do serviço, e sem
+ * nenhum caso deste arquivo saber que fuso é.
+ */
+const FUSOS_DO_TESTE = [
+  'America/Noronha',      // UTC−2
+  'America/Bahia',        // UTC−3
+  'America/Manaus',       // UTC−4
+  'America/Rio_Branco',   // UTC−5
+];
+
+function fusoMaisLongeDaMeiaNoite(): string {
+  const agora = new Date();
+  const minutosLocais = (fuso: string): number => {
+    const partes = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: fuso,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(agora);
+    const hora = Number(partes.find((parte) => parte.type === 'hour')?.value ?? '0');
+    const minuto = Number(partes.find((parte) => parte.type === 'minute')?.value ?? '0');
+    return hora * 60 + minuto;
+  };
+  // `reduce` e não `sort`: a lista tem quatro itens e o que se quer é um só.
+  return FUSOS_DO_TESTE.reduce((melhor, fuso) =>
+    minutosLocais(fuso) < minutosLocais(melhor) ? fuso : melhor,
+  );
+}
+
 describeIfDb('fila presencial pela HTTP', () => {
   beforeAll(async () => {
     if (!SEED_URL) throw new Error('SEED_DATABASE_URL é obrigatória');
@@ -117,7 +168,7 @@ describeIfDb('fila presencial pela HTTP', () => {
     await com(token)(
       http()
         .put('/v1/admin/business')
-        .send({ name: conta.businessName, city: 'Salvador', timezone: 'America/Bahia' }),
+        .send({ name: conta.businessName, city: 'Salvador', timezone: fusoMaisLongeDaMeiaNoite() }),
     ).expect(200);
 
     await com(token)(
