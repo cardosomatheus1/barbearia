@@ -23,19 +23,32 @@ import type {
   TipoDeRecado,
   TratamentoDaTaxa,
   TratamentoDoDesconto,
+  AppointmentStatus,
+  AttendanceAction,
 } from '@barbearia/core';
 
 import { BASE, chamar, type Resposta } from './core';
 
 // -- Balcão -------------------------------------------------------------------
 
-export type StatusAtendimento =
-  | 'pending' | 'confirmed' | 'checked_in' | 'waiting' | 'in_progress'
-  | 'completed' | 'cancelled_customer' | 'cancelled_business' | 'no_show' | 'rescheduled';
+/**
+ * Uma declaração só, reexportada — os dez estados moram em `core`.
+ *
+ * Ela era soletrada aqui, num arquivo que já importa vinte e quatro tipos do
+ * domínio seis linhas acima. Um estado novo ganha rótulo obrigatório em
+ * `ROTULO_DO_ESTADO` e `TOM_SEMANTICO_DO_ESTADO` — que são totais sobre a união
+ * do `core` — e esta ficaria velha sem nada ficar vermelho: a API devolveria o
+ * estado e a tela receberia um valor que o próprio tipo dela diz não existir.
+ */
+export type StatusAtendimento = AppointmentStatus;
 
-export type AcaoAtendimento =
-  | 'confirm' | 'check_in' | 'wait' | 'start' | 'complete'
-  | 'no_show' | 'undo_no_show' | 'cancel';
+/**
+ * Idem: as oito ações são `ACOES` em `core`.
+ *
+ * `meu-dia/page.tsx` já importa `AttendanceAction as AcaoAtendimento` — as duas
+ * declarações chegavam às mesmas funções e o `tsc` não via diferença.
+ */
+export type AcaoAtendimento = AttendanceAction;
 
 export type Pontualidade =
   | { kind: 'upcoming'; minutesUntil: number }

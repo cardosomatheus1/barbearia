@@ -6,6 +6,7 @@ import {
   MAXIMO_DE_ESPECIALIDADES,
   slugDoBarbeiro,
   type TipoDeCadeira,
+  ESTADOS_ANTES_DO_ATENDIMENTO,
 } from '@barbearia/core';
 import { CatalogError, exigirServicosDoTenant } from './servicos.js';
 import { travarCatalogoDoTenant, travarConfiguracaoDoProfissional } from './concorrencia.js';
@@ -83,7 +84,7 @@ export async function listProfessionals(
              (SELECT count(*) FROM appointments a
                WHERE a.professional_id = p.id
                  AND a.service_starts_at >= ${now}
-                 AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
+                 AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
              ) AS future_appointments,
              EXISTS (SELECT 1 FROM staff_users s WHERE s.professional_id = p.id) AS has_account,
              p.phone_e164, p.public_profile, p.public_slug, p.specialties
@@ -418,7 +419,7 @@ async function conflitosDaJornadaTx(
     LEFT JOIN customers c ON c.id = a.customer_id
     WHERE a.professional_id = ${params.professionalId}::uuid
       AND a.service_starts_at >= ${params.now}
-      AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
+      AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
     ORDER BY a.service_starts_at
   `;
 
@@ -626,7 +627,7 @@ export async function setProfessionalActive(params: {
       LEFT JOIN customers c ON c.id = a.customer_id
       WHERE a.professional_id = ${params.professionalId}::uuid
         AND a.service_starts_at >= ${now}
-        AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
+        AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
       ORDER BY a.service_starts_at
     `;
 

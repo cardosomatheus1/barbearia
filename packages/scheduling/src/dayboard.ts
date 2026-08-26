@@ -14,6 +14,7 @@ import {
   type DesfechoDoSinal,
   type MotivoDoSinal,
   type Punctuality,
+  ESTADOS_QUE_LIBERAM_A_AGENDA,
 } from '@barbearia/core';
 import { agendarOfertaDaVaga, registrarEventoDeWebhook } from '@barbearia/jobs';
 import { contencaoDeHorario } from './booking.js';
@@ -429,7 +430,7 @@ async function recursosAindaCabemAoDesfazerFalta(
                  AND a2.starts_at < alvo.ends_at
                  AND upper(janela_ocupada(a2.starts_at, a2.ends_at, a2.completed_at)) > alvo.starts_at
                  AND NOT isempty(janela_ocupada(a2.starts_at, a2.ends_at, a2.completed_at))
-                 AND a2.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+                 AND a2.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
             ), 0)
             + COALESCE((
               SELECT sum(shr.quantity)

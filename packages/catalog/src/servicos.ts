@@ -1,5 +1,5 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
-import { validateCombos } from '@barbearia/core';
+import { ESTADOS_ANTES_DO_ATENDIMENTO, validateCombos } from '@barbearia/core';
 import { travarCatalogoDoTenant } from './concorrencia.js';
 
 /**
@@ -160,7 +160,7 @@ export async function listServices(
                 JOIN appointments a ON a.id = aps.appointment_id
                WHERE aps.service_id = s.id
                  AND a.service_starts_at >= ${now}
-                 AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
+                 AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
              ) AS future_appointments,
              (SELECT jsonb_object_agg(sc2.product_id::text, sc2.quantity)
                 FROM service_consumables sc2
@@ -531,7 +531,7 @@ export async function setServiceActive(
       JOIN appointments a ON a.id = aps.appointment_id
       WHERE aps.service_id = ${serviceId}::uuid
         AND a.service_starts_at >= ${now}
-        AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')
+        AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
     `;
     return { futureAppointments: Number(linhas[0]?.total ?? 0) };
   });

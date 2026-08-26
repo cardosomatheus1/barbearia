@@ -598,6 +598,8 @@ lancar "certificação prática da pilha" node scripts/verificar-certificacao-pr
 lancar "certificação prática da pilha — negativos" node --test scripts/verificar-certificacao-pratica.test.mjs
 lancar "carga concorrente — contrato do ensaio" node --test scripts/carga-concorrencia-reserva.test.mjs
 lancar "404 por superfície" node scripts/verificar-404-por-superficie.mjs
+lancar "estado de agendamento no domínio" node scripts/estado-de-agendamento-do-dominio.mjs
+lancar "estado de agendamento — negativos" node --test scripts/estado-de-agendamento-do-dominio.test.mjs
 # Quatro guardas que existiam, passavam e **não rodavam** — nenhuma estava aqui.
 # Duas delas são os testes negativos de guardas que o portão já executava, então
 # a prova de que aquelas conseguem ficar vermelhas nunca era exercitada: guarda

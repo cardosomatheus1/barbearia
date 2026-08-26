@@ -14,6 +14,8 @@ import {
   subtract,
   type AtendenteNaFila,
   type CustoDoEncaixe,
+  ESTADOS_QUE_LIBERAM_A_AGENDA,
+  ESTADOS_ANTES_DO_ATENDIMENTO,
 } from '@barbearia/core';
 
 /**
@@ -238,7 +240,7 @@ async function cadeiras(
            (SELECT min(a.service_starts_at) FROM appointments a
              WHERE a.professional_id = p.id
                AND a.service_starts_at >= ${now}
-               AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting')) AS proximo_marcado
+               AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])) AS proximo_marcado
       FROM professionals p
      WHERE p.location_id = ${locationId}::uuid
        AND p.active
@@ -782,7 +784,7 @@ export async function seatQueueEntry(params: {
             SELECT 1 FROM appointments
              WHERE professional_id = ${params.professionalId}::uuid
                AND (service_starts_at AT TIME ZONE ${pro.timezone})::date = ${dataLocal}::date
-               AND status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+               AND status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
             UNION ALL
             SELECT 1 FROM slot_holds
              WHERE professional_id = ${params.professionalId}::uuid
@@ -889,7 +891,7 @@ export async function seatQueueEntry(params: {
                      AND a.starts_at < ${ocupadoAte}
                      AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${ocupadoDe}
                      AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
-                     AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+                     AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
                 ), 0)
                 + COALESCE((
                   SELECT sum(shr.quantity)

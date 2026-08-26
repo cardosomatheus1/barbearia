@@ -1,5 +1,5 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
-import { ticketMedio, variacao } from '@barbearia/core';
+import { ESTADOS_QUE_OCUPAM_A_AGENDA, ticketMedio, variacao } from '@barbearia/core';
 
 import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 
@@ -163,7 +163,7 @@ async function operacionalDoDia(
         WHERE a.location_id = ${locationId}::uuid
           AND a.service_starts_at >= ${dia}::date
           AND a.service_starts_at < (${dia}::date + 1)
-          AND a.status IN ('completed', 'in_progress', 'checked_in', 'waiting', 'confirmed', 'pending')
+          AND a.status = ANY(${[...ESTADOS_QUE_OCUPAM_A_AGENDA]}::appointment_status[])
       )::bigint AS minutos_vendidos,
 
       -- Cliente novo é o que apareceu hoje pela primeira vez. Contar cadastro
@@ -435,7 +435,7 @@ async function operacionalDoPeriodo(
         WHERE a.location_id = ${locationId}::uuid
           AND a.service_starts_at >= ${inicio}::date
           AND a.service_starts_at < (${fim}::date + 1)
-          AND a.status IN ('completed', 'in_progress', 'checked_in', 'waiting', 'confirmed', 'pending'))::bigint
+          AND a.status = ANY(${[...ESTADOS_QUE_OCUPAM_A_AGENDA]}::appointment_status[]))::bigint
           AS minutos_vendidos,
       (SELECT count(*) FROM customers c
         WHERE (SELECT min(a.service_starts_at) FROM appointments a
@@ -484,7 +484,7 @@ async function ocupacaoDaEquipe(
        WHERE a.professional_id = p.id
          AND a.service_starts_at >= ${inicio}::date
          AND a.service_starts_at < (${fim}::date + 1)
-         AND a.status IN ('completed', 'in_progress', 'checked_in', 'waiting', 'confirmed', 'pending')), 0)::bigint AS vendidos,
+         AND a.status = ANY(${[...ESTADOS_QUE_OCUPAM_A_AGENDA]}::appointment_status[])), 0)::bigint AS vendidos,
       coalesce((SELECT sum(ws.end_minute - ws.start_minute - COALESCE((
                  SELECT sum((b->>'end')::int - (b->>'start')::int)
                    FROM jsonb_array_elements(ws.breaks) AS b

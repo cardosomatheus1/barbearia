@@ -7,6 +7,7 @@ import {
   type ScheduleException,
   type TimeRange,
   type WeeklyPlan,
+  ESTADOS_QUE_LIBERAM_A_AGENDA,
 } from '@barbearia/core';
 
 /**
@@ -23,12 +24,6 @@ import {
  * que deliberadamente não repetem `tenant_id` no WHERE.
  */
 
-const TERMINAL_STATUSES = [
-  'cancelled_customer',
-  'cancelled_business',
-  'no_show',
-  'rescheduled',
-] as const;
 
 export interface LocationSettings {
   readonly id: string;
@@ -473,7 +468,7 @@ export async function loadRangeContext(
       AND starts_at < ${rangeEnd}
       AND upper(janela_ocupada(starts_at, ends_at, completed_at)) > ${rangeStart}
       AND NOT isempty(janela_ocupada(starts_at, ends_at, completed_at))
-      AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+      AND status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
       AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
            OR id <> ${params.ignoreAppointmentId ?? null}::uuid)
   `;
@@ -501,7 +496,7 @@ export async function loadRangeContext(
          WHERE professional_id = ANY(${professionalIds}::uuid[])
            AND starts_at >= ${rangeStart}
            AND starts_at < ${rangeEnd}
-           AND status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+           AND status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
            AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
                 OR id <> ${params.ignoreAppointmentId ?? null}::uuid)
         UNION ALL
@@ -547,7 +542,7 @@ export async function loadRangeContext(
            AND a.starts_at < ${rangeEnd}
            AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${rangeStart}
            AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
-           AND a.status <> ALL(${[...TERMINAL_STATUSES]}::appointment_status[])
+           AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
            AND (${params.ignoreAppointmentId ?? null}::uuid IS NULL
                 OR a.id <> ${params.ignoreAppointmentId ?? null}::uuid)
         UNION ALL

@@ -1,4 +1,10 @@
-import { maskPhone, tryNormalizePhone, type Segmento } from '@barbearia/core';
+import {
+  ESTADOS_QUE_LIBERAM_A_AGENDA,
+  maskPhone,
+  tryNormalizePhone,
+  type Segmento,
+  ESTADOS_EM_CURSO,
+} from '@barbearia/core';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { segmentosDaBase } from './segmento.js';
 
@@ -140,9 +146,7 @@ async function paginaDoBanco(
                  JOIN locations l ON l.id = a.location_id
                 WHERE a.customer_id = c.id
                   AND (a.service_starts_at AT TIME ZONE l.timezone)::date = ${params.hoje}::date
-                  AND a.status NOT IN (
-                    'cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled'
-                  )
+                  AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
              )
            )
          )
@@ -165,7 +169,7 @@ async function paginaDoBanco(
              SELECT min(a.service_starts_at)
                FROM appointments a
               WHERE a.customer_id = p.id
-                AND a.status IN ('pending', 'confirmed', 'checked_in', 'waiting', 'in_progress')
+                AND a.status = ANY(${[...ESTADOS_EM_CURSO]}::appointment_status[])
                 AND a.service_starts_at >= now()
            ) END AS next_visit,
            CASE WHEN p.id IS NULL OR NOT ${params.podeVerAgenda} THEN NULL ELSE EXISTS (
@@ -174,9 +178,7 @@ async function paginaDoBanco(
                JOIN locations l ON l.id = a.location_id
               WHERE a.customer_id = p.id
                 AND (a.service_starts_at AT TIME ZONE l.timezone)::date = ${params.hoje}::date
-                AND a.status NOT IN (
-                  'cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled'
-                )
+                AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
            ) END AS has_today
       FROM meta m
       LEFT JOIN pagina p ON true

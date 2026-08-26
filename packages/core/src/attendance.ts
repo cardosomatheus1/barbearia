@@ -48,6 +48,45 @@ export const ESTADOS_QUE_LIBERAM_A_AGENDA = [
 ] as const;
 
 /**
+ * O compromisso que existe e ainda **não começou**.
+ *
+ * Marcado, confirmado, chegou, foi chamado — e nenhum deles sentou. É a pergunta
+ * "esta pessoa tem horário?" que a ficha do cliente, a fila, o cadastro de
+ * serviço e o de profissional fazem antes de deixar apagar ou desativar algo que
+ * já foi vendido.
+ *
+ * Estava escrita à mão **nove vezes** (`catalog/servicos.ts`, `catalog/equipe.ts`,
+ * `scheduling/fila.ts`, e duas cópias com o mesmo nome dentro de `scheduling`,
+ * em `booking.ts` e `booking-leitura.ts`). Um estado novo antes do atendimento
+ * acrescentado numa cópia e não na outra faz o cliente ver o horário na lista e
+ * receber recusa ao cancelar — ou o inverso, sumir da lista dele e continuar
+ * cancelável por id. E o `tsc` fica verde: são `const` privados, estruturalmente
+ * iguais.
+ *
+ * Derivada e não escrita: é o que sobra de `STATUSES` tirando os terminais e
+ * `in_progress`. Assim o estado novo que nascer antes do atendimento entra aqui
+ * sozinho, e o que nascer terminal entra em `ESTADOS_QUE_LIBERAM_A_AGENDA` e sai
+ * daqui pela mesma linha.
+ */
+export const ESTADOS_ANTES_DO_ATENDIMENTO: readonly AppointmentStatus[] = STATUSES.filter(
+  (estado) => estado !== 'in_progress' && estado !== 'completed'
+    && !(ESTADOS_QUE_LIBERAM_A_AGENDA as readonly string[]).includes(estado),
+);
+
+/**
+ * O mesmo, mais quem está na cadeira agora.
+ *
+ * A diferença é uma pergunta diferente, e por isso é constante própria: "tem
+ * horário?" não é "tem alguma coisa acontecendo?". A ficha do cliente e o recibo
+ * usam esta; o cadastro que impede apagar um serviço vendido usa a de cima.
+ */
+export const ESTADOS_EM_CURSO: readonly AppointmentStatus[] = [
+  ...ESTADOS_ANTES_DO_ATENDIMENTO,
+  'in_progress',
+];
+
+
+/**
  * Os estados que ocupam a agenda, **derivados** e não escritos.
  *
  * Três consultas de `ocupacao.ts` escreviam esta lista à mão e as três

@@ -19,6 +19,7 @@ import {
   type DecisaoDeReembolso,
   type DecisaoDeSinal,
   type MotivoDoSinal,
+  ESTADOS_ANTES_DO_ATENDIMENTO,
 } from '@barbearia/core';
 import { loadDayContext } from './repository.js';
 import { computeFromContext } from './service.js';
@@ -661,7 +662,6 @@ export async function releaseHold(tenantId: string, holdId: string): Promise<voi
   });
 }
 
-const ACTIVE_STATUSES = ['pending', 'confirmed', 'checked_in', 'waiting'] as const;
 
 export interface CancelRequest {
   readonly tenantId: string;
@@ -832,7 +832,7 @@ export async function cancelAppointment(
           cancelled_at = ${agora},
           updated_at = now()
       WHERE id = ${request.appointmentId}::uuid
-        AND status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
+        AND status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
         AND (${request.customerId ?? null}::uuid IS NULL
              OR customer_id = ${request.customerId ?? null}::uuid)
     `;
@@ -1058,7 +1058,7 @@ export async function rescheduleAppointment(
     if (!appointment) {
       throw new BookingError('appointment_not_found', 'Agendamento não encontrado');
     }
-    if (!(ACTIVE_STATUSES as readonly string[]).includes(appointment.status)) {
+    if (!(ESTADOS_ANTES_DO_ATENDIMENTO as readonly string[]).includes(appointment.status)) {
       throw new BookingError(
         'appointment_not_active',
         'Somente agendamento ativo pode ser remarcado',
@@ -1129,7 +1129,7 @@ export async function rescheduleAppointment(
       UPDATE appointments
          SET status = 'rescheduled', deposit_paid_cents = 0, updated_at = now()
        WHERE id = ${request.appointmentId}::uuid
-         AND status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
+         AND status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
     `;
     if (encerrados !== 1) {
       throw new BookingError('appointment_not_active', 'Somente agendamento ativo pode ser remarcado');

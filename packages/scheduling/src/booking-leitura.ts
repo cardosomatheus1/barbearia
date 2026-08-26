@@ -1,7 +1,13 @@
 import { withTenant } from '@barbearia/db';
-import { canCancel, canReschedule, minutesBetween, type ChangeRefusal } from '@barbearia/core';
+import {
+  canCancel,
+  canReschedule,
+  ESTADOS_ANTES_DO_ATENDIMENTO,
+  ESTADOS_EM_CURSO,
+  minutesBetween,
+  type ChangeRefusal,
+} from '@barbearia/core';
 
-const ACTIVE_STATUSES = ['pending', 'confirmed', 'checked_in', 'waiting'] as const;
 
 export interface CustomerAppointment {
   readonly id: string;
@@ -101,7 +107,7 @@ export async function listCustomerAppointments(params: {
     `;
 
     return rows.map((row) => {
-      const active = (ACTIVE_STATUSES as readonly string[]).includes(row.status);
+      const active = (ESTADOS_ANTES_DO_ATENDIMENTO as readonly string[]).includes(row.status);
       const minutes = minutesBetween(now, row.service_starts_at);
       const window = {
         cancelMinHours: row.cancel_min_hours,
@@ -163,11 +169,15 @@ export async function listCustomerAppointments(params: {
 export type ReceiptState = 'active' | 'done' | 'cancelled' | 'rescheduled';
 
 /**
- * Conjunto próprio, não `ACTIVE_STATUSES`: aquele responde "ainda dá para
- * cancelar?" e por isso deixa `in_progress` de fora. Aqui a pergunta é "esse
- * horário ainda vale?", e um corte em andamento vale.
+ * `ESTADOS_EM_CURSO`, e não `ESTADOS_ANTES_DO_ATENDIMENTO`: aquele responde "ainda
+ * dá para cancelar?" e por isso deixa `in_progress` de fora. Aqui a pergunta é
+ * "esse horário ainda vale?", e um corte em andamento vale.
+ *
+ * A distinção estava certa e o conjunto estava escrito à mão. Agora as duas
+ * perguntas têm cada uma a sua constante no domínio, e um estado novo entra nas
+ * duas — ou em nenhuma — pela mesma derivação.
  */
-const RECEIPT_ACTIVE = ['pending', 'confirmed', 'checked_in', 'waiting', 'in_progress'];
+const RECEIPT_ACTIVE: readonly string[] = ESTADOS_EM_CURSO;
 
 function receiptState(status: string): ReceiptState {
   if (RECEIPT_ACTIVE.includes(status)) return 'active';
@@ -293,7 +303,7 @@ export async function getReschedulableAppointment(params: {
       JOIN appointment_services aps ON aps.appointment_id = a.id
       WHERE a.id = ${params.appointmentId}::uuid
         AND a.customer_id = ${params.customerId}::uuid
-        AND a.status = ANY(${[...ACTIVE_STATUSES]}::appointment_status[])
+        AND a.status = ANY(${[...ESTADOS_ANTES_DO_ATENDIMENTO]}::appointment_status[])
       GROUP BY a.id
     `;
 

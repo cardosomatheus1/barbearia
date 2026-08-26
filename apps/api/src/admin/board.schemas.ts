@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ACOES } from '@barbearia/core';
 import { diaISO } from '../common/data.js';
 
 /**
@@ -19,19 +20,18 @@ export const daySchema = z.object({
   professionalId: z.string().uuid().optional(),
 });
 
-export const ATTENDANCE_ACTIONS = [
-  'confirm',
-  'check_in',
-  'wait',
-  'start',
-  'complete',
-  'no_show',
-  'undo_no_show',
-  'cancel',
-] as const;
+/**
+ * Do catálogo, nunca reescrita — e não havia laço de compilador nenhum ligando
+ * as duas: o controller anotava o corpo à mão em vez de usar `z.infer`, então a
+ * saída do zod era **afirmada**, não conferida. Uma nona ação em `ACOES` levava
+ * 400 em silêncio; uma que existisse só aqui não daria erro de tipo tampouco.
+ *
+ * O comentário de `ACOES` no `core` documenta exatamente este defeito sendo
+ * consertado — para a cópia do **web**, com os mesmos oito nomes. A da API ficou.
+ */
 
 export const attendanceSchema = z.object({
-  action: z.enum(ATTENDANCE_ACTIONS),
+  action: z.enum(ACOES as unknown as [string, ...string[]]),
 });
 
 export const searchSchema = z.object({

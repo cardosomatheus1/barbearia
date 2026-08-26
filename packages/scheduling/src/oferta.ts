@@ -9,6 +9,7 @@ import {
   ordenarPorPrioridade,
   type CandidatoNaFila,
   type EstadoDaOferta,
+  ESTADOS_QUE_LIBERAM_A_AGENDA,
 } from '@barbearia/core';
 import { agendarVencimentoDaOferta } from '@barbearia/jobs';
 import { candidatosDaVaga, vagaDoCancelamento } from './espera.js';
@@ -128,7 +129,7 @@ async function recursosCabem(
                  AND a.starts_at < ${params.fim}
                  AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${params.inicio}
                  AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
-                 AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+                 AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
             ), 0)
             + COALESCE((
               SELECT sum(shr.quantity)
@@ -170,7 +171,7 @@ async function profissionalAindaLivre(
          AND a.starts_at < ${params.fim}
          AND upper(janela_ocupada(a.starts_at, a.ends_at, a.completed_at)) > ${params.inicio}
          AND NOT isempty(janela_ocupada(a.starts_at, a.ends_at, a.completed_at))
-         AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+         AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
       UNION ALL
       SELECT 1 FROM slot_holds h
        WHERE h.professional_id = ${params.professionalId}::uuid
@@ -195,7 +196,7 @@ async function profissionalTemCotaNoDia(
              SELECT 1 FROM appointments a
               WHERE a.professional_id = p.id
                 AND (a.service_starts_at AT TIME ZONE ${params.timezone})::date = ${params.dia}::date
-                AND a.status NOT IN ('cancelled_customer', 'cancelled_business', 'no_show', 'rescheduled')
+                AND a.status <> ALL(${[...ESTADOS_QUE_LIBERAM_A_AGENDA]}::appointment_status[])
              UNION ALL
              SELECT 1 FROM slot_holds h
               WHERE h.professional_id = p.id
