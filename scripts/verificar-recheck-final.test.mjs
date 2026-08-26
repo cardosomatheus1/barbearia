@@ -96,6 +96,11 @@ test('detecta guarda de entrega liberando quando o banco não responde', () => m
   'if (unidades === null) {',
   'if (false) {',
 ));
+test('detecta fábrica de mensageria voltando a derrubar o boot', () => mutacao(
+  'packages/identity/src/messaging.ts',
+  "if (env['NODE_ENV'] === 'production') return new MensageriaPendenteProvider();",
+  "if (env['NODE_ENV'] === 'production') throw new Error('proibido');",
+));
 test('detecta deploy que para de rodar a guarda de entrega', () => mutacao(
   'deploy/compose.yml',
   'node scripts/verificar-otp-entregavel.mjs',

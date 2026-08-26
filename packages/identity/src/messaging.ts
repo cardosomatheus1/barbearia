@@ -231,6 +231,47 @@ export class MetaIdentityMessagingProvider implements MessagingProvider {
 
 export type IdentityMessagingMode = 'console' | 'meta';
 
+/**
+ * Em produção sem provedor: falha **no uso**, nunca no boot.
+ *
+ * A fábrica lançava quando o modo era `console` em produção, e o `useFactory`
+ * do `app.module` a chama na subida — então a API não subia. Isso era coerente
+ * enquanto o preflight recusava `console` antes de chegar aqui; deixou de ser
+ * quando a recusa passou a ser derivada do banco, e o resultado foi um deploy
+ * que passou no portão e derrubou a API. É a mesma lição do Turnstile, na outra
+ * ponta: guarda que empurra a quebra para a frente quebra na frente do cliente.
+ *
+ * Console em produção **não** é o caminho, e por isso este provider não escreve
+ * no log e segue: ele recusa, alto, com a frase que diz o que configurar.
+ *
+ * - **Senha de primeiro acesso:** `entregarSenha` já trata falha do provedor —
+ *   grava `falhou` e devolve o estado para a tela, que mostra a senha. A conta é
+ *   criada do mesmo jeito.
+ * - **OTP:** falha visível para quem pediu, e nos logs. É pior que entregar, e
+ *   muito melhor que o `ConsoleMessagingProvider` fingindo sucesso enquanto o
+ *   cliente espera um código que está no log do contêiner.
+ */
+export class MensageriaPendenteProvider implements MessagingProvider {
+  private recusar(): never {
+    throw new Error(
+      'IDENTITY_MESSAGING_MODO=console em produção: a mensagem não foi enviada. ' +
+        'Configure IDENTITY_MESSAGING_MODO=meta com a WABA central para entregar ' +
+        'OTP e senha de primeiro acesso.',
+    );
+  }
+
+  // Os parâmetros entram nomeados com `_` para casar com a interface: sem eles
+  // o tipo da classe declara zero argumentos, e o compilador recusa qualquer
+  // chamador — inclusive o teste. O `vitest` não veria, porque roda por esbuild.
+  async sendOtp(_message: OtpMessage): Promise<void> {
+    this.recusar();
+  }
+
+  async sendStaffPassword(_message: StaffPasswordMessage): Promise<void> {
+    this.recusar();
+  }
+}
+
 /** Seleciona o provider sem permitir que produção caia silenciosamente no console. */
 export function identityMessagingProviderFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -238,9 +279,9 @@ export function identityMessagingProviderFromEnv(
 ): MessagingProvider {
   const mode = (env['IDENTITY_MESSAGING_MODO'] ?? 'console').trim();
   if (mode === 'console') {
-    if (env['NODE_ENV'] === 'production') {
-      throw new Error('IDENTITY_MESSAGING_MODO=console é proibido em produção');
-    }
+    // Produção não ganha o provider de console: ele imprime e devolve sucesso,
+    // e sucesso falso é o desfecho que não se pode ter numa porta de entrada.
+    if (env['NODE_ENV'] === 'production') return new MensageriaPendenteProvider();
     return new ConsoleMessagingProvider();
   }
   if (mode !== 'meta') {

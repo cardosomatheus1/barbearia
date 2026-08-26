@@ -76,6 +76,17 @@ exigir(
   compose.includes('verificar-otp-entregavel.mjs'),
   'o deploy deixou de rodar a guarda de entrega de OTP',
 );
+/**
+ * A fábrica é chamada num `useFactory` do `app.module`, avaliado na subida.
+ * Lançar ali derruba a API inteira — foi o que aconteceu no primeiro deploy
+ * depois de a recusa de `console` sair do preflight: portão verde, API fora.
+ * A recusa mora no **uso**, e é isso que esta linha cobra.
+ */
+exigir(
+  messaging.includes('export class MensageriaPendenteProvider implements MessagingProvider')
+    && /=== 'production'\) return new MensageriaPendenteProvider\(\);/.test(messaging),
+  'a fábrica de mensageria voltou a derrubar o boot em vez de recusar no uso',
+);
 
 // Plataforma: plano e motivo de bloqueio são termos da plataforma, mesmo sob RLS permissiva da tabela.
 exigir(
