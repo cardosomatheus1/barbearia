@@ -57,6 +57,48 @@ exigir(!/\.contexto__faixa\s*\{[^}]*flex-direction:\s*column/s.test(css), 'abas 
 exigir(casco.includes('if (telas.length <= 1) return null;'), 'módulo de tela única desenha aba redundante');
 exigir(css.includes('.contexto__link::after'), 'aba atual não tem marcador visual consistente');
 
+/**
+ * O trilho não pode esconder destino no celular.
+ *
+ * Ele era `overflow-x: auto` em toda largura, e sete módulos com rótulo nunca
+ * couberam em 390px: Financeiro, Crescimento, Gestão e Configurações ficavam à
+ * direita da borda, atrás de um arrasto lateral que nada anunciava — a barra de
+ * rolagem de celular é sobreposta e some quando ninguém a está usando. O dono
+ * relatou duas vezes não achar uma tela que estava lá.
+ *
+ * A regra cobrada é a que o projeto já escreveu: refluir em vez de esconder, e
+ * **quebrar por dentro também** — a barra da plataforma tinha `flex-wrap` na
+ * externa e não na interna, e os seis destinos formavam uma linha só que não
+ * cabia. Por isso os dois são cobrados, e o `nowrap` só é aceito atrás de um
+ * `min-width`: solto, ele volta a valer no aparelho pequeno.
+ */
+// Comentário sai antes de casar: os blocos abaixo **citam** `flex: none` e
+// `nowrap` para explicar por que não podem estar ali, e a primeira versão desta
+// guarda reprovou a própria explicação. É a segunda vez nesta base — a de
+// pureza do `core` foi a primeira.
+const semComentario = css.replace(/\/\*[\s\S]*?\*\//g, '');
+const semMedia = semComentario.replace(/@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/g, '');
+for (const seletor of ['.trilho', '.trilho__grupo']) {
+  const bloco = new RegExp(`\\${seletor}\\s*\\{[^}]*\\}`).exec(semMedia)?.[0] ?? '';
+  exigir(/flex-wrap:\s*wrap/.test(bloco), `${seletor} não quebra em linhas no celular`);
+  exigir(!/flex-wrap:\s*nowrap/.test(bloco), `${seletor} tem nowrap fora de um min-width`);
+}
+
+/**
+ * `flex-wrap: wrap` no grupo não basta: com `flex: none` — que é `0 0 auto` — ele
+ * não encolhe abaixo do próprio conteúdo, e os filhos nunca chegam a quebrar. A
+ * primeira versão deste conserto tinha o `wrap` e o `flex: none` juntos: só o
+ * grupo de configuração desceu, os sete módulos continuaram numa faixa cortada
+ * em "ATEN…", e **esta guarda ficou verde** sobre a tela errada. Guarda que
+ * aprova o defeito que ela existe para pegar é pior que guarda nenhuma, então o
+ * que ela cobra agora é a condição inteira.
+ */
+const blocoGrupo = /\.trilho__grupo\s*\{[^}]*\}/.exec(semMedia)?.[0] ?? '';
+exigir(
+  !/flex:\s*(none|0\s+0\s)/.test(blocoGrupo),
+  'grupo do trilho não encolhe, então os módulos não quebram por mais wrap que tenham',
+);
+
 // Migalha escrita dentro de página volta a criar duas fontes de verdade.
 const raiz = 'apps/web/src/app/admin';
 const paginas = [];

@@ -21,8 +21,24 @@
 
 /* -- o trilho de módulos ----------------------------------------------------- */
 
+/* No celular o trilho **quebra em linhas**; da largura em que os sete módulos
+   cabem para cima, volta a ser uma faixa só.
+
+   Ele era `overflow-x: auto` em toda largura, e sete módulos com rótulo nunca
+   couberam em 390px: Financeiro, Crescimento, Gestão e Configurações ficavam à
+   direita da borda. A barra de rolagem de celular é sobreposta e some quando
+   ninguém está arrastando, então não havia **nada** na tela dizendo que existia
+   mais coisa — o dono relatou duas vezes não achar uma tela que estava lá, e a
+   segunda (Estoque) estava em produção o tempo todo.
+
+   É a regra que este projeto já escreveu duas vezes: nunca esconder conteúdo no
+   celular, refluir; e barra de navegação que quebra em linhas quebra **por
+   dentro** também — foi o que faltou na barra da plataforma, cuja externa
+   quebrava e cuja interna não, deixando a trilha de auditoria fora do alcance.
+   Por isso o `flex-wrap` está nos dois, e o `nowrap` volta nos dois juntos. */
 .trilho {
   display: flex;
+  flex-wrap: wrap;
   overflow-x: auto;
   scrollbar-width: thin;
   align-items: center;
@@ -34,10 +50,25 @@
 }
 .trilho__grupo {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
-  flex: none;
+  /* `flex: none` é `0 0 auto`: o grupo não encolhe abaixo do próprio conteúdo,
+     então os filhos **nunca** quebram por mais `flex-wrap` que ele tenha — a
+     linha inteira transborda junta. Foi o que aconteceu na primeira tentativa
+     deste conserto: Configurações desceu para a segunda fila, os sete módulos
+     continuaram numa faixa cortada em "ATEN…", com a guarda verde e a medição
+     verde. Só o print mostrou. */
+  flex: 0 1 auto;
   min-width: 0;
+}
+/* 60rem é onde os sete módulos com rótulo cabem numa linha ao lado do selo e do
+   grupo de configuração. Abaixo disso a quebra é o comportamento certo, não a
+   degradação de um. */
+@media (min-width: 60rem) {
+  .trilho,
+  .trilho__grupo { flex-wrap: nowrap; }
+  .trilho__grupo { flex: none; }
 }
 .trilho__selo {
   display: grid;
