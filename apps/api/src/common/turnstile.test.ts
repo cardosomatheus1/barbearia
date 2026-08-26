@@ -60,4 +60,44 @@ describe('Turnstile server-side', () => {
       await expect(verificarTurnstile({ token: 't', action: 'signup', env: ENV, fetcher })).resolves.toEqual({ ok: false, code: 'provedor_indisponivel' });
     }
   });
+
+  /**
+   * O interruptor de provedor não contratado, e o motivo de ele existir.
+   *
+   * Sem esta saída, tirar a exigência do preflight moveria a quebra do deploy
+   * para o runtime — `/admin/criar-conta` responderia 403 a todo mundo, porque
+   * `verificarTurnstile` falha fechado em produção. A pendência assumida tem
+   * que abrir a porta de verdade, não adiar o erro.
+   */
+  it('BOT_PROTECTION_MODO=nenhum abre a porta mesmo em produção e sem chave', async () => {
+    const nunca = vi.fn<typeof fetch>(async () => { throw new Error('não deveria chamar a Cloudflare'); });
+    const env = { NODE_ENV: 'production', BOT_PROTECTION_MODO: 'nenhum' } as NodeJS.ProcessEnv;
+    await expect(verificarTurnstile({ token: 't', action: 'signup', env, fetcher: nunca })).resolves.toEqual({
+      ok: true,
+      ignorado: true,
+    });
+    expect(nunca).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `nehum` escrito errado não pode virar "sem proteção".
+   *
+   * É o precedente de `PSP_MODO`: lido com tolerância, um valor desconhecido
+   * abriria a porta de cadastro por um typo e ninguém descobriria — o oposto do
+   * que um interruptor existe para fazer.
+   */
+  it('BOT_PROTECTION_MODO desconhecido derruba, em vez de virar "sem proteção"', async () => {
+    const env = { NODE_ENV: 'production', BOT_PROTECTION_MODO: 'nehum' } as NodeJS.ProcessEnv;
+    await expect(
+      verificarTurnstile({ token: 't', action: 'signup', env, fetcher: vi.fn<typeof fetch>() }),
+    ).rejects.toThrow(/BOT_PROTECTION_MODO inválido/);
+  });
+
+  /** O padrão continua exigindo: quem não escreve nada não perde a proteção. */
+  it('sem a variável, o comportamento é o de antes', async () => {
+    const env = { NODE_ENV: 'production' } as NodeJS.ProcessEnv;
+    await expect(
+      verificarTurnstile({ token: 't', action: 'signup', env, fetcher: vi.fn<typeof fetch>() }),
+    ).resolves.toEqual({ ok: false, code: 'configuracao_ausente' });
+  });
 });

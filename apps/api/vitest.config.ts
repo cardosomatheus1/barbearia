@@ -2,7 +2,17 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['test/**/*.test.ts'],
+    /**
+     * `src/` também, e não só `test/`.
+     *
+     * `src/common/turnstile.test.ts` e `src/media/storage.test.ts` existiam com
+     * dezessete casos verdes que **nenhum runner executava**: o `include` cobria
+     * só `test/`, e ninguém percebe um teste que não roda — ele não fica
+     * vermelho, ele não aparece. Os de Turnstile são a porta anti-bot do
+     * cadastro público, que é justamente o tipo de garantia que não pode
+     * depender de alguém lembrar de rodar à mão.
+     */
+    include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
 
     /**
      * Um arquivo por vez.

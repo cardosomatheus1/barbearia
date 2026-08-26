@@ -59,6 +59,26 @@ export function falhasDaProtecaoAntiBot(fontes = {}) {
     if (!preflight.includes(env)) falhas.push(`preflight não cobra ${env}`);
     if (!compose.includes(`${env}:`)) falhas.push(`compose não entrega ${env}`);
   }
+  /**
+   * O interruptor precisa existir nos dois lados **e** falhar alto.
+   *
+   * Um `BOT_PROTECTION_MODO` que o compose não repassasse chegaria ao runtime
+   * como ausente, e ausente é `turnstile` — o preflight passaria com `nenhum` e
+   * a rota de cadastro responderia 403 a todo mundo. É a quebra empurrada para
+   * a frente que a saída em `verificarTurnstile` existe para impedir.
+   */
+  if (!compose.includes('BOT_PROTECTION_MODO:')) falhas.push('compose não entrega BOT_PROTECTION_MODO');
+  if (!preflight.includes('BOT_PROTECTION_MODO')) falhas.push('preflight não conhece BOT_PROTECTION_MODO');
+  if (!/BOT_PROTECTION_MODO inválido/.test(preflight)) {
+    falhas.push('preflight aceita BOT_PROTECTION_MODO desconhecido em silêncio');
+  }
+  const runtime = ler('apps/api/src/common/turnstile.ts');
+  if (!/BOT_PROTECTION_MODO inválido/.test(runtime)) {
+    falhas.push('o runtime aceita BOT_PROTECTION_MODO desconhecido em silêncio');
+  }
+  if (!/modoAntiBot\(env\) === 'nenhum'/.test(runtime)) {
+    falhas.push('verificarTurnstile não respeita BOT_PROTECTION_MODO=nenhum e vai falhar fechado');
+  }
   return falhas;
 }
 

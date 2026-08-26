@@ -131,15 +131,34 @@ export function errosDaConfiguracaoDeProducao(env = process.env) {
     } catch { erros.push('BACKUP_ENCRYPTION_KEY precisa ter 32 bytes em base64'); }
   }
 
-  for (const nome of ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_HOSTNAMES']) {
-    if (!valor(env, nome)) erros.push(`proteção anti-bot exige ${nome}`);
+  /**
+   * A proteção anti-bot é do mesmo formato de `PSP_MODO` e `FISCAL_MODO`:
+   * provedor não contratado é `nenhum` **declarado**, nunca omitido.
+   *
+   * O padrão continua `turnstile`, então quem não escrever nada continua sendo
+   * cobrado das três chaves. `nenhum` é uma linha no `.env` que alguém digitou
+   * de propósito, e é isso que a torna encontrável quando o cadastro público
+   * começar a receber conta falsa.
+   */
+  const antiBot = valor(env, 'BOT_PROTECTION_MODO') || 'turnstile';
+  if (!['turnstile', 'nenhum'].includes(antiBot)) {
+    erros.push(`BOT_PROTECTION_MODO inválido: ${antiBot}. Use turnstile ou nenhum.`);
   }
-  const hostnamesTurnstile = valor(env, 'TURNSTILE_HOSTNAMES')
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-  if (hostnamesTurnstile.some((h) => ['localhost', '127.0.0.1', '::1'].includes(h))) {
-    erros.push('TURNSTILE_HOSTNAMES de produção não pode conter localhost');
+  if (antiBot === 'turnstile') {
+    for (const nome of ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_HOSTNAMES']) {
+      if (!valor(env, nome)) {
+        erros.push(
+          `proteção anti-bot exige ${nome} (ou BOT_PROTECTION_MODO=nenhum para assumir a pendência)`,
+        );
+      }
+    }
+    const hostnamesTurnstile = valor(env, 'TURNSTILE_HOSTNAMES')
+      .split(',')
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean);
+    if (hostnamesTurnstile.some((h) => ['localhost', '127.0.0.1', '::1'].includes(h))) {
+      erros.push('TURNSTILE_HOSTNAMES de produção não pode conter localhost');
+    }
   }
 
   const webUrl = valor(env, 'WEB_URL');

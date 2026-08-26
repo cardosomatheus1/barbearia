@@ -105,6 +105,9 @@ x-ambiente: &ambiente
   WHATSAPP_ONBOARDING: ${WHATSAPP_ONBOARDING:-padrao}
   # Proteção anti-bot da criação de conta. A site key é pública; a secret key
   # nunca sai do servidor/API. O preflight recusa produção sem as três.
+  # `turnstile` (padrão) exige as três chaves; `nenhum` assume a pendência por
+  # escrito. Ver docs/go-live.md.
+  BOT_PROTECTION_MODO: ${BOT_PROTECTION_MODO:-turnstile}
   TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
   TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
   TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}

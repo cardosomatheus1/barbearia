@@ -8,6 +8,28 @@
  * de um provedor externo.
  */
 
+/**
+ * O interruptor da proteção anti-bot, e a **única** função que lê a variável.
+ *
+ * É o desenho de `PSP_MODO`, `FISCAL_MODO` e `WHATSAPP_MODO`: provedor que a
+ * casa ainda não contratou entra como `nenhum` — declarado, não omitido. O
+ * padrão é `turnstile` de propósito: `nenhum` por omissão faria toda instalação
+ * nova perder a proteção sem ninguém ter decidido isso, que é o oposto do que
+ * um interruptor existe para fazer.
+ *
+ * Valor desconhecido **falha alto**. Lido com tolerância, um `BOT_PROTECION`
+ * escrito errado viraria "sem proteção" e a porta de cadastro ficaria aberta
+ * por um typo, em silêncio — o mesmo motivo pelo qual `PSP_MODO` desconhecido
+ * derruba o processo em vez de virar "sem adquirente".
+ */
+export type ModoAntiBot = 'turnstile' | 'nenhum';
+
+export function modoAntiBot(env: NodeJS.ProcessEnv = process.env): ModoAntiBot {
+  const modo = (env['BOT_PROTECTION_MODO'] ?? 'turnstile').trim();
+  if (modo === 'turnstile' || modo === 'nenhum') return modo;
+  throw new Error(`BOT_PROTECTION_MODO inválido: ${modo}. Use turnstile ou nenhum.`);
+}
+
 const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TETO_TOKEN = 2048;
 const TIMEOUT_MS = 10_000;
@@ -41,6 +63,19 @@ const hostnamesEsperados = (env: NodeJS.ProcessEnv): ReadonlySet<string> =>
 
 export async function verificarTurnstile(params: VerificarTurnstileParams): Promise<ResultadoTurnstile> {
   const env = params.env ?? process.env;
+
+  /**
+   * Desligada por decisão declarada, a porta abre — e é diferente de
+   * configuração ausente.
+   *
+   * Sem esta saída, tirar a exigência do preflight moveria a falha do deploy
+   * para o runtime: o `verificarTurnstile` falha fechado em produção, então
+   * `/admin/criar-conta` responderia 403 a todo mundo. Guarda de configuração
+   * que só empurra a quebra para a frente é pior que guarda nenhuma, porque a
+   * quebra passa a acontecer na frente do cliente.
+   */
+  if (modoAntiBot(env) === 'nenhum') return { ok: true, ignorado: true };
+
   const segredo = env['TURNSTILE_SECRET_KEY']?.trim();
   const producao = env['NODE_ENV'] === 'production';
 
