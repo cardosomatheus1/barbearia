@@ -597,6 +597,8 @@ lancar "auditoria Recheck Final — negativos" node --test scripts/verificar-rec
 lancar "certificação prática da pilha" node scripts/verificar-certificacao-pratica.mjs
 lancar "certificação prática da pilha — negativos" node --test scripts/verificar-certificacao-pratica.test.mjs
 lancar "carga concorrente — contrato do ensaio" node --test scripts/carga-concorrencia-reserva.test.mjs
+lancar "404 por superfície" node scripts/verificar-404-por-superficie.mjs
+lancar "404 por superfície — negativos" node --test scripts/verificar-404-por-superficie.test.mjs
 lancar "criptografia de backup" node scripts/verificar-criptografia-backup.mjs
 lancar "criptografia de backup — runtime" node --test scripts/backup-crypto.test.mjs
 lancar "backup shell criptografado" node --test scripts/backup-shell.test.mjs

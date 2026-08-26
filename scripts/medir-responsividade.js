@@ -3066,6 +3066,11 @@ async function main() {
     },
     { nome: 'configurações', url: '/admin/configuracoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'privacidade (LGPD)', url: '/admin/lgpd', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    // A lista de clientes entrou com o pacote de certificação e ficou fora daqui:
+    // nunca foi fotografada nem conferida em 360px, e é a porta de uma das áreas
+    // mais usadas do painel. A ficha (`/admin/cliente?id=`) já era medida — medir a
+    // ficha e não a lista é medir o destino sem medir o caminho até ele.
+    { nome: 'clientes', url: '/admin/clientes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'fotos', url: '/admin/fotos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'franquia', url: '/admin/franquia', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'rede da franquia', url: '/admin/rede', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
