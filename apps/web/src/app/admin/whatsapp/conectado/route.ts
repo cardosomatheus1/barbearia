@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { conectarWhatsAppNaApi } from '@/lib/admin-api';
 import { VOLTA_DA_META } from '@/lib/meta';
+import { registrarFalhaInesperada } from '@/lib/falha-inesperada';
 import {
   guardarCodigoDaMeta,
   guardarMotivoDaMeta,
@@ -89,7 +90,24 @@ function passagem(destino: string, aviso: string): Response {
   });
 }
 
+/**
+ * A volta da Meta, com a falha inesperada virando frase em vez de página crua.
+ *
+ * Route Handler que lança devolve o "500 | Internal Server Error" do Next, fora
+ * do `error.tsx` do admin — e foi o que a barbearia viu, sem stack no log para
+ * dizer onde. Aqui a pessoa volta ao painel com um motivo, e o log ganha a linha.
+ */
 export async function GET(requisicao: Request): Promise<Response> {
+  try {
+    return await conectar(requisicao);
+  } catch (erro) {
+    // `redirect()` funciona lançando: engoli-lo quebraria os caminhos felizes.
+    if (!registrarFalhaInesperada('GET /admin/whatsapp/conectado', erro)) throw erro;
+    return passagem(TELA + '?erro=falha_inesperada', 'Voltando ao painel…');
+  }
+}
+
+async function conectar(requisicao: Request): Promise<Response> {
   const url = new URL(requisicao.url);
   const code = url.searchParams.get('code');
 

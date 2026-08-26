@@ -91,6 +91,15 @@ const FALHA: Record<string, string> = {
   token_invalido: 'O token não confere. Copie de novo do painel da Meta.',
   forbidden: 'Sua conta não mexe no WhatsApp da casa.',
   /**
+   * A falha que ninguém previu, com frase em vez da página crua do Next.
+   *
+   * Ela não diz "tente de novo" porque não se sabe se tentar de novo resolve —
+   * e não manda procurar no painel da Meta, porque o problema é deste lado. O
+   * que ela promete é o que de fato passou a acontecer: o motivo está no log.
+   */
+  falha_inesperada:
+    'Alguma coisa falhou aqui dentro no meio da conexão. O erro foi registrado no servidor com o detalhe técnico — se repetir, é ele que diz o que houve.',
+  /**
    * "Tente de novo" só quando tentar de novo pode funcionar (bloco 90).
    *
    * Esta frase cobre duas coisas muito diferentes: a rede que hesitou, em que
