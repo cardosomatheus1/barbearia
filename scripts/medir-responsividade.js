@@ -3230,6 +3230,8 @@ async function main() {
 
   let problemas = 0;
 
+  const alturas = [];
+
   for (const tela of telas) {
     const resultados = [];
 
@@ -3581,8 +3583,39 @@ async function main() {
           }
         }
 
+        /**
+         * Quantas telas de rolagem a página custa.
+         *
+         * Esta medição tinha 65 etapas de portão atrás dela e era **cega para
+         * altura**. Rolagem horizontal reprova, alvo abaixo de 44px reprova,
+         * contraste reprova — e o catálogo em 390px passava verde com 22.507px,
+         * que são vinte e oito telas de celular para nove serviços. O pior
+         * defeito de uso do produto era o único invisível para tudo que foi
+         * construído para pegá-lo, e foi assim que ele piorou entrega após
+         * entrega sem ninguém notar: entre duas medições, catálogo +1.806px,
+         * agenda da semana +6.531px, WhatsApp +2.694px.
+         *
+         * Ela **registra e não reprova**, de propósito e por enquanto. Um teto
+         * ligado hoje nasce vermelho em dez telas, e guarda que nasce vermelha
+         * é guarda que alguém desliga antes de consertar o que ela achou. O que
+         * o número faz agora é existir: sem ele, "a tela está longa demais" é
+         * impressão, e impressão não sustenta prioridade nem prova conserto.
+         *
+         * O teto entra quando o V8 tiver derrubado as alturas — e aí ele é
+         * decisão de produto, não de layout, porque quantas telas de rolagem
+         * uma página pode custar depende do que ela é: o catálogo do dono e a
+         * página pública do cliente não respondem a mesma pergunta.
+         */
+        const alturaDaJanela = window.innerHeight || 1;
+        const altura = Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        );
+
         return {
           rola,
+          altura,
+          telasDeRolagem: Math.round((altura / alturaDaJanela) * 10) / 10,
           estouram: [...new Set(estouram)].slice(0, 4),
           cortados: [...new Set(cortados)].slice(0, 4),
           pequenos: [...new Set(pequenos)].slice(0, 4),
@@ -3621,6 +3654,11 @@ async function main() {
     );
     problemas += ruins.length;
 
+    // A régua de altura é do celular: é lá que rolagem custa, e 390px é o
+    // aparelho em que o cliente e a recepção de fato abrem estas telas.
+    const noCelular = resultados.find((r) => r.largura === 390);
+    if (noCelular?.altura) alturas.push({ tela: tela.nome, ...noCelular });
+
     // Largura que nem chegou a ser medida não conta como aprovada: sem isto,
     // uma tela que falhou nas quatro ainda terminava com um "ok" embaixo.
     const marca = ruins.length === 0 && resultados.length === LARGURAS.length ? 'ok ' : 'FALHA';
@@ -3637,6 +3675,25 @@ async function main() {
   }
 
   await browser.close();
+
+  /**
+   * A régua de altura, registrada e não cobrada — ver o comentário na medição.
+   *
+   * Sai ordenada da pior para a melhor e cortada nas dez primeiras: a lista
+   * inteira são noventa e seis linhas que ninguém lê, e o que se quer aqui é a
+   * fila de quem precisa encolher. O total continua saindo, para a soma ser
+   * comparável entre duas execuções mesmo quando a ordem muda.
+   */
+  if (alturas.length > 0) {
+    alturas.sort((a, b) => b.altura - a.altura);
+    const soma = alturas.reduce((t, a) => t + a.altura, 0);
+    console.log('\naltura de página em 390px — registrada, ainda sem teto');
+    for (const a of alturas.slice(0, 10)) {
+      console.log(`      ${String(a.altura).padStart(6)}px  ${String(a.telasDeRolagem).padStart(5)} telas  ${a.tela}`);
+    }
+    console.log(`      ${String(soma).padStart(6)}px  somadas as ${alturas.length} telas`);
+  }
+
   console.log(problemas === 0 ? '\ntodas as telas passam nas quatro larguras' : `\n${problemas} medições com problema`);
   process.exit(problemas === 0 ? 0 : 1);
 }
