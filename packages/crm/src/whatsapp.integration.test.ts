@@ -12,6 +12,9 @@ import {
   tenantDoNumero,
   salvarCadastroDoWhatsApp,
   submeterTemplate,
+  entregarTemplateNaMeta,
+  liberarTemplatesAbandonados,
+  templateDaUnidade,
   templatesDaUnidade,
   conciliarNumero,
   templatesEmCurso,
@@ -19,6 +22,50 @@ import {
   desconectarNumero,
 } from './whatsapp.js';
 import { enviarMensagemAvulsa } from './mensagem-avulsa.js';
+import { semTenant, withTenant } from '@barbearia/db';
+import type { TemplateNaTela } from './whatsapp.js';
+import type { WhatsAppProvider } from '@barbearia/core';
+
+/**
+ * O caminho inteiro do balcão, agora em dois passos (bloco 133).
+ *
+ * A requisição reserva a linha e **enfileira**; quem fala com a Meta é o
+ * worker. Quase todo teste deste arquivo quer o desfecho, então o helper
+ * percorre os dois — e o faz do jeito que a produção faz: o `claim` sai da
+ * tarefa que a reserva enfileirou, não de uma variável passada por baixo.
+ *
+ * Isso é de propósito. Se alguém tirar o `enfileirar` de dentro da transação da
+ * reserva, o `claim` some, a entrega não acha alvo e **os vinte testes** que
+ * usam este helper ficam vermelhos — em vez de um só, escrito à parte, que
+ * poderia ser apagado junto com o defeito.
+ */
+async function submeterEEntregar(
+  params: Parameters<typeof submeterTemplate>[0] & { readonly provider: WhatsAppProvider },
+): Promise<TemplateNaTela> {
+  const { provider, ...pedido } = params;
+  const criado = await submeterTemplate(pedido);
+  const claim = await semTenant(async (tx) => {
+    const linhas = await tx.$queryRaw<{ claim: string }[]>`
+      SELECT payload->>'claim' AS claim
+        FROM jobs
+       WHERE kind = 'whatsapp.submeter_template'
+         AND payload->>'templateId' = ${criado.id}
+       ORDER BY created_at DESC
+       LIMIT 1
+    `;
+    return linhas[0]?.claim ?? null;
+  });
+  if (!claim) throw new Error('a reserva não enfileirou a ida à Meta');
+  await entregarTemplateNaMeta({
+    tenantId: params.tenantId,
+    templateId: criado.id,
+    claim,
+    provider,
+  });
+  const depois = await templateDaUnidade(params.tenantId, criado.id);
+  if (!depois) throw new Error('o texto sumiu depois da entrega');
+  return depois;
+}
 
 /**
  * WhatsApp oficial contra Postgres real (bloco 55, SPEC §4.12).
@@ -127,6 +174,24 @@ describeIfDb('WhatsApp oficial', () => {
    * dois colidiriam na chave da Meta — o teste falharia por outro motivo que
    * não a regra sob prova.
    */
+  /**
+   * Empurra a reserva para trás no tempo: o relógio é o do banco.
+   *
+   * `withTenant` e não `semTenant`: `whatsapp_templates` tem política por
+   * tenant, e um `UPDATE` sem tenant no contexto alcança **zero linhas, em
+   * silêncio**. Escrito com `semTenant`, este auxiliar não envelhecia nada — e
+   * o teste da varredura falhava acusando a varredura, que estava certa.
+   */
+  const envelhecerSubmissao = (templateId: string, quanto: string) =>
+    withTenant(TENANT, async (tx) => {
+      await tx.$executeRawUnsafe(
+        `UPDATE whatsapp_templates
+            SET submission_updated_at = now() - interval '${quanto}'
+          WHERE id = $1::uuid`,
+        templateId,
+      );
+    });
+
   const aprovarTemplate = async (
     tipo = 'lembrete_24h',
     corpo = 'Olá {{1}}, seu corte é amanhã às {{2}}.',
@@ -134,7 +199,7 @@ describeIfDb('WhatsApp oficial', () => {
   ) => {
     const provedor = new FakeWhatsAppProvider();
     provedor.proximoEstadoDoTemplate = 'aprovado';
-    return submeterTemplate({
+    return submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: tipo as 'lembrete_24h',
@@ -476,7 +541,7 @@ describeIfDb('WhatsApp oficial', () => {
 
   it('o template nasce pendente e a resposta da Meta o move', async () => {
     const provedor = new FakeWhatsAppProvider();
-    const criado = await submeterTemplate({
+    const criado = await submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: 'lembrete_24h',
@@ -501,9 +566,146 @@ describeIfDb('WhatsApp oficial', () => {
     expect(depois[0]?.estado).toBe('aprovado');
   });
 
+  it('o balcão não espera a Meta: a requisição reserva, enfileira e volta', async () => {
+    /**
+     * O bloco 133 inteiro em um teste.
+     *
+     * Medido em produção, o `POST` que fazia a viagem à Meta dentro da
+     * requisição levava 7.039 ms contra o teto de 10 s do `web` — e estourar
+     * significava a tela dizer "não deu" sobre um texto que a Meta **já tinha
+     * recebido**, com a tentativa seguinte batendo em "nome repetido".
+     *
+     * A prova não é o tempo: é que a linha volta em `pendente` **na fila**, com
+     * a tarefa gravada, e que nada foi à Meta até alguém entregar.
+     */
+    const criado = await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      titulo: 'Volta que a gente sente falta',
+      corpo: 'Olá {{1}}, a barbearia {{2}} sente sua falta.',
+      ...operador,
+    });
+    expect(criado.estado).toBe('pendente');
+    expect(criado.naFila).toBe(true);
+
+    const tarefas = await semTenant(async (tx) =>
+      tx.$queryRaw<{ kind: string; payload: unknown }[]>`
+        SELECT kind, payload FROM jobs WHERE payload->>'templateId' = ${criado.id}
+      `,
+    );
+    expect(tarefas).toHaveLength(1);
+    expect(tarefas[0]?.kind).toBe('whatsapp.submeter_template');
+    /**
+     * Ids, nunca o texto: `jobs` não tem RLS, e o que a barbearia escreveu é
+     * dela. Quem lê o corpo é o handler, sob `withTenant`.
+     */
+    expect(JSON.stringify(tarefas[0]?.payload)).not.toContain('sente sua falta');
+
+    const claim = String((tarefas[0]?.payload as { claim?: unknown })?.claim ?? '');
+    const provedor = new FakeWhatsAppProvider();
+    await entregarTemplateNaMeta({
+      tenantId: TENANT,
+      templateId: criado.id,
+      claim,
+      provider: provedor,
+    });
+    expect(provedor.submetidos).toHaveLength(1);
+    expect(provedor.submetidos[0]?.corpo).toContain('sente sua falta');
+
+    // E a tela para de dizer "na fila" quando ela deixa de estar.
+    expect((await templateDaUnidade(TENANT, criado.id))?.naFila).toBe(false);
+  });
+
+  it('a entrega atrasada não escreve sobre a reserva de outra tentativa', async () => {
+    /**
+     * A tarefa pode chegar depois de a barbearia ter corrigido o texto.
+     *
+     * Sem a conferência do claim, a entrega velha gravaria a resposta da Meta
+     * sobre a reserva nova — e o texto certo ficaria com o desfecho do errado,
+     * sem nada ficar vermelho.
+     */
+    const criado = await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      titulo: 'Volta',
+      corpo: 'primeira versão {{1}}',
+      ...operador,
+    });
+    const provedor = new FakeWhatsAppProvider();
+    await entregarTemplateNaMeta({
+      tenantId: TENANT,
+      templateId: criado.id,
+      claim: '00000000-0000-4000-8000-000000000000',
+      provider: provedor,
+    });
+    expect(provedor.submetidos).toHaveLength(0);
+    expect((await templateDaUnidade(TENANT, criado.id))?.naFila).toBe(true);
+  });
+
+  it('o texto preso pela tarefa que desistiu volta a rascunho, e não fica para sempre', async () => {
+    /**
+     * `sending` é o estado que **recusa a submissão seguinte**. Sem esta
+     * varredura, a tarefa esgotada deixaria a barbearia sem o texto e sem o
+     * caminho de refazê-lo — sem erro e sem alerta.
+     *
+     * O relógio é o do banco, então o teste envelhece a linha à mão: é o único
+     * jeito determinístico de atravessar duas horas.
+     */
+    const criado = await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      titulo: 'Preso',
+      corpo: 'Olá {{1}}',
+      ...operador,
+    });
+    expect((await templateDaUnidade(TENANT, criado.id))?.naFila).toBe(true);
+
+    // Ainda dentro do prazo: soltar aqui duplicaria a submissão que o claim
+    // existe para impedir.
+    expect(await liberarTemplatesAbandonados(TENANT)).toBe(0);
+
+    await envelhecerSubmissao(criado.id, '3 hours');
+    expect(await liberarTemplatesAbandonados(TENANT)).toBe(1);
+
+    const solto = await templateDaUnidade(TENANT, criado.id);
+    expect(solto?.estado).toBe('rascunho');
+    expect(solto?.naFila).toBe(false);
+    // O texto continua inteiro: o que se perde é a tentativa, não o trabalho.
+    expect(solto?.corpo).toBe('Olá {{1}}');
+  });
+
+  it('o texto que a Meta já conhece não é solto pela varredura', async () => {
+    /**
+     * Com `meta_id`, quem resolve é a conciliação por nome. Soltar aqui criaria
+     * a segunda submissão de um texto que a Meta já tem — e ela recusa por nome
+     * repetido, com uma frase que não explica nada disso.
+     */
+    const criado = await submeterTemplate({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      tipo: 'retorno',
+      titulo: 'Ja na meta',
+      corpo: 'Olá {{1}}',
+      ...operador,
+    });
+    // `withTenant` pelo mesmo motivo de `envelhecerSubmissao`: sem tenant no
+    // contexto, este `UPDATE` não alcançaria linha nenhuma e o teste passaria
+    // pelo motivo errado.
+    await withTenant(TENANT, async (tx) => {
+      await tx.$executeRaw`
+        UPDATE whatsapp_templates SET meta_id = 'meta.9' WHERE id = ${criado.id}::uuid
+      `;
+    });
+    await envelhecerSubmissao(criado.id, '3 hours');
+    expect(await liberarTemplatesAbandonados(TENANT)).toBe(0);
+  });
+
   it('o pendente entra na fila de conciliação e o aprovado sai', async () => {
     const provedor = new FakeWhatsAppProvider();
-    const criado = await submeterTemplate({
+    const criado = await submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: 'confirmacao',
@@ -524,7 +726,7 @@ describeIfDb('WhatsApp oficial', () => {
 
   it('nome fora do formato da Meta é recusado antes do banco', async () => {
     await expect(
-      submeterTemplate({
+      submeterEEntregar({
         tenantId: TENANT,
         locationId: LOCAL,
         tipo: 'lembrete_24h',
@@ -549,7 +751,7 @@ describeIfDb('WhatsApp oficial', () => {
     const provedor = new FakeWhatsAppProvider();
     provedor.proximoEstadoDoTemplate = 'aprovado';
 
-    await submeterTemplate({
+    await submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: 'retorno',
@@ -560,7 +762,7 @@ describeIfDb('WhatsApp oficial', () => {
     expect(provedor.submetidos).toHaveLength(1);
     expect(provedor.editados).toHaveLength(0);
 
-    await submeterTemplate({
+    await submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: 'retorno',
@@ -590,7 +792,7 @@ describeIfDb('WhatsApp oficial', () => {
     await cadastrar();
     const provedor = new FakeWhatsAppProvider();
 
-    await submeterTemplate({
+    await submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: 'lembrete_24h',
@@ -615,7 +817,7 @@ describeIfDb('WhatsApp oficial', () => {
     const provedor = new FakeWhatsAppProvider();
 
     await expect(
-      submeterTemplate({
+      submeterEEntregar({
         tenantId: TENANT,
         locationId: LOCAL,
         tipo: 'retorno',
@@ -652,7 +854,7 @@ describeIfDb('WhatsApp oficial', () => {
     process.env['WEB_URL'] = 'https://barbearia.exemplo';
     const provedor = new FakeWhatsAppProvider();
 
-    await submeterTemplate({
+    await submeterEEntregar({
       tenantId: TENANT,
       locationId: LOCAL,
       tipo: 'retorno',
@@ -681,7 +883,7 @@ describeIfDb('WhatsApp oficial', () => {
     const provedor = new FakeWhatsAppProvider();
 
     await expect(
-      submeterTemplate({
+      submeterEEntregar({
         tenantId: TENANT,
         locationId: LOCAL,
         tipo: 'retorno',

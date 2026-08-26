@@ -111,6 +111,7 @@ let conciliacoesDeNota: { tenantId: string }[] = [];
 let entregasDeNota: { tenantId: string; agora: Date }[] = [];
 let respostasDeWhatsApp: { tenantId: string; inboundId: string }[] = [];
 let conciliacoesDeWhatsApp: { tenantId: string; agora: Date }[] = [];
+let templatesEntregues: { tenantId: string; templateId: string; claim: string }[] = [];
 let automacoesRodadas: { tenantId: string; agora: Date }[] = [];
 let campanhasDespachadas: { tenantId: string; campanhaId: string }[] = [];
 let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' =
@@ -133,6 +134,9 @@ const ligacoesDaPlataforma = () => ({
   conciliarWhatsApp: async (tenantId: string, agora: Date) => {
     conciliacoesDeWhatsApp.push({ tenantId, agora });
     return { promovido: false, templates: 0 };
+  },
+  entregarTemplate: async (tenantId: string, templateId: string, claim: string) => {
+    templatesEntregues.push({ tenantId, templateId, claim });
   },
   rodarAutomacoes: async (tenantId: string, agora: Date) => {
     automacoesRodadas.push({ tenantId, agora });
@@ -256,6 +260,7 @@ describeIfDb('fila de trabalho', () => {
     recadosRespondidos.length = 0;
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
+    templatesEntregues.length = 0;
     cobrancasDoClube.length = 0;
     liquidacoesRodadas.length = 0;
     avisosDoClube.length = 0;
@@ -917,6 +922,46 @@ describeIfDb('fila de trabalho', () => {
 
     expect(campanhasDespachadas).toEqual([
       { tenantId: TENANT, campanhaId: 'cc000000-0000-0000-0000-000000000001' },
+    ]);
+  });
+
+  it('a tarefa de texto leva os dois ids para quem sabe falar com a Meta', async () => {
+    /**
+     * A ligação do bloco 133, prendida onde ela pode se soltar.
+     *
+     * O `claim` viaja junto do `templateId` porque a entrega precisa provar que
+     * ainda é a dela: uma tarefa atrasada, depois de a barbearia ter corrigido
+     * o texto, gravaria a resposta da Meta sobre a reserva errada. Perder o
+     * claim aqui é o tipo de coisa que não quebra nada visível — a entrega
+     * simplesmente escreveria no lugar errado.
+     */
+    templatesEntregues.length = 0;
+    await enfileirarNoTenant({
+      kind: 'whatsapp.submeter_template',
+      payload: {
+        templateId: 'tt000000-0000-0000-0000-000000000001',
+        claim: 'cl000000-0000-0000-0000-000000000009',
+      },
+      idempotencyKey: 'whatsapp-template:cl9',
+    });
+
+    await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
+      varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(templatesEntregues).toEqual([
+      {
+        tenantId: TENANT,
+        templateId: 'tt000000-0000-0000-0000-000000000001',
+        claim: 'cl000000-0000-0000-0000-000000000009',
+      },
     ]);
   });
 

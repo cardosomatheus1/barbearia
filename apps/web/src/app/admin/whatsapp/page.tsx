@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
 import {
   AVISO_SEM_GERENCIA,
-  EXPLICACAO_DO_TEMPLATE,
   EXPLICACAO_DO_WHATSAPP,
   ROTULO_DO_BOTAO,
-  ROTULO_DO_TEMPLATE,
   ROTULO_DO_WHATSAPP,
+  estadoDoTextoNaTela,
   BOTOES_POSSIVEIS,
   BOTOES_QUE_LEVAM,
   EFEITO_DO_BOTAO_QUE_LEVA,
@@ -161,6 +160,9 @@ const GRUPOS_DE_BOTAO = TIPOS_DE_NOTIFICACAO.reduce<
 }, []);
 
 function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
+  // Rótulo e explicação saem da mesma função do domínio: `pendente` responde
+  // "esperando a fila" e "esperando a Meta", e a tela não é quem decide qual.
+  const estado = estadoDoTextoNaTela(template.estado, template.naFila);
   return (
     <li>
       <article
@@ -189,9 +191,9 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
             */}
             <p className="item-cadastro__linha">
               {template.titulo ? `${nomeDoAviso(template.tipo)} · ` : ''}
-              {template.nome} · {ROTULO_DO_TEMPLATE[template.estado]}
+              {template.nome} · {estado.rotulo}
             </p>
-            <p className="item-cadastro__linha">{EXPLICACAO_DO_TEMPLATE[template.estado]}</p>
+            <p className="item-cadastro__linha">{estado.explicacao}</p>
             {template.motivoDaRecusa ? (
               <p className="item-cadastro__linha item-cadastro__risco">
                 {template.motivoDaRecusa}
@@ -568,8 +570,18 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         </div>
       ) : null}
       {feito === 'template' ? (
+        /*
+          A frase deixou de prometer o que ainda não aconteceu (bloco 133).
+
+          Ela dizia "Texto enviado para aprovação" no instante em que a
+          requisição voltava — e a requisição agora só enfileira. Quem lesse
+          isso e fosse conferir no painel da Meta não acharia nada, e concluiria
+          que o produto está quebrado. É o mesmo defeito do bloco 132, uma tela
+          adiante: a frase afirmando um fato que o produto não tem.
+        */
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Texto enviado para aprovação. Ela costuma sair em minutos, às vezes em dias.
+          Texto guardado e na fila para a Meta. Ele sai daqui em instantes, e a resposta dela
+          costuma vir em minutos — às vezes em dias. O estado abaixo muda sozinho.
         </div>
       ) : null}
 

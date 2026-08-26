@@ -24,6 +24,7 @@
  */
 
 import {
+  FakeWhatsAppProvider,
   ROTULO_DO_BOTAO_QUE_LEVA,
   categoriaDoAviso,
   exemplosDoCorpo,
@@ -42,6 +43,8 @@ import { decifrarCom } from '@barbearia/identity';
 import {
   cadastroDoWhatsApp,
   conciliarNumero,
+  entregarTemplateNaMeta,
+  liberarTemplatesAbandonados,
   gravarRespostaDoTemplate,
   templatesEmCurso,
 } from './whatsapp.js';
@@ -568,6 +571,16 @@ export async function conciliarWhatsAppDaUnidade(
   locationId: string,
   agora: Date,
 ): Promise<{ readonly promovido: boolean; readonly templates: number }> {
+  /**
+   * Antes de perguntar: soltar o que a fila abandonou.
+   *
+   * Vem primeiro porque não depende de canal ligado — e é justamente a
+   * barbearia sem canal que mais acumula texto preso, já que o de mentira
+   * também pode falhar. Fosse depois do `return`, a linha ficaria em `sending`
+   * para sempre exatamente onde ninguém iria olhar.
+   */
+  await liberarTemplatesAbandonados(tenantId);
+
   const provider = await provedorDoWhatsApp(tenantId, locationId);
   if (!provider) return { promovido: false, templates: 0 };
 
@@ -594,4 +607,49 @@ export async function conciliarWhatsAppDaUnidade(
   }
 
   return { promovido, templates: conciliados };
+}
+
+/**
+ * O de mentira, **só** quando não há canal ligado (bloco 82, movido no 133).
+ *
+ * Ele responde `pendente` ao submeter — o estado real de um recém-enviado, que
+ * a Meta leva de minutos a dias para mover. É o que faz a cadeia de conciliação
+ * ser percorrida pelo caminho real em vez de pulada por um fake otimista.
+ *
+ * Morava no controller. Com a ida à Meta na fila, deixá-lo lá faria o worker
+ * ter a **segunda** noção de "tem canal?", que é o defeito que o comentário de
+ * lá já descrevia em outras palavras: dois lugares para ligar o canal, com um
+ * deles submetendo para o vazio. Aqui ele fica ao lado de `provedorDoWhatsApp`,
+ * que é quem responde a pergunta.
+ */
+const FAKE = new FakeWhatsAppProvider();
+
+/**
+ * A ida à Meta pela fila, com o provedor resolvido (bloco 133).
+ *
+ * A fatia fina que o worker chama: quem faz o trabalho é
+ * `entregarTemplateNaMeta`, que recebe o provedor por parâmetro e por isso é
+ * exercitável com um de mentira. Aqui mora só a pergunta "esta unidade tem
+ * canal ligado?", ao lado de quem a responde.
+ *
+ * Ela precisa do `location_id` para perguntar, e ele vem da própria linha: o
+ * `payload` da tarefa carrega ids, e a unidade do texto está gravada nele.
+ */
+export async function entregarTemplateDaFila(params: {
+  readonly tenantId: string;
+  readonly templateId: string;
+  readonly claim: string;
+}): Promise<void> {
+  const locationId = await withTenant(params.tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ location_id: string }[]>`
+      SELECT location_id FROM whatsapp_templates WHERE id = ${params.templateId}::uuid
+    `;
+    return linhas[0]?.location_id ?? null;
+  });
+  // Sumiu entre o pedido e a entrega. Lançar faria a tarefa ser retentada seis
+  // vezes contra uma linha que não existe.
+  if (!locationId) return;
+
+  const provider = (await provedorDoWhatsApp(params.tenantId, locationId)) ?? FAKE;
+  await entregarTemplateNaMeta({ ...params, provider });
 }

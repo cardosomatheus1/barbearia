@@ -17,6 +17,7 @@ import {
   marcarDisparoDaAutomacaoIncerto,
   reservarDisparoDaAutomacao,
   conciliarWhatsAppDaUnidade,
+  entregarTemplateDaFila,
   provedorDoWhatsApp,
   respostaParaEnviar,
   varrerAutomacoes,
@@ -500,6 +501,17 @@ async function main(): Promise<void> {
         if (!local) return { promovido: false, templates: 0 };
         return conciliarWhatsAppDaUnidade(tenantId, local.id, agora);
       },
+      /**
+       * A unidade sai da **linha do texto**, não de `primaryLocation`.
+       *
+       * É a lição do bloco 117: numa rede, a loja mais antiga não é a loja do
+       * fato. Aqui ela decidiria com qual token o texto é submetido — e a
+       * filial que tem o próprio número veria o texto dela indo pela conta da
+       * matriz. Quem resolve isso é `entregarTemplateDaFila`, que lê a unidade
+       * gravada no texto.
+       */
+      entregarTemplate: (tenantId, templateId, claim) =>
+        entregarTemplateDaFila({ tenantId, templateId, claim }),
       rodarAutomacoes: async (tenantId, agora) => {
         const local = await primaryLocation(tenantId);
         if (!local) return;

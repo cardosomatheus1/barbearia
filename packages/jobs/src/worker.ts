@@ -181,6 +181,26 @@ export interface Contexto {
     tenantId: string,
     agora: Date,
   ) => Promise<{ readonly promovido: boolean; readonly templates: number }>;
+  /**
+   * Leva um texto à Meta, fora da requisição (bloco 133).
+   *
+   * Medido em produção, o `POST` que fazia isso no caminho do balcão levava
+   * **7.039 ms** contra um teto de 10 s — e estourar o teto significava o `web`
+   * mostrar recusa sobre um texto que a Meta **já tinha recebido**, com a
+   * tentativa seguinte batendo em "nome repetido". É o precedente da nota
+   * fiscal: emissão nunca bloqueia a venda.
+   *
+   * Injetada e obrigatória no tipo, como `conciliarWhatsApp` e pelo mesmo
+   * motivo: quem sabe falar com a Meta é `packages/crm`. Opcional, o primeiro
+   * worker novo a esqueceria e o texto ficaria em `sending` para sempre — que é
+   * o estado que **bloqueia a submissão seguinte**, então a barbearia perderia
+   * o texto e o caminho de refazê-lo ao mesmo tempo.
+   */
+  readonly entregarTemplate: (
+    tenantId: string,
+    templateId: string,
+    claim: string,
+  ) => Promise<void>;
   readonly varrerRetencao: (
     tenantId: string,
     agora: Date,
@@ -509,6 +529,26 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    */
   'whatsapp.conciliar': async (tarefa, contexto) => {
     await contexto.conciliarWhatsApp(tarefa.tenantId, contexto.relogio.agora());
+  },
+
+  /**
+   * A ida à Meta que saiu do balcão (bloco 133).
+   *
+   * A tarefa nasce dentro da transação que reserva a linha e carrega **ids**:
+   * `jobs` não tem RLS, e o texto que a barbearia escreveu é dela. O `claim`
+   * viaja junto porque a entrega precisa provar que ainda é a dela — uma tarefa
+   * atrasada, depois de a barbearia ter corrigido o texto, gravaria a resposta
+   * da Meta sobre a reserva errada.
+   *
+   * Tarefa sem os dois é defeito de quem enfileirou, e lançar é o certo: sem
+   * eles não há o que entregar, e engolir deixaria o texto em `sending` para
+   * sempre, sem erro e sem alerta.
+   */
+  'whatsapp.submeter_template': async (tarefa, contexto) => {
+    const templateId = String(tarefa.payload['templateId'] ?? '');
+    const claim = String(tarefa.payload['claim'] ?? '');
+    if (!templateId || !claim) throw new Error('tarefa de template sem template ou sem claim');
+    await contexto.entregarTemplate(tarefa.tenantId, templateId, claim);
   },
 
   /**

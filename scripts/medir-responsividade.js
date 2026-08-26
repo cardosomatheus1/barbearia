@@ -2149,6 +2149,29 @@ function prepararWhatsApp(slug) {
              '["agendar_novamente"]'::jsonb)
      ON CONFLICT DO NOTHING`,
   );
+
+  /**
+   * Um texto **na fila**, que é o estado que o bloco 133 criou.
+   *
+   * Desde que a ida à Meta virou tarefa, `pendente` responde duas coisas —
+   * esperando a fila e esperando a Meta — e a tela ganhou a frase que as
+   * separa. Sem esta linha, os quatro textos da semente já têm desfecho e o
+   * print sai do estado **de antes** do bloco, com a medição dizendo "ok" sobre
+   * o que ninguém olhou.
+   *
+   * É a mesma regra da semente que confere a resposta, vista do lado do que a
+   * medição fotografa.
+   */
+  psql(
+    `INSERT INTO whatsapp_templates
+       (tenant_id, location_id, kind, name, titulo, status, body, buttons,
+        submission_state, submission_claim, submission_updated_at)
+     VALUES ('${tenant}', '${local}', 'link_atualizado', 'endereco_novo',
+             'Mudamos de endereço', 'pendente',
+             'Oi {{1}}, a {{2}} mudou de lugar. O novo endereço está no link.',
+             '[]'::jsonb, 'sending', gen_random_uuid(), now())
+     ON CONFLICT DO NOTHING`,
+  );
 }
 
 /**

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { BotaoDaMensagem, BotaoQueLeva, TipoDeNotificacao } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
+import { enfileirar } from '@barbearia/jobs';
 import { recusar } from './whatsapp-erros.js';
 
 export interface ClaimDeTemplate {
@@ -11,11 +12,26 @@ export interface ClaimDeTemplate {
 }
 
 /**
- * Toma posse persistente de uma submissão/edição antes da chamada à Meta.
+ * Toma posse persistente de uma submissão/edição, e **enfileira a ida à Meta**.
  *
  * `FOR UPDATE` serializa quem já tem linha; `ON CONFLICT DO NOTHING` fecha a
- * corrida de duas primeiras criações. A chamada externa acontece só depois do
- * commit, portanto nenhum lock de banco fica preso esperando rede.
+ * corrida de duas primeiras criações.
+ *
+ * ## A tarefa nasce dentro desta transação (bloco 133)
+ *
+ * É a regra de sempre: trabalho fora de requisição é tarefa em `jobs`,
+ * enfileirada **dentro** da transação que cria o fato. Enfileirar depois do
+ * commit abriria a janela em que a linha existe em `sending` e nada está
+ * marcado para levá-la à Meta — e `sending` bloqueia a submissão seguinte, então
+ * a barbearia ficaria com um texto travado e sem caminho.
+ *
+ * O `payload` carrega **ids**, nunca o corpo: `jobs` não tem RLS, e o texto que
+ * a barbearia escreveu é dela. Quem lê o corpo é o handler, sob `withTenant`.
+ *
+ * A chave de idempotência é o **claim**, que é sorteado a cada reserva: uma
+ * correção do mesmo texto amanhã é outra ida à Meta e precisa da tarefa dela.
+ * Fosse o id do template, o `ON CONFLICT DO NOTHING` descartaria a segunda em
+ * silêncio e o texto corrigido nunca sairia.
  */
 export async function reservarSubmissaoDeTemplate(params: {
   readonly tenantId: string;
@@ -91,6 +107,11 @@ export async function reservarSubmissaoDeTemplate(params: {
       entity: 'whatsapp_templates',
       entityId: linha.id,
       after: { nome: params.nome, tipo: params.tipo },
+    });
+    await enfileirar(tx, {
+      kind: 'whatsapp.submeter_template',
+      payload: { templateId: linha.id, claim },
+      idempotencyKey: `whatsapp-template:${claim}`,
     });
     return { id: linha.id, metaId: linha.meta_id, claim };
   });

@@ -236,6 +236,39 @@ export const EXPLICACAO_DO_TEMPLATE: Readonly<Record<EstadoDoTemplate, string>> 
     'A Meta pausou este texto porque muita gente marcou como spam ou bloqueou o número. Ele volta sozinho, e mandar menos é o que faz voltar.',
 };
 
+/**
+ * O que a tela escreve sobre um texto — rótulo e porquê, na mesma conta.
+ *
+ * ## `pendente` passou a significar duas coisas (bloco 133)
+ *
+ * A ida à Meta virou tarefa de fila, então entre o clique e a Meta existe agora
+ * um intervalo em que o texto está `pendente` e **não saiu daqui**. Com um mapa
+ * só, a tela dizia "Enviado. A Meta costuma responder em minutos" sobre um
+ * texto que a Meta nunca viu — e a barbearia ia procurar no painel dela um
+ * texto que não estava lá. É o estado vazio que não diz o porquê, com outra
+ * roupa.
+ *
+ * Rótulo e explicação saem **juntos** de propósito. Separados, o dia em que
+ * alguém acrescentasse um estado deixaria os dois mapas divergirem — e a tela
+ * mostraria "Na fila" ao lado de "a Meta costuma responder em minutos".
+ *
+ * `naFila` só vale sobre `pendente`: nos outros estados a Meta já respondeu, e
+ * um texto aprovado não está esperando fila nenhuma.
+ */
+export function estadoDoTextoNaTela(
+  estado: EstadoDoTemplate,
+  naFila: boolean,
+): { readonly rotulo: string; readonly explicacao: string } {
+  if (estado === 'pendente' && naFila) {
+    return {
+      rotulo: 'Na fila',
+      explicacao:
+        'Na fila para a Meta. Sai em instantes — não precisa mandar de novo, e o estado muda sozinho aqui.',
+    };
+  }
+  return { rotulo: ROTULO_DO_TEMPLATE[estado], explicacao: EXPLICACAO_DO_TEMPLATE[estado] };
+}
+
 /** Só o aprovado sai. Os outros quatro são etapas ou problemas. */
 export function templateUtilizavel(estado: EstadoDoTemplate): boolean {
   return estado === 'aprovado';

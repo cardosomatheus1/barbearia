@@ -19,6 +19,7 @@ const arquivos = [
   'packages/crm/src/whatsapp-roteamento.ts',
   'packages/crm/src/whatsapp-lifecycle.ts',
   'packages/crm/src/whatsapp-template-submissao.ts',
+  'packages/crm/src/whatsapp-template-entrega.ts',
   'apps/api/src/plataforma/whatsapp-webhook.controller.ts',
   'apps/worker/src/main.ts',
   'packages/db/migrations/0113_crm_whatsapp_concorrencia.sql',
@@ -68,7 +69,7 @@ test('detecta conciliação de templates sem locationId', () =>
 test('detecta remoção do FOR UPDATE do claim de template', () =>
   mutacao('packages/crm/src/whatsapp-template-submissao.ts', '       FOR UPDATE', '       /* sem lock */'));
 test('detecta remoção do estado incerto de template', () =>
-  mutacao('packages/crm/src/whatsapp-templates.ts', "erro.name === 'WhatsAppMetaTransportError'", "erro.name === 'NuncaIncerto'"));
+  mutacao('packages/crm/src/whatsapp-template-entrega.ts', "erro.name === 'WhatsAppMetaTransportError'", "erro.name === 'NuncaIncerto'"));
 test('detecta lifecycle que volta a usar phone_number como id opaco', () =>
   mutacao('apps/api/src/plataforma/whatsapp-webhook.controller.ts',
     'const numero = mudanca.value.metadata?.phone_number_id;',

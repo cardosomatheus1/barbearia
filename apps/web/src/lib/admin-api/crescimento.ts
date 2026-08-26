@@ -59,6 +59,14 @@ export interface TemplateNaTelaDoAdmin {
   readonly corpo: string;
   readonly botoes: readonly string[];
   readonly motivoDaRecusa: string | null;
+  /**
+   * Ainda não saiu daqui (bloco 133).
+   *
+   * `pendente` responde duas coisas desde que a ida à Meta virou tarefa, e sem
+   * este campo a tela dizia "a Meta costuma responder em minutos" sobre um
+   * texto que nem tinha chegado lá.
+   */
+  readonly naFila: boolean;
 }
 
 /**

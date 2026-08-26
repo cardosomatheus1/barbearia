@@ -15,6 +15,7 @@ const assinatura = ler('packages/crm/src/whatsapp-assinatura.ts');
 const roteamento = ler('packages/crm/src/whatsapp-roteamento.ts');
 const lifecycle = ler('packages/crm/src/whatsapp-lifecycle.ts');
 const submissao = ler('packages/crm/src/whatsapp-template-submissao.ts');
+const entrega = ler('packages/crm/src/whatsapp-template-entrega.ts');
 const promocional = ler('packages/crm/src/disparo-promocional.ts');
 
 // O hotspot original tinha 1.490 linhas e misturava credencial, templates,
@@ -28,6 +29,11 @@ exigir(linhas(assinatura) <= 100, `whatsapp-assinatura.ts cresceu demais: ${linh
 exigir(linhas(roteamento) <= 50, `whatsapp-roteamento.ts cresceu demais: ${linhas(roteamento)} linhas`);
 exigir(linhas(lifecycle) <= 100, `whatsapp-lifecycle.ts cresceu demais: ${linhas(lifecycle)} linhas`);
 exigir(linhas(submissao) <= 160, `whatsapp-template-submissao.ts cresceu demais: ${linhas(submissao)} linhas`);
+// A ida à Meta saiu de `whatsapp-templates.ts` no bloco 133, e foi esta guarda
+// que cobrou: o arquivo passou de 400 para 520 linhas ao ganhar o caminho do
+// worker. O corte é o mesmo da submissão — pedir, entregar e ler são três
+// coisas, e a terceira é a única que o balcão espera.
+exigir(linhas(entrega) <= 220, `whatsapp-template-entrega.ts cresceu demais: ${linhas(entrega)} linhas`);
 exigir(linhas(promocional) <= 220, `disparo-promocional.ts cresceu demais: ${linhas(promocional)} linhas`);
 
 for (const [nome, fonte] of [
@@ -39,10 +45,19 @@ for (const [nome, fonte] of [
   ['whatsapp-roteamento.ts', roteamento],
   ['whatsapp-lifecycle.ts', lifecycle],
   ['whatsapp-template-submissao.ts', submissao],
+  ['whatsapp-template-entrega.ts', entrega],
   ['disparo-promocional.ts', promocional],
 ]) {
   exigir(!fonte.includes("from './whatsapp.js'"), `${nome} criou dependência circular com a fachada`);
 }
+
+// A entrega é do worker, e a reserva é quem a agenda: sem a tarefa dentro da
+// transação existe a janela em que a linha está em `sending` e nada está
+// marcado para levá-la à Meta — e `sending` recusa a submissão seguinte.
+exigir(submissao.includes("kind: 'whatsapp.submeter_template'"), 'a reserva deixou de enfileirar a ida à Meta');
+exigir(submissao.includes('await enfileirar(tx, {'), 'a tarefa saiu de dentro da transação da reserva');
+exigir(!templates.includes('provider.submeterTemplate'), 'a ida à Meta voltou para o caminho da requisição');
+exigir(entrega.includes('meta_id IS NULL'), 'a soltura passou a alcançar texto que a Meta já conhece');
 
 // Credencial: segredo dedicado, nunca devolvido em leitura e falha alta quando
 // a linha/token não está utilizável.
@@ -73,5 +88,5 @@ exigir(roteamento.includes('semTenant'), 'porta do webhook deixou de resolver te
 exigir(roteamento.includes('SELECT tenant_id, location_id FROM whatsapp_numbers'), 'roteamento público passou a ler mais que ids de roteamento');
 
 console.log(
-  `crm/whatsapp modular: fachada ${linhas(fachada)}; cadastro ${linhas(cadastro)}; templates ${linhas(templates)}; mensagens ${linhas(mensagens)}; assinatura ${linhas(assinatura)}; roteamento ${linhas(roteamento)}; lifecycle ${linhas(lifecycle)}; submissao ${linhas(submissao)}; promocional ${linhas(promocional)} linhas`,
+  `crm/whatsapp modular: fachada ${linhas(fachada)}; cadastro ${linhas(cadastro)}; templates ${linhas(templates)}; entrega ${linhas(entrega)}; mensagens ${linhas(mensagens)}; assinatura ${linhas(assinatura)}; roteamento ${linhas(roteamento)}; lifecycle ${linhas(lifecycle)}; submissao ${linhas(submissao)}; promocional ${linhas(promocional)} linhas`,
 );

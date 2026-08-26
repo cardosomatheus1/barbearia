@@ -16,7 +16,6 @@ import {
   templatesDaUnidade,
 } from '@barbearia/crm';
 import {
-  FakeWhatsAppProvider,
   type BotaoDaMensagem,
   type BotaoQueLeva,
   type TipoDeNotificacao,
@@ -131,23 +130,14 @@ function toHttp(erro: unknown): never {
 }
 
 /**
- * O de mentira, **só** quando não há canal ligado (bloco 82).
+ * O de mentira mudou de casa no bloco 133.
  *
- * Ele responde `pendente` ao submeter template — o estado real de um
- * recém-enviado, que a Meta leva de minutos a dias para mover. É o que faz a
- * cadeia de conciliação ser percorrida pelo caminho real em vez de pulada por
- * um fake otimista.
- *
- * O que mudou: com `WHATSAPP_MODO=meta` e o cadastro preenchido, quem submete é
- * o provedor de verdade. Deixá-lo fixo aqui era o defeito que o comentário
- * deste arquivo já previa em outras palavras — **dois lugares para ligar o
- * canal**, com o worker mandando pela Meta e o painel submetendo template para
- * o vazio. E a consequência era a pior possível: o template ficava `pendente`
- * para sempre, `enviarPeloWhatsApp` recusa quem não está `aprovado`, e a
- * mensagem caía no canal de reserva **para sempre**, com a tela dizendo
- * "Ativo".
+ * Ele morava aqui e servia a uma coisa só: submeter template sem canal ligado.
+ * Com a ida à Meta na fila, quem precisa dele é o worker — e mantê-lo aqui
+ * também faria existir a **segunda** noção de "tem canal?", que é o defeito que
+ * o comentário desta constante já descrevia. Hoje ele vive ao lado de
+ * `provedorDoWhatsApp`, em `packages/crm`.
  */
-const FAKE = new FakeWhatsAppProvider();
 
 @Controller('v1/admin/whatsapp')
 @UseGuards(StaffGuard, PermissaoGuard)
@@ -405,9 +395,15 @@ export class WhatsAppController {
         ...(body.botoes ? { botoes: body.botoes } : {}),
         ...(body.acoes ? { acoes: body.acoes } : {}),
         corpo: body.corpo,
-        // O de verdade quando há canal ligado; o de mentira só como último
-        // recurso, para a tela continuar exercitável sem conta na Meta.
-        provider: (await provedorDoWhatsApp(staff.tenantId, local.id)) ?? FAKE,
+        /**
+         * Sem provedor: a ida à Meta é da fila desde o bloco 133.
+         *
+         * A rota reserva a linha, enfileira a entrega **na mesma transação** e
+         * devolve o texto em `pendente`. Medido aqui, a viagem à Meta custava
+         * 7.039 ms de uma requisição do balcão, contra o teto de 10 s do `web`
+         * — e estourar significava dizer "não deu" sobre um texto que a Meta já
+         * tinha recebido.
+         */
         staffId: staff.staffUserId,
         staffName: staff.name,
       });

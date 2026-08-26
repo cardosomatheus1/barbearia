@@ -12,6 +12,7 @@ import {
   FakeWhatsAppProvider,
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
+  estadoDoTextoNaTela,
   ROTULO_DO_WHATSAPP,
   botaoConhecido,
   lerPayload,
@@ -266,5 +267,29 @@ describe('o provedor de mentira', () => {
         respostas: [],
       }),
     ).resolves.toMatchObject({ wamid: expect.any(String) });
+  });
+});
+
+describe('o que a tela escreve sobre um texto', () => {
+  it('separa "esperando a fila" de "esperando a Meta"', () => {
+    // O defeito que ela impede: a tela dizia "Enviado. A Meta costuma responder
+    // em minutos" no instante em que a requisição voltava — e a requisição só
+    // enfileira desde o bloco 133. Quem fosse conferir no painel da Meta não
+    // acharia nada.
+    const naFila = estadoDoTextoNaTela('pendente', true);
+    const naMeta = estadoDoTextoNaTela('pendente', false);
+    expect(naFila.rotulo).not.toBe(naMeta.rotulo);
+    expect(naFila.explicacao).not.toBe(naMeta.explicacao);
+    expect(naMeta.explicacao).toContain('Meta');
+  });
+
+  it('ignora a fila em todo estado que a Meta já respondeu', () => {
+    // Um texto aprovado não está esperando fila nenhuma. Sem o recorte por
+    // `pendente`, uma linha com `submission_state` velho diria "Na fila" sobre
+    // um texto que já sai.
+    for (const estado of ['rascunho', 'aprovado', 'rejeitado', 'pausado'] as const) {
+      expect(estadoDoTextoNaTela(estado, true)).toEqual(estadoDoTextoNaTela(estado, false));
+      expect(estadoDoTextoNaTela(estado, true).rotulo).toBe(ROTULO_DO_TEMPLATE[estado]);
+    }
   });
 });

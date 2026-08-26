@@ -5,6 +5,8 @@ import {
   TETO_DE_LIGACAO,
   TETO_DE_LINK,
   TETO_DE_RESPOSTA_RAPIDA,
+  botaoConhecido,
+  botaoQueLevaConhecido,
   type BotaoDaMensagem,
   type BotaoQueLeva,
   type EstadoDoTemplate,
@@ -31,10 +33,25 @@ export interface TemplateNaTela {
   readonly corpo: string;
   readonly botoes: readonly BotaoDaMensagem[];
   readonly motivoDaRecusa: string | null;
+  /**
+   * Ainda não saiu daqui (bloco 133).
+   *
+   * `pendente` passou a significar duas coisas quando a ida à Meta virou
+   * tarefa: *esperando a fila levar* e *a Meta recebeu e está avaliando*. A
+   * tela precisa dizer qual, senão ela promete "a Meta costuma responder em
+   * minutos" sobre um texto que nem chegou lá — e a barbearia vai procurar no
+   * painel dela um texto que não existe.
+   *
+   * Obrigatório e não opcional: `undefined` é falso, e o defeito que a omissão
+   * produziria é o silencioso — a tela voltaria a dizer "Na Meta" sobre tudo,
+   * com o compilador calado.
+   */
+  readonly naFila: boolean;
 }
 
 const COLUNAS_DO_TEMPLATE = sql`id, kind::text AS kind, name, titulo, language,
-                                status::text AS status, body, buttons, rejection_reason`;
+                                status::text AS status, body, buttons, rejection_reason,
+                                submission_state = 'sending' AS na_fila`;
 
 const paraTela = (l: {
   id: string;
@@ -46,6 +63,7 @@ const paraTela = (l: {
   body: string;
   buttons: unknown;
   rejection_reason: string | null;
+  na_fila: boolean;
 }): TemplateNaTela => ({
   id: l.id,
   tipo: l.kind,
@@ -56,6 +74,7 @@ const paraTela = (l: {
   corpo: l.body,
   botoes: Array.isArray(l.buttons) ? (l.buttons as BotaoDaMensagem[]) : [],
   motivoDaRecusa: l.rejection_reason,
+  naFila: l.na_fila,
 });
 
 export async function templatesDaUnidade(
@@ -123,7 +142,7 @@ export function identificadorDoTexto(titulo: string | undefined, tipo: TipoDeNot
  * montado lá dentro seria a segunda noção de "qual é a página desta casa" — a
  * primeira já mora no slug, que é permanente por decisão do bloco 1.
  */
-async function destinosDosBotoes(
+export async function destinosDosBotoes(
   tenantId: string,
   locationId: string,
   acoes: readonly BotaoQueLeva[],
@@ -200,7 +219,6 @@ export async function submeterTemplate(params: {
   readonly acoes?: readonly BotaoQueLeva[];
   readonly idioma?: string;
   readonly corpo: string;
-  readonly provider: WhatsAppProvider;
   readonly staffId: string;
   readonly staffName: string;
 }): Promise<TemplateNaTela> {
@@ -253,32 +271,14 @@ export async function submeterTemplate(params: {
   });
 
   /**
-   * Editar quando a Meta já conhece o texto; criar quando não.
+   * Fim do caminho da requisição. A ida à Meta é da fila (bloco 133).
    *
-   * Os dois são endpoints diferentes do lado dela, e o de criar é recusado
-   * sobre um nome que já existe. Enquanto só ele era chamado, corrigir uma
-   * vírgula num texto aprovado devolvia recusa da Meta numa frase que não
-   * explicava nada — e o nome é derivado do tipo desde o bloco 89, então a
-   * segunda submissão do mesmo aviso **sempre** cai nesse caso.
+   * `destinos` continua sendo resolvido **aqui** de propósito: sem telefone
+   * cadastrado o botão de ligação é recusado, e recusa de entrada tem que
+   * chegar a quem está digitando. Do lado do worker ela viraria uma tarefa que
+   * falha seis vezes contra um cadastro que ninguém vai corrigir, porque
+   * ninguém foi avisado.
    */
-  const paraAMeta = { nome, idioma, corpo: params.corpo, botoes, tipo: params.tipo, acoes: destinos };
-  let resposta: Awaited<ReturnType<WhatsAppProvider['submeterTemplate']>>;
-  try {
-    resposta = criado.metaId
-      ? await params.provider.editarTemplate(criado.metaId, paraAMeta)
-      : await params.provider.submeterTemplate(paraAMeta);
-  } catch (erro) {
-    const transporteIncerto = erro instanceof Error && erro.name === 'WhatsAppMetaTransportError';
-    await registrarFalhaDaSubmissao({
-      tenantId: params.tenantId,
-      templateId: criado.id,
-      claim: criado.claim,
-      incerta: transporteIncerto,
-    });
-    throw erro;
-  }
-  await gravarRespostaDoTemplate({ tenantId: params.tenantId, templateId: criado.id, resposta, claim: criado.claim });
-
   const atual = await templateDaUnidade(params.tenantId, criado.id);
   if (!atual) recusar('template_nao_encontrado');
   return atual;

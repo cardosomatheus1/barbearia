@@ -18,6 +18,11 @@ const waba = ler('packages/crm/src/whatsapp-waba.ts');
 const roteamento = ler('packages/crm/src/whatsapp-roteamento.ts');
 const lifecycle = ler('packages/crm/src/whatsapp-lifecycle.ts');
 const submissao = ler('packages/crm/src/whatsapp-template-submissao.ts');
+// A ida à Meta saiu de `whatsapp-templates.ts` no bloco 133: a requisição só
+// reserva e enfileira. A distinção entre transporte ambíguo e recusa explícita
+// foi junto, e é ela que decide se o texto fica bloqueado esperando conciliação
+// por nome ou volta a rascunho.
+const entrega = ler('packages/crm/src/whatsapp-template-entrega.ts');
 const webhook = ler('apps/api/src/plataforma/whatsapp-webhook.controller.ts');
 const worker = ler('apps/worker/src/main.ts');
 const migracao = ler('packages/db/migrations/0113_crm_whatsapp_concorrencia.sql');
@@ -80,7 +85,7 @@ exigir(submissao.includes('SELECT id, meta_id, submission_state')
   && submissao.includes("submission_state = 'sending'")
   && submissao.includes('submission_claim = ${claim}::uuid'),
   'submissão de template perdeu claim persistente/lock');
-exigir(templates.includes("erro.name === 'WhatsAppMetaTransportError'")
+exigir(entrega.includes("erro.name === 'WhatsAppMetaTransportError'")
   && submissao.includes("submission_state = ${params.incerta ? 'uncertain' : 'idle'}"),
   'template não distingue transporte ambíguo de recusa explícita');
 exigir(templates.includes("submission_state <> 'sending'")

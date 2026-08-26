@@ -31,7 +31,14 @@ export {
   templateDaUnidade,
   gravarRespostaDoTemplate,
   templatesEmCurso,
+  destinosDosBotoes,
 } from './whatsapp-templates.js';
+
+export {
+  entregarTemplateNaMeta,
+  liberarTemplatesAbandonados,
+  ESPERA_PARA_SOLTAR_TEXTO_PRESO,
+} from './whatsapp-template-entrega.js';
 
 export {
   type PedidoDeMensagem,
