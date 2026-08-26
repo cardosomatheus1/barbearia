@@ -89,7 +89,21 @@ $COMPOSE exec -T db pg_dump --format=custom --username postgres barbearia > "$ar
 # produziria um tar vazio e daria falsa sensação de proteção. Nesse modo a
 # retenção/versionamento do bucket é uma configuração do provedor.
 if [ "$MEDIA_STORAGE" = "local" ]; then
-  $COMPOSE exec -T api sh -c 'mkdir -p /data/media && tar -C /data/media -czf - .' > "$midia"
+  # `run --rm`, e **não** `exec`.
+  #
+  # `exec` entra no contêiner que está rodando, e portanto exige que a aplicação
+  # esteja de pé — exatamente o que ela não está quando o backup mais importa.
+  # Aconteceu: a API entrou em laço de reinício, o backup falhou com "container
+  # is restarting", e como `atualizar.sh` faz backup antes de buscar o código, a
+  # correção da API nunca chegava a ser construída. Um impasse em que só se
+  # conserta a aplicação quando ela já está funcionando.
+  #
+  # `run` sobe um contêiner descartável da mesma imagem, com os mesmos volumes
+  # declarados no serviço — a mídia vive num volume, não no processo. `--no-deps`
+  # para não arrastar o banco, e `-T` porque a saída é binária e um TTY a
+  # corromperia.
+  $COMPOSE run --rm --no-deps -T --entrypoint sh api \
+    -c 'mkdir -p /data/media && tar -C /data/media -czf - .' > "$midia"
 fi
 
 tamanho="$(du -h "$arquivo" | cut -f1 || true)"

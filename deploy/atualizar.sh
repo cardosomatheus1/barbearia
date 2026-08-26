@@ -36,6 +36,11 @@ ANTERIOR="$(git rev-parse HEAD)"
 echo "$ANTERIOR" > "$DESTINO/.versao-anterior"
 verde "  $(git rev-parse --short "$ANTERIOR")"
 
+titulo "código novo"
+git fetch --quiet origin "$BRANCH"
+git reset --hard --quiet "origin/$BRANCH"
+verde "  $(git rev-parse --short HEAD)"
+
 titulo "segredos que a versão nova exige"
 # Uma atualização pode introduzir um segredo obrigatório — e foi o que aconteceu
 # com `BACKUP_ENCRYPTION_KEY`: o `.env` de quem já rodava não o tinha, o backup
@@ -56,16 +61,23 @@ else
   verde "  .env sem DOMINIO/ACME_EMAIL — pulando (instalação antiga)"
 fi
 
-titulo "backup antes de migrar"
-DESTINO="$DESTINO" "$DESTINO/deploy/backup.sh" || morrer "o backup falhou: nada foi migrado e nada subiu"
-
-titulo "código novo"
-git fetch --quiet origin "$BRANCH"
-git reset --hard --quiet "origin/$BRANCH"
-verde "  $(git rev-parse --short HEAD)"
-
 titulo "construindo"
 $COMPOSE build
+
+# O backup vem **depois** de buscar e construir, e antes de migrar.
+#
+# A ordem era backup → código novo → build, e ela criava um impasse: o backup
+# empacota a mídia falando com o contêiner da API, então uma API quebrada
+# derrubava o backup, e o `set -e` parava aqui — antes de o código com a
+# correção sequer ser baixado. Só dava para consertar a aplicação com ela de pé.
+#
+# Trazer o código para cima não enfraquece nada. O que o backup protege é a
+# **migração**, e ela continua vindo depois dele; `git reset` e `build` não
+# tocam contêiner nenhum nem o banco. E o `segredos.sh` que roda agora é o da
+# versão nova, que é o certo: era ele que devia saber de um segredo novo, e
+# rodava na versão velha justamente por causa desta ordem.
+titulo "backup antes de migrar"
+DESTINO="$DESTINO" "$DESTINO/deploy/backup.sh" || morrer "o backup falhou: nada foi migrado e nada subiu"
 
 titulo "migrações"
 # `preparar` sai com código diferente de zero se qualquer migração falhar, e o
