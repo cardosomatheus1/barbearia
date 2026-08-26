@@ -3236,7 +3236,21 @@ async function main() {
     const resultados = [];
 
     for (const largura of LARGURAS) {
-      const ctx = await browser.newContext({ viewport: { width: largura, height: 900 } });
+      /**
+       * `MEDICAO_ESCALA=2` fotografa em dois pixels por pixel de CSS.
+       *
+       * A medição em si não muda — largura, transbordo e alvo de toque são
+       * medidos em pixels de CSS, e o fator não os afeta. O que muda é o print:
+       * em escala 1 ele tem exatamente a resolução da tela, e ampliá-lo para uma
+       * página impressa ou um slide deixa o texto mole. Quem usa a imagem para
+       * vender precisa de 2×; quem só confere layout não precisa pagar o dobro
+       * de memória por captura, então o padrão continua 1.
+       */
+      const escala = Number(process.env['MEDICAO_ESCALA'] ?? '1');
+      const ctx = await browser.newContext({
+        viewport: { width: largura, height: 900 },
+        deviceScaleFactor: Number.isFinite(escala) && escala >= 1 && escala <= 3 ? escala : 1,
+      });
       await ctx.route('https://images.unsplash.com/**', async (route) => {
         const bytes = await baixarFoto(route.request().url());
         if (!bytes) return route.abort();
