@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANTECEDENCIA,
+  faltaDeTexto,
+  tiposDeCampanhaPorExtenso,
+  TIPOS_DE_CAMPANHA,
+  nomeDoAviso,
   chaveDaNotificacao,
   decidirEnvioDeAgendamento,
   decidirRetorno,
@@ -351,5 +355,31 @@ describe('a chave de deduplicação', () => {
     expect(chaveDaNotificacao('lembrete_24h', 'ap-1')).not.toBe(
       chaveDaNotificacao('lembrete_24h', 'ap-2'),
     );
+  });
+});
+
+describe('a falta de texto para oferecer', () => {
+  it('separa "a Meta não aprovou nada" de "aprovou, e nenhum é de campanha"', () => {
+    // O defeito que ela existe para impedir: as três telas escreviam "Nenhum
+    // texto aprovado" para a barbearia que tinha dois aprovados de outro tipo,
+    // e ela via os dois no painel da Meta. Um zero só não distingue os dois
+    // fatos — é o número que entra, não a frase, que precisava de duas.
+    expect(faltaDeTexto(0, 0)).toBe('nada_aprovado');
+    expect(faltaDeTexto(2, 0)).toBe('nenhum_do_tipo');
+  });
+
+  it('não é falta nenhuma quando há texto do tipo', () => {
+    expect(faltaDeTexto(5, 1)).toBeNull();
+    // Só o do tipo decide: uma tela que recebesse a lista já recortada tem
+    // `aprovados` igual a `doTipo`, e continua sem estado vazio para escrever.
+    expect(faltaDeTexto(1, 1)).toBeNull();
+  });
+
+  it('nomeia os tipos aceitos a partir da lista, e não à mão', () => {
+    const porExtenso = tiposDeCampanhaPorExtenso('e');
+    for (const tipo of TIPOS_DE_CAMPANHA) {
+      expect(porExtenso).toContain(nomeDoAviso(tipo));
+    }
+    expect(tiposDeCampanhaPorExtenso('ou')).toContain(' ou ');
   });
 });

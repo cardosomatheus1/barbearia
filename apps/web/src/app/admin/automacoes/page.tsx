@@ -15,6 +15,8 @@ import {
   TIPOS_DE_CAMPANHA,
   corpoComExemplos,
   nomeDoAviso,
+  faltaDeTexto,
+  tiposDeCampanhaPorExtenso,
   rotuloDoBotao,
   type Gatilho,
   type Objetivo,
@@ -309,8 +311,11 @@ export default async function AutomacoesPage({ searchParams }: Props) {
    * texto por tipo, e as onze automações possíveis saíam todas com a mesma
    * frase.
    */
-  const aprovados = (templates?.ok ? templates.dados.templates : []).filter(
-    (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
+  const aprovadosNaMeta = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.estado === 'aprovado',
+  );
+  const aprovados = aprovadosNaMeta.filter((t) =>
+    (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
   // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
   // uma decisão que não existe e quem abre procura a segunda opção.
@@ -660,8 +665,19 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
               >
                 {aprovados.length === 0 ? (
+                  /*
+                    Dois zeros diferentes, uma frase só (bloco 132).
+
+                    "Nenhum texto aprovado" era escrito também para quem tinha
+                    textos aprovados de outros tipos — e a barbearia que os viu
+                    no painel da Meta concluiu que o produto estava quebrado. O
+                    fato aqui não é a aprovação: é que nenhum aprovado serve a
+                    uma automação, que fala com quem **não tem horário marcado**.
+                  */
                   <p className="alternativa__nota alternativa__nota--risco">
-                    Nenhum texto aprovado — nada vai sair.
+                    {faltaDeTexto(aprovadosNaMeta.length, aprovados.length) === 'nada_aprovado'
+                      ? 'Nenhum texto aprovado — nada vai sair.'
+                      : `Nenhum texto de ${tiposDeCampanhaPorExtenso('ou')} aprovado — nada vai sair. Os que você tem falam de um horário marcado, e quem recebe uma automação não tem.`}
                   </p>
                 ) : (
                   aprovados.map((texto, i) => (

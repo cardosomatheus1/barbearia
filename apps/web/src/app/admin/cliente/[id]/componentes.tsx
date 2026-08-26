@@ -5,6 +5,8 @@ import {
   ROTULO_DA_ASSINATURA,
   ROTULO_DO_PACOTE,
   TIPOS_DE_CAMPANHA,
+  faltaDeTexto,
+  tiposDeCampanhaPorExtenso,
   corpoComExemplos,
   saldoPorExtenso,
   nomeDoAviso,
@@ -307,6 +309,15 @@ export function MandarMensagem({
     readonly corpo: string;
   }[];
 }) {
+  /**
+   * Aprovado é da página; **mandável à mão** é daqui (bloco 132).
+   *
+   * As duas perguntas são diferentes — "a Meta liberou este texto?" e "faz
+   * sentido apertar um botão e mandá-lo?" —, e por blocos elas foram feitas no
+   * mesmo `filter`, na página. O efeito era esta tela não conseguir distinguir
+   * os dois zeros: com dois textos aprovados e nenhum de campanha, ela recebia
+   * uma lista vazia e dizia "Nenhum texto aprovado ainda".
+   */
   const textosDeCampanha = textos.filter((texto) =>
     (TIPOS_DE_CAMPANHA as readonly string[]).includes(texto.tipo),
   );
@@ -317,9 +328,39 @@ export function MandarMensagem({
         Mandar uma mensagem
       </h2>
       {textosDeCampanha.length === 0 ? (
+        /*
+          Duas frases, porque são dois fatos diferentes — e a única que existia
+          descrevia o que **não** era o caso.
+
+          A barbearia tinha dois textos aprovados pela Meta (`sua_vez` e o
+          lembrete de 2h) e lia aqui "Nenhum texto aprovado ainda". Ela foi ao
+          painel da Meta conferir, viu os dois lá, voltou, apertou "Perguntar à
+          Meta agora" — que não tinha nada a conciliar — e concluiu que o produto
+          estava quebrado. Nada estava: esta lista só aceita os tipos que fazem
+          sentido mandar **à mão**, e nenhum dos dois é.
+
+          É a §6 pergunta 6 entre duas telas do mesmo produto, e um estado vazio
+          que não diz o porquê — o indicador sempre `—` com outra roupa.
+
+          A contagem e os nomes saem do dado e do domínio, nunca escritos aqui:
+          um tipo novo em `TIPOS_DE_CAMPANHA` entra nesta frase sozinho.
+        */
         <p className="secao__vazio">
-          Nenhum texto aprovado ainda. A Meta precisa aprovar cada texto antes de ele poder
-          sair — <a href="/admin/whatsapp">mande um para aprovação</a>.
+          {faltaDeTexto(textos.length, textosDeCampanha.length) === 'nada_aprovado' ? (
+            <>
+              Nenhum texto aprovado ainda. A Meta precisa aprovar cada texto antes de ele
+              poder sair — <a href="/admin/whatsapp">mande um para aprovação</a>.
+            </>
+          ) : (
+            <>
+              {textos.length === 1
+                ? 'Você tem um texto aprovado, mas ele não'
+                : `Você tem ${textos.length} textos aprovados, mas nenhum deles`}{' '}
+              serve para mandar à mão: aqui só saem {tiposDeCampanhaPorExtenso('e')}. Os
+              outros saem sozinhos, na hora deles.{' '}
+              <a href="/admin/whatsapp">Mande um destes para aprovação</a>.
+            </>
+          )}
         </p>
       ) : (
         <>

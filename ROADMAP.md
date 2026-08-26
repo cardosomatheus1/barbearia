@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Prontidão do produto:** use a matriz abaixo. Os 131 blocos continuam registrados
+**Prontidão do produto:** use a matriz abaixo. Os 132 blocos continuam registrados
 como histórico de execução; bloco concluído não é sinônimo de integração real nem
 de funcionalidade pronta para produção.
 
@@ -530,6 +530,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 129 | O relatório de resultado ganha o consolidado da rede — `TODAS_AS_UNIDADES` existia desde o bloco 58 e nenhuma tela o chamava — e o autoatendimento do cliente passa a decidir as três finalidades de consentimento, não só a de promoção | ✅ |
 | 130 | O barbeiro fecha a própria agenda sem teto de horas — o limite de quatro horas valia pela duração e ignorava o alvo, então pegava junto o dono da cadeira —, o seletor "De quem" deixa de abrir na única opção que a API sempre recusa para ele, e a regra de comissão por **categoria** ganha porta na tela: `commission_rules.category_id` existia desde o bloco 19, com peso próprio na resolução, e nenhum formulário a preenchia | ✅ |
 | 131 | As três peças da rede de segurança do deploy que só falhavam quando acionadas: o backup empacotava a mídia com `exec` no contêiner da API — impossível fazer backup com a aplicação fora, que é quando ele importa —, o `atualizar.sh` fazia backup **antes** de buscar o código, então uma API quebrada nunca chegava a ser corrigida, e o `voltar.sh` imprimia "no ar" sem conferir nada, sobre um contêiner morto | ✅ |
+| 132 | O estado vazio que não distinguia dois zeros: as três telas que oferecem texto de WhatsApp — ficha do cliente, Campanhas e Automações — escreviam "Nenhum texto aprovado" também para quem tinha textos aprovados de outro tipo. A barbearia com `sua_vez` e o lembrete de 2h aprovados leu isso, foi ao painel da Meta, viu os dois lá e concluiu que o produto estava quebrado. `faltaDeTexto` separa os dois fatos em `core`, e a guarda é derivada de `TIPOS_DE_CAMPANHA`: a quarta tela que recortar por tipo nasce cobrada | ✅ |
 
 ---
 

@@ -392,6 +392,42 @@ export type TipoDeCampanha = (typeof TIPOS_DE_CAMPANHA)[number];
  */
 export const TIPO_PADRAO_DE_CAMPANHA: TipoDeCampanha = TIPOS_DE_CAMPANHA[0];
 
+/**
+ * Por que uma tela não tem texto para oferecer (bloco 132).
+ *
+ * São **dois zeros diferentes**, e as três telas que ofereciam texto escreviam
+ * a mesma frase para os dois: *"Nenhum texto aprovado"*. A barbearia tinha dois
+ * textos aprovados pela Meta — `sua_vez` e o lembrete de 2h —, leu isso, foi ao
+ * painel da Meta conferir, viu os dois lá e concluiu que o produto estava
+ * quebrado. Nada estava: nenhum dos dois é de campanha, e campanha é o único
+ * tipo que faz sentido mandar a quem **não tem horário marcado**.
+ *
+ * É um estado vazio que não diz o porquê — o indicador sempre `—` com outra
+ * roupa —, e é a §6 pergunta 6 entre esta tela e a da Meta.
+ *
+ * A união é quem cobra a frase: `Record<FaltaDeTexto, …>` na tela faz o
+ * compilador pedir o texto do caso novo, e um `??` genérico é justamente o que
+ * deixou as três dizendo a mesma coisa. Devolve `null` quando não falta nada —
+ * quem tem texto não tem estado vazio para escrever.
+ */
+export type FaltaDeTexto = 'nada_aprovado' | 'nenhum_do_tipo';
+
+export function faltaDeTexto(aprovados: number, doTipo: number): FaltaDeTexto | null {
+  if (doTipo > 0) return null;
+  return aprovados > 0 ? 'nenhum_do_tipo' : 'nada_aprovado';
+}
+
+/**
+ * Os tipos que uma tela de campanha aceita, por extenso.
+ *
+ * A frase do vazio precisa nomeá-los, e nomeá-los à mão faria o tipo novo em
+ * `TIPOS_DE_CAMPANHA` ficar fora dela sem nada ficar vermelho. `separador` é
+ * "e" numa lista do que sai e "ou" numa lista do que faltou.
+ */
+export function tiposDeCampanhaPorExtenso(separador: 'e' | 'ou'): string {
+  return TIPOS_DE_CAMPANHA.map((tipo) => nomeDoAviso(tipo)).join(` ${separador} `);
+}
+
 export function tipoDeCampanhaValido(tipo: string): tipo is TipoDeCampanha {
   return (TIPOS_DE_CAMPANHA as readonly string[]).includes(tipo);
 }

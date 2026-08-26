@@ -15,6 +15,8 @@ import {
   rotuloDoFiltro,
   type FiltroDeCampanha,
   TIPOS_DE_CAMPANHA,
+  faltaDeTexto,
+  tiposDeCampanhaPorExtenso,
   campanhaEnviavel,
   campanhaParada,
   corpoComExemplos,
@@ -613,8 +615,14 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const pulados = listaDePulados?.ok ? listaDePulados.dados.pulados : null;
   const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
   // Só o aprovado sai; mostrar rascunho prometeria o que a Meta ainda recusa.
-  const textos = (templates?.ok ? templates.dados.templates : []).filter(
-    (t) => t.estado === 'aprovado' && (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
+  const aprovadosNaMeta = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.estado === 'aprovado',
+  );
+  // E, dentro deles, só os de campanha: os outros falam de um horário marcado.
+  // As duas contas são separadas porque o vazio precisa saber qual dos dois
+  // zeros é o dela — ver `faltaDeTexto`.
+  const textos = aprovadosNaMeta.filter((t) =>
+    (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
   // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
   // uma decisão que não existe e quem abre procura a segunda opção.
@@ -901,8 +909,18 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 {...(umaMensagemSo ? {} : { 'aria-label': 'Qual mensagem', role: 'radiogroup' })}
               >
                 {textos.length === 0 ? (
+                  /*
+                    Dois zeros diferentes, uma frase só (bloco 132).
+
+                    "Nenhum texto aprovado" era escrito também para quem tinha
+                    aprovados de outros tipos, e a barbearia que os viu no painel
+                    da Meta concluiu que o produto estava quebrado. O fato aqui
+                    não é a aprovação: é que nenhum aprovado serve a uma campanha.
+                  */
                   <p className="alternativa__nota alternativa__nota--risco">
-                    Nenhum texto aprovado — nada vai sair.
+                    {faltaDeTexto(aprovadosNaMeta.length, textos.length) === 'nada_aprovado'
+                      ? 'Nenhum texto aprovado — nada vai sair.'
+                      : `Nenhum texto de ${tiposDeCampanhaPorExtenso('ou')} aprovado — nada vai sair. Os que você tem falam de um horário marcado, e quem recebe uma campanha não tem.`}
                   </p>
                 ) : (
                   textos.map((texto, i) => (

@@ -12,7 +12,6 @@ import {
   ROTULO_DA_ASSINATURA,
   ROTULO_DO_PACOTE,
   ROTULO_DO_SEGMENTO,
-  TIPOS_DE_CAMPANHA,
   corpoComExemplos,
   saldoPorExtenso,
   type Segmento,
@@ -68,7 +67,6 @@ import {
   acaoTransferirPacote,
   acaoDefinirLimiteDeFiado,
   acaoLancarSaldoInicialDeFiado,
-  acaoMandarMensagem,
   acaoSair,
 } from '../../acoes';
 import { secao } from '../../secoes';
@@ -537,20 +535,23 @@ export default async function FichaPage({ params, searchParams }: Props) {
           de={voltar}
           textos={textos.dados.templates
             /**
-             * Aprovado **e** de campanha (bloco 96).
+             * Só aprovado — o recorte por tipo é da tela (blocos 96 e 132).
              *
-             * A lista trazia os seis textos aprovados, incluindo confirmação e
-             * os dois lembretes — e os três falam de um horário marcado, que
-             * quem recebe uma mensagem avulsa não tem. O domínio já os recusava
-             * com `tipo_invalido` desde o bloco 92: eram três botões "Mandar"
-             * que só podiam dar erro, que é a §6 pergunta 1 na forma mais
-             * direta.
+             * O filtro daqui trazia os seis textos aprovados, incluindo
+             * confirmação e os dois lembretes, e os três falam de um horário
+             * marcado que quem recebe uma mensagem avulsa não tem. O domínio já
+             * os recusava com `tipo_invalido` desde o bloco 92: eram três botões
+             * "Mandar" que só podiam dar erro, que é a §6 pergunta 1 na forma
+             * mais direta.
+             *
+             * O bloco 96 resolveu isso somando `TIPOS_DE_CAMPANHA` **a este
+             * filtro**, e com isso apagou a diferença entre "a Meta não aprovou
+             * nada" e "aprovou, e nenhum é de mandar à mão": a tela recebia zero
+             * nos dois casos e escrevia a primeira frase. Quem tinha dois textos
+             * aprovados lia que não tinha nenhum. A pergunta do tipo ficou onde
+             * ela é feita, e esta lista voltou a significar o que o nome diz.
              */
-            .filter(
-              (t) =>
-                t.estado === 'aprovado' &&
-                (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
-            )
+            .filter((t) => t.estado === 'aprovado')
             .map((t) => ({ id: t.id, tipo: t.tipo, titulo: t.titulo, corpo: t.corpo }))}
         />
       ) : null}
