@@ -176,6 +176,7 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
   );
   const profissionais = equipe.ok ? equipe.dados.professionals.filter((p) => p.active) : [];
   const servicos = catalogo.ok ? catalogo.dados.services.filter((s) => s.active) : [];
+  const categorias = catalogo.ok ? catalogo.dados.categories : [];
 
   return (
     <main className="ui-container painel__conteudo" {...secao('comissao')}>
@@ -360,18 +361,53 @@ export default async function RegrasDeComissaoPage({ searchParams }: Props) {
             </select>
           </div>
 
+          {/*
+            Serviço **ou** categoria, num campo só.
+            
+            `commission_rules` tem as três colunas desde o bloco 19 e o motor
+            resolve as três — profissional pesa 4, serviço 2, categoria 1, e a
+            mais específica ganha. A tela oferecia duas: "50% em tudo que é
+            Barba" só dava para fazer serviço a serviço, e a coluna existia sem
+            porta de entrada. É o defeito de `blocks`, quatro camadas abaixo: o
+            banco, o domínio, o `z.enum` da borda, o controller e o cliente HTTP
+            já aceitavam `categoryId`.
+            
+            Um campo e não dois porque a listagem já lê os dois como
+            alternativa (`serviceName ?? categoryName`): dois seletores deixariam
+            marcar "Corte" e "Barba" juntos, que só casa quando o serviço está
+            naquela categoria — regra que nunca dispara, e nada ficaria vermelho.
+            O prefixo separa os dois espaços de id no envio, e é lido num lugar
+            só, na ação.
+          */}
           <div className="ui-field">
-            <label className="ui-field__label" htmlFor="serviceId">
-              Em qual serviço
+            <label className="ui-field__label" htmlFor="alvo">
+              Em quê
             </label>
-            <select className="ui-field__input" id="serviceId" name="serviceId">
-              <option value="">Todos os serviços</option>
-              {servicos.map((servico) => (
-                <option key={servico.id} value={servico.id}>
-                  {servico.name}
-                </option>
-              ))}
+            <select className="ui-field__input" id="alvo" name="alvo">
+              <option value="">Tudo</option>
+              {categorias.length > 0 ? (
+                <optgroup label="Categoria inteira">
+                  {categorias.map((categoria) => (
+                    <option key={categoria.id} value={`cat:${categoria.id}`}>
+                      {categoria.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {servicos.length > 0 ? (
+                <optgroup label="Um serviço">
+                  {servicos.map((servico) => (
+                    <option key={servico.id} value={`srv:${servico.id}`}>
+                      {servico.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
+            <p className="ui-field__hint">
+              A regra mais específica ganha: a do serviço vence a da categoria, e a do
+              profissional vence as duas.
+            </p>
           </div>
 
           <div className="ui-field">

@@ -26,21 +26,33 @@ import {
 } from './agenda.schemas.js';
 
 /**
- * Teto do bloqueio operacional, em minutos.
+ * Teto do bloqueio operacional, em minutos — para a agenda **dos outros**.
  *
  * Quatro horas cobrem o dentista, a entrega, a reunião de equipe e o almoço
- * longo — o que a recepção de fato bloqueia, inclusive para a casa toda. Acima
- * disso a decisão é "hoje não se trabalha", que é folga ou feriado, e isso muda
- * o funcionamento da barbearia.
+ * longo — o que a recepção de fato bloqueia sobre a cadeira alheia. Acima disso
+ * a decisão é "hoje esta cadeira não trabalha", e decidir isso pela agenda de
+ * outra pessoa é folga, que muda o funcionamento da barbearia.
  *
- * O teto é sobre a **duração**, não sobre o alvo: exigir profissional impediria
- * a recepcionista de fechar uma hora para a reunião, que é trabalho legítimo e
- * frequente.
+ * ## A própria cadeira não tem teto
  *
- * **Limite assumido:** seis bloqueios de quatro horas cobrem o dia. A diferença
- * é que ficam seis linhas hachuradas e datadas na agenda, com autor e motivo —
- * não um `holiday` silencioso. Impedir a repetição exigiria um orçamento diário
- * por papel, que é mecanismo grande para um risco que a tela já expõe.
+ * O teto era sobre a **duração** e ignorava o alvo, e com isso pegava o dono da
+ * agenda junto: o barbeiro que precisasse tirar a tarde inteira tinha de pedir
+ * ao dono, ou lançar quatro bloqueios de quatro horas seguidos — que produz o
+ * mesmo buraco na grade, com quatro linhas em vez de uma e sem nada a mais
+ * sendo protegido. Fechar a própria agenda é o caso de uso, não o abuso.
+ *
+ * O que continua barrado não mudou, e é onde o risco realmente estava:
+ *
+ * - **sem profissional** é a barbearia toda, e o motor subtrai bloqueio da
+ *   unidade do dia de todo mundo — a casa some da grade pública;
+ * - **a cadeira do colega** é recusada no domínio desde o bloco 109, com ou sem
+ *   teto de duração;
+ * - **folga, férias, feriado e horário diferente** continuam em `settings.
+ *   manage`, porque são política de funcionamento e não o dia de hoje.
+ *
+ * O dono não perde a informação: o bloqueio fica hachurado e datado na agenda,
+ * com autor e motivo. O que ele perde é o poder de veto prévio sobre a agenda
+ * de quem trabalha nela — e essa foi a decisão.
  */
 const MAX_BLOQUEIO_OPERACIONAL = 240;
 
@@ -240,13 +252,21 @@ export class AgendaController {
     // profissional é um feriado com outra etiqueta — o motor subtrai bloqueio da
     // unidade do dia de todo mundo, e a barbearia some da grade pública.
     // O primeiro teste desta rota conferia só a grafia do tipo, e passava.
-    if (!pode(staff.permissions, 'settings.manage')) {
+    //
+    // A própria cadeira é a exceção, e é o caso de uso: quem trabalha nela
+    // decide quantas horas fecha. `staff.professionalId` nulo é conta de equipe
+    // sem agenda — ela cai no teto como qualquer um, e a comparação vai escrita
+    // em vez de depender de `undefined === null` ser falso.
+    const alvo = body.professionalId ?? null;
+    const propriaCadeira = staff.professionalId !== null && alvo === staff.professionalId;
+
+    if (!pode(staff.permissions, 'settings.manage') && !propriaCadeira) {
       const duracao = (body.endMinute ?? 0) - (body.startMinute ?? 0);
       if (duracao > MAX_BLOQUEIO_OPERACIONAL) {
         throw new DomainError(
           'forbidden',
           403,
-          'Bloqueio longo é folga ou feriado, e isso é do dono ou do gerente.',
+          'Bloqueio longo na agenda de outra pessoa é folga, e isso é do dono ou do gerente.',
         );
       }
     }

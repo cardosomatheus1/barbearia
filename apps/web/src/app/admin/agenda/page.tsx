@@ -633,6 +633,22 @@ export default async function AgendaPage({ searchParams }: Props) {
     ? profissionalEscolhido
     : undefined;
   const podeExcecao = podeNaTela(estado, 'settings.manage');
+  /**
+   * Quem enxerga a casa toda pode fechar a casa toda; quem não, não.
+   *
+   * O seletor "De quem" abria em **"A barbearia toda"** para todo mundo, e para
+   * o barbeiro essa é a única opção que a API sempre recusa — desde o bloco 109
+   * o domínio responde *"Você só pode bloquear a sua própria agenda"* a qualquer
+   * alvo que não seja ele. A lista abaixo já vinha recortada só com o nome dele,
+   * então a tela oferecia uma escolha entre uma opção que funciona e um padrão
+   * que nunca funciona, com o padrão em cima.
+   *
+   * Sem isso o defeito é da §6 pergunta 3 com a polaridade invertida: a saída
+   * existe na tela, e o caminho até ela é o que não estava desenhado.
+   */
+  const podeFecharACasa = podeNaTela(estado, 'appointments.view_all_professionals');
+  const alvoUnico = agenda.professionals[0]?.id ?? '';
+  const umAlvoSo = !podeFecharACasa && agenda.professionals.length === 1;
   const podeMarcar = podeNaTela(estado, 'appointments.create');
   const agoraLocal = instantToLocal(agenda.timezone, new Date());
   const minutoAtual = agoraLocal.date === hoje ? agoraLocal.minutes : 0;
@@ -942,19 +958,39 @@ export default async function AgendaPage({ searchParams }: Props) {
             Folga, férias e feriado fecham o dia inteiro e ignoram o horário acima.
           </p>
 
-          <div className="ui-field">
-            <label className="ui-field__label" htmlFor="professionalId">
-              De quem
-            </label>
-            <select className="ui-field__input" defaultValue="" id="professionalId" name="professionalId">
-              <option value="">A barbearia toda</option>
-              {agenda.professionals.map((pro) => (
-                <option key={pro.id} value={pro.id}>
-                  {pro.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/*
+            Um alvo só não é escolha, e é o caso do barbeiro: sem "A barbearia
+            toda" e com a lista já recortada na dele, sobra uma opção. O campo
+            vira oculto e o rótulo vira afirmação, derivado do **tamanho da
+            lista** — no dia em que a conta dele cobrir duas cadeiras, o seletor
+            volta sozinho. É o padrão que a tela de campanhas já usa.
+          */}
+          {umAlvoSo ? (
+            <div className="ui-field">
+              <span className="ui-field__label">De quem</span>
+              <input name="professionalId" type="hidden" value={alvoUnico} />
+              <p className="ui-field__hint">{agenda.professionals[0]?.name ?? 'A sua agenda'}</p>
+            </div>
+          ) : (
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="professionalId">
+                De quem
+              </label>
+              <select
+                className="ui-field__input"
+                defaultValue={podeFecharACasa ? '' : alvoUnico}
+                id="professionalId"
+                name="professionalId"
+              >
+                {podeFecharACasa ? <option value="">A barbearia toda</option> : null}
+                {agenda.professionals.map((pro) => (
+                  <option key={pro.id} value={pro.id}>
+                    {pro.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="reason">

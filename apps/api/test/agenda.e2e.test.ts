@@ -278,6 +278,26 @@ describeIfDb('agenda do admin pela HTTP', () => {
       }),
     ).expect(201);
 
+    /**
+     * O teto continua vivo para quem não é dono daquela agenda.
+     *
+     * A recepção ganhou a cadeira do colega sem teto no dia em que a própria
+     * cadeira ficou sem teto? Não: `propriaCadeira` exige `professionalId` na
+     * sessão, e a conta dela é nula — cinco horas sobre a casa e cinco horas
+     * sobre a cadeira de alguém continuam sendo folga, e folga é do dono.
+     */
+    const { professionalId } = await catalogo(dono);
+    await com(maria)(
+      http().post('/v1/admin/agenda/blocks').send({
+        kind: 'block', date: amanha, startMinute: 840, endMinute: 1140, reason: 'Reunião',
+      }),
+    ).expect(403);
+    await com(maria)(
+      http().post('/v1/admin/agenda/blocks').send({
+        kind: 'block', date: amanha, startMinute: 840, endMinute: 1140, professionalId,
+      }),
+    ).expect(403);
+
     // Fechar a barbearia no feriado não é.
     await com(maria)(
       http().post('/v1/admin/agenda/exceptions').send({ kind: 'holiday', date: amanha }),
@@ -585,13 +605,22 @@ describeIfDb('agenda do admin pela HTTP', () => {
       }),
     ).expect(403);
 
-    // Com profissional, mas cobrindo o dia: isso é folga.
+    /**
+     * O dia inteiro **na própria cadeira** passa, e a expectativa mudou de 403
+     * para 201 por decisão do dono do produto, não porque o teste incomodava.
+     *
+     * O teto de quatro horas valia pela duração e ignorava o alvo, então pegava
+     * junto quem é dono da agenda: o barbeiro que precisasse tirar a tarde
+     * lançava quatro bloqueios de quatro horas seguidos — mesmo buraco na
+     * grade, quatro linhas em vez de uma, nada a mais protegido. As três
+     * recusas em volta continuam, e é nelas que o risco morava.
+     */
     await com(ruan)(
       http().post('/v1/admin/agenda/blocks').send({
         kind: 'block', date: amanha, startMinute: 0, endMinute: 1440,
         professionalId: outroProfissional,
       }),
-    ).expect(403);
+    ).expect(201);
 
     /**
      * A cadeira do **colega**, na duração que passaria (bloco 109).
@@ -608,7 +637,7 @@ describeIfDb('agenda do admin pela HTTP', () => {
       }),
     ).expect(403);
 
-    // O bloqueio de verdade — a **própria** cadeira — continua passando.
+    // E o bloqueio curto na própria cadeira, que nunca dependeu do teto.
     await com(ruan)(
       http().post('/v1/admin/agenda/blocks').send({
         kind: 'block', date: amanha, startMinute: 840, endMinute: 900,

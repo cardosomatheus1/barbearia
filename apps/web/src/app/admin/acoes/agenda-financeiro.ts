@@ -644,7 +644,18 @@ export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
   }
 
   const professionalId = texto(form, 'professionalId');
-  const serviceId = texto(form, 'serviceId');
+
+  /**
+   * `srv:<id>` ou `cat:<id>` — o único lugar que lê o prefixo.
+   *
+   * Serviço e categoria são espaços de id diferentes na mesma pergunta ("em
+   * quê?"), e o campo único é o que impede marcar os dois: uma regra com
+   * serviço **e** categoria só casa quando aquele serviço está naquela
+   * categoria, então na prática ela nunca dispara — e nada ficaria vermelho.
+   */
+  const alvo = texto(form, 'alvo');
+  const serviceId = alvo.startsWith('srv:') ? alvo.slice(4) : '';
+  const categoryId = alvo.startsWith('cat:') ? alvo.slice(4) : '';
 
   const resultado = await salvarRegraDeComissao(token, {
     modo,
@@ -652,6 +663,7 @@ export async function acaoSalvarRegraDeComissao(form: FormData): Promise<void> {
     ...(faixas.length ? { faixas } : {}),
     ...(professionalId ? { professionalId } : {}),
     ...(serviceId ? { serviceId } : {}),
+    ...(categoryId ? { categoryId } : {}),
   });
   if (!resultado.ok) return falhar('/admin/comissao/regras', resultado);
   redirect('/admin/comissao/regras?salvo=1');
