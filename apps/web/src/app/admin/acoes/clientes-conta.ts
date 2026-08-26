@@ -1,72 +1,25 @@
 'use server';
 
+import {
+  exigirSessao,
+  falhar,
+  numero,
+  texto,
+  TETO_DO_ARQUIVO,
+} from './comum';
+
 import { randomBytes } from 'node:crypto';
 import { redirect } from 'next/navigation';
 
 import {
-  ajustarConfianca,
-  devolverSinalDoHorario,
-  registrarSinal,
   adicionarSlug,
   analisarImportacao,
   aplicarImportacao,
-  criarConta,
-  criarMembro,
-  entrarComoGestor,
-  ligarMembro,
-  marcarNoBalcao,
-  moverAtendimento,
-  publicarBarbearia,
-  sairDoGestor,
-  salvarEmpresa,
-  salvarFotos,
-  enviarFotoDaBarbearia,
-  removerFotoDaBarbearia,
-  type AlvoDeUpload,
   convidarProfissional,
-  salvarAvisos,
-  salvarJanela,
   salvarMetaDoProfissional,
   salvarPreferenciasDoCliente,
-  salvarPagamentos,
-  salvarProfissionais,
-  reemitirSenha,
   reverterImportacao,
   resolverConflitoImportacao,
-  salvarServicos,
-  trocarMinhaSenha,
-  trocarPapel,
-  criarBloqueio,
-  criarExcecao,
-  moverAgendamento,
-  removerExcecao,
-  type TipoDeExcecao,
-  criarProfissional,
-  entrarNaFila,
-  ajustarSaldoDeFidelidade,
-  adiantarNaApi,
-  cancelarValeNaApi,
-  estornarVendaNaApi,
-  transferirPacoteNaApi,
-  salvarFiscalNaApi,
-  emitirNotaNaApi,
-  salvarDocumentoDoTomadorNaApi,
-  salvarCadastroDoWhatsAppNaApi,
-  conciliarWhatsAppNaApi,
-  mandarMensagemNaApi,
-  submeterTemplateNaApi,
-  definirAutomacaoAtivaNaApi,
-  salvarAutomacaoNaApi,
-  abrirUnidadeNaApi,
-  criarCampanhaNaApi,
-  conectarWhatsAppNaApi,
-  signupDoWhatsAppNaApi,
-  enviarCampanhaNaApi,
-  definirUnidadeAtivaNaApi,
-  definirUnidadesNaApi,
-  escolherUnidadeNaApi,
-  transferirEstoqueNaApi,
-  cancelarNotaNaApi,
   criarContaDoFinanceiro as criarContaDoFinanceiroApi,
   quitarContaDoFinanceiro as quitarContaDoFinanceiroApi,
   cancelarContaDoFinanceiro as cancelarContaDoFinanceiroApi,
@@ -77,81 +30,9 @@ import {
   lancarSaldoInicialDeFiado as lancarSaldoInicialDeFiadoApi,
   salvarPacoteNaApi,
   reembolsarPacoteNaApi,
-  contestarAvaliacaoNaApi,
-  retirarContestacaoNaApi,
-  tratarAvaliacaoNaApi,
-  salvarProdutoNaApi,
-  moverEstoqueNaApi,
-  salvarFichaNaApi,
-  salvarPlanoNaApi,
-  assinarNaApi,
-  agendarCancelamentoNaApi,
-  cancelarAssinaturaNaApi,
-  cancelarFaturaNaApi,
-  desfazerCancelamentoNaApi,
-  pagarFaturaNaApi,
-  salvarModeloDaAssinaturaNaApi,
-  cadastrarRecebedorNaApi,
-  salvarSplitNaApi,
-  incluirDependenteNaApi,
-  removerDependenteNaApi,
-  assumirRecadoNaApi,
-  devolverRecadoNaApi,
-  encerrarRecadoNaApi,
-  resolverLacunaNaApi,
-  apagarFaixaNaApi,
-  criarFaixaNaApi,
-  ligarPrecoPorFaixaNaApi,
-  apagarFotoNaApi,
-  contestarClienteDoMarketplace,
-  definirPerfilPublicoNaApi,
-  publicarFotoNaApi,
-  registrarFotoNaApi,
-  definirVitrineNaApi,
-  moverNaFila,
-  responderRecadoNaApi,
-  sentarDaFila,
-  type StatusNaFila,
-  criarServico,
   trocarDePlano,
   salvarPermissoesDoPapel,
-  salvarProgramaDeFidelidade,
-  editarProfissional,
-  editarServico,
-  exigenciasDoServico,
-  ligarProfissional,
-  ligarServico,
-  salvarJornada,
-  salvarRecursos,
-  type AcaoAtendimento,
-  type EntradaDeProfissional,
-  type EntradaDeServico,
-  type Papel,
-  abrirOCaixa,
-  movimentarOCaixa,
-  fecharOCaixa,
-  abrirComandaNoBalcao,
-  cancelarComandaAberta,
-  retomarCampanhaNaApi,
-  tirarDaListaDeEspera,
   adicionarNaComanda,
-  removerDaComanda,
-  ajustarAComanda,
-  cancelarCobrancaDaComanda,
-  cobrarComanda,
-  fecharAComanda,
-  receberDoFiado,
-  comecarSegundoFator,
-  definirPoliticaDeSegundoFator,
-  confirmarSegundoFator,
-  desligarSegundoFator,
-  verificarSegundoFatorAgora,
-  type FormaDePagamento,
-  salvarRegraDeComissao,
-  removerRegraDeComissao,
-  salvarAliquotaDoAdquirente,
-  salvarConfiguracaoDeComissao,
-  fecharComissao,
   registrarConsentimentoNoBalcao,
   abrirPedidoDeDados,
   encerrarPedidoDeDados,
@@ -159,23 +40,10 @@ import {
   encerrarSessao as encerrarSessaoDoAparelho,
   expulsarSuporte,
   salvarPreferenciasDeAlerta,
-  adotarDoPadrao,
-  criarChaveNaApi,
-  cadastrarWebhookNaApi,
-  desligarWebhookNaApi,
-  revogarChaveNaApi,
-  salvarMetaDaRedeNaApi,
-  despublicarDoPadrao,
-  publicarNoPadrao,
 } from '@/lib/admin-api';
 import { versaoDoConsentimento } from '@/lib/politica';
 import {
-  MOTIVOS_DA_CONTESTACAO,
-  MOTIVOS_DA_CONTESTACAO_DE_COMISSAO,
   ehConversa,
-  TIPO_PADRAO_DE_CAMPANHA,
-  type MotivoDaContestacao,
-  ehMeioAceito,
 } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
@@ -183,33 +51,8 @@ import { limiarDeFaltas } from '@/lib/sinal';
 import { destinoDoBalcao } from '@/lib/destino';
 import { VOLTA_DA_META } from '@/lib/meta';
 
-/**
- * A modalidade vinda do `select`, conferida antes de virar corpo de requisição.
- *
- * Campo de formulário é entrada externa. Um valor fora da lista subiria até a
- * borda da API e voltaria como 400 genérico — e a tela diria "não deu para
- * salvar" sobre um campo que a pessoa nem tocou.
- */
-const MODALIDADES = new Set(['nenhum', 'fixo', 'percentual', 'total']);
-type ModalidadeDoFormulario = 'nenhum' | 'fixo' | 'percentual' | 'total';
-
-function modalidadeDeSinal(valor: string): ModalidadeDoFormulario {
-  return MODALIDADES.has(valor) ? (valor as ModalidadeDoFormulario) : 'nenhum';
-}
 import {
-  apagarSessaoGestor,
-  guardarConflitoDaAgenda,
-  guardarEstadoDaMeta,
-  guardarMotivoDaMeta,
-  guardarRascunho,
-  guardarRecusa,
-  guardarConflitoDeJornada,
-  guardarLinkDaFila,
   guardarSenhaDeUmaVez,
-  gravarSessaoGestor,
-  lerSessaoGestor,
-  guardarSegredoDoMfa,
-  guardarCodigosDeRecuperacao,
 } from '@/lib/sessao-gestor';
 
 
@@ -221,109 +64,9 @@ import {
  * cliente e outro, e abandonar no passo 4 não pode custar os passos 1 a 3.
  */
 
-const texto = (form: FormData, campo: string): string => String(form.get(campo) ?? '').trim();
-const numero = (form: FormData, campo: string, padrao: number): number => {
-  const valor = Number(form.get(campo));
-  return Number.isFinite(valor) ? valor : padrao;
-};
-
-/**
- * Recusa: o código na URL e **a frase do domínio** junto, num cookie.
- *
- * O código sozinho era o que a tela recebia, e cada tela traduzia o que ela
- * conhecia num `Record<string, string>` com `?? 'Não deu para salvar. Tente de
- * novo.'` no fim. Medido: os controllers mapeiam 239 códigos e os mapas das
- * telas cobrem 142 — **97 recusas** chegavam à barbearia como a frase genérica.
- *
- * O custo não é cosmético. A recepcionista digita 30% numa casa com teto de
- * 20%, e o domínio devolve *"O desconto máximo desta barbearia é R$ X"* — uma
- * frase escrita de propósito, com o número dentro, porque o comentário da rota
- * diz que *"recusado sem o número manda a recepção adivinhar"*. Ela viajava
- * pela rede inteira e era descartada na última linha: o que aparecia era "Tente
- * de novo", e a pessoa tentava de novo, para sempre.
- *
- * A frase vai por **cookie** e não pela URL, e isso é a regra do código de erro
- * que vai para o endereço: o que fica no histórico do navegador, no
- * autocompletar e no referrer não nomeia mecanismo nem carrega valor. O código
- * continua na URL porque é ele que a tela usa para decidir **onde** desenhar a
- * recusa; a frase é só o texto.
- *
- * `guardarRecusa` existe desde o bloco 98 e era escrita só por
- * `guardarOQueFoiDigitado` — o mecanismo estava pronto e ligado num caminho só.
- */
-async function falhar(
-  rota: string,
-  erro: string | { readonly code: string; readonly message: string },
-): Promise<never> {
-  const code = typeof erro === 'string' ? erro : erro.code;
-  if (typeof erro !== 'string') await guardarRecusa(erro.message);
-  const separador = rota.includes('?') ? '&' : '?';
-  redirect(`${rota}${separador}erro=${encodeURIComponent(code)}`);
-}
-
-/**
- * Guarda o que foi digitado antes de recusar (bloco 98).
- *
- * A recusa voltava com a frase certa e o formulário **vazio**: quem montou um
- * público de sete campos recomeçava do zero por um número que faltava.
- *
- * Só os campos que a tela sabe repor — `FormData` traz botão, chave de
- * idempotência e campo escondido junto, e reencher a tela com eles seria
- * devolver estado que ninguém digitou. A lista é da tela porque é ela que sabe
- * o que tem `defaultValue`.
- */
-async function guardarOQueFoiDigitado(
-  form: FormData,
-  campos: readonly string[],
-  mensagem?: string,
-): Promise<void> {
-  // A frase do domínio junto: ela diz **qual** campo está errado, e a tela
-  // mostrava uma genérica sobre um formulário de sete campos.
-  if (mensagem) await guardarRecusa(mensagem);
-  const rascunho: Record<string, string> = {};
-  for (const campo of campos) {
-    const valor = form.get(campo);
-    /**
-     * Campo ausente vira string vazia, e não some.
-     *
-     * Some, ele volta ao **padrão** na próxima renderização — e o padrão da
-     * caixa "Começar ligada" é marcada. Quem desmarcou de propósito e levou uma
-     * recusa por outro campo encontrava a caixa marcada de novo: a tela
-     * desfazendo em silêncio uma decisão que alguém tomou.
-     */
-    rascunho[campo] = typeof valor === 'string' ? valor : '';
-  }
-  await guardarRascunho(rascunho);
-}
-
-/**
- * Teto do arquivo de importação, em bytes — o mesmo que a API recusa.
- *
- * Conferido aqui também para que o arquivo grande demais nem seja lido na
- * memória do servidor de tela antes de a API dizer não. Repetido em vez de
- * importado do pacote da API porque `apps/web` não depende dela: os dois falam
- * HTTP, e um número é barato de duplicar com o motivo escrito.
- */
-const TETO_DO_ARQUIVO = 8 * 1024 * 1024;
-
-async function exigirSessao(): Promise<string> {
-  const token = await lerSessaoGestor();
-  if (!token) redirect('/admin/entrar');
-  return token;
-}
 
 
-/** Valor em centavos vindo do formulário, compartilhado entre domínios. */
-async function centavos(form: FormData, campo: string, rota: string): Promise<number> {
-  const valor = centavosDoCampo(texto(form, campo));
-  if (valor === null) return falhar(rota, 'valor_invalido');
-  return valor;
-}
 
-/** Campo opcional: vazio é zero, mas escrito errado continua sendo erro. */
-async function centavosOpcionais(form: FormData, campo: string, rota: string): Promise<number> {
-  return texto(form, campo) === '' ? 0 : centavos(form, campo, rota);
-}
 
 // -- A ficha do cliente ------------------------------------------------------
 

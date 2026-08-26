@@ -12,7 +12,24 @@ const apiDir = 'apps/web/src/lib/admin-api';
 const acoesFacade = 'apps/web/src/app/admin/acoes.ts';
 const acoesDir = 'apps/web/src/app/admin/acoes';
 const apiMods = readdirSync(apiDir).filter((n) => n.endsWith('.ts')).sort();
-const acaoMods = readdirSync(acoesDir).filter((n) => n.endsWith('.ts')).sort();
+/**
+ * Módulo de **ação** é o que tem a diretiva, não todo `.ts` da pasta.
+ *
+ * O corte era a extensão, e por isso `comum.ts` — os auxiliares que os seis
+ * módulos compartilhavam depois de deixarem de ser copiados — foi lido como
+ * módulo de ação, e a guarda cobrou que `falhar`, `exigirSessao` e `centavos`
+ * fossem reexportados pela fachada. Eles não são ações: são o que as ações usam,
+ * e reexportá-los seria pôr na porta pública do painel cinco funções que não
+ * respondem a formulário nenhum.
+ *
+ * A diretiva é o discriminador certo porque é ela que o Next exige, e é ela que
+ * limita o arquivo a exportar só função assíncrona — que é exatamente o motivo
+ * de os auxiliares terem precisado de arquivo próprio.
+ */
+const acaoMods = readdirSync(acoesDir)
+  .filter((n) => n.endsWith('.ts'))
+  .filter((n) => /^\s*'use server';/.test(ler(join(acoesDir, n))))
+  .sort();
 
 exigir(linhas(apiFacade) <= 80, `admin-api.ts voltou a concentrar lógica (${linhas(apiFacade)} linhas)`);
 exigir(linhas(acoesFacade) <= 260, `acoes.ts voltou a concentrar lógica (${linhas(acoesFacade)} linhas)`);
