@@ -125,6 +125,29 @@ export type UnavailableReason =
   | 'past_cutoff'
   | 'daily_limit_reached';
 
+/**
+ * O que a tela diz sobre cada motivo — escrito **uma vez**.
+ *
+ * Três telas montavam o próprio `Record<string, string>` com fallback próprio, e
+ * `past_cutoff` já divergia: "Já passou do horário de agendar para hoje." nas
+ * duas do cliente e **"O dia já acabou."** na do balcão. A mesma cadeira fechada
+ * explicada com duas frases conforme quem olha.
+ *
+ * `beyond_booking_window` fica de fora desta união de propósito: ele nasce em
+ * `AvailabilityReason`, que estende esta com os motivos que só a leitura de
+ * intervalo produz. Quem o exibe soma o rótulo dele — e é por isso que o mapa é
+ * total sobre `UnavailableReason` e não sobre `string`: motivo novo aqui obriga
+ * a frase antes de a tela precisar de uma rede.
+ */
+export const MOTIVO_DE_DIA_SEM_HORARIO: Readonly<Record<UnavailableReason, string>> = {
+  closed: 'A barbearia não abre neste dia.',
+  fully_booked: 'Todos os horários deste dia já foram preenchidos.',
+  daily_limit_reached: 'A agenda deste dia já está completa.',
+  resource_unavailable: 'Não há estrutura livre para este serviço neste dia.',
+  past_cutoff: 'Já passou do horário de agendar para hoje.',
+  no_qualified_professional: 'Ninguém executa esta combinação de serviços.',
+};
+
 export interface AvailabilityResult {
   readonly date: string;
   readonly totalDurationMinutes: Minutes;

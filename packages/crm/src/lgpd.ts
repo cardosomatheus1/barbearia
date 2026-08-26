@@ -1,6 +1,7 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
 import { anonimizarCliente } from './anonimizacao.js';
+import type { EstadoDoPedidoDoTitular, TipoDePedidoDoTitular } from '@barbearia/core';
 
 /**
  * Os direitos do titular (bloco 31, SPEC Parte 1 §1.8).
@@ -613,8 +614,8 @@ export const PRAZO_DO_PEDIDO_DIAS = 15;
 
 export interface PedidoDoTitular {
   readonly id: string;
-  readonly tipo: 'export' | 'deletion';
-  readonly estado: 'open' | 'done' | 'refused';
+  readonly tipo: TipoDePedidoDoTitular;
+  readonly estado: EstadoDoPedidoDoTitular;
   readonly customerId: string | null;
   readonly pedidoEm: Date;
   readonly venceEm: Date;
@@ -667,7 +668,7 @@ const COLUNAS = `id, kind, status, customer_id, requested_at, due_at, settled_at
 export async function abrirPedidoDoTitular(entrada: {
   readonly tenantId: string;
   readonly customerId: string;
-  readonly tipo: 'export' | 'deletion';
+  readonly tipo: TipoDePedidoDoTitular;
   readonly agora?: Date;
 }): Promise<PedidoDoTitular> {
   const agora = entrada.agora ?? new Date();

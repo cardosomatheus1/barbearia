@@ -4,6 +4,7 @@ import { getProfile, listarAgendamentos, opcoesDeRemarcacao } from '@/lib/api';
 import { addDays, dayNumber, humanInstant, localDate, localTime, weekdayShort } from '@/lib/date';
 import { lerSessao } from '@/lib/sessao';
 import { remarcar } from '../../acoes';
+import { MOTIVO_DE_DIA_SEM_HORARIO } from '@barbearia/core';
 
 /**
  * Remarcar.
@@ -39,12 +40,9 @@ const FALHA: Record<string, string> = {
 };
 
 const MOTIVO: Record<string, string> = {
-  closed: 'A barbearia não abre neste dia.',
-  fully_booked: 'Todos os horários deste dia já foram preenchidos.',
-  daily_limit_reached: 'A agenda deste dia já está completa.',
-  resource_unavailable: 'Não há estrutura livre para este serviço neste dia.',
-  past_cutoff: 'Já passou do horário de agendar para hoje.',
-  no_qualified_professional: 'Ninguém executa esta combinação de serviços.',
+  ...MOTIVO_DE_DIA_SEM_HORARIO,
+  // Só a grade pública o produz: no balcão `atCounter` impede o motor de
+  // emiti-lo, e por isso ele não está na união do domínio.
   beyond_booking_window: 'Este dia ainda não está aberto para agendamento.',
 };
 

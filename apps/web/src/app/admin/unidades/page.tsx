@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { FUSOS_DO_BRASIL } from '@barbearia/core';
+import { FUSOS_DO_BRASIL, ROTULO_DO_PAPEL, type Papel } from '@barbearia/core';
 import type { Metadata } from 'next';
 import {
   cadastroDeUnidadesNaApi,
@@ -85,12 +85,6 @@ const FEITO: Record<string, string> = {
   transferencia: 'Produto transferido. As duas lojas já mostram o saldo novo.',
 };
 
-const PAPEL: Record<string, string> = {
-  owner: 'Dono',
-  manager: 'Gerente',
-  receptionist: 'Recepção',
-  professional: 'Barbeiro',
-};
 
 const quando = (iso: string, timezone: string): string =>
   new Intl.DateTimeFormat('pt-BR', {
@@ -401,7 +395,7 @@ export default async function UnidadesPage({ searchParams }: Props) {
                     <input name="staffUserId" type="hidden" value={pessoa.id} />
                     <h3 className="item-cadastro__nome">{pessoa.nome}</h3>
                     <p className="item-cadastro__linha">
-                      {PAPEL[pessoa.papel] ?? pessoa.papel}
+                      {ROTULO_DO_PAPEL[pessoa.papel as Papel]}
                       {pessoa.unidades.length === 0 ? ' · todas as unidades' : ''}
                     </p>
                     {pessoa.papel === 'owner' ? (

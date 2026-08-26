@@ -1,12 +1,34 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { MODOS_DE_FIDELIDADE, ROTULO_DO_MODO, type ModoDeFidelidade } from '@barbearia/core';
+import {
+  ESCOPOS,
+  MODOS_DE_FIDELIDADE,
+  ROTULO_DO_MODO,
+  type EscopoMultiunidade,
+  type ModoDeFidelidade,
+} from '@barbearia/core';
 import { programaDeFidelidade } from '@/lib/admin-api';
 import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoSair, acaoSalvarFidelidade } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+
+/**
+ * O que "empresa" e "unidade" querem dizer **aqui**.
+ *
+ * O saldo tem dois bolsos, e o escopo decide em qual o ponto novo cai.
+ *
+ * Mapa nomeado e total sobre a união, não um `<option>` escrito à mão: as três
+ * telas que oferecem escopo dizem coisas diferentes de propósito, e o que
+ * estava copiado era o **conjunto de valores**. Assim um terceiro escopo no
+ * domínio obriga cada tela a decidir a própria frase, em vez de sumir de uma
+ * delas em silêncio.
+ */
+const ESCOPO_DO_SALDO: Readonly<Record<EscopoMultiunidade, string>> = {
+  empresa: 'Em todas as unidades',
+  unidade: 'Só na unidade onde foi ganho',
+};
 
 /**
  * O programa de fidelidade (bloco 41, SPEC §4.8).
@@ -202,8 +224,11 @@ export default async function FidelidadePage({ searchParams }: Props) {
           <label className="fidelidade__campo">
             <span>Onde o saldo vale</span>
             <select className="ui-field__input" defaultValue={p.escopo ?? 'empresa'} name="escopo">
-              <option value="empresa">Em todas as unidades</option>
-              <option value="unidade">Só na unidade onde foi ganho</option>
+              {ESCOPOS.map((escopo) => (
+                <option key={escopo} value={escopo}>
+                  {ESCOPO_DO_SALDO[escopo]}
+                </option>
+              ))}
             </select>
             <span className="fidelidade__dica">
               O que já foi ganho não muda de lugar: cada lançamento guarda a regra com que

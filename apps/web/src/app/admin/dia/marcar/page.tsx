@@ -13,6 +13,7 @@ import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoMarcarNoBalcao } from '../../acoes';
 import { secao } from '../../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
+import { MOTIVO_DE_DIA_SEM_HORARIO } from '@barbearia/core';
 
 /**
  * Marcar alguém pelo balcão.
@@ -51,12 +52,7 @@ const FALHA: Record<string, string> = {
 };
 
 const MOTIVO: Record<string, string> = {
-  closed: 'A barbearia não abre neste dia.',
-  fully_booked: 'Todos os horários deste dia já foram preenchidos.',
-  daily_limit_reached: 'A agenda deste dia já está completa.',
-  resource_unavailable: 'Não há estrutura livre para este serviço neste dia.',
-  past_cutoff: 'O dia já acabou.',
-  no_qualified_professional: 'Ninguém executa esta combinação de serviços.',
+  ...MOTIVO_DE_DIA_SEM_HORARIO,
 };
 
 /** Régua de dias, a partir de hoje na barbearia. */

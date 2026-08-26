@@ -28,6 +28,8 @@ import {
   ROTULO_DO_TRATAMENTO_DO_DESCONTO,
   TRATAMENTOS_DA_TAXA,
   TRATAMENTOS_DO_DESCONTO,
+  FORMAS_DO_CLIENTE,
+  ROTULO_DA_FORMA,
 } from '@barbearia/core';
 import { marcaDaRecusa } from '../../falha-da-leitura';
 
@@ -66,13 +68,23 @@ const first = (valor: string | string[] | undefined): string | undefined =>
  * quando o cliente volta e paga de verdade. Incluí-lo cobraria a maquininha de
  * um dinheiro que não passou por ela.
  */
-const MEIOS_COM_TAXA = [
-  { valor: 'credit', rotulo: 'Crédito' },
-  { valor: 'debit', rotulo: 'Débito' },
-  { valor: 'pix', rotulo: 'Pix' },
-  { valor: 'link', rotulo: 'Link de pagamento' },
-  { valor: 'transfer', rotulo: 'Transferência' },
-] as const;
+/**
+ * Os meios que passam por adquirente — do domínio, não escritos aqui.
+ *
+ * Eram cinco à mão, com os rótulos copiados de `ROTULO_DA_FORMA`. Faltava
+ * `cash`, e a ausência tinha intenção escrita do outro lado: o schema da borda
+ * diz em letras que *"`cash` continua na lista: há adquirente que cobra tarifa
+ * por saque, e a barbearia que paga isso tem onde declarar"*. Não tinha — esta é
+ * a única tela que gerencia taxa, e ela não oferecia o campo.
+ *
+ * `FORMAS_DO_CLIENTE` é o conjunto certo: o que o cliente apresenta e portanto
+ * passa por maquininha. Fidelidade, pacote e assinatura são crédito da casa e
+ * não têm adquirente que cobre nada por eles.
+ */
+const MEIOS_COM_TAXA = FORMAS_DO_CLIENTE.map((valor) => ({
+  valor,
+  rotulo: ROTULO_DA_FORMA[valor],
+}));
 
 /** Pontos-base para o que o dono digita: 319 → `3,19`. Vazio quando não há. */
 const porcentagem = (bps: number | undefined): string =>

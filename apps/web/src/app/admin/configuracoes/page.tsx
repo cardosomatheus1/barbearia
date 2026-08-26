@@ -8,7 +8,28 @@ import { acaoDefinirVitrine, acaoJanela,
 import { secao } from '../secoes';
 import { faltasDoLimiar } from '@/lib/sinal';
 import { marcaDaRecusa } from '../falha-da-leitura';
-import { MEIOS_ACEITOS, ROTULO_DO_MEIO_ACEITO } from '@barbearia/core';
+import {
+  ESCOPOS,
+  MEIOS_ACEITOS,
+  ROTULO_DO_MEIO_ACEITO,
+  type EscopoMultiunidade,
+} from '@barbearia/core';
+
+/**
+ * O que "empresa" e "unidade" querem dizer **aqui**.
+ *
+ * A dívida é da pessoa com a barbearia; o escopo diz se ela é uma só ou uma por loja.
+ *
+ * Mapa nomeado e total sobre a união, não um `<option>` escrito à mão: as três
+ * telas que oferecem escopo dizem coisas diferentes de propósito, e o que
+ * estava copiado era o **conjunto de valores**. Assim um terceiro escopo no
+ * domínio obriga cada tela a decidir a própria frase, em vez de sumir de uma
+ * delas em silêncio.
+ */
+const ESCOPO_DO_FIADO: Readonly<Record<EscopoMultiunidade, string>> = {
+  empresa: 'Na rede toda — uma dívida só',
+  unidade: 'Só na loja em que a dívida nasceu',
+};
 
 /**
  * Janela de cancelamento e remarcação.
@@ -323,8 +344,11 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
             id="creditScope"
             name="creditScope"
           >
-            <option value="empresa">Na rede toda — uma dívida só</option>
-            <option value="unidade">Só na loja em que a dívida nasceu</option>
+            {ESCOPOS.map((escopo) => (
+              <option key={escopo} value={escopo}>
+                {ESCOPO_DO_FIADO[escopo]}
+              </option>
+            ))}
           </select>
           <p className="ui-field__hint">
             O limite não é repartido: ele vale inteiro em cada loja. Com uma unidade só, os

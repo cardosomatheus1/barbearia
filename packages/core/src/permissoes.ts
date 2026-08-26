@@ -408,6 +408,25 @@ export type Papel = 'owner' | 'manager' | 'receptionist' | 'professional';
 export const PAPEIS: readonly Papel[] = ['owner', 'manager', 'receptionist', 'professional'];
 
 /**
+ * Como cada papel se chama na tela.
+ *
+ * Estava escrito **três vezes** — em Equipe, em Permissões e em Unidades —, e a
+ * terceira com `Record<string, string>` mais `?? pessoa.papel`. Um quinto papel
+ * deixaria as duas primeiras vermelhas no `tsc` (é o que a chave estreita compra)
+ * e a terceira **verde**, mostrando `supervisor` cru e minúsculo ao lado de
+ * "Gerente" e "Recepção" na mesma lista.
+ *
+ * Total sobre a união, e sem rede: o compilador cobra a frase antes de a tela
+ * precisar de uma.
+ */
+export const ROTULO_DO_PAPEL: Readonly<Record<Papel, string>> = {
+  owner: 'Dono',
+  manager: 'Gerente',
+  receptionist: 'Recepção',
+  professional: 'Barbeiro',
+};
+
+/**
  * Padrão de fábrica de cada papel.
  *
  * As três separações que a SPEC chama de não negociáveis:

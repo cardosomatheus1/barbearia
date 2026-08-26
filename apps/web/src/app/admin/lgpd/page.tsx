@@ -13,6 +13,7 @@ import { faltamDias } from '@/lib/prazo';
 import { acaoEncerrarPedidoDeDados, acaoSair } from '../acoes';
 import { secao } from '../secoes';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { ROTULO_DO_ESTADO_DO_PEDIDO, ROTULO_DO_PEDIDO_DO_TITULAR } from '@barbearia/core';
 
 /**
  * Os pedidos dos clientes sobre os dados deles (bloco 31, SPEC §1.8.4).
@@ -43,16 +44,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const TIPO: Record<string, string> = {
-  export: 'Cópia dos dados',
-  deletion: 'Exclusão dos dados',
-};
-
-const ESTADO: Record<string, string> = {
-  done: 'Atendido',
-  refused: 'Recusado',
-  open: 'Em aberto',
-};
 
 /**
  * As frases de recusa, pela **união** dos códigos e não por `string`.
@@ -97,9 +88,9 @@ function Pedido({ pedido, agora }: { readonly pedido: PedidoNaTela; readonly ago
   return (
     <li className={`pedido${aberto && quando.urgente ? ' pedido--urgente' : ''}`}>
       <div className="pedido__cabeca">
-        <span className="pedido__tipo">{TIPO[pedido.tipo] ?? pedido.tipo}</span>
+        <span className="pedido__tipo">{ROTULO_DO_PEDIDO_DO_TITULAR[pedido.tipo]}</span>
         <span className="pedido__prazo">
-          {aberto ? quando.texto : `${ESTADO[pedido.estado]} em ${data(pedido.encerradoEm ?? pedido.venceEm)}`}
+          {aberto ? quando.texto : `${ROTULO_DO_ESTADO_DO_PEDIDO[pedido.estado]} em ${data(pedido.encerradoEm ?? pedido.venceEm)}`}
         </span>
       </div>
 

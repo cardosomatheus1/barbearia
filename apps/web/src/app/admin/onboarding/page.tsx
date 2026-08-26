@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { estadoDoPainel, templatesDeServico } from '@/lib/admin-api';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { COMODIDADES, ROTULO_DA_COMODIDADE } from '@barbearia/core';
+import { COMODIDADES, FUSOS_DO_BRASIL, ROTULO_DA_COMODIDADE } from '@barbearia/core';
 import {
   acaoEmpresa,
   acaoPagamentos,
@@ -192,15 +192,17 @@ export default async function OnboardingPage({ searchParams }: Props) {
               <label className="ui-field__label" htmlFor="timezone">Fuso horário</label>
               <select className="ui-field__input" id="timezone" name="timezone"
                       defaultValue={empresa.timezone}>
-                <option value="America/Sao_Paulo">Brasília (SP, RJ, MG…)</option>
-                <option value="America/Bahia">Bahia</option>
-                <option value="America/Fortaleza">Ceará, PI, RN, PB, PE, AL, SE</option>
-                <option value="America/Recife">Recife</option>
-                <option value="America/Belem">Pará, Amapá</option>
-                <option value="America/Manaus">Amazonas, Rondônia, Roraima</option>
-                <option value="America/Cuiaba">Mato Grosso</option>
-                <option value="America/Campo_Grande">Mato Grosso do Sul</option>
-                <option value="America/Rio_Branco">Acre</option>
+                {/* Derivadas de `FUSOS_DO_BRASIL`, como a tela de Unidades já faz.
+                    Escritas à mão, eram nove das doze: Porto Velho, Boa Vista e
+                    **Fernando de Noronha** não existiam aqui. Noronha é UTC−2 e caía em
+                    −3 — e o fuso decide a grade, `orders.business_day` e a janela de
+                    silêncio dos avisos. Os rótulos também divergiam: `America/Bahia` era
+                    "Bahia" aqui e "Salvador (UTC−3)" lá, para o mesmo valor. */}
+                {FUSOS_DO_BRASIL.map((fuso) => (
+                  <option key={fuso.id} value={fuso.id}>
+                    {fuso.rotulo}
+                  </option>
+                ))}
               </select>
               <p className="ui-field__hint">
                 A grade de horários sai deste fuso, nunca do celular do cliente.

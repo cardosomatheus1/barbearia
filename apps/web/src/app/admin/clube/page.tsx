@@ -8,6 +8,8 @@ import {
   fraseDaSimulacao,
   fraseDoBloqueio,
   type MetodoDaBaixa,
+  ESCOPOS,
+  type EscopoMultiunidade,
 } from '@barbearia/core';
 import {
   catalogoDeServicos,
@@ -36,6 +38,22 @@ import {
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+
+/**
+ * O que "empresa" e "unidade" querem dizer **aqui**.
+ *
+ * O escopo é do **plano**, não da barbearia: o clube da filial pode ser da loja e o Premium valer na rede.
+ *
+ * Mapa nomeado e total sobre a união, não um `<option>` escrito à mão: as três
+ * telas que oferecem escopo dizem coisas diferentes de propósito, e o que
+ * estava copiado era o **conjunto de valores**. Assim um terceiro escopo no
+ * domínio obriga cada tela a decidir a própria frase, em vez de sumir de uma
+ * delas em silêncio.
+ */
+const ESCOPO_DO_PLANO: Readonly<Record<EscopoMultiunidade, string>> = {
+  empresa: 'Em todas as unidades',
+  unidade: 'Só na unidade onde a pessoa assinou',
+};
 
 /**
  * O clube de assinatura (bloco 45, SPEC §4.6).
@@ -211,8 +229,11 @@ function CamposDoPlano({
           id={`${prefixo}-escopo`}
           name="escopo"
         >
-          <option value="empresa">Em todas as unidades</option>
-          <option value="unidade">Só na unidade onde a pessoa assinou</option>
+          {ESCOPOS.map((escopo) => (
+            <option key={escopo} value={escopo}>
+              {ESCOPO_DO_PLANO[escopo]}
+            </option>
+          ))}
         </select>
         <p className="ui-field__hint">
           Quem já assinava antes continua coberto em toda parte. Com uma unidade só, os dois

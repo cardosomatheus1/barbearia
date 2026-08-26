@@ -152,12 +152,6 @@ const FALHA: Record<string, string> = {
   request_failed: 'Não deu para carregar. Tente de novo.',
 };
 
-const ROTULO_DA_VISITA: Record<string, string> = {
-  completed: 'Atendido',
-  no_show: 'Faltou',
-  cancelled_customer: 'Cancelou',
-  cancelled_business: 'Cancelado pela casa',
-};
 
 /**
  * Total sobre a união, e não `Record<string, string>`.

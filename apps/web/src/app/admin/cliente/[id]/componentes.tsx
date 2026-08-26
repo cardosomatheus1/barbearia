@@ -9,6 +9,8 @@ import {
   saldoPorExtenso,
   nomeDoAviso,
   type Conversa,
+  ROTULO_DO_ESTADO,
+  type AppointmentStatus,
 } from '@barbearia/core';
 import type {
   ConfiancaDoCliente,
@@ -46,12 +48,20 @@ import {
   acaoMandarMensagem,
 } from '../../acoes';
 
-const ROTULO_DA_VISITA: Record<string, string> = {
-  completed: 'Atendido',
-  no_show: 'Faltou',
-  cancelled_customer: 'Cancelou',
-  cancelled_business: 'Cancelado pela casa',
-};
+/**
+ * Total sobre a união, e derivado do domínio.
+ *
+ * Eram duas cópias — esta e uma **morta** em `page.tsx`, byte a byte igual e sem
+ * nenhum uso — com `Record<string, string>` e sem `??` de rede. A consulta da
+ * ficha (`crm/ficha.ts`) filtra em quatro estados hoje; acrescentar um quinto ao
+ * `IN` renderizaria a linha da visita **vazia**, não o valor cru: sem rede e com
+ * a chave larga, o `tsc` não vê que a chave pode não existir.
+ *
+ * E os rótulos divergiam do domínio para a mesma linha da mesma pessoa:
+ * `cancelled_customer` era "Cancelou" aqui e "Cancelado pelo cliente" em
+ * `ROTULO_DO_ESTADO`. Agora é um só.
+ */
+const ROTULO_DA_VISITA: Readonly<Record<AppointmentStatus, string>> = ROTULO_DO_ESTADO;
 
 const ROTULO_DA_CONVERSA: Readonly<Record<Conversa, string>> = {
   silencioso: 'Silêncio',
@@ -73,7 +83,7 @@ export function Visita({ visita }: { readonly visita: VisitaNaFicha }) {
     <li className={`visita${veio ? '' : ' visita--falhou'}`}>
       <span className="visita__quando tabular">{dia(visita.quando)}</span>
       <span className="visita__servico">
-        {veio ? visita.servicos.join(' + ') || 'Atendimento' : ROTULO_DA_VISITA[visita.status]}
+        {veio ? visita.servicos.join(' + ') || 'Atendimento' : ROTULO_DA_VISITA[visita.status as AppointmentStatus]}
       </span>
       {/* A loja entra ao lado de quem atendeu, e não numa coluna própria: numa
           barbearia de uma unidade só ela é sempre a mesma palavra, e uma coluna

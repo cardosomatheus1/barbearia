@@ -77,3 +77,4 @@ export * from './meio-de-pagamento.js';
 export * from './assinatura-da-plataforma.js';
 
 export * from './apuracao.js';
+export * from './titular.js';

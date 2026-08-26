@@ -6,6 +6,7 @@ import {
   PERMISSOES_SEM_ROTA,
   type Papel,
   type Permissao,
+  ROTULO_DO_PAPEL,
 } from '@barbearia/core';
 import { equipeDaBarbearia } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
@@ -47,12 +48,6 @@ interface Props {
   readonly searchParams: Promise<{ salvo?: string; erro?: string }>;
 }
 
-const PAPEL: Record<Papel, string> = {
-  owner: 'Dono',
-  manager: 'Gerente',
-  receptionist: 'Recepção',
-  professional: 'Barbeiro',
-};
 
 /** Os papéis editáveis. `owner` fica de fora aqui, na borda e no domínio. */
 const EDITAVEIS: readonly Papel[] = ['manager', 'receptionist', 'professional'];
@@ -361,7 +356,7 @@ export default async function PermissoesPage({ searchParams }: Props) {
           <section className="painel__grupo permissoes-do-papel" key={papel}>
             <details className="dobra">
               <summary className="dobra__titulo">
-                <h2 className="painel__secao permissao__papel">{PAPEL[papel]}</h2>
+                <h2 className="painel__secao permissao__papel">{ROTULO_DO_PAPEL[papel]}</h2>
                 <span className="permissao__conta tabular">
                   {marcadas} de {total}
                 </span>
@@ -402,7 +397,7 @@ export default async function PermissoesPage({ searchParams }: Props) {
               ))}
 
               <button className="ui-button ui-button--primary permissao__salvar" type="submit">
-                Salvar as permissões de {PAPEL[papel].toLowerCase()}
+                Salvar as permissões de {ROTULO_DO_PAPEL[papel].toLowerCase()}
               </button>
             </form>
             </details>

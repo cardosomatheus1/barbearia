@@ -22,6 +22,8 @@ import type {
   TipoDeRecado,
   TratamentoDaTaxa,
   TratamentoDoDesconto,
+  EstadoDoPedidoDoTitular,
+  TipoDePedidoDoTitular,
 } from '@barbearia/core';
 
 import { BASE, chamar, type Resposta } from './core';
@@ -248,8 +250,8 @@ export const registrarConsentimentoNoBalcao = (
 
 export interface PedidoNaTela {
   id: string;
-  tipo: 'export' | 'deletion';
-  estado: 'open' | 'done' | 'refused';
+  tipo: TipoDePedidoDoTitular;
+  estado: EstadoDoPedidoDoTitular;
   customerId: string | null;
   pedidoEm: string;
   venceEm: string;

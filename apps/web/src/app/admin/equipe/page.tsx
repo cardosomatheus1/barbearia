@@ -18,6 +18,7 @@ import {
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { ROTULO_DO_PAPEL } from '@barbearia/core';
 
 /**
  * Equipe.
@@ -43,12 +44,6 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const PAPEL: Record<Papel, string> = {
-  owner: 'Dono',
-  manager: 'Gerente',
-  receptionist: 'Recepção',
-  professional: 'Barbeiro',
-};
 
 /** O que cada papel faz, em uma frase, para a escolha não ser adivinhação. */
 const PARA_QUE: Record<Papel, string> = {
@@ -128,7 +123,7 @@ function Pessoa({
             >
               {ATRIBUIVEIS.map((papel) => (
                 <option key={papel} value={papel}>
-                  {PAPEL[papel]}
+                  {ROTULO_DO_PAPEL[papel]}
                 </option>
               ))}
             </select>
@@ -269,7 +264,7 @@ export default async function EquipePage({ searchParams }: Props) {
               {ATRIBUIVEIS.map((papel, indice) => (
                 <label className="papel" key={papel}>
                   <input defaultChecked={indice === 0} name="role" type="radio" value={papel} />
-                  <span className="papel__nome">{PAPEL[papel]}</span>
+                  <span className="papel__nome">{ROTULO_DO_PAPEL[papel]}</span>
                   {/* "No padrão" porque o papel é editável: a frase descreve o
                       que ele traz de fábrica, e a contagem ao lado é a verdade
                       de agora. */}
