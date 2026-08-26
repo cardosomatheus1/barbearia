@@ -3341,6 +3341,28 @@ async function main() {
         continue;
       }
 
+      /**
+       * A altura é medida **antes** de abrir as dobras, e é a única coisa aqui que é.
+       *
+       * O passo seguinte abre todo `<details>` de propósito, e está certo para o
+       * que ele serve: transbordo e alvo de toque precisam ser conferidos dentro
+       * do formulário dobrado, senão a tela é aprovada pelo que esconde.
+       *
+       * Para altura o mesmo estado responde a pergunta errada, e caro. A régua
+       * nasceu lendo o depois e registrou "catálogo: 22.507px, vinte e cinco
+       * telas de rolagem para nove serviços" — o catálogo com os nove
+       * formulários de edição escancarados, que é uma tela que ninguém abre. Foi
+       * dessa leitura que saiu o diagnóstico de que "nada colapsa neste produto",
+       * quando o que não colapsava era a medição.
+       *
+       * O que se quer saber é quanto a pessoa rola no estado em que a tela é
+       * entregue. Esse número é este, e ele vem primeiro.
+       */
+      const alturaEntregue = await page.evaluate(() => ({
+        altura: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+        janela: window.innerHeight || 1,
+      }));
+
       // Conteúdo dobrado é conteúdo. As telas de cadastro guardam os
       // formulários atrás de `<details>` — inclusive a tabela da jornada, que é
       // a coisa mais larga do painel. Medir só o que está aberto seria aprovar
@@ -3606,23 +3628,20 @@ async function main() {
          * uma página pode custar depende do que ela é: o catálogo do dono e a
          * página pública do cliente não respondem a mesma pergunta.
          */
-        const alturaDaJanela = window.innerHeight || 1;
-        const altura = Math.max(
-          document.documentElement.scrollHeight,
-          document.body.scrollHeight,
-        );
-
         return {
           rola,
-          altura,
-          telasDeRolagem: Math.round((altura / alturaDaJanela) * 10) / 10,
           estouram: [...new Set(estouram)].slice(0, 4),
           cortados: [...new Set(cortados)].slice(0, 4),
           pequenos: [...new Set(pequenos)].slice(0, 4),
         };
       });
 
-      resultados.push({ largura, ...medida });
+      resultados.push({
+        largura,
+        ...medida,
+        altura: alturaEntregue.altura,
+        telasDeRolagem: Math.round((alturaEntregue.altura / alturaEntregue.janela) * 10) / 10,
+      });
 
 
 
@@ -3677,12 +3696,22 @@ async function main() {
   await browser.close();
 
   /**
-   * A régua de altura, registrada e não cobrada — ver o comentário na medição.
+   * A régua de altura, registrada e não cobrada.
+   *
+   * Ela mede o estado **entregue** — antes de a medição abrir as dobras. A
+   * primeira versão lia o depois, e por isso registrou o catálogo em 22.507px:
+   * nove formulários de edição escancarados, uma tela que ninguém abre. Número
+   * medido no estado errado é pior que número nenhum, porque tem cara de dado —
+   * é a mesma lição do P95 sob contenção.
    *
    * Sai ordenada da pior para a melhor e cortada nas dez primeiras: a lista
-   * inteira são noventa e seis linhas que ninguém lê, e o que se quer aqui é a
+   * inteira são noventa e cinco linhas que ninguém lê, e o que se quer aqui é a
    * fila de quem precisa encolher. O total continua saindo, para a soma ser
    * comparável entre duas execuções mesmo quando a ordem muda.
+   *
+   * Sem teto, por enquanto: um teto ligado antes de o V8 derrubar as alturas
+   * nasce vermelho, e guarda que nasce vermelha é guarda que alguém desliga
+   * antes de consertar o que ela achou.
    */
   if (alturas.length > 0) {
     alturas.sort((a, b) => b.altura - a.altura);
