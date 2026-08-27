@@ -621,6 +621,8 @@ lancar "alvo do bloqueio e regra de comissão — negativos" node --test scripts
 lancar "vazio de texto" node scripts/verificar-vazio-de-texto.mjs
 lancar "vazio de texto — negativos" node --test scripts/verificar-vazio-de-texto.test.mjs
 lancar "pulo com motivo" node scripts/verificar-pulo-com-motivo.mjs
+lancar "hora com fuso" node scripts/verificar-hora-com-fuso.mjs
+lancar "hora com fuso — negativos" node scripts/verificar-hora-com-fuso.test.mjs
 lancar "entrega de OTP — negativos" node --test scripts/verificar-otp-entregavel.test.mjs
 lancar "rede de deploy" node scripts/verificar-rede-de-deploy.mjs
 lancar "rede de deploy — negativos" node --test scripts/verificar-rede-de-deploy.test.mjs

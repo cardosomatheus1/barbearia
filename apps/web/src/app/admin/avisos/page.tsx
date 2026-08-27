@@ -54,8 +54,17 @@ const ROTULO_DO_STATUS: Record<EnvioRegistrado['status'], string> = {
   skipped: 'Não enviado',
 };
 
-function quando(iso: string): string {
+/**
+ * Fuso da unidade, e não do processo (bloco 135).
+ *
+ * Sem `timeZone`, `Intl` usa UTC no servidor e o do aparelho no navegador: o
+ * React não reidrata a hora e a **página inteira** cai com o erro 418. É o
+ * defeito D2 com uma segunda consequência, e foi assim que a ficha do cliente
+ * quebrou no percurso da medição do bloco 134.
+ */
+function quando(fuso: string, iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -238,7 +247,7 @@ export default async function AvisosPage({ searchParams }: Props) {
                 {envio.telefone ? ` · ${envio.telefone}` : ''}
               </p>
               <p className="envios__meta">
-                <time dateTime={envio.enviadoEm}>{quando(envio.enviadoEm)}</time>
+                <time dateTime={envio.enviadoEm}>{quando(estado.empresa.timezone, envio.enviadoEm)}</time>
                 {/* A frase sai de `packages/core`: esta tela tinha o quinto
                     mapa de motivos do produto, com palavras próprias para os
                     mesmos fatos — e era o único que conhecia

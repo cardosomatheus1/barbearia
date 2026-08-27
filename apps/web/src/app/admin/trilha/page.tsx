@@ -46,20 +46,37 @@ interface Props {
 const first = (valor: string | string[] | undefined): string | undefined =>
   Array.isArray(valor) ? valor[0] : valor;
 
-const QUANDO = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
+/**
+ * Fuso da unidade, e não do processo (bloco 135).
+ *
+ * Sem `timeZone`, `Intl` usa UTC no servidor e o do aparelho no navegador: o
+ * React não reidrata a hora e a **página inteira** cai com o erro 418. É o
+ * defeito D2 com uma segunda consequência, e foi assim que a ficha do cliente
+ * quebrou no percurso da medição do bloco 134.
+ */
+const quando = (fuso: string, iso: string): string =>
+  new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
 
-function Evento({ evento }: { readonly evento: EventoDaTrilha }) {
+function Evento({
+  evento,
+  fuso,
+}: {
+  readonly evento: EventoDaTrilha;
+  /** O fuso da unidade. Sem ele a hora diverge entre servidor e navegador (bloco 135). */
+  readonly fuso: string;
+}) {
   const mudou = diferencaDoEvento(evento.before, evento.after);
 
   return (
     <li className="evento">
       <p className="evento__quando tabular">
-        <time dateTime={evento.createdAt}>{QUANDO.format(new Date(evento.createdAt))}</time>
+        <time dateTime={evento.createdAt}>{quando(fuso, evento.createdAt)}</time>
       </p>
       <p className="evento__frase">
         <strong>{evento.actorName}</strong>{' '}
@@ -215,7 +232,7 @@ export default async function TrilhaPage({ searchParams }: Props) {
         <>
           <ul className="eventos">
             {entries.map((evento) => (
-              <Evento evento={evento} key={evento.id} />
+              <Evento evento={evento} fuso={estado.empresa.timezone} key={evento.id} />
             ))}
           </ul>
 

@@ -79,8 +79,16 @@ function Atendimento({ linha }: { readonly linha: LinhaDoDia }) {
  * atendimento nenhum: depois do redirecionamento ela não aparecia em tela
  * nenhuma do produto. Quem fechasse a aba perdia a única porta.
  */
-function Aberta({ comanda }: { readonly comanda: ComandaAbertaNaTela }) {
+function Aberta({
+  comanda,
+  fuso,
+}: {
+  readonly comanda: ComandaAbertaNaTela;
+  /** O fuso da unidade. Sem ele a hora diverge entre servidor e navegador (bloco 135). */
+  readonly fuso: string;
+}) {
   const quando = new Date(comanda.abertaEm).toLocaleTimeString('pt-BR', {
+    timeZone: fuso,
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -194,7 +202,7 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
           </p>
           <ul className="para-cobrar-lista">
             {abertas.dados.comandas.map((comanda) => (
-              <Aberta comanda={comanda} key={comanda.id} />
+              <Aberta comanda={comanda} fuso={estado.empresa.timezone} key={comanda.id} />
             ))}
           </ul>
         </section>

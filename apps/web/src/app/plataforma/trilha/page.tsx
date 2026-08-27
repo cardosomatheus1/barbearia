@@ -1,3 +1,4 @@
+import { FUSO_DA_PLATAFORMA } from '@barbearia/core';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { listarBarbearias, trilhaDaPlataforma, type EventoDaPlataforma } from '@/lib/plataforma-api';
@@ -31,6 +32,9 @@ const ACAO: Record<string, string> = {
 
 const quando = (iso: string): string =>
   new Date(iso).toLocaleString('pt-BR', {
+    // A trilha da plataforma atravessa barbearias: não há unidade de onde tirar
+    // o fuso, e sem `timeZone` a hora diverge entre servidor e navegador (418).
+    timeZone: FUSO_DA_PLATAFORMA,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

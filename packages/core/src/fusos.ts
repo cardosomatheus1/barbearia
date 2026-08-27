@@ -46,3 +46,18 @@ export const IDS_DE_FUSO: readonly string[] = FUSOS_DO_BRASIL.map((f) => f.id);
 export function fusoConhecido(id: string): boolean {
   return IDS_DE_FUSO.includes(id);
 }
+
+/**
+ * O fuso em que o painel da plataforma lê as próprias telas (bloco 135).
+ *
+ * A trilha da plataforma atravessa barbearias — não existe unidade de onde tirar
+ * o fuso, e é justamente por isso que ela ficou sem nenhum: `Intl` caía no do
+ * processo, que é UTC no servidor e o do aparelho no navegador. O React não
+ * reidrata a diferença e a página inteira cai com o erro 418.
+ *
+ * Constante nomeada e não literal na página porque o painel tem mais de uma tela
+ * com hora, e um literal repetido é a divergência de amanhã. Não é
+ * `locations.timezone` disfarçado: aqui quem lê é **uma** organização, a que
+ * opera o produto, e não mil e duzentas.
+ */
+export const FUSO_DA_PLATAFORMA = 'America/Sao_Paulo';

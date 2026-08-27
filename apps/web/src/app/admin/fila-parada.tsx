@@ -26,7 +26,14 @@ import type { SaudeDaFilaNaTela } from '@/lib/admin-api';
  * Alarme que dispara à toa é alarme que se aprende a ignorar, e um canal
  * ignorado é pior que canal nenhum.
  */
-export function FilaParada({ fila }: { readonly fila: SaudeDaFilaNaTela | null }) {
+export function FilaParada({
+  fila,
+  fuso,
+}: {
+  readonly fila: SaudeDaFilaNaTela | null;
+  /** O fuso da unidade. Sem ele a hora diverge entre servidor e navegador (bloco 135). */
+  readonly fuso: string;
+}) {
   /**
    * A ordem das três perguntas, e por que ela não é a de escrita.
    *
@@ -44,7 +51,7 @@ export function FilaParada({ fila }: { readonly fila: SaudeDaFilaNaTela | null }
         <strong>As mensagens não estão saindo.</strong> Há {fila.atrasadas}{' '}
         {fila.atrasadas === 1 ? 'tarefa parada' : 'tarefas paradas'} na fila
         {fila.ultimaConclusao
-          ? ` e nada foi processado desde ${quandoCurto(fila.ultimaConclusao)}`
+          ? ` e nada foi processado desde ${quandoCurto(fuso, fila.ultimaConclusao)}`
           : ' e nada foi processado ainda'}
         . O que você montar aqui fica guardado, mas não chega a ninguém enquanto isso não
         voltar — avise quem cuida do sistema.
@@ -94,8 +101,17 @@ export function FilaParada({ fila }: { readonly fila: SaudeDaFilaNaTela | null }
 }
 
 /** "19/08 às 23:26" — o suficiente para saber se foi hoje. */
-function quandoCurto(iso: string): string {
+/**
+ * Fuso da unidade, e não do processo (bloco 135).
+ *
+ * Sem `timeZone`, `Intl` usa UTC no servidor e o do aparelho no navegador: o
+ * React não reidrata a hora e a **página inteira** cai com o erro 418. É o
+ * defeito D2 com uma segunda consequência, e foi assim que a ficha do cliente
+ * quebrou no percurso da medição do bloco 134.
+ */
+function quandoCurto(fuso: string, iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',

@@ -93,12 +93,22 @@ const MOTIVO_DO_TELEFONE: Record<string, string> = {
   invalid_br_subscriber: 'não parece celular',
 };
 
-const QUANDO = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
+/**
+ * Fuso da unidade, e não do processo (bloco 135).
+ *
+ * Sem `timeZone`, `Intl` usa UTC no servidor e o do aparelho no navegador: o
+ * React não reidrata a hora e a **página inteira** cai com o erro 418. É o
+ * defeito D2 com uma segunda consequência, e foi assim que a ficha do cliente
+ * quebrou no percurso da medição do bloco 134.
+ */
+const quando = (fuso: string, iso: string): string =>
+  new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
 
 /** A frase da SPEC: "1.240 clientes, 38 duplicados, 12 telefones inválidos". */
 function frase(resumo: ResumoDaImportacao['resumo']): string {
@@ -135,14 +145,21 @@ function Problema({ linha }: { readonly linha: LinhaComProblema }) {
   );
 }
 
-function Importacao({ item }: { readonly item: ResumoDaImportacao }) {
+function Importacao({
+  item,
+  fuso,
+}: {
+  readonly item: ResumoDaImportacao;
+  /** O fuso da unidade. Sem ele a hora diverge entre servidor e navegador (bloco 135). */
+  readonly fuso: string;
+}) {
   const rotulo =
     item.status === 'applied' ? 'aplicada' : item.status === 'reverted' ? 'desfeita' : 'só conferida';
 
   return (
     <li className="evento">
       <p className="evento__quando tabular">
-        <time dateTime={item.createdAt}>{QUANDO.format(new Date(item.createdAt))}</time>
+        <time dateTime={item.createdAt}>{quando(fuso, item.createdAt)}</time>
       </p>
       <p className="evento__frase">
         <strong>{item.fileName}</strong> — {rotulo}, {frase(item.resumo)}
@@ -444,7 +461,7 @@ export default async function ImportarPage({ searchParams }: Props) {
         ) : (
           <ul className="eventos">
             {importacoes.map((item) => (
-              <Importacao item={item} key={item.id} />
+              <Importacao fuso={estado.empresa.timezone} item={item} key={item.id} />
             ))}
           </ul>
         )}

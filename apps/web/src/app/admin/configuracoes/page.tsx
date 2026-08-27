@@ -578,7 +578,8 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
                         <div className="item-cadastro__quem">
                           <h3 className="item-cadastro__nome">{r.clienteNome ?? 'Cliente'}</h3>
                           <p className="item-cadastro__linha">
-                            Queria {quando(r.queria)} · recusado em {quando(r.quando)}
+                            Queria {quando(estado.empresa.timezone, r.queria)} · recusado em{' '}
+                            {quando(estado.empresa.timezone, r.quando)}
                           </p>
                         </div>
                       </div>
@@ -594,9 +595,17 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
   );
 }
 
-/** Dia e hora curtos, no fuso do navegador de quem administra. */
-function quando(iso: string): string {
+/**
+ * Fuso da unidade, e não do processo (bloco 135).
+ *
+ * Sem `timeZone`, `Intl` usa UTC no servidor e o do aparelho no navegador: o
+ * React não reidrata a hora e a **página inteira** cai com o erro 418. É o
+ * defeito D2 com uma segunda consequência, e foi assim que a ficha do cliente
+ * quebrou no percurso da medição do bloco 134.
+ */
+function quando(fuso: string, iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',

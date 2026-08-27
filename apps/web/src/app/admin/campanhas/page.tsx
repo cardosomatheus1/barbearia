@@ -680,7 +680,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
         se ela valeu o que custou.
       </p>
 
-      <FilaParada fila={fila} />
+      <FilaParada fila={fila} fuso={estado.empresa.timezone} />
       {/*
         A frase do **domínio**, quando ela existe (bloco 98).
 

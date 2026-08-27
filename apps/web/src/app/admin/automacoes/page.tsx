@@ -364,7 +364,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         <a href="/admin/campanhas">Campanhas</a>.
       </p>
 
-      <FilaParada fila={fila} />
+      <FilaParada fila={fila} fuso={estado.empresa.timezone} />
       {/* A frase do domínio primeiro: ela nomeia o campo. O mapa por código
           continua como rede para as recusas que não trazem frase. */}
       {erro ? (

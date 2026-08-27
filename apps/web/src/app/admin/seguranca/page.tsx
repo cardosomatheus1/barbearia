@@ -427,6 +427,7 @@ export default async function SegurancaPage({ searchParams }: Props) {
       */}
       <QuemEstaNaConta
         encerrada={first(query['encerrada']) === '1'}
+        fuso={estado.empresa.timezone}
         expulso={first(query['suporte']) === 'fora'}
         salvo={first(query['salvo']) === '1'}
         sessoes={sessoes.ok ? sessoes.dados.sessoes : []}
@@ -457,6 +458,7 @@ function QuemEstaNaConta({
   encerrada,
   expulso,
   salvo,
+  fuso,
 }: {
   readonly sessoes: readonly SessaoNaTela[];
   readonly suporte: readonly SuporteNaTela[];
@@ -464,6 +466,8 @@ function QuemEstaNaConta({
   readonly encerrada: boolean;
   readonly expulso: boolean;
   readonly salvo: boolean;
+  /** O fuso da unidade. Sem ele a hora diverge entre servidor e navegador (bloco 135). */
+  readonly fuso: string;
 }) {
   return (
     <>
@@ -500,7 +504,7 @@ function QuemEstaNaConta({
             <div className="sessoes__texto">
               <span className="sessoes__aparelho">{sessao.aparelho}</span>
               <span className="sessoes__quando">
-                Entrou em {dataCurta(sessao.criadaEm)}
+                Entrou em {dataCurta(fuso, sessao.criadaEm)}
                 {sessao.atual ? ' · este aparelho' : ''}
               </span>
             </div>
@@ -562,8 +566,9 @@ function QuemEstaNaConta({
  * completo já vinha da API e era jogado fora no formato. É o mesmo formato da
  * trilha, que acerta desde sempre.
  */
-const dataCurta = (iso: string): string =>
+const dataCurta = (fuso: string, iso: string): string =>
   new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
     day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
   })
     .format(new Date(iso));
