@@ -24,10 +24,10 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.1",
-    "pg": "^8.16.3"
+    "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.15.6",
+    "@types/pg": "^8.23.1",
     "prisma": "^6.19.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.9"
