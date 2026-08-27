@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Prontidão do produto:** use a matriz abaixo. Os 134 blocos continuam registrados
+**Prontidão do produto:** use a matriz abaixo. Os 136 blocos continuam registrados
 como histórico de execução; bloco concluído não é sinônimo de integração real nem
 de funcionalidade pronta para produção.
 
@@ -535,6 +535,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 133 | A viagem à Meta sai da requisição e vira tarefa de fila. Medido em produção, submeter um texto custava **7.039 ms** de um `POST` do balcão contra o teto de 10 s do `web` — e estourar o teto fazia a tela dizer "não deu" sobre um texto que a Meta já tinha recebido, com a tentativa seguinte batendo em "nome repetido". A reserva enfileira dentro da própria transação, o worker entrega, e `pendente` ganhou o campo que separa "na fila" de "na Meta". Mais a varredura que solta o texto preso quando a tarefa desiste — o estado sem saída do bloco 121, na porta ao lado | ✅ |
 | 134 | Os quatro silêncios que a caçada de produção expôs: `accepted` da Meta era gravado e mostrado como entrega, e `whatsapp_messages.delivered_at` estava sendo escrito desde o bloco 58 **sem nenhum leitor**; seis porteiros do worker cortavam o envio e fechavam a tarefa como concluída, sem motivo em lugar nenhum; `assinarWebhook` tinha um chamador só, então quem cadastra o número à mão nunca recebia desfecho de nada; e `fiscal.conciliar` falhava três vezes por hora, nas duas barbearias, porque não há emissor contratado | ✅ |
 | 135 | A hora que o servidor renderiza e o navegador não reidrata: oito telas formatam `hour`/`minute` sem `timeZone`, então `Intl` usa UTC de um lado e o fuso do aparelho do outro. É o defeito D2 mais o erro 418, que derruba a página inteira. Entra com a guarda derivada — o corte foi medido no bloco 134 e acusa 8 de 63 | ⬜ |
+| 136 | A página de Termos de Serviço, que a Meta exige em URL pública ao lado da privacidade — o campo estava com o exemplo `https://www.facebook.com/`, que reprova a submissão antes de qualquer humano olhar. Ela identifica a parte contratante pelo CNPJ, escreve a régua de cobrança com os números de `packages/core/src/cobranca.ts` e declara em letras os três `❌` da matriz. E entra na varredura R8: é o único texto do produto capaz de virar obrigação jurídica | ✅ |
 
 ---
 

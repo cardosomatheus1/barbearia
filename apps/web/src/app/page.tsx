@@ -590,9 +590,14 @@ export default function LandingPage() {
       <footer className="lp-rodape">
         <div className="lp-container lp-rodape__interno">
           <p>Barber Dock — gestão para barbearias</p>
+          {/* Privacidade e termos entram aqui porque a página que ninguém
+              alcança é a página que não existe — e a Meta confere se as duas
+              URLs respondem antes de qualquer humano olhar a submissão. */}
           <nav aria-label="Rodapé" className="lp-rodape__links">
             <a href="/admin/entrar">Entrar</a>
             <a href="/admin/criar-conta">Criar minha conta</a>
+            <a href="/privacidade">Privacidade</a>
+            <a href="/termos">Termos</a>
           </nav>
         </div>
       </footer>

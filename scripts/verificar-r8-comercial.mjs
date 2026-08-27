@@ -6,6 +6,22 @@ import { fileURLToPath } from 'node:url';
 
 const raiz = process.env['R8_RAIZ'] ?? join(dirname(fileURLToPath(import.meta.url)), '..');
 const roadmap = readFileSync(join(raiz, 'ROADMAP.md'), 'utf8');
+/**
+ * O texto sem comentário, que é o que a barbearia lê.
+ *
+ * A varredura acusou a **frase que explica a regra**: o cabeçalho da página de
+ * termos cita "split automático" para dizer que ele está indisponível, e o
+ * padrão casou. Guarda que proíbe documentar o próprio motivo é guarda que
+ * alguém apaga — é o mesmo conserto da guarda de pureza do `core`.
+ *
+ * Vale nas duas direções, e a segunda é a que importa mais: as asserções
+ * positivas também rodam sobre o texto limpo, senão um comentário citando
+ * "O que ainda não está disponível" satisfaria a exigência com a seção fora do
+ * ar.
+ */
+const semComentarios = (t) =>
+  t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
 const problemas = [];
 const falhar = (m) => problemas.push(m);
 
@@ -16,8 +32,13 @@ function tabela(fonte, cabecalho) {
 const linhas=tabela(roadmap,'| Funcionalidade | Motor | Tela | Integração real | E2E real | Produção | Evidência |');
 const estado=new Map(linhas.map(([nome,motor,tela,integracao,e2e,producao])=>[nome,{motor,tela,integracao,e2e,producao}]));
 
-const superficies=['apps/web/src/app/page.tsx','docs/comercial/prontidao.md'];
-const promessas=['apps/web/src/app/page.tsx'];
+// Os termos entram como superfície comercial, e em `promessas` junto da landing.
+// Eles são o único texto do produto capaz de virar obrigação jurídica: uma
+// landing otimista custa uma reclamação, um contrato prometendo NFS-e que não
+// existe custa outra coisa. A seção 8 da página diz o que **não** está
+// disponível, e é ela que a varredura protege de sumir num ajuste de redação.
+const superficies=['apps/web/src/app/page.tsx','apps/web/src/app/termos/page.tsx','docs/comercial/prontidao.md'];
+const promessas=['apps/web/src/app/page.tsx','apps/web/src/app/termos/page.tsx'];
 const textos=superficies.map((arquivo)=>({arquivo, texto: existsSync(join(raiz,arquivo)) ? readFileSync(join(raiz,arquivo),'utf8') : ''}));
 for (const {arquivo,texto} of textos) if(!texto) falhar(`R8: superfície comercial ausente: ${arquivo}`);
 
@@ -28,7 +49,18 @@ const proibidas=[
 ];
 for(const regra of proibidas){
   if(estado.get(regra.nome)?.producao!=='❌') continue;
-  for(const {arquivo,texto} of textos.filter((x)=>promessas.includes(x.arquivo))) for(const p of regra.pads){ const m=p.exec(texto); if(m) falhar(`R8: ${arquivo} vende ${regra.nome} apesar de Produção ❌: "${m[0].trim()}"`); }
+  for(const {arquivo,texto} of textos.filter((x)=>promessas.includes(x.arquivo))) for(const p of regra.pads){ const m=p.exec(semComentarios(texto)); if(m) falhar(`R8: ${arquivo} vende ${regra.nome} apesar de Produção ❌: "${m[0].trim()}"`); }
+}
+
+const termos=semComentarios(textos.find((x)=>x.arquivo==='apps/web/src/app/termos/page.tsx')?.texto ?? '');
+if(!/O que ainda não está disponível/.test(termos)) falhar('R8: os termos perderam a seção que declara o que não está disponível');
+for(const regra of proibidas){
+  if(estado.get(regra.nome)?.producao!=='❌') continue;
+  // Cada `❌` da matriz precisa estar **nomeado** na seção 8 — sem isso, um
+  // recurso novo que nasça indisponível ficaria de fora do contrato em silêncio.
+  const nomes={'Split de pagamento':/repartição automática do pagamento/i,'Fiscal (NFS-e)':/emissão de nota fiscal de serviço/i,'Sinal cobrado online':/cobrança do sinal do agendamento/i};
+  const p=nomes[regra.nome];
+  if(p&&!p.test(termos)) falhar(`R8: os termos não declaram que "${regra.nome}" está indisponível, apesar de Produção ❌`);
 }
 
 const landing=textos.find((x)=>x.arquivo==='apps/web/src/app/page.tsx')?.texto ?? '';

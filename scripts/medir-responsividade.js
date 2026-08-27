@@ -3052,6 +3052,10 @@ async function main() {
     // a única tela do produto que é texto longo, onde o que quebra não é grade
     // e sim medida de linha.
     { nome: 'privacidade', url: '/privacidade' },
+    // Os termos, que a Meta exige ao lado da privacidade — o campo dela estava
+    // com o exemplo `https://www.facebook.com/`, que reprova a submissão antes
+    // de qualquer humano olhar. Mesmo caso da de cima: texto longo, sem sessão.
+    { nome: 'termos', url: '/termos' },
     // Onde a Stripe deixa quem pagou por link. Sem sessão e sem dado: é a
     // única tela do produto cujo endereço quem escolhe é o adquirente.
     { nome: 'retorno do pagamento', url: '/pagamento?pago=1' },

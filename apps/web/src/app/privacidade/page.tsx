@@ -252,6 +252,7 @@ export default function PrivacidadePage() {
           <p>Barber Dock — sistema de gestão para barbearias</p>
           <nav aria-label="Rodapé" className="lp-rodape__links">
             <a href="/">Início</a>
+            <a href="/termos">Termos</a>
             <a href="/admin/entrar">Entrar</a>
           </nav>
         </div>
