@@ -63,6 +63,17 @@ export class FichaController {
    *
    * Anotação privada e identidade são decisões diferentes do dono, e a segunda
    * não vem de graça com a primeira.
+   *
+   * ## Por que as mensagens não pedem permissão nova (bloco 134)
+   *
+   * O que entrou é o **desfecho** de mensagens que já saíram para este cliente:
+   * estado, instante e o título que a própria barbearia deu ao texto. Nenhum
+   * telefone, nenhum corpo de mensagem, nenhum dado de terceiro — e tudo sobre
+   * a pessoa cuja ficha esta rota já devolve sob `customers.view`.
+   *
+   * `whatsapp.manage` guarda **mexer no canal**: conectar número, cadastrar
+   * texto, ligar automação. Saber se o lembrete de ontem chegou é operação de
+   * balcão, e exigi-la aqui tiraria a ficha inteira de quem atende.
    */
   @Exige('customers.view_notes', 'customers.view')
   @Get(':id/ficha')

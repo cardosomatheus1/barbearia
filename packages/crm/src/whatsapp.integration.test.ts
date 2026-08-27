@@ -566,6 +566,62 @@ describeIfDb('WhatsApp oficial', () => {
     expect(depois[0]?.estado).toBe('aprovado');
   });
 
+  it('o cadastro à mão inscreve o app na WABA, como o Embedded Signup faz', async () => {
+    /**
+     * O defeito que este teste prende custou duas horas de produção.
+     *
+     * `assinarWebhook` existe desde o bloco 88 e tinha **um** chamador: o
+     * Embedded Signup. Quem conecta o número pelo formulário — informando os
+     * identificadores à mão, que é o caminho do bloco 55 e o que toda barbearia
+     * usa enquanto o clique de ponta a ponta não foi provado — ficava com
+     * `subscribed_apps` vazio.
+     *
+     * A consequência não é a mensagem parar de sair: ela sai. É a Meta **nunca
+     * contar o desfecho** — nem entrega, nem leitura, nem falha, nem aprovação
+     * de texto. Medido: quatro envios aceitos, `delivered_at` nulo nos quatro,
+     * e o texto aprovado só aparecendo quando alguém apertava "Perguntar à Meta
+     * agora".
+     *
+     * A tarefa nasce **dentro** da transação do cadastro, e carrega a unidade —
+     * nunca o token, que mora cifrado e `jobs` não tem RLS.
+     */
+    await cadastrar('EAA-token-de-teste');
+
+    const tarefas = await semTenant(async (tx) =>
+      tx.$queryRaw<{ kind: string; payload: unknown }[]>`
+        SELECT kind, payload FROM jobs WHERE kind = 'whatsapp.assinar_waba'
+      `,
+    );
+    expect(tarefas).toHaveLength(1);
+    expect((tarefas[0]?.payload as { locationId?: unknown })?.locationId).toBe(LOCAL);
+    expect(JSON.stringify(tarefas[0]?.payload)).not.toContain('EAA-token-de-teste');
+  });
+
+  it('corrigir o número visível sem token não enfileira inscrição nova', async () => {
+    /**
+     * Sem token não há como falar com a Meta. Enfileirar assim mesmo faria a
+     * tarefa retentar seis vezes contra um cadastro que ninguém vai completar
+     * por causa dela — chamadas que já sabem a resposta.
+     */
+    await semTenant(async (tx) => {
+      await tx.$executeRaw`DELETE FROM jobs WHERE kind = 'whatsapp.assinar_waba'`;
+    });
+    await salvarCadastroDoWhatsApp({
+      tenantId: TENANT,
+      locationId: LOCAL,
+      phoneNumberId: '109876543210987',
+      wabaId: '102030405060708',
+      numeroVisivel: '+55 71 3333-4455',
+      ...operador,
+    });
+    const tarefas = await semTenant(async (tx) =>
+      tx.$queryRaw<{ kind: string }[]>`
+        SELECT kind FROM jobs WHERE kind = 'whatsapp.assinar_waba'
+      `,
+    );
+    expect(tarefas).toHaveLength(0);
+  });
+
   it('o balcão não espera a Meta: a requisição reserva, enfileira e volta', async () => {
     /**
      * O bloco 133 inteiro em um teste.

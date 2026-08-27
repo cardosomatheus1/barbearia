@@ -12,6 +12,8 @@ import {
   FakeWhatsAppProvider,
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
+  ESTADOS_DA_MENSAGEM,
+  estadoDaMensagemNaTela,
   estadoDoTextoNaTela,
   ROTULO_DO_WHATSAPP,
   botaoConhecido,
@@ -291,5 +293,35 @@ describe('o que a tela escreve sobre um texto', () => {
       expect(estadoDoTextoNaTela(estado, true)).toEqual(estadoDoTextoNaTela(estado, false));
       expect(estadoDoTextoNaTela(estado, true).rotulo).toBe(ROTULO_DO_TEMPLATE[estado]);
     }
+  });
+});
+
+describe('o que a tela escreve sobre uma mensagem que saiu', () => {
+  it('separa "a Meta aceitou" de "chegou no aparelho"', () => {
+    /**
+     * O defeito de produção: a Cloud API responde `accepted` com um `wamid`, o
+     * banco gravava `enviada`, e a tela dizia "Mensagem enviada pelo WhatsApp
+     * da casa". Quatro mensagens aceitas, nenhuma entregue, e a recepção sem
+     * nada para olhar.
+     */
+    const aCaminho = estadoDaMensagemNaTela('enviada');
+    const entregue = estadoDaMensagemNaTela('entregue');
+    expect(aCaminho.rotulo).not.toBe(entregue.rotulo);
+    expect(aCaminho.explicacao).toContain('aceitou');
+    expect(aCaminho.rotulo).not.toMatch(/entregue/i);
+  });
+
+  it('tem frase para os quatro estados que o banco grava', () => {
+    for (const estado of ESTADOS_DA_MENSAGEM) {
+      const naTela = estadoDaMensagemNaTela(estado);
+      expect(naTela.rotulo).toBeTruthy();
+      expect(naTela.explicacao).toBeTruthy();
+    }
+  });
+
+  it('estado de uma versão mais nova aparece cru, e não em branco', () => {
+    // Silêncio numa tela que existe para explicar o que aconteceu é o pior
+    // desfecho: o código cru pelo menos é pesquisável.
+    expect(estadoDaMensagemNaTela('inventado').rotulo).toBe('inventado');
   });
 });

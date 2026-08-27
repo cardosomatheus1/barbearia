@@ -102,6 +102,31 @@ export async function agendarConciliacaoDeNotasDeTodas(params: {
  * A chave carrega a hora: duas voltas do laço dentro do mesmo minuto não
  * enfileiram duas tarefas, e a hora seguinte enfileira a dela.
  */
+/**
+ * Vale enfileirar a volta fiscal desta hora? (bloco 134)
+ *
+ * Duas condições, e a primeira faltava. `FISCAL_MODO` nasce `nenhum`, e mesmo
+ * assim o laço enfileirava `fiscal.entregar` e `fiscal.conciliar` para toda
+ * barbearia a cada hora — com a segunda terminando em `tarefa.falhou`, porque
+ * `exigirEmissorFiscal()` lança quando não há emissor contratado.
+ *
+ * Medido em produção: três tentativas por hora, nas duas barbearias, desde
+ * sempre. Nada quebrava; não há nota para conciliar sem emissor. O estrago é o
+ * outro: vermelho constante e inofensivo é o que ensina quem opera a não olhar
+ * o log, e o erro de verdade vai aparecer no meio desses.
+ *
+ * Função e não um `&&` na linha do laço porque o laço não tem teste — a
+ * decisão vira pura e o teste alcança.
+ */
+export function cabeVoltaFiscal(params: {
+  readonly emiteNotaFiscal: boolean;
+  readonly hora: string;
+  readonly ultima: string | null;
+}): boolean {
+  if (!params.emiteNotaFiscal) return false;
+  return params.hora !== params.ultima;
+}
+
 export function entregaDeNotasPendente(agora: Date): {
   readonly hora: string;
   readonly quando: Date;

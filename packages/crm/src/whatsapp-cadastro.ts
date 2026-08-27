@@ -1,6 +1,7 @@
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { type EstadoDoWhatsApp, type WhatsAppProvider } from '@barbearia/core';
 import { audit, cifrarCom, decifrarCom } from '@barbearia/identity';
+import { enfileirar } from '@barbearia/jobs';
 import { reivindicarWaba } from './whatsapp-waba.js';
 import { recusar } from './whatsapp-erros.js';
 
@@ -12,7 +13,8 @@ import { recusar } from './whatsapp-erros.js';
  * mesmo tempo, e o defeito apareceria como "a mensagem parou de sair" dias
  * depois. É o precedente do segredo próprio do webhook da Stripe.
  */
-const CHAVE_DO_TOKEN = 'WHATSAPP_TOKEN_KEY';
+/** Exportada no bloco 134: a inscrição da WABA lê o token pelo mesmo cofre. */
+export const CHAVE_DO_TOKEN = 'WHATSAPP_TOKEN_KEY';
 
 /**
  * WhatsApp oficial, do banco para a Meta (bloco 55, SPEC §4.12).
@@ -349,80 +351,35 @@ export async function salvarCadastroDoWhatsApp(params: {
       after: { estado, temToken, phoneNumberId: params.phoneNumberId },
     });
 
+    /**
+     * A inscrição do app na WABA, enfileirada aqui dentro (bloco 134).
+     *
+     * `assinarWebhook` só era chamada pelo Embedded Signup, e quem conecta pelo
+     * formulário ficava com `subscribed_apps` vazio — a Meta aceitando as
+     * mensagens e nunca contando o desfecho de nada. A história inteira está no
+     * teste `o cadastro à mão inscreve o app na WABA`.
+     *
+     * Dentro da transação pela regra de sempre: depois do commit existe a
+     * janela em que o cadastro existe e nada está marcado para inscrever.
+     *
+     * Só com token, porque sem ele não há como falar com a Meta — e corrigir o
+     * número visível é um caminho legítimo que não manda token. Sem chave de
+     * idempotência, porque a inscrição já é idempotente lá e uma chave por
+     * unidade descartaria em silêncio a tentativa depois de uma rotação.
+     */
+    if (temToken) {
+      await enfileirar(tx, {
+        kind: 'whatsapp.assinar_waba',
+        payload: { locationId: params.locationId },
+      });
+    }
+
     const salvo = await cadastroDoWhatsApp(params.tenantId, params.locationId, tx);
     if (!salvo) recusar('nao_configurado');
     return salvo;
   });
 }
 
-/**
- * Pergunta à Meta se a posse do número já foi provada, e promove (bloco 90).
- *
- * ## O estado que nunca chegava
- *
- * `whatsapp_settings.status` nascia em `aguardando_verificacao` desde o bloco
- * 55, e a única escrita depois disso era `suspenso`. **Nada promovia a
- * `ativo`** — o comentário de `salvarCadastroDoWhatsApp` dizia "quem o promove
- * é a Meta respondendo, pela conciliação", e essa conciliação não existia.
- *
- * O efeito não era a mensagem parar de sair: `provedorDoWhatsApp` nunca olhou
- * status, então o canal funcionava. Era pior de diagnosticar — o checklist da
- * tela lê `estado === 'ativo'` e ficava para sempre em "Passo 1: conectar o
- * número da barbearia", com o número conectado e mandando mensagem. Indicador
- * que nunca preenche é a §6 pergunta 5, e ensina quem opera a não olhar.
- *
- * ## Por que perguntar, e não deduzir
- *
- * Registrar o número na Cloud API e **provar a posse dele** são passos
- * diferentes: o segundo é a pessoa digitando, no painel da Meta, o código que
- * chega por SMS — fora do produto, minutos ou horas depois de conectar. Deduzir
- * `ativo` do registro bem-sucedido marcaria como pronto um cadastro que ainda
- * não pode receber nada.
- *
- * ## Só a prova da Meta sobe para ativo
- *
- * `aguardando_verificacao` é o caminho normal e `suspenso` também pode voltar
- * quando a própria Meta volta a provar a posse. Isso é necessário porque um
- * `ACCOUNT_RECONNECTED` pode chegar depois de um offboarding; deixar a
- * conciliação aceitar apenas o primeiro estado tornaria a suspensão permanente.
- * Uma resposta não verificada nunca altera estado nem apaga o motivo.
- */
-export async function conciliarNumero(params: {
-  readonly tenantId: string;
-  readonly locationId: string;
-  readonly provider: WhatsAppProvider;
-  readonly agora: Date;
-}): Promise<{ readonly verificado: boolean; readonly promovido: boolean }> {
-  const estado = await params.provider.consultarNumero();
-  if (!estado.verificado) return { verificado: false, promovido: false };
-
-  const promovidas = await withTenant(params.tenantId, async (tx) => {
-    return tx.$executeRaw`
-      UPDATE whatsapp_settings
-         SET status = 'ativo',
-             verified_at = ${params.agora},
-             -- O número como a Meta o escreve vence o que foi digitado à mão,
-             -- e ausente é "não mexa", como em todo campo opcional daqui.
-             display_phone = COALESCE(${estado.numeroVisivel}, display_phone),
-             -- Sai junto: um numero de volta ao ar com "qualidade baixa" ainda
-             -- escrito ao lado sao dois campos discordando sobre o mesmo fato,
-             -- e o motivo so explica alguma coisa enquanto ele vale.
-             status_reason = NULL,
-             updated_at = now()
-       WHERE location_id = ${params.locationId}::uuid
-         AND status IN ('aguardando_verificacao', 'suspenso')
-    `;
-  });
-
-  return { verificado: true, promovido: promovidas > 0 };
-}
-
-/**
- * O token decifrado, para quem vai falar com a Meta.
- *
- * Não é exportado para a API: só o worker e o envio o chamam. A tela nunca
- * recebe o valor — `cadastroDoWhatsApp` devolve `temToken` e mais nada.
- */
 async function tokenDaUnidade(tenantId: string, locationId: string): Promise<string> {
   const cifrado = await withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ access_token_cipher: string | null }[]>`

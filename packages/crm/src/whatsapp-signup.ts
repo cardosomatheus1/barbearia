@@ -30,6 +30,9 @@
  */
 
 import { ESCOPO_DE_ENVIO, ESCOPO_DE_GERENCIA } from '@barbearia/core';
+import { withTenant } from '@barbearia/db';
+import { decifrarCom } from '@barbearia/identity';
+import { CHAVE_DO_TOKEN } from './whatsapp-cadastro.js';
 import {
   cadastroDoWhatsApp,
   salvarCadastroDoWhatsApp,
@@ -328,6 +331,53 @@ export async function trocarCodigoPorToken(
  * com "entregues" e "lidos" em zero para sempre — o indicador que nunca
  * preenche, com a mensagem saindo normalmente.
  */
+/**
+ * Inscreve o app na WABA desta unidade, pelo cadastro gravado (bloco 134).
+ *
+ * ## O que ela conserta
+ *
+ * `assinarWebhook` existia desde o bloco 88 e tinha **um** chamador: o Embedded
+ * Signup. Quem conecta o número pelo formulário — informando os identificadores
+ * à mão, que é o caminho do bloco 55 e o que toda barbearia usa enquanto o
+ * clique de ponta a ponta não foi provado — ficava com `subscribed_apps` vazio.
+ *
+ * O efeito: a Meta aceita as mensagens e **nunca conta o desfecho**. Nem
+ * entrega, nem leitura, nem falha, nem aprovação de texto. Medido em produção —
+ * quatro envios aceitos, `delivered_at` nulo nos quatro, `failure_reason` vazio,
+ * e o texto aprovado só aparecendo quando alguém apertava "Perguntar à Meta
+ * agora". Duas horas de investigação para descobrir que a resposta nunca era
+ * pedida.
+ *
+ * É a lição do comentário de `assinarWebhook`, que já dizia *"sem isto a
+ * barbearia manda mensagem e não recebe nada de volta"* — escrita, correta, e
+ * fora do caminho que as pessoas usam.
+ *
+ * ## Por que ela não recusa
+ *
+ * Sem WABA ou sem token não há o que inscrever, e isso é estado legítimo:
+ * `salvarCadastroDoWhatsApp` aceita corrigir o número visível sem mandar token.
+ * Lançar faria a tarefa da fila ser retentada seis vezes contra um cadastro
+ * incompleto que ninguém vai completar por causa dela.
+ */
+export async function assinarWabaDaUnidade(
+  tenantId: string,
+  locationId: string,
+  buscar: typeof fetch = fetch,
+): Promise<boolean> {
+  const linha = await withTenant(tenantId, async (tx) => {
+    const linhas = await tx.$queryRaw<{ waba_id: string | null; cifrado: string | null }[]>`
+      SELECT waba_id, access_token_cipher AS cifrado
+        FROM whatsapp_settings
+       WHERE location_id = ${locationId}::uuid
+    `;
+    return linhas[0] ?? null;
+  });
+  if (!linha?.waba_id || !linha.cifrado) return false;
+
+  await assinarWebhook(linha.waba_id, decifrarCom(CHAVE_DO_TOKEN, linha.cifrado), buscar);
+  return true;
+}
+
 export async function assinarWebhook(
   wabaId: string,
   token: string,

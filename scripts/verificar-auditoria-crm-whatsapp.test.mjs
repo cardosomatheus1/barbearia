@@ -15,6 +15,7 @@ const arquivos = [
   'packages/crm/src/whatsapp-templates.ts',
   'packages/crm/src/whatsapp-meta.ts',
   'packages/crm/src/whatsapp-cadastro.ts',
+  'packages/crm/src/whatsapp-numero.ts',
   'packages/crm/src/whatsapp-waba.ts',
   'packages/crm/src/whatsapp-roteamento.ts',
   'packages/crm/src/whatsapp-lifecycle.ts',
@@ -79,7 +80,7 @@ test('detecta remoção do roteamento por entry.id/WABA', () =>
 test('detecta remoção de PARTNER_REMOVED', () =>
   mutacao('apps/api/src/plataforma/whatsapp-webhook.controller.ts', "mudanca.value.event === 'PARTNER_REMOVED'", "mudanca.value.event === 'PARTNER_REMOVIDO'"));
 test('detecta suspensão sem caminho de reativação', () =>
-  mutacao('packages/crm/src/whatsapp-cadastro.ts', "status IN ('aguardando_verificacao', 'suspenso')", "status = 'aguardando_verificacao'"));
+  mutacao('packages/crm/src/whatsapp-numero.ts', "status IN ('aguardando_verificacao', 'suspenso')", "status = 'aguardando_verificacao'"));
 test('detecta WABA sem owner único', () =>
   mutacao('packages/db/migrations/0113_crm_whatsapp_concorrencia.sql', 'waba_id    text PRIMARY KEY', 'waba_id    text NOT NULL'));
 test('detecta cadastro que não reivindica owner da WABA', () =>

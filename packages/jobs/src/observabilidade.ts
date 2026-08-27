@@ -24,6 +24,28 @@ export type EventoDaTarefa =
       readonly duracaoMs: number;
     }
   | {
+      /**
+       * A tarefa rodou, não fez nada, e **disse por quê** (bloco 134).
+       *
+       * Seis handlers começavam com `if (!recursoLigado(...)) return;` — um
+       * `return` puro, sem notificação, sem log e sem motivo. A tarefa era
+       * marcada como concluída, e o efeito para quem opera era o pior possível:
+       * o balcão apertava "Chamar", nada chegava ao cliente, e não havia onde
+       * olhar. Aconteceu em produção e custou duas horas de investigação.
+       *
+       * `motivo` é código de conjunto fechado, nunca frase: ele vai para o log
+       * e não pode carregar telefone nem nome, como o resto deste envelope.
+       */
+      readonly fase: 'pulada';
+      readonly tarefaId: string;
+      readonly tenantId: string;
+      readonly kind: string;
+      readonly tentativa: number;
+      readonly maxTentativas: number;
+      readonly duracaoMs: number;
+      readonly motivo: string;
+    }
+  | {
       readonly fase: 'reagendada' | 'falhou';
       readonly tarefaId: string;
       readonly tenantId: string;
@@ -60,3 +82,21 @@ export function resumoPersistivelDoErro(erro: unknown): string {
   const seguro = identificarErroDaTarefa(erro);
   return seguro.erroCodigo ? `${seguro.erroTipo}:${seguro.erroCodigo}` : seguro.erroTipo;
 }
+
+/**
+ * O que um handler devolve quando decide não fazer nada.
+ *
+ * Devolver — e não `return` puro — é o que transforma silêncio em rastro: o
+ * laço vê o motivo, emite `fase: 'pulada'` e a tarefa continua concluída, que é
+ * o desfecho certo (não houve erro, houve decisão).
+ */
+export interface PuloDaTarefa {
+  readonly pulada: string;
+}
+
+export function ehPulo(valor: unknown): valor is PuloDaTarefa {
+  return typeof (valor as PuloDaTarefa | null)?.pulada === 'string';
+}
+
+/** O recurso `avisos` está desligado para esta barbearia. */
+export const PULO_POR_RECURSO: PuloDaTarefa = { pulada: 'recurso_desligado' };

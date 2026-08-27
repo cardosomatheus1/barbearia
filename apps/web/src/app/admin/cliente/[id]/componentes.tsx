@@ -6,6 +6,7 @@ import {
   ROTULO_DO_PACOTE,
   TIPOS_DE_CAMPANHA,
   faltaDeTexto,
+  estadoDaMensagemNaTela,
   tiposDeCampanhaPorExtenso,
   corpoComExemplos,
   saldoPorExtenso,
@@ -25,6 +26,7 @@ import type {
   ConsentimentosNaFicha,
   FotoNaFicha,
   VisitaNaFicha,
+  MensagemNaFicha,
 } from '@/lib/admin-api';
 import { CONSENTIMENTOS_OPCIONAIS } from '@/lib/politica';
 import { reais, reaisDoCampo } from '@/lib/dinheiro';
@@ -77,6 +79,29 @@ const dinheiro = (centavos: number): string =>
 function dia(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
     .format(new Date(iso));
+}
+
+/**
+ * Dia **e hora**, ao contrário de `dia` (bloco 134).
+ *
+ * A pergunta que a lista de mensagens responde é "a de agora chegou?", e três
+ * lembretes do mesmo dia com a mesma data são indistinguíveis.
+ *
+ * `timeZone` explícito, e a primeira versão não o tinha. Sem ele, `Intl` usa o
+ * fuso do **processo** — que é UTC no servidor e o do aparelho no navegador —,
+ * e a hora que o servidor renderizou não é a que o React reidrata: a página
+ * inteira quebrava com o erro 418, e foi o percurso da medição que pegou. É o
+ * defeito D2 pela porta da hidratação, e a regra é a de sempre: o fuso vem da
+ * unidade, nunca do dispositivo.
+ */
+function quando(fuso: string, iso: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: fuso,
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
 }
 
 export function Visita({ visita }: { readonly visita: VisitaNaFicha }) {
@@ -290,6 +315,8 @@ export function Fotos({
 export function MandarMensagem({
   customerId,
   textos,
+  mensagens,
+  fuso,
   de,
 }: {
   readonly customerId: string;
@@ -308,6 +335,17 @@ export function MandarMensagem({
     readonly titulo: string | null;
     readonly corpo: string;
   }[];
+  /**
+   * O que aconteceu com as últimas mensagens (bloco 134).
+   *
+   * `whatsapp_messages` guarda entrega e leitura desde o bloco 58 e nenhuma
+   * tela lia. Quando a mensagem não chegava, a recepção não tinha onde olhar —
+   * aconteceu em produção e custou duas horas de investigação para descobrir
+   * que a Meta tinha só **aceitado** as quatro últimas.
+   */
+  readonly mensagens: readonly MensagemNaFicha[];
+  /** O fuso da unidade. Formatar no do processo é o defeito D2 — e, no servidor, o erro 418. */
+  readonly fuso: string;
 }) {
   /**
    * Aprovado é da página; **mandável à mão** é daqui (bloco 132).
@@ -323,10 +361,67 @@ export function MandarMensagem({
   );
 
   return (
-    <section aria-labelledby="mandar-mensagem" className="secao">
-      <h2 className="secao__titulo" id="mandar-mensagem">
-        Mandar uma mensagem
+    <section aria-labelledby="mensagens-do-cliente" className="secao">
+      <h2 className="secao__titulo" id="mensagens-do-cliente">
+        Mensagens
       </h2>
+      {/*
+        O que saiu, e o que aconteceu com cada uma.
+
+        Vem **antes** dos botões de mandar de propósito: quem abre esta seção
+        depois de o cliente dizer "não recebi nada" quer a resposta, não outro
+        botão. Mandar de novo sem saber o desfecho da anterior é como se produz
+        mensagem repetida no celular de quem já recebeu.
+      */}
+      {mensagens.length > 0 ? (
+        <>
+          <h3 className="secao__titulo" id="mensagens-que-sairam">
+            O que já saiu
+          </h3>
+          <ul className="lista-cadastro" aria-labelledby="mensagens-que-sairam">
+            {mensagens.map((m) => {
+              const estado = estadoDaMensagemNaTela(m.estado);
+              return (
+                <li key={m.id}>
+                  <article className={`item-cadastro${m.estado === 'falhou' ? ' item-cadastro--fora' : ''}`}>
+                    <div className="item-cadastro__cabeca">
+                      <div className="item-cadastro__quem">
+                        <p className="item-cadastro__nome">
+                          {m.texto ?? (m.tipo ? nomeDoAviso(m.tipo) : 'Mensagem')}
+                        </p>
+                        <p className="item-cadastro__linha">
+                          {quando(fuso, m.quando)} · {estado.rotulo}
+                        </p>
+                        <p className="item-cadastro__linha">{estado.explicacao}</p>
+                        {m.motivoDaFalha ? (
+                          <p className="item-cadastro__linha item-cadastro__risco">{m.motivoDaFalha}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
+
+      {/*
+        O título de quem manda, separado do título de quem já saiu.
+
+        A lista de cima nasceu neste bloco debaixo de um `h2` que dizia "Mandar
+        uma mensagem", e um título descreve o que está embaixo dele: a seção
+        passou a afirmar que aquelas quatro linhas eram formas de mandar. É a §6
+        pergunta 6 entre um cabeçalho e a própria lista.
+
+        O `id` fica **aqui** e não no `h2` porque é para cá que o botão
+        "WhatsApp" do cabeçalho da ficha aponta: quem clica nele quer mandar,
+        não ler o histórico.
+      */}
+      <h3 className="secao__titulo" id="mandar-mensagem">
+        Mandar uma mensagem
+      </h3>
+
       {textosDeCampanha.length === 0 ? (
         /*
           Duas frases, porque são dois fatos diferentes — e a única que existia

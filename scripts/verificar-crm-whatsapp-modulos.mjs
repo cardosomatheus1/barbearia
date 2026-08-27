@@ -16,6 +16,7 @@ const roteamento = ler('packages/crm/src/whatsapp-roteamento.ts');
 const lifecycle = ler('packages/crm/src/whatsapp-lifecycle.ts');
 const submissao = ler('packages/crm/src/whatsapp-template-submissao.ts');
 const entrega = ler('packages/crm/src/whatsapp-template-entrega.ts');
+const numero = ler('packages/crm/src/whatsapp-numero.ts');
 const promocional = ler('packages/crm/src/disparo-promocional.ts');
 
 // O hotspot original tinha 1.490 linhas e misturava credencial, templates,
@@ -34,6 +35,11 @@ exigir(linhas(submissao) <= 160, `whatsapp-template-submissao.ts cresceu demais:
 // worker. O corte é o mesmo da submissão — pedir, entregar e ler são três
 // coisas, e a terceira é a única que o balcão espera.
 exigir(linhas(entrega) <= 220, `whatsapp-template-entrega.ts cresceu demais: ${linhas(entrega)} linhas`);
+// A conciliação do número saiu de `whatsapp-cadastro.ts` no bloco 134, e foi
+// esta guarda que cobrou de novo: o arquivo passou de 450 ao ganhar a tarefa de
+// inscrição da WABA. O corte é o mesmo da submissão de template — gravar o
+// cadastro e perguntar à Meta se ele foi provado são duas coisas.
+exigir(linhas(numero) <= 120, `whatsapp-numero.ts cresceu demais: ${linhas(numero)} linhas`);
 exigir(linhas(promocional) <= 220, `disparo-promocional.ts cresceu demais: ${linhas(promocional)} linhas`);
 
 for (const [nome, fonte] of [
@@ -46,6 +52,7 @@ for (const [nome, fonte] of [
   ['whatsapp-lifecycle.ts', lifecycle],
   ['whatsapp-template-submissao.ts', submissao],
   ['whatsapp-template-entrega.ts', entrega],
+  ['whatsapp-numero.ts', numero],
   ['disparo-promocional.ts', promocional],
 ]) {
   exigir(!fonte.includes("from './whatsapp.js'"), `${nome} criou dependência circular com a fachada`);
@@ -64,6 +71,9 @@ exigir(entrega.includes('meta_id IS NULL'), 'a soltura passou a alcançar texto 
 exigir(cadastro.includes("const CHAVE_DO_TOKEN = 'WHATSAPP_TOKEN_KEY'"), 'token perdeu chave dedicada');
 exigir(cadastro.includes('(access_token_cipher IS NOT NULL) AS tem_token'), 'cadastro deixou de devolver só presença do token');
 exigir(cadastro.includes("recusar('token_invalido')"), 'token corrompido deixou de falhar alto');
+// A inscrição do app na WABA nasce com o cadastro, e dentro da transação: sem
+// ela a Meta aceita as mensagens e nunca conta o desfecho de nenhuma.
+exigir(cadastro.includes("kind: 'whatsapp.assinar_waba'"), 'o cadastro deixou de enfileirar a inscrição na WABA');
 exigir(!/return\s+\{[^}]*access_token_cipher/s.test(cadastro), 'credencial cifrada entrou no retorno do cadastro');
 
 // Templates: limites da Meta e destinos controlados pelo cadastro da própria casa.
@@ -88,5 +98,5 @@ exigir(roteamento.includes('semTenant'), 'porta do webhook deixou de resolver te
 exigir(roteamento.includes('SELECT tenant_id, location_id FROM whatsapp_numbers'), 'roteamento público passou a ler mais que ids de roteamento');
 
 console.log(
-  `crm/whatsapp modular: fachada ${linhas(fachada)}; cadastro ${linhas(cadastro)}; templates ${linhas(templates)}; entrega ${linhas(entrega)}; mensagens ${linhas(mensagens)}; assinatura ${linhas(assinatura)}; roteamento ${linhas(roteamento)}; lifecycle ${linhas(lifecycle)}; submissao ${linhas(submissao)}; promocional ${linhas(promocional)} linhas`,
+  `crm/whatsapp modular: fachada ${linhas(fachada)}; cadastro ${linhas(cadastro)}; numero ${linhas(numero)}; templates ${linhas(templates)}; entrega ${linhas(entrega)}; mensagens ${linhas(mensagens)}; assinatura ${linhas(assinatura)}; roteamento ${linhas(roteamento)}; lifecycle ${linhas(lifecycle)}; submissao ${linhas(submissao)}; promocional ${linhas(promocional)} linhas`,
 );

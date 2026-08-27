@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { WhatsAppDeliveryUnknownError } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
+import type { EventoDaTarefa } from './observabilidade.js';
 import {
   cancelarTarefas,
   concluirTarefa,
@@ -111,6 +112,7 @@ let conciliacoesDeNota: { tenantId: string }[] = [];
 let entregasDeNota: { tenantId: string; agora: Date }[] = [];
 let respostasDeWhatsApp: { tenantId: string; inboundId: string }[] = [];
 let conciliacoesDeWhatsApp: { tenantId: string; agora: Date }[] = [];
+let wabasAssinadas: { tenantId: string; locationId: string }[] = [];
 let templatesEntregues: { tenantId: string; templateId: string; claim: string }[] = [];
 let automacoesRodadas: { tenantId: string; agora: Date }[] = [];
 let campanhasDespachadas: { tenantId: string; campanhaId: string }[] = [];
@@ -138,6 +140,11 @@ const ligacoesDaPlataforma = () => ({
   entregarTemplate: async (tenantId: string, templateId: string, claim: string) => {
     templatesEntregues.push({ tenantId, templateId, claim });
   },
+  assinarWaba: async (tenantId: string, locationId: string) => {
+    wabasAssinadas.push({ tenantId, locationId });
+  },
+  // A instalação da suíte emite: é ela que exercita o caminho fiscal inteiro.
+  emiteNotaFiscal: true,
   rodarAutomacoes: async (tenantId: string, agora: Date) => {
     automacoesRodadas.push({ tenantId, agora });
   },
@@ -261,6 +268,7 @@ describeIfDb('fila de trabalho', () => {
     alertasEntregues.length = 0;
     conciliacoesRodadas.length = 0;
     templatesEntregues.length = 0;
+    wabasAssinadas.length = 0;
     cobrancasDoClube.length = 0;
     liquidacoesRodadas.length = 0;
     avisosDoClube.length = 0;
@@ -653,6 +661,53 @@ describeIfDb('fila de trabalho', () => {
     }
   });
 
+  it('a tarefa cortada pelo recurso desligado diz por que não fez nada', async () => {
+    /**
+     * O defeito que este teste prende custou duas horas de produção.
+     *
+     * O porteiro era `if (!recursoLigado(...)) return;` — `return` puro. A
+     * tarefa fechava como concluída, o log dizia `tarefa.concluida`, e nada
+     * registrava o corte. O balcão apertou "Chamar", a mensagem não chegou ao
+     * cliente, e não havia **onde olhar**: nem `notifications`, nem `jobs`, nem
+     * log.
+     *
+     * Concluída continua sendo o desfecho certo — não houve erro, houve
+     * decisão. O que faltava era o evento dizer qual.
+     */
+    await enfileirarNoTenant({
+      kind: 'notificacao.lembrete_24h',
+      payload: { appointmentId: AGENDAMENTO },
+      idempotencyKey: 'lembrete_24h:pulo',
+    });
+
+    const eventos: EventoDaTarefa[] = [];
+    recursosLigados = false;
+    try {
+      await rodada(
+        {
+          provider,
+          relogio: { agora: () => new Date(COMECA_EM.getTime() - 24 * 60 * 60_000) },
+          recursoLigado: async () => recursosLigados,
+          entregarWebhook: async () => 'entregue' as const,
+          varrerWebhooks: async () => [],
+          varrerVitrine: async () => 0,
+          limparUsoDaApi: async () => 0,
+          ...ligacoesDaPlataforma(),
+        },
+        { aoEvento: (evento) => eventos.push(evento) },
+      );
+    } finally {
+      recursosLigados = true;
+    }
+
+    const pulada = eventos.find((e) => e.fase === 'pulada');
+    expect(pulada, `nenhum evento de pulo: ${JSON.stringify(eventos.map((e) => e.fase))}`).toBeDefined();
+    expect(pulada).toMatchObject({ kind: 'notificacao.lembrete_24h', motivo: 'recurso_desligado' });
+    // E **não** `concluida`: as duas fases diziam a mesma coisa sobre trabalho
+    // feito e trabalho que nem começou.
+    expect(eventos.some((e) => e.fase === 'concluida')).toBe(false);
+  });
+
   it('a resposta ao recado chega a quem sabe entregá-la', async () => {
     // O handler não sabe o que foi respondido nem a quem: `jobs` não conhece
     // `crm`. Ele carrega o id e chama quem sabe — e o payload guarda só isso.
@@ -963,6 +1018,39 @@ describeIfDb('fila de trabalho', () => {
         claim: 'cl000000-0000-0000-0000-000000000009',
       },
     ]);
+  });
+
+  it('a tarefa de inscrição leva a unidade para quem sabe falar com a Meta', async () => {
+    /**
+     * A ligação do bloco 134, e ela custou duas horas de produção.
+     *
+     * `assinarWebhook` existia desde o bloco 88 e só o Embedded Signup a
+     * chamava. Quem cadastrou o número pelo formulário ficou com
+     * `subscribed_apps` vazio, e a Meta nunca contou o desfecho de nada — nem
+     * entrega, nem falha, nem aprovação de texto. Quatro envios aceitos,
+     * `delivered_at` nulo nos quatro.
+     *
+     * O payload carrega a **unidade**, nunca o token: ele mora cifrado no banco
+     * e `jobs` não tem RLS.
+     */
+    wabasAssinadas.length = 0;
+    await enfileirarNoTenant({
+      kind: 'whatsapp.assinar_waba',
+      payload: { locationId: LOCATION },
+    });
+
+    await rodada({
+      provider,
+      relogio: { agora: () => COMECA_EM },
+      recursoLigado: async () => recursosLigados,
+      entregarWebhook: async () => 'entregue' as const,
+      varrerWebhooks: async () => [],
+      varrerVitrine: async () => 0,
+      limparUsoDaApi: async () => 0,
+      ...ligacoesDaPlataforma(),
+    });
+
+    expect(wabasAssinadas).toEqual([{ tenantId: TENANT, locationId: LOCATION }]);
   });
 
   it('provedor fora do ar devolve a tarefa à fila', async () => {

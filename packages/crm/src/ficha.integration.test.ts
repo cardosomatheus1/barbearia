@@ -263,6 +263,48 @@ describeIfDb('a ficha do cliente', () => {
     expect(Number(daRival[0]?.n)).toBe(0);
   });
 
+  it('a ficha lê o desfecho da mensagem, e separa aceita de entregue', async () => {
+    /**
+     * O dado que existia e ninguém lia (§6, pergunta 4).
+     *
+     * `whatsapp_messages` guarda `delivered_at` e `read_at` desde o bloco 58,
+     * escritos pelo webhook. Nenhuma tela consultava. Quando a mensagem não
+     * chegava, a recepção não tinha onde olhar — e em produção quatro
+     * mensagens ficaram em `enviada` com `delivered_at` nulo, com a tela
+     * dizendo "Mensagem enviada pelo WhatsApp da casa" sobre as quatro.
+     *
+     * `enviada` quer dizer que a Meta **aceitou**. É a distinção inteira.
+     */
+    await exec(
+      admin,
+      `INSERT INTO whatsapp_messages (tenant_id, wamid, customer_id, status, sent_at)
+       VALUES ('${TENANT}', 'wamid.aceita', '${CARLOS}', 'enviada', now() - interval '2 minutes'),
+              ('${TENANT}', 'wamid.entregue', '${CARLOS}', 'entregue', now() - interval '1 hour');
+       UPDATE whatsapp_messages SET delivered_at = now() - interval '59 minutes'
+        WHERE wamid = 'wamid.entregue';`,
+    );
+
+    const ficha = await lerFicha(TENANT, CARLOS);
+    expect(ficha.mensagens).toHaveLength(2);
+    // A mais recente primeiro: a pergunta é sobre a última que saiu.
+    expect(ficha.mensagens[0]?.estado).toBe('enviada');
+    expect(ficha.mensagens[0]?.entregueEm).toBeNull();
+    expect(ficha.mensagens[1]?.estado).toBe('entregue');
+    expect(ficha.mensagens[1]?.entregueEm).not.toBeNull();
+  });
+
+  it('a mensagem da barbearia vizinha não aparece nesta ficha', async () => {
+    // A RLS separa barbearias; este teste consulta sem filtro de tenant e
+    // espera zero, que é o que prova a política em vez de um `WHERE`.
+    await exec(
+      admin,
+      `INSERT INTO whatsapp_messages (tenant_id, wamid, customer_id, status)
+       VALUES ('${RIVAL}', 'wamid.da-rival', NULL, 'entregue');`,
+    );
+    const ficha = await lerFicha(TENANT, CARLOS);
+    expect(ficha.mensagens.some((m) => m.id === 'wamid.da-rival')).toBe(false);
+  });
+
   it('cliente inexistente responde igual a cliente de outra barbearia', async () => {
     // Distinguir os dois seria um oráculo: com uma conta grátis dava para
     // perguntar "este id existe na plataforma?".

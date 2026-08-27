@@ -9,6 +9,7 @@ const secoes = ler('apps/web/src/app/admin/secoes.ts');
 const ficha = ler('apps/web/src/app/admin/cliente/[id]/page.tsx');
 const dia = ler('apps/web/src/app/admin/dia/page.tsx');
 const css = ler('apps/web/src/app/admin/busca-global.module.css');
+const fichaComponentes = ler('apps/web/src/app/admin/cliente/[id]/componentes.tsx');
 
 const erros = [];
 const exigir = (condicao, texto) => { if (!condicao) erros.push(texto); };
@@ -30,6 +31,11 @@ exigir(rota.includes("'cache-control': 'no-store, private'"), 'resultado com dad
 exigir(ficha.includes('aria-label="Ações deste cliente"'), 'a ficha precisa ter ações contextuais explícitas');
 exigir(ficha.includes('/admin/dia/marcar?c=${encodeURIComponent(id)}&cn=${encodeURIComponent(ficha.dados.nome)}'), 'Agendar deve carregar o cliente sem procurá-lo de novo');
 exigir(ficha.includes('?aba=visao&de=${origem}#mandar-mensagem'), 'WhatsApp deve agir no contexto da ficha, preservar a origem e abrir a aba correta');
+// O botão leva a um âncora, e âncora sem alvo certo é botão que leva a lugar
+// nenhum (§6 pergunta 1). Desde o bloco 134 a seção tem duas metades — o que
+// já saiu e o que se manda — e quem clica em "WhatsApp" quer a segunda.
+exigir(/id="mandar-mensagem">\s*\n\s*Mandar uma mensagem/.test(fichaComponentes),
+  'o âncora #mandar-mensagem tem que cair no título de quem manda, não no histórico');
 exigir(dia.includes('id={`atendimento-${linha.id}`}'), 'resultado de agendamento precisa cair no atendimento exato');
 exigir(css.includes('@media (max-width: 560px)') && css.includes('min-height: 44px'), 'gatilho mobile precisa manter alvo de toque de 44px');
 

@@ -237,6 +237,81 @@ export const EXPLICACAO_DO_TEMPLATE: Readonly<Record<EstadoDoTemplate, string>> 
 };
 
 /**
+ * Os quatro estados de uma mensagem que saiu, e é `core` quem os nomeia.
+ *
+ * A união vivia só em `packages/crm`, e a tela não tinha como falar deles — foi
+ * por isso que o produto passou a chamar tudo de "enviada". É a regra do tipo
+ * com o mesmo nome nos dois lados: uma declaração só, no domínio.
+ */
+export const ESTADOS_DA_MENSAGEM = ['enviada', 'entregue', 'lida', 'falhou'] as const;
+export type EstadoDaMensagemEnviada = (typeof ESTADOS_DA_MENSAGEM)[number];
+
+/**
+ * O que a tela escreve sobre uma mensagem — rótulo e porquê, juntos.
+ *
+ * ## `enviada` não quer dizer que chegou
+ *
+ * A Cloud API responde `accepted` e devolve um `wamid`: isso é a Meta **aceitar
+ * para entregar**, não entregar. Quem conta o desfecho é o webhook, minutos ou
+ * segundos depois. O produto tratava as duas coisas como uma só — o banco
+ * gravava `enviada`, a tela dizia "Mensagem enviada pelo WhatsApp da casa", e
+ * pronto.
+ *
+ * Aconteceu em produção: quatro mensagens aceitas, nenhuma entregue,
+ * `delivered_at` nulo nas quatro, e a recepção sem nada para olhar. Duas horas
+ * de investigação para descobrir que o app não estava publicado — e que o
+ * produto não tinha vocabulário para dizer o que sabia.
+ *
+ * Rótulo e explicação saem juntos pela razão do bloco 133: separados, o estado
+ * novo faria os dois mapas divergirem, e a tela mostraria uma coisa ao lado da
+ * outra.
+ */
+export const ESTADO_DA_MENSAGEM: Readonly<
+  Record<EstadoDaMensagemEnviada, { readonly rotulo: string; readonly explicacao: string }>
+> = {
+  enviada: {
+    rotulo: 'A caminho',
+    explicacao:
+      'A Meta aceitou para entregar. Ainda não confirmou que chegou no aparelho — costuma levar segundos.',
+  },
+  entregue: {
+    rotulo: 'Entregue',
+    explicacao: 'Chegou no WhatsApp do cliente.',
+  },
+  lida: {
+    rotulo: 'Lida',
+    explicacao: 'O cliente abriu a mensagem.',
+  },
+  falhou: {
+    /**
+     * Sem "o motivo está ao lado": a tela empilha, e no celular ele fica
+     * embaixo. Frase que nomeia posição erra na primeira largura em que o
+     * layout reflui — e o motivo da Meta é obrigatório por `CHECK` nesta
+     * linha, então repetir que ele existe não acrescenta nada. O que falta a
+     * quem lê é o que fazer com ele.
+     */
+    rotulo: 'Não chegou',
+    explicacao:
+      'A Meta recusou a entrega. Mandar de novo só adianta se o que ela apontou tiver mudado.',
+  },
+};
+
+export function estadoDaMensagemNaTela(estado: string): {
+  readonly rotulo: string;
+  readonly explicacao: string;
+} {
+  const conhecido = (ESTADOS_DA_MENSAGEM as readonly string[]).includes(estado);
+  /**
+   * Estado que este mapa não conhece é gravado por uma versão mais nova, e a
+   * tela precisa dizer alguma coisa. Devolver o código cru é honesto — o
+   * silêncio, não.
+   */
+  return conhecido
+    ? ESTADO_DA_MENSAGEM[estado as EstadoDaMensagemEnviada]
+    : { rotulo: estado, explicacao: 'Estado desconhecido para esta versão da tela.' };
+}
+
+/**
  * O que a tela escreve sobre um texto — rótulo e porquê, na mesma conta.
  *
  * ## `pendente` passou a significar duas coisas (bloco 133)

@@ -12,6 +12,10 @@ const mensagens = ler('packages/crm/src/whatsapp-mensagens.ts');
 const templates = ler('packages/crm/src/whatsapp-templates.ts');
 const meta = ler('packages/crm/src/whatsapp-meta.ts');
 const cadastro = ler('packages/crm/src/whatsapp-cadastro.ts');
+// A conciliação do número saiu de `whatsapp-cadastro.ts` no bloco 134: gravar o
+// cadastro e perguntar à Meta se ele foi provado são duas coisas, e o arquivo
+// tinha passado do teto da guarda de modularidade.
+const numero = ler('packages/crm/src/whatsapp-numero.ts');
 // A reivindicacao da WABA saiu para modulo proprio quando o cadastro bateu no
 // teto de linhas. A guarda segue o fato, nao o arquivo em que ele morava.
 const waba = ler('packages/crm/src/whatsapp-waba.ts');
@@ -107,7 +111,7 @@ exigir(webhook.includes("ACCOUNT_OFFBOARDED") && webhook.includes("PARTNER_REMOV
 exigir(webhook.includes('numeroVisivelDaUnidadeConfere')
   && lifecycle.includes('SELECT display_phone FROM whatsapp_settings'),
   'desambiguação por número visível não ocorre depois da RLS');
-exigir(cadastro.includes("status IN ('aguardando_verificacao', 'suspenso')")
+exigir(numero.includes("status IN ('aguardando_verificacao', 'suspenso')")
   && lifecycle.includes("SET status = 'aguardando_verificacao'"),
   'número suspenso não tem caminho seguro de reconciliação/reativação');
 

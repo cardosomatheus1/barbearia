@@ -13,9 +13,10 @@ export {
   type CadastroDoWhatsApp,
   cadastroDoWhatsApp,
   salvarCadastroDoWhatsApp,
-  conciliarNumero,
   tokenDoWhatsApp,
 } from './whatsapp-cadastro.js';
+
+export { conciliarNumero } from './whatsapp-numero.js';
 
 export {
   numeroVisivelDaUnidadeConfere,

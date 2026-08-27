@@ -18,6 +18,7 @@ import {
   reservarDisparoDaAutomacao,
   conciliarWhatsAppDaUnidade,
   entregarTemplateDaFila,
+  assinarWabaDaUnidade,
   provedorDoWhatsApp,
   respostaParaEnviar,
   varrerAutomacoes,
@@ -512,6 +513,15 @@ async function main(): Promise<void> {
        */
       entregarTemplate: (tenantId, templateId, claim) =>
         entregarTemplateDaFila({ tenantId, templateId, claim }),
+      /**
+       * Falha aqui **não** é falha da conexão: o cadastro está gravado e o
+       * canal manda mensagem sem isto. O que se perde é a volta — entrega,
+       * leitura e aprovação de texto —, e a tarefa retenta sozinha.
+       */
+      assinarWaba: async (tenantId, locationId) => {
+        const assinou = await assinarWabaDaUnidade(tenantId, locationId);
+        logWorker('whatsapp.waba_assinada', { tenantId, assinou });
+      },
       rodarAutomacoes: async (tenantId, agora) => {
         const local = await primaryLocation(tenantId);
         if (!local) return;
@@ -680,10 +690,20 @@ async function main(): Promise<void> {
        * num emissor de mentira responderia "autorizada" sobre nota que nunca
        * foi à prefeitura.
        */
+      emiteNotaFiscal: EMISSOR_FISCAL !== null,
+      /**
+       * Sem emissor, sai sem lançar — e é a segunda camada.
+       *
+       * O laço já não enfileira quando `emiteNotaFiscal` é falso; isto aqui é
+       * para a tarefa que **já estava** na fila quando alguém desligou o modo.
+       * Lançar faria ela ser retentada três vezes e virar `failed`, que é
+       * exatamente o vermelho de hora em hora que este bloco fecha.
+       */
       conciliarNotas: async (tenantId) => {
+        if (!EMISSOR_FISCAL) return;
         const conciliadas = await conciliarNotas({
           tenantId,
-          provider: exigirEmissorFiscal(),
+          provider: EMISSOR_FISCAL,
         });
         if (conciliadas > 0) {
           logWorker('fiscal.notas_conciliadas', { tenantId, conciliadas });
@@ -1064,6 +1084,10 @@ async function main(): Promise<void> {
           ...('duracaoMs' in evento ? { duracaoMs: evento.duracaoMs } : {}),
           ...('erroTipo' in evento ? { erroTipo: evento.erroTipo } : {}),
           ...('erroCodigo' in evento && evento.erroCodigo ? { erroCodigo: evento.erroCodigo } : {}),
+          // Por que a tarefa não fez nada (bloco 134). Código de conjunto
+          // fechado, nunca frase: esta linha vai para o log e não pode carregar
+          // telefone nem nome, como o resto do envelope.
+          ...('motivo' in evento ? { motivo: evento.motivo } : {}),
         }, evento.fase === 'falhou' ? 'erro' : evento.fase === 'reagendada' ? 'aviso' : 'info');
       },
       aoRodar: (resultado: ResultadoDaRodada) => {

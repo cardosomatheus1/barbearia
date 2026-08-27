@@ -49,6 +49,24 @@ export interface VisitaNaFicha {
   unidade: string | null;
 }
 
+/**
+ * Uma mensagem que saiu, com o desfecho que a Meta contou (bloco 134).
+ *
+ * `enviada` quer dizer que a Meta **aceitou**, não que chegou. O produto
+ * tratava as duas como a mesma coisa, e a tela dizia "Mensagem enviada" sobre
+ * quatro mensagens que nunca foram entregues.
+ */
+export interface MensagemNaFicha {
+  id: string;
+  quando: string;
+  estado: string;
+  entregueEm: string | null;
+  lidaEm: string | null;
+  motivoDaFalha: string | null;
+  texto: string | null;
+  tipo: string | null;
+}
+
 export interface FichaDoCliente {
   customerId: string;
   nome: string;
@@ -59,6 +77,8 @@ export interface FichaDoCliente {
   anotadoEm: string | null;
   anotadoPor: string | null;
   linhaDoTempo: VisitaNaFicha[];
+  /** As últimas mensagens e o que aconteceu com cada uma (bloco 134). */
+  mensagens: MensagemNaFicha[];
   visitas: number;
   desde: string | null;
   /** Último atendimento concluído; cancelamento/falta não é visita. */

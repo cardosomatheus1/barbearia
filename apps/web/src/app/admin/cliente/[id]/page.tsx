@@ -359,8 +359,24 @@ export default async function FichaPage({ params, searchParams }: Props) {
       </AvisoDeRecusa>
 
       {first(query['feito']) === 'mensagem' ? (
+        /*
+          A frase parou de afirmar o que o produto não sabe (bloco 134).
+
+          Ela dizia "Mensagem enviada pelo WhatsApp da casa" no instante em que
+          a requisição voltava. Mas a Cloud API responde `accepted` — a Meta
+          **aceitou para entregar**, e quem conta o desfecho é o webhook,
+          segundos depois.
+
+          Aconteceu em produção: quatro mensagens aceitas, nenhuma entregue,
+          `delivered_at` nulo nas quatro, e a recepção lendo "enviada" sobre
+          nada. Duas horas para descobrir que o app não estava publicado.
+
+          É a mesma correção do bloco 133 na tela de textos, e a lista logo
+          abaixo é o que faz a frase nova ter para onde apontar.
+        */
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Mensagem enviada pelo WhatsApp da casa.
+          Mensagem entregue ao WhatsApp da casa. A confirmação de que ela chegou no aparelho
+          aparece na lista abaixo, em segundos.
         </div>
       ) : null}
 
@@ -533,6 +549,8 @@ export default async function FichaPage({ params, searchParams }: Props) {
         <MandarMensagem
           customerId={ficha.dados.customerId}
           de={voltar}
+          fuso={estado.empresa.timezone}
+          mensagens={ficha.dados.mensagens}
           textos={textos.dados.templates
             /**
              * Só aprovado — o recorte por tipo é da tela (blocos 96 e 132).

@@ -2175,6 +2175,50 @@ function prepararWhatsApp(slug) {
 }
 
 /**
+ * As quatro respostas que a Meta pode dar sobre uma mensagem (bloco 134).
+ *
+ * A lista da ficha só existe se houver linha em `whatsapp_messages`, e nada na
+ * semeadura escrevia ali: sem isto, a medição fotografaria a ficha **no estado
+ * de antes do bloco** e diria "ok" sobre a tela que não mudou. É a regra da
+ * semente que produz o estado que o bloco criou.
+ *
+ * As quatro de propósito, e não uma: o que o bloco entrega é justamente a
+ * distinção entre "a Meta aceitou" e "chegou no aparelho", e ela só aparece com
+ * as duas na tela, uma embaixo da outra. A que falhou traz o motivo longo da
+ * Meta, que é o texto que estoura a linha em 360px.
+ */
+function prepararMensagensDoCliente(slug, clienteId) {
+  if (!clienteId) return;
+  const tenant = psql(`select tenant_id from tenant_slugs where slug = '${slug}'`);
+  if (!tenant) return;
+  const texto = primeiraLinha(
+    psql(
+      `select id from whatsapp_templates` +
+        ` where tenant_id = '${tenant}' and status = 'aprovado' limit 1`,
+    ),
+  );
+  const alvo = texto ? `'${texto}'` : 'NULL';
+
+  psql(
+    `INSERT INTO whatsapp_messages
+       (tenant_id, wamid, customer_id, template_id, status, failure_reason,
+        sent_at, delivered_at, read_at)
+     VALUES
+       ('${tenant}', 'wamid.medicao.lida', '${clienteId}', ${alvo}, 'lida', NULL,
+        now() - interval '3 days', now() - interval '3 days' + interval '4 seconds',
+        now() - interval '3 days' + interval '2 minutes'),
+       ('${tenant}', 'wamid.medicao.entregue', '${clienteId}', ${alvo}, 'entregue', NULL,
+        now() - interval '2 days', now() - interval '2 days' + interval '6 seconds', NULL),
+       ('${tenant}', 'wamid.medicao.falhou', '${clienteId}', ${alvo}, 'falhou',
+        'O número não tem conta de WhatsApp ativa (131026)',
+        now() - interval '1 day', NULL, NULL),
+       ('${tenant}', 'wamid.medicao.enviada', '${clienteId}', ${alvo}, 'enviada', NULL,
+        now() - interval '20 minutes', NULL, NULL)
+     ON CONFLICT DO NOTHING`,
+  );
+}
+
+/**
  * Duas automações, uma com resultado e outra sem (bloco 56).
  *
  * Pelo banco, como o resto. O que estoura a linha é a automação com nome longo,
@@ -2971,6 +3015,7 @@ async function main() {
   prepararValeEEstorno(slug);
   const vendaComNota = prepararFiscal(slug);
   prepararWhatsApp(slug);
+  prepararMensagensDoCliente(slug, balcao.clienteId);
   prepararAutomacoes(slug);
   prepararCampanha(slug);
   const emRisco = prepararSegmentos(slug);

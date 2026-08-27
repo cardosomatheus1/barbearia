@@ -49,6 +49,25 @@ export interface VisitaNaLinhaDoTempo {
   readonly unidade: string | null;
 }
 
+/**
+ * Uma mensagem que saiu, com o desfecho que a Meta contou.
+ *
+ * `estado` é o do banco, e a distinção que importa é entre `enviada` e
+ * `entregue`: a primeira quer dizer que a Meta **aceitou**, não que chegou. O
+ * produto tratava as duas como a mesma coisa.
+ */
+export interface MensagemNaFicha {
+  readonly id: string;
+  readonly quando: string;
+  readonly estado: string;
+  readonly entregueEm: string | null;
+  readonly lidaEm: string | null;
+  readonly motivoDaFalha: string | null;
+  /** O título que a barbearia deu ao texto; nulo cai no nome do aviso. */
+  readonly texto: string | null;
+  readonly tipo: string | null;
+}
+
 export interface Ficha {
   readonly customerId: string;
   readonly nome: string;
@@ -61,6 +80,19 @@ export interface Ficha {
   readonly anotadoEm: string | null;
   readonly anotadoPor: string | null;
   readonly linhaDoTempo: readonly VisitaNaLinhaDoTempo[];
+  /**
+   * As últimas mensagens que saíram para este cliente, e o que aconteceu com
+   * cada uma (bloco 134).
+   *
+   * `whatsapp_messages` guarda `sent_at`, `delivered_at` e `read_at` desde o
+   * bloco 58, e **nenhuma tela lia**. O banco sabia que a Meta tinha só
+   * aceitado; a tela dizia "Mensagem enviada pelo WhatsApp da casa" e parava
+   * ali. Quando a mensagem não chegava, a recepção não tinha onde olhar —
+   * aconteceu em produção e custou duas horas.
+   *
+   * É o dado que existe e ninguém lê, da §6 pergunta 4.
+   */
+  readonly mensagens: readonly MensagemNaFicha[];
   /** Quantas vezes já veio de fato. É o número que muda como se trata alguém. */
   readonly visitas: number;
   readonly desde: string | null;
@@ -109,6 +141,15 @@ interface LinhaDaFicha {
  * completo tem a agenda.
  */
 const VISITAS_NA_TELA = 10;
+
+/**
+ * Quantas mensagens a ficha mostra (bloco 134).
+ *
+ * Cinco: a pergunta que a tela responde é *"a última chegou?"*, não *"quantas
+ * já mandamos?"*. Uma lista longa aqui competiria com a linha do tempo das
+ * visitas, que é o que a recepção abre a ficha para ver.
+ */
+const MENSAGENS_NA_TELA = 5;
 
 export async function lerFicha(
   tenantId: string,
@@ -170,6 +211,39 @@ export async function lerFicha(
     `;
 
     /**
+     * O que aconteceu com as últimas mensagens (bloco 134).
+     *
+     * Consulta própria porque é sobre `whatsapp_messages`, que não tem relação
+     * com a linha do tempo de visitas — e porque o dado estava sendo escrito
+     * pelo webhook desde o bloco 58 sem nenhum leitor.
+     *
+     * `LEFT JOIN` no template: ele é `ON DELETE SET NULL`, e uma mensagem cujo
+     * texto foi apagado continua sendo um fato que aconteceu.
+     */
+    const mensagens = await tx.$queryRaw<
+      {
+        id: string;
+        quando: Date;
+        estado: string;
+        entregue_em: Date | null;
+        lida_em: Date | null;
+        motivo: string | null;
+        texto: string | null;
+        tipo: string | null;
+      }[]
+    >`
+      SELECT m.id, m.sent_at AS quando, m.status::text AS estado,
+             m.delivered_at AS entregue_em, m.read_at AS lida_em,
+             m.failure_reason AS motivo,
+             t.titulo AS texto, t.kind::text AS tipo
+        FROM whatsapp_messages m
+        LEFT JOIN whatsapp_templates t ON t.id = m.template_id
+       WHERE m.customer_id = ${customerId}::uuid
+       ORDER BY m.sent_at DESC
+       LIMIT ${MENSAGENS_NA_TELA}
+    `;
+
+    /**
      * O segmento vem da base inteira, e é por isso que ele custa uma consulta a
      * mais em vez de sair da linha acima.
      *
@@ -207,6 +281,16 @@ export async function lerFicha(
         servicos: visita.servicos ?? [],
         precoCents: visita.price_cents,
         unidade: visita.unidade,
+      })),
+      mensagens: mensagens.map((m) => ({
+        id: m.id,
+        quando: m.quando.toISOString(),
+        estado: m.estado,
+        entregueEm: m.entregue_em?.toISOString() ?? null,
+        lidaEm: m.lida_em?.toISOString() ?? null,
+        motivoDaFalha: m.motivo,
+        texto: m.texto,
+        tipo: m.tipo,
       })),
       visitas: Number(linha.visitas),
       desde: linha.desde?.toISOString() ?? null,

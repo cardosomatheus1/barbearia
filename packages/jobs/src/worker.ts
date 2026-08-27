@@ -15,6 +15,7 @@ import { agendarRetencaoDeTodas, retencaoPendente } from './retencao.js';
 import {
   agendarAutomacaoDeTodas,
   agendarConciliacaoDeNotasDeTodas,
+  cabeVoltaFiscal,
   agendarEntregaDeNotasDeTodas,
   entregaDeNotasPendente,
 } from './fiscal.js';
@@ -29,9 +30,12 @@ import { alertasDaBarbearia } from './alertas.js';
 // REPARO DA VALIDAÇÃO: o ZIP criou observabilidade.ts e usou os três
 // símbolos no worker sem importá-los — cinco erros de compilação.
 import {
+  ehPulo,
   identificarErroDaTarefa,
   resumoPersistivelDoErro,
+  PULO_POR_RECURSO,
   type EventoDaTarefa,
+  type PuloDaTarefa,
 } from './observabilidade.js';
 import { agendarVarreduraDeRetorno } from './preferencias.js';
 import {
@@ -67,7 +71,14 @@ export interface Relogio {
 
 export const RELOGIO_REAL: Relogio = { agora: () => new Date() };
 
-export type Handler = (tarefa: Tarefa, contexto: Contexto) => Promise<void>;
+/**
+ * `PuloDaTarefa` no retorno: handler que decide não fazer nada **diz por quê**.
+ *
+ * `void` continua valendo para quem sempre faz o trabalho. Quem tem porteiro —
+ * hoje o `recursoLigado` — devolve o motivo, e o laço o publica em vez de
+ * concluir em silêncio.
+ */
+export type Handler = (tarefa: Tarefa, contexto: Contexto) => Promise<void | PuloDaTarefa>;
 
 export interface Contexto {
   readonly provider: NotificationProvider;
@@ -136,6 +147,27 @@ export interface Contexto {
    */
   readonly conciliarNotas: (tenantId: string) => Promise<void>;
   /**
+   * Esta instalação tem emissor fiscal contratado? (bloco 134)
+   *
+   * ## O vermelho de hora em hora
+   *
+   * `FISCAL_MODO` é da instalação e nasce `nenhum`. Mesmo assim o laço
+   * enfileirava `fiscal.entregar` e `fiscal.conciliar` para **toda** barbearia
+   * a cada hora, e `conciliarNotas` chamava `exigirEmissorFiscal()`, que lança.
+   * Medido em produção: três tentativas por hora, nas duas barbearias, desde
+   * sempre, terminando em `tarefa.falhou`.
+   *
+   * Nada quebrava — não há nota para conciliar sem emissor. Mas é o pior tipo
+   * de log: vermelho constante e inofensivo, que ensina quem opera a não olhar.
+   * Quando um erro de verdade aparecer, ele vai estar no meio desses.
+   *
+   * Booleano e não função porque a resposta não muda durante a vida do
+   * processo: o modo é lido do ambiente no arranque, e trocá-lo exige subir de
+   * novo. Obrigatório no tipo pela razão de sempre — opcional, o primeiro
+   * worker novo o esqueceria e o vermelho voltaria.
+   */
+  readonly emiteNotaFiscal: boolean;
+  /**
    * Uma volta do motor de automação (bloco 56), injetada.
    *
    * Mesma razão de `varrerRetencao`: ela lê em `packages/crm`, decide com
@@ -201,6 +233,15 @@ export interface Contexto {
     templateId: string,
     claim: string,
   ) => Promise<void>;
+  /**
+   * Inscreve o app nos eventos da WABA desta unidade (bloco 134).
+   *
+   * Injetada e obrigatória, como as outras: quem sabe falar com a Meta é
+   * `packages/crm`. Opcional, o primeiro worker novo a esqueceria — e o sintoma
+   * é o pior que existe, porque **nada quebra**: as mensagens saem, a Meta
+   * aceita, e o produto simplesmente nunca fica sabendo se elas chegaram.
+   */
+  readonly assinarWaba: (tenantId: string, locationId: string) => Promise<void>;
   readonly varrerRetencao: (
     tenantId: string,
     agora: Date,
@@ -414,7 +455,7 @@ const avisoDeAgendamento =
     // A checagem é **na hora de enviar**, não na de enfileirar. Desligar o
     // recurso precisa parar também o lembrete que já está na fila para amanhã —
     // e é justamente o que já está na fila que continuaria custando mensagem.
-    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return PULO_POR_RECURSO;
     await executarAvisoDeAgendamento({
       tenantId: tarefa.tenantId,
       appointmentId,
@@ -544,6 +585,19 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
    * eles não há o que entregar, e engolir deixaria o texto em `sending` para
    * sempre, sem erro e sem alerta.
    */
+  /**
+   * A inscrição do app na WABA, fora da requisição (bloco 134).
+   *
+   * A tarefa nasce dentro da transação que grava o cadastro e carrega **o id da
+   * unidade**: o token mora cifrado no banco, e `jobs` não tem RLS — pôr
+   * credencial no `payload` seria um segredo em repouso legível sem tenant.
+   */
+  'whatsapp.assinar_waba': async (tarefa, contexto) => {
+    const locationId = String(tarefa.payload['locationId'] ?? '');
+    if (!locationId) throw new Error('tarefa de inscrição sem unidade');
+    await contexto.assinarWaba(tarefa.tenantId, locationId);
+  },
+
   'whatsapp.submeter_template': async (tarefa, contexto) => {
     const templateId = String(tarefa.payload['templateId'] ?? '');
     const claim = String(tarefa.payload['claim'] ?? '');
@@ -586,7 +640,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'notificacao.sua_vez': async (tarefa, contexto) => {
     const queueEntryId = String(tarefa.payload['queueEntryId'] ?? '');
     if (!queueEntryId) throw new Error('tarefa de fila sem entrada');
-    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return PULO_POR_RECURSO;
     await executarAvisoDeFila({
       tenantId: tarefa.tenantId,
       queueEntryId,
@@ -609,9 +663,10 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     // A varredura de retorno se reprograma sozinha, então o recurso desligado
     // pula o envio **e** mantém a corrente viva: religar não pode exigir que
     // alguém lembre de reenfileirar a primeira.
-    if (await contexto.recursoLigado(tarefa.tenantId, 'avisos')) {
+    const ligado = await contexto.recursoLigado(tarefa.tenantId, 'avisos');
+    if (ligado) {
       await varrerRetornos({
-      tenantId: tarefa.tenantId,
+        tenantId: tarefa.tenantId,
         provider: contexto.provider,
         agora,
       });
@@ -622,6 +677,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         quando: new Date(agora.getTime() + 24 * 60 * 60_000),
       }),
     );
+    /**
+     * O pulo vem **depois** de reprogramar, e a ordem é a decisão.
+     *
+     * Este é o único porteiro que não pode sair cedo: a varredura de retorno se
+     * reprograma sozinha, e devolver antes mataria a corrente — religar o
+     * recurso passaria a exigir que alguém lembrasse de reenfileirar a primeira.
+     */
+    if (!ligado) return PULO_POR_RECURSO;
   },
 
   /**
@@ -761,7 +824,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
      * Sem isto, quem desligou as mensagens continuaria mandando convite de vaga
      * — e o convite é o mais intrusivo de todos, porque tem relógio correndo.
      */
-    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return PULO_POR_RECURSO;
 
     await contexto.oferecerVagaDaEspera(
       tarefa.tenantId,
@@ -790,7 +853,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'recado.responder': async (tarefa, contexto) => {
     const recadoId = String(tarefa.payload['recadoId'] ?? '');
     if (!recadoId) return;
-    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return PULO_POR_RECURSO;
 
     await contexto.responderRecadoDoCliente(tarefa.tenantId, recadoId);
   },
@@ -845,7 +908,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     const subscriptionId = String(tarefa.payload['subscriptionId'] ?? '');
     const motivo = String(tarefa.payload['motivo'] ?? '');
     if (!subscriptionId || !motivo) return;
-    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return;
+    if (!(await contexto.recursoLigado(tarefa.tenantId, 'avisos'))) return PULO_POR_RECURSO;
 
     await contexto.avisarDoClube(
       tarefa.tenantId,
@@ -921,10 +984,20 @@ export async function rodada(
 
     try {
       if (!handler) throw new Error(`tarefa sem handler: ${tarefa.kind}`);
-      await handler(tarefa, contexto);
+      const desfechoDoHandler = await handler(tarefa, contexto);
       await concluirTarefa(tarefa);
       concluidas += 1;
-      opcoes.aoEvento?.({ fase: 'concluida', ...base, duracaoMs: Date.now() - inicio });
+      /**
+       * Pulo é conclusão, não erro — e por isso a tarefa fecha do mesmo jeito.
+       * O que muda é o evento: `pulada` com o motivo, em vez de `concluida`,
+       * que dizia exatamente a mesma coisa de trabalho feito e de trabalho que
+       * nem começou.
+       */
+      opcoes.aoEvento?.(
+        ehPulo(desfechoDoHandler)
+          ? { fase: 'pulada', ...base, duracaoMs: Date.now() - inicio, motivo: desfechoDoHandler.pulada }
+          : { fase: 'concluida', ...base, duracaoMs: Date.now() - inicio },
+      );
     } catch (erro) {
       const desfecho = await falharTarefa(
         tarefa,
@@ -1070,7 +1143,13 @@ export async function rodarWorker(
     }
 
     const entrega = entregaDeNotasPendente(contexto.relogio.agora());
-    if (entrega.hora !== ultimaEntregaDeNotas) {
+    if (
+      cabeVoltaFiscal({
+        emiteNotaFiscal: contexto.emiteNotaFiscal,
+        hora: entrega.hora,
+        ultima: ultimaEntregaDeNotas,
+      })
+    ) {
       const ok = await executarGlobal('fiscal.agendar_entrega_conciliacao', async () => {
         await agendarEntregaDeNotasDeTodas(entrega);
         // A conciliação na mesma cadência: a prefeitura responde em minutos ou
