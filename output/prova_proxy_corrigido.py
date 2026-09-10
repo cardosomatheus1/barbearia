@@ -5,8 +5,10 @@ import os, subprocess, time, json, http.client, secrets, re
 root=Path(__file__).resolve().parents[1]
 runtime=Path('/home/ec2-user/codex-tmp/barbearia-audit-runtime')
 env=dict(os.environ)
+database=env.get('MEDICAO_DB_NAME','barbearia_audit_medicao')
+assert re.fullmatch(r'barbearia_audit_medicao(?:_v[0-9]+)?',database)
 secret=secrets.token_hex(32)
-env.update({'DATABASE_URL':'postgres://barbearia_app:'+quote(env['APP_DB_PASSWORD'],safe='')+'@127.0.0.1:5432/barbearia_audit_medicao',
+env.update({'DATABASE_URL':'postgres://barbearia_app:'+quote(env['APP_DB_PASSWORD'],safe='')+'@127.0.0.1:5432/'+database,
  'API_URL':'http://127.0.0.1:3420','WEB_URL':'http://127.0.0.1:3421','PORT':'3420','RATE_LIMIT_SHORT':'2',
  'RATE_LIMIT_SHORT_TTL_MS':'600000','RATE_LIMIT_LONG':'1000','LOG_REQUISICOES':'sim','FISCAL_MODO':'nenhum',
  'INTERNAL_PROXY_SECRET':secret,'ACME_EMAIL':'audit@example.com'})

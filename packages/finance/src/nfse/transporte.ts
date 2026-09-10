@@ -1,3 +1,4 @@
+import { caminhoNfsePermitido } from './identificadores.js';
 import { request, type RequestOptions } from 'node:https';
 import type { CertificadoA1 } from './certificado.js';
 import { NfseError } from './erros.js';
@@ -32,7 +33,7 @@ export function codigosDaResposta(dados: unknown): string[] {
 
 /** TLS autenticado, sem redirects, limite de corpo e prazo total (inclui DNS/TLS). */
 export async function httpNfse(p: PedidoHttpNfse, enviar: typeof request = request): Promise<RespostaHttpNfse> {
-  if (!Object.hasOwn(ENDERECOS, p.ambiente) || !/^\/(?:nfse(?:\/[0-9]{50}(?:\/eventos(?:\/[0-9]{6}\/\d{1,3})?)?)?|dps\/DPS\d{42}|parametros_municipais\/\d{7}\/convenio)$/.test(p.caminho)) {
+  if (!Object.hasOwn(ENDERECOS, p.ambiente) || !caminhoNfsePermitido(p.caminho)) {
     throw new NfseError('nfse_destino_invalido', 'Destino fiscal inválido.');
   }
   const url = new URL(`${ENDERECOS[p.ambiente]}${p.caminho}`);

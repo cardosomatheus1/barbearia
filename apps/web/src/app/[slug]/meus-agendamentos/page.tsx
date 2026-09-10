@@ -78,6 +78,7 @@ const FEITO: Record<string, string> = {
   cancelado: 'Agendamento cancelado.',
   remarcado: 'Horário remarcado.',
   aceitou: 'Pronto — você vai receber as promoções desta barbearia.',
+  aceite_anterior: 'Esta escolha já havia sido confirmada. Suas preferências atuais foram mantidas; confira abaixo.',
   pediu: 'Pedido registrado. A barbearia responde em até 15 dias.',
   pediu_exclusao:
     'Pedido de exclusão registrado. A barbearia tem 15 dias para responder — ela confere antes '

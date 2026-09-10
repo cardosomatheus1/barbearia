@@ -84,7 +84,13 @@ test('fiscal fake não sobe em produção', () => assert.match(erros({ FISCAL_MO
 test('emissor fiscal próprio exige chave dedicada e aceita somente formato canônico', () => {
   assert.match(erros({ FISCAL_MODO: 'nacional' }).join('\n'), /FISCAL_SECRET_KEY/);
   assert.match(erros({ FISCAL_MODO: 'nacional', FISCAL_SECRET_KEY: 'invalida' }).join('\n'), /FISCAL_SECRET_KEY/);
-  assert.deepEqual(erros({ FISCAL_MODO: 'nacional', FISCAL_SECRET_KEY: Buffer.alloc(32, 31).toString('base64') }), []);
+  assert.match(erros({ FISCAL_MODO: 'nacional', FISCAL_SECRET_KEY: Buffer.alloc(32, 31).toString('base64') }).join('\n'), /FISCAL_AUTORIDADES_PEM_B64/);
+  // Esta guarda exige a declaração. A validação criptográfica do catálogo e
+  // sua indisponibilidade fechada são exercitadas pela suíte fiscal do emissor.
+  assert.match(erros({ FISCAL_MODO: 'nacional', FISCAL_CONFIANCA_DIR: 'relativo' }).join('\n'), /FISCAL_CONFIANCA_DIR/);
+  assert.deepEqual(erros({ FISCAL_MODO: 'nacional', FISCAL_SECRET_KEY: Buffer.alloc(32, 31).toString('base64'),
+    FISCAL_AUTORIDADES_PEM_B64: Buffer.from('catalogo-sintetico-da-guarda').toString('base64'), FISCAL_CONFIANCA_DIR: '/run/fiscal-confianca',
+    FISCAL_DANFSE_FONTES_DIR: '/run/fiscal-fontes' }), []);
 });
 test('S3 incompleto é recusado', () => assert.match(erros({ MEDIA_STORAGE: 's3' }).join('\n'), /MEDIA_S3_ENDPOINT/));
 test('S3 HTTP exige decisão explícita', () => {

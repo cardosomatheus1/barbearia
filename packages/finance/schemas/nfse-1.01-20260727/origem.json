@@ -1,0 +1,17 @@
+{
+  "source": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita/esquemas-nfse-rtc-v1-01-20260727.zip",
+  "retrieved": "2026-09-10",
+  "sha256Zip": "6c7e0510d3ecff4454f291f4e10b742d27a4818f23aab181494f96d0ea79f3dc",
+  "sha256": {
+    "CNC_v1.00.xsd": "26961f705970ccb1dede1b6bb0ab544ca1d089137c22e93371d789c1e15ef0c4",
+    "DPS_v1.01.xsd": "c7dab363d8cf7c83fc2b3b21e72cf669a51bd30947a5690685ea96c4b3e39dcd",
+    "evento_v1.01.xsd": "dd14062174d439a67a11266d82e822cb9021db1595a41bd876a16560a38f6aec",
+    "NFSe_v1.01.xsd": "1dd8f543060a4ba6f355693f1fa5d79a269acae7c3dfe42d621f62911cfebac0",
+    "pedRegEvento_v1.01.xsd": "186c83f33752a195845300af61ffbe7136547f84cab032b35238c78f9d78f7c6",
+    "tiposCnc_v1.00.xsd": "c1cc33f1007251075b1fff7766bf881bba6a8ad7f1f36d149e54ae98090c77f8",
+    "tiposComplexos_v1.01.xsd": "6f792f408a33c11e799042a8d61cac7d1c9f5992c53e07e60ce75a15f157d1ac",
+    "tiposEventos_v1.01.xsd": "6c9ae744b1cb886607c1138c32eeb76cd410b856ce7301197b95d48d63f7b40b",
+    "tiposSimples_v1.01.xsd": "3d8171c9b7c9a82ecb48eed9a96485f2077006e7d21db6cd182839dd34dbb5e4",
+    "xmldsig-core-schema.xsd": "bf43998b2df1fedd9ed7d6914f91ab4d34958e8730c3b500cbe0b21e60335f11"
+  }
+}

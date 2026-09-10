@@ -20,11 +20,14 @@ def inventariar_testes():
     verify = (ROOT/'scripts/verify.sh').read_text()
     inventario = []
     for p in caminhos():
+        if p.startswith('integrations/fiscal-municipal/tests/') and p.endswith('.cs'):
+            inventario.append({'arquivo': p, 'runner': 'bash scripts/testar-fiscal-municipal.sh', 'incluido_no_portao': 'scripts/testar-fiscal-municipal.sh' in verify})
+            continue
         if not re.search(r'\.(?:test|spec)\.(?:[cm]?[jt]sx?|sql)$', p):
             continue
         if p.startswith('scripts/') or (p.startswith('packages/db/test/') and p.endswith('.mjs')):
             runner = 'scripts/verify.sh'
-            incluido = p in verify
+            incluido = p in verify or (p == 'scripts/ponte-fiscal-real.test.mjs' and 'scripts/testar-fiscal-municipal.sh' in verify and p in (ROOT/'scripts/testar-fiscal-municipal.sh').read_text())
         else:
             package_dir = '/'.join(p.split('/')[:2])
             manifest = ROOT/package_dir/'package.json'
@@ -49,7 +52,9 @@ def inventariar_testes():
                 'scripts/ensaio-de-restauracao.sh', 'python3 output/prova_backup_cifrado.py',
                 'TZ=Asia/Tokyo pnpm --filter @barbearia/core test',
                 'node scripts/verificar-segredos.mjs --history', 'pnpm audit',
-                'python3 output/prova_instalacao_limpa.py', 'python3 output/prova_baileys_navegador.py',
+                'python3 output/prova_instalacao_limpa.py', 'python3 output/prova_baileys_revisao.py', 'python3 output/prova_meta_navegador.py',
+                'python3 output/prova_manual_navegador.py', 'python3 output/prova_consentimento_navegador.py',
+                'python3 output/prova_operacao_navegador.py', 'python3 output/prova_docker_compose.py',
                 'python3 output/prova_baileys_worker_navegador.py',
                 'python3 output/prova_stripe_navegador.py', 'python3 output/prova_fiscal_navegador.py',
                 'python3 output/prova_proxy_corrigido.py', 'python3 output/prova_log_fiscal_proxy.py',

@@ -85,7 +85,7 @@ export async function reservarDisparoPromocional(
       (
         SELECT count(*) FROM notification_send_intents i
          WHERE i.customer_id = ${params.customerId}::uuid
-           AND i.quota_date = ${diaLocal}::date
+           AND (i.quota_date = ${diaLocal}::date OR i.manual_pending)
            AND i.status IN ('sending', 'uncertain', 'sent')
       ) + (
         SELECT count(*) FROM notifications n

@@ -1,0 +1,12 @@
+.escolha { margin-block: 1.5rem; }
+.modos { display: grid; gap: .75rem; }
+.modo { display: flex; flex-direction: column; gap: .5rem; padding: 1rem; border: 1px solid var(--color-border); border-radius: .5rem; color: inherit; text-decoration: none; min-width: 0; }
+.modo[aria-current="page"] { border-color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); }
+.modo strong { font-size: 1.25rem; }
+.modo:hover { background: var(--color-surface-hover); }
+.modo:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.etiqueta { font-size: .875rem; font-weight: 600; }
+.destino { margin-block-start: auto; padding-block-start: .5rem; font-weight: 600; }
+.contexto { border-inline-start: 3px solid var(--color-border); padding-inline-start: 1rem; margin-block: 1rem; }
+.contexto p { margin-block: .5rem; }
+@media (min-width: 64rem) { .modos { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

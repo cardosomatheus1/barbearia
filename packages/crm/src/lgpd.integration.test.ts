@@ -259,6 +259,7 @@ describeIfDb('direitos do titular', () => {
       'whatsapp_inbound',
       'whatsapp_messages',
       'whatsapp_baileys_outbox',
+      'whatsapp_manual_queue',
       // A recusa de marcação online (bloco 60). É decisão sobre o titular,
       // tomada a partir do histórico dele: o fato sai, o score e o limiar não —
       // eles são internos por regra da SPEC §2.13.
@@ -280,6 +281,7 @@ describeIfDb('direitos do titular', () => {
        * O vínculo some na anonimização pela chave estrangeira `SET NULL`, que é
        * o que separa esta linha de uma cópia de dado pessoal.
        */
+      ['customer_marketing_requests', 'intenção não confirmada e token de uso único; aceite confirmado consta em customer_consents, intenção expira em 30 minutos'],
       ['automation_sends', 'registro de desempenho da casa; a mensagem entra por whatsapp_messages'],
       /**
        * O alvo de campanha, pela mesma razão do disparo de automação (bloco 57).

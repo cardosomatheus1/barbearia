@@ -149,8 +149,8 @@ export async function acaoSalvarProduto(form: FormData): Promise<void> {
   const tipo = texto(form, 'tipo');
   if (tipo !== 'resale' && tipo !== 'internal') return falhar('/admin/estoque', 'invalid_request');
 
-  const preco = Number(form.get('precoReais') ?? 0);
-  const custo = Number(form.get('custoReais') ?? 0);
+  const precoCents = tipo === 'resale' ? await centavos(form, 'precoReais', '/admin/estoque') : null;
+  const custoCents = await centavosOpcionais(form, 'custoReais', '/admin/estoque');
   const vence = texto(form, 'venceEm');
 
   const resultado = await salvarProdutoNaApi(
@@ -162,10 +162,10 @@ export async function acaoSalvarProduto(form: FormData): Promise<void> {
       barcode: texto(form, 'barcode') || null,
       categoria: texto(form, 'categoria') || null,
       fornecedor: texto(form, 'fornecedor') || null,
-      custoCents: Math.round(custo * 100),
+      custoCents,
       // O preço só existe na revenda; no uso interno vira nulo, e o domínio
       // ignora o que vier.
-      precoCents: tipo === 'resale' ? Math.round(preco * 100) : null,
+      precoCents,
       minimo: Number(form.get('minimo') ?? 0),
       unidade: texto(form, 'unidade') || 'un',
       venceEm: vence.length > 0 ? vence : null,
@@ -241,7 +241,7 @@ export async function acaoSalvarFicha(form: FormData): Promise<void> {
 export async function acaoSalvarPlano(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'id');
-  const preco = Number(form.get('precoReais') ?? 0);
+  const precoCents = await centavos(form, 'precoReais', '/admin/clube');
   const desconto = Number(form.get('descontoPercent') ?? 0);
 
   /**
@@ -283,7 +283,7 @@ export async function acaoSalvarPlano(form: FormData): Promise<void> {
     {
       nome: texto(form, 'nome'),
       descricao: texto(form, 'descricao') || null,
-      precoCents: Math.round(preco * 100),
+      precoCents,
       descontoEmProdutoBps: Math.round(desconto * 100),
       ativo: form.get('ativo') === 'on',
       janelaDeAgendamentoDias: Number(form.get('janelaDias') ?? 0),
@@ -640,4 +640,3 @@ export async function acaoTransferirPacote(form: FormData): Promise<void> {
   if (!resultado.ok) return falhar(rota, resultado);
   redirect(`${rota}&salvo=pacote-transferido`);
 }
-

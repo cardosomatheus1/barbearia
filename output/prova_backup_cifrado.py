@@ -5,14 +5,16 @@ no relatório; artefatos transitórios ficam em diretório privado e são removi
 """
 from pathlib import Path
 from urllib.parse import urlparse
-import base64, hashlib, json, os, subprocess, tempfile, time, uuid
+import base64, hashlib, json, os, re, subprocess, tempfile, time, uuid
 
 root = Path(__file__).resolve().parents[1]
 env = dict(os.environ)
 admin = env['ADMIN_DATABASE_URL']
 assert urlparse(admin).hostname in ['127.0.0.1', 'localhost']
 base = admin.rsplit('/', 1)[0]
-origem = base + '/barbearia_audit_medicao'
+origem_db = env.get('BACKUP_ENSAIO_DB', 'barbearia_audit_medicao')
+assert re.fullmatch(r'barbearia_audit_medicao(?:_v[0-9]+)?', origem_db)
+origem = base + '/' + origem_db
 db = 'barbearia_restore_gcm_' + uuid.uuid4().hex[:10]
 destino = base + '/' + db
 env['BACKUP_ENCRYPTION_KEY'] = base64.b64encode(os.urandom(32)).decode()

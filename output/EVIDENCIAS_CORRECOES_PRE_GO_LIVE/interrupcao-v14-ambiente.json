@@ -1,0 +1,10 @@
+{
+  "resultado": "interrompida",
+  "regressao_exit_code": 143,
+  "postgres_shutdown_utc": "2026-09-10T20:32:14Z",
+  "origem": "SIGTERM recebido pelo processo do banco; sem erro de produto identificado nessa rodada",
+  "vitest_aprovados_parcial": 1844,
+  "dotnet_aprovados_parcial": 34,
+  "certifica_fonte_final": false,
+  "retomada": "PostgreSQL via pg_ctl, independente do comando que o inicia"
+}

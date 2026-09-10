@@ -1,0 +1,612 @@
+
+> @barbearia/db@0.1.0 test /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/packages/db
+> ./scripts/test.sh
+
+psql:migrations/0078_isolamento.sql:83: NOTICE:  policy "staff_directory_isolation" for relation "staff_directory" does not exist, skipping
+psql:migrations/0078_isolamento.sql:84: NOTICE:  policy "staff_directory_acesso" for relation "staff_directory" does not exist, skipping
+psql:migrations/0104_whatsapp_avulso_idempotente.sql:35: NOTICE:  policy "tenant_isolation" for relation "whatsapp_manual_send_intents" does not exist, skipping
+psql:migrations/0106_notificacao_automatica_idempotente.sql:20: NOTICE:  policy "tenant_isolation" for relation "notification_send_intents" does not exist, skipping
+psql:migrations/0108_auditoria_profunda.sql:184: NOTICE:  policy "subscription_change_intents_leitura" for relation "subscription_change_intents" does not exist, skipping
+psql:migrations/0108_auditoria_profunda.sql:190: NOTICE:  policy "subscription_change_intents_escrita" for relation "subscription_change_intents" does not exist, skipping
+psql:migrations/0110_scheduling_concorrencia_recursos.sql:29: NOTICE:  policy "tenant_isolation" for relation "slot_hold_resources" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:52: NOTICE:  policy "whatsapp_waba_owners_leitura" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:53: NOTICE:  policy "whatsapp_waba_owners_insercao" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:54: NOTICE:  policy "whatsapp_waba_owners_alteracao" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:55: NOTICE:  policy "whatsapp_waba_owners_remocao" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:79: NOTICE:  policy "whatsapp_wabas_leitura" for relation "whatsapp_wabas" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:80: NOTICE:  policy "whatsapp_wabas_insercao" for relation "whatsapp_wabas" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:81: NOTICE:  policy "whatsapp_wabas_alteracao" for relation "whatsapp_wabas" does not exist, skipping
+psql:migrations/0113_crm_whatsapp_concorrencia.sql:82: NOTICE:  policy "whatsapp_wabas_remocao" for relation "whatsapp_wabas" does not exist, skipping
+==> invariantes do schema
+psql:test/0001_scheduling.test.sql:81: NOTICE:  OK 1 — sobreposição no mesmo profissional rejeitada pelo banco
+psql:test/0001_scheduling.test.sql:101: NOTICE:  OK 2 — encaixe justo aceito (tstzrange semiaberto)
+psql:test/0001_scheduling.test.sql:119: NOTICE:  OK 3 — mesmo horário em outro profissional aceito
+psql:test/0001_scheduling.test.sql:141: NOTICE:  OK 4 — vaga liberada por cancelamento pode ser reocupada
+psql:test/0001_scheduling.test.sql:151: NOTICE:  OK 5 — reativar cancelado sobre horário já ocupado é rejeitado
+psql:test/0001_scheduling.test.sql:185: NOTICE:  OK 6 — duplo toque com a mesma Idempotency-Key rejeitado
+psql:test/0001_scheduling.test.sql:198: NOTICE:  OK 7 — serviço com duração zero rejeitado (validador V10)
+psql:test/0001_scheduling.test.sql:216: NOTICE:  OK 8 — janela de serviço precisa caber dentro da ocupada
+psql:test/0001_scheduling.test.sql:225: NOTICE:  OK 9 — telefone precisa estar em E.164 (base da deduplicação)
+psql:test/0001_scheduling.test.sql:241: NOTICE:  OK 10 — slug legado resolve, sem diferenciar maiúsculas
+psql:test/0001_scheduling.test.sql:266: NOTICE:  OK 11 — sem tenant no contexto, nada é visível
+psql:test/0001_scheduling.test.sql:289: NOTICE:  OK 12 — tenant enxerga 5 agendamentos e zero dados do rival
+psql:test/0001_scheduling.test.sql:300: NOTICE:  OK 13 — WITH CHECK impede gravar em nome de outro tenant
+psql:test/0001_scheduling.test.sql:313: NOTICE:  OK 14 — slug resolve sem tenant (a API precisa disso antes de ter um)
+psql:test/0001_scheduling.test.sql:322: NOTICE:  OK 15 — leitura de slug é pública, escrita não
+psql:test/0001_scheduling.test.sql:331: NOTICE:  OK 16 — não se cria slug apontando para outro tenant
+psql:test/0001_scheduling.test.sql:335: NOTICE:  --- todos os invariantes passaram ---
+psql:test/0017_fila.test.sql:48: NOTICE:  OK 1 — duplo toque na recepção não põe a mesma pessoa duas vezes na fila
+psql:test/0017_fila.test.sql:71: NOTICE:  OK 2 — quem saiu da fila pode entrar de novo mais tarde
+psql:test/0017_fila.test.sql:85: NOTICE:  OK 3 — token do link de acompanhamento é único
+psql:test/0017_fila.test.sql:96: NOTICE:  OK 4 — só o hash do token é guardado
+psql:test/0017_fila.test.sql:108: NOTICE:  OK 5 — estado terminal exige hora de término
+psql:test/0017_fila.test.sql:117: NOTICE:  OK 6 — em atendimento exige o agendamento que nasceu dali
+psql:test/0017_fila.test.sql:126: NOTICE:  OK 7 — ninguém é chamado antes de entrar na fila
+psql:test/0017_fila.test.sql:144: NOTICE:  OK 8 — a fila de uma barbearia não aparece para a outra
+psql:test/0017_fila.test.sql:155: NOTICE:  OK 9 — não se põe ninguém na fila de outra barbearia
+psql:test/0017_fila.test.sql:167: NOTICE:  OK 10 — o rival não tira ninguém da fila da casa
+psql:test/0017_fila.test.sql:178: NOTICE:  OK 11 — sem tenant no contexto a fila não existe
+psql:test/0017_fila.test.sql:184: NOTICE:  --- invariantes da fila passaram ---
+psql:test/0018_comanda_caixa.test.sql:48: NOTICE:  OK 1 — só um caixa aberto por unidade; a venda sempre tem gaveta definida
+psql:test/0018_comanda_caixa.test.sql:57: NOTICE:  OK 2 — fechar exige o contado, o esperado e a divergência
+psql:test/0018_comanda_caixa.test.sql:67: NOTICE:  OK 3 — sangria sai, suprimento entra; o sinal não é livre
+psql:test/0018_comanda_caixa.test.sql:81: NOTICE:  OK 4 — preço de item nunca é negativo; desconto tem campo próprio
+psql:test/0018_comanda_caixa.test.sql:91: NOTICE:  OK 5 — quantidade de item é pelo menos 1
+psql:test/0018_comanda_caixa.test.sql:100: NOTICE:  OK 6 — desconto nunca passa do subtotal
+psql:test/0018_comanda_caixa.test.sql:108: NOTICE:  OK 7 — comanda paga tem hora; sem ela não há faturamento por período
+psql:test/0018_comanda_caixa.test.sql:118: NOTICE:  OK 8 — pagamento tem valor positivo
+psql:test/0018_comanda_caixa.test.sql:141: NOTICE:  OK 9 — uma comanda aberta por agendamento; duas seriam cobrança dobrada
+psql:test/0018_comanda_caixa.test.sql:154: NOTICE:  OK 10 — limite de fiado nunca é negativo
+psql:test/0018_comanda_caixa.test.sql:167: NOTICE:  OK 11 — cliente novo não fia por padrão; fiar é decisão, não default
+psql:test/0018_comanda_caixa.test.sql:187: NOTICE:  OK 12 — extrato é append-only; prova que se reescreve não prova nada
+psql:test/0018_comanda_caixa.test.sql:196: NOTICE:  OK 13 — extrato não se apaga
+psql:test/0018_comanda_caixa.test.sql:222: NOTICE:  OK 14 — comanda, caixa e extrato de uma barbearia não existem para a outra
+psql:test/0018_comanda_caixa.test.sql:232: NOTICE:  OK 15 — não se abre comanda na barbearia do vizinho
+psql:test/0018_comanda_caixa.test.sql:244: NOTICE:  OK 16 — o rival não mexe no limite de fiado da casa
+psql:test/0018_comanda_caixa.test.sql:250: NOTICE:  --- invariantes da comanda e do caixa passaram ---
+psql:test/0019_comissao.test.sql:55: NOTICE:  OK 1 — alíquota acima de 100% é recusada
+psql:test/0019_comissao.test.sql:64: NOTICE:  OK 2 — modo por faixas exige pelo menos uma faixa
+psql:test/0019_comissao.test.sql:78: NOTICE:  OK 3 — nulo é valor de negócio: duas regras gerais não convivem
+psql:test/0019_comissao.test.sql:83: NOTICE:  OK 4 — regra por serviço convive com a geral
+psql:test/0019_comissao.test.sql:107: NOTICE:  OK 5 — um lançamento positivo por item vendido
+psql:test/0019_comissao.test.sql:114: NOTICE:  OK 6 — estorno é lançamento novo, com sinal negativo
+psql:test/0019_comissao.test.sql:125: NOTICE:  OK 7 — um estorno por item
+psql:test/0019_comissao.test.sql:136: NOTICE:  OK 8 — sinal é 1 ou -1, nunca zero
+psql:test/0019_comissao.test.sql:147: NOTICE:  OK 9 — base negativa não existe; o que inverte é o sinal
+psql:test/0019_comissao.test.sql:164: NOTICE:  OK 10 — dois fechamentos do mesmo período pagariam o mês duas vezes
+psql:test/0019_comissao.test.sql:173: NOTICE:  OK 11 — período com fim antes do início é recusado
+psql:test/0019_comissao.test.sql:189: NOTICE:  OK 12 — uma linha por profissional em cada fechamento
+psql:test/0019_comissao.test.sql:195: NOTICE:  OK 13 — o fechamento carimba o lançamento
+psql:test/0019_comissao.test.sql:205: NOTICE:  OK 14 — lançamento fechado não muda mais
+psql:test/0019_comissao.test.sql:215: NOTICE:  OK 15 — nem descarimbar é permitido
+psql:test/0019_comissao.test.sql:232: NOTICE:  OK 16 — lançamento de comissão de uma barbearia não existe para a outra
+psql:test/0019_comissao.test.sql:242: NOTICE:  OK 17 — regra de comissão também não atravessa
+psql:test/0019_comissao.test.sql:255: NOTICE:  OK 18 — WITH CHECK impede gravar no tenant do vizinho
+psql:test/0019_comissao.test.sql:263: NOTICE:  OK 19 — a aplicação não apaga lançamento: estorno é linha nova
+psql:test/0019_comissao.test.sql:267: NOTICE:  --- invariantes da comissão passaram ---
+psql:test/0020_fila_de_trabalho.test.sql:40: NOTICE:  OK 1 — chave de idempotência impede a tarefa duplicada
+psql:test/0020_fila_de_trabalho.test.sql:45: NOTICE:  OK 2 — tarefa sem chave pode repetir; varredura não é evento
+psql:test/0020_fila_de_trabalho.test.sql:53: NOTICE:  OK 3 — tarefa sem tipo é recusada; ninguém saberia o que executar
+psql:test/0020_fila_de_trabalho.test.sql:61: NOTICE:  OK 4 — teto de tentativas entre 1 e 20; zero nunca executaria
+psql:test/0020_fila_de_trabalho.test.sql:72: NOTICE:  OK 5 — toda tarefa tem tenant; sem ele nada de negócio é legível
+psql:test/0020_fila_de_trabalho.test.sql:89: NOTICE:  OK 6 — FOR UPDATE SKIP LOCKED toma a próxima tarefa pronta
+psql:test/0020_fila_de_trabalho.test.sql:103: NOTICE:  OK 7 — run_after no futuro não é tarefa pronta
+psql:test/0020_fila_de_trabalho.test.sql:122: NOTICE:  OK 8 — o registro guarda o telefone mascarado, não o número
+psql:test/0020_fila_de_trabalho.test.sql:137: NOTICE:  OK 9 — consentimento de marketing é opt-in; o padrão é não
+psql:test/0020_fila_de_trabalho.test.sql:148: NOTICE:  OK 10 — a unidade nasce com prazo de retorno, e a mensagem desligada
+psql:test/0020_fila_de_trabalho.test.sql:157: NOTICE:  OK 11 — prazo de retorno entre 7 e 365 dias; dois dias é perseguição
+psql:test/0020_fila_de_trabalho.test.sql:174: NOTICE:  OK 12 — envio de uma barbearia não existe para a outra
+psql:test/0020_fila_de_trabalho.test.sql:182: NOTICE:  OK 13 — registro de envio é append-only: "foi avisado?" não se reescreve
+psql:test/0020_fila_de_trabalho.test.sql:190: NOTICE:  OK 14 — nem apagar
+psql:test/0020_fila_de_trabalho.test.sql:203: NOTICE:  OK 15 — a fila é infraestrutura e é legível sem tenant no contexto
+psql:test/0020_fila_de_trabalho.test.sql:207: NOTICE:  --- invariantes da fila de trabalho passaram ---
+psql:test/0021_ficha_do_cliente.test.sql:51: NOTICE:  OK 1 — uma ficha por cliente; preferência é estado, não histórico
+psql:test/0021_ficha_do_cliente.test.sql:60: NOTICE:  OK 2 — "conversa" tem vocabulário fechado; três sinônimos leem como três coisas
+psql:test/0021_ficha_do_cliente.test.sql:76: NOTICE:  OK 3 — sem ninguém dizer, a preferência de conversa é "indiferente"
+psql:test/0021_ficha_do_cliente.test.sql:85: NOTICE:  OK 4 — anotação tem teto; sem ele a ficha vira rolagem antes do que importa
+psql:test/0021_ficha_do_cliente.test.sql:105: NOTICE:  OK 5 — uma cadeira, uma conta
+psql:test/0021_ficha_do_cliente.test.sql:114: NOTICE:  OK 6 — conta sem cadeira pode repetir; o índice ignora nulo
+psql:test/0021_ficha_do_cliente.test.sql:125: NOTICE:  OK 7 — apagar a cadeira solta a conta, não a destrói
+psql:test/0021_ficha_do_cliente.test.sql:142: NOTICE:  OK 8 — a anotação sobre um cliente não existe para a outra barbearia
+psql:test/0021_ficha_do_cliente.test.sql:157: NOTICE:  OK 9 — WITH CHECK recusa a escrita com tenant alheio
+psql:test/0021_ficha_do_cliente.test.sql:161: NOTICE:  --- invariantes da ficha do cliente passaram ---
+psql:test/0022_metas.test.sql:37: NOTICE:  OK 1 — uma meta por profissional e por mês
+psql:test/0022_metas.test.sql:49: NOTICE:  OK 2 — o mês da meta é sempre o dia 1; o resto é o mesmo mês duas vezes
+psql:test/0022_metas.test.sql:59: NOTICE:  OK 3 — meta zero é "sem meta", e sem meta é não ter linha
+psql:test/0022_metas.test.sql:72: NOTICE:  OK 4 — meses convivem; "bateu em 4 dos últimos 6" é uma frase, "a meta é X" não é
+psql:test/0022_metas.test.sql:83: NOTICE:  OK 5 — apagar a cadeira apaga as metas dela
+psql:test/0022_metas.test.sql:106: NOTICE:  OK 6 — quanto o barbeiro da casa precisa faturar não é da conta da rival
+psql:test/0022_metas.test.sql:120: NOTICE:  OK 7 — WITH CHECK recusa a escrita com tenant alheio
+psql:test/0022_metas.test.sql:124: NOTICE:  --- invariantes da meta do profissional passaram ---
+psql:test/0023_tolerancia_do_combo.test.sql:30: NOTICE:  OK 1 — tolerância padrão é zero; combo esquecido aparece no validador
+psql:test/0023_tolerancia_do_combo.test.sql:39: NOTICE:  OK 2 — teto de 60 min; acima disso é jeito de calar o validador
+psql:test/0023_tolerancia_do_combo.test.sql:48: NOTICE:  OK 3 — tolerância negativa não é nada; a regra já cobre o combo curto
+psql:test/0023_tolerancia_do_combo.test.sql:55: NOTICE:  OK 4 — a casa declara quanto ganha fazendo os dois na sequência
+psql:test/0024_trilha_por_acao.test.sql:22: NOTICE:  OK 1 — audit_log tem índice por (tenant_id, action, id DESC)
+psql:test/0024_trilha_por_acao.test.sql:62: NOTICE:  OK 2 — o filtro por ação separa gestão de dinheiro, e o tenant separa as casas
+psql:test/0024_trilha_por_acao.test.sql:78: NOTICE:  OK 3 — nenhuma ação do lado de gestão carrega valor em centavos
+psql:test/0025_importacao_de_base.test.sql:32: NOTICE:  OK 1 — reimportar o mesmo arquivo é recusado pelo banco
+psql:test/0025_importacao_de_base.test.sql:40: NOTICE:  OK 2 — duas barbearias importam o mesmo arquivo sem colidir
+psql:test/0025_importacao_de_base.test.sql:52: NOTICE:  OK 3 — não dá para marcar aplicada sem dizer quando
+psql:test/0025_importacao_de_base.test.sql:63: NOTICE:  OK 4 — não dá para desfazer o que nunca foi aplicado
+psql:test/0025_importacao_de_base.test.sql:76: NOTICE:  OK 5 — depois de desfeita, o mesmo arquivo pode ser importado de novo
+psql:test/0025_importacao_de_base.test.sql:88: NOTICE:  OK 6 — file_sha256 tem que ser um sha256 de verdade
+psql:test/0025_importacao_de_base.test.sql:110: NOTICE:  OK 7 — cliente sobrevive ao sumiço do registro da importação
+psql:test/0025_importacao_de_base.test.sql:123: NOTICE:  OK 8 — data de nascimento anterior a 1900 é recusada
+psql:test/0025_importacao_de_base.test.sql:139: NOTICE:  OK 9 — importação aplicada não guarda mais a cópia do arquivo
+psql:test/0025_importacao_de_base.test.sql:155: NOTICE:  OK 10 — RLS separa a importação de cada barbearia
+psql:test/0026_plataforma.test.sql:42: NOTICE:  OK 1 — toda barbearia nova entra no espelho sem a aplicação pedir
+psql:test/0026_plataforma.test.sql:54: NOTICE:  OK 2 — renomear acerta o espelho
+psql:test/0026_plataforma.test.sql:68: NOTICE:  OK 3 — bloqueio sem motivo escrito é recusado
+psql:test/0026_plataforma.test.sql:80: NOTICE:  OK 4 — motivo sem bloqueio é recusado
+psql:test/0026_plataforma.test.sql:101: NOTICE:  OK 6 — plano com barbearia dentro não some (ON DELETE RESTRICT)
+psql:test/0026_plataforma.test.sql:123: NOTICE:  OK 7 — a trilha da plataforma sobrevive à barbearia apagada
+psql:test/0026_plataforma.test.sql:153: NOTICE:  OK 8 — a camada de plataforma não alargou nenhuma tabela de negócio
+psql:test/0026_plataforma.test.sql:169: NOTICE:  OK 9 — as tabelas de plataforma são de leitura ampla, de propósito
+psql:test/0026_plataforma.test.sql:182: NOTICE:  OK 10 — a trilha da plataforma não é reescrita
+psql:test/0026_plataforma.test.sql:192: NOTICE:  OK 10b — a trilha da plataforma não é apagada
+psql:test/0027_metricas_da_plataforma.test.sql:35: NOTICE:  OK 1 — toda barbearia nova entra no ciclo de vida pelo banco
+psql:test/0027_metricas_da_plataforma.test.sql:57: NOTICE:  OK 2 — o ciclo de vida sobrevive à barbearia apagada
+psql:test/0027_metricas_da_plataforma.test.sql:71: NOTICE:  OK 3 — contagem negativa é recusada pelo banco
+psql:test/0027_metricas_da_plataforma.test.sql:97: NOTICE:  OK 4 — reapurar o mesmo dia substitui o número, não soma outro
+psql:test/0027_metricas_da_plataforma.test.sql:118: NOTICE:  OK 5 — o agregado global só guarda número, data e o id da barbearia
+psql:test/0027_metricas_da_plataforma.test.sql:136: NOTICE:  OK 6 — nada por profissional nem por cliente atravessa para a plataforma
+psql:test/0027_metricas_da_plataforma.test.sql:156: NOTICE:  OK 7 — a camada de métricas não alargou nenhuma tabela de negócio
+psql:test/0027_metricas_da_plataforma.test.sql:175: NOTICE:  OK 7b — o agregado de uma barbearia não é escrito por outra
+psql:test/0027_metricas_da_plataforma.test.sql:188: NOTICE:  OK 7c — e a própria continua escrevendo a sua
+psql:test/0027_metricas_da_plataforma.test.sql:201: NOTICE:  OK 8 — o ciclo de vida não é reescrito
+psql:test/0027_metricas_da_plataforma.test.sql:211: NOTICE:  OK 8b — o ciclo de vida não é apagado
+psql:test/0028_flags_e_impersonacao.test.sql:47: NOTICE:  OK 1 — o plano padrão liga os três recursos que ele inclui
+psql:test/0028_flags_e_impersonacao.test.sql:70: NOTICE:  OK 1b — o Starter não inclui os três, e por isso eles ficam desligados
+psql:test/0028_flags_e_impersonacao.test.sql:105: NOTICE:  OK 2 — a exceção de uma barbearia não vale para a outra, no mesmo plano
+psql:test/0028_flags_e_impersonacao.test.sql:122: NOTICE:  OK 3 — recurso fora do catálogo é recusado pelo banco
+psql:test/0028_flags_e_impersonacao.test.sql:144: NOTICE:  OK 3b — recurso é decidido pela plataforma, não pela barbearia
+psql:test/0028_flags_e_impersonacao.test.sql:159: NOTICE:  OK 4 — suporte sem motivo escrito é recusado
+psql:test/0028_flags_e_impersonacao.test.sql:184: NOTICE:  OK 5 — o registro do suporte sobrevive à barbearia apagada
+psql:test/0028_flags_e_impersonacao.test.sql:197: NOTICE:  OK 5b — e sobrevive à conta do Super Admin apagada
+psql:test/0028_flags_e_impersonacao.test.sql:212: NOTICE:  OK 6 — o registro do suporte não é apagado pela aplicação
+psql:test/0028_flags_e_impersonacao.test.sql:231: NOTICE:  OK 7 — a marca de suporte vive na sessão, que toda rota já lê
+psql:test/0029_assinatura.test.sql:40: NOTICE:  OK 1 — barbearia nova nasce em teste no plano padrão, pelo banco
+psql:test/0029_assinatura.test.sql:56: NOTICE:  OK 2 — só um plano pode ser o padrão
+psql:test/0029_assinatura.test.sql:75: NOTICE:  OK 3 — reajustar o catálogo não muda quem já contratou
+psql:test/0029_assinatura.test.sql:90: NOTICE:  OK 4 — plano com assinatura dentro não some
+psql:test/0029_assinatura.test.sql:110: NOTICE:  OK 5 — a cadeira que passa do teto do plano é recusada
+psql:test/0029_assinatura.test.sql:127: NOTICE:  OK 6 — balcão e recurso entram sem ocupar vaga do plano
+psql:test/0029_assinatura.test.sql:152: NOTICE:  OK 7 — religar quem estava desligado também passa pelo teto
+psql:test/0029_assinatura.test.sql:173: NOTICE:  OK 8 — subir de plano libera a cadeira na requisição seguinte
+psql:test/0029_assinatura.test.sql:189: NOTICE:  OK 9 — `max_chairs` nulo é ilimitado, e não zero
+psql:test/0029_assinatura.test.sql:212: NOTICE:  OK 9b — a contagem guardada acompanha o cadastro (36 cadeiras)
+psql:test/0029_assinatura.test.sql:231: NOTICE:  OK 9c — desligar uma cadeira baixa a contagem
+psql:test/0029_assinatura.test.sql:270: NOTICE:  OK 10 — a barbearia lê a assinatura e não escreve nela
+psql:test/0029_assinatura.test.sql:287: NOTICE:  OK 11 — a barbearia não cria assinatura
+psql:test/0029_assinatura.test.sql:333: NOTICE:  OK 12 — temporária não sequestra o contador de cadeiras
+psql:test/0029_assinatura.test.sql:358: NOTICE:  OK 12b — temporária não apaga o teto de cadeiras
+psql:test/0029_assinatura.test.sql:376: NOTICE:  OK 12c — a função do gatilho não é chamável pela aplicação
+psql:test/0030_cobranca.test.sql:40: NOTICE:  OK 1 — uma mensalidade por período
+psql:test/0030_cobranca.test.sql:58: NOTICE:  OK 2 — dois acertos de rateio cabem no mesmo período
+psql:test/0030_cobranca.test.sql:83: NOTICE:  OK 3 — fatura paga sem data é recusada
+psql:test/0030_cobranca.test.sql:83: NOTICE:  OK 3b — data de pagamento sem baixa é recusada
+psql:test/0030_cobranca.test.sql:100: NOTICE:  OK 4 — cancelamento de fatura exige motivo
+psql:test/0030_cobranca.test.sql:118: NOTICE:  OK 5 — vencimento anterior ao período é recusado
+psql:test/0030_cobranca.test.sql:132: NOTICE:  OK 6 — crédito da assinatura não fica negativo
+psql:test/0030_cobranca.test.sql:148: NOTICE:  OK 7 — plano com fatura dentro não é apagado
+psql:test/0030_cobranca.test.sql:173: NOTICE:  OK 8 — o extrato de uma barbearia não é lido pela outra
+psql:test/0030_cobranca.test.sql:196: NOTICE:  OK 9 — a barbearia lê a fatura e não se dá baixa
+psql:test/0030_cobranca.test.sql:211: NOTICE:  OK 10 — a barbearia não emite fatura
+psql:test/0031_psp.test.sql:47: NOTICE:  OK 1 — não há onde guardar número de cartão
+psql:test/0031_psp.test.sql:61: NOTICE:  OK 2 — só quatro dígitos entram em last4
+psql:test/0031_psp.test.sql:84: NOTICE:  OK 3 — entrega duplicada não vira segundo evento
+psql:test/0031_psp.test.sql:102: NOTICE:  OK 4 — uma cobrança pertence a uma fatura só
+psql:test/0031_psp.test.sql:124: NOTICE:  OK 5 — estorno sem motivo é recusado
+psql:test/0031_psp.test.sql:124: NOTICE:  OK 5b — estorno de valor não positivo é recusado
+psql:test/0031_psp.test.sql:142: NOTICE:  OK 6 — estorno confirmado sem data é recusado
+psql:test/0031_psp.test.sql:172: NOTICE:  OK 7 — a aplicação grava o desfecho do estorno
+psql:test/0031_psp.test.sql:172: NOTICE:  OK 7b — e não reescreve o valor
+psql:test/0031_psp.test.sql:172: NOTICE:  OK 7c — nem apaga
+psql:test/0031_psp.test.sql:192: NOTICE:  OK 8 — cartão e estorno são lidos só por quem é dono
+psql:test/0031_psp.test.sql:215: NOTICE:  OK 9 — a barbearia lê o cartão e não o troca
+psql:test/0031_psp.test.sql:231: NOTICE:  OK 10 — o evento do adquirente não é lido pela barbearia
+psql:test/0032_rbac_editavel.test.sql:27: NOTICE:  OK 1 — `finance.discount` e `customers.edit_notes` entram
+psql:test/0032_rbac_editavel.test.sql:44: NOTICE:  OK 2 — permissão fora do catálogo é recusada pelo banco
+psql:test/0032_rbac_editavel.test.sql:73: NOTICE:  OK 3 — o teto de desconto fica entre 0 e 10000 pontos-base
+psql:test/0032_rbac_editavel.test.sql:73: NOTICE:  OK 3b — nem teto negativo
+psql:test/0032_rbac_editavel.test.sql:103: NOTICE:  OK 4 — permissão de papel é por barbearia, e apagar não vaza
+psql:test/0033_lgpd_consentimento.test.sql:43: NOTICE:  OK 1 — consentir e revogar convivem no histórico
+psql:test/0033_lgpd_consentimento.test.sql:61: NOTICE:  OK 2 — o espelho segue a decisão mais recente
+psql:test/0033_lgpd_consentimento.test.sql:83: NOTICE:  OK 3 — decisão fora de ordem não move o espelho
+psql:test/0033_lgpd_consentimento.test.sql:104: NOTICE:  OK 4 — consentimento de foto não liga campanha
+psql:test/0033_lgpd_consentimento.test.sql:131: NOTICE:  OK 5 — consentimento não é reescrito
+psql:test/0033_lgpd_consentimento.test.sql:131: NOTICE:  OK 5b — nem apagado
+psql:test/0033_lgpd_consentimento.test.sql:157: NOTICE:  OK 6 — recusa de pedido exige motivo
+psql:test/0033_lgpd_consentimento.test.sql:157: NOTICE:  OK 6b — pedido encerrado sem data é recusado
+psql:test/0033_lgpd_consentimento.test.sql:190: NOTICE:  OK 6c — um pedido aberto por pessoa e por tipo
+psql:test/0033_lgpd_consentimento.test.sql:190: NOTICE:  OK 6d — pedido novo depois de atendido é aceito
+psql:test/0033_lgpd_consentimento.test.sql:222: NOTICE:  OK 7 — consentimento é da barbearia que o coletou
+psql:test/0033_lgpd_consentimento.test.sql:238: NOTICE:  OK 8 — o e-mail do encarregado é conferido
+psql:test/0034_lgpd_retencao.test.sql:81: NOTICE:  OK 1 — extrato continua fora do alcance da aplicação
+psql:test/0034_lgpd_retencao.test.sql:81: NOTICE:  OK 1b — consentimento também
+psql:test/0034_lgpd_retencao.test.sql:101: NOTICE:  OK 2 — sem tenant, a função recusa
+psql:test/0034_lgpd_retencao.test.sql:117: NOTICE:  OK 3 — anonimizar exige motivo escrito
+psql:test/0034_lgpd_retencao.test.sql:142: NOTICE:  OK 4 — a função não atravessa a fronteira do tenant
+psql:test/0034_lgpd_retencao.test.sql:159: NOTICE:  OK 5 — anonimização executada
+psql:test/0034_lgpd_retencao.test.sql:191: NOTICE:  OK 5b — nome, telefone, nascimento e IP saíram; o saldo ficou
+psql:test/0034_lgpd_retencao.test.sql:228: NOTICE:  OK 5d — ficha, notas, IP e sessão saíram; os centavos ficaram
+psql:test/0034_lgpd_retencao.test.sql:293: NOTICE:  OK 5e — nenhuma coluna de customers sobreviveu fora da lista
+psql:test/0034_lgpd_retencao.test.sql:309: NOTICE:  OK 6 — a segunda vez é silenciosa e devolve falso
+psql:test/0034_lgpd_retencao.test.sql:329: NOTICE:  OK 7 — cadastro vivo precisa de telefone
+psql:test/0034_lgpd_retencao.test.sql:340: NOTICE:  OK 8 — anonimizar_cliente não está aberta a PUBLIC
+psql:test/0035_seguranca.test.sql:38: NOTICE:  OK 1 — a escada guarda HMAC, contador e data, e mais nada
+psql:test/0035_seguranca.test.sql:55: NOTICE:  OK 2 — contador de falhas não fica negativo
+psql:test/0035_seguranca.test.sql:89: NOTICE:  OK 2b — uma escada por conta e origem
+psql:test/0035_seguranca.test.sql:89: NOTICE:  OK 2c — sem IP conhecido, uma escada só
+psql:test/0035_seguranca.test.sql:108: NOTICE:  OK 3 — conta de plataforma nasce viewer
+psql:test/0035_seguranca.test.sql:130: NOTICE:  OK 4 — o registro de aviso não é apagado pela aplicação
+psql:test/0035_seguranca.test.sql:149: NOTICE:  OK 5 — um aviso por regra por dia
+psql:test/0035_seguranca.test.sql:149: NOTICE:  OK 5b — o mesmo aviso volta amanhã
+psql:test/0035_seguranca.test.sql:176: NOTICE:  OK 6 — preferência e histórico de aviso são da barbearia
+psql:test/0036_cobranca_sem_id_vazio.test.sql:41: NOTICE:  OK 1 — id de cobrança vazio recusado
+psql:test/0036_cobranca_sem_id_vazio.test.sql:58: NOTICE:  OK 2 — id só com espaço recusado
+psql:test/0036_cobranca_sem_id_vazio.test.sql:80: NOTICE:  OK 3 — nulo continua sendo "ainda não amarrada"
+psql:test/0036_cobranca_sem_id_vazio.test.sql:101: NOTICE:  OK 4 — id de estorno vazio recusado
+psql:test/0037_cobranca_da_comanda.test.sql:50: NOTICE:  OK 1 — a cobrança guarda id opaco do provedor, e mais nada de cartão
+psql:test/0037_cobranca_da_comanda.test.sql:77: NOTICE:  OK 2 — uma cobrança viva por comanda
+psql:test/0037_cobranca_da_comanda.test.sql:96: NOTICE:  OK 3 — encerrada a primeira, a comanda aceita a segunda
+psql:test/0037_cobranca_da_comanda.test.sql:121: NOTICE:  OK 4 — paga exige id do provedor
+psql:test/0037_cobranca_da_comanda.test.sql:121: NOTICE:  OK 4b — paga exige hora
+psql:test/0037_cobranca_da_comanda.test.sql:142: NOTICE:  OK 5 — só pix, cartão e link são emissíveis
+psql:test/0037_cobranca_da_comanda.test.sql:174: NOTICE:  OK 6 — cada barbearia enxerga só as próprias cobranças
+psql:test/0037_cobranca_da_comanda.test.sql:192: NOTICE:  OK 7 — o evento do adquirente é da barbearia dele
+psql:test/0037_cobranca_da_comanda.test.sql:210: NOTICE:  OK 8 — a aplicação não apaga cobrança
+psql:test/0037_cobranca_da_comanda.test.sql:220: NOTICE:  OK 8b — a aplicação não apaga evento
+psql:test/0038_taxa_do_adquirente.test.sql:39: NOTICE:  OK 1 — a taxa nasce absorvida, como o produto sempre fez
+psql:test/0038_taxa_do_adquirente.test.sql:65: NOTICE:  OK 2 — alíquota acima de 30% recusada
+psql:test/0038_taxa_do_adquirente.test.sql:65: NOTICE:  OK 2b — alíquota negativa recusada
+psql:test/0038_taxa_do_adquirente.test.sql:85: NOTICE:  OK 3 — uma alíquota por meio de pagamento
+psql:test/0038_taxa_do_adquirente.test.sql:106: NOTICE:  OK 4 — taxa negativa recusada na venda
+psql:test/0038_taxa_do_adquirente.test.sql:124: NOTICE:  OK 5 — nulo continua sendo "não sabemos"
+psql:test/0038_taxa_do_adquirente.test.sql:148: NOTICE:  OK 6 — cada barbearia enxerga só a própria alíquota
+psql:test/0038_taxa_do_adquirente.test.sql:165: NOTICE:  OK 7 — não se escreve alíquota na conta alheia
+psql:test/0039_sinal_seletivo.test.sql:49: NOTICE:  OK 1 — o padrão é não cobrar sinal
+psql:test/0039_sinal_seletivo.test.sql:74: NOTICE:  OK 2a — fixo sem valor recusado
+psql:test/0039_sinal_seletivo.test.sql:74: NOTICE:  OK 2b — percentual sem alíquota recusado
+psql:test/0039_sinal_seletivo.test.sql:102: NOTICE:  OK 3a — percentual acima de 100% recusado
+psql:test/0039_sinal_seletivo.test.sql:102: NOTICE:  OK 3b — limiar fora da escala recusado
+psql:test/0039_sinal_seletivo.test.sql:139: NOTICE:  OK 4a — carimbo recusado em agendamento não cancelado
+psql:test/0039_sinal_seletivo.test.sql:139: NOTICE:  OK 4b — cancelado com carimbo aceito
+psql:test/0039_sinal_seletivo.test.sql:186: NOTICE:  OK 4c — sinal sem motivo recusado
+psql:test/0039_sinal_seletivo.test.sql:186: NOTICE:  OK 4d — motivo sem sinal recusado
+psql:test/0039_sinal_seletivo.test.sql:186: NOTICE:  OK 4e — motivo desconhecido recusado
+psql:test/0039_sinal_seletivo.test.sql:186: NOTICE:  OK 4f — sinal com motivo conhecido aceito
+psql:test/0039_sinal_seletivo.test.sql:235: NOTICE:  OK 5a — override sem motivo recusado
+psql:test/0039_sinal_seletivo.test.sql:235: NOTICE:  OK 5b — motivo curto demais recusado
+psql:test/0039_sinal_seletivo.test.sql:235: NOTICE:  OK 5c — override fora da escala recusado
+psql:test/0039_sinal_seletivo.test.sql:235: NOTICE:  OK 5d — override com motivo escrito aceito
+psql:test/0039_sinal_seletivo.test.sql:254: NOTICE:  OK 6 — índice do histórico presente
+psql:test/0041_lista_de_espera.test.sql:105: NOTICE:  OK 1a — janela vazia recusada
+psql:test/0041_lista_de_espera.test.sql:105: NOTICE:  OK 1b — período invertido recusado
+psql:test/0041_lista_de_espera.test.sql:105: NOTICE:  OK 1c — duração zero recusada
+psql:test/0041_lista_de_espera.test.sql:105: NOTICE:  OK 1d — faixa acima de 60 dias recusada
+psql:test/0041_lista_de_espera.test.sql:149: NOTICE:  OK 2a — espera repetida sem profissional recusada
+psql:test/0041_lista_de_espera.test.sql:149: NOTICE:  OK 2b — a mesma faixa com profissional escolhido é outro pedido
+psql:test/0041_lista_de_espera.test.sql:170: NOTICE:  OK 3 — quem saiu volta para a mesma lista
+psql:test/0041_lista_de_espera.test.sql:209: NOTICE:  OK 4a — estado terminal sem hora recusado
+psql:test/0041_lista_de_espera.test.sql:209: NOTICE:  OK 4b — "conseguiu marcar" sem agendamento recusado
+psql:test/0041_lista_de_espera.test.sql:209: NOTICE:  OK 4c — estado terminal com hora aceito
+psql:test/0041_lista_de_espera.test.sql:225: NOTICE:  OK 5 — a lista da vizinha não mostra a desta barbearia
+psql:test/0041_lista_de_espera.test.sql:241: NOTICE:  OK 5b — WITH CHECK impede escrever em nome de outra barbearia
+psql:test/0041_lista_de_espera.test.sql:259: NOTICE:  OK 6 — sem tenant no contexto a lista não existe
+psql:test/0041_lista_de_espera.test.sql:285: NOTICE:  OK 7 — os dois índices quentes existem
+psql:test/0042_oferta_de_vaga.test.sql:103: NOTICE:  OK 1a — janela invertida recusada
+psql:test/0042_oferta_de_vaga.test.sql:103: NOTICE:  OK 1b — prazo no passado recusado
+psql:test/0042_oferta_de_vaga.test.sql:144: NOTICE:  OK 2a — uma oferta viva por vaga
+psql:test/0042_oferta_de_vaga.test.sql:144: NOTICE:  OK 2b — a mesma hora em outra cadeira é outra vaga
+psql:test/0042_oferta_de_vaga.test.sql:166: NOTICE:  OK 3 — uma oferta viva por pessoa
+psql:test/0042_oferta_de_vaga.test.sql:195: NOTICE:  OK 4a — estado terminal sem hora recusado
+psql:test/0042_oferta_de_vaga.test.sql:195: NOTICE:  OK 4b — "aceita" sem agendamento recusado
+psql:test/0042_oferta_de_vaga.test.sql:195: NOTICE:  OK 4c — vencida com hora aceita
+psql:test/0042_oferta_de_vaga.test.sql:212: NOTICE:  OK 5 — vencida a primeira, a vaga vai ao próximo
+psql:test/0042_oferta_de_vaga.test.sql:232: NOTICE:  OK 6 — só o hash do token é guardado
+psql:test/0042_oferta_de_vaga.test.sql:248: NOTICE:  OK 7 — as ofertas da vizinha não mostram as desta barbearia
+psql:test/0042_oferta_de_vaga.test.sql:264: NOTICE:  OK 7b — WITH CHECK impede oferecer em nome de outra barbearia
+psql:test/0042_oferta_de_vaga.test.sql:291: NOTICE:  OK 9 — início de serviço fora da vaga recusado
+psql:test/0042_oferta_de_vaga.test.sql:330: NOTICE:  OK 10a — aceitando não exige hora de resposta
+psql:test/0042_oferta_de_vaga.test.sql:330: NOTICE:  OK 10b — a vaga em resgate não é oferecida a mais ninguém
+psql:test/0042_oferta_de_vaga.test.sql:345: NOTICE:  OK 8 — vaga_liberada existe como tipo de aviso
+psql:test/0043_recados.test.sql:39: NOTICE:  OK 1 — recado sem cliente e sem atendimento é aceito
+psql:test/0043_recados.test.sql:63: NOTICE:  OK 2a — recado em branco recusado
+psql:test/0043_recados.test.sql:63: NOTICE:  OK 2b — recado acima do teto recusado
+psql:test/0043_recados.test.sql:94: NOTICE:  OK 3a — respondido sem resposta recusado
+psql:test/0043_recados.test.sql:94: NOTICE:  OK 3b — encerrado sem hora recusado
+psql:test/0043_recados.test.sql:94: NOTICE:  OK 3c — respondido com resposta e hora aceito
+psql:test/0043_recados.test.sql:114: NOTICE:  OK 4 — a aplicação não tem DELETE em feedbacks
+psql:test/0043_recados.test.sql:139: NOTICE:  OK 5a — a vizinha não lê os recados desta barbearia
+psql:test/0043_recados.test.sql:139: NOTICE:  OK 5b — WITH CHECK impede escrever em nome de outra barbearia
+psql:test/0043_recados.test.sql:172: NOTICE:  OK 6 — anonimizar desata o vínculo e preserva o texto
+psql:test/0043_recados.test.sql:192: NOTICE:  OK 7a — feedback.view e feedback.manage são permissões válidas
+psql:test/0043_recados.test.sql:192: NOTICE:  OK 7b — não existe permissão de apagar recado
+psql:test/0043_recados.test.sql:209: NOTICE:  OK 8 — o índice parcial da triagem existe
+psql:test/0043_recados.test.sql:224: NOTICE:  OK 9 — resposta_recado existe como tipo de aviso
+psql:test/0044_fidelidade.test.sql:51: NOTICE:  OK 1 — um modelo por barbearia
+psql:test/0044_fidelidade.test.sql:76: NOTICE:  OK 2a — cashback acima do teto recusado
+psql:test/0044_fidelidade.test.sql:76: NOTICE:  OK 2b — ponto sem valor recusado
+psql:test/0044_fidelidade.test.sql:103: NOTICE:  OK 3a — lançamento com modo "nenhum" recusado
+psql:test/0044_fidelidade.test.sql:103: NOTICE:  OK 3b — movimento zero recusado
+psql:test/0044_fidelidade.test.sql:130: NOTICE:  OK 4a — resgate com sinal invertido recusado
+psql:test/0044_fidelidade.test.sql:130: NOTICE:  OK 4b — acúmulo com sinal invertido recusado
+psql:test/0044_fidelidade.test.sql:148: NOTICE:  OK 5 — ajuste sem motivo escrito recusado
+psql:test/0044_fidelidade.test.sql:179: NOTICE:  OK 6a — um acúmulo por venda
+psql:test/0044_fidelidade.test.sql:179: NOTICE:  OK 6b — o resgate da mesma venda não é bloqueado pelo índice
+psql:test/0044_fidelidade.test.sql:205: NOTICE:  OK 7a — a aplicação não tem UPDATE em loyalty_entries
+psql:test/0044_fidelidade.test.sql:205: NOTICE:  OK 7b — a aplicação não tem DELETE em loyalty_entries
+psql:test/0044_fidelidade.test.sql:233: NOTICE:  OK 8a — a vizinha não lê o saldo desta barbearia
+psql:test/0044_fidelidade.test.sql:233: NOTICE:  OK 8b — WITH CHECK impede creditar em nome de outra barbearia
+psql:test/0044_fidelidade.test.sql:250: NOTICE:  OK 9 — fidelidade existe como forma de pagamento
+psql:test/0044_fidelidade.test.sql:264: NOTICE:  OK 10 — finance.loyalty_adjust é permissão válida
+psql:test/0044_fidelidade.test.sql:280: NOTICE:  OK 11 — os índices de saldo e de vencimento existem
+psql:test/0045_pacotes.test.sql:79: NOTICE:  OK 1 — uma unidade por comanda e por pacote
+psql:test/0045_pacotes.test.sql:105: NOTICE:  OK 2 — consumo append-only
+psql:test/0045_pacotes.test.sql:126: NOTICE:  OK 3 — a unidade cabe no que foi pago
+psql:test/0045_pacotes.test.sql:144: NOTICE:  OK 4 — reembolso é data e valor juntos
+psql:test/0045_pacotes.test.sql:183: NOTICE:  OK 5 — WITH CHECK recusa gravar em tenant alheio
+psql:test/0045_pacotes.test.sql:202: NOTICE:  OK 6 — pacote começa em duas unidades
+psql:test/0046_avaliacoes.test.sql:66: NOTICE:  OK 1 — uma avaliação por atendimento
+psql:test/0046_avaliacoes.test.sql:90: NOTICE:  OK 2a — a nota é imutável
+psql:test/0046_avaliacoes.test.sql:90: NOTICE:  OK 2b — o comentário é imutável
+psql:test/0046_avaliacoes.test.sql:116: NOTICE:  OK 3a — resolução exige desfecho e texto
+psql:test/0046_avaliacoes.test.sql:116: NOTICE:  OK 3b — o texto da resolução tem piso
+psql:test/0046_avaliacoes.test.sql:133: NOTICE:  OK 3c — a resolução válida grava
+psql:test/0046_avaliacoes.test.sql:149: NOTICE:  OK 4 — a nota vai de 1 a 5
+psql:test/0046_avaliacoes.test.sql:172: NOTICE:  OK 5 — não existe caminho para apagar avaliação
+psql:test/0046_avaliacoes.test.sql:194: NOTICE:  OK 6a — reviews.delete não existe
+psql:test/0046_avaliacoes.test.sql:194: NOTICE:  OK 6b — as duas permissões do bloco são válidas
+psql:test/0046_avaliacoes.test.sql:228: NOTICE:  OK 7 — WITH CHECK recusa gravar em tenant alheio
+psql:test/0047_estoque.test.sql:50: NOTICE:  OK 1 — o saldo é derivado, não guardado
+psql:test/0047_estoque.test.sql:70: NOTICE:  OK 2 — o saldo não fica negativo
+psql:test/0047_estoque.test.sql:107: NOTICE:  OK 3a — perda só subtrai
+psql:test/0047_estoque.test.sql:107: NOTICE:  OK 3b — entrada só soma
+psql:test/0047_estoque.test.sql:107: NOTICE:  OK 3c — ajuste anda nos dois sentidos
+psql:test/0047_estoque.test.sql:126: NOTICE:  OK 4 — perda e ajuste exigem motivo
+psql:test/0047_estoque.test.sql:149: NOTICE:  OK 5 — movimento append-only
+psql:test/0047_estoque.test.sql:174: NOTICE:  OK 6a — revenda exige preço
+psql:test/0047_estoque.test.sql:174: NOTICE:  OK 6b — uso interno não tem preço
+psql:test/0047_estoque.test.sql:195: NOTICE:  OK 7 — código de barras único por barbearia
+psql:test/0047_estoque.test.sql:232: NOTICE:  OK 8 — WITH CHECK recusa gravar em tenant alheio
+psql:test/0047_estoque.test.sql:246: NOTICE:  OK 9 — a ficha técnica grava
+psql:test/0047_estoque.test.sql:271: NOTICE:  OK 10 — produto só em item de produto ou consumível
+psql:test/0048_assinatura.test.sql:56: NOTICE:  OK 1 — uma assinatura viva por cliente
+psql:test/0048_assinatura.test.sql:82: NOTICE:  OK 2a — cancelamento exige data
+psql:test/0048_assinatura.test.sql:82: NOTICE:  OK 2b — cancelar libera para assinar de novo
+psql:test/0048_assinatura.test.sql:118: NOTICE:  OK 3a — o cooldown tem teto
+psql:test/0048_assinatura.test.sql:118: NOTICE:  OK 3b — quantidade zero não é benefício
+psql:test/0048_assinatura.test.sql:118: NOTICE:  OK 3c — ilimitado é nulo
+psql:test/0048_assinatura.test.sql:143: NOTICE:  OK 4 — uso append-only
+psql:test/0048_assinatura.test.sql:159: NOTICE:  OK 5 — o desconto em produto tem teto
+psql:test/0048_assinatura.test.sql:190: NOTICE:  OK 6 — WITH CHECK recusa gravar em tenant alheio
+psql:test/0048_assinatura.test.sql:207: NOTICE:  OK 7 — as duas assinaturas são tabelas diferentes
+psql:test/0049_assinatura_restricoes.test.sql:51: NOTICE:  OK 1a — a janela tem começo antes do fim
+psql:test/0049_assinatura_restricoes.test.sql:51: NOTICE:  OK 1b — o dia da semana vai de 0 a 6
+psql:test/0049_assinatura_restricoes.test.sql:70: NOTICE:  OK 2 — o titular não é dependente dele mesmo
+psql:test/0049_assinatura_restricoes.test.sql:104: NOTICE:  OK 3 — uma pessoa, uma assinatura
+psql:test/0049_assinatura_restricoes.test.sql:120: NOTICE:  OK 4 — a antecedência tem teto
+psql:test/0050_cobranca_do_clube.test.sql:57: NOTICE:  OK 1 — uma fatura por ciclo
+psql:test/0050_cobranca_do_clube.test.sql:83: NOTICE:  OK 2a — fatura paga tem data
+psql:test/0050_cobranca_do_clube.test.sql:83: NOTICE:  OK 2b — data de pagamento só em fatura paga
+psql:test/0050_cobranca_do_clube.test.sql:100: NOTICE:  OK 3 — id de cobrança vazio é recusado
+psql:test/0050_cobranca_do_clube.test.sql:121: NOTICE:  OK 4 — só token, bandeira, quatro últimos e validade
+psql:test/0050_cobranca_do_clube.test.sql:139: NOTICE:  OK 5 — suspensão tem data
+psql:test/0050_cobranca_do_clube.test.sql:157: NOTICE:  OK 6 — o cancelamento agendado tem as duas pontas
+psql:test/0050_cobranca_do_clube.test.sql:177: NOTICE:  OK 7 — a fatura do clube é append-only para a aplicação
+psql:test/0050_cobranca_do_clube.test.sql:191: NOTICE:  OK 8 — club_invoices com RLS forçada
+psql:test/0050_cobranca_do_clube.test.sql:224: NOTICE:  OK 9 — a anonimização leva todo dado de cartão junto
+psql:test/0051_comissao_da_assinatura.test.sql:57: NOTICE:  OK 1 — o modelo nasce no comportamento anterior
+psql:test/0051_comissao_da_assinatura.test.sql:91: NOTICE:  OK 2a — assinatura sem mensalidade é recusada
+psql:test/0051_comissao_da_assinatura.test.sql:91: NOTICE:  OK 2b — mensalidade sem assinatura é recusada
+psql:test/0051_comissao_da_assinatura.test.sql:113: NOTICE:  OK 3 — mensalidade congelada é sempre positiva
+psql:test/0051_comissao_da_assinatura.test.sql:127: NOTICE:  OK 4 — o teto vai de 0 a 100%
+psql:test/0051_comissao_da_assinatura.test.sql:153: NOTICE:  OK 5 — apagar a assinatura desata a comissão, não a destrói
+psql:test/0052_split.test.sql:53: NOTICE:  OK 1 — o split nasce desligado e sem alíquota
+psql:test/0052_split.test.sql:72: NOTICE:  OK 1b — a alíquota da plataforma é da plataforma
+psql:test/0052_split.test.sql:104: NOTICE:  OK 2a — parte de profissional tem dono
+psql:test/0052_split.test.sql:104: NOTICE:  OK 2b — só a parte do profissional tem dono
+psql:test/0052_split.test.sql:133: NOTICE:  OK 3 — uma parte por cobrança, papel e profissional
+psql:test/0052_split.test.sql:162: NOTICE:  OK 4a — repasse liquidado tem data
+psql:test/0052_split.test.sql:162: NOTICE:  OK 4b — a parte estornada mantém a data em que o dinheiro saiu
+psql:test/0052_split.test.sql:182: NOTICE:  OK 5 — o repasse é append-only para a aplicação
+psql:test/0052_split.test.sql:205: NOTICE:  OK 6 — o split não tem alíquota própria; ele deriva da comissão
+psql:test/0052_split.test.sql:222: NOTICE:  OK 7 — a alíquota da plataforma tem teto
+psql:test/0052_split.test.sql:236: NOTICE:  OK 8 — payment_splits com RLS forçada
+psql:test/0052_split.test.sql:270: NOTICE:  OK 9 — nenhuma chave do repasse destrói a linha em cascata
+psql:test/0053_kyc_e_liquidacao.test.sql:61: NOTICE:  OK 1 — o profissional nasce sem cadastro, e isso é normal
+psql:test/0053_kyc_e_liquidacao.test.sql:79: NOTICE:  OK 2 — aprovado tem recebedor
+psql:test/0053_kyc_e_liquidacao.test.sql:102: NOTICE:  OK 3 — só a referência opaca do adquirente
+psql:test/0053_kyc_e_liquidacao.test.sql:130: NOTICE:  OK 4a — repasse aceito tem id
+psql:test/0053_kyc_e_liquidacao.test.sql:130: NOTICE:  OK 4b — repasse recusado tem motivo
+psql:test/0053_kyc_e_liquidacao.test.sql:152: NOTICE:  OK 5 — a tentativa de repasse é append-only
+psql:test/0053_kyc_e_liquidacao.test.sql:173: NOTICE:  OK 6 — nenhuma chave da tentativa destrói a linha em cascata
+psql:test/0053_kyc_e_liquidacao.test.sql:187: NOTICE:  OK 7 — split_transfers com RLS forçada
+psql:test/0054_financeiro.test.sql:61: NOTICE:  OK 1a — conta paga tem dia e valor
+psql:test/0054_financeiro.test.sql:61: NOTICE:  OK 1b — conta aberta não tem dia nem valor de pagamento
+psql:test/0054_financeiro.test.sql:79: NOTICE:  OK 2 — a direção de uma conta é congelada
+psql:test/0054_financeiro.test.sql:119: NOTICE:  OK 3 — conta paga pela gaveta não volta
+psql:test/0054_financeiro.test.sql:146: NOTICE:  OK 4a — pagamento de conta sai com sinal negativo
+psql:test/0054_financeiro.test.sql:146: NOTICE:  OK 4b — recebimento de conta entra com sinal positivo
+psql:test/0054_financeiro.test.sql:169: NOTICE:  OK 5 — transferência exige duas contas diferentes
+psql:test/0054_financeiro.test.sql:194: NOTICE:  OK 6 — conta que moveu dinheiro não se apaga
+psql:test/0054_financeiro.test.sql:220: NOTICE:  OK 7 — transferência e conta não se apagam
+psql:test/0054_financeiro.test.sql:246: NOTICE:  OK 8a — uma gaveta por unidade
+psql:test/0054_financeiro.test.sql:246: NOTICE:  OK 8b — gaveta tem unidade
+psql:test/0054_financeiro.test.sql:275: NOTICE:  OK 9 — nenhuma chave do financeiro destrói a linha em cascata
+psql:test/0054_financeiro.test.sql:293: NOTICE:  OK 9b — unidade com financeiro não se apaga
+psql:test/0054_financeiro.test.sql:311: NOTICE:  OK 10 — RLS forçada em todo o financeiro
+psql:test/0054_financeiro.test.sql:332: NOTICE:  OK 11 — movimento de caixa só em conta paga
+psql:test/0055_vale_dre_estorno.test.sql:58: NOTICE:  OK 1 — vale descontado tem fechamento
+psql:test/0055_vale_dre_estorno.test.sql:75: NOTICE:  OK 2 — cancelar vale exige motivo
+psql:test/0055_vale_dre_estorno.test.sql:101: NOTICE:  OK 3a — o dono do vale é congelado
+psql:test/0055_vale_dre_estorno.test.sql:101: NOTICE:  OK 3b — o valor do vale é congelado
+psql:test/0055_vale_dre_estorno.test.sql:128: NOTICE:  OK 4 — vale descontado é imutável
+psql:test/0055_vale_dre_estorno.test.sql:144: NOTICE:  OK 5 — fechamento com vale descontado não se apaga
+psql:test/0055_vale_dre_estorno.test.sql:183: NOTICE:  OK 6a — venda estornada tem data
+psql:test/0055_vale_dre_estorno.test.sql:183: NOTICE:  OK 6b — venda estornada tem motivo
+psql:test/0055_vale_dre_estorno.test.sql:183: NOTICE:  OK 6c — venda paga não tem data de estorno
+psql:test/0055_vale_dre_estorno.test.sql:223: NOTICE:  OK 7a — transferência exige duas pessoas diferentes
+psql:test/0055_vale_dre_estorno.test.sql:223: NOTICE:  OK 7b — transferência exige motivo escrito
+psql:test/0055_vale_dre_estorno.test.sql:247: NOTICE:  OK 8 — vale e transferência não se apagam
+psql:test/0055_vale_dre_estorno.test.sql:269: NOTICE:  OK 9 — nenhuma chave do bloco 52 destrói a linha em cascata
+psql:test/0055_vale_dre_estorno.test.sql:286: NOTICE:  OK 10 — RLS forçada no vale e na transferência
+psql:test/0055_vale_dre_estorno.test.sql:308: NOTICE:  OK 11 — o vale abatido na folha é sempre positivo
+psql:test/0056_fiscal.test.sql:43: NOTICE:  OK 1 — só a referência opaca do emissor
+psql:test/0056_fiscal.test.sql:74: NOTICE:  OK 2a — o CNPJ é só dígitos
+psql:test/0056_fiscal.test.sql:74: NOTICE:  OK 2b — o município é código IBGE
+psql:test/0056_fiscal.test.sql:98: NOTICE:  OK 3 — o ISS respeita o teto de 5%
+psql:test/0056_fiscal.test.sql:116: NOTICE:  OK 4 — a emissão automática nasce desligada
+psql:test/0056_fiscal.test.sql:150: NOTICE:  OK 5a — nota autorizada tem número e data
+psql:test/0056_fiscal.test.sql:150: NOTICE:  OK 5b — nota rejeitada tem motivo
+psql:test/0056_fiscal.test.sql:175: NOTICE:  OK 6a — só o Salão-Parceiro tem parcela de parceiro
+psql:test/0056_fiscal.test.sql:175: NOTICE:  OK 6b — a parcela do parceiro cabe na nota
+psql:test/0056_fiscal.test.sql:211: NOTICE:  OK 7a — uma nota viva por comanda
+psql:test/0056_fiscal.test.sql:211: NOTICE:  OK 7b — a rejeitada não bloqueia a segunda tentativa
+psql:test/0056_fiscal.test.sql:281: NOTICE:  OK 8a — o valor de uma nota emitida é congelado
+psql:test/0056_fiscal.test.sql:281: NOTICE:  OK 8b — nota autorizada só sai para cancelamento
+psql:test/0056_fiscal.test.sql:281: NOTICE:  OK 8c — cancelar mantém o número que foi à prefeitura
+psql:test/0056_fiscal.test.sql:297: NOTICE:  OK 9 — comanda com nota não se apaga
+psql:test/0056_fiscal.test.sql:326: NOTICE:  OK 10 — o fiscal não se apaga, nem em cascata
+psql:test/0056_fiscal.test.sql:347: NOTICE:  OK 11 — a configuração fiscal é por unidade
+psql:test/0056_fiscal.test.sql:364: NOTICE:  OK 12 — RLS forçada no fiscal
+psql:test/0057_fiscal_operacao.test.sql:67: NOTICE:  OK 1a — CPF pontuado recusado
+psql:test/0057_fiscal_operacao.test.sql:67: NOTICE:  OK 1b — documento de tamanho errado recusado
+psql:test/0057_fiscal_operacao.test.sql:67: NOTICE:  OK 1c — CNPJ aceito na mesma coluna
+psql:test/0057_fiscal_operacao.test.sql:67: NOTICE:  OK 1d — sem documento é estado legítimo
+psql:test/0057_fiscal_operacao.test.sql:121: NOTICE:  OK 2 — a pessoa sai de dentro da nota e a nota fica
+psql:test/0057_fiscal_operacao.test.sql:139: NOTICE:  OK 3 — o CPF sai do cadastro
+psql:test/0057_fiscal_operacao.test.sql:167: NOTICE:  OK 4 — o carimbo tira a nota da fila de entrega
+psql:test/0057_fiscal_operacao.test.sql:202: NOTICE:  OK 5 — sem link, sem mensagem
+psql:test/0058_whatsapp.test.sql:42: NOTICE:  OK 1 — nenhuma credencial em claro no cadastro do WhatsApp
+psql:test/0058_whatsapp.test.sql:66: NOTICE:  OK 2a — ativo sem os três é recusado
+psql:test/0058_whatsapp.test.sql:66: NOTICE:  OK 2b — ativo com os três é aceito
+psql:test/0058_whatsapp.test.sql:95: NOTICE:  OK 3a — suspender exige motivo escrito
+psql:test/0058_whatsapp.test.sql:95: NOTICE:  OK 3b — suspenso guarda motivo e ids
+psql:test/0058_whatsapp.test.sql:132: NOTICE:  OK 4a — um aprovado por tipo e idioma
+psql:test/0058_whatsapp.test.sql:132: NOTICE:  OK 4b — o rejeitado se acumula ao lado do aprovado
+psql:test/0058_whatsapp.test.sql:157: NOTICE:  OK 4c — o nome segue o formato que a Meta exige
+psql:test/0058_whatsapp.test.sql:157: NOTICE:  OK 4d — recusa da Meta exige motivo gravado
+psql:test/0058_whatsapp.test.sql:189: NOTICE:  OK 5a — mensagem é única por id da Meta
+psql:test/0058_whatsapp.test.sql:189: NOTICE:  OK 5b — resposta é única por id da Meta
+psql:test/0058_whatsapp.test.sql:208: NOTICE:  OK 6 — o id da Meta é único no produto inteiro
+psql:test/0058_whatsapp.test.sql:224: NOTICE:  OK 7 — falha da Meta exige motivo gravado
+psql:test/0058_whatsapp.test.sql:248: NOTICE:  OK 8 — RLS forçada nas tabelas do WhatsApp
+psql:test/0058_whatsapp.test.sql:275: NOTICE:  OK 9 — nada do WhatsApp some em cascata
+psql:test/0061_multiunidade.test.sql:46: NOTICE:  OK 1 — origem igual ao destino é recusada
+psql:test/0061_multiunidade.test.sql:68: NOTICE:  OK 2 — quantidade não positiva é recusada
+psql:test/0061_multiunidade.test.sql:89: NOTICE:  OK 3 — transferência é append-only para a aplicação
+psql:test/0061_multiunidade.test.sql:115: NOTICE:  OK 4 — nenhuma cascata destrói o registro da transferência
+psql:test/0061_multiunidade.test.sql:147: NOTICE:  OK 5 — RLS FORCE com USING e WITH CHECK nas duas tabelas novas
+psql:test/0061_multiunidade.test.sql:169: NOTICE:  OK 6 — fechar a loja não derruba a sessão
+psql:test/0061_multiunidade.test.sql:191: NOTICE:  OK 7 — a unidade da assinatura não some com a loja
+psql:test/0061_multiunidade.test.sql:212: NOTICE:  OK 8 — a FK aceita unidade alheia; quem recusa é a aplicação, sob RLS
+psql:test/0062_compartilhado.test.sql:46: NOTICE:  OK 1 — os três escopos nascem empresa
+psql:test/0062_compartilhado.test.sql:72: NOTICE:  OK 2a — escopo unidade exige unidade
+psql:test/0062_compartilhado.test.sql:72: NOTICE:  OK 2b — escopo empresa com unidade é aceito e não recorta
+psql:test/0062_compartilhado.test.sql:98: NOTICE:  OK 3 — apagar a loja não destrói o extrato
+psql:test/0062_compartilhado.test.sql:117: NOTICE:  OK 4 — os dois extratos continuam append-only
+psql:test/0062_compartilhado.test.sql:136: NOTICE:  OK 5 — um tipo só, com dois valores
+psql:test/0063_score_condicional.test.sql:41: NOTICE:  OK 1 — recusar nasce desligado, beneficiar nasce no 85
+psql:test/0063_score_condicional.test.sql:66: NOTICE:  OK 2a — limiar de recusa fora de 0..100 é recusado
+psql:test/0063_score_condicional.test.sql:66: NOTICE:  OK 2b — limiar de confiança fora de 0..100 é recusado
+psql:test/0063_score_condicional.test.sql:93: NOTICE:  OK 3 — a recusa guarda score e limiar, os dois na escala
+psql:test/0063_score_condicional.test.sql:123: NOTICE:  OK 4 — a loja não some, e o cliente pode ser anonimizado
+psql:test/0063_score_condicional.test.sql:143: NOTICE:  OK 5 — RLS FORCE com USING e WITH CHECK
+psql:test/0066_precificacao.test.sql:43: NOTICE:  OK 1 — variação nasce desligada, teto nasce em 15%
+psql:test/0066_precificacao.test.sql:66: NOTICE:  OK 2 — faixa sobreposta recusada pelo banco
+psql:test/0066_precificacao.test.sql:77: NOTICE:  OK 3 — faixas encostadas convivem
+psql:test/0066_precificacao.test.sql:95: NOTICE:  OK 4 — faixa sem efeito recusada
+psql:test/0066_precificacao.test.sql:118: NOTICE:  OK 5 — nenhuma coluna guarda preço decidido por algoritmo
+psql:test/0066_precificacao.test.sql:138: NOTICE:  OK 6 — RLS FORCE com USING e WITH CHECK
+psql:test/0073_franquia.test.sql:33: NOTICE:  OK 1 — uma franqueadora por franquia
+psql:test/0073_franquia.test.sql:72: NOTICE:  OK 2 — so a franqueadora escreve o padrao
+psql:test/0073_franquia.test.sql:109: NOTICE:  OK 3 — o padrao nao atravessa franquias
+psql:test/0073_franquia.test.sql:124: NOTICE:  OK 4 — item do padrao nao e apagavel
+psql:test/0073_franquia.test.sql:146: NOTICE:  OK 5 — o vinculo se desfaz, o servico fica
+psql:test/0073_franquia.test.sql:170: NOTICE:  OK 6 — o preco de referencia mora em um lugar so
+psql:test/0073_franquia.test.sql:237: NOTICE:  OK 6b — a participacao so e escrita sem tenant, pela plataforma
+psql:test/0073_franquia.test.sql:263: NOTICE:  OK 6c — a plataforma monta, sem tenant no contexto
+psql:test/0073_franquia.test.sql:282: NOTICE:  OK 7 — RLS FORCE com USING e WITH CHECK
+psql:test/0073_franquia.test.sql:304: NOTICE:  OK 8 — franchise.manage entrou no catalogo do banco
+psql:test/0074_franquia_indicadores.test.sql:24: NOTICE:  OK 1 — a franquia vem do contexto, nunca do parametro
+psql:test/0074_franquia_indicadores.test.sql:43: NOTICE:  OK 2 — sem tenant, sem linha
+psql:test/0074_franquia_indicadores.test.sql:94: NOTICE:  OK 3 — a soma atravessa, a identidade nao
+psql:test/0074_franquia_indicadores.test.sql:129: NOTICE:  OK 4 — so a soma atravessa; cliente e comanda ficam
+psql:test/0074_franquia_indicadores.test.sql:172: NOTICE:  OK 5 — meta escrita pela franqueadora, lida por quem e dela
+psql:test/0074_franquia_indicadores.test.sql:193: NOTICE:  OK 6 — o indicador da rede e derivado
+psql:test/0075_api_publica.test.sql:53: NOTICE:  OK 1 — dinheiro nao entra numa chave de API
+psql:test/0075_api_publica.test.sql:72: NOTICE:  OK 2 — chave sem escopo e recusada
+psql:test/0075_api_publica.test.sql:97: NOTICE:  OK 3 — chave nao e apagavel, e revogar exige motivo
+psql:test/0075_api_publica.test.sql:132: NOTICE:  OK 4 — a chave da vizinha nao e lida nem revogada
+psql:test/0075_api_publica.test.sql:157: NOTICE:  OK 5 — o teto e por chave, uma linha por minuto
+psql:test/0075_api_publica.test.sql:180: NOTICE:  OK 6 — so o prefixo e o HMAC
+psql:test/0076_webhooks.test.sql:30: NOTICE:  OK 1 — so https
+psql:test/0076_webhooks.test.sql:49: NOTICE:  OK 2 — endereco sem evento e recusado
+psql:test/0076_webhooks.test.sql:77: NOTICE:  OK 3 — o endereco da vizinha nao e visto nem desligado
+psql:test/0076_webhooks.test.sql:99: NOTICE:  OK 4 — so o segredo cifrado
+psql:test/0076_webhooks.test.sql:132: NOTICE:  OK 5 — entrega nao e apagavel, e o id do evento e unico
+psql:test/0076_webhooks.test.sql:156: NOTICE:  OK 6 — entregue e hora andam juntos
+psql:test/0076_webhooks.test.sql:190: NOTICE:  OK 7 — a varredura enxerga sem tenant; a barbearia so o que e dela
+psql:test/0076_webhooks.test.sql:220: NOTICE:  OK 8 — nenhuma cascata alcanca a entrega
+psql:test/0077_contestacao.test.sql:75: NOTICE:  OK 1a — contestacao pela metade e recusada
+psql:test/0077_contestacao.test.sql:75: NOTICE:  OK 1b — a justificativa tem piso de dez caracteres
+psql:test/0077_contestacao.test.sql:106: NOTICE:  OK 2a — a contestacao completa e aceita
+psql:test/0077_contestacao.test.sql:106: NOTICE:  OK 2b — a nota continua imutavel
+psql:test/0077_contestacao.test.sql:106: NOTICE:  OK 2c — o comentario continua imutavel
+psql:test/0077_contestacao.test.sql:133: NOTICE:  OK 3a — o motivo nao se reescreve
+psql:test/0077_contestacao.test.sql:133: NOTICE:  OK 3b — a justificativa nao se reescreve
+psql:test/0077_contestacao.test.sql:156: NOTICE:  OK 3c — a contestacao se retira, e a avaliacao volta ao ar
+psql:test/0077_contestacao.test.sql:156: NOTICE:  OK 3d — recontestar com outro motivo passa, em dois gestos
+psql:test/0077_contestacao.test.sql:172: NOTICE:  OK 4 — a recuperacao continua gravavel numa contestada
+psql:test/0077_contestacao.test.sql:186: NOTICE:  OK 5 — motivo fora do enum e recusado
+psql:test/0077_contestacao.test.sql:205: NOTICE:  OK 6a — reviews.contest e permissao conhecida
+psql:test/0077_contestacao.test.sql:205: NOTICE:  OK 6b — nao existe permissao de apagar avaliacao
+psql:test/0077_contestacao.test.sql:260: NOTICE:  OK 7 — so o dono nasce podendo contestar, e a semente e repetivel
+psql:test/0077_contestacao.test.sql:287: NOTICE:  OK 8 — o REVOKE DELETE continua valendo
+psql:test/0077_contestacao.test.sql:334: NOTICE:  OK 9 — a justificativa sai quando a pessoa sai; o motivo fica
+psql:test/0080_cascata_global.test.sql:72: NOTICE:  OK 1 — nenhuma cascata alcanca tabela que a aplicacao nao apaga
+psql:test/0080_cascata_global.test.sql:111: NOTICE:  OK 2 — a varredura acusa a cascata reintroduzida
+psql:test/0080_cascata_global.test.sql:152: NOTICE:  OK 3 — o privilegio real bate com o que o comentario promete
+psql:test/0080_cascata_global.test.sql:196: NOTICE:  OK 4 — nenhuma chave para locations cascateia
+psql:test/0084_escopos_do_whatsapp.test.sql:40: NOTICE:  OK 1 — cadastro sem escopo declarado é aceito
+psql:test/0084_escopos_do_whatsapp.test.sql:61: NOTICE:  OK 2 — escopo vazio é recusado
+psql:test/0084_escopos_do_whatsapp.test.sql:87: NOTICE:  OK 3 — os escopos concedidos são lidos de volta inteiros
+psql:test/0084_escopos_do_whatsapp.test.sql:105: NOTICE:  OK 4 — token só de envio é cadastro válido, não erro de banco
+psql:test/0110_scheduling_concorrencia_recursos.test.sql:19: NOTICE:  OK 1 — fingerprint de idempotência existe no schema
+psql:test/0110_scheduling_concorrencia_recursos.test.sql:46: NOTICE:  OK 2 — hold exige quantity positiva
+psql:test/0110_scheduling_concorrencia_recursos.test.sql:57: NOTICE:  OK 3 — recursos do hold têm RLS forçada
+psql:test/0110_scheduling_concorrencia_recursos.test.sql:71: NOTICE:  OK 4 — RLS isola recursos de hold por tenant
+psql:test/0111_finance_estorno_concorrencia.test.sql:17: NOTICE:  OK 1 — fingerprint do fechamento existe
+psql:test/0111_finance_estorno_concorrencia.test.sql:29: NOTICE:  OK 2 — lease de estorno existe
+psql:test/0111_finance_estorno_concorrencia.test.sql:41: NOTICE:  OK 3 — refund pendente é indexado
+psql:test/0112_pacote_congelado_na_comanda.test.sql:24: NOTICE:  OK 1 — quatro termos mutáveis do pacote ficam congelados no item
+psql:test/0112_pacote_congelado_na_comanda.test.sql:37: NOTICE:  OK 2 — pacote não pode existir com snapshot estrutural incompleto
+psql:test/0112_pacote_congelado_na_comanda.test.sql:52: NOTICE:  OK 3 — referência do pacote vendido usa ON DELETE RESTRICT
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:21: NOTICE:  OK 1 — intenção de notificação carrega reserva de cota
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:35: NOTICE:  OK 2 — template possui claim persistente de submissão
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:51: NOTICE:  OK 3 — roteamento WABA tem RLS forçada
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:77: NOTICE:  OK 4 — uma WABA pertence a exatamente um tenant
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:94: NOTICE:  OK 5 — intent_key mantém cardinalidade por tenant da migração 0106
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:113: NOTICE:  OK 6 — índice fecha segunda reserva promocional do mesmo dia
+psql:test/0113_crm_whatsapp_concorrencia.test.sql:132: NOTICE:  OK 7 — escrita rival não consegue anexar localização à WABA alheia
+psql:test/0114_catalogo_estrutura_onboarding.test.sql:18: NOTICE:  OK 1 — combo vendável tem unicidade por serviço
+psql:test/0114_catalogo_estrutura_onboarding.test.sql:47: NOTICE:  OK 2 — serviço vendido não aceita dois combos concorrentes
+psql:test/0114_catalogo_estrutura_onboarding.test.sql:61: NOTICE:  OK 3 — vínculo sobrevive a renomeação
+psql:test/0115_platform_jobs_integracoes.test.sql:19: NOTICE:  OK 1 — entrega e endpoint compartilham o mesmo tenant por FK
+psql:test/0115_platform_jobs_integracoes.test.sql:45: NOTICE:  OK 2 — FK rejeita endpoint de outro tenant
+psql:test/0115_platform_jobs_integracoes.test.sql:66: NOTICE:  OK 3 — outcome do PSP é fechado
+psql:test/0116_recheck_final_hardening.test.sql:36: NOTICE:  OK 1 — tenant não altera plan_id
+psql:test/0116_recheck_final_hardening.test.sql:48: NOTICE:  OK 2 — tenant não altera blocked_reason
+==> cliente com escopo de tenant
+
+ RUN  v4.1.11 /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/packages/db
+
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  19:13:40
+   Duration  2.05s (transform 74ms, setup 0ms, import 155ms, tests 1.70s, environment 0ms)
+

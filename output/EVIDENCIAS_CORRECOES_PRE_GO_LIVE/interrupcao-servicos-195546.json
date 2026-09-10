@@ -1,0 +1,7 @@
+{
+  "utc": "2026-09-10T19:55:46Z",
+  "efeito": "SIGTERM externo interrompeu PG, Docker e prova Baileys UX",
+  "prova_exit_code": 143,
+  "homologacao_ou_falha_do_produto": false,
+  "acao": "Retomar servi\u00e7os locais e repetir prova interrompida"
+}

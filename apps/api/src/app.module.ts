@@ -1,3 +1,5 @@
+import { ConsentimentoCadastroController } from './auth/consentimento-cadastro.controller.js';
+import { WhatsAppManualController } from './admin/whatsapp-manual.controller.js';
 import { proxyConfiavel } from './common/proxy-confiavel.js';
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -46,6 +48,7 @@ import { FinanceiroController } from './admin/financeiro.controller.js';
 import { DreController } from './admin/dre.controller.js';
 import { FiscalController } from './admin/fiscal.controller.js';
 import { FiscalNacionalController } from './admin/fiscal-nacional.controller.js';
+import { FiscalMunicipalController } from './admin/fiscal-municipal.controller.js';
 import { FiscalDocumentoController } from './booking/fiscal-documento.controller.js';
 import { FranquiaController } from './admin/franquia.controller.js';
 import { RedeController } from './admin/rede.controller.js';
@@ -135,6 +138,7 @@ import { MediaController } from './media/media.controller.js';
     DreController,
     FiscalController,
     FiscalNacionalController,
+    FiscalMunicipalController,
     FiscalDocumentoController,
     FranquiaController,
     RedeController,
@@ -145,6 +149,8 @@ import { MediaController } from './media/media.controller.js';
     WhatsAppConexaoController,
     AutomacaoController,
     CampanhaController,
+    WhatsAppManualController,
+    ConsentimentoCadastroController,
     SegmentoController,
     ChurnController,
     MetricaController,

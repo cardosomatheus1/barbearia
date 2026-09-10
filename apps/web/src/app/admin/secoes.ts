@@ -133,7 +133,7 @@ export const MODULOS = [
     id: 'crescimento',
     nome: 'Crescimento',
     telas: [
-      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', molde: 'configuracao', nota: 'o número por onde tudo sai — conecte antes de enviar', grupo: 'Relacionamento', permissao: ['whatsapp.manage'] },
+      { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', molde: 'configuracao', nota: 'conexões e formas de enviar mensagens', grupo: 'Relacionamento', permissao: ['whatsapp.manage'] },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', molde: 'gestao', nota: 'horários vazios e quem chamar', grupo: 'Relacionamento', permissao: ['marketing.send'] },
       { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', molde: 'configuracao', nota: 'o que a casa manda sozinha', grupo: 'Relacionamento', permissao: ['marketing.send'] },
       { href: '/admin/avisos', nome: 'Avisos ao cliente', secao: 'avisos', molde: 'configuracao', nota: 'confirmação, lembrete e retorno', grupo: 'Relacionamento', recurso: 'avisos', permissao: ['settings.manage'] },

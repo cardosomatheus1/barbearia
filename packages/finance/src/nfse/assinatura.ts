@@ -1,3 +1,4 @@
+import { ID_DPS_NFSE, idPedidoCancelamentoValido } from './identificadores.js';
 import { SignedXml } from 'xml-crypto';
 import type { CertificadoA1 } from './certificado.js';
 import { conferirXmlFiscal } from './xml-seguro.js';
@@ -9,13 +10,13 @@ export const NAMESPACE_NFSE = 'http://www.sped.fazenda.gov.br/nfse';
  */
 export function assinarDps(xml: string, certificado: CertificadoA1, id: string,
   algoritmo: 'sha1' | 'sha256'): string {
-  if (!/^DPS\d{42}$/.test(id)) throw new Error('nfse_id_dps_invalido');
+  if (!ID_DPS_NFSE.test(id)) throw new Error('nfse_id_dps_invalido');
   return assinarElemento(xml, certificado, id, algoritmo, 'DPS', 'infDPS');
 }
 
 export function assinarPedidoDeCancelamento(xml: string, certificado: CertificadoA1, id: string,
   algoritmo: 'sha1' | 'sha256'): string {
-  if (!/^PRE\d{50}101101$/.test(id)) throw new Error('nfse_id_evento_invalido');
+  if (!idPedidoCancelamentoValido(id)) throw new Error('nfse_id_evento_invalido');
   return assinarElemento(xml, certificado, id, algoritmo, 'pedRegEvento', 'infPedReg');
 }
 

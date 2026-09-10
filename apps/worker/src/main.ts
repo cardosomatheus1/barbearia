@@ -788,7 +788,7 @@ async function main(): Promise<void> {
           profissional: oferta.profissionalNome,
           quandoTexto: `${oferta.dia} às ${oferta.hora}`,
           minutosParaResponder: Math.max(1, Math.ceil((oferta.venceEm.getTime() - agora.getTime()) / 60_000)),
-          link: `${WEB_URL}/vaga/${oferta.token}`,
+          link: new URL(`/${encodeURIComponent(oferta.slug)}/vaga/${encodeURIComponent(oferta.token)}`, WEB_URL).href,
         }) });
       },
 

@@ -1,0 +1,433 @@
+
+==> matriz de prontidão
+    ok
+
+==> verdade comercial R8
+    ok
+
+==> vocabulário e navegação V0
+    ok
+
+==> invariantes da auditoria
+    ok
+
+==> auditoria profunda de invariantes
+    ok
+
+==> auditoria ofensiva de invariantes
+    ok
+
+==> rotas internas web
+    ok
+
+==> porta de clientes V1
+    ok
+
+==> orientação V3
+    ok
+
+==> operação x configuração V4
+    ok
+
+==> centro operacional V5
+    ok
+
+==> primeira ilha de cliente R5
+    ok
+
+==> promessas históricas R6
+    ok
+
+==> lacunas declaradas
+    ok
+
+==> agenda proporcional V10
+    ok
+
+==> busca global e ações V11
+    ok
+  ✓ V2: ficha do cliente organizada
+  ✓ V6: painel do dono narrativo
+  ✓ V7/V8/V9: moldes, hierarquia e semântica visual
+
+==> V8 técnico global estático
+    ok
+
+==> acessibilidade e densidade operacional
+    ok
+
+==> honestidade do percurso financeiro E2E
+    ok
+
+==> percursos de usabilidade R12
+    ok
+
+==> armazenamento próprio de mídia R9
+    ok
+
+==> CSS por superfície R10
+    ok
+
+==> módulos do admin R11
+    ok
+
+==> módulos financeiros da comanda
+    ok
+
+==> módulos do motor de booking
+    ok
+
+==> módulos do CRM/WhatsApp
+    ok
+
+==> módulos financeiros de comissão
+    ok
+
+==> módulos financeiros fiscais
+    ok
+
+==> build dos pacotes
+    ok
+
+==> typecheck, builds e suítes (em paralelo)
+
+==> typecheck
+    ok
+
+==> build do web + typecheck
+    ok
+
+==> build da api
+    ok
+
+==> core — unitários
+    ok
+
+==> ui — tokens e componentes
+    ok
+
+==> web — lógica de tela
+    ok
+
+==> fiscal municipal — motor e fonte reutilizada
+    ok
+
+==> resolvedor de afetados
+    ok
+
+==> guarda da matriz de prontidão
+    ok
+
+==> guarda CSS R10 — negativos
+    ok
+
+==> guarda R11 — módulos por domínio
+    ok
+
+==> crase em consulta SQL
+    ok
+
+==> crase em script inline
+    ok
+
+==> o .env.example é a lista
+    ok
+
+==> recurso do menu × catálogo
+    ok
+
+==> UPDATE de unidade com WHERE
+    ok
+
+==> evento de webhook com emissor
+    ok
+
+==> escopo de chave × rota
+    ok
+
+==> @Param com pipe
+    ok
+
+==> métrica com resposta
+    ok
+
+==> capacidade com tipo de cadeira
+    ok
+
+==> id conferido contra a unidade
+    ok
+
+==> permissao com rota
+    ok
+
+==> recusa com frase
+    ok
+
+==> uniao do dominio
+    ok
+
+==> summary com classe
+    ok
+
+==> rota de primeiro nível × slug reservado
+    ok
+
+==> segredos do deploy
+    ok
+
+==> configuração de produção
+    ok
+
+==> SQL seguro
+    ok
+
+==> SQL seguro — negativos
+    ok
+
+==> segredos no snapshot
+    ok
+
+==> secret scan — negativos
+    ok
+
+==> proteção anti-bot
+    ok
+
+==> proteção anti-bot — negativos
+    ok
+
+==> portão de segurança
+    ok
+
+==> portão de segurança — negativos
+    ok
+
+==> identidade/tenant — segurança
+    ok
+
+==> identidade/tenant — negativos
+    ok
+
+==> auditoria Scheduling
+    ok
+
+==> auditoria Scheduling — negativos
+    ok
+
+==> auditoria Financeiro
+    ok
+
+==> auditoria Financeiro — negativos
+    ok
+
+==> auditoria CRM/WhatsApp
+    ok
+
+==> auditoria CRM/WhatsApp — negativos
+    ok
+
+==> auditoria Catálogo/Onboarding
+    ok
+
+==> auditoria Catálogo/Onboarding — negativos
+    ok
+
+==> auditoria Platform/Jobs
+    ok
+
+==> auditoria Platform/Jobs — negativos
+    ok
+
+==> auditoria Final Cross-Domain
+    ok
+
+==> auditoria Final Cross-Domain — negativos
+    ok
+
+==> auditoria Recheck Final
+    ok
+
+==> auditoria Recheck Final — negativos
+    ok
+
+==> certificação prática da pilha
+    ok
+
+==> módulos financeiros fiscais — negativos
+    ok
+
+==> certificação prática da pilha — negativos
+    ok
+
+==> carga concorrente — contrato do ensaio
+    ok
+
+==> 404 por superfície
+    ok
+
+==> estado de agendamento no domínio
+    ok
+
+==> estado de agendamento — negativos
+    ok
+
+==> varredura com chamador
+    ok
+
+==> R12 usabilidade — negativos
+    ok
+
+==> R6 promessas — negativos
+    ok
+
+==> R8 comercial — negativos
+    ok
+
+==> movimento reduzido
+    ok
+
+==> movimento reduzido — negativos
+    ok
+
+==> 404 por superfície — negativos
+    ok
+
+==> alvo do bloqueio e regra de comissão
+    ok
+
+==> alvo do bloqueio e regra de comissão — negativos
+    ok
+
+==> vazio de texto
+    ok
+
+==> vazio de texto — negativos
+    ok
+
+==> pulo com motivo
+    ok
+
+==> hora com fuso
+    ok
+
+==> hora com fuso — negativos
+    ok
+
+==> entrega de OTP — negativos
+    ok
+
+==> rede de deploy
+    ok
+
+==> rede de deploy — negativos
+    ok
+
+==> criptografia de backup
+    ok
+
+==> criptografia de backup — runtime
+    ok
+
+==> portão do deploy
+    ok
+
+==> sondas do deploy
+    ok
+
+==> restore com role da aplicação
+    ok
+
+==> backup shell criptografado
+    ok
+
+==> criptografia de backup — negativos
+    ok
+
+==> hardening de integrações
+    ok
+
+==> robustez operacional
+    ok
+
+==> robustez operacional — negativos
+    ok
+
+==> observabilidade e diagnóstico
+    ok
+
+==> observabilidade — negativos
+    ok
+
+==> cron do backup
+    ok
+
+==> trava da semente
+    ok
+
+==> semente não inventa
+    ok
+
+==> migração aditiva
+    ok
+
+==> migrações repetíveis
+    ok
+
+==> db — invariantes
+    ok
+
+==> identity — OTP, sessão e 2º fator
+    ok
+
+==> scheduling — integração
+    ok
+
+==> onboarding — seis etapas
+    ok
+
+==> catalog — CRUD do admin
+    ok
+
+==> finance — comanda, caixa e fiado
+    ok
+
+==> crm — a ficha do cliente
+    ok
+
+==> jobs — fila, avisos e falta automática
+    ok
+
+==> platform — planos, bloqueio e a porta do Super Admin
+    ok
+
+==> api — e2e
+    FALHOU
+    - []
+    + [
+    +   "fiscal-municipal.controller.ts FiscalMunicipalController: @Get()",
+    +   "fiscal-municipal.controller.ts FiscalMunicipalController: @Put('configuracao')",
+    + ]
+    
+     ❯ test/permissao.guard.test.ts:461:76
+        459|     expect(guardadas.length, 'nenhum controller guardado foi encontrad…
+        460|
+        461|     expect(semDeclaracao, `rota sem @Exige:\n${semDeclaracao.join('\n'…
+           |                                                                            ^
+        462|   });
+        463|
+    
+    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+    
+    
+     Test Files  1 failed | 37 passed (38)
+          Tests  1 failed | 553 passed (554)
+       Start at  21:18:53
+       Duration  972.72s (transform 6.59s, setup 0ms, import 40.78s, tests 925.20s, environment 5ms)
+    
+    /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/apps/api:
+     ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @barbearia/api@0.1.0 test: `./scripts/test.sh`
+    Exit status 1
+
+verify: 1 etapa(s) com problema
+  - api — e2e
+{"fonte_estavel": true, "sha256_conjunto": "5c6712fdd91303f7c981aedcab3b08dd755e2a2e503e807d0f1ae589e4280179"}

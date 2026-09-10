@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/apps/api
+
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  21:37:16
+   Duration  2.13s (transform 911ms, setup 0ms, import 1.49s, tests 453ms, environment 0ms)
+

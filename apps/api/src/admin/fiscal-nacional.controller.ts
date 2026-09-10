@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Header, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
+import { PERFIL_IBSCBS_BARBEARIA } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { audit, type AuthenticatedStaff } from '@barbearia/identity';
 import { NfseError, situacaoNfse, salvarConfiguracaoNfse, salvarCertificadoNfse, removerCertificadoNfse,
@@ -15,7 +16,10 @@ const configSchema = z.object({
   ambiente: z.enum(['homologacao', 'producao']), serie: z.number().int().min(1).max(49999),
   codigoNacional: z.string().regex(/^\d{6}$/), codigoMunicipal: z.string().regex(/^\d{3}$/).nullable(),
   nbs: z.string().regex(/^\d{9}$/).nullable(), aliquotaTotalSimplesBps: z.number().int().min(0).max(9999).nullable(),
-  habilitada: z.boolean(),
+  tributosAproximadosBps: z.object({ federal: z.number().int().min(0).max(10000),
+    estadual: z.number().int().min(0).max(10000), municipal: z.number().int().min(0).max(10000) }).strict().nullable().optional(),
+  habilitada: z.boolean(), issForaDas: z.boolean().optional(), federaisForaDas: z.boolean().optional(),
+  perfilIbsCbs: z.literal(PERFIL_IBSCBS_BARBEARIA).nullable().optional(),
 }).strict();
 const certificadoSchema = z.object({
   arquivo: z.string().min(4).max(699052).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),

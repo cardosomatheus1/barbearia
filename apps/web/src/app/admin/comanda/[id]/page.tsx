@@ -1162,7 +1162,7 @@ export default async function ComandaPage({ params, searchParams }: Props) {
                   className="ui-field__input"
                   defaultValue={documentoBonito(tomador.documento)}
                   id="documento-tomador"
-                  inputMode="numeric"
+                  autoCapitalize="characters"
                   maxLength={20}
                   name="documento"
                   placeholder="Sem CPF sai ao consumidor"

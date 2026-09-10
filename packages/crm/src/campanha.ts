@@ -1,3 +1,5 @@
+import { criacaoManualExistente, type CriacaoManual } from './manual/criacao.js';
+import { prepararFilaManual } from './manual/fila.js';
 import { sql, withTenant, type Sql } from '@barbearia/db';
 import {
   campanhaParada,
@@ -85,6 +87,7 @@ export class CampanhaError extends Error {
 }
 
 export interface CampanhaNaTela {
+  readonly templateId: string | null;
   readonly id: string;
   readonly nome: string;
   readonly filtro: FiltroDeCampanha;
@@ -183,6 +186,7 @@ export async function campanhasDaCasa(params: {
         filter_weekday: number | null;
         kind: TipoDeNotificacao;
         texto_titulo: string | null;
+        template_id: string | null;
         status: 'rascunho' | 'enviando' | 'enviada';
         created_at: Date;
         ultimo_movimento: Date;
@@ -198,7 +202,7 @@ export async function campanhasDaCasa(params: {
       }[]
     >`
       SELECT c.id, c.name, c.filter::text AS filter, c.filter_value, c.filter_weekday,
-             c.kind::text AS kind, w.titulo AS texto_titulo,
+             c.kind::text AS kind, w.titulo AS texto_titulo, c.template_id,
              c.status::text AS status, c.created_at,
              COALESCE(max(t.sent_at), c.created_at) AS ultimo_movimento,
              count(t.id) AS publico,
@@ -226,6 +230,7 @@ export async function campanhasDaCasa(params: {
                    WHERE ct.campaign_id = c.id AND ct.skipped_reason IS NOT NULL
                    GROUP BY ct.skipped_reason) p
         ) mot ON true
+       WHERE COALESCE(w.transport, 'meta') <> 'manual'
        GROUP BY c.id, w.titulo, mot.motivos
        ORDER BY c.created_at DESC
     `;
@@ -237,6 +242,7 @@ export async function campanhasDaCasa(params: {
       diaDaSemana: l.filter_weekday,
       tipo: l.kind,
       textoTitulo: l.texto_titulo,
+      templateId: l.template_id,
       estado: l.status,
       criadaEm: l.created_at.toISOString(),
       ultimoMovimentoEm: l.ultimo_movimento.toISOString(),
@@ -298,6 +304,7 @@ export async function puladosDaCampanha(
  * sem erro. O filtro roda uma vez; depois disso o público é o que está gravado.
  */
 export async function criarCampanha(params: {
+  readonly criacaoManual?: CriacaoManual;
   readonly tenantId: string;
   readonly locationId?: string;
   readonly nome: string;
@@ -367,6 +374,10 @@ export async function criarCampanha(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    const existente = await criacaoManualExistente(tx, params, 'campanha');
+    if (existente) { const [contagem] = await tx.$queryRaw<{ total: number }[]>`SELECT count(*)::int AS total FROM campaign_targets WHERE campaign_id = ${existente}::uuid`;
+      return { id: existente, publico: contagem?.total ?? 0 }; }
+
     /**
      * O tipo sai do texto escolhido, conferido sob RLS antes de gravar.
      *
@@ -379,8 +390,9 @@ export async function criarCampanha(params: {
     let tipo = params.tipo;
     if (params.templateId) {
       const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
-        SELECT kind::text AS kind FROM whatsapp_templates_disponiveis
+        SELECT kind::text AS kind FROM whatsapp_templates
          WHERE id = ${params.templateId}::uuid
+           AND ((transport = 'manual' AND local_enabled) OR id IN (SELECT id FROM whatsapp_templates_disponiveis))
            AND (${params.locationId ?? null}::uuid IS NULL OR location_id = ${params.locationId ?? null}::uuid)
       `;
       const achado = doTexto[0];
@@ -402,12 +414,12 @@ export async function criarCampanha(params: {
     const criadas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO campaigns
         (tenant_id, name, filter, filter_value, filter_weekday, kind, goal_window_days,
-         created_by, template_id)
+         created_by, template_id, manual_request_key, manual_request_hash)
       VALUES (NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.filtro}::campaign_filter,
               ${params.valorDoFiltro}, ${params.diaDaSemana},
               ${tipo}::notification_kind, ${params.janelaDias},
-              ${params.staffId}::uuid, ${params.templateId ?? null}::uuid)
+              ${params.staffId}::uuid, ${params.templateId ?? null}::uuid, ${params.criacaoManual?.chave ?? null}::uuid, ${params.criacaoManual?.hash ?? null})
       RETURNING id
     `;
     const campanha = criadas[0];
@@ -582,6 +594,7 @@ export async function alvosAEnviar(
         JOIN LATERAL (SELECT id, timezone FROM locations
           WHERE (ca.template_id IS NULL OR id = w.location_id) ORDER BY created_at, id LIMIT 1) l ON true
        WHERE t.campaign_id = ${campanhaId}::uuid
+         AND COALESCE(w.transport, 'meta') <> 'manual'
          AND t.sent_at IS NULL AND t.skipped_reason IS NULL
        LIMIT ${limite}
     `;
@@ -674,6 +687,7 @@ export async function despacharCampanha(params: {
    */
   readonly enviar: (alvo: AlvoAEnviar) => Promise<string | null>;
 }): Promise<{ readonly enviados: number; readonly pulados: number }> {
+  if (await prepararFilaManual(params.tenantId, params.agora, params.campanhaId)) return { enviados: 0, pulados: 0 };
   const alvos = await alvosAEnviar(params.tenantId, params.campanhaId);
   let enviados = 0;
   let pulados = 0;

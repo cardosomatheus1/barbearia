@@ -1,0 +1,28 @@
+
+> @barbearia/finance@0.1.0 test /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/packages/finance
+> ./scripts/test.sh src/nfse-municipal
+
+psql:../db/migrations/0078_isolamento.sql:83: NOTICE:  policy "staff_directory_isolation" for relation "staff_directory" does not exist, skipping
+psql:../db/migrations/0078_isolamento.sql:84: NOTICE:  policy "staff_directory_acesso" for relation "staff_directory" does not exist, skipping
+psql:../db/migrations/0104_whatsapp_avulso_idempotente.sql:35: NOTICE:  policy "tenant_isolation" for relation "whatsapp_manual_send_intents" does not exist, skipping
+psql:../db/migrations/0106_notificacao_automatica_idempotente.sql:20: NOTICE:  policy "tenant_isolation" for relation "notification_send_intents" does not exist, skipping
+psql:../db/migrations/0108_auditoria_profunda.sql:184: NOTICE:  policy "subscription_change_intents_leitura" for relation "subscription_change_intents" does not exist, skipping
+psql:../db/migrations/0108_auditoria_profunda.sql:190: NOTICE:  policy "subscription_change_intents_escrita" for relation "subscription_change_intents" does not exist, skipping
+psql:../db/migrations/0110_scheduling_concorrencia_recursos.sql:29: NOTICE:  policy "tenant_isolation" for relation "slot_hold_resources" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:52: NOTICE:  policy "whatsapp_waba_owners_leitura" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:53: NOTICE:  policy "whatsapp_waba_owners_insercao" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:54: NOTICE:  policy "whatsapp_waba_owners_alteracao" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:55: NOTICE:  policy "whatsapp_waba_owners_remocao" for relation "whatsapp_waba_owners" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:79: NOTICE:  policy "whatsapp_wabas_leitura" for relation "whatsapp_wabas" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:80: NOTICE:  policy "whatsapp_wabas_insercao" for relation "whatsapp_wabas" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:81: NOTICE:  policy "whatsapp_wabas_alteracao" for relation "whatsapp_wabas" does not exist, skipping
+psql:../db/migrations/0113_crm_whatsapp_concorrencia.sql:82: NOTICE:  policy "whatsapp_wabas_remocao" for relation "whatsapp_wabas" does not exist, skipping
+
+ RUN  v4.1.11 /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/packages/finance
+
+
+ Test Files  2 passed (2)
+      Tests  30 passed (30)
+   Start at  19:01:22
+   Duration  69.36s (transform 2.95s, setup 0ms, import 4.75s, tests 63.79s, environment 1ms)
+

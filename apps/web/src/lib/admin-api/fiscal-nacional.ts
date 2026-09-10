@@ -1,8 +1,11 @@
 import { chamar } from './core';
+import type { PerfilIbsCbs, TributosAproximadosBps } from '@barbearia/core';
 
 export interface ConfiguracaoNfseNaTela {
   ambiente: 'homologacao' | 'producao'; serie: number; codigoNacional: string;
-  codigoMunicipal: string | null; nbs: string | null; aliquotaTotalSimplesBps: number | null; habilitada: boolean;
+  codigoMunicipal: string | null; nbs: string | null; aliquotaTotalSimplesBps: number | null; habilitada: boolean; issForaDas?: boolean; federaisForaDas?: boolean;
+  tributosAproximadosBps?: TributosAproximadosBps | null;
+  perfilIbsCbs?: PerfilIbsCbs | null;
 }
 export interface SituacaoNfseNaTela {
   modo: 'nenhum' | 'fake' | 'nacional'; configuracao: ConfiguracaoNfseNaTela | null;

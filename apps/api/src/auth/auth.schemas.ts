@@ -13,6 +13,7 @@ export const verifyOtpSchema = z.object({
 });
 
 export const createAppointmentSchema = z.object({
+  aceitaWhatsApp: z.boolean().optional(),
   // Sem sessão: nome e celular no corpo. É o fluxo do mercado — escolher,
   // informar, confirmar. Com sessão, estes campos são ignorados.
   name: z.string().trim().min(3).max(80).optional(),

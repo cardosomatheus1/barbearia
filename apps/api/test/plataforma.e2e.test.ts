@@ -22,7 +22,9 @@ import { SuporteInterceptor } from '../src/admin/suporte.interceptor.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { FiscalController } from '../src/admin/fiscal.controller.js';
 import { FiscalNacionalController } from '../src/admin/fiscal-nacional.controller.js';
+import { FiscalMunicipalController } from '../src/admin/fiscal-municipal.controller.js';
 import { certificadoNfseSintetico, CNPJ_TESTE_NFSE } from '../../../packages/finance/test/nfse-fixtures.js';
+import { confiancaA1Sintetica } from '../../../packages/finance/test/nfse-confianca-fixture.js';
 import { MeController } from '../src/admin/team.controller.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { guardarCorpoCru } from '../src/common/corpo-cru.js';
@@ -259,6 +261,7 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         OnboardingController,
         FiscalController,
         FiscalNacionalController,
+        FiscalMunicipalController,
         MeController,
         PlanoController,
         StripeWebhookController,
@@ -717,8 +720,11 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(200);
   });
 
-  it('NFS-e própria cadastra A1 pela API sem reexpor segredo e exige recurso, permissão e unidade da sessão', async () => {
+  it.each([CNPJ_TESTE_NFSE, '12ABC34501DE35'])('NFS-e própria cadastra A1 %s pela API sem reexpor segredo e exige recurso, permissão e unidade da sessão', async cnpj => {
+    const cred = confiancaA1Sintetica(undefined, cnpj);
     vi.stubEnv('FISCAL_SECRET_KEY', Buffer.alloc(32, 27).toString('base64'));
+    vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', '');
+    vi.stubEnv('FISCAL_CONFIANCA_DIR', cred.pasta);
     const token = await tokenDoDono(); const plataforma = await tokenDaPlataforma();
     const path = '/v1/admin/fiscal/nacional';
     await http().get(path).expect(401);
@@ -727,20 +733,78 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .send({ code: 'fiscal', ligado: true }).expect(200);
     try {
       await http().put('/v1/admin/fiscal/configuracao').set('authorization', `Bearer ${token}`)
-        .send({ cnpj: CNPJ_TESTE_NFSE, regime: 'mei', codigoDeServico: '060101', issBps: 0,
+        .send({ cnpj, regime: 'mei', codigoDeServico: '060101', issBps: 0,
           municipioIbge: '2927408', emitirAutomaticamente: false }).expect(200);
       const config = { ambiente: 'homologacao', serie: 1, codigoNacional: '060101', codigoMunicipal: null,
         nbs: null, aliquotaTotalSimplesBps: null, habilitada: true };
       await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ ...config, locationId: LOCAL_VIZINHA }).expect(400);
       await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send(config).expect(200);
       await http().post(`${path}/certificado`).set('authorization', `Bearer ${token}`).send({ arquivo: 'AAAA', senha: 'incorreta' }).expect(400);
-      const cred = certificadoNfseSintetico();
+      const intruso = certificadoNfseSintetico(cnpj);
+      await http().post(`${path}/certificado`).set('authorization', `Bearer ${token}`)
+        .send({ arquivo: intruso.pfx.toString('base64'), senha: intruso.senha }).expect(400);
       await http().post(`${path}/certificado`).set('authorization', `Bearer ${token}`)
         .send({ arquivo: cred.pfx.toString('base64'), senha: cred.senha }).expect(201);
+      const semAutoridade = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
+      expect(semAutoridade.body.pronta).toBe(false);
+      vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', Buffer.from(cred.certificado.certificadoPem).toString('base64'));
       const status = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
       expect(status.body.pronta).toBe(true);
       expect(JSON.stringify(status.body).includes(cred.senha)).toBe(false);
       expect(JSON.stringify(status.body).includes(cred.pfx.toString('base64'))).toBe(false);
+      expect(JSON.stringify(status.body).includes(cred.certificado.certificadoPem)).toBe(false);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: true }).expect(400);
+      await http().put('/v1/admin/fiscal/configuracao').set('authorization', `Bearer ${token}`)
+        .send({ cnpj, regime: 'simples', codigoDeServico: '060101', issBps: 500,
+          municipioIbge: '2927408', emitirAutomaticamente: false }).expect(200);
+      for (const issForaDas of ['true', 1, null]) {
+        await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+          .send({ ...config, issForaDas }).expect(400);
+      }
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: true }).expect(409);
+      const estimativasSimples = { federal: 1345, estadual: 0, municipal: 500 };
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: true, tributosAproximadosBps: estimativasSimples }).expect(200);
+      expect((await http().get(path).set('authorization', `Bearer ${token}`).expect(200)).body)
+        .toMatchObject({ pronta: true, configuracao: { issForaDas: true, tributosAproximadosBps: estimativasSimples } });
+      for (const federaisForaDas of ['true', 1, null]) {
+        await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+          .send({ ...config, issForaDas: true, federaisForaDas, tributosAproximadosBps: estimativasSimples }).expect(400);
+      }
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: false, federaisForaDas: true, tributosAproximadosBps: estimativasSimples }).expect(400);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: true, federaisForaDas: true, tributosAproximadosBps: estimativasSimples }).expect(200);
+      expect((await http().get(path).set('authorization', `Bearer ${token}`).expect(200)).body)
+        .toMatchObject({ pronta: true, configuracao: { issForaDas: true, federaisForaDas: true } });
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: false }).expect(409);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ ...config, issForaDas: false, aliquotaTotalSimplesBps: 650 }).expect(200);
+      expect((await http().get(path).set('authorization', `Bearer ${token}`).expect(200)).body)
+        .toMatchObject({ pronta: true, configuracao: { issForaDas: false, aliquotaTotalSimplesBps: 650 } });
+      const cadastroFiscal = { cnpj, regime: 'normal', codigoDeServico: '060101', issBps: 500,
+        municipioIbge: '2927408', emitirAutomaticamente: false };
+      await http().put('/v1/admin/fiscal/configuracao').set('authorization', `Bearer ${token}`).send(cadastroFiscal).expect(200);
+      expect((await http().get(path).set('authorization', `Bearer ${token}`).expect(200)).body.pronta).toBe(false);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send(config).expect(409);
+      for (const tributosAproximadosBps of [{ federal: 1345, estadual: 0 }, { federal: 10001, estadual: 0, municipal: 500 }]) {
+        await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ ...config, tributosAproximadosBps }).expect(400);
+      }
+      const tributosAproximadosBps = { federal: 1345, estadual: 0, municipal: 500 };
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ ...config, tributosAproximadosBps }).expect(409);
+      const perfil = { perfilIbsCbs: 'regular_presencial', nbs: '126021000' };
+      for (const alteracao of [{ perfilIbsCbs: 'isento' }, { nbs: null }, { codigoNacional: '060201' }]) {
+        await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+          .send({ ...config, tributosAproximadosBps, ...perfil, ...alteracao }).expect(400);
+      }
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ ...config, tributosAproximadosBps, ...perfil }).expect(200);
+      const normal = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
+      expect(normal.body).toMatchObject({ pronta: true, configuracao: { tributosAproximadosBps, ...perfil } });
+      await http().put('/v1/admin/fiscal/configuracao').set('authorization', `Bearer ${token}`).send({ ...cadastroFiscal, regime: 'mei', issBps: 0 }).expect(200);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send(config).expect(200);
       await http().get(`${path}/notas/${LOCAL_VIZINHA}/xml`).set('authorization', `Bearer ${token}`).expect(404);
       await admin.$executeRaw`DELETE FROM role_permissions WHERE tenant_id = ${DOMARI}::uuid AND role = 'owner' AND permission = 'fiscal.settings'`;
       try { await http().get(path).set('authorization', `Bearer ${token}`).expect(403); }
@@ -749,9 +813,53 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       const removido = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
       expect(removido.body.certificado).toBeNull(); expect(removido.body.pronta).toBe(false);
     } finally {
+      cred.limpar();
       await http().put(`/v1/plataforma/barbearias/${DOMARI}/recursos`).set('authorization', `Bearer ${plataforma}`)
         .send({ code: 'fiscal', ligado: false }).expect(200);
       vi.unstubAllEnvs();
+    }
+  });
+
+  it('NFS-e municipal reaproveitada exige unidade, permissão, série e certificado sem reexpor credenciais', async () => {
+    const cred = confiancaA1Sintetica();
+    vi.stubEnv('FISCAL_SECRET_KEY', Buffer.alloc(32, 27).toString('base64'));
+    vi.stubEnv('FISCAL_MUNICIPAL_BIN', '/bin/true');
+    vi.stubEnv('FISCAL_CONFIANCA_DIR', cred.pasta);
+    const token = await tokenDoDono(); const plataforma = await tokenDaPlataforma();
+    const path = '/v1/admin/fiscal/municipal';
+    await http().get(path).expect(401);
+    await http().get(path).set('authorization', `Bearer ${token}`).expect(404);
+    await http().put(`/v1/plataforma/barbearias/${DOMARI}/recursos`).set('authorization', `Bearer ${plataforma}`)
+      .send({ code: 'fiscal', ligado: true }).expect(200);
+    try {
+      await http().put('/v1/admin/fiscal/configuracao').set('authorization', `Bearer ${token}`)
+        .send({ cnpj: CNPJ_TESTE_NFSE, regime: 'simples', codigoDeServico: '060101', issBps: 200,
+          municipioIbge: '3550308', inscricaoMunicipal: '12345678', emitirAutomaticamente: false }).expect(200);
+      await http().post('/v1/admin/fiscal/nacional/certificado').set('authorization', `Bearer ${token}`)
+        .send({ arquivo: cred.pfx.toString('base64'), senha: cred.senha }).expect(201);
+      const config = { ambiente: 'producao', serie: 'SP1', numeroInicial: 25, serieExclusiva: true,
+        razaoSocial: 'Barbearia sintética', itemListaServico: '6.01', codigoMunicipal: '2658', codigoCancelamento: '1',
+        cnae: '9602501', nbs: null, layoutSaoPaulo: 1, habilitada: true,
+        enderecoPrestador: { logradouro: 'Rua teste', numero: '1', bairro: 'Centro', cep: '01001000',
+          municipio: 3550308, nomeMunicipio: 'São Paulo', uf: 'SP' } };
+      for (const alteracao of [{ serieExclusiva: false }, { numeroInicial: 0 }, { layoutSaoPaulo: 2 }, { locationId: LOCAL_VIZINHA }]) {
+        await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ config: { ...config, ...alteracao } }).expect(400);
+      }
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`)
+        .send({ config, credenciais: { usuario: 'usuario-sintetico', senha: 'senha-municipal-sintetica', token: 'token-municipal-sintetico' } }).expect(200);
+      const estado = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
+      expect(estado.body).toMatchObject({ pronta: true, emissor: 'municipal', temCredenciais: true, configuracao: config });
+      for (const segredo of ['senha-municipal-sintetica', 'token-municipal-sintetico', cred.senha]) expect(JSON.stringify(estado.body)).not.toContain(segredo);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ config: { ...config, numeroInicial: 1 } }).expect(400);
+      await admin.$executeRaw`DELETE FROM role_permissions WHERE tenant_id = ${DOMARI}::uuid AND role = 'owner' AND permission = 'fiscal.settings'`;
+      try {
+        await http().get(path).set('authorization', `Bearer ${token}`).expect(403);
+        await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ config }).expect(403);
+      } finally { await admin.$executeRaw`INSERT INTO role_permissions (tenant_id, role, permission) VALUES (${DOMARI}::uuid, 'owner', 'fiscal.settings') ON CONFLICT DO NOTHING`; }
+    } finally {
+      cred.limpar();
+      await http().put(`/v1/plataforma/barbearias/${DOMARI}/recursos`).set('authorization', `Bearer ${plataforma}`)
+        .send({ code: 'fiscal', ligado: false }).expect(200);
     }
   });
 

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { RETENCAO_ANOS, AVISO_DE_RETENCAO_DIAS } from '@barbearia/core';
 import { aVencerPorRetencao, anonimizarCliente, varrerRetencao } from './anonimizacao.js';
+import { solicitarConsentimentoCadastro } from './consentimento-cadastro.js';
 import { abrirPedidoDoTitular, atenderExclusao, encerrarPedidoDoTitular, LgpdError, pedidosDoTitular } from './lgpd.js';
 
 /**
@@ -80,6 +81,45 @@ describeIfDb('anonimização e retenção', () => {
     admin.$queryRawUnsafe<
       { name: string; phone_e164: string | null; anonymized_at: Date | null; balance_cents: number }[]
     >(`SELECT name, phone_e164, anonymized_at, balance_cents FROM customers WHERE id = '${id}'`);
+
+  it('retenção remove intenções expiradas de WhatsApp e preserva as válidas e as de outro tenant', async () => {
+    const horario = '0b323232-0000-0000-0000-000000000091';
+    const horarioRival = '0b323232-0000-0000-0000-000000000092';
+    const localRival = 'a2323232-0000-0000-0000-000000000092';
+    const profissionalRival = 'e2323232-0000-0000-0000-000000000092';
+    await exec(`
+      INSERT INTO locations (id, tenant_id, name, timezone)
+        VALUES ('${localRival}', '${RIVAL}', 'Vizinha', 'America/Bahia');
+      INSERT INTO professionals (id, tenant_id, location_id, name, kind)
+        VALUES ('${profissionalRival}', '${RIVAL}', '${localRival}', 'Profissional da vizinha', 'professional');
+      INSERT INTO appointments
+        (id, tenant_id, location_id, customer_id, professional_id,
+         starts_at, ends_at, service_starts_at, service_ends_at, price_cents, status)
+        VALUES
+        ('${horario}', '${TENANT}', '${LOCAL}', '${CARLOS}', '${RUAN}',
+          '${diasAtras(10).toISOString()}', '${diasAtras(9.9).toISOString()}',
+          '${diasAtras(10).toISOString()}', '${diasAtras(9.9).toISOString()}', 5000, 'completed'),
+        ('${horarioRival}', '${RIVAL}', '${localRival}', '${DELA}', '${profissionalRival}',
+          '${diasAtras(10).toISOString()}', '${diasAtras(9.9).toISOString()}',
+          '${diasAtras(10).toISOString()}', '${diasAtras(9.9).toISOString()}', 5000, 'completed');
+    `);
+    const pedido = { tenantId: TENANT, customerId: CARLOS, appointmentId: horario, ip: null, agora: AGORA };
+    await solicitarConsentimentoCadastro(pedido);
+    await solicitarConsentimentoCadastro(pedido);
+    await solicitarConsentimentoCadastro({ ...pedido, tenantId: RIVAL, customerId: DELA, appointmentId: horarioRival });
+    const pedidos = await admin.$queryRaw<{ id: string; tenant_id: string }[]>`SELECT id,tenant_id FROM customer_marketing_requests ORDER BY id`;
+    const nossos = pedidos.filter(p => p.tenant_id === TENANT);
+    const vencido = nossos[0], valido = nossos[1], rival = pedidos.find(p => p.tenant_id === RIVAL);
+    if (!vencido || !valido || !rival) throw new Error('Intenções não foram criadas');
+    await admin.$executeRaw`UPDATE customer_marketing_requests SET created_at = ${diasAtras(1)}, expires_at = ${AGORA}
+      WHERE id IN (${vencido.id}::uuid, ${rival.id}::uuid)`;
+
+    await varrerRetencao({ tenantId: TENANT, agora: AGORA });
+    const restantes = await admin.$queryRaw<{ id: string }[]>`SELECT id FROM customer_marketing_requests ORDER BY id`;
+    expect(restantes.map(p => p.id).sort()).toEqual([valido.id, rival.id].sort());
+    expect((await cadastro(CARLOS))[0]?.anonymized_at).toBeNull();
+    expect(await admin.$queryRaw`SELECT id FROM customer_consents WHERE purpose = 'marketing' AND granted`).toHaveLength(0);
+  });
 
   // -- anonimizar --------------------------------------------------------------
 

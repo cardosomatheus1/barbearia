@@ -23,6 +23,7 @@ import {
   parteDoParceiro,
   vendaAceitaNota,
   validarConfiguracaoFiscal,
+  tributosAproximadosValidos,
   type ConfiguracaoFiscal,
 } from './fiscal.js';
 
@@ -71,8 +72,21 @@ describe('o CNPJ é conferido aqui, não só no emissor', () => {
     expect(cnpjValido('')).toBe(false);
   });
 
-  it('normalizar guarda só os dígitos, que é como o emissor recebe', () => {
+  it('normalizar remove a máscara do documento numérico', () => {
     expect(normalizarCnpj('11.222.333/0001-81')).toBe('11222333000181');
+  });
+  it('valida o exemplo alfanumérico oficial sem aceitar DV alterado ou apagar letras', () => {
+    expect(cnpjValido('12.ABC.345/01DE-35')).toBe(true);
+    expect(cnpjValido('12abc34501de35')).toBe(true);
+    expect(normalizarCnpj(' 12.abc.345/01de-35 ')).toBe('12ABC34501DE35');
+    expect(documentoBonito('12ABC34501DE35')).toBe('12.ABC.345/01DE-35');
+    expect(documentoDoTomadorValido('12ABC34501DE35')).toBe(true);
+    expect(normalizarDocumento('12.ABC.345/01DE-35')).toBe('12ABC34501DE35');
+    for (const valor of ['12ABC34501DE36', '12ABC34501DE3A', '12ABC34501DÉ35', '11!222333000181', 'ABC11222333000181']) {
+      expect(cnpjValido(valor)).toBe(false); expect(documentoDoTomadorValido(valor)).toBe(false);
+    }
+    expect(cpfValido('ABC52998224725')).toBe(false);
+    expect(documentoDoTomadorValido('letras')).toBe(false);
   });
 });
 
@@ -269,6 +283,14 @@ describe('o emissor de mentira', () => {
 });
 
 describe('o vocabulário da nota', () => {
+  it('tributos aproximados exigem as três esferas, distinguem zero de ausência e limitam cada percentual', () => {
+    expect(tributosAproximadosValidos({ federal: 0, estadual: 0, municipal: 10000 })).toBe(true);
+    for (const valor of [null, {}, { federal: 0, estadual: 0 }, { federal: 1345, estadual: 0, municipal: -1 },
+      { federal: 10001, estadual: 0, municipal: 500 }, { federal: 13.45, estadual: 0, municipal: 500 },
+      { federal: '1345', estadual: 0, municipal: 500 }, { federal: 1345, estadual: 0, municipal: 500, extra: 1 }]) {
+      expect(tributosAproximadosValidos(valor)).toBe(false);
+    }
+  });
   it('todo estado tem rótulo e explicação', () => {
     for (const estado of ESTADOS_DA_NOTA) {
       expect(ROTULO_DA_NOTA[estado]).toBeTruthy();

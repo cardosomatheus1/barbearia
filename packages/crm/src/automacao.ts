@@ -1,3 +1,4 @@
+import { criacaoManualExistente, type CriacaoManual } from './manual/criacao.js';
 import { sql, withTenant, type Sql, type TransactionClient } from '@barbearia/db';
 import { segmentosDaBase } from './segmento.js';
 import {
@@ -150,6 +151,7 @@ export async function automacoesDaCasa(tenantId: string): Promise<readonly Autom
         FROM automations a
         LEFT JOIN automation_sends s ON s.automation_id = a.id
         LEFT JOIN whatsapp_templates w ON w.id = a.template_id
+       WHERE COALESCE(w.transport, 'meta') <> 'manual'
        GROUP BY a.id, w.titulo
        ORDER BY a.created_at DESC
     `);
@@ -158,6 +160,7 @@ export async function automacoesDaCasa(tenantId: string): Promise<readonly Autom
 }
 
 export async function salvarAutomacao(params: {
+  readonly criacaoManual?: CriacaoManual;
   readonly tenantId: string;
   readonly locationId?: string;
   readonly id?: string;
@@ -231,6 +234,9 @@ export async function salvarAutomacao(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
+    const existente = await criacaoManualExistente(tx, params, 'automacao');
+    if (existente) { return { id: existente }; }
+
     /**
      * O tipo sai do **texto escolhido**, e não de um campo ao lado.
      *
@@ -261,7 +267,7 @@ export async function salvarAutomacao(params: {
     const linhas = await tx.$queryRaw<{ id: string }[]>`
       INSERT INTO automations
         (id, tenant_id, name, trigger, threshold, delay_minutes, kind, goal,
-         goal_window_days, active, created_by, template_id, audience)
+         goal_window_days, active, created_by, template_id, audience, manual_request_key, manual_request_hash)
       VALUES (COALESCE(${params.id ?? null}::uuid, gen_random_uuid()),
               NULLIF(current_setting('app.tenant_id', true), '')::uuid,
               ${params.nome.trim()}, ${params.gatilho}::automation_trigger,
@@ -269,7 +275,7 @@ export async function salvarAutomacao(params: {
               ${tipo}::notification_kind, ${params.objetivo}::automation_goal,
               ${params.janelaDias}, ${params.ativa}, ${params.staffId}::uuid,
               ${params.templateId ?? null}::uuid,
-              ${params.publico === undefined ? null : params.publico})
+              ${params.publico === undefined ? null : params.publico}, ${params.criacaoManual?.chave ?? null}::uuid, ${params.criacaoManual?.hash ?? null})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         threshold = EXCLUDED.threshold,
@@ -704,6 +710,7 @@ export async function disparosAEnviar(
         JOIN LATERAL (SELECT id, timezone FROM locations
           WHERE (a.template_id IS NULL OR id = w.location_id) ORDER BY created_at, id LIMIT 1) l ON true
        WHERE s.sent_at IS NULL AND s.skipped_reason IS NULL
+         AND a.active AND COALESCE(w.transport, 'meta') <> 'manual'
          AND s.scheduled_for <= ${agora}::timestamptz
          AND c.phone_e164 IS NOT NULL
        ORDER BY s.scheduled_for

@@ -1,3 +1,4 @@
+import { lerPedidoConsentimentoCadastro } from '@/lib/consentimento-cadastro';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getComprovante, getProfile } from '@/lib/api';
@@ -14,6 +15,7 @@ import { regraDeCancelamento } from '@/lib/politica';
 
 interface Props {
   readonly params: Promise<{ slug: string; id: string }>;
+  readonly searchParams: Promise<{ whatsapp?: string }>;
 }
 
 export const metadata: Metadata = {
@@ -38,11 +40,13 @@ const MARCA: Record<string, string> = {
   active: '✓', done: '✓', cancelled: '×', rescheduled: '→',
 };
 
-export default async function ConfirmadoPage({ params }: Props) {
+export default async function ConfirmadoPage({ params, searchParams }: Props) {
   const { slug, id } = await params;
   const [profile, comprovante] = await Promise.all([getProfile(slug), getComprovante(slug, id)]);
   if (!profile || !comprovante) notFound();
 
+  const pedidoWhatsApp = await lerPedidoConsentimentoCadastro(slug);
+  const whatsappPendente = (await searchParams).whatsapp === 'pendente';
   const ativo = comprovante.state === 'active';
   const quando = humanInstant(profile.location.timezone, comprovante.startsAt);
   const minutos = Math.round(
@@ -67,6 +71,16 @@ export default async function ConfirmadoPage({ params }: Props) {
         {profile.name}
         {endereco ? <> · {endereco}</> : null}
       </p>
+
+      {pedidoWhatsApp?.appointmentId === id ? <section className="ui-alert ui-alert--success confirmado__aviso">
+        <p>Seu agendamento está confirmado. Para ativar as novidades por WhatsApp que você escolheu, confirme que o número é seu.</p>
+        <a className="ui-button ui-button--primary" href={`/${slug}/consentimento-whatsapp`}>Confirmar meu WhatsApp</a>
+      </section> : null}
+
+      {whatsappPendente && pedidoWhatsApp?.appointmentId !== id ? <section className="ui-alert ui-alert--warning confirmado__aviso" role="status">
+        <p>Seu agendamento está confirmado. Não conseguimos guardar sua escolha sobre novidades por WhatsApp. Você pode ativá-las nas suas preferências.</p>
+        <a className="ui-button ui-button--primary" href={`/${slug}/meus-agendamentos`}>Escolher minhas preferências</a>
+      </section> : null}
 
       {/* O comprovante: o que foi marcado, com quem, quanto tempo e quanto custa. */}
       <dl className="comprovante">

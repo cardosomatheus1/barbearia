@@ -1,0 +1,15 @@
+{
+  "name": "permissao-municipal-correcao-v16",
+  "command": [
+    "pnpm",
+    "--filter",
+    "@barbearia/api",
+    "exec",
+    "vitest",
+    "run",
+    "test/permissao.guard.test.ts"
+  ],
+  "started_utc": "2026-09-10T21:37:15.824752+00:00",
+  "duration_seconds": 3.0,
+  "exit_code": 0
+}

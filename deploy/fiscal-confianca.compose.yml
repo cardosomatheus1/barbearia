@@ -1,0 +1,36 @@
+# Usar como override do Compose de produção somente após preencher o manifesto.
+# API/worker já montam o mesmo diretório como somente leitura.
+services:
+  fiscal-confianca:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "scripts/fiscal-confianca-atualizar.mjs", "--loop", "/run/fontes-fiscais.json", "/data/confianca"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    volumes:
+      - type: bind
+        source: ${FISCAL_CONFIANCA_MANIFESTO:-./fontes-fiscais.json}
+        target: /run/fontes-fiscais.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FISCAL_CONFIANCA_DIR:-./fiscal-confianca}
+        target: /data/confianca
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "node", "scripts/fiscal-confianca-atualizar.mjs", "--health", "/data/confianca"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"

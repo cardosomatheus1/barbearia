@@ -17,6 +17,11 @@
 # com o mesmo conteúdo e três builds a manter em sincronia. O compose sobe três
 # serviços a partir dela, cada um com o seu comando — que é onde a separação
 # realmente importa, porque um pode cair e reiniciar sem os outros.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS fiscal-municipal
+WORKDIR /build
+COPY integrations/fiscal-municipal/ ./
+RUN dotnet publish src/FiscalMunicipal.csproj -c Release -r linux-x64 --self-contained true -p:RestoreLockedMode=true -o /fiscal-municipal
+
 FROM node:22-bookworm-slim
 
 # `postgresql-client` porque os scripts do repositório falam com o banco por
@@ -25,7 +30,7 @@ FROM node:22-bookworm-slim
 # e é o segundo caminho que sai de sincronia sem ninguém ver.
 # `curl` é a sonda de pronto do próprio script.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates openssl \
+ && apt-get install -y --no-install-recommends curl ca-certificates openssl util-linux libicu72 \
  && curl -fsS https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/keyrings/postgresql.asc \
  && echo 'deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
  && apt-get update \
@@ -35,11 +40,16 @@ RUN apt-get update \
 RUN corepack enable
 
 WORKDIR /app
+COPY --from=fiscal-municipal /fiscal-municipal /opt/barbearia/fiscal-municipal
+ENV FISCAL_MUNICIPAL_BIN=/opt/barbearia/fiscal-municipal/Barbearia.FiscalMunicipal
 
 # O lockfile e os manifestos primeiro: enquanto nenhuma dependência muda, o
 # Docker reaproveita a camada de instalação e um `docker compose up` depois de
 # editar código não baixa nada de novo.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# O lockfile aplica correções locais (incluindo libsignal do Baileys). Elas
+# precisam existir já na camada de instalação, antes do restante da fonte.
+COPY patches/ ./patches/
 COPY packages/core/package.json          packages/core/
 COPY packages/db/package.json            packages/db/
 COPY packages/db/prisma/schema.prisma    packages/db/prisma/

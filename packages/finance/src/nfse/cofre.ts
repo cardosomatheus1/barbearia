@@ -22,10 +22,11 @@ export function decifrarFiscal(conteudo: string, escopo: string): string {
   try {
     const [versao, iv, mac, body, sobra] = conteudo.split('.');
     if (versao !== 'v1' || !iv || !mac || !body || sobra !== undefined) throw new Error();
-    const nonce = Buffer.from(iv, 'base64'); const tag = Buffer.from(mac, 'base64');
-    if (nonce.length !== 12 || tag.length !== 16) throw new Error();
+    const nonce = Buffer.from(iv, 'base64'); const tag = Buffer.from(mac, 'base64'); const dados = Buffer.from(body, 'base64');
+    if (nonce.length !== 12 || tag.length !== 16 || nonce.toString('base64') !== iv ||
+      tag.toString('base64') !== mac || dados.toString('base64') !== body) throw new Error();
     const cipher = createDecipheriv('aes-256-gcm', chave, nonce);
     cipher.setAAD(Buffer.from(`nfse:v1:${escopo}`)); cipher.setAuthTag(tag);
-    return Buffer.concat([cipher.update(Buffer.from(body, 'base64')), cipher.final()]).toString('utf8');
+    return Buffer.concat([cipher.update(dados), cipher.final()]).toString('utf8');
   } catch { throw new Error('nfse_cofre_invalido'); }
 }

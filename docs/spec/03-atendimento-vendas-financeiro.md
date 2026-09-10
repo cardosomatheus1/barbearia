@@ -312,8 +312,13 @@ Salão-Parceiro.
 **Decisão de arquitetura (mandato de setembro/2026):** integração própria,
 sem intermediário. O core mantém o contrato `FiscalProvider`; `finance/nfse`
 implementa A1, XML assinado, transporte mTLS e recuperação. O adaptador nacional
-atual atende MEI e Simples com ISS no DAS, sem retenção; outros perfis e
-municípios sem emissor nacional exigem adaptadores próprios e homologação.
+atual implementa MEI, Simples com as três formas de apuração (`regApTribSN=1/2/3`)
+e não optante pelo Simples, sem retenção. ISS fora do DAS e não optante exigem
+os três percentuais de tributos aproximados. Não optante usa `opSimpNac=1`, sem
+campos exclusivos do Simples, e o perfil presencial de IBS/CBS da barbearia.
+O DANFSe é gerado localmente a partir da resposta fiscal verificada. Outros
+perfis e municípios sem emissor nacional ainda exigem ampliação própria;
+os perfis implementados exigem homologação.
 A implantação não deve ser apresentada como cobertura universal.
 
 ```

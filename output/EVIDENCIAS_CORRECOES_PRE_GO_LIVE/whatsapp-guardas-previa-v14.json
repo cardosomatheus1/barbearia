@@ -1,0 +1,14 @@
+{
+  "name": "whatsapp-guardas-previa-v14",
+  "command": [
+    "pnpm",
+    "--filter",
+    "@barbearia/web",
+    "test",
+    "src/app/admin/previa-da-mensagem.test.ts",
+    "src/app/admin/acoes/whatsapp-textos.test.ts"
+  ],
+  "started_utc": "2026-09-10T20:23:33.152062+00:00",
+  "duration_seconds": 3.11,
+  "exit_code": 0
+}

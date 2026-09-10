@@ -1,3 +1,4 @@
+import { limparPedidosConsentimento } from './consentimento-cadastro.js';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
 import {
@@ -144,6 +145,7 @@ export async function varrerRetencao(entrada: {
   const corte = new Date(agora.getTime() - RETENCAO_ANOS * 365 * 86_400_000);
 
   return withTenant(entrada.tenantId, async (tx) => {
+    await limparPedidosConsentimento(tx, agora);
     /**
      * Quem voltou perde o carimbo do aviso — e a `/security-review` deste bloco
      * foi quem cobrou.

@@ -1,0 +1,22 @@
+{
+  "estado": "interrompida_a_pedido_do_usuario",
+  "utc": "2026-09-10T21:57:33.430992+00:00",
+  "motivo": "Commit e push imediato para main, com interrupção dos testes em andamento.",
+  "fonte_sha256": "a17c2a7339a4b03fb1bc8d11ec29920bae2e7911eb58d50d2337a4f07f19d613",
+  "regressao_v16_parcial": {
+    "guardas_e_etapas_concluidas": 29,
+    "falhas_anunciadas": [],
+    "logs_etapas": 101,
+    "vitest_aprovados_parcial": 2410,
+    "vitest_reprovados_parcial": 0,
+    "suites_vitest_concluidas": 33,
+    "logs_com_falha": [],
+    "dotnet": [
+      "Passed!  - Failed:     0, Passed:    34, Skipped:     0, Total:    34, Duration: 4 s - FiscalMunicipal.Tests.dll (net10.0)"
+    ]
+  },
+  "validacoes_complementares_v16": "não iniciadas",
+  "regressao_v15": "executada integralmente: 4418 Vitest aprovados, 1 falha na ordem dos decoradores; 321 TAP e 34 C# aprovados",
+  "correcao": "A ordem de Exige nas duas rotas municipais foi alinhada ao padrão do projeto; 24 testes dirigidos de permissões aprovados.",
+  "publicacao": "Preparada para main; recibo Git será conferido após o push."
+}

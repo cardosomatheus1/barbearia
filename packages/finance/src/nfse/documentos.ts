@@ -1,17 +1,19 @@
 import type { TransactionClient } from '@barbearia/db';
 import { withTenant } from '@barbearia/db';
-import { identificadorDps, type DadosDps } from './dps.js';
-import { ratearDesconto } from '@barbearia/core';
+import { identificadorDps, regimeDpsAtendido, type DadosDps } from './dps.js';
+import { ratearDesconto, tributosAproximadosValidos, perfilIbsCbsCompativel, cpfValido } from '@barbearia/core';
 import { cifrarFiscal, decifrarFiscal } from './cofre.js';
 import { lerConfiguracaoNfse } from './configuracao.js';
 import { recusarNfse } from './erros.js';
 import type { AmbienteNfse } from './transporte.js';
+import { baixarXmlMunicipal } from '../nfse-municipal/documentos.js';
 
 export interface DocumentoNfse {
   invoice_id: string; location_id: string; environment: AmbienteNfse; dps_id: string;
   snapshot_cipher: string; signed_dps_cipher: string | null; nfse_cipher: string | null;
   access_key: string | null; cancel_request_cipher: string | null; cancel_event_cipher: string | null;
   cancel_error_code: string | null;
+  nfse_validation_cipher: string | null; cancel_validation_cipher: string | null;
   attempt_at: Date | null;
 }
 export function escopoDocumento(tenantId: string, doc: Pick<DocumentoNfse, 'invoice_id' | 'location_id'>, tipo: string): string {
@@ -33,8 +35,20 @@ export async function prepararDocumentoNfse(tx: TransactionClient, tenantId: str
   const r = rows[0];
   if (!r) recusarNfse('nota_nao_encontrada', 'Esta nota não existe.', 404);
   const config = await lerConfiguracaoNfse(tx, r.location_id);
-  if (!config?.habilitada || (r.regime !== 'mei' && r.regime !== 'simples')) {
+  if (!config?.habilitada || !regimeDpsAtendido(r.regime)) {
     recusarNfse('nfse_nao_configurada', 'Confira a configuração do emissor nacional.');
+  }
+  if ((r.regime === 'normal' || config.issForaDas) && !tributosAproximadosValidos(config.tributosAproximadosBps)) {
+    recusarNfse('nfse_nao_configurada', 'Informe os tributos aproximados antes de solicitar a nota.');
+  }
+  if (config.perfilIbsCbs) {
+    if (!perfilIbsCbsCompativel({ perfil: config.perfilIbsCbs, regime: r.regime,
+      codigoNacional: config.codigoNacional, nbs: config.nbs }) || r.competence < '2026-01-01') {
+      recusarNfse('nfse_ibscbs_perfil_invalido', 'Confira o perfil de IBS/CBS desta operação.');
+    }
+    if (!r.customer_document || !cpfValido(r.customer_document) || !r.customer_name?.trim()) {
+      recusarNfse('nfse_ibscbs_tomador_obrigatorio', 'Cadastre nome e CPF do cliente que recebeu o serviço antes de emitir a nota.');
+    }
   }
   const itens = await tx.$queryRaw<{ id: string; kind: string; description: string; quantity: number; unit_price_cents: number }[]>`
     SELECT oi.id, oi.kind::text, oi.description, oi.quantity, oi.unit_price_cents
@@ -60,6 +74,10 @@ export async function prepararDocumentoNfse(tx: TransactionClient, tenantId: str
     ...(config.nbs ? { nbs: config.nbs } : {}),
     ...(r.municipal_registration ? { inscricaoMunicipal: r.municipal_registration } : {}),
     ...(config.aliquotaTotalSimplesBps !== null ? { aliquotaTotalSimplesBps: config.aliquotaTotalSimplesBps } : {}),
+    ...(config.issForaDas ? { issForaDas: true } : {}),
+    ...(config.federaisForaDas ? { federaisForaDas: true } : {}),
+    ...((r.regime === 'normal' || config.issForaDas) && config.tributosAproximadosBps ? { tributosAproximadosBps: config.tributosAproximadosBps } : {}),
+    ...(config.perfilIbsCbs ? { perfilIbsCbs: config.perfilIbsCbs } : {}),
     descricao: servicos.map(i => `${i.quantity}x ${i.description}`).join('; '), servicoCents: r.service_cents,
     descontoIncondicionadoCents: servicos.reduce((total, i) => total + (descontos.get(i.id) ?? 0), 0),
     ...(r.customer_document ? { tomador: { documento: r.customer_document, nome: r.customer_name ?? 'Consumidor' } } : {}),
@@ -75,7 +93,7 @@ export async function prepararDocumentoNfse(tx: TransactionClient, tenantId: str
 export async function lerDocumentoNfse(tenantId: string, invoiceId: string): Promise<DocumentoNfse> {
   const rows = await withTenant(tenantId, tx => tx.$queryRaw<DocumentoNfse[]>`
     SELECT invoice_id, location_id, environment, dps_id, snapshot_cipher, signed_dps_cipher, nfse_cipher,
-           access_key, cancel_request_cipher, cancel_event_cipher, cancel_error_code, attempt_at
+           access_key, cancel_request_cipher, cancel_event_cipher, cancel_error_code, attempt_at, nfse_validation_cipher, cancel_validation_cipher
       FROM fiscal_native_documents WHERE invoice_id = ${invoiceId}::uuid
   `);
   if (!rows[0]) recusarNfse('nfse_documento_ausente', 'Esta nota não tem uma DPS do emissor nacional.', 404);
@@ -88,6 +106,10 @@ export function snapshotDoDocumento(tenantId: string, doc: DocumentoNfse): Dados
 }
 
 export async function baixarXmlNfse(p: { tenantId: string; locationId: string; invoiceId: string }): Promise<string> {
+  const municipais = await withTenant(p.tenantId, tx => tx.$queryRaw<{ invoice_id: string }[]>`
+    SELECT invoice_id FROM fiscal_municipal_documents WHERE invoice_id = ${p.invoiceId}::uuid
+  `);
+  if (municipais[0]) return baixarXmlMunicipal(p);
   const doc = await lerDocumentoNfse(p.tenantId, p.invoiceId);
   if (doc.location_id !== p.locationId) recusarNfse('nota_nao_encontrada', 'Esta nota não existe.', 404);
   if (!doc.nfse_cipher) recusarNfse('nfse_xml_indisponivel', 'O XML autorizado ainda não está disponível.');

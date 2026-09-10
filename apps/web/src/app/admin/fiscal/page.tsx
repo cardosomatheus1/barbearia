@@ -21,6 +21,8 @@ import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
 import { situacaoNfseNaApi } from '@/lib/admin-api';
 import { EmissorNacional } from './emissor-nacional';
+import { EmissorMunicipal } from './emissor-municipal';
+import { situacaoMunicipalNaApi } from '@/lib/admin-api';
 
 /** Cadastro fiscal, certificado e acompanhamento das notas da unidade. */
 
@@ -51,11 +53,19 @@ const FALHA: Record<string, string> = {
   forbidden: 'Sua conta não mexe no fiscal da casa.',
   invalid_request: 'Confira os dados e tente de novo.',
   request_failed: 'Não deu para salvar. Tente de novo.',
+  nfse_municipal_configuracao_invalida: 'Confira os códigos, o endereço, a série exclusiva e seu número inicial. O número inicial de uma série já salva não pode ser alterado.',
+  nfse_municipal_sem_suporte: 'Este município não tem o fluxo municipal completo disponível neste ambiente. Utilize o portal da prefeitura.',
+  nfse_municipal_indisponivel: 'O emissor municipal precisa ser habilitado nesta instalação. Entre em contato com o suporte.',
+  nfse_municipal_perfil_sem_suporte: 'Esta operação não é atendida pelo emissor municipal disponível. Utilize o portal da prefeitura.',
   nfse_nao_configurada: 'Confira o cadastro do emissor e o certificado desta unidade.',
+  nfse_ibscbs_perfil_invalido: 'Confira IBS/CBS com seu contador. O perfil presencial exige não optante pelo Simples, serviço 060101 e NBS 126021000.',
+  nfse_ibscbs_tomador_obrigatorio: 'Cadastre nome e CPF do cliente que recebeu o serviço antes de emitir a nota.',
   nfse_configuracao_invalida: 'Confira os códigos e a série do emissor nacional.',
-  nfse_certificado_invalido: 'Confira arquivo, senha, CNPJ e validade do certificado A1.',
+  nfse_certificado_invalido: 'Confira arquivo, senha e validade do A1. O CNPJ completo do certificado deve ser o mesmo desta unidade.',
+  nfse_certificado_sem_confianca: 'Não foi possível validar o A1. Confira a cadeia do certificado e a atualização das listas de revogação com o suporte.',
+  nfse_confianca_indisponivel: 'A plataforma precisa atualizar a confiança dos certificados fiscais. Entre em contato com o suporte.',
   nfse_certificado_tamanho: 'Escolha um arquivo A1 de até 512 KB.',
-  nfse_perfil_nao_atendido: 'O emissor atual atende MEI e Simples com ISS pelo DAS, sem retenção. Este perfil ainda precisa de implementação tributária.',
+  nfse_perfil_nao_atendido: 'Confira o perfil tributário e preencha os tributos exigidos antes de habilitar o emissor. Salão-parceiro e retenções ainda não são atendidos.',
   nfse_motivo_invalido: 'O motivo do cancelamento deve ter de 15 a 255 caracteres.',
   nfse_cancelamento_recusado: 'O emissor recusou o cancelamento. A nota permanece válida.',
   nfse_cancelamento_pendente: 'O cancelamento aguarda confirmação. O sistema continuará consultando o emissor.',
@@ -179,10 +189,11 @@ export default async function FiscalPage({ searchParams }: Props) {
   const hoje = new Date().toISOString().slice(0, 10);
   const trintaDias = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
 
-  const [config, notas, nacional] = await Promise.all([
+  const [config, notas, nacional, municipal] = await Promise.all([
     podeCadastrar ? configuracaoFiscalNaApi(token) : Promise.resolve(null),
     veLista ? notasNaApi(token, trintaDias, hoje) : Promise.resolve(null),
     podeCadastrar ? situacaoNfseNaApi(token) : Promise.resolve(null),
+    podeCadastrar ? situacaoMunicipalNaApi(token) : Promise.resolve(null),
   ]);
 
   const erro = first(query['erro']);
@@ -190,6 +201,7 @@ export default async function FiscalPage({ searchParams }: Props) {
   const feito = first(query['feito']);
   const atual = config?.ok ? config.dados.configuracao : null;
   const lista = notas?.ok ? notas.dados.notas : [];
+  const emissorSelecionado = first(query['emissor']) ?? (municipal?.ok ? municipal.dados.emissor : 'nacional');
   /**
    * Sem emissor contratado, a tela **diz**.
    *
@@ -259,9 +271,9 @@ export default async function FiscalPage({ searchParams }: Props) {
       {feito === 'cancelamento-pedido' ? <div className="ui-alert ui-alert--success painel__aviso" role="status">
         Cancelamento solicitado. A nota continua válida até a confirmação do emissor.
       </div> : null}
-      {['nfse-configurada', 'certificado-salvo', 'certificado-removido'].includes(feito ?? '') ? (
+      {['nfse-configurada', 'municipal-salvo', 'certificado-salvo', 'certificado-removido'].includes(feito ?? '') ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          {feito === 'nfse-configurada' ? 'Configuração do emissor salva.' : feito === 'certificado-salvo' ? 'Certificado cadastrado.' : 'Certificado removido desta unidade.'}
+          {feito === 'nfse-configurada' || feito === 'municipal-salvo' ? 'Configuração do emissor salva.' : feito === 'certificado-salvo' ? 'Certificado cadastrado.' : 'Certificado removido desta unidade.'}
         </div>
       ) : null}
 
@@ -286,7 +298,8 @@ export default async function FiscalPage({ searchParams }: Props) {
                 className="ui-field__input"
                 defaultValue={atual ? cnpjBonito(atual.cnpj) : ''}
                 id="cnpj"
-                inputMode="numeric"
+                autoCapitalize="characters"
+                maxLength={18}
                 name="cnpj"
                 placeholder="11.222.333/0001-81"
                 required
@@ -403,7 +416,16 @@ export default async function FiscalPage({ searchParams }: Props) {
           </details>
         </section>
       ) : null}
-      {nacional?.ok && nacional.dados.modo === 'nacional' ? <EmissorNacional situacao={nacional.dados} regime={atual?.regime} /> : null}
+      {nacional?.ok && nacional.dados.modo === 'nacional' ? <>
+        <nav className="item-cadastro__acao" aria-label="Emissor fiscal da unidade">
+          <a className={`ui-button ${emissorSelecionado !== 'municipal' ? 'ui-button--primary' : 'ui-button--secondary'}`} aria-current={emissorSelecionado !== 'municipal' ? 'page' : undefined} href="/admin/fiscal?emissor=nacional">Emissor nacional</a>
+          <a className={`ui-button ${emissorSelecionado === 'municipal' ? 'ui-button--primary' : 'ui-button--secondary'}`} aria-current={emissorSelecionado === 'municipal' ? 'page' : undefined} href="/admin/fiscal?emissor=municipal">Emissor municipal</a>
+        </nav>
+        {emissorSelecionado === 'municipal' ? municipal?.ok
+          ? <EmissorMunicipal situacao={municipal.dados} certificado={nacional.dados.certificado} />
+          : <p className="painel__nota" role="alert">Não foi possível carregar a configuração municipal. Recarregue a página para tentar novamente.</p>
+          : <EmissorNacional situacao={nacional.dados} regime={atual?.regime} />}
+      </> : null}
 
       {veLista ? (
         <section className="painel__grupo">

@@ -1,5 +1,6 @@
 'use server';
 
+import { guardarConsentimentoCadastro, esquecerConsentimentoCadastro } from '@/lib/consentimento-cadastro';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { COOKIE_DA_ORIGEM } from '@barbearia/core';
@@ -55,6 +56,7 @@ export async function criarAgendamento(form: FormData): Promise<void> {
     start,
     name: String(form.get('name') ?? '').trim(),
     phone: String(form.get('phone') ?? '').trim(),
+    aceitaWhatsApp: form.get('aceitaWhatsApp') === 'sim',
   });
 
   if (!resultado.ok) {
@@ -74,9 +76,12 @@ export async function criarAgendamento(form: FormData): Promise<void> {
     redirect(`/${slug}/agendar?${retorno.toString()}`);
   }
 
+  if (resultado.consentimentoWhatsApp) await guardarConsentimentoCadastro(slug, resultado.id, resultado.consentimentoWhatsApp);
+  else await esquecerConsentimentoCadastro(slug);
+
   // Só o id: a tela de confirmação lê o agendamento da API. Data e hora na URL
   // seriam uma segunda fonte, e ela mentiria se o horário mudasse.
-  redirect(`/${slug}/agendado/${resultado.id}`);
+  redirect(`/${slug}/agendado/${resultado.id}${resultado.consentimentoWhatsAppIndisponivel ? '?whatsapp=pendente' : ''}`);
 }
 
 /**

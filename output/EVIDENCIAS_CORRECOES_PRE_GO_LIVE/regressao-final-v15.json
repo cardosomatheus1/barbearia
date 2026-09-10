@@ -1,0 +1,11 @@
+{
+  "name": "regressao-final-v15",
+  "command": [
+    "python3",
+    "output/executar_verify_correcao.py",
+    "fiscal-baileys-stripe-v15"
+  ],
+  "started_utc": "2026-09-10T20:42:07.630388+00:00",
+  "duration_seconds": 3180.3,
+  "exit_code": 1
+}

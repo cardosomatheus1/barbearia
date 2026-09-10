@@ -1,0 +1,10 @@
+{
+  "name": "whatsapp-meta-ux-v13",
+  "command": [
+    "python3",
+    "output/prova_meta_navegador.py"
+  ],
+  "started_utc": "2026-09-10T19:58:44.009277+00:00",
+  "duration_seconds": 20.11,
+  "exit_code": 0
+}

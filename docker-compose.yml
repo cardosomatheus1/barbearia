@@ -127,9 +127,16 @@ services:
     depends_on:
       preparar:
         condition: service_completed_successfully
-    environment: *ambiente
+    environment:
+      <<: *ambiente
+      FISCAL_SECRET_KEY: ${FISCAL_SECRET_KEY:-}
+      FISCAL_AUTORIDADES_PEM_B64: ${FISCAL_AUTORIDADES_PEM_B64:-}
+      FISCAL_CONFIANCA_DIR: /run/fiscal-confianca
+      FISCAL_DANFSE_FONTES_DIR: /run/fiscal-fontes
     volumes:
       - media:/data/media
+      - ${FISCAL_CONFIANCA_DIR:-./fiscal-confianca}:/run/fiscal-confianca:ro
+      - ${FISCAL_DANFSE_FONTES_DIR:-./fiscal-fontes}:/run/fiscal-fontes:ro
     # Só o laço: publicar em todas as interfaces expõe a API de quem sobe o
     # compose num VPS ou numa rede de escritório para mostrar o produto.
     ports: ['127.0.0.1:3000:3000']
@@ -147,7 +154,15 @@ services:
     depends_on:
       preparar:
         condition: service_completed_successfully
-    environment: *ambiente
+    environment:
+      <<: *ambiente
+      FISCAL_SECRET_KEY: ${FISCAL_SECRET_KEY:-}
+      FISCAL_AUTORIDADES_PEM_B64: ${FISCAL_AUTORIDADES_PEM_B64:-}
+      FISCAL_CONFIANCA_DIR: /run/fiscal-confianca
+      FISCAL_DANFSE_FONTES_DIR: /run/fiscal-fontes
+    volumes:
+      - ${FISCAL_CONFIANCA_DIR:-./fiscal-confianca}:/run/fiscal-confianca:ro
+      - ${FISCAL_DANFSE_FONTES_DIR:-./fiscal-fontes}:/run/fiscal-fontes:ro
     command: node apps/worker/dist/main.js
 
   web:

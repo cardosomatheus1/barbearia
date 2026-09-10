@@ -1,3 +1,5 @@
+import { autenticarRespostaAtual, exigirAutoridadeFiscalDisponivel } from './prova-resposta.js';
+import { CHAVE_NFSE } from './identificadores.js';
 import { randomUUID } from 'node:crypto';
 import { withTenant } from '@barbearia/db';
 import type { FiscalProvider, NotaEmitida, PedidoDeNota } from '@barbearia/core';
@@ -13,6 +15,7 @@ import { lerNotaAutorizada } from './respostas.js';
 import { validarSchemaNfse } from './schema.js';
 import { processarCancelamentoNfse } from './evento-operacao.js';
 import { conferirMunicipioNfse } from './capacidade.js';
+import { certificadosDasAutoridades } from './assinatura-resposta.js';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 function identificar(id: string): { tenantId: string; invoiceId: string } {
@@ -74,7 +77,10 @@ export class EmissorNacionalNfse implements FiscalProvider {
       const motivoEfetivo = motivo ?? recuperarMotivo;
       if (doc.nfse_cipher && !motivoEfetivo && (!doc.cancel_request_cipher || doc.cancel_error_code)) return respostaLocalNfse(tenantId, doc);
       const snapshot = snapshotDoDocumento(tenantId, doc);
+      // Não iniciar transmissão sem poder autenticar o retorno da autoridade.
+      certificadosDasAutoridades();
       const certificado = await certificadoDaUnidade(tenantId, doc.location_id, snapshot.cnpj);
+      await exigirAutoridadeFiscalDisponivel();
       if (motivoEfetivo || doc.cancel_request_cipher) {
         await processarCancelamentoNfse({ tenantId, doc, token, certificado, transporte: this.transporte,
           ...(motivoEfetivo !== undefined ? { motivo: motivoEfetivo } : {}) });
@@ -124,7 +130,7 @@ export class EmissorNacionalNfse implements FiscalProvider {
       // sequência/emissor. Não apropriar uma nota anterior de mesmo valor.
       if (!doc.attempt_at) return this.recusa(tenantId, doc, 'nfse_serie_ja_utilizada');
       const chave = registro(consulta.dados)['chaveAcesso'];
-      if (typeof chave !== 'string' || !/^\d{50}$/.test(chave)) throw new NfseError('nfse_resposta_invalida', 'A consulta não devolveu a chave da nota.', 502);
+      if (typeof chave !== 'string' || !CHAVE_NFSE.test(chave)) throw new NfseError('nfse_resposta_invalida', 'A consulta não devolveu a chave da nota.', 502);
       const nota = await this.transporte({ ...base, metodo: 'GET', caminho: `/nfse/${chave}` });
       if (nota.status !== 200) throw new NfseError('nfse_consulta_falhou', 'A consulta fiscal será repetida.', 503);
       await this.gravarAutorizacao(tenantId, doc, token, lerNotaAutorizada(nota.dados, dps, chave));
@@ -153,9 +159,10 @@ export class EmissorNacionalNfse implements FiscalProvider {
   }
 
   private async gravarAutorizacao(tenantId: string, doc: DocumentoNfse, token: string, nota: { chave: string; xml: string }): Promise<void> {
+    const prova = await autenticarRespostaAtual(nota.xml, 'NFSe', escopoDocumento(tenantId, doc, 'validacao_nfse'));
     const cipher = cifrarFiscal(nota.xml, escopoDocumento(tenantId, doc, 'nfse'));
     const mudou = await withTenant(tenantId, tx => tx.$executeRaw`
-      UPDATE fiscal_native_documents SET nfse_cipher = ${cipher}, access_key = ${nota.chave}, last_error_code = NULL, updated_at = now()
+      UPDATE fiscal_native_documents SET nfse_cipher = ${cipher}, nfse_validation_cipher = ${prova.envelope}, access_key = ${nota.chave}, last_error_code = NULL, updated_at = now()
        WHERE invoice_id = ${doc.invoice_id}::uuid AND lease_token = ${token}::uuid AND nfse_cipher IS NULL
     `);
     if (!mudou) throw new NfseError('nfse_tentativa_substituida', 'Outra tentativa está processando esta nota.');

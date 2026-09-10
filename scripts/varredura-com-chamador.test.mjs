@@ -1,6 +1,9 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
+
+const ts = createRequire(new URL('../packages/crm/package.json', import.meta.url))('typescript');
 
 /**
  * Toda varredura e toda atribuição têm chamador no worker (bloco 108).
@@ -102,6 +105,35 @@ function exportadas() {
   return [...nomes].sort();
 }
 
+/**
+ * O worker chama serviços que executam auxiliares na mesma transação. Ler só
+ * main/worker acusava a limpeza das intenções, já chamada por varrerRetencao.
+ * A AST considera chamadas no corpo, não imports, comentários ou texto de SQL.
+ * Nomes ambíguos não propagam alcance: preferimos pedir revisão a presumir o alvo.
+ */
+function alcancadas(disparadores, fontes) {
+  const funcoes = new Map();
+  for (const texto of fontes) {
+    const arquivo = ts.createSourceFile('fonte.ts', texto, ts.ScriptTarget.Latest, true);
+    for (const node of arquivo.statements) {
+      if (!ts.isFunctionDeclaration(node) || !node.name || !node.body) continue;
+      const chamadas = new Set();
+      const visitar = filho => {
+        if (ts.isCallExpression(filho) && ts.isIdentifier(filho.expression)) chamadas.add(filho.expression.text);
+        ts.forEachChild(filho, visitar);
+      };
+      visitar(node.body);
+      const nome = node.name.text;
+      funcoes.set(nome, funcoes.has(nome) ? null : chamadas);
+    }
+  }
+  const vistas = new Set([...funcoes.keys()].filter(nome => new RegExp(`\\b${nome}\\b`).test(disparadores)));
+  for (const nome of vistas) {
+    for (const chamada of funcoes.get(nome) ?? []) if (funcoes.has(chamada)) vistas.add(chamada);
+  }
+  return vistas;
+}
+
 describe('a varredura que ninguém chama', () => {
   it('a busca encontra as funções que deveria vigiar', () => {
     const nomes = exportadas();
@@ -123,10 +155,29 @@ describe('a varredura que ninguém chama', () => {
   const CONHECIDAS = new Set([]);
 
   it('toda varredura e atribuição é mencionada por quem dispara trabalho de fundo', () => {
+    const chamadas = alcancadas(DISPARADORES, fontes(join(RAIZ, 'packages')).map(caminho => readFileSync(caminho, 'utf8')));
     const orfas = exportadas()
-      .filter((nome) => !DISPARADORES.includes(nome))
+      .filter((nome) => !DISPARADORES.includes(nome) && !chamadas.has(nome))
       .filter((nome) => !CONHECIDAS.has(nome));
     expect(orfas, 'função de fundo sem chamador é comentário, não código').toEqual([]);
+  });
+
+  it('segue auxiliar chamado pelo serviço agendado e recusa referência que existe só em comentário ou função órfã', () => {
+    const programa = `export async function varrerRetencao() { await limparPedidos(); }
+      export async function limparPedidos() { await apagarExpirados(); }
+      function apagarExpirados() {}
+      export async function orfa() { await limparSemChamador(); }
+      export async function limparSemChamador() {}`;
+    expect(alcancadas('varrerRetencao()', [programa])).toEqual(new Set(['varrerRetencao', 'limparPedidos', 'apagarExpirados']));
+    const removida = programa.replace('await limparPedidos();', '/* await limparPedidos(); */');
+    expect(alcancadas('varrerRetencao()', [removida])).toEqual(new Set(['varrerRetencao']));
+  });
+
+  it('não atribui ao worker uma chamada indireta com destino ambíguo', () => {
+    const programa = `async function varrer() { await auxiliar(); }
+      async function auxiliar() { await limpar(); }
+      async function limpar() {}`;
+    expect(alcancadas('varrer()', [programa, 'async function auxiliar() {}'])).not.toContain('limpar');
   });
 
   it('a lista de conhecidas não guarda quem já tem chamador', () => {

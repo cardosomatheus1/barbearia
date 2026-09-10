@@ -1,5 +1,5 @@
 {
-  "arquivos": 380,
+  "arquivos": 398,
   "inventario": [
     {
       "arquivo": "apps/api/src/common/turnstile.test.ts",
@@ -187,6 +187,26 @@
       "incluido_no_portao": true
     },
     {
+      "arquivo": "apps/api/test/whatsapp-manual.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/[slug]/consentimento-whatsapp/acoes.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/acoes/catalogo-comercial.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/acoes/whatsapp-textos.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
       "arquivo": "apps/web/src/app/admin/casco.test.ts",
       "runner": "pnpm --filter @barbearia/web test",
       "incluido_no_portao": true
@@ -339,6 +359,11 @@
     {
       "arquivo": "apps/web/src/lib/vaga.test.ts",
       "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "integrations/fiscal-municipal/tests/MotorTests.cs",
+      "runner": "bash scripts/testar-fiscal-municipal.sh",
       "incluido_no_portao": true
     },
     {
@@ -533,6 +558,11 @@
     },
     {
       "arquivo": "packages/core/src/financeiro.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/fiscal-ibscbs.test.ts",
       "runner": "pnpm --filter @barbearia/core test",
       "incluido_no_portao": true
     },
@@ -808,6 +838,16 @@
     },
     {
       "arquivo": "packages/crm/src/lgpd.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/manual/fila.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/manual/fila.test.ts",
       "runner": "pnpm --filter @barbearia/crm test",
       "incluido_no_portao": true
     },
@@ -1267,7 +1307,42 @@
       "incluido_no_portao": true
     },
     {
+      "arquivo": "packages/finance/src/nfse-municipal/contrato.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse-municipal/municipal.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/assinatura-resposta.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/cnpj-alfanumerico.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/confianca-a1.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/confianca-atualizacao.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
       "arquivo": "packages/finance/src/nfse/contrato.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/danfse.test.ts",
       "runner": "pnpm --filter @barbearia/finance test",
       "incluido_no_portao": true
     },
@@ -1283,6 +1358,11 @@
     },
     {
       "arquivo": "packages/finance/src/nfse/nacional.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/prova-resposta.test.ts",
       "runner": "pnpm --filter @barbearia/finance test",
       "incluido_no_portao": true
     },
@@ -1672,6 +1752,11 @@
       "incluido_no_portao": true
     },
     {
+      "arquivo": "scripts/ponte-fiscal-real.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
       "arquivo": "scripts/prontidao-deploy.test.mjs",
       "runner": "scripts/verify.sh",
       "incluido_no_portao": true
@@ -1802,6 +1887,11 @@
       "incluido_no_portao": true
     },
     {
+      "arquivo": "scripts/verificar-finance-fiscal-modulos.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
       "arquivo": "scripts/verificar-hardening-integracoes.test.mjs",
       "runner": "scripts/verify.sh",
       "incluido_no_portao": true
@@ -1913,7 +2003,12 @@
     "node scripts/verificar-segredos.mjs --history",
     "pnpm audit",
     "python3 output/prova_instalacao_limpa.py",
-    "python3 output/prova_baileys_navegador.py",
+    "python3 output/prova_baileys_revisao.py",
+    "python3 output/prova_meta_navegador.py",
+    "python3 output/prova_manual_navegador.py",
+    "python3 output/prova_consentimento_navegador.py",
+    "python3 output/prova_operacao_navegador.py",
+    "python3 output/prova_docker_compose.py",
     "python3 output/prova_baileys_worker_navegador.py",
     "python3 output/prova_stripe_navegador.py",
     "python3 output/prova_fiscal_navegador.py",

@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import * as ts from 'typescript';
 
 /**
  * O que a tela promete que vai sair (blocos 92 e 96).
@@ -76,6 +77,43 @@ const MOSTRA_CORPO = />\s*\{\s*\w+\.corpo\s*\}\s*</;
 
 /** O corpo com as variáveis já preenchidas, que é como o cliente vai ler. */
 const PREENCHE = /corpoComExemplos\(/;
+
+// Editores usam estado local, enquanto listas leem template.corpo. A guarda
+// precisa reconhecer a ligação entre textarea e prévia sem exigir uma propriedade fictícia.
+function temCorpoParaPrevia(fonte: string): boolean {
+  if (/\.corpo\b/.test(fonte)) return true;
+  const arvore = ts.createSourceFile('tela.tsx', fonte, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const campos = new Set<string>();
+  const previas = new Set<string>();
+  function visitar(no: ts.Node) {
+    if (ts.isJsxSelfClosingElement(no) && no.tagName.getText(arvore) === 'textarea') {
+      const atributos = no.attributes.properties.filter(ts.isJsxAttribute);
+      const nome = atributos.find(a => a.name.getText(arvore) === 'name')?.initializer;
+      const valor = atributos.find(a => a.name.getText(arvore) === 'value')?.initializer;
+      const muda = atributos.find(a => a.name.getText(arvore) === 'onChange')?.initializer;
+      if (nome && ts.isStringLiteral(nome) && nome.text === 'corpo' && valor && ts.isJsxExpression(valor)
+        && valor.expression && ts.isIdentifier(valor.expression) && muda && ts.isJsxExpression(muda) && muda.expression) {
+        campos.add(valor.expression.text);
+      }
+    }
+    if (ts.isCallExpression(no) && ts.isIdentifier(no.expression) && no.expression.text === 'corpoComExemplos') {
+      const corpo = no.arguments[1];
+      if (corpo && ts.isIdentifier(corpo)) previas.add(corpo.text);
+    }
+    ts.forEachChild(no, visitar);
+  }
+  visitar(arvore);
+  return [...campos].some(campo => previas.has(campo));
+}
+
+it.each([
+  ['<textarea name="corpo" value={corpo} onChange={e => setCorpo(e.target.value)} />; corpoComExemplos(tipo, corpo)', true],
+  ['<textarea name="corpo" value={corpo} onChange={e => setCorpo(e.target.value)} />; corpoComExemplos(tipo, outro)', false],
+  ['<textarea name="corpo" value={corpo} />; corpoComExemplos(tipo, corpo)', false],
+  ['corpoComExemplos(tipo, corpo)', false],
+])('guarda reconhece apenas a prévia ligada ao texto editável: %s', (fonte, esperado) => {
+  expect(temCorpoParaPrevia(fonte)).toBe(esperado);
+});
 
 describe('o que a tela promete que vai sair', () => {
   it('nenhuma tela escolhe a mensagem pelo tipo — a escolha é o texto', () => {
@@ -176,7 +214,7 @@ describe('o que a tela promete que vai sair', () => {
     const vazias = telas(RAIZ)
       .filter((caminho) => {
         const fonte = semComentarios(readFileSync(caminho, 'utf8'));
-        return PREENCHE.test(fonte) && !/\.corpo\b/.test(fonte);
+        return PREENCHE.test(fonte) && !temCorpoParaPrevia(fonte);
       })
       .map(curto);
 

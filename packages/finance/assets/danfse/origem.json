@@ -1,0 +1,13 @@
+{
+  "consultadoEm": "2026-09-10",
+  "municipios": {
+    "origem": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/anexo_a-municipio_ibge-paises_iso2-v1-00-snnfse-20251210.xlsx",
+    "sha256Xlsx": "238b715ab2dcc2c9e0857c44d69048e0af806b45ec8499568342de4a37f4419d",
+    "quantidade": 5570,
+    "uf": "Derivada do prefixo IBGE; coluna B da planilha oficial está ausente em várias linhas."
+  },
+  "logo": {
+    "origem": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/logos-da-nfs-e/Logo%20-%20NFS-e%20-%20Horizontal.png",
+    "sha256": "ab57fa34887929a10ee3b9b4d666084ec9b9465e62bbcc3523b99b23ccac1063"
+  }
+}

@@ -357,6 +357,10 @@ export async function cancelarNota(params: {
     if (tomadas !== 1) recusar('nota_nao_cancelavel');
     await audit(tx, { actorId: params.staffId, actorName: params.staffName,
       action: 'fiscal.cancellation_requested', entity: 'fiscal_invoice', entityId: params.invoiceId });
+      await tx.$executeRaw`
+        UPDATE fiscal_municipal_documents SET cancel_request_cipher = NULL, cancel_error_code = NULL
+         WHERE invoice_id = ${params.invoiceId}::uuid AND cancel_error_code IS NOT NULL
+      `;
     if (params.enfileirar) {
       await tx.$executeRaw`
         UPDATE fiscal_native_documents SET cancel_request_cipher = NULL, cancel_error_code = NULL

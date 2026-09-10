@@ -1,9 +1,11 @@
+import { solicitarConsentimentoCadastro } from '@barbearia/crm';
 import {
   Body,
   Controller,
   Get,
   Headers,
   Inject,
+  Logger,
   Param,
   Post,
   Query,
@@ -55,6 +57,7 @@ function toHttp(error: unknown): never {
 }
 
 interface CreateBody {
+  aceitaWhatsApp?: boolean;
   name?: string;
   phone?: string;
   locationId: string;
@@ -83,6 +86,7 @@ interface CreateBody {
  */
 @Controller('v1/b/:slug/appointments')
 export class GuestAppointmentsController {
+  private readonly logger = new Logger(GuestAppointmentsController.name);
   constructor(@Inject(TenantService) private readonly tenants: TenantService) {}
 
   @Post()
@@ -129,7 +133,21 @@ export class GuestAppointmentsController {
         ...(body.notes ? { notes: body.notes } : {}),
         ...(idempotencyKey ? { idempotencyKey } : {}),
       });
+      let consentimentoWhatsApp: Awaited<ReturnType<typeof solicitarConsentimentoCadastro>> | undefined;
+      let consentimentoWhatsAppIndisponivel = false;
+      if (body.aceitaWhatsApp) {
+        try {
+          consentimentoWhatsApp = await solicitarConsentimentoCadastro({ tenantId, customerId, appointmentId: appointment.id, ip: request.ip ?? null, agora: new Date() });
+        } catch {
+          // A reserva já está confirmada. Devolver erro aqui induziria outra
+          // reserva; a tela oferece as preferências sem afirmar que houve aceite.
+          consentimentoWhatsAppIndisponivel = true;
+          this.logger.warn('consentimento_cadastro_indisponivel: agendamento preservado; orientar preferências do titular');
+        }
+      }
       return {
+        ...(consentimentoWhatsApp ? { consentimentoWhatsApp } : {}),
+        ...(consentimentoWhatsAppIndisponivel ? { consentimentoWhatsAppIndisponivel: true } : {}),
         id: appointment.id,
         startsAt: appointment.serviceStartsAt,
         endsAt: appointment.serviceEndsAt,

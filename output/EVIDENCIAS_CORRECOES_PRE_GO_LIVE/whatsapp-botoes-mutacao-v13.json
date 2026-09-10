@@ -1,0 +1,10 @@
+{
+  "name": "whatsapp-botoes-mutacao-v13",
+  "command": [
+    "python3",
+    "output/prova_mutacao_botoes.py"
+  ],
+  "started_utc": "2026-09-10T20:00:48.932744+00:00",
+  "duration_seconds": 2.06,
+  "exit_code": 0
+}

@@ -304,6 +304,7 @@ export interface CelulaNaTelaDoAdmin {
 }
 
 export interface CampanhaNaTelaDoAdmin {
+  readonly templateId: string | null;
   readonly id: string;
   readonly nome: string;
   readonly filtro: string;

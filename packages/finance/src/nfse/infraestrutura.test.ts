@@ -25,7 +25,9 @@ function cert(par: forge.pki.rsa.KeyPair, cnpj = CNPJ, ca = false) {
       a.create(a.Class.CONTEXT_SPECIFIC, 0, true, [a.create(a.Class.UNIVERSAL, a.Type.UTF8, false, cnpj)]),
     ]),
   ]);
-  c.setExtensions([{ name: 'basicConstraints', cA: ca }, { id: '2.5.29.17', value: a.toDer(san).getBytes() }]);
+  c.setExtensions([{ name: 'basicConstraints', cA: ca },
+    { name: 'keyUsage', digitalSignature: true, nonRepudiation: true, keyCertSign: ca, cRLSign: ca },
+    { id: '2.5.29.17', value: a.toDer(san).getBytes() }]);
   c.sign(par.privateKey, forge.md.sha256.create());
   return c;
 }
@@ -49,6 +51,16 @@ describe('infraestrutura própria de NFS-e adaptada do Raiz', () => {
     expect(() => lerCertificadoA1(arquivo, SENHA, CNPJ, new Date('2025-01-01'))).toThrow('certificado_fora_da_validade');
     expect(() => lerCertificadoA1(arquivo, SENHA, CNPJ, new Date('2027-01-01'))).toThrow('certificado_fora_da_validade');
   });
+  it.each(['ausente', 'sem_assinatura', 'sem_nao_repudio', 'versao_antiga'] as const)(
+    'recusa A1 fora do padrão fiscal mesmo com chave, CNPJ e validade corretos: %s', caso => {
+      const folha = cert(key);
+      folha.setExtensions(folha.extensions.filter(e => e.name !== 'keyUsage'));
+      if (caso !== 'ausente') folha.setExtensions([...folha.extensions,
+        { name: 'keyUsage', digitalSignature: caso !== 'sem_assinatura', nonRepudiation: caso !== 'sem_nao_repudio' }]);
+      if (caso === 'versao_antiga') folha.version = 1;
+      folha.sign(key.privateKey, forge.md.sha256.create());
+      expect(() => lerCertificadoA1(pfx([folha]), SENHA, CNPJ, AGORA)).toThrow('certificado_padrao_assinatura_invalido');
+    });
   it('apresenta somente a folha e a intermediária que a assinou, sem incluir a raiz', () => {
     const raiz = cert(outra, CNPJ, true);
     raiz.setSubject([{ name: 'commonName', value: 'Raiz sintetica' }]); raiz.setIssuer(raiz.subject.attributes);

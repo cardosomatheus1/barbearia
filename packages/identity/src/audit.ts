@@ -178,6 +178,13 @@ export type AuditAction =
   | 'whatsapp.settings_changed'
   | 'whatsapp.template_submitted'
   | 'whatsapp.local_text_changed'
+  | 'whatsapp.manual_assumir'
+  | 'whatsapp.manual_opened'
+  | 'whatsapp.manual_enviado'
+  | 'whatsapp.manual_liberar'
+  | 'whatsapp.manual_descartar'
+  | 'whatsapp.manual_optout'
+  | 'whatsapp.manual_text_changed'
   /** Ligar ou desligar o que a casa manda sozinha para a base (bloco 56). */
   | 'automation.changed'
   /** Uma campanha criada, com o tamanho do público (bloco 57). */
@@ -504,6 +511,13 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'whatsapp.settings_changed',
   'whatsapp.template_submitted',
   'whatsapp.local_text_changed',
+  'whatsapp.manual_assumir',
+  'whatsapp.manual_opened',
+  'whatsapp.manual_enviado',
+  'whatsapp.manual_liberar',
+  'whatsapp.manual_descartar',
+  'whatsapp.manual_optout',
+  'whatsapp.manual_text_changed',
   'automation.changed',
   'campaign.created',
   'campaign.sent',

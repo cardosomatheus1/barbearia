@@ -1,5 +1,8 @@
+import { ConsentimentoCadastroController } from '../src/auth/consentimento-cadastro.controller.js';
 import 'reflect-metadata';
 import { PrismaClient } from '@prisma/client';
+import { withTenant } from '@barbearia/db';
+import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -71,7 +74,7 @@ describeIfDb('fluxo do cliente', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot(throttlerConfig())],
-      controllers: [AuthController, SessionController, GuestAppointmentsController, AppointmentsController],
+      controllers: [AuthController, SessionController, GuestAppointmentsController, AppointmentsController, ConsentimentoCadastroController],
       providers: [
         TenantService,
         CustomerGuard,
@@ -161,6 +164,108 @@ describeIfDb('fluxo do cliente', () => {
       start,
     });
   };
+
+
+  it('aceite no cadastro é opcional e só ativa marketing após OTP do mesmo número e confirmação explícita', async () => {
+    const sem = await agendarComoConvidado(CARLOS, '09:00').expect(201);
+    expect(sem.body.consentimentoWhatsApp).toBeUndefined();
+    expect(await admin.$queryRaw`SELECT id FROM customer_marketing_requests`).toHaveLength(0);
+    await admin.$executeRaw`INSERT INTO customer_consents (tenant_id,customer_id,purpose,granted,text_version)
+      SELECT tenant_id,id,'marketing',false,'revogado-anteriormente' FROM customers WHERE phone_e164 = '+5571988887777'`;
+    const marcado = await http().post('/v1/b/domari/appointments').send({ name: 'Carlos Souza', phone: CARLOS,
+      locationId: LOCATION, professionalId: RUAN, serviceIds: [CABELO], date: DIA, start: '10:00', aceitaWhatsApp: true }).expect(201);
+    const pedido = marcado.body.consentimentoWhatsApp.token as string;
+    expect(pedido).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const clientes = await admin.$queryRaw<{ accepts_marketing: boolean }[]>`SELECT accepts_marketing FROM customers WHERE phone_e164 = '+5571988887777'`;
+    expect(clientes[0]?.accepts_marketing).toBe(false);
+    const base = '/v1/b/domari/auth/whatsapp-cadastro';
+    await http().post(base + '/confirmar').send({ token: pedido }).expect(401);
+    const outro = await login('+5571966665555');
+    await http().post(base + '/confirmar').set('Authorization', `Bearer ${outro}`).send({ token: pedido }).expect(404);
+    const token = await login(CARLOS);
+    expect((await admin.$queryRaw<{ accepts_marketing: boolean }[]>`SELECT accepts_marketing FROM customers WHERE phone_e164 = '+5571988887777'`)[0]?.accepts_marketing).toBe(false);
+    const lido = await http().post(base + '/consultar').set('Authorization', `Bearer ${token}`).send({ token: pedido }).expect(201);
+    expect(lido.body).toMatchObject({ confirmado: false, texto: 'Aceito receber pelo WhatsApp confirmações, lembretes e novidades da Domari Barber Club.' });
+    await http().post('/v1/b/rival/auth/whatsapp-cadastro/confirmar').set('Authorization', `Bearer ${token}`).send({ token: pedido }).expect(401);
+    const respostas = await Promise.all([1,2].map(() => http().post(base + '/confirmar').set('Authorization', `Bearer ${token}`).send({ token: pedido }).expect(201)));
+    expect(respostas.map(r => r.body.novoAceite).sort()).toEqual([false, true]);
+    const aceites = await admin.$queryRaw<{ text_snapshot: string; verification_method: string; ip: string | null }[]>`
+      SELECT text_snapshot,verification_method,ip::text FROM customer_consents WHERE granted AND purpose = 'marketing'`;
+    expect(aceites).toHaveLength(1); expect(aceites[0]).toMatchObject({ verification_method: 'sessao_otp', text_snapshot: lido.body.texto }); expect(aceites[0]?.ip).toBeTruthy();
+    expect((await admin.$queryRaw<{ accepts_marketing: boolean }[]>`SELECT accepts_marketing FROM customers WHERE phone_e164 = '+5571988887777'`)[0]?.accepts_marketing).toBe(true);
+  });
+
+  it('intenção expirada não ativa marketing e tipo incorreto de aceite é recusado na borda', async () => {
+    const corpo = { name: 'Carlos Souza', phone: CARLOS, locationId: LOCATION, professionalId: RUAN, serviceIds: [CABELO], date: DIA, start: '09:00' };
+    await http().post('/v1/b/domari/appointments').send({ ...corpo, aceitaWhatsApp: 'true' }).expect(400);
+    const marcado = await http().post('/v1/b/domari/appointments').send({ ...corpo, aceitaWhatsApp: true }).expect(201);
+    const token = await login(CARLOS);
+    await admin.$executeRaw`UPDATE customer_marketing_requests SET created_at = now() - interval '1 hour', expires_at = now() - interval '30 minutes'`;
+    await http().post('/v1/b/domari/auth/whatsapp-cadastro/confirmar').set('Authorization', `Bearer ${token}`).send({ token: marcado.body.consentimentoWhatsApp.token }).expect(404);
+    expect(await admin.$queryRaw`SELECT id FROM customer_consents WHERE granted AND purpose = 'marketing'`).toHaveLength(0);
+  });
+
+  it('falha ao preparar o aceite não transforma agendamento confirmado em erro nem cria outro horário no replay', async () => {
+    // Falha real só na persistência da intenção; o banco de agendamento continua disponível.
+    await admin.$executeRawUnsafe('ALTER TABLE customer_marketing_requests ADD CONSTRAINT ensaio_indisponivel CHECK (false) NOT VALID');
+    const corpo = { name: 'Carlos Souza', phone: CARLOS, locationId: LOCATION, professionalId: RUAN,
+      serviceIds: [CABELO], date: DIA, start: '09:00', aceitaWhatsApp: true };
+    let id: string;
+    try {
+      const resposta = await http().post('/v1/b/domari/appointments').set('Idempotency-Key', 'aceite-indisponivel').send(corpo).expect(201);
+      expect(resposta.body.consentimentoWhatsAppIndisponivel).toBe(true);
+      expect(resposta.body.consentimentoWhatsApp).toBeUndefined();
+      id = resposta.body.id as string;
+      expect(await admin.$queryRaw`SELECT id FROM appointments`).toEqual([{ id }]);
+      expect(await admin.$queryRaw`SELECT id FROM customer_consents WHERE granted AND purpose = 'marketing'`).toHaveLength(0);
+    } finally {
+      await admin.$executeRawUnsafe('ALTER TABLE customer_marketing_requests DROP CONSTRAINT ensaio_indisponivel');
+    }
+    const repetida = await http().post('/v1/b/domari/appointments').set('Idempotency-Key', 'aceite-indisponivel').send(corpo).expect(201);
+    expect(repetida.body.id).toBe(id);
+    expect(repetida.body.consentimentoWhatsApp.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await admin.$queryRaw`SELECT id FROM appointments`).toEqual([{ id }]);
+  });
+
+  it('banco recusa intenção de aceite vinculada ao cliente errado ou a outra barbearia mesmo com FK válida', async () => {
+    const marcado = await http().post('/v1/b/domari/appointments').send({ name: 'Carlos Souza', phone: CARLOS,
+      locationId: LOCATION, professionalId: RUAN, serviceIds: [CABELO], date: DIA, start: '09:00', aceitaWhatsApp: true }).expect(201);
+    const outro = randomUUID(), alheio = randomUUID();
+    await admin.$executeRaw`INSERT INTO customers (id,tenant_id,name,phone_e164) VALUES
+      (${outro}::uuid,${TENANT}::uuid,'Outro cliente','+5571966665555'),
+      (${alheio}::uuid,${RIVAL}::uuid,'Cliente da vizinha','+5571955554444')`;
+    for (const customerId of [outro, alheio]) {
+      await expect(withTenant(TENANT, tx => tx.$executeRaw`INSERT INTO customer_marketing_requests
+        (tenant_id,customer_id,appointment_id,token_hash,text_version,text_snapshot,created_at,expires_at)
+        VALUES (${TENANT}::uuid,${customerId}::uuid,${marcado.body.id}::uuid,repeat('a',64),'v1','Texto',now(),now()+interval '30 minutes')`)).rejects.toThrow();
+    }
+    expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT id FROM customer_marketing_requests`)).toHaveLength(0);
+    await expect(withTenant(TENANT, tx => tx.$executeRaw`UPDATE customer_marketing_requests
+      SET text_snapshot = 'Texto que ninguém aceitou' WHERE appointment_id = ${marcado.body.id}::uuid`)).rejects.toThrow();
+  });
+
+  it('aceites em abas diferentes são serializados e repetir uma confirmação antiga não desfaz revogação', async () => {
+    const corpo = { name: 'Carlos Souza', phone: CARLOS, locationId: LOCATION, professionalId: RUAN,
+      serviceIds: [CABELO], date: DIA, start: '09:00', aceitaWhatsApp: true };
+    const primeira = await http().post('/v1/b/domari/appointments').set('Idempotency-Key', 'duas-abas').send(corpo).expect(201);
+    const segunda = await http().post('/v1/b/domari/appointments').set('Idempotency-Key', 'duas-abas').send(corpo).expect(201);
+    expect(primeira.body.id).toBe(segunda.body.id);
+    const sessao = await login(CARLOS);
+    const confirmar = (token: string) => http().post('/v1/b/domari/auth/whatsapp-cadastro/confirmar')
+      .set('Authorization', `Bearer ${sessao}`).send({ token }).expect(201);
+    const novas = await Promise.all([confirmar(primeira.body.consentimentoWhatsApp.token), confirmar(segunda.body.consentimentoWhatsApp.token)]);
+    expect(novas.map(r => r.body.novoAceite)).toEqual([true, true]);
+    await http().put('/v1/b/domari/auth/consentimento').set('Authorization', `Bearer ${sessao}`)
+      .send({ finalidade: 'marketing', concedido: false, versaoDoTexto: 'revogacao-apos-cadastro' }).expect(200);
+    const antes = await admin.$queryRaw`SELECT id FROM customer_consents ORDER BY id`;
+    const repetidas = await Promise.all([confirmar(primeira.body.consentimentoWhatsApp.token), confirmar(segunda.body.consentimentoWhatsApp.token)]);
+    expect(repetidas.map(r => r.body.novoAceite)).toEqual([false, false]);
+    const lido = await http().post('/v1/b/domari/auth/whatsapp-cadastro/consultar')
+      .set('Authorization', `Bearer ${sessao}`).send({ token: primeira.body.consentimentoWhatsApp.token }).expect(201);
+    expect(lido.body.confirmado).toBe(true);
+    expect(await admin.$queryRaw`SELECT id FROM customer_consents ORDER BY id`).toEqual(antes);
+    expect(await admin.$queryRaw`SELECT accepts_marketing FROM customers WHERE phone_e164 = '+5571988887777'`).toEqual([{ accepts_marketing: false }]);
+  });
 
   // -- login -----------------------------------------------------------------
 

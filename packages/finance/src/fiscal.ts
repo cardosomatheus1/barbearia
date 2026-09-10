@@ -20,3 +20,7 @@ export { situacaoNfse, salvarConfiguracaoNfse, salvarCertificadoNfse, removerCer
 export type { ConfiguracaoNfse } from './nfse/configuracao.js';
 export { baixarXmlNfse } from './nfse/documentos.js';
 export { prepararPdfsNfse, baixarPdfNfse, pdfPeloLinkNfse } from './nfse/pdf.js';
+export { situacaoMunicipal, salvarConfiguracaoMunicipal } from './nfse-municipal/configuracao.js';
+export type { CredenciaisMunicipais, SituacaoMunicipal } from './nfse-municipal/configuracao.js';
+export type { ConfiguracaoMunicipal, EnderecoMunicipal } from './nfse-municipal/contrato.js';
+export { baixarXmlMunicipal } from './nfse-municipal/documentos.js';

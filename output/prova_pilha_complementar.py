@@ -1,14 +1,16 @@
 """Start the compiled local stack against retained synthetic measurement data."""
 from pathlib import Path
 from urllib.parse import quote
-import os, subprocess, sys, time, urllib.request, urllib.error
+import os, re, subprocess, sys, time, urllib.request, urllib.error
 root=Path(__file__).resolve().parents[1]
 runtime=Path('/home/ec2-user/codex-tmp/barbearia-audit-runtime')
 env=dict(os.environ)
-env.update({'DATABASE_URL':'postgres://barbearia_app:'+quote(env['APP_DB_PASSWORD'],safe='')+'@127.0.0.1:5432/barbearia_audit_medicao','DEMO_DATABASE_URL':env['ADMIN_DATABASE_URL'].rsplit('/',1)[0]+'/barbearia_audit_medicao','API_URL':'http://127.0.0.1:3430','WEB_URL':'http://127.0.0.1:3431','PORT':'3430','RATE_LIMIT_SHORT':'1000000','RATE_LIMIT_LONG':'1000000','FISCAL_MODO':'fake','PSP_MODO':'nenhum','WHATSAPP_MODO':'nenhum'})
+database=env.get('MEDICAO_DB_NAME','barbearia_audit_medicao')
+assert re.fullmatch(r'barbearia_audit_medicao(?:_v[0-9]+)?',database)
+env.update({'DATABASE_URL':'postgres://barbearia_app:'+quote(env['APP_DB_PASSWORD'],safe='')+'@127.0.0.1:5432/'+database,'DEMO_DATABASE_URL':env['ADMIN_DATABASE_URL'].rsplit('/',1)[0]+'/'+database,'API_URL':'http://127.0.0.1:3430','WEB_URL':'http://127.0.0.1:3431','PORT':'3430','RATE_LIMIT_SHORT':'1000000','RATE_LIMIT_LONG':'1000000','FISCAL_MODO':'fake','PSP_MODO':'nenhum','WHATSAPP_MODO':'nenhum'})
 processes=[];logs=[]
 try:
-    for name,args,cwd in [('api',['node','apps/api/dist/main.js'],root),('worker',['node','apps/worker/dist/main.js'],root),('web',['node',str(root/'apps/web/node_modules/next/dist/bin/next'),'start','-p','3431','-H','127.0.0.1'],root/'apps/web')]:
+    for name,args,cwd in [('api',['node','apps/api/dist/main.js'],root),('web',['node',str(root/'apps/web/node_modules/next/dist/bin/next'),'start','-p','3431','-H','127.0.0.1'],root/'apps/web')]:
         log=(runtime/('extra-'+name+'.raw.log')).open('w');logs.append(log)
         processes.append(subprocess.Popen(args,cwd=cwd,env=env,stdout=log,stderr=subprocess.STDOUT))
     for _ in range(100):

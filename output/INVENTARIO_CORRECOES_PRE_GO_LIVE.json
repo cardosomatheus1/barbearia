@@ -1,5 +1,5 @@
 {
-  "commit": "3d90fc62de2947fda05aed32407d5a2f2852340b",
+  "commit": "75a41587d28e25c27125acf498bf0f1138ea80d1",
   "routes": [
     {
       "file": "apps/api/src/admin/admin.controller.ts",
@@ -2834,8 +2834,46 @@
       "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
     },
     {
+      "file": "apps/api/src/admin/fiscal-municipal.controller.ts",
+      "line": 40,
+      "controller": "FiscalMunicipalController",
+      "handler": "situacao",
+      "verb": "GET",
+      "path": "/v1/admin/fiscal/municipal",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.settings'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal-municipal.controller.ts",
+      "line": 47,
+      "controller": "FiscalMunicipalController",
+      "handler": "configurar",
+      "verb": "PUT",
+      "path": "/v1/admin/fiscal/municipal/configuracao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.settings'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
       "file": "apps/api/src/admin/fiscal-nacional.controller.ts",
-      "line": 38,
+      "line": 42,
       "controller": "FiscalNacionalController",
       "handler": "situacao",
       "verb": "GET",
@@ -2854,7 +2892,7 @@
     },
     {
       "file": "apps/api/src/admin/fiscal-nacional.controller.ts",
-      "line": 45,
+      "line": 49,
       "controller": "FiscalNacionalController",
       "handler": "configurar",
       "verb": "PUT",
@@ -2873,7 +2911,7 @@
     },
     {
       "file": "apps/api/src/admin/fiscal-nacional.controller.ts",
-      "line": 52,
+      "line": 56,
       "controller": "FiscalNacionalController",
       "handler": "certificado",
       "verb": "POST",
@@ -2892,7 +2930,7 @@
     },
     {
       "file": "apps/api/src/admin/fiscal-nacional.controller.ts",
-      "line": 61,
+      "line": 65,
       "controller": "FiscalNacionalController",
       "handler": "remover",
       "verb": "DELETE",
@@ -2911,7 +2949,7 @@
     },
     {
       "file": "apps/api/src/admin/fiscal-nacional.controller.ts",
-      "line": 67,
+      "line": 71,
       "controller": "FiscalNacionalController",
       "handler": "xml",
       "verb": "GET",
@@ -2931,7 +2969,7 @@
     },
     {
       "file": "apps/api/src/admin/fiscal-nacional.controller.ts",
-      "line": 80,
+      "line": 84,
       "controller": "FiscalNacionalController",
       "handler": "pdf",
       "verb": "GET",
@@ -5000,6 +5038,162 @@
       "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
     },
     {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 40,
+      "controller": "WhatsAppManualController",
+      "handler": "fila",
+      "verb": "GET",
+      "path": "/v1/admin/whatsapp/manual",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 45,
+      "controller": "WhatsAppManualController",
+      "handler": "textos",
+      "verb": "GET",
+      "path": "/v1/admin/whatsapp/manual/textos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 48,
+      "controller": "WhatsAppManualController",
+      "handler": "configuracoes",
+      "verb": "GET",
+      "path": "/v1/admin/whatsapp/manual/configuracoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 51,
+      "controller": "WhatsAppManualController",
+      "handler": "estadoAutomacao",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/manual/automacoes/:id/estado",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 57,
+      "controller": "WhatsAppManualController",
+      "handler": "salvarTexto",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/manual/textos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 62,
+      "controller": "WhatsAppManualController",
+      "handler": "campanha",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/manual/campanhas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 74,
+      "controller": "WhatsAppManualController",
+      "handler": "automacao",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/manual/automacoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 80,
+      "controller": "WhatsAppManualController",
+      "handler": "abrir",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/manual/:id/abrir",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp-manual.controller.ts",
+      "line": 85,
+      "controller": "WhatsAppManualController",
+      "handler": "concluir",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/manual/:id/concluir",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
       "file": "apps/api/src/admin/whatsapp.controller.ts",
       "line": 150,
       "controller": "WhatsAppController",
@@ -5216,6 +5410,34 @@
       "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
     },
     {
+      "file": "apps/api/src/auth/consentimento-cadastro.controller.ts",
+      "line": 14,
+      "controller": "ConsentimentoCadastroController",
+      "handler": "consultar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/auth/whatsapp-cadastro/consultar",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/consentimento-cadastro.controller.ts",
+      "line": 19,
+      "controller": "ConsentimentoCadastroController",
+      "handler": "confirmar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/auth/whatsapp-cadastro/confirmar",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
       "file": "apps/api/src/booking/agente.controller.ts",
       "line": 58,
       "controller": "AgenteController",
@@ -5243,7 +5465,7 @@
     },
     {
       "file": "apps/api/src/booking/appointments.controller.ts",
-      "line": 88,
+      "line": 92,
       "controller": "GuestAppointmentsController",
       "handler": "create",
       "verb": "POST",
@@ -5255,7 +5477,7 @@
     },
     {
       "file": "apps/api/src/booking/appointments.controller.ts",
-      "line": 164,
+      "line": 182,
       "controller": "GuestAppointmentsController",
       "handler": "receipt",
       "verb": "GET",
@@ -5267,7 +5489,7 @@
     },
     {
       "file": "apps/api/src/booking/appointments.controller.ts",
-      "line": 236,
+      "line": 254,
       "controller": "AppointmentsController",
       "handler": "list",
       "verb": "GET",
@@ -5281,7 +5503,7 @@
     },
     {
       "file": "apps/api/src/booking/appointments.controller.ts",
-      "line": 245,
+      "line": 263,
       "controller": "AppointmentsController",
       "handler": "cancel",
       "verb": "POST",
@@ -5295,7 +5517,7 @@
     },
     {
       "file": "apps/api/src/booking/appointments.controller.ts",
-      "line": 277,
+      "line": 295,
       "controller": "AppointmentsController",
       "handler": "rescheduleOptions",
       "verb": "GET",
@@ -5309,7 +5531,7 @@
     },
     {
       "file": "apps/api/src/booking/appointments.controller.ts",
-      "line": 333,
+      "line": 351,
       "controller": "AppointmentsController",
       "handler": "reschedule",
       "verb": "POST",
@@ -6350,6 +6572,7 @@
     "apps/web/src/app/[slug]/agendado/[id]/page.tsx",
     "apps/web/src/app/[slug]/agendar/page.tsx",
     "apps/web/src/app/[slug]/b/[barbeiro]/page.tsx",
+    "apps/web/src/app/[slug]/consentimento-whatsapp/page.tsx",
     "apps/web/src/app/[slug]/conversar/page.tsx",
     "apps/web/src/app/[slug]/entrar/page.tsx",
     "apps/web/src/app/[slug]/falar/page.tsx",
@@ -6412,6 +6635,7 @@
     "apps/web/src/app/admin/trocar-senha/page.tsx",
     "apps/web/src/app/admin/unidades/page.tsx",
     "apps/web/src/app/admin/webhooks/page.tsx",
+    "apps/web/src/app/admin/whatsapp/manual/page.tsx",
     "apps/web/src/app/admin/whatsapp/page.tsx",
     "apps/web/src/app/buscar/page.tsx",
     "apps/web/src/app/pagamento/page.tsx",
@@ -6527,9 +6751,12 @@
         "@barbearia/db": "workspace:*",
         "@barbearia/identity": "workspace:*",
         "@barbearia/jobs": "workspace:*",
+        "@xmldom/xmldom": "0.8.15",
         "fast-xml-parser": "^5.11.1",
         "libxml2-wasm": "0.7.2",
         "node-forge": "^1.4.0",
+        "pdfkit": "0.17.2",
+        "qrcode-generator": "2.0.4",
         "xml-crypto": "^6.1.2",
         "xmlbuilder2": "^4.0.3"
       },
@@ -6720,7 +6947,16 @@
     "packages/db/migrations/0124_rota_fiscal_reservada.sql",
     "packages/db/migrations/0125_reserva_cobranca_saas.sql",
     "packages/db/migrations/0126_oferta_entrega_recuperavel.sql",
-    "packages/db/migrations/0127_texto_fiscal_proprio.sql"
+    "packages/db/migrations/0127_texto_fiscal_proprio.sql",
+    "packages/db/migrations/0128_nfse_nao_optante.sql",
+    "packages/db/migrations/0129_nfse_ibscbs.sql",
+    "packages/db/migrations/0130_cnpj_alfanumerico.sql",
+    "packages/db/migrations/0131_nfse_prova_assinatura.sql",
+    "packages/db/migrations/0132_whatsapp_manual.sql",
+    "packages/db/migrations/0133_nfse_iss_fora_das.sql",
+    "packages/db/migrations/0134_consentimento_whatsapp_cadastro.sql",
+    "packages/db/migrations/0135_nfse_federais_fora_das.sql",
+    "packages/db/migrations/0136_nfse_municipal_reaproveitada.sql"
   ],
   "estado": "Fonte de trabalho não commitada; a base não representa as alterações locais"
 }

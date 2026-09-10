@@ -1016,7 +1016,7 @@ export async function oferecerProximaVaga(params: {
   readonly agora: Date;
   readonly exceto?: readonly string[];
 }): Promise<
-  | (OfertaCriada & { readonly telefone: string | null; readonly barbearia: string })
+  | (OfertaCriada & { readonly telefone: string | null; readonly barbearia: string; readonly slug: string })
   | null
 > {
   if (params.inicio.getTime() <= params.agora.getTime()) return null;
@@ -1024,15 +1024,19 @@ export async function oferecerProximaVaga(params: {
     // O nome da barbearia sai daqui junto do fuso, e não de uma segunda ida ao
     // banco: quem manda a mensagem precisa dizer de quem ela é — sem isso o
     // WhatsApp chega assinado por ninguém.
-    const unidades = await tx.$queryRaw<{ timezone: string; barbearia: string }[]>`
-      SELECT l.timezone, t.name AS barbearia
+    const unidades = await tx.$queryRaw<{ timezone: string; barbearia: string; slug: string }[]>`
+      SELECT l.timezone, t.name AS barbearia, s.slug
         FROM locations l
         JOIN tenants t ON t.id = l.tenant_id
+        JOIN tenant_slugs s ON s.tenant_id = t.id AND s.is_primary
        WHERE l.id = ${params.locationId}::uuid
     `;
     const timezone = unidades[0]?.timezone;
     const barbearia = unidades[0]?.barbearia ?? '';
-    if (!timezone) return null;
+    const slug = unidades[0]?.slug;
+    // A rota pública inclui a casa. Sem endereço publicável, reservar a vaga
+    // criaria exclusividade para um convite que o cliente não consegue abrir.
+    if (!timezone || !slug) return null;
 
     await travarDiaDaAgenda(tx,params.locationId,instantToLocal(timezone,params.inicio).date);
     await travarConfiguracaoDoProfissional(tx,params.professionalId);
@@ -1054,7 +1058,7 @@ export async function oferecerProximaVaga(params: {
       if(hashDaOferta(token)!==anterior.token_hash)throw new Error('oferta_token_divergente');
       const local=instantToLocal(timezone,anterior.service_starts_at);
       return {id:anterior.id,entryId:anterior.entry_id,customerId:anterior.customer_id,customerNome:anterior.customer_nome,
-        telefone:anterior.phone_e164,barbearia,token,venceEm:anterior.expires_at,dia:local.date,hora:formatHHMM(local.minutes),
+        telefone:anterior.phone_e164,barbearia,slug,token,venceEm:anterior.expires_at,dia:local.date,hora:formatHHMM(local.minutes),
         profissionalNome:anterior.professional_name};
     }
     const anteriores=await tx.$queryRaw<{entry_id:string}[]>`SELECT entry_id FROM waitlist_offers
@@ -1081,6 +1085,6 @@ export async function oferecerProximaVaga(params: {
     const contatos = await tx.$queryRaw<{ phone_e164: string | null }[]>`
       SELECT phone_e164 FROM customers WHERE id = ${oferta.customerId}::uuid
     `;
-    return { ...oferta, telefone: contatos[0]?.phone_e164 ?? null, barbearia };
+    return { ...oferta, telefone: contatos[0]?.phone_e164 ?? null, barbearia, slug };
   });
 }

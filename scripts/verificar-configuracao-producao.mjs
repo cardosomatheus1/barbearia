@@ -63,6 +63,17 @@ export function errosDaConfiguracaoDeProducao(env = process.env) {
     if (!/^[A-Za-z0-9+/]{43}=$/.test(chave) || Buffer.from(chave, 'base64').length !== 32 || Buffer.from(chave, 'base64').toString('base64') !== chave) {
       erros.push('FISCAL_MODO=nacional exige FISCAL_SECRET_KEY com 32 bytes em base64');
     }
+    // A guarda cobra a declaração; o emissor confere X.509, validade e pinagem
+    // antes de qualquer chamada e a tela não informa prontidão se forem inválidos.
+    if (!valor(env, 'FISCAL_AUTORIDADES_PEM_B64')) {
+      erros.push('FISCAL_MODO=nacional exige FISCAL_AUTORIDADES_PEM_B64 com certificados públicos obtidos da autoridade por fonte independente');
+    }
+    if (!valor(env, 'FISCAL_CONFIANCA_DIR').startsWith('/')) {
+      erros.push('FISCAL_MODO=nacional exige FISCAL_CONFIANCA_DIR absoluto com raízes ICP-Brasil e CRLs vigentes');
+    }
+    if (!valor(env, 'FISCAL_DANFSE_FONTES_DIR').startsWith('/')) {
+      erros.push('FISCAL_MODO=nacional exige FISCAL_DANFSE_FONTES_DIR absoluto com fontes licenciadas para o DANFSe (NT008)');
+    }
   }
 
   if (!['local', 's3'].includes(midia)) erros.push(`MEDIA_STORAGE inválido: ${midia}`);

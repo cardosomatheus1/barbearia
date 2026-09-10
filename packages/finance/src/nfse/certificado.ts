@@ -1,3 +1,4 @@
+import { CNPJ_NORMALIZADO } from '@barbearia/core';
 import forge from 'node-forge';
 import { createPrivateKey, createPublicKey, X509Certificate } from 'node:crypto';
 
@@ -28,7 +29,7 @@ function cnpjIcpBrasil(cert: forge.pki.Certificate): string {
       forge.asn1.derToOid(oid.value) !== '2.16.76.1.3.3' || !wrapper || typeof wrapper === 'string' ||
       !Array.isArray(wrapper.value)) continue;
     const value = wrapper.value[0];
-    if (value && typeof value !== 'string' && typeof value.value === 'string' && /^[0-9]{14}$/.test(value.value)) {
+    if (value && typeof value !== 'string' && typeof value.value === 'string' && CNPJ_NORMALIZADO.test(value.value)) {
       return value.value;
     }
   }
@@ -36,11 +37,11 @@ function cnpjIcpBrasil(cert: forge.pki.Certificate): string {
 }
 
 /**
- * Verifica material local; confiança ICP-Brasil/revogação é validada também pela
- * autoridade durante mTLS. Não chama rede nem registra chave, senha ou PFX.
+ * Lê material local. O cadastro e cada uso ainda exigem validarConfiancaA1;
+ * montar uma cadeia não prova confiança nem ausência de revogação.
  */
 export function lerCertificadoA1(pfx: Buffer, senha: string, cnpjEsperado: string, agora = new Date()): CertificadoA1 {
-  if (pfx.length === 0 || pfx.length > 512 * 1024 || senha.length > 1024 || !/^\d{14}$/.test(cnpjEsperado)) {
+  if (pfx.length === 0 || pfx.length > 512 * 1024 || senha.length > 1024 || !CNPJ_NORMALIZADO.test(cnpjEsperado) || !Number.isFinite(agora.getTime())) {
     throw new Error('certificado_entrada_invalida');
   }
   let p12: forge.pkcs12.Pkcs12Pfx;
@@ -67,6 +68,12 @@ export function lerCertificadoA1(pfx: Buffer, senha: string, cnpjEsperado: strin
   const folhas = material.filter(c => !c.x509.ca && c.x509.publicKey.export({ type: 'spki', format: 'der' }).equals(pub));
   if (folhas.length !== 1) throw new Error('certificado_folha_ambigua_ou_incompativel');
   const folha = folhas[0]!;
+  const uso = folha.cert.extensions.find(e => e.id === '2.5.29.15');
+  // RN da DPS exige X.509 v3, assinatura digital e não repúdio. A finalidade
+  // sslclient do OpenSSL, sozinha, também aceita folhas sem esses usos fiscais.
+  if (folha.cert.version !== 2 || uso?.digitalSignature !== true || uso.nonRepudiation !== true) {
+    throw new Error('certificado_padrao_assinatura_invalido');
+  }
   const cnpj = cnpjIcpBrasil(folha.cert);
   if (cnpj !== cnpjEsperado) throw new Error('certificado_cnpj_divergente');
   const validoDesde = folha.cert.validity.notBefore;

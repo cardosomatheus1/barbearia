@@ -1,3 +1,4 @@
+import { dadosManuaisDoTitular } from './manual/exportacao.js';
 import { conteudoDoEnvio, type EnvioBaileys } from './baileys/outbox.js';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
@@ -167,7 +168,7 @@ export async function consentimentosDoCliente(
 ): Promise<ConsentimentosDoCliente> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<LinhaDeConsentimento[]>`
-      SELECT purpose, granted, text_version, decided_at, ip::text AS ip, recorded_by
+      SELECT purpose, granted, text_version, text_snapshot, verification_method, requested_at, requested_ip::text AS requested_ip, decided_at, ip::text AS ip, recorded_by
         FROM customer_consents
        WHERE customer_id = ${customerId}::uuid
        ORDER BY decided_at DESC, id DESC
@@ -190,6 +191,7 @@ export async function consentimentosDoCliente(
 // ---------------------------------------------------------------------------
 
 export interface DadosDoTitular {
+  readonly whatsappManual: readonly Record<string, unknown>[];
   readonly whatsappBaileys: readonly Record<string, unknown>[];
   readonly geradoEm: string;
   readonly barbearia: { readonly nome: string; readonly encarregado: string | null };
@@ -250,7 +252,7 @@ export async function exportarDadosDoTitular(
     if (!cliente) throw new LgpdError('customer_not_found', 'Cliente não encontrado');
 
     const consentimentos = await tx.$queryRaw<Record<string, unknown>[]>`
-      SELECT purpose, granted, text_version, decided_at, ip::text AS ip
+      SELECT purpose, granted, text_version, text_snapshot, verification_method, requested_at, requested_ip::text AS requested_ip, decided_at, ip::text AS ip
         FROM customer_consents WHERE customer_id = ${customerId}::uuid
        ORDER BY decided_at
     `;
@@ -564,6 +566,7 @@ export async function exportarDadosDoTitular(
     const preferencia = preferencias[0] ?? null;
 
     return {
+      whatsappManual: await dadosManuaisDoTitular(tx, tenantId, customerId),
       whatsappBaileys,
       whatsappRecebidas: mensagensRecebidas,
       whatsappEnviadas: mensagensEnviadas,

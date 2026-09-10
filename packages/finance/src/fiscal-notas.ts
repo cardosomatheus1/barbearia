@@ -1,6 +1,7 @@
 import { sql, withTenant, type TransactionClient } from '@barbearia/db';
 import {
   baseDaNota,
+  cpfValido,
   comissaoDoPeriodo,
   ESTADOS_QUE_OCUPAM_A_VENDA,
   motivoParaNaoEmitir,
@@ -17,6 +18,8 @@ import { recusar } from './fiscal-erros.js';
 import { modoFiscal } from './fiscal-emissor.js';
 import { situacaoNfse } from './nfse/configuracao.js';
 import { prepararDocumentoNfse } from './nfse/documentos.js';
+import { emissorDaUnidade, situacaoMunicipal } from './nfse-municipal/configuracao.js';
+import { prepararDocumentoMunicipal } from './nfse-municipal/documentos.js';
 import { NfseError } from './nfse/erros.js';
 
 export interface NotaNaTela {
@@ -68,8 +71,10 @@ const paraTela = (l: {
   motivoDaRecusa: l.rejection_reason,
   xmlDisponivel: l.xml_available,
   avisoOperacional: l.operational_error === 'nfse_municipio_sem_emissor_nacional'
-    ? 'Este município exige seu emissor municipal para este regime. A integração municipal ainda precisa ser implementada.'
+    ? 'Este município exige emissão municipal para este regime. Confira a opção Emissor municipal na configuração fiscal.'
     : l.operational_error?.startsWith('nfse_certificado') ? 'Confira ou renove o certificado A1 da unidade.'
+    : l.operational_error === 'nfse_pdf_fontes_ausentes' ? 'A nota foi autorizada. Peça ao suporte para concluir a configuração do PDF fiscal.'
+    : l.operational_error?.startsWith('nfse_pdf_') ? 'A nota foi autorizada. O sistema tentará preparar o PDF novamente.'
     : l.operational_error ? 'A comunicação fiscal está pendente. O sistema consultará a nota novamente.' : null,
   regime: l.regime,
   servicoCents: l.service_cents,
@@ -82,8 +87,10 @@ const paraTela = (l: {
 const COLUNAS = sql`id, order_id, status::text AS status, number, pdf_url, rejection_reason,
                     regime::text AS regime, service_cents, partner_cents, iss_bps,
                     customer_name, requested_at, created_by_name,
-                    EXISTS (SELECT 1 FROM fiscal_native_documents nd WHERE nd.invoice_id = fiscal_invoices.id AND nd.nfse_cipher IS NOT NULL) AS xml_available,
-                    (SELECT nd.last_error_code FROM fiscal_native_documents nd WHERE nd.invoice_id = fiscal_invoices.id) AS operational_error`;
+                    (EXISTS (SELECT 1 FROM fiscal_native_documents nd WHERE nd.invoice_id = fiscal_invoices.id AND nd.nfse_cipher IS NOT NULL)
+                     OR EXISTS (SELECT 1 FROM fiscal_municipal_documents md WHERE md.invoice_id = fiscal_invoices.id AND md.nfse_cipher IS NOT NULL)) AS xml_available,
+                    COALESCE((SELECT nd.last_error_code FROM fiscal_native_documents nd WHERE nd.invoice_id = fiscal_invoices.id),
+                             (SELECT md.last_error_code FROM fiscal_municipal_documents md WHERE md.invoice_id = fiscal_invoices.id)) AS operational_error`;
 
 export async function notasDoPeriodo(params: {
   readonly tenantId: string;
@@ -206,9 +213,14 @@ export async function pedirNota(
     recusar('fiscal_indisponivel');
   }
 
+  let exigeTomadorIbsCbs = false;
+  let municipal = false;
   if (modoFiscal() === 'nacional') {
     await tx.$queryRaw`SELECT location_id FROM fiscal_settings WHERE location_id = ${params.locationId}::uuid FOR UPDATE`;
-    const situacao = await situacaoNfse(params.tenantId, params.locationId, new Date(), tx);
+    municipal = await emissorDaUnidade(tx, params.locationId) === 'municipal';
+    const situacao = municipal ? await situacaoMunicipal(params.tenantId, params.locationId, tx)
+      : await situacaoNfse(params.tenantId, params.locationId, new Date(), tx);
+    exigeTomadorIbsCbs = !municipal && Boolean(situacao.configuracao && 'perfilIbsCbs' in situacao.configuracao && situacao.configuracao.perfilIbsCbs);
     if (!situacao.pronta) {
       if (params.automatica) return null;
       throw new NfseError('nfse_nao_configurada', situacao.motivo ?? 'Confira a configuração fiscal.');
@@ -222,12 +234,13 @@ export async function pedirNota(
       status: 'open' | 'paid' | 'cancelled' | 'refunded';
       customer_name: string | null;
       customer_document: string | null;
+      discount_cents: number;
     }[]
   >`
     -- O CPF sai do cadastro e é congelado na nota, como o nome já era. Lê-lo do
     -- cadastro na hora de enviar faria a nota de janeiro mudar de tomador
     -- quando o cliente corrigisse o próprio documento em março.
-    SELECT o.status::text AS status, c.name AS customer_name, c.tax_id AS customer_document
+    SELECT o.status::text AS status, c.name AS customer_name, c.tax_id AS customer_document, o.discount_cents
       FROM orders o
       LEFT JOIN customers c ON c.id = o.customer_id
      WHERE o.id = ${params.orderId}::uuid AND o.location_id = ${params.locationId}::uuid
@@ -236,6 +249,11 @@ export async function pedirNota(
   if (!venda) {
     if (params.automatica) return null;
     recusar('venda_nao_encontrada');
+  }
+  if (exigeTomadorIbsCbs && (!venda.customer_document || !cpfValido(venda.customer_document) || !venda.customer_name?.trim())) {
+    // O cadastro fiscal incompleto não pode desfazer o pagamento da comanda.
+    if (params.automatica) return null;
+    throw new NfseError('nfse_ibscbs_tomador_obrigatorio', 'Cadastre nome e CPF do cliente que recebeu o serviço antes de emitir a nota.');
   }
 
   const itens = await tx.$queryRaw<{ tipo: string; total: bigint }[]>`
@@ -273,6 +291,13 @@ export async function pedirNota(
   if (!config) {
     if (params.automatica) return null;
     recusar('nao_configurado');
+  }
+
+  if (municipal && config.municipioIbge === '3550308' && venda.discount_cents > 0) {
+    // Limitação do adaptador não pode desfazer o recebimento da comanda.
+    if (params.automatica) return null;
+    throw new NfseError('nfse_municipal_perfil_sem_suporte',
+      'O emissor de São Paulo disponível atende ao layout 1 sem desconto. Para esta venda, utilize o portal da prefeitura.', 400);
   }
 
   /**
@@ -348,7 +373,10 @@ export async function pedirNota(
   `;
   const criada = criadas[0];
   if (!criada) return null;
-  if (modoFiscal() === 'nacional') await prepararDocumentoNfse(tx, params.tenantId, criada.id);
+  if (modoFiscal() === 'nacional') {
+    if (municipal) await prepararDocumentoMunicipal(tx, params.tenantId, criada.id);
+    else await prepararDocumentoNfse(tx, params.tenantId, criada.id);
+  }
 
   await enfileirarPara(tx, params.tenantId, {
     kind: 'fiscal.emitir',

@@ -1,0 +1,26 @@
+{
+  "src/OpenAC.Net.NFSe/Commom/Client/NFSeHttpServiceClient.cs": {
+    "antes": "7f1f0ea206961035f8166acf60a5303495699442fba8fb3c4d61fd24edbe8f5a",
+    "depois": "1214d8028aac4e5b0c39e0f5fb256fb78b3dda0fc6bdb4c37e4139f1cac970ab"
+  },
+  "src/OpenAC.Net.NFSe/Commom/Client/NFSeMultiPartClient.cs": {
+    "antes": "87b45a0246dc8344590c5797033be0900cd7784d3c994ad2366104c88d7e0240",
+    "depois": "11631ba3d5a41e8f01ccf2f063bf7f0fac04b35db95b4ff37e4750da5870f672"
+  },
+  "src/OpenAC.Net.NFSe/Configuracao/ConfigNFSe.cs": {
+    "antes": "04dac1d31c353fc23216b3218e7329a0b93169fd9204e93d85b11f2d6e8ac4fa",
+    "depois": "fbd5c18841e194d6818a62052340b1e0503d1963dda38808631162c8cfd65899"
+  },
+  "src/OpenAC.Net.NFSe/OpenAC.Net.NFSe.csproj": {
+    "antes": "f34c4dcecefbe84fd332ffc791b10021a9ae195b7ccffa2bb78efedaf3bfd79d",
+    "depois": "9c7ece2d4c063450a40da400bcf4063eaa146171bbecc9d235732adb3df72fe7"
+  },
+  "src/OpenAC.Net.NFSe/OpenNFSe.cs": {
+    "antes": "b85b52ef86833a7a95a57352b0c610f915a9c09a930afc86753e334c9584dd9d",
+    "depois": "e51cc36b479caf3a7645b64f1dc09e74b86ba4692d25b3c2512f8c78e0785999"
+  },
+  "src/OpenAC.Net.NFSe/Providers/ProviderBase.cs": {
+    "antes": "d91febac6cbbe5482a82b9d219b297e0de86f2863f7aeb763711d3054cbce15f",
+    "depois": "0dbecf3eaff08dcacdea1240bf3818b3f6e1f8f2b4e4675561228c1c532e6f5a"
+  }
+}

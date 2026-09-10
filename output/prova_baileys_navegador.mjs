@@ -68,11 +68,13 @@ try {
     assert.equal(r.status,200); return r.json();
   };
   await page.goto(process.env.WEB_URL+'/admin/whatsapp', { waitUntil: 'networkidle' });
-  await page.locator('#canal-whatsapp').selectOption('baileys');
-  await page.getByRole('button', { name: 'Usar esta conexão', exact: true }).click();
+  await page.getByRole('link', { name: /Alternativa não oficial Baileys/ }).click();
+  assert.equal((await situacao()).canal,'meta','Consultar Baileys não pode ativá-lo');
+  assert.ok((await page.locator('#configuracao').innerText()).includes('risco de bloqueio ou banimento'));
+  await page.getByRole('button', { name: 'Usar conexão Baileys', exact: true }).click();
   await page.getByRole('heading', { name: 'Mensagens por QR', exact: true }).waitFor();
   assert.equal((await situacao()).canal,'baileys');
-  assert.equal(await page.getByRole('heading', { name: 'Textos aprovados', exact: true }).count(),0);
+  assert.equal(await page.getByRole('heading', { name: 'Mensagens da Meta', exact: true }).count(),0);
   runtime.iniciar();
   await page.getByRole('button', { name: 'Gerar QR Code', exact: true }).click();
   await page.getByAltText('QR para conectar o WhatsApp desta unidade').waitFor({ timeout: 20_000 });
@@ -152,9 +154,9 @@ try {
   await page.getByRole('button', { name: 'Desconectar número', exact: true }).click();
   await page.getByText('Número desconectado', { exact: true }).waitFor();
   assert.equal((await situacao()).baileys.qr,null);
-  await page.locator('#canal-whatsapp').selectOption('meta');
-  await page.getByRole('button', { name: 'Usar esta conexão', exact: true }).click();
-  await page.getByRole('heading', { name: 'Textos aprovados', exact: true }).waitFor();
+  await page.getByRole('link', { name: /Recomendado · oficial Meta/ }).click();
+  await page.getByRole('button', { name: 'Usar conexão Meta', exact: true }).click();
+  await page.getByRole('heading', { name: 'Mensagens da Meta', exact: true }).waitFor();
   assert.equal((await situacao()).canal,'meta'); assert.deepEqual(errors,[]);
   console.log(JSON.stringify({ resultado: 'passou', cenarios: ['seleção do canal','QR sintético','conexão','texto local','envio manual pela tela','campanha criada na tela e consumida pela fila real','automação criada na tela, agendada e consumida pela fila real','QR expirado','texto preservado em erro','quatro larguras','desconexão','retorno à Meta'], redeWhatsApp: false, processoMainWorker: false }));
 } finally { await runtime.parar(); await browser.close(); await db.end(); await disconnect(); }

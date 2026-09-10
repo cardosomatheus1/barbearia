@@ -1,0 +1,1480 @@
+{
+  "comando": [
+    "python3",
+    "output/executar_verify_correcao.py",
+    "fiscal-baileys-stripe-v15"
+  ],
+  "inicio_utc": "2026-09-10T20:42:07.630388+00:00",
+  "duracao_segundos": 3180.3,
+  "exit_code": 1,
+  "fonte_estavel": true,
+  "fonte_sha256": "5c6712fdd91303f7c981aedcab3b08dd755e2a2e503e807d0f1ae589e4280179",
+  "guardas_iniciais": [
+    {
+      "nome": "matriz de prontidão",
+      "resultado": "ok"
+    },
+    {
+      "nome": "verdade comercial R8",
+      "resultado": "ok"
+    },
+    {
+      "nome": "vocabulário e navegação V0",
+      "resultado": "ok"
+    },
+    {
+      "nome": "invariantes da auditoria",
+      "resultado": "ok"
+    },
+    {
+      "nome": "auditoria profunda de invariantes",
+      "resultado": "ok"
+    },
+    {
+      "nome": "auditoria ofensiva de invariantes",
+      "resultado": "ok"
+    },
+    {
+      "nome": "rotas internas web",
+      "resultado": "ok"
+    },
+    {
+      "nome": "porta de clientes V1",
+      "resultado": "ok"
+    },
+    {
+      "nome": "orientação V3",
+      "resultado": "ok"
+    },
+    {
+      "nome": "operação x configuração V4",
+      "resultado": "ok"
+    },
+    {
+      "nome": "centro operacional V5",
+      "resultado": "ok"
+    },
+    {
+      "nome": "primeira ilha de cliente R5",
+      "resultado": "ok"
+    },
+    {
+      "nome": "promessas históricas R6",
+      "resultado": "ok"
+    },
+    {
+      "nome": "lacunas declaradas",
+      "resultado": "ok"
+    },
+    {
+      "nome": "agenda proporcional V10",
+      "resultado": "ok"
+    },
+    {
+      "nome": "busca global e ações V11",
+      "resultado": "ok"
+    },
+    {
+      "nome": "V8 técnico global estático",
+      "resultado": "ok"
+    },
+    {
+      "nome": "acessibilidade e densidade operacional",
+      "resultado": "ok"
+    },
+    {
+      "nome": "honestidade do percurso financeiro E2E",
+      "resultado": "ok"
+    },
+    {
+      "nome": "percursos de usabilidade R12",
+      "resultado": "ok"
+    },
+    {
+      "nome": "armazenamento próprio de mídia R9",
+      "resultado": "ok"
+    },
+    {
+      "nome": "CSS por superfície R10",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos do admin R11",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos financeiros da comanda",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos do motor de booking",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos do CRM/WhatsApp",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos financeiros de comissão",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos financeiros fiscais",
+      "resultado": "ok"
+    },
+    {
+      "nome": "build dos pacotes",
+      "resultado": "ok"
+    }
+  ],
+  "etapas": [
+    {
+      "indice": 0,
+      "nome": "typecheck",
+      "resultado": "ok",
+      "log_sha256": "b1366141da184397c4a94ef042b40b0c1d9a4a081e7a957e59c7ad73bfb82dba",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 1,
+      "nome": "build do web + typecheck",
+      "resultado": "ok",
+      "log_sha256": "b12fbdee52f26c68fdac5f1bbe18b7bdfaa1976555b6766f92948aa8ac43f67e",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 2,
+      "nome": "build da api",
+      "resultado": "ok",
+      "log_sha256": "f23c40051b9b402efe9e74def7e6dd5a095cc7787cfd85d5ecca9e55a0e949ab",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 3,
+      "nome": "core — unitários",
+      "resultado": "ok",
+      "log_sha256": "4b8d3b3abfc3642c7aa7e7343c22385bbc1d1b2bc0c43e0dd1e0ab1890395d78",
+      "vitest": [
+        {
+          "passed": 1438
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 4,
+      "nome": "ui — tokens e componentes",
+      "resultado": "ok",
+      "log_sha256": "f69d78b3860daed468915874725ef2a767dfcebdbc64bcff2ca60f4cf82ed147",
+      "vitest": [
+        {
+          "passed": 90
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 5,
+      "nome": "web — lógica de tela",
+      "resultado": "ok",
+      "log_sha256": "fbe9889a8d6b0577223312c8535ccce8c793c797a1a901aa9809695740944cfe",
+      "vitest": [
+        {
+          "passed": 209
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 6,
+      "nome": "fiscal municipal — motor e fonte reutilizada",
+      "resultado": "ok",
+      "log_sha256": "a5ce9cfdf1fbefceeadec2ec92de66ed67805014f7de88d5263b5cc6bf44b04c",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": [
+        {
+          "failed": 0,
+          "passed": 34,
+          "skipped": 0,
+          "tests": 34
+        }
+      ]
+    },
+    {
+      "indice": 7,
+      "nome": "resolvedor de afetados",
+      "resultado": "ok",
+      "log_sha256": "77228431c22d66c9c49c9ee0698594a8fd4f37517a2bad8d069d0629e83ff169",
+      "vitest": [
+        {
+          "passed": 9
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 8,
+      "nome": "guarda da matriz de prontidão",
+      "resultado": "ok",
+      "log_sha256": "3c7bdd389bf9601fedfc7e6dd06370ad42904a7098b19c7a751845693a19df1b",
+      "vitest": [],
+      "tap": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 9,
+      "nome": "guarda CSS R10 — negativos",
+      "resultado": "ok",
+      "log_sha256": "bbad0f88aedd4c0006b75a145cab3d9c9d2a5bccf75777083160dd40c286099f",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 10,
+      "nome": "guarda R11 — módulos por domínio",
+      "resultado": "ok",
+      "log_sha256": "d3bc77e00dcb9648a5384433787e2ee9c5142c4a58a96db4ab288f503b697a57",
+      "vitest": [
+        {
+          "passed": 4
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 11,
+      "nome": "crase em consulta SQL",
+      "resultado": "ok",
+      "log_sha256": "61afb628607d46107b7b52ed0147e240d8244e20d762802b3d63b3c6551dd417",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 12,
+      "nome": "crase em script inline",
+      "resultado": "ok",
+      "log_sha256": "1a04d9b154df1896c7084372f1eb486c3a64c0d428401c4fe94a1a41e600ee9c",
+      "vitest": [
+        {
+          "passed": 1
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 13,
+      "nome": "o .env.example é a lista",
+      "resultado": "ok",
+      "log_sha256": "4409307f8278d9f6aecee9e8b46a3e5ea61b49afcc4f4521815313f7a9379ced",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 14,
+      "nome": "recurso do menu × catálogo",
+      "resultado": "ok",
+      "log_sha256": "6e4403d6f4d0e97f6798b72d287f7910b81f34a5dcac7c19f55be3463f66a979",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 15,
+      "nome": "UPDATE de unidade com WHERE",
+      "resultado": "ok",
+      "log_sha256": "51e33aaf57b32f03680c097ef29be0c18978eff2551c2d8888a1ccaf8d5f3b66",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 16,
+      "nome": "evento de webhook com emissor",
+      "resultado": "ok",
+      "log_sha256": "5b6c11beb86b3210055e68182ebd3195e0658ecb0ffe578d89c464f37a06637d",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 17,
+      "nome": "escopo de chave × rota",
+      "resultado": "ok",
+      "log_sha256": "f3b8d2642019b1f47b26e9b8057ebfc27251136c574e96e03735444523c1c2d1",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 18,
+      "nome": "@Param com pipe",
+      "resultado": "ok",
+      "log_sha256": "27b86c54ae624a417db10dc3533f54a1d8948ada769d95089a91ef65143f2b97",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 19,
+      "nome": "métrica com resposta",
+      "resultado": "ok",
+      "log_sha256": "e2f41a1e0dd99b3005d240986056bb52b35e354c13978802e0f6d145632f9b74",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 20,
+      "nome": "capacidade com tipo de cadeira",
+      "resultado": "ok",
+      "log_sha256": "db4aadb5da489e71c929b78582adcde575ca2d41c5980f1e45d3923b5164a660",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 21,
+      "nome": "id conferido contra a unidade",
+      "resultado": "ok",
+      "log_sha256": "f05e33f153521e020a2405ca5985f9f166c6b7ee45d3cc9f3ce7abc2e7fdf2cc",
+      "vitest": [
+        {
+          "passed": 4
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 22,
+      "nome": "permissao com rota",
+      "resultado": "ok",
+      "log_sha256": "00794bc35127c82cbc80f57a9f0bf7a0f4524224c0767ac0043da27e003fb812",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 23,
+      "nome": "recusa com frase",
+      "resultado": "ok",
+      "log_sha256": "d4807473387ffa73e6e671f0468a7db69e46bfdf2fed6e6ff04b098c180c6402",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 24,
+      "nome": "uniao do dominio",
+      "resultado": "ok",
+      "log_sha256": "6fd93b0ae1351bfcf6a801c7e741f04908881d1f177c40b035c61ebb73f4f702",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 25,
+      "nome": "summary com classe",
+      "resultado": "ok",
+      "log_sha256": "67446b0a6175e9021c9fe62e298bdf3b4a639e5dd9656ae0033864e019af7485",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 26,
+      "nome": "rota de primeiro nível × slug reservado",
+      "resultado": "ok",
+      "log_sha256": "e44134074fb82c72304f4a7e626adf554325c468454baa03a7d9ebbfd1eaedf1",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 27,
+      "nome": "segredos do deploy",
+      "resultado": "ok",
+      "log_sha256": "f1550a18efa53dfa7edbf36ab1d6e1b43a1c4cfc5da87836876dae4a5fb962bc",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 28,
+      "nome": "configuração de produção",
+      "resultado": "ok",
+      "log_sha256": "7b3bba9cbc3e1b719a1a5ef87cc7945abd70568d51ca94f5a77b3e31780bf97c",
+      "vitest": [],
+      "tap": {
+        "tests": 25,
+        "pass": 25,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 29,
+      "nome": "SQL seguro",
+      "resultado": "ok",
+      "log_sha256": "a2934e639207072de52997eaf9a180fdb464f720e88ae864619b35555b53b76e",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 30,
+      "nome": "SQL seguro — negativos",
+      "resultado": "ok",
+      "log_sha256": "1666467df4e17ab26dcaf48883295e2b2afa9ab25c600a7859ad04a7a738a874",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 31,
+      "nome": "segredos no snapshot",
+      "resultado": "ok",
+      "log_sha256": "d72f192a4cb44d5be2ba3b2f2df5cb7992358e8d44a004ac7058d4bfb0d8ce89",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 32,
+      "nome": "secret scan — negativos",
+      "resultado": "ok",
+      "log_sha256": "cf0731e6143144e5cf6ce386d138c2d60a14047e30f9182a172c37288c3108ad",
+      "vitest": [],
+      "tap": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 33,
+      "nome": "proteção anti-bot",
+      "resultado": "ok",
+      "log_sha256": "c322ca40e405eb4539b1b3a191373fd2dc8b338385c6a6641913e1ddd2aca916",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 34,
+      "nome": "proteção anti-bot — negativos",
+      "resultado": "ok",
+      "log_sha256": "4e0706d2dac62efb41f633174a42595bacd07a97cb1de81c949cf67f1301f784",
+      "vitest": [],
+      "tap": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 35,
+      "nome": "portão de segurança",
+      "resultado": "ok",
+      "log_sha256": "d8dcdfaa99536a0c996cc38b1c4f8cd298d256b8f268868f55f7eee5f14cd31e",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 36,
+      "nome": "portão de segurança — negativos",
+      "resultado": "ok",
+      "log_sha256": "8b72a5707a0841adde2473773c316f4a6e9d0a15cdc722455e31703bfab126b6",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 37,
+      "nome": "identidade/tenant — segurança",
+      "resultado": "ok",
+      "log_sha256": "c224eccafb286e5c60138ef910978e3b6eb0f9d4db6ae318453b0887fbe89cd9",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 38,
+      "nome": "identidade/tenant — negativos",
+      "resultado": "ok",
+      "log_sha256": "14d6bada41a61b223646ec643c5256c90317bc117270476e6e6548c7eafa9519",
+      "vitest": [],
+      "tap": {
+        "tests": 14,
+        "pass": 14,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 39,
+      "nome": "auditoria Scheduling",
+      "resultado": "ok",
+      "log_sha256": "d33b0c59462acccee0d345a439b8a1e6da34eaad0e384c8915d0b3ac5df55a2f",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 40,
+      "nome": "auditoria Scheduling — negativos",
+      "resultado": "ok",
+      "log_sha256": "1bb394922ba4634d36fe4c47625c5dc8167fe31914804309bb625f88e0b2511e",
+      "vitest": [],
+      "tap": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 41,
+      "nome": "auditoria Financeiro",
+      "resultado": "ok",
+      "log_sha256": "0b4c9facbfa7d71b5737829281f7f5e5ca9ad3743098c3f94e348c153488b2f6",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 42,
+      "nome": "auditoria Financeiro — negativos",
+      "resultado": "ok",
+      "log_sha256": "1f3d0e23a93625412b58e611a00bd03bcf0b29a4240e8e0fa5d61d57ac9bb6f0",
+      "vitest": [],
+      "tap": {
+        "tests": 17,
+        "pass": 17,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 43,
+      "nome": "auditoria CRM/WhatsApp",
+      "resultado": "ok",
+      "log_sha256": "f6e0baf384383bc16e914e71c6ccb6f0f4214c9347ef974a41bf25febe701f28",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 44,
+      "nome": "auditoria CRM/WhatsApp — negativos",
+      "resultado": "ok",
+      "log_sha256": "59abafe64ab9c61fcf9c320af961fed347c185310f7fdb7aba1cc74bb26f2d8f",
+      "vitest": [],
+      "tap": {
+        "tests": 21,
+        "pass": 21,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 45,
+      "nome": "auditoria Catálogo/Onboarding",
+      "resultado": "ok",
+      "log_sha256": "ed5893a4b95b0a4629f7677e7499760c43f8b5564939d8517514b64cd23f9915",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 46,
+      "nome": "auditoria Catálogo/Onboarding — negativos",
+      "resultado": "ok",
+      "log_sha256": "eb6e18d701df8076a6a2b06ffbb8d0c70e61fe1590656f28e77876be30a8a57b",
+      "vitest": [],
+      "tap": {
+        "tests": 28,
+        "pass": 28,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 47,
+      "nome": "auditoria Platform/Jobs",
+      "resultado": "ok",
+      "log_sha256": "434e202bafa9627f404d3a44a4b1284e0afd8f53028bb17288c91029a570291e",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 48,
+      "nome": "auditoria Platform/Jobs — negativos",
+      "resultado": "ok",
+      "log_sha256": "d6f46e9b8d4829cedead3a6ddd0540533b312a667b75f32059725fefd7bf40f8",
+      "vitest": [],
+      "tap": {
+        "tests": 19,
+        "pass": 19,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 49,
+      "nome": "auditoria Final Cross-Domain",
+      "resultado": "ok",
+      "log_sha256": "8ff5a5d2fbfaa5e9efc2651395b8fea7a48e2a0c9577c081f3fb682ce94df92d",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 50,
+      "nome": "auditoria Final Cross-Domain — negativos",
+      "resultado": "ok",
+      "log_sha256": "78e5b4ce9f8d1ecf2f29a4f12b0a99c0529668f24770f7df74ba15b82ce945f6",
+      "vitest": [],
+      "tap": {
+        "tests": 23,
+        "pass": 23,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 51,
+      "nome": "auditoria Recheck Final",
+      "resultado": "ok",
+      "log_sha256": "5778e97ff26e82553dad30c32038fe695ca3ff1c7b2a685a6b484a213d73c978",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 52,
+      "nome": "auditoria Recheck Final — negativos",
+      "resultado": "ok",
+      "log_sha256": "ffbb6033e8f706778bf8f7b4e2f325c58a9f302af4f442c9dda178573ad8b7a5",
+      "vitest": [],
+      "tap": {
+        "tests": 16,
+        "pass": 16,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 53,
+      "nome": "certificação prática da pilha",
+      "resultado": "ok",
+      "log_sha256": "d8a17e29e643a6a72a15a0651977635b5adfd12ac4a1d1f90eb1111ae7b1a5d6",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 54,
+      "nome": "módulos financeiros fiscais — negativos",
+      "resultado": "ok",
+      "log_sha256": "a9f93b8cc9d250a11dd52b6a7b76f350046e8c4c582a220d71f8a53efdba92dd",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 55,
+      "nome": "certificação prática da pilha — negativos",
+      "resultado": "ok",
+      "log_sha256": "2d3bab4f3d3431003c40c79452528afc7407038bf6ed880e4d8a75f22dc4e919",
+      "vitest": [],
+      "tap": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 56,
+      "nome": "carga concorrente — contrato do ensaio",
+      "resultado": "ok",
+      "log_sha256": "dc7edfdf3424813273bd9eb14754cf70b0a5728bd7cffa2be9e50e10e40e58d3",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 57,
+      "nome": "404 por superfície",
+      "resultado": "ok",
+      "log_sha256": "d83ac815a5a3bc285957eae14eedafd872ac7da6360239f490ac78f0138bfa6c",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 58,
+      "nome": "estado de agendamento no domínio",
+      "resultado": "ok",
+      "log_sha256": "5c1853b46fed30ca77c06b801918ddfb99263154a66d5ebae90aaa359f2324da",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 59,
+      "nome": "estado de agendamento — negativos",
+      "resultado": "ok",
+      "log_sha256": "39b801ea033f616c16188c94885d0b2ed467030fb0207f3ba77a9ccbaadddea6",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 60,
+      "nome": "varredura com chamador",
+      "resultado": "ok",
+      "log_sha256": "3325f21c885640ef81ed56957f55022cf47faf0f6c16fc4e91c9c226dd6b8e40",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 61,
+      "nome": "R12 usabilidade — negativos",
+      "resultado": "ok",
+      "log_sha256": "eaf3e40155d5612a16c0fc3a594f841d7c0e6c8ba7f3968b8708a3e39a16e84d",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 62,
+      "nome": "R6 promessas — negativos",
+      "resultado": "ok",
+      "log_sha256": "5631b036b9edea80e036bc4d508ab699a2e02c1a88ea431f17cc53983ab4a5eb",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 63,
+      "nome": "R8 comercial — negativos",
+      "resultado": "ok",
+      "log_sha256": "21a179c3ea134e216fcc29902574a82f2ef2d42c21a88e6bef2426d91454d45a",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 64,
+      "nome": "movimento reduzido",
+      "resultado": "ok",
+      "log_sha256": "5069a6ac05381c64bf44e413a01b3293f43ca8c250840d63dd857187b691bd0d",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 65,
+      "nome": "movimento reduzido — negativos",
+      "resultado": "ok",
+      "log_sha256": "fac65da45dd987313143f9e620455407581fe7dd4a939ae0300314d6e0bfb903",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 66,
+      "nome": "404 por superfície — negativos",
+      "resultado": "ok",
+      "log_sha256": "f302abf56a53b8d84daa15a68b8c7f66d1f3ed53e253fe873eb1fc3bb68387d2",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 67,
+      "nome": "alvo do bloqueio e regra de comissão",
+      "resultado": "ok",
+      "log_sha256": "600b07d5d06bf282fdb5e76bef59a8bda6520701852bef8ec7e85fe31e896c7c",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 68,
+      "nome": "alvo do bloqueio e regra de comissão — negativos",
+      "resultado": "ok",
+      "log_sha256": "0a49b52d524dcbd758727afe149d2db021823c396bba974f602fa966bd45c056",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 69,
+      "nome": "vazio de texto",
+      "resultado": "ok",
+      "log_sha256": "12d9084b0fa6052d33a9b39325618f9eaffa5fa98583f505e236730333d11af0",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 70,
+      "nome": "vazio de texto — negativos",
+      "resultado": "ok",
+      "log_sha256": "a86a7296f790804fb9a51cd2f2379732e0757b438ba15afeb5921bdc8009a8d2",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 71,
+      "nome": "pulo com motivo",
+      "resultado": "ok",
+      "log_sha256": "278ff9f4391f662091f84f58760e33eefd1968d2beca35c05a1edb06bbc8125b",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 72,
+      "nome": "hora com fuso",
+      "resultado": "ok",
+      "log_sha256": "58ac48f0451a579f34fad4a12f057494913df1981b8976737e689f7c17ffd785",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 73,
+      "nome": "hora com fuso — negativos",
+      "resultado": "ok",
+      "log_sha256": "2dea31b7f217c6ecc2fad285ef067712b517a75b8449456f4d8fe25ee52c9dae",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 74,
+      "nome": "entrega de OTP — negativos",
+      "resultado": "ok",
+      "log_sha256": "6dd993088cfea52874ae353eb12e4db5e57ae45984f391ffb8956f4980246a35",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 75,
+      "nome": "rede de deploy",
+      "resultado": "ok",
+      "log_sha256": "6794a236883e4e59e69399ca78947ac313d38bde33ab361022d7dca7e5cd25f6",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 76,
+      "nome": "rede de deploy — negativos",
+      "resultado": "ok",
+      "log_sha256": "35c8e9200ac6fb8ff718edb9bfd93f870054909c480909a992a36fcc707837ed",
+      "vitest": [],
+      "tap": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 77,
+      "nome": "criptografia de backup",
+      "resultado": "ok",
+      "log_sha256": "e0dd15723b7392392b9715848fd9951d829444e09ebb99eb020bf05114c5ed0f",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 78,
+      "nome": "criptografia de backup — runtime",
+      "resultado": "ok",
+      "log_sha256": "17f3015b33a1878d9e05a4b61cf7a218ef9a94a2b8f548351ea10f3911c7c532",
+      "vitest": [],
+      "tap": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 79,
+      "nome": "portão do deploy",
+      "resultado": "ok",
+      "log_sha256": "2bf0d188748511e68f94198bfb7371abe9e509d9e50da3308c2a3fe6b679e5da",
+      "vitest": [],
+      "tap": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 80,
+      "nome": "sondas do deploy",
+      "resultado": "ok",
+      "log_sha256": "e3472f01f50d0127e442d435ebf4180c831bd2381d98e8028722ebcd76a68cee",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 81,
+      "nome": "restore com role da aplicação",
+      "resultado": "ok",
+      "log_sha256": "e95e12bb7ace37fba683b140afd3a29116d43f0b9402c5f4a1bb5cccc714802a",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 82,
+      "nome": "backup shell criptografado",
+      "resultado": "ok",
+      "log_sha256": "6bd914915d6e6cf6b96cb7e9f024defd083305667c8269d68f4544e4ae596525",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 83,
+      "nome": "criptografia de backup — negativos",
+      "resultado": "ok",
+      "log_sha256": "1b3590e74bcbd8eed702281204ed63c02501b9b790166361225527b2acabccba",
+      "vitest": [],
+      "tap": {
+        "tests": 12,
+        "pass": 12,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 84,
+      "nome": "hardening de integrações",
+      "resultado": "ok",
+      "log_sha256": "ea2d53115cf7a44989d5beba80fb3e2479709e36f7c4d01c7454dce45bff79e7",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "dotnet": []
+    },
+    {
+      "indice": 85,
+      "nome": "robustez operacional",
+      "resultado": "ok",
+      "log_sha256": "86b83a611b593862285acfe6661147721add2536bb898c47fa02d1a3805ee567",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 86,
+      "nome": "robustez operacional — negativos",
+      "resultado": "ok",
+      "log_sha256": "02ffb0f216745ff6146e9d06253fc7179e12e1537e7923cc26b0fc4558fcffd5",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 87,
+      "nome": "observabilidade e diagnóstico",
+      "resultado": "ok",
+      "log_sha256": "f52a89a215a53f794499f9c70a9d9b49f3b506bb1265c376adfcbee94734395a",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 88,
+      "nome": "observabilidade — negativos",
+      "resultado": "ok",
+      "log_sha256": "70479d3da855431e83f0a43585fdc78ee03158e31e62cf340cbbf9c12d472b55",
+      "vitest": [],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 89,
+      "nome": "cron do backup",
+      "resultado": "ok",
+      "log_sha256": "2763264851292fc716a12a4e05b1bf3ccd3cb55675f48cc49f22dc0e6859a1d0",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 90,
+      "nome": "trava da semente",
+      "resultado": "ok",
+      "log_sha256": "fe351ce01f0befcfe1ff6009bb499b898d195d3a86c74fa91fcd6969d8eec86e",
+      "vitest": [
+        {
+          "passed": 9
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 91,
+      "nome": "semente não inventa",
+      "resultado": "ok",
+      "log_sha256": "c8ddc2cfadda474187c4361e47affc1c7bb116da4e3a6d5e24be8bdcfcc18457",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 92,
+      "nome": "migração aditiva",
+      "resultado": "ok",
+      "log_sha256": "24e9238a241ef634562bc16f2473eb9f7375f5234583f4b66c42c4978be824f3",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 93,
+      "nome": "migrações repetíveis",
+      "resultado": "ok",
+      "log_sha256": "b1e2e856dc4f47144f0bd0315edb668ac814d95b52f907ee06e056682f65c04d",
+      "vitest": [
+        {
+          "passed": 9
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 94,
+      "nome": "db — invariantes",
+      "resultado": "ok",
+      "log_sha256": "902f1195812a866dc5fd099906a2842f01715dc68d723aac62b88430e973da0b",
+      "vitest": [
+        {
+          "passed": 10
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 95,
+      "nome": "identity — OTP, sessão e 2º fator",
+      "resultado": "ok",
+      "log_sha256": "9e0f92607a574723f5ef4c78169642fb58859f5df1c745f791a97cc5f3fbdfd1",
+      "vitest": [
+        {
+          "passed": 208
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 96,
+      "nome": "scheduling — integração",
+      "resultado": "ok",
+      "log_sha256": "687773be64966ca27b8953e1583e6c1245f4132351d4530c753a34925bad7710",
+      "vitest": [
+        {
+          "passed": 287
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 97,
+      "nome": "onboarding — seis etapas",
+      "resultado": "ok",
+      "log_sha256": "57da1c8979cd426913a68f8f0ca0b70a37d66c9e8ee4a1980dc4323a514391c4",
+      "vitest": [
+        {
+          "passed": 18
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 98,
+      "nome": "catalog — CRUD do admin",
+      "resultado": "ok",
+      "log_sha256": "490bc509e202a298c6c5bc1b4e44d4098589a8d857bee1640a7ac58c5cb8e414",
+      "vitest": [
+        {
+          "passed": 53
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 99,
+      "nome": "finance — comanda, caixa e fiado",
+      "resultado": "ok",
+      "log_sha256": "782525f1501b1dd5e5d313b511b8abf7b94b7512dcfb38ec3a75cdcbfba078ec",
+      "vitest": [
+        {
+          "passed": 645
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 100,
+      "nome": "crm — a ficha do cliente",
+      "resultado": "ok",
+      "log_sha256": "63d30319a81ccd0846f20e90bd35c72205be0913a7e1dd27bb8f26941cf657a4",
+      "vitest": [
+        {
+          "passed": 447
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 101,
+      "nome": "jobs — fila, avisos e falta automática",
+      "resultado": "ok",
+      "log_sha256": "5eaecc1b4247b1c8f1ca64e2c7140991303351b839bb2b010d3528467c77c845",
+      "vitest": [
+        {
+          "passed": 101
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 102,
+      "nome": "platform — planos, bloqueio e a porta do Super Admin",
+      "resultado": "ok",
+      "log_sha256": "c970c6e25af0f7b9129a25631136c4bc22dad23a5136cb2eebb10bcfdc9b29a7",
+      "vitest": [
+        {
+          "passed": 262
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    },
+    {
+      "indice": 103,
+      "nome": "api — e2e",
+      "resultado": "FALHOU",
+      "log_sha256": "df2fce82e39e10da40eaea4424b63aa87f34569abb705d05f3cc6d64f2b2a765",
+      "vitest": [
+        {
+          "failed": 1,
+          "passed": 553
+        }
+      ],
+      "tap": null,
+      "dotnet": []
+    }
+  ],
+  "total_vitest": {
+    "passed": 4418,
+    "failed": 1,
+    "skipped": 0,
+    "todo": 0
+  },
+  "total_tap": {
+    "tests": 321,
+    "pass": 321,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "total_dotnet": {
+    "tests": 34,
+    "passed": 34,
+    "failed": 0,
+    "skipped": 0
+  },
+  "observacao": "Contagens dos resumos dos runners. Não somam asserts SQL nem scripts sem resumo numérico. Logs completos preservados no runtime privado; este resumo não copia entradas nem payloads."
+}

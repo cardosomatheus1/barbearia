@@ -1,5 +1,5 @@
 import { FakeFiscalProvider, type FiscalProvider } from '@barbearia/core';
-import { EmissorNacionalNfse } from './nfse/emissor.js';
+import { EmissorProprioNfse } from './nfse-municipal/roteador.js';
 import { chaveFiscal } from './nfse/cofre.js';
 
 export type ModoFiscal = 'nenhum' | 'fake' | 'nacional';
@@ -36,6 +36,6 @@ export function modoFiscal(bruto = process.env['FISCAL_MODO']): ModoFiscal {
  * produção do valor vindo do ambiente para não criar um atalho perigoso.
  */
 export function emissorFiscal(modo = modoFiscal()): FiscalProvider | null {
-  if (modo === 'nacional') { chaveFiscal(); return new EmissorNacionalNfse(); }
+  if (modo === 'nacional') { chaveFiscal(); return new EmissorProprioNfse(); }
   return modoSeguroParaOAmbiente(modo) === 'fake' ? new FakeFiscalProvider() : null;
 }

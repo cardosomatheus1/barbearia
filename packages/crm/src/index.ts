@@ -31,3 +31,7 @@ export * from './baileys/conciliacao.js';
 export * from './baileys/retencao.js';
 
 export * from './automacao-despacho.js';
+
+export * from './manual/fila.js';
+export * from './manual/textos.js';
+export * from './consentimento-cadastro.js';

@@ -185,3 +185,6 @@ export {
 export { acaoSalvarNfse, acaoSalvarCertificadoNfse, acaoRemoverCertificadoNfse } from './acoes/fiscal-nacional';
 export { acaoSelecionarConexao, acaoOperarBaileys, acaoSalvarTextoBaileys } from './acoes/whatsapp-conexao';
 export { acaoAutenticarCobranca } from './acoes/stripe-autenticacao';
+export { acaoAbrirManual, acaoConcluirManual, acaoEstadoAutomacaoManual, acaoConfigurarManual } from './acoes/whatsapp-manual';
+
+export { acaoSalvarMunicipal } from './acoes/fiscal-municipal';

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
@@ -45,6 +45,9 @@ const ARQUIVOS = execFileSync(
   { encoding: 'utf8', cwd: RAIZ.pathname },
 )
   .split('\n')
+  // ls-files ainda lista arquivos removidos antes de staged/commit. A guarda
+  // examina a árvore de trabalho atual, incluindo os novos que o Git lista.
+  .filter(caminho => caminho !== '' && existsSync(new URL(caminho, RAIZ)))
   /**
    * `scripts/` entrou depois, e por ter sido mordido duas vezes.
    *

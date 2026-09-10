@@ -1,4 +1,4 @@
-import { beforeAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { certificadoNfseSintetico, nfseSintetica, eventoNfseSintetico, CHAVE_TESTE_NFSE, CNPJ_TESTE_NFSE } from '../../test/nfse-fixtures.js';
 import { gerarDps } from './dps.js';
 import { assinarDps, assinarPedidoDeCancelamento } from './assinatura.js';
@@ -15,6 +15,7 @@ const dados = { ambiente: 'homologacao' as const, cnpj: CNPJ_TESTE_NFSE, municip
   regime: 'mei' as const, serie: 1, numero: '1', emitidaEm: new Date('2026-09-10T01:00:00Z'), competencia: '2026-09-09',
   codigoNacional: '060101', descricao: 'Corte sintetico', servicoCents: 5000 };
 beforeAll(() => { cred = certificadoNfseSintetico(); });
+beforeEach(() => vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', Buffer.from(cred.certificado.certificadoPem).toString('base64')));
 afterEach(() => vi.unstubAllEnvs());
 
 describe('contratos locais da NFS-e nacional', () => {
@@ -36,6 +37,21 @@ describe('contratos locais da NFS-e nacional', () => {
     expect(() => gerarPedidoDeCancelamento({ ambiente: 'homologacao', cnpj: CNPJ_TESTE_NFSE, chave: CHAVE_TESTE_NFSE,
       motivo: 'curto', quando: dados.emitidaEm })).toThrow('nfse_cancelamento_invalido');
   });
+  it('confere IBS/CBS na resposta assinada, incluindo ausência do grupo, base, alíquota efetiva e total da nota', () => {
+    const d = gerarDps({ ...dados, regime: 'normal', nbs: '126021000', perfilIbsCbs: 'regular_presencial',
+      tributosAproximadosBps: { federal: 1345, estadual: 0, municipal: 500 },
+      tomador: { nome: 'Cliente identificado', documento: '52998224725' } });
+    const assinado = assinarDps(d.xml, cred.certificado, d.id, 'sha1');
+    const resposta = (opcoes = {}) => ({ nfseXmlGZipB64: compactarXmlFiscal(nfseSintetica(assinado, cred.certificado, CHAVE_TESTE_NFSE, opcoes)) });
+    expect(lerNotaAutorizada(resposta(), assinado).numero).toBe('12');
+    for (const opcoes of [{ incluir: false }, { base: '49.99' }, { total: '50.50' }, { aliquotaEfetiva: '0.00' }]) {
+      expect(() => lerNotaAutorizada(resposta(opcoes), assinado)).toThrow('não corresponde');
+    }
+    const antiga = gerarDps(dados);
+    const semRtc = assinarDps(antiga.xml, cred.certificado, antiga.id, 'sha1');
+    expect(() => lerNotaAutorizada({ nfseXmlGZipB64: compactarXmlFiscal(nfseSintetica(semRtc, cred.certificado,
+      CHAVE_TESTE_NFSE, { incluir: true })) }, semRtc)).toThrow('não corresponde');
+  });
   it('cifra com nonce aleatório e autentica também tenant, unidade e finalidade', () => {
     vi.stubEnv('FISCAL_SECRET_KEY', Buffer.alloc(32, 17).toString('base64'));
     const a = cifrarFiscal('material-sintetico', 'tenant:unidade:a1');
@@ -43,16 +59,19 @@ describe('contratos locais da NFS-e nacional', () => {
     expect(decifrarFiscal(a, 'tenant:unidade:a1')).toBe('material-sintetico');
     expect(() => decifrarFiscal(a, 'vizinha:unidade:a1')).toThrow('nfse_cofre_invalido');
     expect(() => decifrarFiscal(a, 'tenant:unidade:xml')).toThrow('nfse_cofre_invalido');
+    for (const alterado of [a + 'a', a + '\n', a.replace('v1.', 'v1.\n')]) {
+      expect(() => decifrarFiscal(alterado, 'tenant:unidade:a1')).toThrow('nfse_cofre_invalido');
+    }
     vi.stubEnv('FISCAL_SECRET_KEY', ''); expect(() => cifrarFiscal('x', 'y')).toThrow('FISCAL_SECRET_KEY');
   });
-  it('MEI usa a exceção nacional; Simples exige confirmação do emissor municipal habilitado', async () => {
+  it.each(['simples', 'normal'] as const)('MEI usa a exceção nacional; %s exige confirmação do emissor municipal habilitado', async regime => {
     const transporte = vi.fn().mockResolvedValue({ status: 200, dados: { parametrosConvenio: { aderenteAmbienteNacional: 1, aderenteEmissorNacional: 0 } } });
     await conferirMunicipioNfse(dados, cred.certificado, transporte); expect(transporte).not.toHaveBeenCalled();
-    await expect(conferirMunicipioNfse({ ...dados, regime: 'simples' }, cred.certificado, transporte)).rejects.toMatchObject({ code: 'nfse_municipio_sem_emissor_nacional' });
+    await expect(conferirMunicipioNfse({ ...dados, regime }, cred.certificado, transporte)).rejects.toMatchObject({ code: 'nfse_municipio_sem_emissor_nacional' });
     transporte.mockResolvedValue({ status: 200, dados: {} });
-    await expect(conferirMunicipioNfse({ ...dados, regime: 'simples' }, cred.certificado, transporte)).rejects.toMatchObject({ code: 'nfse_municipio_nao_verificado' });
+    await expect(conferirMunicipioNfse({ ...dados, regime }, cred.certificado, transporte)).rejects.toMatchObject({ code: 'nfse_municipio_nao_verificado' });
     transporte.mockResolvedValue({ status: 200, dados: { parametrosConvenio: { aderenteAmbienteNacional: 1, aderenteEmissorNacional: 1 } } });
-    await expect(conferirMunicipioNfse({ ...dados, regime: 'simples' }, cred.certificado, transporte)).resolves.toBeUndefined();
+    await expect(conferirMunicipioNfse({ ...dados, regime }, cred.certificado, transporte)).resolves.toBeUndefined();
   });
   it('destinos e caminhos arbitrários são recusados antes de qualquer conexão', async () => {
     const enviar = vi.fn();

@@ -99,9 +99,10 @@ export async function notasAEntregar(
       }[]
     >`
       SELECT f.id, c.id AS customer_id, f.pdf_url, f.number, c.phone_e164, c.name, l.timezone,
-             t.name AS barbearia, f.location_id, (d.pdf_cipher IS NOT NULL) AS pdf_nativo
+             t.name AS barbearia, f.location_id, (d.pdf_cipher IS NOT NULL OR m.nfse_cipher IS NOT NULL) AS pdf_nativo
         FROM fiscal_invoices f
         LEFT JOIN fiscal_native_documents d ON d.invoice_id = f.id
+        LEFT JOIN fiscal_municipal_documents m ON m.invoice_id = f.id
         JOIN orders o ON o.id = f.order_id
         JOIN customers c ON c.id = o.customer_id
         JOIN locations l ON l.id = f.location_id

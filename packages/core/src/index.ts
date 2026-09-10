@@ -65,6 +65,7 @@ export * from './financeiro.js';
 export * from './dre.js';
 export * from './vale.js';
 export * from './fiscal.js';
+export * from './fiscal-ibscbs.js';
 export * from './whatsapp.js';
 export * from './automacao.js';
 export * from './ocupacao.js';
@@ -78,3 +79,4 @@ export * from './assinatura-da-plataforma.js';
 
 export * from './apuracao.js';
 export * from './titular.js';
+export * from './consentimento-whatsapp.js';

@@ -63,6 +63,7 @@ describeIfDb('oferta de vaga com janela exclusiva', () => {
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
     await exec(`
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
+      INSERT INTO tenant_slugs (tenant_id, slug, is_primary) VALUES ('${TENANT}', 'domari', true);
 
       INSERT INTO locations (id, tenant_id, name, timezone, granularity_minutes)
       VALUES ('${LOCATION}', '${TENANT}', 'Matriz', 'America/Bahia', 30);
@@ -145,6 +146,18 @@ describeIfDb('oferta de vaga com janela exclusiva', () => {
     );
 
   // -- oferecer ----------------------------------------------------------------
+
+  it('convite e retomada usam o endereço principal da casa; sem ele não seguram a vaga', async () => {
+    await esperar(CARLOS);
+    await admin.$executeRaw`UPDATE tenant_slugs SET is_primary = false WHERE tenant_id = ${TENANT}::uuid`;
+    expect(await oferecer()).toBeNull();
+    expect(await holds()).toHaveLength(0);
+    await admin.$executeRaw`INSERT INTO tenant_slugs (tenant_id, slug, is_primary) VALUES (${TENANT}::uuid, 'domari-atual', true)`;
+    const convite = await oferecer();
+    expect(convite?.slug).toBe('domari-atual');
+    const retomada = await oferecer();
+    expect(retomada).toMatchObject({ id: convite?.id, slug: 'domari-atual', token: convite?.token });
+  });
 
   it('sem ninguém na lista, não há oferta — e isso não é erro', async () => {
     expect(await oferecer()).toBeNull();

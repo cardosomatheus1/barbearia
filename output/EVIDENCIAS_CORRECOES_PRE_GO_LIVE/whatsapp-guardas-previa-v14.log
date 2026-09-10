@@ -1,0 +1,13 @@
+
+> @barbearia/web@0.1.0 test /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/apps/web
+> vitest run src/app/admin/previa-da-mensagem.test.ts src/app/admin/acoes/whatsapp-textos.test.ts
+
+
+ RUN  v4.1.11 /home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/apps/web
+
+
+ Test Files  2 passed (2)
+      Tests  12 passed (12)
+   Start at  20:23:34
+   Duration  2.16s (transform 836ms, setup 0ms, import 1.62s, tests 152ms, environment 0ms)
+

@@ -53,6 +53,7 @@ import {
 import { versaoDoConsentimento } from '@/lib/politica';
 import {
   TIPO_PADRAO_DE_CAMPANHA,
+  REGIMES_FISCAIS,
 } from '@barbearia/core';
 import { DIAS, lerJornada, minutosOuNulo } from '@/lib/jornada';
 import { centavosDoCampo } from '@/lib/dinheiro';
@@ -85,8 +86,8 @@ const ROTA_FISCAL = '/admin/fiscal';
 
 export async function acaoSalvarFiscal(form: FormData): Promise<void> {
   const token = await exigirSessao();
-  const regime = texto(form, 'regime');
-  if (regime !== 'simples' && regime !== 'mei' && regime !== 'salao_parceiro') {
+  const regime = REGIMES_FISCAIS.find(r => r === texto(form, 'regime'));
+  if (!regime) {
     return falhar(ROTA_FISCAL, 'invalid_request');
   }
 
@@ -457,7 +458,8 @@ export async function acaoSubmeterTemplate(form: FormData): Promise<void> {
   const resultado = await submeterTemplateNaApi(token, {
     tipo: texto(form, 'tipo'),
     ...(titulo ? { titulo } : {}),
-    ...(botoes.length > 0 ? { botoes } : {}),
+    // A lista vazia é a escolha de não adicionar botões. Omitir ativaria os padrões do domínio.
+    botoes,
     ...(acoes.length > 0 ? { acoes } : {}),
     corpo: texto(form, 'corpo'),
   });

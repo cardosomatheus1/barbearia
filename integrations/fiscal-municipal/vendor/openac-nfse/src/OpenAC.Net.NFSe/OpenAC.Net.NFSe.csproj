@@ -1,0 +1,446 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net8.0</TargetFrameworks>
+		<LangVersion>latest</LangVersion>
+		<AssemblyName>OpenAC.Net.NFSe</AssemblyName>
+		<RootNamespace>OpenAC.Net.NFSe</RootNamespace>
+		<SignAssembly>true</SignAssembly>
+		<AssemblyOriginatorKeyFile>OpenAC.snk</AssemblyOriginatorKeyFile>
+		<Copyright>Copyright © Projeto OpenAC .Net 2014 - 2025</Copyright>
+		<Company>OpenAC .Net - Automação Comercial em .Net</Company>
+		<Authors>Projeto OpenAC .Net</Authors>
+		<PackageProjectUrl>https://openac.net.br/</PackageProjectUrl>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PackageIcon>nuget.png</PackageIcon>
+		<RepositoryUrl>https://github.com/OpenAC-Net/OpenAC.Net.NFSe</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageTags>OpenAC.Net NFSe OpenNFSe</PackageTags>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<NeutralLanguage>pt-BR</NeutralLanguage>
+		<AssemblyVersion>1.8.0</AssemblyVersion>
+		<FileVersion>1.8.0</FileVersion>
+		<Version>1.8.0</Version>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<DebugType>embedded</DebugType>
+		<IncludeSymbols>true</IncludeSymbols>
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageId>OpenAC.Net.NFSe</PackageId>
+		<Nullable>annotations</Nullable>
+		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+		<NoWarn>$(NoWarn);1591;1572;1573;1574;1587;1584;SYSLIB0014;0067</NoWarn>
+		<Description>Biblioteca para emissão e trasmissão de NFSe (Nota Fiscal de Serviço Eletrônica).</Description>
+	</PropertyGroup>	
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="OpenAC.Net.Core" Version="1.6.0" />
+		<PackageReference Include="OpenAC.Net.DFe.Core" Version="1.7.0.1" />
+		<PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.11" />				
+	</ItemGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'net470' or '$(TargetFramework)' == 'net48'">
+		<Reference Include="System.Drawing" />
+	</ItemGroup>
+	
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'net470' or '$(TargetFramework)' == 'net48' or '$(TargetFramework)' == 'netstandard2.0'">
+		<PackageReference Include="System.Net.Http" Version="4.3.4" />
+	</ItemGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net6.0' or '$(TargetFramework)' == 'net7.0' or '$(TargetFramework)' == 'net8.0' or '$(TargetFramework)' == 'net9.0'">
+		<Compile Remove="Commom\Extensions\DictionaryExtensions.cs" />
+		<Compile Remove="Commom\Model\Interfaces\**" />
+	</ItemGroup>
+
+	<!-- Itens do pacote nuget -->
+	<ItemGroup>
+		<None Include="..\..\LICENSE">
+			<Pack>True</Pack>
+			<PackagePath>/</PackagePath>
+		</None>
+		<None Include="..\..\nuget.png">
+		  <Pack>True</Pack>
+		  <PackagePath />
+		  <Link>nuget.png</Link>
+		</None>
+		<None Include="..\..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>/</PackagePath>
+		</None>
+		<None Include="Schemas\Abaco\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Abaco</PackagePath>
+		</None>
+		<None Include="Schemas\ABase\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ABase</PackagePath>
+		</None>
+		<None Include="Schemas\AssessorPublico\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\AssessorPublico</PackagePath>
+		</None>
+		<None Include="Schemas\Betha\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Betha</PackagePath>
+		</None>
+		<None Include="Schemas\BHISS\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\BHISS</PackagePath>
+		</None>
+		<None Include="Schemas\Citta\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Citta</PackagePath>
+		</None>
+		<None Include="Schemas\Conam\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Conam</PackagePath>
+		</None>
+		<None Include="Schemas\Coplan\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Coplan</PackagePath>
+		</None>
+		<None Include="Schemas\DBSeller\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\DBSeller</PackagePath>
+		</None>
+		<None Include="Schemas\DSF\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\DSF</PackagePath>
+		</None>
+		<None Include="Schemas\Equiplano\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Equiplano</PackagePath>
+		</None>
+		<None Include="Schemas\Fiorilli\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Fiorilli</PackagePath>
+		</None>
+		<None Include="Schemas\FissLex\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\FissLex</PackagePath>
+		</None>
+		<None Include="Schemas\Ginfes\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Ginfes</PackagePath>
+		</None>
+		<None Include="Schemas\IPM\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\IPM</PackagePath>
+		</None>
+		<None Include="Schemas\ISSCuritiba\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSCuritiba</PackagePath>
+		</None>
+		<None Include="Schemas\ISSDSF\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSDSF</PackagePath>
+		</None>
+		<None Include="Schemas\ISSe\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSe</PackagePath>
+		</None>
+		<None Include="Schemas\ISSGoiania\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSGoiania</PackagePath>
+		</None>
+		<None Include="Schemas\ISSNet\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSNet</PackagePath>
+		</None>
+		<None Include="Schemas\ISSPortoVelho\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSPortoVelho</PackagePath>
+		</None>
+		<None Include="Schemas\ISSRio\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSRio</PackagePath>
+		</None>
+		<None Include="Schemas\ISSSaoPaulo\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSSaoPaulo</PackagePath>
+		</None>
+		<None Include="Schemas\ISSVitoria\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSVitoria</PackagePath>
+		</None>		
+		<None Include="Schemas\MetropolisWeb\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\MetropolisWeb</PackagePath>
+		</None>		
+		<None Include="Schemas\Mitra\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Mitra</PackagePath>
+		</None>
+		<None Include="Schemas\NFeCidades\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\NFeCidades</PackagePath>
+		</None>		
+		<None Include="Schemas\Pronim\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Pronim</PackagePath>
+		</None>
+		<None Include="Schemas\RLZ\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\RLZ</PackagePath>
+		</None>
+		<None Include="Schemas\SIAPNet\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SIAPNet</PackagePath>
+		</None>
+		<None Include="Schemas\SigISS\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SigISS</PackagePath>
+		</None>
+		<None Include="Schemas\SigISSWeb\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SigISSWeb</PackagePath>
+		</None>		
+		<None Include="Schemas\SimplISS\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SimplISS</PackagePath>
+		</None>
+		<None Include="Schemas\Sintese\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Sintese</PackagePath>
+		</None>		
+		<None Include="Schemas\SmarAPD\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SmarAPD</PackagePath>
+		</None>
+		<None Include="Schemas\SpeedGov\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SpeedGov</PackagePath>
+		</None>
+		<None Include="Schemas\SystemPro\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\SystemPro</PackagePath>
+		</None>
+		<None Include="Schemas\Thema\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Thema</PackagePath>
+		</None>
+		<None Include="Schemas\Tiplan\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Tiplan</PackagePath>
+		</None>
+		<None Include="Schemas\Tinus\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Tinus</PackagePath>
+		</None>
+		<None Include="Schemas\WebISS\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\WebISS</PackagePath>
+		</None>
+		<None Update="Schemas\Sigep\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Sigep</PackagePath>
+		</None>
+		<None Update="Schemas\ISSIntegra\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\ISSIntegra</PackagePath>
+		</None>
+		<None Update="Schemas\Agili\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Agili</PackagePath>
+		</None>
+		<None Update="Schemas\Megasoft\**\*.*">
+			<Pack>True</Pack>
+			<PackagePath>content\Schemas\Megasoft</PackagePath>
+		</None>
+	</ItemGroup>
+	
+	<ItemGroup>
+		<None Remove="Resources\Municipios.nfse" />
+		<EmbeddedResource Include="Resources\Municipios.nfse" />
+	</ItemGroup>
+
+	<!-- Consumidores que mantêm schemas próprios podem desabilitar apenas a cópia para a saída. -->
+	<ItemGroup Condition="'$(CopySchemasToOutputDirectory)' != 'false'">
+		<None Update="Schemas\Abaco\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ABase\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ABRASF\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\AssessorPublico\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Betha\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\BHISS\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Citta\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Conam\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Coplan\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\DBSeller\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\DSF\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Equiplano\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Fiorilli\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\FissLex\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Ginfes\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\IPM\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSCuritiba\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSDSF\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>		
+		<None Update="Schemas\ISSe\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSNet\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSGoiania\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSNet\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSPortoVelho\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSRio\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSSaoPaulo\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSVitoria\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>		
+		<None Update="Schemas\MetropolisWeb\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Mitra\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\NFeCidades\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>		
+		<None Update="Schemas\Pronim\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\RLZ\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>	
+		<None Update="Schemas\SIAPNet\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\SigISS\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\SigISSWeb\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\SimplISS\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Sintese\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\SmarAPD\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\SpeedGov\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\SystemPro\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Thema\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>	
+		<None Update="Schemas\Tiplan\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Tinus\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\WebISS\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Sigep\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\ISSIntegra\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Agili\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="Schemas\Megasoft\**\*.*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+	
+	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+	  <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
+	  <PackageReference Include="System.ServiceModel.Http" Version="10.0.652802" />
+	  <PackageReference Include="System.ServiceModel.Primitives" Version="10.0.652802" />
+	</ItemGroup>
+	
+	<ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">
+	  <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
+	  <PackageReference Include="System.ServiceModel.Http" Version="10.0.652802" />
+	  <PackageReference Include="System.ServiceModel.Primitives" Version="10.0.652802" />
+	</ItemGroup>
+	
+	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+	  <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
+	  <PackageReference Include="System.ServiceModel.Http" Version="10.0.652802" />
+	  <PackageReference Include="System.ServiceModel.Primitives" Version="10.0.652802" />
+	</ItemGroup>
+	
+	<ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+	  <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
+	  <PackageReference Include="System.ServiceModel.Http" Version="10.0.652802" />
+	  <PackageReference Include="System.ServiceModel.Primitives" Version="10.0.652802" />
+	</ItemGroup>
+	
+	<ItemGroup>
+	  <Folder Include="Schemas\ISSCampinas\2.03\" />
+	</ItemGroup>
+	
+	<ItemGroup Condition="'$(CopySchemasToOutputDirectory)' != 'false'">
+	  <None Update="Schemas\ISSCampinas\2.03\nfse.xsd">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Schemas\ISSCampinas\2.03\xmldsig-core-schema20020212.xsd">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+</Project>

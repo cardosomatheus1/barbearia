@@ -539,6 +539,22 @@ describeIfDb('fiscal', () => {
     expect(depois[0]?.customer_document).toBe('52998224725');
   });
 
+  it('CNPJ alfanumérico é normalizado e entradas inválidas não apagam o documento salvo', async () => {
+    const params = { tenantId: TENANT, customerId: CARLOS, ...operador };
+    expect(await salvarDocumentoDoCliente({ ...params, documento: '12.abc.345/01de-35' }))
+      .toEqual({ documento: '12ABC34501DE35' });
+    for (const documento of ['letras', '12ABC34501DE36', 'ABC52998224725']) {
+      await expect(salvarDocumentoDoCliente({ ...params, documento })).rejects.toMatchObject({ code: 'documento_invalido' });
+    }
+    const salvo = await admin.$queryRaw<{ tax_id: string }[]>`SELECT tax_id FROM customers WHERE id = ${CARLOS}::uuid`;
+    expect(salvo[0]?.tax_id).toBe('12ABC34501DE35');
+    await cadastrar();
+    const venda = await venderCorte();
+    const notas = await admin.$queryRaw<{ customer_document: string }[]>`
+      SELECT customer_document FROM fiscal_invoices WHERE order_id = ${venda}::uuid`;
+    expect(notas[0]?.customer_document).toBe('12ABC34501DE35');
+  });
+
   it('CPF com dígito verificador errado é recusado antes do banco', async () => {
     await expect(
       salvarDocumentoDoCliente({

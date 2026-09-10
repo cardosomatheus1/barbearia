@@ -35,7 +35,8 @@ function assinarResposta(xml: string, cert: CertificadoA1, elemento: string): st
   s.computeSignature(xml); return s.getSignedXml();
 }
 
-export function nfseSintetica(dps: string, cert: CertificadoA1, chave = CHAVE_TESTE_NFSE): string {
+export function nfseSintetica(dps: string, cert: CertificadoA1, chave = CHAVE_TESTE_NFSE,
+  rtc: { incluir?: boolean; base?: string; total?: string; aliquotaEfetiva?: string } = {}): string {
   const doc = create({ version: '1.0' }).ele('NFSe', { xmlns: NAMESPACE_NFSE, versao: '1.01' });
   const inf = doc.ele('infNFSe', { Id: `NFS${chave}` });
   inf.ele('xLocEmi').txt('Municipio sintetico'); inf.ele('xLocPrestacao').txt('Municipio sintetico'); inf.ele('nNFSe').txt('12');
@@ -45,7 +46,15 @@ export function nfseSintetica(dps: string, cert: CertificadoA1, chave = CHAVE_TE
   const emit = inf.ele('emit'); emit.ele('CNPJ').txt(cert.cnpj); emit.ele('xNome').txt('Barbearia sintetica');
   const end = emit.ele('enderNac'); end.ele('xLgr').txt('Rua sintetica'); end.ele('nro').txt('1');
   end.ele('xBairro').txt('Centro'); end.ele('cMun').txt('3550308'); end.ele('UF').txt('SP'); end.ele('CEP').txt('01001000');
-  inf.ele('valores').ele('vLiq').txt('50.00'); inf.import(create(dps).root());
+  inf.ele('valores').ele('vLiq').txt('50.00');
+  if (rtc.incluir ?? dps.includes('<IBSCBS>')) {
+    inf.import(create(`<IBSCBS xmlns="${NAMESPACE_NFSE}"><cLocalidadeIncid>3550308</cLocalidadeIncid><xLocalidadeIncid>Municipio sintetico</xLocalidadeIncid>
+      <valores><vBC>${rtc.base ?? '50.00'}</vBC><uf><pIBSUF>0.10</pIBSUF><pAliqEfetUF>${rtc.aliquotaEfetiva ?? '0.10'}</pAliqEfetUF></uf>
+      <mun><pIBSMun>0.00</pIBSMun><pAliqEfetMun>0.00</pAliqEfetMun></mun><fed><pCBS>0.90</pCBS><pAliqEfetCBS>0.90</pAliqEfetCBS></fed></valores>
+      <totCIBS><vTotNF>${rtc.total ?? '50.00'}</vTotNF><gIBS><vIBSTot>0.05</vIBSTot><gIBSUFTot><vIBSUF>0.05</vIBSUF></gIBSUFTot>
+      <gIBSMunTot><vIBSMun>0.00</vIBSMun></gIBSMunTot></gIBS><gCBS><vCBS>0.45</vCBS></gCBS></totCIBS></IBSCBS>`).root());
+  }
+  inf.import(create(dps).root());
   const xml = assinarResposta(doc.end({ prettyPrint: false }), cert, 'infNFSe');
   validarSchemaNfse(xml, 'NFSe'); return xml;
 }

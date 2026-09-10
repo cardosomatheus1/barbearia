@@ -1,0 +1,10 @@
+{
+  "name": "whatsapp-baileys-ux-v13",
+  "command": [
+    "python3",
+    "output/prova_baileys_revisao.py"
+  ],
+  "started_utc": "2026-09-10T19:59:04.164398+00:00",
+  "duration_seconds": 40.9,
+  "exit_code": 0
+}

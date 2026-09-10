@@ -1,4 +1,7 @@
-# Schemas nacionais de NFS-e 1.01
+# Schemas nacionais de NFS-e 1.01 — referência histórica
+
+O validador atual usa o pacote de 27/07/2026 em `../nfse-1.01-20260727`.
+A descrição abaixo registra o comportamento da versão anterior.
 
 Arquivos originais do pacote oficial `nfse-esquemas_xsd-v1-01-20260209.zip`,
 obtidos de gov.br em 2026-09-09. URL e SHA256 por arquivo estão em `origem.json`.

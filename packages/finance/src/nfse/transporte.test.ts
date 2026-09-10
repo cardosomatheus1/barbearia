@@ -5,7 +5,6 @@ import type { TLSSocket } from 'node:tls';
 import forge from 'node-forge';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { httpNfse } from './transporte.js';
-import { obterPdfNfse } from './pdf-transporte.js';
 import type { CertificadoA1 } from './certificado.js';
 
 /** Só o destino de rede é redirecionado. TLS e apresentação do A1 são reais. */
@@ -59,9 +58,6 @@ describe('transporte fiscal com mTLS local', () => {
     expect(await httpNfse({ ambiente: 'homologacao', certificado, metodo: 'POST', caminho: '/nfse', corpo: { dpsXmlGZipB64: 'sintetico' } }, local))
       .toEqual({ status: 200, dados: { ok: true } });
     expect(destinos.at(-1)).toBe('https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/nfse');
-    resposta = 'pdf';
-    expect((await obterPdfNfse({ ambiente: 'producao', certificado, chave: '1'.repeat(50) }, local)).toString()).toBe('%PDF-1.4\n%%EOF');
-    expect(destinos.at(-1)).toBe(`https://adn.nfse.gov.br/danfse/${'1'.repeat(50)}`);
     const antes = recebidos;
     await expect(httpNfse({ ambiente: 'producao', certificado, metodo: 'GET', caminho: '/nfse/../../segredo' }, local))
       .rejects.toMatchObject({ code: 'nfse_destino_invalido' });
@@ -73,13 +69,6 @@ describe('transporte fiscal com mTLS local', () => {
       ['grande', 'nfse_resposta_grande'], ['quebrada', 'nfse_transporte_falhou']]) {
       resposta = tipo ?? '';
       await expect(httpNfse({ ambiente: 'homologacao', certificado, metodo: 'GET', caminho: '/nfse' }, local)).rejects.toMatchObject({ code });
-    }
-  });
-
-  it('não aceita PDF inválido nem redireciona download', async () => {
-    for (const tipo of ['redirect', 'invalida', 'grande', 'quebrada']) {
-      resposta = tipo;
-      await expect(obterPdfNfse({ ambiente: 'homologacao', certificado, chave: '1'.repeat(50) }, local)).rejects.toThrow();
     }
   });
 

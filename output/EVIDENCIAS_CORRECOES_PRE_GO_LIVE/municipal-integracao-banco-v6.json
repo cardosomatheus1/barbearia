@@ -1,0 +1,13 @@
+{
+  "name": "municipal-integracao-banco-v6",
+  "command": [
+    "pnpm",
+    "--filter",
+    "@barbearia/finance",
+    "test",
+    "src/nfse-municipal"
+  ],
+  "started_utc": "2026-09-10T19:01:10.158476+00:00",
+  "duration_seconds": 82.27,
+  "exit_code": 0
+}

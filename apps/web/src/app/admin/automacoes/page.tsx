@@ -1,3 +1,4 @@
+import { ContextoDeEnvio } from '../whatsapp/modos';
 import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -157,7 +158,7 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
               não acha o que mandar e devolve zero — com a linha dizendo
               "Ligada" e o contador em "0 enviadas". O dono lê que está no ar.
             */}
-            {automacao.textoTitulo === null && !temTextoDoTipo ? (
+            {!temTextoDoTipo ? (
               <p className="item-cadastro__linha item-cadastro__risco">
                 {/* A regra desligada não "parou de sair" por falta de texto: ela
                     parou porque alguém a desligou, e a linha acima já diz isso.
@@ -170,7 +171,7 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
                   : automacao.enviadas > 0
                     ? 'Parou de sair: '
                     : 'Nada vai sair: '}
-                não há mensagem disponível de {nomeDoAviso(automacao.tipo)}.{' '}
+                a mensagem escolhida não está disponível nesta conexão.{' '}
                 <a href="/admin/whatsapp">Configurar uma mensagem</a>.
               </p>
             ) : null}
@@ -292,6 +293,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         </form>
       </header>
         <h1 className="painel__titulo">Automações</h1>
+      <ContextoDeEnvio canal={canal?.ok ? canal.dados.canal : null} />
         <FalhaDaLeitura code="forbidden" href="/admin/automacoes" oque="as automações" />
       </main>
     );
@@ -357,6 +359,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       </header>
 
       <h1 className="painel__titulo">Automações</h1>
+      <ContextoDeEnvio canal={canal?.ok ? canal.dados.canal : null} />
       {/* O par da frase que a tela de campanhas ganhou: as duas ficam lado a
           lado no menu, mandam pelo mesmo canal e têm formulário parecido, e
           quem abre pela primeira vez não tem como saber qual usar. */}
@@ -428,7 +431,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 automacao={a}
                 key={a.id}
                 podeMexer={podeMexer}
-                temTextoDoTipo={aprovados.some((t) => t.tipo === a.tipo)}
+                temTextoDoTipo={aprovados.some((t) => a.templateId ? t.id === a.templateId : t.tipo === a.tipo)}
               />
             ))}
           </ul>

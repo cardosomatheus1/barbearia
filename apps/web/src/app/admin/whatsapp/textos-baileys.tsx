@@ -40,6 +40,7 @@ export function TextosBaileys({ mensagens }: { readonly mensagens: readonly Temp
   return <section className="cartao-balcao">
     <h2 className="cartao-balcao__titulo">Mensagens por QR</h2>
     <p className="painel__nota">Salve os textos e escolha quais usar nas campanhas e automações. Eles não precisam de aprovação da Meta.</p>
+    <p className="painel__nota"><a href="/admin/campanhas">Campanhas: enviar para uma lista</a> · <a href="/admin/automacoes">Automações: enviar quando algo acontecer</a></p>
     {mensagens.length ? <ul className="lista-cadastro">{mensagens.map(t => <li key={t.id}>
       <details className="dobra"><summary className="dobra__titulo">{t.titulo ?? nomeDoAviso(t.tipo as TipoDeNotificacao)} · {t.disponivel ? 'Disponível' : 'Pausada'}</summary>
         <Editor mensagem={t} />

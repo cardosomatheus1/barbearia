@@ -79,6 +79,9 @@ x-api: &api
   COMANDA_PSP_MODO: ${COMANDA_PSP_MODO:-nenhum}
   FISCAL_MODO: ${FISCAL_MODO:-nenhum}
   FISCAL_SECRET_KEY: ${FISCAL_SECRET_KEY:-}
+  FISCAL_AUTORIDADES_PEM_B64: ${FISCAL_AUTORIDADES_PEM_B64:-}
+  FISCAL_CONFIANCA_DIR: /run/fiscal-confianca
+  FISCAL_DANFSE_FONTES_DIR: /run/fiscal-fontes
   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
   STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
   STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -182,6 +185,8 @@ services:
     environment: *api
     volumes:
       - media:/data/media
+      - ${FISCAL_CONFIANCA_DIR:-./fiscal-confianca}:/run/fiscal-confianca:ro
+      - ${FISCAL_DANFSE_FONTES_DIR:-./fiscal-fontes}:/run/fiscal-fontes:ro
     command: node apps/api/dist/main.js
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:3000/health/pronto | grep -q ok']
@@ -207,9 +212,15 @@ services:
       COMANDA_PSP_MODO: ${COMANDA_PSP_MODO:-nenhum}
       FISCAL_MODO: ${FISCAL_MODO:-nenhum}
       FISCAL_SECRET_KEY: ${FISCAL_SECRET_KEY:-}
+      FISCAL_AUTORIDADES_PEM_B64: ${FISCAL_AUTORIDADES_PEM_B64:-}
+      FISCAL_CONFIANCA_DIR: /run/fiscal-confianca
+      FISCAL_DANFSE_FONTES_DIR: /run/fiscal-fontes
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       BAILEYS_HABILITADO: ${BAILEYS_HABILITADO:-0}
       WHATSAPP_MODO: ${WHATSAPP_MODO:-nenhum}
+    volumes:
+      - ${FISCAL_CONFIANCA_DIR:-./fiscal-confianca}:/run/fiscal-confianca:ro
+      - ${FISCAL_DANFSE_FONTES_DIR:-./fiscal-fontes}:/run/fiscal-fontes:ro
     command: node apps/worker/dist/main.js
     healthcheck:
       test: ['CMD', 'node', 'scripts/worker-pronto.mjs']
@@ -231,13 +242,23 @@ services:
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET:?falta no .env}
     command: pnpm --filter @barbearia/web exec next start -p 3001 -H 0.0.0.0
+    # O processo pode existir antes de o Next escutar. Sem esta sonda, `up --wait`
+    # anuncia sucesso e o proxy atende os primeiros visitantes com 502.
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:3001/']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
-      - web
-      - api
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     environment:
       DOMINIO: ${DOMINIO:?falta no .env}
       ACME_EMAIL: ${ACME_EMAIL:?falta no .env}

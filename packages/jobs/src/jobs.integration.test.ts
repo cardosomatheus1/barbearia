@@ -284,8 +284,14 @@ describeIfDb('fila de trabalho', () => {
     };
   });
 
+  // O worker usa AGORA fixo; sem rodarApos, a fila usa o relógio real e os
+  // testes deixam de consumir tarefas quando a data da máquina passa AGORA.
+  // As provas de recuperação tomam a tarefa uma hora antes desse instante.
   const enfileirarNoTenant = (tarefa: Parameters<typeof enfileirar>[1]) =>
-    withTenant(TENANT, (tx) => enfileirar(tx, tarefa));
+    withTenant(TENANT, (tx) => enfileirar(tx, {
+      ...tarefa,
+      rodarApos: tarefa.rodarApos ?? new Date(AGORA.getTime() - 60 * 60_000),
+    }));
 
   const quantasNaFila = async (status = 'pending'): Promise<number> => {
     const linhas = await admin.$queryRawUnsafe<{ n: bigint }[]>(
@@ -1244,6 +1250,7 @@ describeIfDb('fila de trabalho', () => {
       kind: 'cobranca.aviso',
       payload: { faturaId: '11111111-2222-3333-4444-555555555555', assunto: 'venceu' },
       idempotencyKey: 'cobranca:teste:venceu',
+      rodarApos: AGORA,
     });
 
     const resultado = await rodada(contexto);
@@ -1265,11 +1272,14 @@ describeIfDb('fila de trabalho', () => {
       kind: 'cobranca.aviso',
       payload: { assunto: 'venceu' },
       idempotencyKey: 'cobranca:sem-fatura',
+      rodarApos: AGORA,
     });
 
     const resultado = await rodada(contexto);
 
     expect(resultado.concluidas).toBe(0);
+    expect(resultado.tomadas).toBe(1);
+    expect(resultado.reagendadas).toBe(1);
     expect(avisosDeCobranca).toHaveLength(0);
   });
 
@@ -1288,6 +1298,7 @@ describeIfDb('fila de trabalho', () => {
       kind: 'lgpd.retencao',
       payload: {},
       idempotencyKey: 'retencao:teste:hoje',
+      rodarApos: AGORA,
     });
 
     const resultado = await rodada(contexto);
@@ -1319,6 +1330,7 @@ describeIfDb('fila de trabalho', () => {
       kind: 'agendamento.marcar_falta',
       payload: { appointmentId: AGENDAMENTO },
       idempotencyKey: `falta:${AGENDAMENTO}`,
+      rodarApos: AGORA,
     });
 
     const resultado = await rodada({

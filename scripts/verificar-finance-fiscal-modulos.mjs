@@ -8,6 +8,7 @@ const exigir = (ok, msg) => { if (!ok) throw new Error(msg); };
 
 const fachada = ler('packages/finance/src/fiscal.ts');
 const emissor = ler('packages/finance/src/fiscal-emissor.ts');
+const roteador = ler('packages/finance/src/nfse-municipal/roteador.ts');
 const erros = ler('packages/finance/src/fiscal-erros.ts');
 const configuracao = ler('packages/finance/src/fiscal-configuracao.ts');
 const notas = ler('packages/finance/src/fiscal-notas.ts');
@@ -82,9 +83,12 @@ for (const [nome, fonte] of [
   exigir(!new RegExp(`export\\s+(?:async\\s+)?function\\s+${nome}\\s*\\(`).test(fachada), `${nome} voltou para a fachada`);
 }
 
-// Emissor nacional próprio, padrão desligado e fake vedado em produção.
+// O nome nacional é histórico: o roteador escolhe o emissor do documento.
+// Padrão desligado, cofre obrigatório e fake vedado em produção.
 exigir(emissor.includes("export type ModoFiscal = 'nenhum' | 'fake' | 'nacional'"), 'catálogo fiscal não corresponde às implementações');
-exigir(emissor.includes('new EmissorNacionalNfse()') && emissor.includes('chaveFiscal()'), 'emissor nacional perdeu ligação ou cofre obrigatório');
+exigir(emissor.includes('new EmissorProprioNfse()') && emissor.includes('chaveFiscal()'), 'emissor próprio perdeu roteador ou cofre obrigatório');
+exigir(roteador.includes('new EmissorNacionalNfse()') && roteador.includes('new EmissorMunicipalNfse()'), 'roteador perdeu um dos emissores próprios');
+exigir(roteador.includes('fiscal_municipal_documents') && roteador.includes("ref.startsWith('nfse-municipal:')"), 'roteador deixou de preservar o emissor do documento');
 exigir(emissor.includes("if (bruto === undefined || bruto === '') return 'nenhum'"), 'fiscal deixou de iniciar desligado por padrão');
 exigir(emissor.includes("if (bruto === 'nenhum' || bruto === 'fake') return modoSeguroParaOAmbiente(bruto)"), 'modo fiscal deixou de aceitar apenas os modos implementados');
 exigir(emissor.includes('FISCAL_MODO inválido'), 'modo fiscal desconhecido deixou de falhar alto');

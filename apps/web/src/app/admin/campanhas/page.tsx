@@ -1,3 +1,4 @@
+import { ContextoDeEnvio } from '../whatsapp/modos';
 import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -298,6 +299,7 @@ function Campanha({
   campanha,
   podeMexer,
   podeVerNomes,
+  textoDisponivel,
   pulados,
 }: {
   /** O relógio da renderização: `campanhaParada` o compara com o último movimento. */
@@ -305,6 +307,7 @@ function Campanha({
   readonly campanha: CampanhaNaTelaDoAdmin;
   readonly podeMexer: boolean;
   readonly podeVerNomes: boolean;
+  readonly textoDisponivel: boolean;
   /** A lista aberta desta campanha; `null` quando ela não foi pedida. */
   readonly pulados: readonly PuladoNaTela[] | null;
 }) {
@@ -472,7 +475,8 @@ function Campanha({
             e **qual texto** antes de abrir o botão, que é o que a pessoa
             precisa reler.
           */}
-          {podeMexer && campanhaEnviavel(estado) ? (
+          {campanhaEnviavel(estado) && !textoDisponivel ? <p className="item-cadastro__linha item-cadastro__risco">A mensagem desta campanha não está disponível na conexão atual. <a href="/admin/whatsapp">Confira a conexão e a mensagem</a> antes de enviar.</p> : null}
+          {podeMexer && campanhaEnviavel(estado) && textoDisponivel ? (
             <details className="confirmar">
               <summary className="ui-button ui-button--primary confirmar__abrir">
                 Enviar para {campanha.publico}
@@ -607,6 +611,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
         </form>
       </header>
         <h1 className="painel__titulo">Campanhas</h1>
+      <ContextoDeEnvio canal={canal?.ok ? canal.dados.canal : null} />
         <FalhaDaLeitura code="forbidden" href="/admin/campanhas" oque="as campanhas" />
       </main>
     );
@@ -664,6 +669,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
       </header>
 
       <h1 className="painel__titulo">Campanhas</h1>
+      <ContextoDeEnvio canal={canal?.ok ? canal.dados.canal : null} />
       {/*
         **A diferença entre as duas telas, dita na tela** (bloco 99).
 
@@ -1019,7 +1025,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
             {campanhas.map((c) => (
               <Campanha
                 agora={agora}
-                campanha={c}
+                campanha={c} textoDisponivel={textos.some(t => c.templateId ? t.id === c.templateId : t.tipo === c.tipo)}
                 key={c.id}
                 podeMexer={podeMexer}
                 podeVerNomes={podeVerNomes}

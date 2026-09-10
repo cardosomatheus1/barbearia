@@ -1,4 +1,4 @@
-.acoes { display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; }
+.acoes { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; }
 .campo { flex: 1 1 12rem; min-width: 0; }
 .qr { display: grid; justify-items: center; gap: .75rem; margin-block: 1rem; }
 .qr img { display: block; width: min(100%, 300px); height: auto; padding: .75rem; background: white; image-rendering: pixelated; }

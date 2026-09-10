@@ -5,25 +5,16 @@ import {
   ROTULO_DO_BOTAO,
   ROTULO_DO_WHATSAPP,
   estadoDoTextoNaTela,
-  BOTOES_POSSIVEIS,
-  BOTOES_QUE_LEVAM,
-  EFEITO_DO_BOTAO_QUE_LEVA,
-  ROTULO_DO_BOTAO_QUE_LEVA,
-  RESSALVA_DO_BOTAO,
-  EFEITO_DO_BOTAO,
   corpoComExemplos,
   nomeDoAviso,
-  TIPOS_DE_NOTIFICACAO,
   oQueFazerNaMeta,
   podeGerenciarTemplates,
-  VARIAVEIS_DO_AVISO,
   type BotaoDaMensagem,
 } from '@barbearia/core';
 import {
   cadastroDoWhatsAppNaApi,
   signupDoWhatsAppNaApi,
   templatesDoWhatsAppNaApi,
-  type SignupDoWhatsAppNaTela,
   type TemplateNaTelaDoAdmin,
 } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
@@ -33,7 +24,6 @@ import {
   acaoConciliarWhatsApp,
   acaoIrParaMeta,
   acaoSalvarCadastroDoWhatsApp,
-  acaoSubmeterTemplate,
   acaoSair,
 } from '../acoes';
 import { secao } from '../secoes';
@@ -41,6 +31,8 @@ import { FalhaDaLeitura } from '../falha-da-leitura';
 import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { ConexaoWhatsApp } from './conexao';
 import { TextosBaileys } from './textos-baileys';
+import { ModosWhatsApp } from './modos';
+import { EditorMeta } from './editor-meta';
 
 /**
  * O WhatsApp da casa (bloco 55, SPEC §4.12).
@@ -80,7 +72,7 @@ const FALHA: Record<string, string> = {
   desistiu: 'Você saiu do fluxo da Meta antes de terminar. Pode tentar de novo quando quiser.',
   sem_codigo: 'A Meta não devolveu o código da conexão. Tente de novo.',
   estado_invalido:
-    'Esta volta não bate com a conexão que começou aqui. Comece de novo por segurança — e se repetir, use o cadastro à mão logo abaixo.',
+    'Esta volta não bate com a conexão que começou aqui. Comece de novo por segurança — e se repetir, peça ajuda ao suporte.',
   sem_app: 'A conexão automática não está configurada nesta instalação.',
   codigo_invalido: 'O código da Meta não vale mais. Ele expira em 30 segundos — tente de novo.',
   meta_recusou: 'A Meta recusou a conexão. O motivo é o que ela respondeu, abaixo.',
@@ -120,50 +112,6 @@ const FALHA: Record<string, string> = {
   baileys_tipo_do_texto: 'Crie outra mensagem para mudar a finalidade.',
   baileys_texto_ausente: 'Esta mensagem não está disponível. Atualize a página.',
 };
-
-/**
- * Os botões agrupados por quem os aceita, derivados de `BOTOES_POSSIVEIS`.
- *
- * Derivado e não escrito: um aviso novo, ou um botão novo num aviso existente,
- * aparece aqui sozinho. Uma lista ao lado seria a que fica para trás — foi o que
- * aconteceu três vezes com o rótulo dos avisos neste mesmo arquivo.
- *
- * Os avisos que não aceitam botão nenhum não viram grupo: `sua_vez` é a pessoa
- * já esperando dentro da barbearia, e `senha_de_acesso` é credencial.
- */
-const GRUPOS_DE_BOTAO = TIPOS_DE_NOTIFICACAO.reduce<
-  { chave: string; titulo: string; botoes: readonly BotaoDaMensagem[];
-    ressalvas: Partial<Record<string, string>> }[]
->((grupos, tipo) => {
-  const botoes = BOTOES_POSSIVEIS[tipo];
-  // Aviso sem botão possível não vira grupo: `sua_vez` é a pessoa já esperando
-  // dentro da barbearia e `senha_de_acesso` é credencial.
-  if (botoes.length === 0) return grupos;
-
-  // A chave é o **conjunto** de botões: confirmação e os dois lembretes aceitam
-  // os mesmos três e formam um grupo só, sem ninguém dizer que formam.
-  const chave = [...botoes].sort().join('|');
-  const existente = grupos.find((g) => g.chave === chave);
-  if (existente) {
-    existente.titulo = `${existente.titulo}, ${nomeDoAviso(tipo).toLowerCase()}`;
-    /**
-     * As ressalvas se acumulam do aviso mais restritivo do grupo.
-     *
-     * O lembrete de 2 horas aceita "Remarcar" e desaconselha: duas horas antes
-     * não costuma haver grade para remanejar no mesmo dia. Aviso e não recusa —
-     * proibir seria o produto opinando sobre a agenda de quem opera.
-     */
-    existente.ressalvas = { ...existente.ressalvas, ...(RESSALVA_DO_BOTAO[tipo] ?? {}) };
-    return grupos;
-  }
-  grupos.push({
-    chave,
-    titulo: `Para ${nomeDoAviso(tipo).toLowerCase()}`,
-    botoes,
-    ressalvas: { ...(RESSALVA_DO_BOTAO[tipo] ?? {}) },
-  });
-  return grupos;
-}, []);
 
 function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
   // Rótulo e explicação saem da mesma função do domínio: `pendente` responde
@@ -235,79 +183,17 @@ function Template({ template }: { readonly template: TemplateNaTelaDoAdmin }) {
 
 
 
-/**
- * O caminho inteiro, em três passos, com o estado de cada um (bloco 83).
- *
- * O que faltava nesta tela não era campo: era **a frase que liga as coisas**. A
- * barbearia cadastrava o número, ia para a tela de campanha, apertava Enviar e
- * nada chegava — porque faltava o template aprovado, que mora três seções
- * abaixo e nunca foi apresentado como obrigatório.
- *
- * É a §6 pergunta 6 na forma mais cara: três telas, cada uma coerente sozinha,
- * e nenhuma dizendo de que a outra depende. Os passos são derivados do estado
- * de verdade — o cadastro e a contagem de templates aprovados —, nunca de uma
- * lista escrita à mão que fica velha no primeiro estado novo.
- */
-function Caminho({
-  conectado,
-  aprovados,
-}: {
-  readonly conectado: boolean;
-  readonly aprovados: number;
-}) {
-  const passos = [
-    {
-      feito: conectado,
-      titulo: 'Conectar o número da barbearia',
-      texto: conectado
-        ? 'Pronto. Os avisos saem pelo número da casa.'
-        : 'Sem isto, tudo que o produto manda fica só no registro interno — o cliente não recebe nada.',
-    },
-    {
-      feito: aprovados > 0,
-      titulo: 'Ter pelo menos um texto aprovado',
-      texto:
-        aprovados > 0
-          ? `${aprovados} ${aprovados === 1 ? 'texto aprovado' : 'textos aprovados'}. Só eles saem.`
-          : 'A Meta aprova cada texto antes de ele poder ser enviado, e leva de minutos a dias. Comece pelo lembrete de 24 horas: é o que mais reduz falta.',
-    },
-    {
-      feito: conectado && aprovados > 0,
-      titulo: 'Ligar as automações e montar campanhas',
-      texto:
-        conectado && aprovados > 0
-          ? 'O canal está de pé. O que você ligar em Automações e enviar em Campanhas sai pelo WhatsApp da casa.'
-          : 'Automação e campanha já funcionam, mas enquanto os dois passos acima não estiverem prontos elas não chegam a ninguém.',
-    },
-  ];
-
+function Conectar({ modo, habilitado = true }: { readonly modo: 'padrao' | 'coexistencia'; readonly habilitado?: boolean }) {
   return (
     <section className="cartao-balcao">
-      <h2 className="cartao-balcao__titulo">Para a mensagem chegar ao cliente</h2>
-      <ol className="caminho">
-        {passos.map((passo, i) => (
-          <li className={`caminho__passo${passo.feito ? ' caminho__passo--feito' : ''}`} key={i}>
-            {/* O estado é dito em letras, e a cor só reforça: quem tem baixa
-                visão precisa da palavra. */}
-            <span className="caminho__marca">{passo.feito ? 'Feito' : `Passo ${i + 1}`}</span>
-            <span className="caminho__titulo">{passo.titulo}</span>
-            <span className="caminho__texto">{passo.texto}</span>
-          </li>
-        ))}
+      <h2 className="cartao-balcao__titulo">Passo a passo do cadastro na Meta</h2>
+      <ol>
+        <li><strong>Separe o acesso da empresa e do número.</strong> Você precisa entrar na conta da Meta que gerencia a empresa e ter acesso ao número que vai cadastrar.</li>
+        <li><strong>Clique em “Conectar pela Meta”.</strong> Na tela oficial, entre na sua conta e escolha ou cadastre a empresa e o número.</li>
+        <li><strong>Conclua a verificação pedida pela Meta.</strong> Confirme o código por SMS ou ligação quando solicitado e revise as permissões.</li>
+        <li><strong>Volte aqui e confira o estado do número.</strong> Se houver pendências, siga a orientação mostrada. Depois crie suas mensagens e aguarde a aprovação.</li>
       </ol>
-    </section>
-  );
-}
-
-function Conectar({ modo }: { readonly modo: 'padrao' | 'coexistencia' }) {
-  return (
-    <section className="cartao-balcao">
-      <h2 className="cartao-balcao__titulo">Conectar o WhatsApp</h2>
-      <p className="cartao-balcao__texto">
-        Você vai para a página oficial da Meta, entra na sua conta, escolhe a empresa e o número, e
-        confirma o código que chega por SMS. No fim ela traz você de volta para cá, já conectado —
-        não é preciso copiar identificador nenhum.
-      </p>
+      <p className="painel__nota">Os dados da conexão vêm automaticamente. Confira também a forma de pagamento e os <a href="https://business.whatsapp.com/products/platform-pricing" target="_blank" rel="noopener noreferrer">custos de envio da Meta</a>. As tarifas variam conforme a mensagem e o destino.</p>
 
       {/*
         O que acontece com o número, **antes** do botão.
@@ -355,11 +241,11 @@ function Conectar({ modo }: { readonly modo: 'padrao' | 'coexistencia' }) {
         Continua sem JavaScript: é um `<form>` com um botão de submeter, como
         todo o resto do painel.
       */}
-      <form action={acaoIrParaMeta}>
+      {habilitado ? <form action={acaoIrParaMeta}>
         <button className="ui-button ui-button--primary ui-button--block" type="submit">
-          Conectar WhatsApp
+          Conectar pela Meta
         </button>
-      </form>
+      </form> : <p className="painel__nota">Para iniciar o cadastro, escolha “Usar conexão Meta” acima.</p>}
     </section>
   );
 }
@@ -371,7 +257,7 @@ function Conectar({ modo }: { readonly modo: 'padrao' | 'coexistencia' }) {
  * o Embedded Signup não está configurado, e dentro de um `<details>` quando
  * está. Escrito duas vezes, os dois divergiriam no primeiro campo novo.
  */
-function FormularioManual({
+function ConfiguracaoAvancada({
   cadastro,
 }: {
   readonly cadastro: { phoneNumberId: string | null; wabaId: string | null; numeroVisivel: string | null; temToken: boolean } | null;
@@ -512,6 +398,9 @@ export default async function WhatsAppPage({ searchParams }: Props) {
   const motivoDaMeta = falha ? await lerMotivoDaMeta() : null;
   const oQueFazer = motivoDaMeta ? oQueFazerNaMeta(motivoDaMeta) : null;
   const feito = first(query['feito']);
+  const ativo = conexaoResposta.ok ? conexaoResposta.dados.canal : null;
+  const solicitado = first(query['modo']);
+  const modo = solicitado === 'meta' || solicitado === 'baileys' ? solicitado : ativo ?? 'meta';
 
   return (
     <main className="ui-container painel__conteudo" {...secao('whatsapp')}>
@@ -528,8 +417,10 @@ export default async function WhatsAppPage({ searchParams }: Props) {
 
       <h1 className="painel__titulo">WhatsApp</h1>
       <p className="painel__sub">
-        Conecte o número da barbearia e organize os avisos aos clientes.
+        Escolha uma opção e siga os passos para preparar suas mensagens.
       </p>
+
+      <ModosWhatsApp modo={modo} ativo={ativo} />
 
       {falha ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
@@ -552,23 +443,20 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           {oQueFazer ? <p className="whatsapp__caminho">{oQueFazer}</p> : null}
         </div>
       ) : null}
-      {conexaoResposta.ok ? <ConexaoWhatsApp inicial={conexaoResposta.dados} /> :
+      {conexaoResposta.ok ? <ConexaoWhatsApp inicial={conexaoResposta.dados} modo={modo} podeMexer={podeMexer} /> :
         <FalhaDaLeitura code={conexaoResposta.code} href="/admin/whatsapp" oque="a conexão do WhatsApp" />}
-      {conexaoResposta.ok && conexaoResposta.dados.canal === 'baileys' ? <>
+      {conexaoResposta.ok && modo === 'meta' && ativo !== modo ? signup ? <Conectar modo={signup.modo} habilitado={false} /> : <p className="painel__nota">A conexão guiada pela Meta ainda não está disponível nesta instalação. Peça ao suporte para habilitá-la; quem já possui credenciais da API pode usar a configuração avançada após escolher a conexão Meta.</p> : null}
+      {conexaoResposta.ok && modo === 'baileys' && ativo === modo ? <>
         {feito === 'texto-local' ? <p className="ui-alert ui-alert--success" role="status">Mensagem salva.</p> : null}
         {templatesResposta.ok ? <TextosBaileys mensagens={todosTextos.filter(t => t.canal === 'baileys')} /> :
           <FalhaDaLeitura code={templatesResposta.code} href="/admin/whatsapp" oque="as mensagens" />}
-      </> : conexaoResposta.ok ? <>
-      <Caminho
-        aprovados={templates.filter((t) => t.estado === 'aprovado').length}
-        conectado={atual === 'ativo'}
-      />
+      </> : conexaoResposta.ok && modo === 'meta' && ativo === modo ? <>
+
       {/* "Confirme o número", e não "espere o e-mail": o que falta é um passo
           para fazer agora, e mandar esperar por ele para o trabalho. */}
       {feito === 'cadastro' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          Cadastro salvo. Falta confirmar o número no painel da Meta com o código que ela manda
-          por SMS.
+          Cadastro salvo. Confira o estado da conexão abaixo para saber se há alguma etapa pendente na Meta.
         </div>
       ) : null}
       {feito === 'conciliado' ? (
@@ -579,8 +467,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
       ) : null}
       {feito === 'conectado' ? (
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
-          WhatsApp conectado. Agora cadastre os textos abaixo — a Meta precisa aprovar cada um
-          antes de ele sair.
+          Cadastro recebido da Meta. Confira o estado do número abaixo e prepare as mensagens para aprovação.
         </div>
       ) : null}
       {feito === 'template' ? (
@@ -595,7 +482,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         */
         <div className="ui-alert ui-alert--success painel__aviso" role="status">
           Texto guardado e na fila para a Meta. Ele sai daqui em instantes, e a resposta dela
-          costuma vir em minutos — às vezes em dias. O estado abaixo muda sozinho.
+          costuma vir em minutos — às vezes em dias. Use “Atualizar estado na Meta” para conferir a resposta.
         </div>
       ) : null}
 
@@ -604,7 +491,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         "ativo", e cada um pede uma coisa diferente de quem opera. "WhatsApp:
         não" serviria para três situações e não diria o que fazer em nenhuma.
       */}
-      <section className="cartao-balcao">
+      <section className="cartao-balcao" id="configuracao">
         <h2 className="cartao-balcao__titulo">{ROTULO_DO_WHATSAPP[atual]}</h2>
         <p className="cartao-balcao__texto">{EXPLICACAO_DO_WHATSAPP[atual]}</p>
         {cadastro?.motivo ? (
@@ -620,13 +507,16 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           descobrir pelo erro é descobrir com o trabalho já feito.
         */}
         <p className="cartao-balcao__texto">
-          Uma conta nova manda para até <strong>250 pessoas diferentes por dia</strong> quando é a
-          casa que começa a conversa. O teto sobe sozinho conforme as mensagens são entregues, e
-          não é preciso mandar documento nenhum da empresa para começar.
+          Consulte os limites e as pendências da sua conta no Gerenciador do WhatsApp da Meta.
+          A liberação depende da análise da Meta e da situação do número.
         </p>
+        {podeMexer && cadastro ? <form action={acaoConciliarWhatsApp}><button className="ui-button ui-button--ghost" type="submit">Atualizar estado na Meta</button></form> : null}
       </section>
 
-      {podeMexer && signup ? <Conectar modo={signup.modo} /> : null}
+      {podeMexer && signup ? atual === 'ativo' ? <details className="dobra">
+        <summary className="dobra__titulo">Ver passo a passo ou reconectar pela Meta</summary>
+        <Conectar modo={signup.modo} />
+      </details> : <Conectar modo={signup.modo} /> : null}
 
       {/*
         Com o botão de conexão na tela, o formulário técnico vai para dentro de
@@ -638,34 +528,20 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         tela: `wabaId` e `phoneNumberId` existem nos dois formulários, e um
         deles fechado é um destino a menos para errar.
       */}
-      {podeMexer && signup ? (
-        <details className="dobra">
-          {/* `dobra__titulo` como os outros quarenta e sete `summary` do
-              produto: sem classe, o padrão do navegador dá 24px de alvo, abaixo
-              do piso de 44 que vale em qualquer largura. A medição não pegava
-              porque este bloco só existe com o Embedded Signup configurado, e a
-              semente não configura. */}
-          <summary className="dobra__titulo">Cadastrar os identificadores à mão</summary>
-          <p className="cartao-balcao__texto">
-            Só é preciso se você já tem a conta na Meta montada e prefere copiar os dois
-            identificadores do painel dela. Pelo botão acima, eles vêm sozinhos.
-          </p>
-          <FormularioManual cadastro={cadastro} />
-        </details>
-      ) : null}
+      {podeMexer && !signup ? <p className="ui-alert ui-alert--warning">
+        A conexão guiada pela Meta ainda não está disponível nesta instalação. Peça ao suporte para habilitá-la.
+        Se sua empresa já usa a plataforma do WhatsApp Business, use a configuração avançada abaixo.
+      </p> : null}
+      {podeMexer ? <details className="dobra">
+        <summary className="dobra__titulo">Configuração avançada — já tenho WhatsApp Business Platform</summary>
+        <p className="painel__nota">Para quem já possui a conta e as credenciais da API Meta. Na conexão guiada, esses dados são preenchidos automaticamente.</p>
+        <ConfiguracaoAvancada cadastro={cadastro} />
+      </details> : null}
 
-      {podeMexer && !signup ? (
-        <section className="cartao-balcao">
-          <h2 className="cartao-balcao__titulo">O número na Meta</h2>
-          <FormularioManual cadastro={cadastro} />
-        </section>
-      ) : null}
-
-      <section className="cartao-balcao">
-        <h2 className="cartao-balcao__titulo">Textos aprovados</h2>
+      <section className="cartao-balcao" id="mensagens-meta">
+        <h2 className="cartao-balcao__titulo">Mensagens da Meta</h2>
         <p className="cartao-balcao__texto">
-          A Meta aprova cada texto antes de ele poder sair. Um por aviso — e ela pausa o que
-          muita gente marca como spam.
+          As mensagens usadas nos envios automáticos precisam de aprovação da Meta. Ela pode pausar mensagens com avaliações negativas dos destinatários.
         </p>
 
         {/*
@@ -695,7 +571,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
 
         {templates.length === 0 ? (
           <p className="cartao-balcao__texto">
-            Nenhum texto ainda. Comece pelo lembrete de 24 horas: é o que mais reduz falta.
+            Nenhuma mensagem cadastrada. Para sua primeira campanha, crie um convite de retorno. Para avisos da agenda, escolha o tipo de lembrete correspondente.
           </p>
         ) : (
           <ul className="lista-cadastro">
@@ -714,182 +590,15 @@ export default async function WhatsAppPage({ searchParams }: Props) {
             bloco 90 e não tinha como ser acionado por quem estava olhando.
 
             Fica ao lado da lista porque é dela que se duvida. */}
-        {podeMexer ? (
-          <form action={acaoConciliarWhatsApp}>
-            <button className="ui-button ui-button--ghost" type="submit">
-              Perguntar à Meta agora
-            </button>
-          </form>
-        ) : null}
+
 
         {podeMexer ? (
           <details className="dobra">
-            <summary className="dobra__titulo">Mandar um texto para aprovação</summary>
-            <form action={acaoSubmeterTemplate} className="formulario">
-              <div className="ui-field">
-                <label className="ui-field__label" htmlFor="titulo">
-                  Nome deste texto
-                </label>
-                <input
-                  className="ui-field__input"
-                  id="titulo"
-                  maxLength={80}
-                  name="titulo"
-                  placeholder="Volta que a gente sente falta"
-                  required
-                />
-                <p className="ui-field__hint">
-                  Só para você reconhecer na lista. É por ele que você escolhe qual texto cada
-                  automação manda — dois nomes diferentes viram dois textos.
-                </p>
-              </div>
-
-              <div className="ui-field">
-                <label className="ui-field__label" htmlFor="tipo">
-                  Para qual aviso
-                </label>
-                <select className="ui-field__input" id="tipo" name="tipo" required>
-                  {TIPOS_DE_NOTIFICACAO.map((tipo) => (
-                    <option key={tipo} value={tipo}>
-                      {nomeDoAviso(tipo)}
-                    </option>
-                  ))}
-                </select>
-                <p className="ui-field__hint">
-                  Os botões saem daqui, não do texto: o lembrete leva confirmar, remarcar e
-                  cancelar; o de 2 horas não oferece remarcar, porque não há grade para
-                  remanejar no mesmo dia.
-                </p>
-              </div>
-
-              <div className="ui-field">
-                <label className="ui-field__label" htmlFor="corpo">
-                  O texto
-                </label>
-                <textarea
-                  className="ui-field__input"
-                  id="corpo"
-                  name="corpo"
-                  placeholder="Olá {{1}}, seu corte é amanhã às {{2}} com {{3}}."
-                  required
-                  rows={3}
-                />
-                <p className="ui-field__hint">
-                  Escreva como você falaria com o cliente. Você não liga nada a ninguém: o
-                  produto já sabe de quem é cada mensagem e encaixa o dado na hora de
-                  enviar. O que você marca é <strong>onde</strong> ele entra.
-                </p>
-                {/* Derivado de `VARIAVEIS_DO_AVISO`, e é o que impede esta tela de
-                    mentir de novo: ela prometia hora em `{{2}}` e profissional em
-                    `{{3}}` enquanto o worker mandava nome do cliente e nome da
-                    barbearia — dois valores, para todo tipo. Escrito nos dois lugares,
-                    o par divergiu sem nada ficar vermelho. */}
-                <dl className="significados">
-                  {TIPOS_DE_NOTIFICACAO.map((tipo) => (
-                    <div className="significados__par" key={tipo}>
-                      <dt>{nomeDoAviso(tipo)}</dt>
-                      <dd>
-                        {VARIAVEIS_DO_AVISO[tipo].map((qual, i) => (
-                          <span key={qual}>
-                            {i > 0 ? ' · ' : ''}
-                            <code>{`{{${i + 1}}}`}</code> {qual}
-                          </span>
-                        ))}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="ui-field__hint">
-                  Texto sem nenhum atalho também vale: “Seu agendamento está confirmado, te
-                  esperamos em breve!” é um texto válido e a Meta aprova. E não invente
-                  posição que não está na lista — a Meta recusa o envio, e a mensagem não
-                  sai para ninguém.
-                </p>
-              </div>
-
-              {/* Os botões, com o que acontece escrito ao lado.
-
-                  Botão é a única parte da mensagem em que o cliente **age**, e
-                  quem monta o texto precisa saber o efeito antes de oferecer:
-                  sem isso, "Agendar novamente" parece marcar sozinho.
-
-                  Só os dois que agem **sem** horário marcado. Confirmar e
-                  cancelar mexem num agendamento provado, e quem recebe campanha
-                  não tem nenhum — o cliente apertaria e nada aconteceria. */}
-              {/* Os botões, agrupados **por aviso** e com o efeito ao lado.
-
-                  Cinco existem, e nem todo aviso aceita os cinco: confirmar,
-                  remarcar e cancelar mexem num agendamento provado, e quem
-                  recebe campanha não tem nenhum — apertaria e nada aconteceria.
-                  Ao contrário, "agendar novamente" num lembrete ofereceria
-                  marcar de novo a quem já tem hora marcada.
-
-                  Todos aparecem juntos porque o produto não tem componente de
-                  cliente para trocar a lista ao mexer no seletor de aviso — é a
-                  mesma limitação do rótulo que muda por opção. Então cada grupo
-                  diz a que aviso pertence, e o domínio recusa a combinação
-                  errada com a frase que explica.
-
-                  O efeito vem escrito porque botão é a única parte da mensagem
-                  em que o cliente **age**: sem ele, "Agendar novamente" parece
-                  marcar sozinho. */}
-              <fieldset className="etapa">
-                <legend className="etapa__titulo">Botões, se quiser</legend>
-                <p className="etapa__texto">
-                  A Meta desenha o botão dentro da mensagem, e ele só aparece se ela aprovar.
-                  Marque os do aviso que você escolheu acima.
-                </p>
-                {/* Os que **levam a algum lugar**, e valem para qualquer aviso.
-
-                    A Meta aceita três tipos: resposta rápida, que volta para nós
-                    como mensagem, e link e ligação, que não voltam — o aparelho
-                    abre o navegador ou o discador. O produto só usava o primeiro.
-
-                    É o que conserta o "Agendar novamente": aquele é resposta
-                    rápida, e quem aperta **não vai a lugar nenhum** — o produto
-                    registra a intenção e a pessoa fica parada na conversa. */}
-                <p className="ui-field__label">Levam a algum lugar</p>
-                <div className="alternativas">
-                  {BOTOES_QUE_LEVAM.map((b) => (
-                    <label className="alternativa" key={b}>
-                      <input name="acoes" type="checkbox" value={b} />
-                      <span className="alternativa__corpo">
-                        <span className="alternativa__nome">{ROTULO_DO_BOTAO_QUE_LEVA[b]}</span>
-                        <span className="alternativa__nota">{EFEITO_DO_BOTAO_QUE_LEVA[b]}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-
-                {GRUPOS_DE_BOTAO.map((grupo) => (
-                  <div key={grupo.titulo}>
-                    <p className="ui-field__label">{grupo.titulo}</p>
-                    <div className="alternativas">
-                      {grupo.botoes.map((b) => (
-                        <label className="alternativa" key={b}>
-                          <input name="botoes" type="checkbox" value={b} />
-                          <span className="alternativa__corpo">
-                            <span className="alternativa__nome">{ROTULO_DO_BOTAO[b]}</span>
-                            <span className="alternativa__nota">{EFEITO_DO_BOTAO[b]}</span>
-                            {grupo.ressalvas[b] ? (
-                              <span className="alternativa__nota alternativa__nota--risco">
-                                {grupo.ressalvas[b]}
-                              </span>
-                            ) : null}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </fieldset>
-
-              <button className="ui-button ui-button--secondary ui-button--block" type="submit">
-                Mandar para aprovação
-              </button>
-            </form>
+            <summary className="dobra__titulo">Criar mensagem para aprovação</summary>
+            <EditorMeta />
           </details>
         ) : null}
+        <p className="painel__nota">Depois da aprovação, escolha a mensagem em <a href="/admin/campanhas">Campanhas, para enviar uma vez a uma lista</a>, ou em <a href="/admin/automacoes">Automações, para enviar quando algo acontecer</a>.</p>
       </section>
       </> : null}
     </main>

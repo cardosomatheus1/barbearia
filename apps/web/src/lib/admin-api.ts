@@ -18,3 +18,5 @@ export * from './admin-api/plataforma';
 
 export * from './admin-api/fiscal-nacional';
 export * from './admin-api/whatsapp-conexao';
+export * from './admin-api/whatsapp-manual';
+export * from './admin-api/fiscal-municipal';

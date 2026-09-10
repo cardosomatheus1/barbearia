@@ -36,7 +36,20 @@
 // rota nota reservada; convite cifrado apagado ao encerrar. Invariantes do
 // Postgres reexecutadas em migracoes-0120-0126-db. Não atesta homologação externa.
 // 0127: somente descrição do recurso fiscal. Invariantes reexecutadas em migracao-texto-fiscal-db.
-export const HEAD_AUDITADO = '0127';
+// 0128/0129/0133/0135: perfis/percentuais explícitos, CHECKs, sem ampliar acesso.
+// 0130: formato alfanumérico sem apagar identificadores fiscais ou dados legados.
+// 0131: prova fiscal cifrada, vinculada ao documento e imutável após persistência.
+// 0132/0134: fila manual e intenção de aceite com FORCE RLS, origem conferida
+// por trigger, payload protegido e alcance por retenção/exportação/anonimização.
+// Revisão e provas dirigidas registradas em output/REVISAO_MIGRACOES_0128_0135.md;
+// invariantes cumulativas reexecutadas em migracoes-0128-0135-invariantes.
+// O head auditado não declara cobertura fiscal universal nem homologação externa.
+// 0136: quatro tabelas com FORCE RLS e FKs compostas para unidade/documento;
+// contador separado por CNPJ/município/ambiente/série, credenciais e arquivo
+// cifrados, primeira resposta imutável e histórico sem UPDATE/DELETE/TRUNCATE.
+// Revisão em output/REVISAO_MIGRACAO_0136.md; invariantes cumulativas e 30
+// cenários municipais aprovados. Arquivo fiscal não é apagado pelo cadastro.
+export const HEAD_AUDITADO = '0136';
 
 /** As migrações que a auditoria cumulativa exige que continuem existindo. */
 export const MIGRACOES_AUDITADAS = [

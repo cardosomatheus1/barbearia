@@ -1,3 +1,4 @@
+import { autenticarRespostaAtual } from './prova-resposta.js';
 import { withTenant } from '@barbearia/db';
 import type { CertificadoA1 } from './certificado.js';
 import type { DocumentoNfse } from './documentos.js';
@@ -60,9 +61,10 @@ export async function processarCancelamentoNfse(p: {
     dados = resposta.dados;
   }
   const xml = lerCancelamentoConfirmado(dados, doc.access_key, doc.environment);
+  const prova = await autenticarRespostaAtual(xml, 'evento', escopoDocumento(tenantId, doc, 'validacao_evento'));
   const cipher = cifrarFiscal(xml, escopoDocumento(tenantId, doc, 'evento'));
   const mudou = await withTenant(tenantId, tx => tx.$executeRaw`
-    UPDATE fiscal_native_documents SET cancel_event_cipher = ${cipher}, cancel_error_code = NULL, last_error_code = NULL, updated_at = now()
+    UPDATE fiscal_native_documents SET cancel_event_cipher = ${cipher}, cancel_validation_cipher = ${prova.envelope}, cancel_error_code = NULL, last_error_code = NULL, updated_at = now()
      WHERE invoice_id = ${doc.invoice_id}::uuid AND lease_token = ${token}::uuid AND cancel_event_cipher IS NULL
   `);
   if (!mudou) throw new NfseError('nfse_tentativa_substituida', 'Outra tentativa está processando esta nota.');

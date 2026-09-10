@@ -1,3 +1,4 @@
+import { textoConsentimentoWhatsAppCadastro, EXPLICACAO_CONSENTIMENTO_WHATSAPP_CADASTRO } from '@barbearia/core';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getProfile, getAvailability, type PublicProfile, type PublicService } from '@/lib/api';
@@ -855,6 +856,11 @@ async function PassoDados({
           <p className="ui-field__hint" id="celular-ajuda">
             É por ele que você vê e cancela depois.
           </p>
+        </div>
+
+        <div className="ui-field">
+          <label className="marca" htmlFor="aceita-whatsapp-cadastro"><input id="aceita-whatsapp-cadastro" type="checkbox" name="aceitaWhatsApp" value="sim" /><span>{textoConsentimentoWhatsAppCadastro(profile.name)}</span></label>
+          <p className="ui-field__hint">{EXPLICACAO_CONSENTIMENTO_WHATSAPP_CADASTRO}</p>
         </div>
 
         <button className="ui-button ui-button--primary ui-button--lg ui-button--block" type="submit">

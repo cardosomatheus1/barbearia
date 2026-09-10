@@ -176,6 +176,7 @@ export async function getAvailability(
 }
 
 export interface CriarAgendamento {
+  aceitaWhatsApp?: boolean;
   locationId: string;
   professionalId: string;
   serviceIds: string[];
@@ -188,7 +189,7 @@ export interface CriarAgendamento {
 }
 
 export type ResultadoAgendamento =
-  | { ok: true; id: string }
+  | { ok: true; id: string; consentimentoWhatsApp?: { token: string; expiresAt: string }; consentimentoWhatsAppIndisponivel?: boolean }
   | { ok: false; code: string };
 
 /**
@@ -244,6 +245,7 @@ export async function criarAgendamentoNaApi(
         start: dados.start,
         name: dados.name,
         phone: dados.phone,
+        ...(dados.aceitaWhatsApp === true ? { aceitaWhatsApp: true } : {}),
         // Só quando o carimbo existe: mandar `undefined` seria o mesmo, mas
         // mandar a chave sempre faria a borda validar um campo que a página
         // pública normal não tem por que enviar.
@@ -262,8 +264,9 @@ export async function criarAgendamentoNaApi(
     return { ok: false, code: corpo?.error?.code ?? 'request_failed' };
   }
 
-  const criado = (await response.json()) as { id: string };
-  return { ok: true, id: criado.id };
+  const criado = (await response.json()) as { id: string; consentimentoWhatsApp?: { token: string; expiresAt: string }; consentimentoWhatsAppIndisponivel?: boolean };
+  return { ok: true, id: criado.id, ...(criado.consentimentoWhatsApp ? { consentimentoWhatsApp: criado.consentimentoWhatsApp } : {}),
+    ...(criado.consentimentoWhatsAppIndisponivel ? { consentimentoWhatsAppIndisponivel: true } : {}) };
 }
 
 // -- Lista de espera (bloco 38) -----------------------------------------------

@@ -103,28 +103,44 @@ export function vendaAceitaNota(estadoAtual: EstadoDaNota | null): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Os três regimes que uma barbearia brasileira tem na prática.
+ * Perfis fiscais cadastrados pela unidade. Não optante corresponde a opSimpNac=1
+ * na NFS-e; não presume Lucro Real/Presumido nem calcula tributos federais.
  *
  * `salao_parceiro` é da Lei 13.352/2016 e é **específico do setor**: o
  * profissional é parceiro e não empregado, e a nota separa a parcela do salão da
  * parcela dele. A SPEC §3.11 chama a atenção para isso — é exatamente o mesmo
  * dado do split do bloco 49, e a operação da nota entra no bloco 54.
  */
-export const REGIMES_FISCAIS = ['simples', 'mei', 'salao_parceiro'] as const;
+export const REGIMES_FISCAIS = ['simples', 'mei', 'normal', 'salao_parceiro'] as const;
 export type RegimeFiscal = (typeof REGIMES_FISCAIS)[number];
 
 export const ROTULO_DO_REGIME: Readonly<Record<RegimeFiscal, string>> = {
   simples: 'Simples Nacional',
   mei: 'MEI',
+  normal: 'Não optante pelo Simples Nacional',
   salao_parceiro: 'Salão-Parceiro (Lei 13.352)',
 };
 
 export const EXPLICACAO_DO_REGIME: Readonly<Record<RegimeFiscal, string>> = {
   simples: 'A nota sai no valor cheio do serviço, no CNPJ da barbearia.',
   mei: 'A nota sai no valor cheio, com as limitações do MEI.',
+  normal: 'A NFS-e usa o perfil não optante pelo Simples. Confirme os tributos aproximados e o enquadramento com seu contador.',
   salao_parceiro:
     'A nota separa o que é da casa do que é do profissional. Só a parte da casa é receita dela — é a diferença que a Lei 13.352 existe para permitir.',
 };
+
+/** Percentuais informativos da Lei 12.741; não são retenções ou imposto a pagar. */
+export interface TributosAproximadosBps {
+  readonly federal: number;
+  readonly estadual: number;
+  readonly municipal: number;
+}
+export function tributosAproximadosValidos(valor: unknown): valor is TributosAproximadosBps {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return false;
+  const obj = valor as Record<string, unknown>;
+  return Object.keys(obj).length === 3 && ['federal', 'estadual', 'municipal'].every(k =>
+    typeof obj[k] === 'number' && Number.isInteger(obj[k]) && obj[k] >= 0 && obj[k] <= 10000);
+}
 
 // ---------------------------------------------------------------------------
 // A configuração fiscal da barbearia
@@ -146,8 +162,8 @@ export type FiscalFailure =
  * volta da prefeitura não diz que o problema é do cadastro.
  */
 export function cnpjValido(cnpj: string): boolean {
-  const digitos = cnpj.replace(/\D/g, '');
-  if (digitos.length !== 14) return false;
+  const digitos = normalizarCnpj(cnpj);
+  if (!CNPJ_NORMALIZADO.test(digitos)) return false;
   // `00000000000000` é o único repetido que passa na conta dos dígitos, e é o
   // que sai de um campo vazio mal tratado. Os outros já caem na própria conta.
   if (/^(\d)\1{13}$/.test(digitos)) return false;
@@ -156,7 +172,8 @@ export function cnpjValido(cnpj: string): boolean {
     let peso = ate - 7;
     let soma = 0;
     for (let i = 0; i < ate; i += 1) {
-      soma += Number(digitos[i]) * peso;
+      // Manual RFB/Serpro: ASCII menos 48 preserva também o cálculo numérico.
+      soma += (digitos.charCodeAt(i) - 48) * peso;
       peso -= 1;
       if (peso < 2) peso = 9;
     }
@@ -169,9 +186,10 @@ export function cnpjValido(cnpj: string): boolean {
   );
 }
 
-/** Só os dígitos: é assim que o emissor recebe, e é a chave de comparação. */
+export const CNPJ_NORMALIZADO = /^[A-Z0-9]{12}[0-9]{2}$/;
+/** Remove só a máscara conhecida. Caractere estranho continua inválido. */
 export function normalizarCnpj(cnpj: string): string {
-  return cnpj.replace(/\D/g, '');
+  return cnpj.trim().replace(/[./-]/g, '').replace(/[a-z]/g, c => c.toUpperCase());
 }
 
 /**
@@ -183,8 +201,8 @@ export function normalizarCnpj(cnpj: string): string {
  * era. Conferir no balcão é onde a pessoa ainda está na cadeira para corrigir.
  */
 export function cpfValido(cpf: string): boolean {
-  const digitos = cpf.replace(/\D/g, '');
-  if (digitos.length !== 11) return false;
+  const digitos = cpf.trim().replace(/[.-]/g, '');
+  if (!/^\d{11}$/.test(digitos)) return false;
   // Todos iguais passam na conta dos dígitos — `11111111111` inclusive — e são
   // o que sai de um campo preenchido por teclado travado ou por preguiça.
   if (/^(\d)\1{10}$/.test(digitos)) return false;
@@ -208,7 +226,7 @@ export function cpfValido(cpf: string): boolean {
  */
 export function documentoDoTomadorValido(documento: string | null): boolean {
   if (documento === null) return true;
-  const digitos = documento.replace(/\D/g, '');
+  const digitos = normalizarCnpj(documento);
   if (digitos.length === 0) return true;
   if (digitos.length === 11) return cpfValido(digitos);
   if (digitos.length === 14) return cnpjValido(digitos);
@@ -218,7 +236,7 @@ export function documentoDoTomadorValido(documento: string | null): boolean {
 /**
  * O documento como a pessoa lê: `529.982.247-25`, `11.222.333/0001-81`.
  *
- * O que vai ao emissor são os dígitos, e o que aparece na tela é isto. Não é
+ * O que vai ao emissor é o documento sem máscara, e a tela o formata. Não é
  * enfeite: quem digita no balcão está conferindo contra um documento
  * **pontuado** na mão do cliente, e comparar onze dígitos corridos com um RG na
  * mesa é onde o erro de um algarismo passa. Tamanho fora do previsto volta como
@@ -226,17 +244,17 @@ export function documentoDoTomadorValido(documento: string | null): boolean {
  */
 export function documentoBonito(documento: string | null): string {
   if (!documento) return '';
-  const d = documento.replace(/\D/g, '');
-  if (d.length === 11) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  if (d.length === 14) {
+  const d = normalizarCnpj(documento);
+  if (/^\d{11}$/.test(d)) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  if (CNPJ_NORMALIZADO.test(d)) {
     return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
   }
   return documento;
 }
 
-/** Só os dígitos, ou nulo se não sobrou nenhum. Nulo é "ao consumidor". */
+/** Documento sem máscara, ou nulo quando vazio. Não apaga caracteres inválidos. */
 export function normalizarDocumento(documento: string | null | undefined): string | null {
-  const digitos = (documento ?? '').replace(/\D/g, '');
+  const digitos = normalizarCnpj(documento ?? '');
   return digitos.length > 0 ? digitos : null;
 }
 
@@ -278,7 +296,7 @@ export function validarConfiguracaoFiscal(config: ConfiguracaoFiscal): FiscalFai
 
 export interface TomadorDaNota {
   readonly nome: string;
-  /** CPF ou CNPJ, só dígitos. Nulo é nota "ao consumidor", que é o comum. */
+  /** CPF ou CNPJ normalizado. Nulo é nota "ao consumidor" quando permitida. */
   readonly documento: string | null;
   readonly email: string | null;
 }

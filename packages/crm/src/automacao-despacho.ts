@@ -1,3 +1,4 @@
+import { prepararFilaManual } from './manual/fila.js';
 import { WhatsAppDeliveryUnknownError } from '@barbearia/core';
 import { disparosAEnviar, reservarDisparoDaAutomacao, marcarDisparoDaAutomacaoIncerto,
   liberarDisparoDaAutomacao, confirmarDisparoDaAutomacao, type DisparoAEnviar } from './automacao.js';
@@ -6,6 +7,7 @@ import { disparosAEnviar, reservarDisparoDaAutomacao, marcarDisparoDaAutomacaoIn
 export async function despacharAutomacoes(p: {
   tenantId: string; agora: Date; enviar: (disparo: DisparoAEnviar) => Promise<void>;
 }): Promise<number> {
+  await prepararFilaManual(p.tenantId, p.agora);
   const fila = await disparosAEnviar(p.tenantId,p.agora);
   let enviados = 0;
   for (const disparo of fila) {

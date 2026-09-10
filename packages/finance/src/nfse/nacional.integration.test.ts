@@ -1,12 +1,15 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa } from '../caixa.js';
 import { abrirComanda, adicionarItem, fecharComanda } from '../comanda.js';
 import { salvarConfiguracaoFiscal } from '../fiscal-configuracao.js';
-import { notaDaVenda } from '../fiscal-notas.js';
+import { notaDaVenda, pedirNota } from '../fiscal-notas.js';
 import { cancelarNota, conciliarNotas, enviarNota } from '../fiscal-emissao.js';
-import { salvarCertificadoNfse, salvarConfiguracaoNfse, situacaoNfse } from './configuracao.js';
+import { salvarCertificadoNfse, salvarConfiguracaoNfse, situacaoNfse, removerCertificadoNfse } from './configuracao.js';
+import { gerarDanfse } from './danfse.js';
 import { baixarXmlNfse, lerDocumentoNfse, snapshotDoDocumento } from './documentos.js';
 import { EmissorNacionalNfse } from './emissor.js';
 import { prepararPdfsNfse, pdfPeloLinkNfse, baixarPdfNfse } from './pdf.js';
@@ -15,6 +18,7 @@ import { verificarTokenDoDocumento } from './link.js';
 import { compactarXmlFiscal, descompactarXmlFiscal } from './xml-seguro.js';
 import type { PedidoHttpNfse, RespostaHttpNfse, TransporteNfse } from './transporte.js';
 import { certificadoNfseSintetico, nfseSintetica, eventoNfseSintetico, CHAVE_TESTE_NFSE, CNPJ_TESTE_NFSE } from '../../test/nfse-fixtures.js';
+import { confiancaA1Sintetica } from '../../test/nfse-confianca-fixture.js';
 
 const SEED_URL = process.env['SEED_DATABASE_URL'];
 const describeDb = SEED_URL && process.env['APP_DATABASE_URL'] ? describe : describe.skip;
@@ -26,30 +30,33 @@ const SERVICE = '62111111-0000-0000-0000-000000000003';
 const PROFESSIONAL = '62111111-0000-0000-0000-000000000004';
 const CUSTOMER = '62111111-0000-0000-0000-000000000005';
 const ator = { tenantId: TENANT, locationId: LOCATION, staffId: STAFF, staffName: 'Operadora sintetica' };
-let admin: PrismaClient; let cred: ReturnType<typeof certificadoNfseSintetico>;
+let admin: PrismaClient; let cred: ReturnType<typeof confiancaA1Sintetica>;
+let credAlfa: ReturnType<typeof confiancaA1Sintetica>; let credAssinante: ReturnType<typeof confiancaA1Sintetica>;
 
 /** Simula somente a autoridade externa. Banco, RLS, XML, assinatura, fila e casos de uso são reais. */
-function autoridade() {
+function autoridade(certificado = cred.certificado, chave = CHAVE_TESTE_NFSE) {
   let nota: string | undefined; let evento: string | undefined;
   let perderEmissao = false; let perderCancelamento = false; let recusarCancelamento = false;
   const requests: PedidoHttpNfse[] = [];
   const transporte: TransporteNfse = async p => {
     requests.push(p);
+    if (p.metodo === 'GET' && p.caminho.startsWith('/parametros_municipais/')) return { status: 200,
+      dados: { parametrosConvenio: { aderenteAmbienteNacional: 1, aderenteEmissorNacional: 1 } } };
     if (p.metodo === 'GET' && p.caminho.startsWith('/dps/')) return nota
-      ? { status: 200, dados: { chaveAcesso: CHAVE_TESTE_NFSE } } : { status: 404, dados: {} };
+      ? { status: 200, dados: { chaveAcesso: chave } } : { status: 404, dados: {} };
     if (p.metodo === 'GET' && p.caminho.endsWith('/101101/1')) return evento
       ? { status: 200, dados: { eventoXmlGZipB64: compactarXmlFiscal(evento) } } : { status: 404, dados: {} };
     if (p.metodo === 'POST' && p.caminho.endsWith('/eventos')) {
       if (recusarCancelamento) return { status: 400, dados: { erros: [{ codigo: 'E0840' }] } };
-      evento = eventoNfseSintetico(descompactarXmlFiscal(p.corpo?.['pedidoRegistroEventoXmlGZipB64'] ?? ''), cred.certificado);
+      evento = eventoNfseSintetico(descompactarXmlFiscal(p.corpo?.['pedidoRegistroEventoXmlGZipB64'] ?? ''), certificado, chave);
       if (perderCancelamento) throw new Error('resposta externa perdida');
       return { status: 201, dados: { eventoXmlGZipB64: compactarXmlFiscal(evento) } };
     }
     if (p.metodo === 'POST' && p.caminho === '/nfse') {
-      nota = nfseSintetica(descompactarXmlFiscal(p.corpo?.['dpsXmlGZipB64'] ?? ''), cred.certificado);
+      nota = nfseSintetica(descompactarXmlFiscal(p.corpo?.['dpsXmlGZipB64'] ?? ''), certificado, chave);
       if (perderEmissao) throw new Error('resposta externa perdida');
     }
-    if (nota) return { status: 200, dados: { chaveAcesso: CHAVE_TESTE_NFSE, nfseXmlGZipB64: compactarXmlFiscal(nota) } };
+    if (nota) return { status: 200, dados: { chaveAcesso: chave, nfseXmlGZipB64: compactarXmlFiscal(nota) } };
     throw new Error('chamada inesperada ao contrato');
   };
   return { transporte, requests,
@@ -61,12 +68,16 @@ describeDb('NFS-e própria com banco e RLS', () => {
   beforeAll(() => {
     if (!SEED_URL) throw new Error('Banco isolado obrigatório');
     admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
-    cred = certificadoNfseSintetico();
-  });
-  afterAll(async () => { await admin?.$disconnect(); });
+    cred = confiancaA1Sintetica();
+    credAlfa = confiancaA1Sintetica(undefined, '12ABC34501DE35');
+    credAssinante = confiancaA1Sintetica(undefined, undefined, 'assinante fiscal');
+  }, 30000);
+  afterAll(async () => { cred?.limpar(); credAlfa?.limpar(); credAssinante?.limpar(); await admin?.$disconnect(); });
   afterEach(() => vi.unstubAllEnvs());
   beforeEach(async () => {
     vi.stubEnv('FISCAL_MODO', 'nacional'); vi.stubEnv('FISCAL_SECRET_KEY', Buffer.alloc(32, 21).toString('base64'));
+    vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', Buffer.from(cred.certificado.certificadoPem).toString('base64'));
+    vi.stubEnv('FISCAL_CONFIANCA_DIR', cred.pasta); cred.atualizarCrls();
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
     await admin.$executeRawUnsafe('TRUNCATE staff_directory CASCADE');
     await admin.$executeRaw`INSERT INTO tenants (id, name) VALUES (${TENANT}::uuid, 'Sintetica'), (${RIVAL}::uuid, 'Vizinha sintetica')`;
@@ -97,6 +108,121 @@ describeDb('NFS-e própria com banco e RLS', () => {
     return nota.id;
   }
 
+  it('CNPJ alfanumérico percorre cadastro, A1, numeração, conciliação e cancelamento com RLS', async () => {
+    const cnpj = '12ABC34501DE35'; const chave = CHAVE_TESTE_NFSE.replace(CNPJ_TESTE_NFSE, cnpj);
+    const alfa = credAlfa;
+    try {
+      vi.stubEnv('FISCAL_CONFIANCA_DIR', alfa.pasta);
+      vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', Buffer.from(alfa.certificado.certificadoPem).toString('base64'));
+      await salvarConfiguracaoFiscal({ ...ator, config: { cnpj: '12.abc.345/01de-35', regime: 'mei', codigoDeServico: '060101',
+        issBps: 0, municipioIbge: '3550308', emitirAutomaticamente: true } });
+      expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(false);
+      await salvarCertificadoNfse({ ...ator, pfx: alfa.pfx, senha: alfa.senha });
+      expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(true);
+      await withTenant(TENANT, tx => tx.$executeRaw`UPDATE customers SET tax_id = ${cnpj} WHERE id = ${CUSTOMER}::uuid`);
+      const id = await vender(); const snapshot = snapshotDoDocumento(TENANT, await lerDocumentoNfse(TENANT, id));
+      expect(snapshot).toMatchObject({ cnpj, numero: '1', tomador: { documento: cnpj } });
+      const a = autoridade(alfa.certificado, chave); a.perderEmissao();
+      const provider = new EmissorNacionalNfse(a.transporte);
+      await expect(enviarNota({ tenantId: TENANT, invoiceId: id, provider })).rejects.toThrow();
+      expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider })).toBe('autorizada');
+      expect(a.requests.filter(p => p.metodo === 'POST' && p.caminho === '/nfse')).toHaveLength(1);
+      expect((await lerDocumentoNfse(TENANT, id)).access_key).toBe(chave);
+      expect(a.requests.some(p => p.caminho === '/nfse/' + chave)).toBe(true);
+      await cancelarNota({ ...ator, invoiceId: id, motivo: 'Servico nao foi prestado ao cliente', provider });
+      expect((await lerDocumentoNfse(TENANT, id)).cancel_event_cipher).not.toBeNull();
+      expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT cnpj FROM fiscal_dps_counters`)).toEqual([]);
+      expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT access_key FROM fiscal_native_documents`)).toEqual([]);
+      await expect(withTenant(TENANT, tx => tx.$executeRaw`UPDATE customers SET tax_id = '12ABC34501DE3X' WHERE id = ${CUSTOMER}::uuid`)).rejects.toThrow();
+    } finally { alfa.atualizarCrls(); }
+  });
+
+  it.each([false, true])('Simples fora do DAS exige estimativas e congela a apuração antes da transmissão (federais fora: %s)', async federaisForaDas => {
+    await salvarConfiguracaoFiscal({ ...ator, config: { cnpj: CNPJ_TESTE_NFSE, regime: 'simples', codigoDeServico: '060101',
+      issBps: 500, municipioIbge: '3550308', emitirAutomaticamente: true } });
+    const config = (await situacaoNfse(TENANT, LOCATION)).configuracao!;
+    expect(config.issForaDas).toBe(false);
+    await expect(salvarConfiguracaoNfse({ ...ator, config: { ...config, issForaDas: true } }))
+      .rejects.toMatchObject({ code: 'nfse_perfil_nao_atendido' });
+    const tributosAproximadosBps = { federal: 600, estadual: 0, municipal: 500 };
+    await expect(salvarConfiguracaoNfse({ ...ator, config: { ...config, issForaDas: false, federaisForaDas: true, tributosAproximadosBps } }))
+      .rejects.toMatchObject({ code: 'nfse_configuracao_invalida' });
+    await salvarConfiguracaoNfse({ ...ator, config: { ...config, issForaDas: true, federaisForaDas, tributosAproximadosBps } });
+    expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(true);
+    const id = await vender();
+    expect(snapshotDoDocumento(TENANT, await lerDocumentoNfse(TENANT, id))).toMatchObject({ issForaDas: true, tributosAproximadosBps });
+    expect(snapshotDoDocumento(TENANT, await lerDocumentoNfse(TENANT, id)).federaisForaDas ?? false).toBe(federaisForaDas);
+    await expect(withTenant(TENANT, tx => tx.$executeRaw`UPDATE fiscal_native_settings
+      SET iss_outside_das = false, federal_outside_das = true WHERE location_id = ${LOCATION}::uuid`)).rejects.toThrow();
+    await salvarConfiguracaoNfse({ ...ator, config: { ...config, issForaDas: false, aliquotaTotalSimplesBps: 650 } });
+    const a = autoridade();
+    expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) })).toBe('autorizada');
+    const pedido = a.requests.find(p => p.metodo === 'POST' && p.caminho === '/nfse');
+    const xml = descompactarXmlFiscal(pedido?.corpo?.['dpsXmlGZipB64'] ?? '');
+    expect(xml).toContain(`<regApTribSN>${federaisForaDas ? '3' : '2'}</regApTribSN>`); expect(xml).not.toContain('<pTotTribSN>');
+    expect(xml).toContain('<pTotTribMun>5.00</pTotTribMun>');
+    expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT iss_outside_das,federal_outside_das FROM fiscal_native_settings`)).toEqual([]);
+  });
+
+  it('não optante exige os tributos, congela os percentuais na venda e transmite o perfil correto', async () => {
+    await salvarConfiguracaoFiscal({ ...ator, config: { cnpj: CNPJ_TESTE_NFSE, regime: 'normal', codigoDeServico: '060101',
+      issBps: 500, municipioIbge: '3550308', emitirAutomaticamente: true } });
+    const config = (await situacaoNfse(TENANT, LOCATION)).configuracao;
+    if (!config) throw new Error('Configuração sintética ausente');
+    expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(false);
+    await expect(salvarConfiguracaoNfse({ ...ator, config })).rejects.toMatchObject({ code: 'nfse_perfil_nao_atendido' });
+    await expect(withTenant(TENANT, tx => tx.$executeRaw`
+      UPDATE fiscal_native_settings SET approximate_federal_bps = 1345 WHERE location_id = ${LOCATION}::uuid
+    `)).rejects.toThrow();
+    const tributosAproximadosBps = { federal: 1345, estadual: 0, municipal: 500 };
+    await expect(salvarConfiguracaoNfse({ ...ator, config: { ...config, tributosAproximadosBps } }))
+      .rejects.toMatchObject({ code: 'nfse_perfil_nao_atendido' });
+    const perfil = { perfilIbsCbs: 'regular_presencial' as const, nbs: '126021000' };
+    await salvarConfiguracaoNfse({ ...ator, config: { ...config, ...perfil, tributosAproximadosBps } });
+    expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(true);
+    const id = await vender();
+    expect(snapshotDoDocumento(TENANT, await lerDocumentoNfse(TENANT, id)))
+      .toMatchObject({ regime: 'normal', tributosAproximadosBps, ...perfil });
+    await salvarConfiguracaoNfse({ ...ator, config: { ...config, ...perfil, tributosAproximadosBps: { federal: 999, estadual: 0, municipal: 200 } } });
+    const a = autoridade();
+    expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) })).toBe('autorizada');
+    const pedido = a.requests.find(p => p.metodo === 'POST' && p.caminho === '/nfse');
+    const xml = descompactarXmlFiscal(pedido?.corpo?.['dpsXmlGZipB64'] ?? '');
+    expect(xml).toContain('<opSimpNac>1</opSimpNac>'); expect(xml).toContain('<pTotTribFed>13.45</pTotTribFed>');
+    expect(xml).not.toContain('<pTotTribSN>'); expect(xml).not.toContain('<pAliq>');
+    expect(xml).toContain('<cClassTrib>000001</cClassTrib>');
+    await expect(withTenant(TENANT, tx => tx.$executeRaw`
+      UPDATE fiscal_native_settings SET nbs = NULL WHERE location_id = ${LOCATION}::uuid
+    `)).rejects.toThrow();
+    expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT approximate_federal_bps FROM fiscal_native_settings`)).toEqual([]);
+  });
+
+  it('IBS/CBS sem CPF preserva pagamento, orienta a emissão manual e permite emitir após corrigir o cadastro', async () => {
+    await salvarConfiguracaoFiscal({ ...ator, config: { cnpj: CNPJ_TESTE_NFSE, regime: 'normal', codigoDeServico: '060101',
+      issBps: 500, municipioIbge: '3550308', emitirAutomaticamente: true } });
+    const config = (await situacaoNfse(TENANT, LOCATION)).configuracao;
+    if (!config) throw new Error('Configuração sintética ausente');
+    await salvarConfiguracaoNfse({ ...ator, config: { ...config, perfilIbsCbs: 'regular_presencial', nbs: '126021000',
+      tributosAproximadosBps: { federal: 1345, estadual: 0, municipal: 500 } } });
+    await withTenant(TENANT, tx => tx.$executeRaw`UPDATE customers SET tax_id = NULL WHERE id = ${CUSTOMER}::uuid`);
+    const o = await abrirComanda({ ...ator, customerId: CUSTOMER });
+    await adicionarItem({ ...ator, orderId: o.id, tipo: 'service', descricao: 'Corte', serviceId: SERVICE,
+      professionalId: PROFESSIONAL, quantidade: 1, precoUnitarioCents: 5000 });
+    await fecharComanda({ ...ator, orderId: o.id, hojeNaUnidade: '2026-09-09', pagamentos: [{ forma: 'cash', valorCents: 5000 }] });
+    expect(await notaDaVenda(TENANT, LOCATION, o.id)).toBeNull();
+    const pedidos = { ...ator, orderId: o.id, automatica: false };
+    await expect(withTenant(TENANT, tx => pedirNota(tx, pedidos))).rejects.toMatchObject({ code: 'nfse_ibscbs_tomador_obrigatorio' });
+    expect(await withTenant(TENANT, tx => tx.$queryRaw`SELECT status::text FROM orders WHERE id = ${o.id}::uuid`))
+      .toEqual([{ status: 'paid' }]);
+    expect(await withTenant(TENANT, tx => tx.$queryRaw`SELECT last_number FROM fiscal_dps_counters`)).toEqual([]);
+    await withTenant(TENANT, tx => tx.$executeRaw`UPDATE customers SET tax_id = '52998224725' WHERE id = ${CUSTOMER}::uuid`);
+    const nota = await withTenant(TENANT, tx => pedirNota(tx, pedidos));
+    expect(nota).not.toBeNull();
+    if (!nota) throw new Error('Nota não criada após correção');
+    const snapshot = snapshotDoDocumento(TENANT, await lerDocumentoNfse(TENANT, nota.id));
+    expect(snapshot).toMatchObject({ numero: '1', perfilIbsCbs: 'regular_presencial', tomador: { documento: '52998224725' } });
+  });
+
   it('cifra credenciais e impede leitura/vínculo de outra barbearia', async () => {
     const s = await situacaoNfse(TENANT, LOCATION); expect(s.pronta).toBe(true);
     const rows = await withTenant(TENANT, tx => tx.$queryRaw<{ envelope_cipher: string }[]>`SELECT envelope_cipher FROM fiscal_certificates`);
@@ -116,6 +242,104 @@ describeDb('NFS-e própria com banco e RLS', () => {
     expect(docs.map(d => snapshotDoDocumento(TENANT, d).numero).sort()).toEqual(['1', '2']);
     await expect(withTenant(TENANT, tx => tx.$executeRaw`UPDATE fiscal_native_documents SET snapshot_cipher = 'adulterado' WHERE invoice_id = ${ids[0]}::uuid`)).rejects.toThrow('imutavel');
     expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT invoice_id FROM fiscal_native_documents`)).toEqual([]);
+  });
+  it('sem autoridades configuradas nao apresenta prontidao nem inicia a chamada externa', async () => {
+    const id = await vender(); const a = autoridade();
+    vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', '');
+    expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(false);
+    await expect(enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) }))
+      .rejects.toMatchObject({ code: 'nfse_autoridades_nao_configuradas' });
+    expect(a.requests).toHaveLength(0);
+    expect((await lerDocumentoNfse(TENANT, id)).nfse_cipher).toBeNull();
+  });
+  it('revogação após cadastro impede prontidão e transmissão; recuperação preserva o documento', async () => {
+    const id = await vender(); const a = autoridade();
+    cred.atualizarCrls({ revogarFolha: true });
+    expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(false);
+    await expect(enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) }))
+      .rejects.toMatchObject({ code: 'nfse_certificado_sem_confianca' });
+    expect(a.requests).toHaveLength(0);
+    expect((await lerDocumentoNfse(TENANT, id)).nfse_cipher).toBeNull();
+    cred.atualizarCrls();
+    expect((await situacaoNfse(TENANT, LOCATION)).pronta).toBe(true);
+    expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) })).toBe('autorizada');
+    expect(a.requests.filter(p => p.metodo === 'POST' && p.caminho === '/nfse')).toHaveLength(1);
+  });
+  it('upload de A1 revogado ou sem raiz independente não substitui o certificado salvo', async () => {
+    const antes = await withTenant(TENANT, tx => tx.$queryRaw`SELECT fingerprint, envelope_cipher FROM fiscal_certificates`);
+    cred.atualizarCrls({ revogarFolha: true });
+    await expect(salvarCertificadoNfse({ ...ator, pfx: cred.pfx, senha: cred.senha })).rejects.toMatchObject({ code: 'nfse_certificado_sem_confianca' });
+    const intruso = certificadoNfseSintetico(); cred.atualizarCrls();
+    await expect(salvarCertificadoNfse({ ...ator, pfx: intruso.pfx, senha: intruso.senha })).rejects.toMatchObject({ code: 'nfse_certificado_sem_confianca' });
+    expect(await withTenant(TENANT, tx => tx.$queryRaw`SELECT fingerprint, envelope_cipher FROM fiscal_certificates`)).toEqual(antes);
+  });
+  it('revogação do assinante fiscal independente impede prontidão e rede sem invalidar o A1 da unidade', async () => {
+    const assinante = credAssinante;
+    const arquivos = ['raizes.pem', 'crls.pem', 'cadeias.pem'];
+    const originais = arquivos.map(nome => readFileSync(join(cred.pasta, nome), 'utf8'));
+    const publicar = () => arquivos.forEach((nome, i) => writeFileSync(join(cred.pasta, nome),
+      originais[i] + '\n' + readFileSync(join(assinante.pasta, nome), 'utf8')));
+    try {
+      publicar(); vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', Buffer.from(assinante.certificado.certificadoPem).toString('base64'));
+      const id = await vender(); const a = autoridade(assinante.certificado);
+      assinante.atualizarCrls({ revogarFolha: true }); publicar();
+      const s = await situacaoNfse(TENANT, LOCATION);
+      expect(s.pronta).toBe(false); expect(s.motivo).toContain('assinantes fiscais');
+      await expect(enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) }))
+        .rejects.toMatchObject({ code: 'nfse_autoridade_sem_confianca' });
+      expect(a.requests).toHaveLength(0);
+      expect((await lerDocumentoNfse(TENANT, id)).nfse_validation_cipher).toBeNull();
+    } finally { arquivos.forEach((nome, i) => writeFileSync(join(cred.pasta, nome), originais[i]!)); assinante.atualizarCrls(); }
+  });
+
+  it('revogação entre envio e resposta não grava autorização e a recuperação consulta antes de reenviar', async () => {
+    const id = await vender(); const a = autoridade();
+    const transporte: TransporteNfse = async p => {
+      const resposta = await a.transporte(p);
+      if (p.metodo === 'POST' && p.caminho === '/nfse') cred.atualizarCrls({ revogarFolha: true });
+      return resposta;
+    };
+    await expect(enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(transporte) }))
+      .rejects.toMatchObject({ code: 'nfse_autoridade_sem_confianca' });
+    const doc = await lerDocumentoNfse(TENANT, id);
+    expect(doc.signed_dps_cipher).not.toBeNull(); expect(doc.nfse_cipher).toBeNull(); expect(doc.nfse_validation_cipher).toBeNull();
+    cred.atualizarCrls();
+    expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) })).toBe('autorizada');
+    expect(a.requests.filter(p => p.metodo === 'POST' && p.caminho === '/nfse')).toHaveLength(1);
+  });
+
+  it('guarda prova imutável e permite imprimir cancelada após rotação do catálogo', async () => {
+    const id = await vender(); const provider = new EmissorNacionalNfse(autoridade().transporte);
+    await enviarNota({ tenantId: TENANT, invoiceId: id, provider });
+    await cancelarNota({ ...ator, invoiceId: id, motivo: 'Servico nao foi prestado ao cliente', provider });
+    const doc = await lerDocumentoNfse(TENANT, id);
+    expect(doc.nfse_validation_cipher).toBeTruthy(); expect(doc.cancel_validation_cipher).toBeTruthy();
+    for (const coluna of ['nfse_validation_cipher', 'cancel_validation_cipher']) {
+      await expect(withTenant(TENANT, tx => tx.$executeRawUnsafe(
+        `UPDATE fiscal_native_documents SET ${coluna} = 'adulterado' WHERE invoice_id = $1::uuid`, id))).rejects.toThrow('imutavel');
+    }
+    expect(await withTenant(RIVAL, tx => tx.$queryRaw`SELECT nfse_validation_cipher FROM fiscal_native_documents`)).toEqual([]);
+    vi.stubEnv('FISCAL_AUTORIDADES_PEM_B64', ''); vi.stubEnv('FISCAL_CONFIANCA_DIR', '');
+    const pdf = await baixarPdfNfse({ tenantId: TENANT, locationId: LOCATION, invoiceId: id },
+      (xml, chave, _fontes, cancelada, prova) => gerarDanfse(xml, chave,
+        { arialNegrito: 'Helvetica-Bold', arialRegular: 'Helvetica', conteudo: 'Helvetica' }, cancelada, prova));
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('resposta adulterada nao grava autorizacao mesmo depois de enviar a DPS', async () => {
+    const id = await vender(); const a = autoridade();
+    const transporte: TransporteNfse = async p => {
+      const r = await a.transporte(p); const dados = r.dados as Record<string, unknown>;
+      if (typeof dados['nfseXmlGZipB64'] !== 'string') return r;
+      const xml = descompactarXmlFiscal(dados['nfseXmlGZipB64']).replace('<nNFSe>12</nNFSe>', '<nNFSe>13</nNFSe>');
+      return { ...r, dados: { ...dados, nfseXmlGZipB64: compactarXmlFiscal(xml) } };
+    };
+    await expect(enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(transporte) }))
+      .rejects.toMatchObject({ code: 'nfse_assinatura_resposta_invalida' });
+    expect((await lerDocumentoNfse(TENANT, id)).nfse_cipher).toBeNull();
+    // A resposta válida posterior permite recuperar a mesma transmissão.
+    expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) })).toBe('autorizada');
+    expect(a.requests.filter(r => r.metodo === 'POST' && r.caminho === '/nfse')).toHaveLength(1);
   });
   it('recupera resposta perdida em outro processo com a mesma DPS e uma única emissão', async () => {
     const id = await vender(); const a = autoridade(); a.perderEmissao();
@@ -156,6 +380,24 @@ describeDb('NFS-e própria com banco e RLS', () => {
     const nota = await withTenant(TENANT, tx => tx.$queryRaw<{ status: string }[]>`SELECT status::text FROM fiscal_invoices WHERE id = ${id}::uuid`);
     expect(nota[0]?.status).toBe('cancelada'); expect(a.requests.filter(r => r.metodo === 'POST' && r.caminho.endsWith('/eventos'))).toHaveLength(1);
   });
+  it('evento adulterado nao cancela a nota e a consulta valida recupera o mesmo pedido', async () => {
+    const id = await vender(); const a = autoridade();
+    await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) });
+    const transporte: TransporteNfse = async p => {
+      const r = await a.transporte(p); const dados = r.dados as Record<string, unknown>;
+      if (typeof dados['eventoXmlGZipB64'] !== 'string') return r;
+      const xml = descompactarXmlFiscal(dados['eventoXmlGZipB64']).replace('<verAplic>Teste_1.0</verAplic>', '<verAplic>Intruso_1.0</verAplic>');
+      return { ...r, dados: { ...dados, eventoXmlGZipB64: compactarXmlFiscal(xml) } };
+    };
+    await expect(cancelarNota({ ...ator, invoiceId: id, motivo: 'Servico nao foi prestado ao cliente', provider: new EmissorNacionalNfse(transporte) }))
+      .rejects.toMatchObject({ code: 'nfse_assinatura_resposta_invalida' });
+    expect((await lerDocumentoNfse(TENANT, id)).cancel_event_cipher).toBeNull();
+    const pendente = await withTenant(TENANT, tx => tx.$queryRaw<{ status: string }[]>`SELECT status::text FROM fiscal_invoices WHERE id = ${id}::uuid`);
+    expect(pendente[0]?.status).not.toBe('cancelada');
+    expect(await conciliarNotas({ tenantId: TENANT, provider: new EmissorNacionalNfse(a.transporte) })).toBe(1);
+    expect((await lerDocumentoNfse(TENANT, id)).cancel_event_cipher).not.toBeNull();
+    expect(a.requests.filter(r => r.metodo === 'POST' && r.caminho.endsWith('/eventos'))).toHaveLength(1);
+  });
   it('recusa definitiva devolve nota a autorizada e permite novo motivo; timeout não faz isso', async () => {
     const id = await vender(); const a = autoridade(); const provider = new EmissorNacionalNfse(a.transporte);
     await enviarNota({ tenantId: TENANT, invoiceId: id, provider }); a.rejeitarCancelamento(true);
@@ -182,16 +424,24 @@ describeDb('NFS-e própria com banco e RLS', () => {
     expect(jobs[0]?.n).toBe(1n);
     expect(await enviarNota({ tenantId: TENANT, invoiceId: id, provider: new EmissorNacionalNfse(a.transporte) })).toBe('cancelada');
   });
-  it('PDF indisponível não desfaz autorização; download é retomado e o link não abre nota cancelada', async () => {
+  it('PDF próprio é recuperável sem A1/rede; cancelamento revoga link e marca impressão interna', async () => {
     vi.stubEnv('WEB_URL', 'https://barbearia.example');
     const id = await vender(); const a = autoridade(); const provider = new EmissorNacionalNfse(a.transporte);
     await enviarNota({ tenantId: TENANT, invoiceId: id, provider });
-    const falha = await prepararPdfsNfse(TENANT, async () => { throw new Error('ADN indisponível'); });
+    const falha = await prepararPdfsNfse(TENANT, async () => { throw new Error('Falha sintética de geração local'); });
     expect(falha).toEqual({ preparados: 0, falhas: 1 });
     const [erroPdf]=await withTenant(TENANT,tx=>tx.$queryRaw<{last_error_code:string}[]>`SELECT last_error_code FROM fiscal_native_documents WHERE invoice_id=${id}::uuid`);
     expect(erroPdf?.last_error_code).toBe('nfse_pdf_indisponivel');
-    const pdf = Buffer.from('%PDF-1.4\nDocumento sintetico de teste\n%%EOF');
-    expect(await prepararPdfsNfse(TENANT, async () => pdf)).toEqual({ preparados: 1, falhas: 0 });
+    await removerCertificadoNfse(ator);
+    let pdf: Buffer = Buffer.alloc(0);
+    const gerar: typeof gerarDanfse = async (xml, chave, _fontes, cancelada, prova) => {
+      pdf = await gerarDanfse(xml, chave, { arialNegrito: 'Helvetica-Bold', arialRegular: 'Helvetica', conteudo: 'Helvetica' }, cancelada, prova);
+      return pdf;
+    };
+    const chamadas = a.requests.length;
+    expect(await prepararPdfsNfse(TENANT, gerar)).toEqual({ preparados: 1, falhas: 0 });
+    expect(a.requests).toHaveLength(chamadas);
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     const notas = await withTenant(TENANT, tx => tx.$queryRaw<{ pdf_url: string; status: string }[]>`SELECT pdf_url, status::text FROM fiscal_invoices WHERE id = ${id}::uuid`);
     expect(notas[0]?.status).toBe('autorizada');
     const token = new URL(notas[0]?.pdf_url ?? '').pathname.split('/')[2] ?? '';
@@ -203,8 +453,12 @@ describeDb('NFS-e própria com banco e RLS', () => {
     expect(verificarTokenDoDocumento(novoToken, entregaTardia).invoiceId).toBe(id);
     await expect(pdfPeloLinkNfse(`x${token.slice(1)}`)).rejects.toMatchObject({ code: 'nfse_link_invalido' });
     await expect(baixarPdfNfse({ tenantId: RIVAL, locationId: LOCATION, invoiceId: id })).rejects.toMatchObject({ code: 'nfse_pdf_indisponivel' });
+    await salvarCertificadoNfse({ ...ator, pfx: cred.pfx, senha: cred.senha });
     await cancelarNota({ ...ator, invoiceId: id, motivo: 'Servico nao foi prestado ao cliente', provider });
     await expect(pdfPeloLinkNfse(token)).rejects.toMatchObject({ code: 'nfse_link_invalido' });
-    expect((await baixarPdfNfse({ tenantId: TENANT, locationId: LOCATION, invoiceId: id })).equals(pdf)).toBe(true);
+    const antesDoCancelamento = pdf;
+    const cancelada = await baixarPdfNfse({ tenantId: TENANT, locationId: LOCATION, invoiceId: id }, gerar);
+    // O PDF antigo afirmava autorização mesmo depois do cancelamento.
+    expect(cancelada.equals(antesDoCancelamento)).toBe(false);
   });
 });

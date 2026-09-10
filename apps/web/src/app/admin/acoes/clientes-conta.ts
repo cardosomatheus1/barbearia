@@ -1,6 +1,7 @@
 'use server';
 
 import {
+  centavos,
   exigirSessao,
   falhar,
   numero,
@@ -476,7 +477,7 @@ export async function acaoSalvarPacote(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const id = texto(form, 'id');
   const validade = Number(form.get('validadeDias') ?? 0);
-  const preco = Number(form.get('precoReais') ?? 0);
+  const precoCents = await centavos(form, 'precoReais', '/admin/pacotes');
 
   const resultado = await salvarPacoteNaApi(
     token,
@@ -484,10 +485,12 @@ export async function acaoSalvarPacote(form: FormData): Promise<void> {
       nome: texto(form, 'nome'),
       serviceId: texto(form, 'serviceId'),
       quantidade: Number(form.get('quantidade') ?? 2),
-      precoCents: Math.round(preco * 100),
+      precoCents,
       validadeDias: validade > 0 ? validade : null,
-      transferivel: form.get('transferivel') === 'on',
-      ativo: form.get('ativo') !== 'off',
+      // O campo oculto envia off antes da caixa marcada. get() sempre leria
+      // o primeiro valor, desativando até o pacote que acabou de ser criado.
+      transferivel: form.getAll('transferivel').includes('on'),
+      ativo: form.getAll('ativo').includes('on'),
     },
     id.length > 0 ? id : undefined,
   );

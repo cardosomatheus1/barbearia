@@ -8,6 +8,9 @@ node_modules
 **/node_modules
 dist
 **/dist
+**/bin
+**/obj
+integrations/fiscal-municipal/publish
 .next
 **/.next
 .git
@@ -15,6 +18,7 @@ coverage
 **/coverage
 *.tsbuildinfo
 **/*.tsbuildinfo
+output
 
 # Segredo local nunca entra na imagem: o compose passa o dele por ambiente.
 .env

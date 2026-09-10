@@ -92,7 +92,7 @@ export async function templatesDaUnidade(
     const linhas = await tx.$queryRaw<Parameters<typeof paraTela>[0][]>(sql`
       SELECT ${COLUNAS_DO_TEMPLATE}
         FROM whatsapp_templates
-       WHERE location_id = ${locationId}::uuid
+       WHERE location_id = ${locationId}::uuid AND transport <> 'manual'
        ORDER BY kind, created_at DESC
     `);
     const canal = await canalDaUnidade({ tenantId, locationId }, tx);

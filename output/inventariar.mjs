@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
+import { execFileSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const atual = process.argv.includes('--atual');
 const require = createRequire(resolve(root, 'apps/api/package.json'));
@@ -34,7 +35,7 @@ for (const path of files(resolve(root,'apps/api/src')).filter(p=>p.endsWith('.co
 const pages=files(resolve(root,'apps/web/src/app')).filter(p=>p.endsWith('/page.tsx')).map(p=>relative(root,p));
 const packages=['apps','packages'].flatMap(dir=>readdirSync(resolve(root,dir)).filter(name=>{try{return !!readFileSync(resolve(root,dir,name,'package.json'));}catch{return false;}}).map(name=>{const p=JSON.parse(readFileSync(resolve(root,dir,name,'package.json'),'utf8'));return {path:`${dir}/${name}`,name:p.name,dependencies:p.dependencies??{},test:p.scripts?.test??null};}));
 const migrations=files(resolve(root,'packages/db/migrations')).filter(p=>p.endsWith('.sql')).map(p=>relative(root,p));
-const inventory={commit:'3d90fc62de2947fda05aed32407d5a2f2852340b',routes,pages,packages,migrations};
+const inventory={commit:atual ? execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim() : '3d90fc62de2947fda05aed32407d5a2f2852340b',routes,pages,packages,migrations};
 if (atual) inventory.estado = 'Fonte de trabalho não commitada; a base não representa as alterações locais';
 writeFileSync(resolve(root,atual ? 'output/INVENTARIO_CORRECOES_PRE_GO_LIVE.json' : 'output/INVENTARIO_PRE_GO_LIVE.json'),JSON.stringify(inventory,null,2)+'\n');
 const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';

@@ -125,6 +125,13 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   'whatsapp.settings_changed': 'mexeu no WhatsApp da casa',
   'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
   'whatsapp.local_text_changed': 'alterou uma mensagem do WhatsApp por QR',
+  'whatsapp.manual_assumir': 'assumiu o atendimento de uma mensagem manual',
+  'whatsapp.manual_opened': 'reservou uma mensagem manual',
+  'whatsapp.manual_enviado': 'confirmou o envio manual de uma mensagem',
+  'whatsapp.manual_liberar': 'liberou uma mensagem manual sem envio',
+  'whatsapp.manual_descartar': 'descartou uma mensagem manual',
+  'whatsapp.manual_optout': 'registrou a saída de promoções pelo WhatsApp manual',
+  'whatsapp.manual_text_changed': 'alterou uma mensagem do WhatsApp manual',
   'automation.changed': 'mexeu numa automação de mensagem',
   'campaign.created': 'criou uma campanha',
   // Separada da criação porque são duas decisões: montar o público é

@@ -1,6 +1,6 @@
 # Plataforma Inteligente de Gestão para Barbearias
 
-Monorepo TypeScript.
+Monorepo TypeScript, com motor C# para os adaptadores fiscais municipais.
 
 - [`SPEC.md`](SPEC.md) — o que o produto é
 - [`ROADMAP.md`](ROADMAP.md) — em quantos blocos, em que ordem
@@ -13,9 +13,17 @@ A auditoria e a validação de lançamento estão em andamento; a matriz do ROAD
 separa implementação, testes e operação externa.
 
 Stripe recebe somente as assinaturas do SaaS. WhatsApp permite Meta ou Baileys
-por unidade; Baileys tem textos locais, sem aprovação Meta. O fiscal usa um
-emissor próprio do padrão nacional, ainda com cobertura parcial e sem homologação
-externa. Configuração, evidências e pendências: [correções pré-go-live](output/CORRECOES_PRE_GO_LIVE.md).
+por unidade. A interface recomenda Meta, informa os custos variáveis e guia o
+cadastro; Baileys é gratuito, não oficial e sujeito a bloqueio/banimento, com
+textos locais sem aprovação Meta. Consultar uma opção não troca a conexão.
+O modo manual prepara listas e lembretes na fila; o operador abre, envia pelo
+WhatsApp e confirma. Essa fila é independente dos envios automáticos existentes.
+O cadastro público permite consentimento opcional, confirmado pelo cliente.
+O fiscal próprio oferece o padrão nacional e [adaptadores municipais reutilizados](docs/fiscal-municipal.md),
+com cobertura limitada aos perfis documentados e sem homologação externa.
+O motor municipal é compilado com .NET 10 e incluído na imagem Docker; não abre
+serviço ou porta adicional. Retenção de ISS e salão-parceiro ficam para a próxima entrega.
+Configuração, evidências e pendências: [correções pré-go-live](output/CORRECOES_PRE_GO_LIVE.md).
 
 | Pacote | O que é | Estado |
 |---|---|---|

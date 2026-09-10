@@ -1,3 +1,5 @@
+import { CNPJ_NORMALIZADO } from '@barbearia/core';
+import { CHAVE_NFSE } from './identificadores.js';
 import { create } from 'xmlbuilder2';
 import { NAMESPACE_NFSE } from './assinatura.js';
 import { validarSchemaNfse } from './schema.js';
@@ -7,7 +9,7 @@ export function gerarPedidoDeCancelamento(p: {
   readonly ambiente: AmbienteNfse; readonly cnpj: string; readonly chave: string;
   readonly motivo: string; readonly quando: Date;
 }): { id: string; xml: string } {
-  if (!/^\d{14}$/.test(p.cnpj) || !/^\d{50}$/.test(p.chave) || p.motivo.trim().length < 15 || p.motivo.trim().length > 255 ||
+  if (!CNPJ_NORMALIZADO.test(p.cnpj) || !CHAVE_NFSE.test(p.chave) || p.motivo.trim().length < 15 || p.motivo.trim().length > 255 ||
     !['producao', 'homologacao'].includes(p.ambiente) || !Number.isFinite(p.quando.getTime())) throw new Error('nfse_cancelamento_invalido');
   const id = `PRE${p.chave}101101`;
   const doc = create({ version: '1.0', encoding: 'UTF-8' }).ele('pedRegEvento', { xmlns: NAMESPACE_NFSE, versao: '1.01' });

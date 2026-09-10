@@ -527,6 +527,7 @@ precisa "@barbearia/ui" && lancar "ui — tokens e componentes" pnpm --filter @b
 precisa "@barbearia/web" && lancar "web — lógica de tela" pnpm --filter @barbearia/web test
 # O resolvedor tem teste próprio: ele decide o que vai ser conferido, e errar
 # para menos ali devolveria verde sobre código que ninguém rodou.
+lancar "fiscal municipal — motor e fonte reutilizada" bash scripts/testar-fiscal-municipal.sh
 lancar "resolvedor de afetados" pnpm exec vitest run scripts/afetados.test.mjs
 lancar "guarda da matriz de prontidão" node --test scripts/verificar-prontidao.test.mjs
 lancar "guarda CSS R10 — negativos" node --test scripts/verificar-r10-css.test.mjs
@@ -600,6 +601,7 @@ lancar "auditoria Final Cross-Domain — negativos" node --test scripts/verifica
 lancar "auditoria Recheck Final" node scripts/verificar-recheck-final.mjs
 lancar "auditoria Recheck Final — negativos" node --test scripts/verificar-recheck-final.test.mjs
 lancar "certificação prática da pilha" node scripts/verificar-certificacao-pratica.mjs
+lancar "módulos financeiros fiscais — negativos" node --test scripts/verificar-finance-fiscal-modulos.test.mjs
 lancar "certificação prática da pilha — negativos" node --test scripts/verificar-certificacao-pratica.test.mjs
 lancar "carga concorrente — contrato do ensaio" node --test scripts/carga-concorrencia-reserva.test.mjs
 lancar "404 por superfície" node scripts/verificar-404-por-superficie.mjs
